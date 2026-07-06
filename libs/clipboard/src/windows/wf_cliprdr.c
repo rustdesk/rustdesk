@@ -232,12 +232,7 @@ struct _CliprdrStream
 	FILEDESCRIPTORW m_Dsc;
 	void *m_pData;
 	UINT32 m_connID;
-	// Unique id sent as the CLIPRDR streamId; also keys the peer's cached stream in
-	// wf_cliprdr_server_file_contents_request().
-	UINT32 m_streamId;
-	// Set after a request on this stream fails/times out; poisons later reads so a
-	// late response cannot be mistaken for the current read (streamId is per-stream).
-	BOOL m_failed;
+	UINT32 m_streamId;   // unique CLIPRDR streamId; avoids leaking a heap pointer
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -283,38 +278,16 @@ struct wf_clipboard
 	HANDLE thread;
 	HANDLE formatDataRespEvent;
 	BOOL formatDataRespReceived;
-	// Format-data rendezvous, mirroring the req_f* fields. format_request_mutex
-	// serializes whole request/response cycles; hmem_mutex guards the hmem hand-off
-	// and formatDataRespExpected, which lets the response handler drop a late,
-	// duplicate or unsolicited response instead of overwriting the slot a consumer
-	// is about to take.
-	BOOL formatDataRespExpected;
-	HANDLE hmem_mutex;
-	HANDLE format_request_mutex;
 
 	LPDATAOBJECT data_obj;
 	HANDLE data_obj_mutex;
 
-	// The req_f* fields are a single-slot rendezvous for the one outstanding
-	// file-contents request. req_f_request_mutex enforces "one request at a time" by
-	// serializing whole request/response cycles (it is held across the response wait);
-	// req_f_mutex only guards the brief req_fdata/req_fsize hand-off with the channel
-	// thread and must not be held across a blocking wait.
 	ULONG req_fsize;
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
-	// Distinguishes a successful zero-byte response (EOF) from a failed one; both
-	// leave req_fdata NULL.
-	BOOL req_f_response_ok;
-	// Bytes asked for by the last request; a response claiming more is rejected.
-	ULONG req_f_size_requested;
-	// Stream ID of the last request; responses for another stream are ignored.
-	UINT32 req_f_stream_id_expected;
-	// Source of unique per-stream ids (see CliprdrStream_New).
-	LONG req_f_stream_id_seq;
-	HANDLE req_f_mutex;
-	HANDLE req_f_request_mutex;
+	UINT32 req_f_stream_id_expected;   // streamId of the outstanding request; responses for another are dropped
+	LONG req_f_stream_id_seq;          // source of unique per-stream ids
 
 	size_t nFiles;
 	size_t file_array_size;
@@ -342,8 +315,7 @@ BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
 static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
-static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId,
-									  HANDLE *outHmem, SIZE_T *outLen);
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
 static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
@@ -426,94 +398,10 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 	}
 }
 
-// Acquire `mutex`, returning TRUE if it is held on return. WAIT_ABANDONED still
-// transfers ownership; WAIT_FAILED / WAIT_TIMEOUT do not, so the caller must then not
-// release the mutex.
-static BOOL lock_mutex(HANDLE mutex, DWORD timeoutMillis)
-{
-	DWORD wait = WaitForSingleObject(mutex, timeoutMillis);
-	return (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED);
-}
-
-// Take ownership of the pending file-contents response buffer, clearing the shared
-// slot under req_f_mutex. The caller must free the returned buffer.
-static void take_req_fdata(wfClipboard *clipboard, char **data, ULONG *size)
-{
-	if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
-	{
-		*data = NULL;
-		*size = 0;
-		return;
-	}
-	*data = clipboard->req_fdata;
-	*size = clipboard->req_fsize;
-	clipboard->req_fdata = NULL;
-	clipboard->req_fsize = 0;
-	ReleaseMutex(clipboard->req_f_mutex);
-}
-
-// Take ownership of the pending format-data buffer under hmem_mutex. The caller owns
-// the returned HGLOBAL and must GlobalFree it (or hand it to the clipboard / OLE).
-static void take_hmem(wfClipboard *clipboard, HANDLE *hmem, SIZE_T *len)
-{
-	if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
-	{
-		*hmem = NULL;
-		*len = 0;
-		return;
-	}
-	*hmem = clipboard->hmem;
-	*len = clipboard->hmem_data_len;
-	clipboard->hmem = NULL;
-	clipboard->hmem_data_len = 0;
-	ReleaseMutex(clipboard->hmem_mutex);
-}
-
-// Serialize whole file-contents request/response cycles (request, wait, take) across
-// streams, enforcing the one-outstanding-request invariant of the req_f* slot. The
-// wait is bounded so a wedged request degrades into a failed read instead of blocking
-// a clipboard consumer forever.
-static BOOL acquire_req_f_request_mutex(wfClipboard *clipboard)
-{
-	DWORD timeoutMillis;
-
-	if (!clipboard || !clipboard->context || !clipboard->req_f_request_mutex)
-		return FALSE;
-
-	// Long enough for a predecessor's full request cycle plus a margin of its own.
-	timeoutMillis = (clipboard->context->ResponseWaitTimeoutSecs + 1) * 2000;
-	return lock_mutex(clipboard->req_f_request_mutex, timeoutMillis);
-}
-
-// Run one full file-contents request cycle under req_f_request_mutex: acquire, send,
-// wait for the response, and take ownership of the response buffer into *outData (which
-// the caller must free). Returns the send/wait status; CHANNEL_RC_OK on success.
-static UINT cliprdr_request_filecontents_sync(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
-											  ULONG index, UINT32 flag, DWORD positionHigh,
-											  DWORD positionLow, ULONG nreq, char **outData,
-											  ULONG *outSize)
-{
-	UINT rc;
-
-	*outData = NULL;
-	*outSize = 0;
-
-	if (!acquire_req_f_request_mutex(clipboard))
-		return ERROR_INTERNAL_ERROR;
-
-	rc = cliprdr_send_request_filecontents(clipboard, connID, streamId, index, flag, positionHigh,
-										   positionLow, nreq);
-	take_req_fdata(clipboard, outData, outSize);
-	ReleaseMutex(clipboard->req_f_request_mutex);
-	return rc;
-}
-
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
 													ULONG *pcbRead)
 {
 	UINT ret;
-	ULONG req_size = 0;
-	char *req_data = NULL;
 	CliprdrStream *instance = (CliprdrStream *)This;
 	wfClipboard *clipboard;
 
@@ -523,53 +411,45 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	clipboard = (wfClipboard *)instance->m_pData;
 	*pcbRead = 0;
 
-	// A prior request on this stream failed/timed out; a late response could satisfy
-	// this read with a previous offset's bytes, so fail every later read instead.
-	if (instance->m_failed)
-		return E_FAIL;
-
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	ret = cliprdr_request_filecontents_sync(clipboard, instance->m_connID, instance->m_streamId,
-											instance->m_lIndex, FILECONTENTS_RANGE,
-											instance->m_lOffset.HighPart, instance->m_lOffset.LowPart,
-											cb, &req_data, &req_size);
+	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId, instance->m_lIndex,
+											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
+											instance->m_lOffset.LowPart, cb);
 
 	if (ret != CHANNEL_RC_OK)
 	{
-		instance->m_failed = TRUE;
-		free(req_data);
+		free(clipboard->req_fdata);
+		clipboard->req_fdata = NULL;
 		return E_FAIL;
 	}
 
-	// A response larger than requested must never overflow `pv`.
-	if (req_size > cb)
+	if (clipboard->req_fsize > cb)
 	{
-		free(req_data);
+		free(clipboard->req_fdata);
+		clipboard->req_fdata = NULL;
 		return STG_E_READFAULT;
 	}
 
-	// A successful request may legitimately return 0 bytes (EOF).
-	if (req_size > 0)
+	if (clipboard->req_fdata)
 	{
-		if (!req_data)
-			return E_FAIL;
-		CopyMemory(pv, req_data, req_size);
+		CopyMemory(pv, clipboard->req_fdata, clipboard->req_fsize);
+		free(clipboard->req_fdata);
+		clipboard->req_fdata = NULL;
 	}
-	free(req_data);
 
-	*pcbRead = req_size;
+	*pcbRead = clipboard->req_fsize;
 	// Check overflow, can not be a real case
-	if ((instance->m_lOffset.QuadPart + req_size) < instance->m_lOffset.QuadPart) {
+	if ((instance->m_lOffset.QuadPart + clipboard->req_fsize) < instance->m_lOffset.QuadPart) {
 		// It's better to crash to release the explorer.exe
 		// This is a critical error, because the explorer is waiting for the data
 		// and the m_lOffset is wrong(overflowed)
 		return S_FALSE;
 	}
-	instance->m_lOffset.QuadPart += req_size;
+	instance->m_lOffset.QuadPart += clipboard->req_fsize;
 
-	if (req_size < cb)
+	if (clipboard->req_fsize < cb)
 		return S_FALSE;
 
 	return S_OK;
@@ -725,8 +605,6 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 	IStream *iStream = NULL;
 	BOOL success = FALSE;
 	BOOL isDir = FALSE;
-	char *req_data = NULL;
-	ULONG req_sz = 0;
 	CliprdrStream *instance = NULL;
 	wfClipboard *clipboard = (wfClipboard *)pData;
 
@@ -764,7 +642,6 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			instance->m_pData = pData;
 			instance->m_lOffset.QuadPart = 0;
 			instance->m_connID = connID;
-			// Unique per-stream id; a truncated pointer could collide or be reused.
 			instance->m_streamId = (UINT32)InterlockedIncrement(&clipboard->req_f_stream_id_seq);
 
 			if (instance->m_Dsc.dwFlags & FD_ATTRIBUTES)
@@ -776,20 +653,17 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			if (((instance->m_Dsc.dwFlags & FD_FILESIZE) == 0) && !isDir)
 			{
 				/* get content size of this stream */
-				if (cliprdr_request_filecontents_sync(clipboard, instance->m_connID,
-													  instance->m_streamId, instance->m_lIndex,
-													  FILECONTENTS_SIZE, 0, 0, 8, &req_data,
-													  &req_sz) == CHANNEL_RC_OK)
+				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
+													  instance->m_lIndex, FILECONTENTS_SIZE, 0, 0,
+													  8) == CHANNEL_RC_OK)
 				{
 					success = TRUE;
 				}
 
-				if (req_data != NULL && req_sz >= sizeof(LONGLONG))
+				if (clipboard->req_fdata != NULL && clipboard->req_fsize >= sizeof(LONGLONG))
 				{
 					LONGLONG sz = 0;
-					CopyMemory(&sz, req_data, sizeof(sz));
-					// m_lSize is unsigned; a negative size would turn into a huge
-					// bogus stream size, so reject it.
+					CopyMemory(&sz, clipboard->req_fdata, sizeof(sz));
 					if (sz < 0)
 						success = FALSE;
 					else
@@ -797,11 +671,13 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 				}
 				else
 				{
-					// The size probe must return at least sizeof(LONGLONG) bytes.
 					success = FALSE;
 				}
-
-				free(req_data);
+				if (clipboard->req_fdata)
+				{
+					free(clipboard->req_fdata);
+					clipboard->req_fdata = NULL;
+				}
 			}
 			else {
 				instance->m_lSize.QuadPart =
@@ -856,16 +732,18 @@ static void wf_cliprdr_reset_streams(CliprdrDataObject *instance)
 	instance->m_nStreams = 0;
 }
 
-/* Only call after hMem has been locked by GlobalLock; takes ownership and frees it. */
-static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(HANDLE hMem,
+/* Only call after clipboard->hmem has been locked by GlobalLock. */
+static HRESULT wf_cliprdr_fail_locked_file_descriptor_data(wfClipboard *clipboard,
 															STGMEDIUM *medium,
 															CliprdrDataObject *instance,
 															IStream **streams,
 															ULONG stream_count,
 															HRESULT error)
 {
-	GlobalUnlock(hMem);
-	GlobalFree(hMem);
+	GlobalUnlock(clipboard->hmem);
+	GlobalFree(clipboard->hmem);
+	clipboard->hmem = NULL;
+	clipboard->hmem_data_len = 0;
 	medium->hGlobal = NULL;
 	wf_cliprdr_release_streams(streams, stream_count);
 	wf_cliprdr_reset_streams(instance);
@@ -992,45 +870,49 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		FILEGROUPDESCRIPTORW *dsc;
 		IStream **streams = NULL;
 		UINT stream_count = 0;
-		SIZE_T hmem_size = 0;
-		HANDLE hMem = NULL;
-		if (cliprdr_send_data_request(instance->m_connID, clipboard,
-									  instance->m_pFormatEtc[idx].cfFormat, &hMem, &hmem_size) != 0)
+		SIZE_T hmem_size;
+		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
+		// FIXME: origin code may be failed here???
+		if (cliprdr_send_data_request(instance->m_connID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
 		{
 			return E_UNEXPECTED;
 		}
-		if (!hMem)
+		if (!clipboard->hmem)
 		{
 			return E_UNEXPECTED;
 		}
 
-		pMedium->hGlobal = hMem; /* points to a FILEGROUPDESCRIPTOR structure */
+		pMedium->hGlobal = clipboard->hmem; /* points to a FILEGROUPDESCRIPTOR structure */
 		/* GlobalLock returns a pointer to the first byte of the memory block,
 		 * in which is a FILEGROUPDESCRIPTOR structure, whose first UINT member
 		 * is the number of FILEDESCRIPTOR's */
-		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(hMem);
+		// dsc = (FILEGROUPDESCRIPTOR *)GlobalLock(clipboard->hmem);
+		dsc = (FILEGROUPDESCRIPTORW *)GlobalLock(clipboard->hmem);
 		if (!dsc)
 		{
 			pMedium->hGlobal = NULL;
-			GlobalFree(hMem);
+			GlobalFree(clipboard->hmem);
+			clipboard->hmem = NULL;
+			clipboard->hmem_data_len = 0;
 			wf_cliprdr_reset_streams(instance);
 			return E_UNEXPECTED;
 		}
 
+		hmem_size = clipboard->hmem_data_len;
 		/* cItems is remote-controlled; verify the fixed header exists before reading it. */
 		if (hmem_size < offsetof(FILEGROUPDESCRIPTORW, fgd))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    hMem, pMedium, instance, NULL, 0, E_UNEXPECTED);
+			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
 		stream_count = dsc->cItems;
 		if (!wf_cliprdr_file_group_descriptor_size_valid(hmem_size, stream_count))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    hMem, pMedium, instance, NULL, 0, E_UNEXPECTED);
+			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
 		streams = (IStream **)calloc(stream_count, sizeof(IStream *));
 		if (!streams)
 			return wf_cliprdr_fail_locked_file_descriptor_data(
-			    hMem, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
+			    clipboard, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
 
 		for (i = 0; i < stream_count; i++)
 		{
@@ -1039,11 +921,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			if (!streams[i])
 			{
 				return wf_cliprdr_fail_locked_file_descriptor_data(
-				    hMem, pMedium, instance, streams, i, E_OUTOFMEMORY);
+				    clipboard, pMedium, instance, streams, i, E_OUTOFMEMORY);
 			}
 		}
 
-		GlobalUnlock(hMem);
+		GlobalUnlock(clipboard->hmem);
 		wf_cliprdr_reset_streams(instance);
 		instance->m_pStream = streams;
 		instance->m_nStreams = stream_count;
@@ -1814,8 +1696,7 @@ UINT try_reset_event(HANDLE event)
 	}
 }
 
-UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag,
-						 void **data, const BOOL *responseSucceeded)
+UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BOOL* recvedFlag, void **data)
 {
 	UINT rc = ERROR_SUCCESS;
 	clipboard->context->IsStopped = FALSE;
@@ -1855,8 +1736,7 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 			return ERROR_INTERNAL_ERROR;
 		}
 
-		if ((responseSucceeded && !*responseSucceeded) ||
-			(!responseSucceeded && (*data) == NULL))
+		if ((*data) == NULL)
 		{
 			rc = ERROR_INTERNAL_ERROR;
 		}
@@ -1890,80 +1770,34 @@ UINT wait_response_event(UINT32 connID, wfClipboard *clipboard, HANDLE event, BO
 	return ERROR_INTERNAL_ERROR;
 }
 
-static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId,
-									  HANDLE *outHmem, SIZE_T *outLen)
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId)
 {
 	UINT rc;
 	UINT32 remoteFormatId;
 	CLIPRDR_FORMAT_DATA_REQUEST formatDataRequest;
-	DWORD timeoutMillis;
-	HANDLE hMem = NULL;
-	SIZE_T len = 0;
 
-	*outHmem = NULL;
-	*outLen = 0;
-
-	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest ||
-		!clipboard->format_request_mutex)
-		return ERROR_INTERNAL_ERROR;
-
-	// Serialize the whole request/response cycle so a second request cannot overwrite
-	// the shared hmem slot while this one is in flight.
-	timeoutMillis = (clipboard->context->ResponseWaitTimeoutSecs + 1) * 2000;
-	if (!lock_mutex(clipboard->format_request_mutex, timeoutMillis))
+	if (!clipboard || !clipboard->context || !clipboard->context->ClientFormatDataRequest)
 		return ERROR_INTERNAL_ERROR;
 
 	rc = try_reset_event(clipboard->formatDataRespEvent);
 	if (rc != ERROR_SUCCESS)
 	{
-		ReleaseMutex(clipboard->format_request_mutex);
 		return rc;
 	}
+	clipboard->formatDataRespReceived = FALSE;
 
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
+
 	formatDataRequest.connID = connID;
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
-
-	// Mark a response as expected under hmem_mutex; the handler drops any response
-	// that arrives while this flag is clear.
-	if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
-	{
-		ReleaseMutex(clipboard->format_request_mutex);
-		return ERROR_INTERNAL_ERROR;
-	}
-	clipboard->formatDataRespReceived = FALSE;
-	clipboard->formatDataRespExpected = TRUE;
-	ReleaseMutex(clipboard->hmem_mutex);
-
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
-	if (rc == ERROR_SUCCESS)
-		rc = wait_response_event(connID, clipboard, clipboard->formatDataRespEvent,
-								 &clipboard->formatDataRespReceived, &clipboard->hmem, NULL);
-
-	// Take ownership of the response buffer and stop expecting a response, both under
-	// hmem_mutex, so a late/duplicate response can no longer touch the slot.
-	if (lock_mutex(clipboard->hmem_mutex, INFINITE))
-	{
-		hMem = clipboard->hmem;
-		len = clipboard->hmem_data_len;
-		clipboard->hmem = NULL;
-		clipboard->hmem_data_len = 0;
-		clipboard->formatDataRespExpected = FALSE;
-		ReleaseMutex(clipboard->hmem_mutex);
-	}
-	ReleaseMutex(clipboard->format_request_mutex);
-
 	if (rc != ERROR_SUCCESS)
 	{
-		if (hMem)
-			GlobalFree(hMem);
 		return rc;
 	}
 
-	*outHmem = hMem;
-	*outLen = len;
-	return rc;
+	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId, ULONG index,
@@ -1981,6 +1815,8 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UI
 	{
 		return rc;
 	}
+	clipboard->req_f_received = FALSE;
+	clipboard->req_f_stream_id_expected = streamId;
 
 	fileContentsRequest.connID = connID;
 	fileContentsRequest.streamId = streamId;
@@ -1991,26 +1827,13 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UI
 	fileContentsRequest.cbRequested = nreq;
 	fileContentsRequest.clipDataId = 0;
 	fileContentsRequest.msgFlags = 0;
-
-	// Publish the per-request expectations under req_f_mutex so the channel-thread
-	// response handler reads a consistent (stream id, requested size) pair.
-	if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
-		return ERROR_INTERNAL_ERROR;
-	clipboard->req_f_received = FALSE;
-	clipboard->req_f_response_ok = FALSE;
-	clipboard->req_f_size_requested = nreq;
-	clipboard->req_f_stream_id_expected = streamId;
-	ReleaseMutex(clipboard->req_f_mutex);
-
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 	if (rc != ERROR_SUCCESS)
 	{
 		return rc;
 	}
 
-	return wait_response_event(connID, clipboard, clipboard->req_fevent,
-							   &clipboard->req_f_received, (void **)&clipboard->req_fdata,
-							   &clipboard->req_f_response_ok);
+	return wait_response_event(connID, clipboard, clipboard->req_fevent, &clipboard->req_f_received, (void **)&clipboard->req_fdata);
 }
 
 static UINT cliprdr_send_response_filecontents(
@@ -2077,13 +1900,11 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 		{
 			if (!is_set_by_instance(clipboard))
 			{
-				// Drop any stale format-data buffer under hmem_mutex so this does not
-				// race the channel thread's response handler.
-				HANDLE stale = NULL;
-				SIZE_T stale_len = 0;
-				take_hmem(clipboard, &stale, &stale_len);
-				if (stale)
-					GlobalFree(stale);
+				if (clipboard->hmem)
+				{
+					GlobalFree(clipboard->hmem);
+					clipboard->hmem = NULL;
+				}
 
 				cliprdr_send_format_list(clipboard, 0);
 			}
@@ -2110,21 +1931,20 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 		// https://docs.microsoft.com/en-us/windows/win32/dataxchg/wm-renderformat?redirectedfrom=MSDN
 		// to-do: ensure usage of 0
+		if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam) != 0)
 		{
-			HANDLE hMem = NULL;
-			SIZE_T hmemLen = 0;
-			if (cliprdr_send_data_request(0, clipboard, (UINT32)wParam, &hMem, &hmemLen) != 0)
-			{
-				DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
-				break;
-			}
+			DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
+			break;
+		}
 
-			if (!SetClipboardData((UINT)wParam, hMem))
-			{
-				DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
+		if (!SetClipboardData((UINT)wParam, clipboard->hmem))
+		{
+			DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
 
-				if (hMem)
-					GlobalFree(hMem);
+			if (clipboard->hmem)
+			{
+				GlobalFree(clipboard->hmem);
+				clipboard->hmem = NULL;
 			}
 		}
 
@@ -2207,22 +2027,22 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 			for (UINT32 i = 0; i < format_ids->size; ++i)
 			{
-				HANDLE hMem = NULL;
-				SIZE_T hmemLen = 0;
-				if (cliprdr_send_data_request(format_ids->connID, clipboard,
-											  format_ids->formats[i], &hMem, &hmemLen) != 0)
+				if (cliprdr_send_data_request(format_ids->connID, clipboard, format_ids->formats[i]) != 0)
 				{
 					DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
 					continue;
 				}
 
-				if (!SetClipboardData(format_ids->formats[i], hMem))
+				if (!SetClipboardData(format_ids->formats[i], clipboard->hmem))
 				{
 					printf("SetClipboardData failed with 0x%x\n", GetLastError());
 					DEBUG_CLIPRDR("SetClipboardData failed with 0x%x", GetLastError());
 
-					if (hMem)
-						GlobalFree(hMem);
+					if (clipboard->hmem)
+					{
+						GlobalFree(clipboard->hmem);
+						clipboard->hmem = NULL;
+					}
 				}
 			}
 
@@ -3136,8 +2956,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 	UINT rc = ERROR_INTERNAL_ERROR;
 	BYTE *data;
 	HANDLE hMem;
-	wfClipboard *clipboard = NULL;
-	BOOL locked = FALSE;
+	wfClipboard *clipboard;
 
 	do
 	{
@@ -3153,33 +2972,13 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
-
-		if (!lock_mutex(clipboard->hmem_mutex, INFINITE))
-		{
-			rc = ERROR_INTERNAL_ERROR;
-			break;
-		}
-		locked = TRUE;
-
-		// Drop a response nobody is waiting for (late/duplicate/unsolicited) so it
-		// cannot overwrite the slot a consumer is about to take.
-		if (!clipboard->formatDataRespExpected)
-		{
-			ReleaseMutex(clipboard->hmem_mutex);
-			return CHANNEL_RC_OK;
-		}
-		// Consume the expectation so a duplicate response for the same request hits
-		// the check above instead of overwriting the slot before the consumer takes it.
-		clipboard->formatDataRespExpected = FALSE;
-
-		// Free any leftover buffer from a prior request that was never consumed.
-		if (clipboard->hmem)
-			GlobalFree(clipboard->hmem);
 		clipboard->hmem = NULL;
 		clipboard->hmem_data_len = 0;
 
 		if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
 		{
+			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
+			// (void)emptyRes;
 			rc = E_FAIL;
 			break;
 		}
@@ -3213,10 +3012,7 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
-	if (locked)
-		ReleaseMutex(clipboard->hmem_mutex);
-
-	if (clipboard && !SetEvent(clipboard->formatDataRespEvent))
+	if (!SetEvent(clipboard->formatDataRespEvent))
 	{
 		// If failed to set event, set flag to indicate the event is received.
 		DEBUG_CLIPRDR("wf_cliprdr_server_format_data_response(), SetEvent failed with 0x%x", GetLastError());
@@ -3244,9 +3040,6 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	BOOL bIsStreamFile = TRUE;
 	static LPSTREAM pStreamStc = NULL;
 	static UINT32 uStreamIdStc = 0;
-	// streamId is only unique within one connection; different peers restart their
-	// stream-id counter, so the cache must also key on connID or a request from one
-	// peer could be served another peer's cached stream.
 	static UINT32 uConnIdStc = 0;
 	wfClipboard *clipboard;
 	UINT rc = ERROR_INTERNAL_ERROR;
@@ -3500,9 +3293,8 @@ static UINT
 wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 										 const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse)
 {
-	wfClipboard *clipboard = NULL;
+	wfClipboard *clipboard;
 	UINT rc = ERROR_INTERNAL_ERROR;
-	BOOL locked = FALSE;
 
 	do
 	{
@@ -3518,28 +3310,10 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
-
-		// req_f_mutex also guards req_f_stream_id_expected / req_f_size_requested, so
-		// take it before reading them.
-		if (!lock_mutex(clipboard->req_f_mutex, INFINITE))
-		{
-			rc = ERROR_INTERNAL_ERROR;
-			break;
-		}
-		locked = TRUE;
-
-		// A response for another stream is ignored without waking the waiter.
 		if (fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
-		{
-			ReleaseMutex(clipboard->req_f_mutex);
 			return CHANNEL_RC_OK;
-		}
-
-		// Free any leftover buffer from a prior request that was never consumed.
-		free(clipboard->req_fdata);
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
-		clipboard->req_f_response_ok = FALSE;
 
 		if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
 		{
@@ -3547,31 +3321,10 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			break;
 		}
 
-		// Reject a response claiming more data than was requested.
-		if (fileContentsResponse->cbRequested > clipboard->req_f_size_requested)
-		{
-			rc = ERROR_INTERNAL_ERROR;
-			break;
-		}
-
-		if (fileContentsResponse->cbRequested == 0)
-		{
-			clipboard->req_f_response_ok = TRUE;
-			rc = CHANNEL_RC_OK;
-			break;
-		}
-
-		if (!fileContentsResponse->requestedData)
-		{
-			rc = ERROR_INTERNAL_ERROR;
-			break;
-		}
-
 		clipboard->req_fsize = fileContentsResponse->cbRequested;
 		clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
 		if (!clipboard->req_fdata)
 		{
-			clipboard->req_fsize = 0;
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
@@ -3579,14 +3332,10 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		CopyMemory(clipboard->req_fdata, fileContentsResponse->requestedData,
 				   fileContentsResponse->cbRequested);
 
-		clipboard->req_f_response_ok = TRUE;
 		rc = CHANNEL_RC_OK;
 	} while (0);
 
-	if (locked)
-		ReleaseMutex(clipboard->req_f_mutex);
-
-	if (clipboard && !SetEvent(clipboard->req_fevent))
+	if (!SetEvent(clipboard->req_fevent))
 	{
 		// If failed to set event, set flag to indicate the event is received.
 		DEBUG_CLIPRDR("wf_cliprdr_server_file_contents_response(), SetEvent failed with 0x%x", GetLastError());
@@ -3657,18 +3406,6 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	if (!(clipboard->req_fevent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
 	clipboard->req_f_received = FALSE;
-
-	if (!(clipboard->req_f_mutex = CreateMutex(NULL, FALSE, NULL)))
-		goto error;
-
-	if (!(clipboard->req_f_request_mutex = CreateMutex(NULL, FALSE, NULL)))
-		goto error;
-
-	if (!(clipboard->hmem_mutex = CreateMutex(NULL, FALSE, NULL)))
-		goto error;
-
-	if (!(clipboard->format_request_mutex = CreateMutex(NULL, FALSE, NULL)))
-		goto error;
 
 	if (!(clipboard->thread = CreateThread(NULL, 0, cliprdr_thread_func, clipboard, 0, NULL)))
 		goto error;
@@ -3741,35 +3478,6 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 	if (clipboard->req_fevent)
 		CloseHandle(clipboard->req_fevent);
-
-	if (clipboard->req_f_mutex)
-	{
-		// Reclaim any response buffer that no consumer ever took, so it is not leaked.
-		char *leftover = NULL;
-		ULONG leftover_sz = 0;
-		take_req_fdata(clipboard, &leftover, &leftover_sz);
-		free(leftover);
-
-		CloseHandle(clipboard->req_f_mutex);
-	}
-
-	if (clipboard->req_f_request_mutex)
-		CloseHandle(clipboard->req_f_request_mutex);
-
-	if (clipboard->hmem_mutex)
-	{
-		// Reclaim any format-data buffer no consumer took, so it is not leaked.
-		HANDLE leftover = NULL;
-		SIZE_T leftover_len = 0;
-		take_hmem(clipboard, &leftover, &leftover_len);
-		if (leftover)
-			GlobalFree(leftover);
-
-		CloseHandle(clipboard->hmem_mutex);
-	}
-
-	if (clipboard->format_request_mutex)
-		CloseHandle(clipboard->format_request_mutex);
 
 	clear_file_array(clipboard);
 	clear_format_map(clipboard);
