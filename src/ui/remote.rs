@@ -513,7 +513,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_rdp();
         fn login(String, String, String, bool);
         fn send2fa(String, bool);
-        fn continue_insecure_connection();
+        fn continue_insecure_connection(bool);
         fn get_enable_trusted_devices();
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);

@@ -1186,7 +1186,12 @@ void msgBox(SessionID sessionId, String type, String title, String text,
     int? submitTimeout}) {
   dialogManager.dismissAll();
   if (type.contains('insecure-connection')) {
-    void closeSession() {
+    Future<void> closeSession() async {
+      await bind.sessionSetCommon(
+        sessionId: sessionId,
+        key: 'continue-insecure-connection',
+        value: 'N',
+      );
       dialogManager.dismissAll();
       closeConnection();
     }
@@ -1195,7 +1200,7 @@ void msgBox(SessionID sessionId, String type, String title, String text,
       unawaited(
         bind.sessionSetCommon(
           sessionId: sessionId,
-          key: 'insecure-connection-confirmed',
+          key: 'continue-insecure-connection',
           value: 'Y',
         ),
       );
