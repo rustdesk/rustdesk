@@ -711,7 +711,6 @@ pub fn is_can_input_monitoring(_prompt: bool) -> bool {
 
 #[inline]
 pub fn get_error() -> String {
-    #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
     {
         let dtype = crate::platform::linux::get_display_server();

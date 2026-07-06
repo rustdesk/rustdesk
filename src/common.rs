@@ -764,15 +764,14 @@ async fn test_rendezvous_server_() {
     Config::reset_online();
 }
 
-// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
 }
 
 pub fn refresh_rendezvous_server() {
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     test_rendezvous_server();
-    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     std::thread::spawn(|| {
         if crate::ipc::test_rendezvous_server().is_err() {
             test_rendezvous_server();
