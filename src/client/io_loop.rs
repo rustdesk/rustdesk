@@ -102,10 +102,6 @@ impl ParsedPeerInfo {
     }
 }
 
-fn is_direct_ip_access(peer: &str) -> bool {
-    hbb_common::is_ip_str(peer) || hbb_common::is_domain_port_str(peer)
-}
-
 impl<T: InvokeUiSession> Remote<T> {
     pub fn new(
         handler: Session<T>,
@@ -192,7 +188,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
                 if !is_secured
-                    && !is_direct_ip_access(&self.handler.get_id())
+                    && !client::is_direct_ip_access(&self.handler.get_id())
                     && !client::confirm_insecure_connection(&self.handler, &mut self.receiver).await
                 {
                     self.send_close_reason(&mut peer, "").await;
