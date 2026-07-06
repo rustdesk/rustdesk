@@ -1408,6 +1408,15 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Close);
     }
 
+    pub fn continue_insecure_connection(&self, continue_insecure: bool) {
+        let data = if continue_insecure {
+            Data::ContinueInsecureConnection
+        } else {
+            Data::RejectInsecureConnection
+        };
+        self.send(data);
+    }
+
     fn try_auto_start_job_str(is_reconnected: bool, job_str: &str) -> Option<String> {
         if is_reconnected {
             let job_str = job_str.trim();

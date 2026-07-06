@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "릴레이 연결"),
         ("Secure Connection", "보안 연결"),
         ("Insecure Connection", "보안되지 않은 연결"),
+        ("Continue", ""),
         ("Scale original", "원본 크기 조정"),
         ("Scale adaptive", "크기 조정 가능"),
         ("General", "일반"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "최소화된 도구 모음에 표시"),
         ("All monitors", "모든 모니터"),
         ("#{} monitor", "#{} 모니터"),
+        ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 아직 설정 중일 수 있습니다. 나중에 다시 시도하세요.\n이 문제가 계속되면 서버를 신뢰할 수 없을 수 있습니다.\n그래도 계속하시겠습니까?"),
     ].iter().cloned().collect();
 }

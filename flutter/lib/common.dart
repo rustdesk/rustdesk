@@ -1185,6 +1185,48 @@ void msgBox(SessionID sessionId, String type, String title, String text,
     VoidCallback? onSubmit,
     int? submitTimeout}) {
   dialogManager.dismissAll();
+  if (type.contains('insecure-connection')) {
+    Future<void> closeSession() async {
+      await bind.sessionSetCommon(
+        sessionId: sessionId,
+        key: 'continue-insecure-connection',
+        value: 'N',
+      );
+      dialogManager.dismissAll();
+      closeConnection();
+    }
+
+    void continueSession() {
+      unawaited(
+        bind.sessionSetCommon(
+          sessionId: sessionId,
+          key: 'continue-insecure-connection',
+          value: 'Y',
+        ),
+      );
+      dialogManager.dismissAll();
+    }
+
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+        title: null,
+        content: SelectionArea(child: msgboxContent(type, title, text)),
+        actions: [
+          dialogButton(
+            'Continue',
+            onPressed: continueSession,
+            isOutline: true,
+          ),
+          dialogButton('Disconnect', onPressed: closeSession),
+        ],
+        onSubmit: closeSession,
+        onCancel: closeSession,
+      ),
+      tag: '$sessionId-$type-$title-$text-$link',
+    );
+    return;
+  }
+
   List<Widget> buttons = [];
   bool hasOk = false;
   submit() {

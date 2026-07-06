@@ -2619,6 +2619,10 @@ pub fn get_control_permission(
     }
 }
 
+pub fn is_direct_ip_access(peer: &str) -> bool {
+    hbb_common::is_ip_str(peer) || hbb_common::is_domain_port_str(peer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

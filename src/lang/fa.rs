@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relay ارتباط"),
         ("Secure Connection", "ارتباط امن"),
         ("Insecure Connection", "ارتباط غیر امن"),
+        ("Continue", ""),
         ("Scale original", "مقیاس اصلی"),
         ("Scale adaptive", "مقیاس تطبیقی"),
         ("General", "عمومی"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "نمایش در نوار ابزار کوچک‌شده"),
         ("All monitors", "همه نمایشگرها"),
         ("#{} monitor", "نمایشگر {}"),
+        ("conn-e2ee-unavailable-tip", "رمزنگاری سرتاسری قابل تأیید نیست.\nدستگاه راه دور ممکن است هنوز در حال آماده‌سازی باشد. بعداً دوباره تلاش کنید.\nاگر این مشکل ادامه داشت، سرور ممکن است نامطمئن باشد.\nبا این حال ادامه می‌دهید؟"),
     ].iter().cloned().collect();
 }

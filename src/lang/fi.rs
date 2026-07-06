@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Välitetty yhteys"),
         ("Secure Connection", "Suojattu yhteys"),
         ("Insecure Connection", "Suojaamaton yhteys"),
+        ("Continue", ""),
         ("Scale original", "Skaalaa alkuperäinen"),
         ("Scale adaptive", "Mukautuva skaalaus"),
         ("General", "Yleiset"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Näytä pienennetyssä työkalurivissä"),
         ("All monitors", "Kaikki näytöt"),
         ("#{} monitor", "Näyttö {}"),
+        ("conn-e2ee-unavailable-tip", "Päästä päähän -salausta ei voitu vahvistaa.\nEtälaite voi olla vielä määritettävänä. Yritä myöhemmin uudelleen.\nJos tämä jatkuu, palvelin ei ehkä ole luotettava.\nJatketaanko silti?"),
     ].iter().cloned().collect();
 }

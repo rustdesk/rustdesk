@@ -3792,6 +3792,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
 #[derive(Clone)]
 pub enum Data {
     Close,
+    RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
@@ -3815,9 +3816,31 @@ pub enum Data {
     ElevateWithLogon(String, String),
     NewVoiceCall,
     CloseVoiceCall,
+    ContinueInsecureConnection,
     ResetDecoder(Option<usize>),
     RenameFile((i32, String, String, bool)),
     TakeScreenshot((i32, String)),
+}
+
+pub async fn confirm_insecure_connection(
+    interface: &impl Interface,
+    receiver: &mut UnboundedReceiver<Data>,
+) -> bool {
+    interface.msgbox(
+        "insecure-connection-nocancel-hasclose",
+        "Insecure Connection",
+        "conn-e2ee-unavailable-tip",
+        "",
+    );
+    while let Some(data) = receiver.recv().await {
+        match data {
+            Data::ContinueInsecureConnection => return true,
+            Data::RejectInsecureConnection => return false,
+            Data::Close => return false,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Keycode for key events.

@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Ретрансльоване підключення"),
         ("Secure Connection", "Безпечне підключення"),
         ("Insecure Connection", "Небезпечне підключення"),
+        ("Continue", ""),
         ("Scale original", "Оригінальний масштаб"),
         ("Scale adaptive", "Адаптивний масштаб"),
         ("General", "Загальні"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Показувати на згорнутій панелі інструментів"),
         ("All monitors", "Усі монітори"),
         ("#{} monitor", "Монітор {}"),
+        ("conn-e2ee-unavailable-tip", "Не вдалося перевірити наскрізне шифрування.\nВіддалений пристрій, можливо, ще налаштовується. Спробуйте пізніше.\nЯкщо це повторюється, сервер може бути ненадійним.\nПродовжити все одно?"),
     ].iter().cloned().collect();
 }

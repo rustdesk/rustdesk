@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Kapcsolódás továbbító-kiszolgálón keresztül"),
         ("Secure Connection", "Biztonságos kapcsolat"),
         ("Insecure Connection", "Nem biztonságos kapcsolat"),
+        ("Continue", ""),
         ("Scale original", "Eredeti méretarány"),
         ("Scale adaptive", "Adaptív méretarány"),
         ("General", "Általános"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Megjelenítés a kis méretű eszköztáron"),
         ("All monitors", "Minden monitor"),
         ("#{} monitor", "{}. monitor"),
+        ("conn-e2ee-unavailable-tip", "A végpontok közötti titkosítás nem volt ellenőrizhető.\nA távoli eszköz talán még beállítás alatt áll. Próbálja újra később.\nHa ez továbbra is előfordul, a szerver lehet, hogy nem megbízható.\nFolytatja így is?"),
     ].iter().cloned().collect();
 }
