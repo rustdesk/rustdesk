@@ -3821,6 +3821,26 @@ pub enum Data {
     TakeScreenshot((i32, String)),
 }
 
+pub async fn confirm_insecure_connection(
+    interface: &impl Interface,
+    receiver: &mut UnboundedReceiver<Data>,
+) -> bool {
+    interface.msgbox(
+        "insecure-connection-nocancel-hasclose",
+        "Insecure Connection",
+        "conn-e2ee-unavailable-tip",
+        "",
+    );
+    while let Some(data) = receiver.recv().await {
+        match data {
+            Data::ContinueInsecureConnection => return true,
+            Data::Close => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Keycode for key events.
 #[derive(Clone, Debug)]
 pub enum Key {

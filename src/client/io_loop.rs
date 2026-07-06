@@ -193,7 +193,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
                 if !is_secured
                     && !is_direct_ip_access(&self.handler.get_id())
-                    && !self.confirm_insecure_connection().await
+                    && !client::confirm_insecure_connection(&self.handler, &mut self.receiver).await
                 {
                     self.send_close_reason(&mut peer, "").await;
                     if kcp.is_some() {
@@ -385,23 +385,6 @@ impl<T: InvokeUiSession> Remote<T> {
             // unmounted. Keep this async path for other file-clipboard platforms.
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
         }
-    }
-
-    async fn confirm_insecure_connection(&mut self) -> bool {
-        self.handler.msgbox(
-            "insecure-connection-nocancel-hasclose",
-            "Insecure Connection",
-            "conn-e2ee-unavailable-tip",
-            "",
-        );
-        while let Some(data) = self.receiver.recv().await {
-            match data {
-                Data::ContinueInsecureConnection => return true,
-                Data::Close => return false,
-                _ => {}
-            }
-        }
-        false
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]

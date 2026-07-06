@@ -120,6 +120,11 @@ async fn connect_and_login(
     let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
+    if !stream.is_secured() {
+        if !confirm_insecure_connection(&interface, ui_receiver).await {
+            bail!("Insecure connection rejected");
+        }
+    }
     let mut buffer = Vec::new();
     let mut received = false;
 
