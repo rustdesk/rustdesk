@@ -192,15 +192,8 @@ impl Capturer {
             DXGI_MODE_ROTATION_ROTATE270 => Some(D3D11_VIDEO_PROCESSOR_ROTATION_270),
             _ => None,
         };
-        let mut has_rotation = processor_rotation.is_some();
-        let mut use_i400 = crate::codec::Encoder::use_i400();
-        // Note: Although this function is named `create_rotations`, its original and underlying
-        // purpose is to initialize the generic `ID3D11VideoProcessor` pipeline. We reuse this
-        // processor context to perform both texture rotation and color saturation adjustments
-        // in a single hardware pass, avoiding redundant VRAM allocations and GPU draw call overhead.
-        log::info!("has_rotation={} use_i400={}", has_rotation, use_i400);
-        if has_rotation || use_i400 {
-            log::info!("create video processors");
+        if let Some(processor_rotation) = processor_rotation {
+            println!("create rotations");
             if !device.is_null() && !context.is_null() {
                 unsafe {
                     (*context).QueryInterface(
@@ -246,51 +239,20 @@ impl Capturer {
                                 {
                                     if caps.FeatureCaps
                                         & D3D11_VIDEO_PROCESSOR_FEATURE_CAPS_ROTATION
-                                        == 0
+                                        != 0
                                     {
-                                        has_rotation = false;
-                                        log::warn!("D3D11 rotation not supported");
-                                    }
-                                    if caps.FilterCaps
-                                        & D3D11_VIDEO_PROCESSOR_FILTER_CAPS_SATURATION
-                                        == 0
-                                    {
-                                        use_i400 = false;
-                                        log::warn!("D3D11 saturation not supported");
-                                    }
-                                    if has_rotation || use_i400 {
                                         (*video_device).CreateVideoProcessor(
                                             video_processor_enum,
                                             0,
                                             &mut video_processor,
                                         );
                                         if !video_processor.is_null() {
-                                            log::info!("create video processor: rotation");
-                                            if let Some(processor_rotation) = processor_rotation {
-                                                (*video_context).VideoProcessorSetStreamRotation(
-                                                    video_processor,
-                                                    0,
-                                                    TRUE,
-                                                    processor_rotation,
-                                                );
-                                            }
-                                            if use_i400 {
-                                                log::info!("create video processor: i400");
-                                                let mut range: D3D11_VIDEO_PROCESSOR_FILTER_RANGE =
-                                                    mem::zeroed();
-                                                (*video_processor_enum)
-                                                    .GetVideoProcessorFilterRange(
-                                                        D3D11_VIDEO_PROCESSOR_FILTER_SATURATION,
-                                                        &mut range,
-                                                    );
-                                                (*video_context).VideoProcessorSetStreamFilter(
-                                                    video_processor,
-                                                    0,
-                                                    D3D11_VIDEO_PROCESSOR_FILTER_SATURATION,
-                                                    TRUE,
-                                                    range.Minimum,
-                                                );
-                                            }
+                                            (*video_context).VideoProcessorSetStreamRotation(
+                                                video_processor,
+                                                0,
+                                                TRUE,
+                                                processor_rotation,
+                                            );
                                             (*video_context)
                                                 .VideoProcessorSetStreamAutoProcessingMode(
                                                     video_processor,
@@ -537,8 +499,7 @@ impl Capturer {
                 DXGI_MODE_ROTATION_ROTATE270 => 270,
                 _ => 0,
             };
-            let use_i400 = crate::codec::Encoder::use_i400();
-            if (rotation != 0 || use_i400)
+            if rotation != 0
                 && !self.texture.is_null()
                 && !self.rotate.video_context.is_null()
                 && !self.rotate.video_device.is_null()
