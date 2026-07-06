@@ -3322,6 +3322,13 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		}
 
 		clipboard->req_fsize = fileContentsResponse->cbRequested;
+		/*
+		 * Keep the zero-size allocation: supported Windows builds use the Microsoft
+		 * CRT, where malloc(0) returns a valid pointer. wait_response_event() also
+		 * uses a non-NULL req_fdata to recognize a successful zero-byte response.
+		 * The Rust FFI derives requestedData and cbRequested from the same Vec, so a
+		 * nonzero length cannot have a NULL data pointer on the normal call path.
+		 */
 		clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
 		if (!clipboard->req_fdata)
 		{
