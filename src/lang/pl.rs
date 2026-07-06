@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Połączenie przez bramkę"),
         ("Secure Connection", "Połączenie szyfrowane"),
         ("Insecure Connection", "Połączenie nieszyfrowane"),
+        ("Continue", ""),
         ("Scale original", "Skalowanie oryginalne"),
         ("Scale adaptive", "Dopasuj do wyświetlacza"),
         ("General", "Ogólne"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Pokaż na zminimalizowanym pasku narzędzi"),
         ("All monitors", "Wszystkie ekrany"),
         ("#{} monitor", "Ekran {}"),
+        ("conn-e2ee-unavailable-tip", "Nie można zweryfikować szyfrowania end-to-end.\nUrządzenie zdalne może nadal się konfigurować. Spróbuj ponownie później.\nJeśli problem będzie się powtarzał, serwer może być niezaufany.\nKontynuować mimo to?"),
     ].iter().cloned().collect();
 }

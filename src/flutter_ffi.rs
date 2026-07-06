@@ -1034,7 +1034,7 @@ pub fn main_set_option(key: String, value: String) {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
-        #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         crate::common::test_rendezvous_server();
     } else {
         set_option(key, value.clone());
@@ -1232,9 +1232,14 @@ pub fn main_set_local_option(key: String, value: String) {
     let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
     let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
+    let is_render_target =
+        |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
     if is_texture_render_key {
         let session_event = [("v", &value)];
         for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
             session.push_event("use_texture_render", &session_event, &[]);
             session.use_texture_render_changed();
             session.ui_handler.update_use_texture_render();
@@ -1242,6 +1247,9 @@ pub fn main_set_local_option(key: String, value: String) {
     }
     if is_d3d_render_key {
         for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
             session.update_supported_decodings();
         }
     }
@@ -3025,6 +3033,16 @@ pub fn main_set_common(_key: String, _value: String) {
                 serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
             );
         });
+    }
+}
+
+pub fn session_set_common(session_id: SessionID, key: String, value: String) {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        if key == "continue-insecure-connection"
+        {
+            s.continue_insecure_connection(value == "Y");
+            return;
+        }
     }
 }
 

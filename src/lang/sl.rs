@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Posredovana povezava"),
         ("Secure Connection", "Zavarovana povezava"),
         ("Insecure Connection", "Nezavarovana povezava"),
+        ("Continue", ""),
         ("Scale original", "Originalna velikost"),
         ("Scale adaptive", "Prilagojena velikost"),
         ("General", "Splošno"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Pokaži v pomanjšani orodni vrstici"),
         ("All monitors", "Vsi zasloni"),
         ("#{} monitor", "Zaslon {}"),
+        ("conn-e2ee-unavailable-tip", "Šifriranja od konca do konca ni bilo mogoče preveriti.\nOddaljena naprava se morda še nastavlja. Poskusite znova pozneje.\nČe se to še naprej dogaja, strežnik morda ni zaupanja vreden.\nVseeno nadaljevati?"),
     ].iter().cloned().collect();
 }

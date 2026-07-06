@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "रिले कनेक्शन"),
         ("Secure Connection", "सुरक्षित कनेक्शन"),
         ("Insecure Connection", "असुरक्षित कनेक्शन"),
+        ("Continue", ""),
         ("Scale original", "मूल पैमाना"),
         ("Scale adaptive", "अनुकूली पैमाना"),
         ("General", "सामान्य"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "न्यूनतम किए गए टूलबार पर दिखाएं"),
         ("All monitors", "सभी मॉनिटर"),
         ("#{} monitor", "मॉनिटर {}"),
+        ("conn-e2ee-unavailable-tip", "एंड-टू-एंड एन्क्रिप्शन सत्यापित नहीं किया जा सका।\nदूरस्थ डिवाइस अभी भी सेट अप हो रहा हो सकता है। बाद में फिर प्रयास करें।\nयदि यह समस्या बनी रहती है, तो सर्वर अविश्वसनीय हो सकता है।\nफिर भी जारी रखें?"),
     ].iter().cloned().collect();
 }

@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Tarpinė jungtis"),
         ("Secure Connection", "Saugus ryšys"),
         ("Insecure Connection", "Nesaugus ryšys"),
+        ("Continue", ""),
         ("Scale original", "Pakeisti originalų mastelį"),
         ("Scale adaptive", "Pritaikomas mastelis"),
         ("General", "Bendra"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Rodyti sumažintoje įrankių juostoje"),
         ("All monitors", "Visi monitoriai"),
         ("#{} monitor", "Monitorius {}"),
+        ("conn-e2ee-unavailable-tip", "Nepavyko patikrinti galinio šifravimo.\nNuotolinis įrenginys galbūt vis dar nustatomas. Bandykite dar kartą vėliau.\nJei tai kartojasi, serveris gali būti nepatikimas.\nVis tiek tęsti?"),
     ].iter().cloned().collect();
 }

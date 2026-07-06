@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Релейна връзка"),
         ("Secure Connection", "Сигурна връзка"),
         ("Insecure Connection", "Несигурна връзка"),
+        ("Continue", ""),
         ("Scale original", "Оригинален мащаб"),
         ("Scale adaptive", "Приспособимо мащабиране"),
         ("General", "Основен"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Показване в минимизираната лента с инструменти"),
         ("All monitors", "Всички монитори"),
         ("#{} monitor", "Монитор {}"),
+        ("conn-e2ee-unavailable-tip", "Шифроването от край до край не може да бъде проверено.\nОтдалеченото устройство може все още да се настройва. Опитайте отново по-късно.\nАко това продължи, сървърът може да не е надежден.\nДа се продължи ли въпреки това?"),
     ].iter().cloned().collect();
 }

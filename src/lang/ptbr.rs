@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Conexão via Relay"),
         ("Secure Connection", "Conexão Segura"),
         ("Insecure Connection", "Conexão Insegura"),
+        ("Continue", ""),
         ("Scale original", "Escala original"),
         ("Scale adaptive", "Escala adaptada"),
         ("General", "Geral"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Mostrar na barra de ferramentas minimizada"),
         ("All monitors", "Todas as telas"),
         ("#{} monitor", "Tela {}"),
+        ("conn-e2ee-unavailable-tip", "Não foi possível verificar a criptografia de ponta a ponta.\nO dispositivo remoto ainda pode estar sendo configurado. Tente novamente mais tarde.\nSe isso continuar acontecendo, o servidor pode não ser confiável.\nContinuar mesmo assim?"),
     ].iter().cloned().collect();
 }

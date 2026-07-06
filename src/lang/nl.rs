@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relaisverbinding"),
         ("Secure Connection", "Beveiligde Verbinding"),
         ("Insecure Connection", "Onveilige Verbinding"),
+        ("Continue", ""),
         ("Scale original", "Oorspronkelijk formaat"),
         ("Scale adaptive", "Automatisch schalen"),
         ("General", "Algemeen"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Weergeven op de geminimaliseerde werkbalk"),
         ("All monitors", "Alle monitoren"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "End-to-endversleuteling kon niet worden geverifieerd.\nHet externe apparaat wordt mogelijk nog ingesteld. Probeer het later opnieuw.\nAls dit blijft gebeuren, is de server mogelijk niet vertrouwd.\nToch doorgaan?"),
     ].iter().cloned().collect();
 }

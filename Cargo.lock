@@ -6588,7 +6588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "556af5f5c953a2ee13f45753e581a38f9778e6551bc3ccc56d90b14628fe59d8"
 dependencies = [
  "cfg-if 0.1.10",
- "rpassword 2.1.0",
+ "rpassword",
  "tempfile",
  "termios 0.3.3",
  "winapi 0.3.9",
@@ -7153,17 +7153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpassword"
-version = "7.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80472be3c897911d0137b2d2b9055faf6eeac5b14e324073d83bc17b191d7e3f"
-dependencies = [
- "libc",
- "rtoolbox",
- "windows-sys 0.48.0",
-]
-
-[[package]]
 name = "rtcp"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7172,16 +7161,6 @@ dependencies = [
  "bytes",
  "thiserror 1.0.61",
  "webrtc-util",
-]
-
-[[package]]
-name = "rtoolbox"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c247d24e63230cdb56463ae328478bd5eac8b8faa8c69461a77e8e323afac90e"
-dependencies = [
- "libc",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -7270,7 +7249,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.4.8"
+version = "1.4.9"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -7283,7 +7262,6 @@ dependencies = [
  "cfg-if 1.0.0",
  "chrono",
  "cidr-utils",
- "clap 4.5.53",
  "clipboard",
  "clipboard-master",
  "cocoa 0.24.1",
@@ -7341,7 +7319,6 @@ dependencies = [
  "repng",
  "reqwest",
  "ringbuf",
- "rpassword 7.3.1",
  "rubato",
  "runas",
  "rust-pulsectl",
@@ -7385,7 +7362,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.4.8"
+version = "1.4.9"
 dependencies = [
  "brotli",
  "dirs 5.0.1",

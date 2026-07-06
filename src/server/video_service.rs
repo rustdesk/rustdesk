@@ -77,7 +77,7 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
     pub static ref IS_UAC_RUNNING: Arc<Mutex<bool>> = Default::default();
     pub static ref IS_FOREGROUND_WINDOW_ELEVATED: Arc<Mutex<bool>> = Default::default();
-    static ref SCREENSHOTS: Mutex<HashMap<usize, Screenshot>> = Default::default();
+    static ref SCREENSHOTS: Mutex<HashMap<(VideoSource, usize), Screenshot>> = Default::default();
 }
 
 struct Screenshot {
@@ -192,7 +192,7 @@ impl VideoFrameController {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum VideoSource {
     Monitor,
     Camera,
@@ -726,7 +726,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
-                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&display_idx);
+                    let screenshot_key = (vs.source, display_idx);
+                    let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
                     if let Some(mut screenshot) = screenshot {
                         let restore_vram = screenshot.restore_vram;
                         let (msg, w, h, data) = match &frame {
@@ -755,7 +756,10 @@ fn run(vs: VideoService) -> ResultType<()> {
                                     #[cfg(all(windows, feature = "vram"))]
                                     VRamEncoder::set_not_use(sp.name(), true);
                                     screenshot.restore_vram = true;
-                                    SCREENSHOTS.lock().unwrap().insert(display_idx, screenshot);
+                                    SCREENSHOTS
+                                        .lock()
+                                        .unwrap()
+                                        .insert(screenshot_key, screenshot);
                                     _raii.try_vram = false;
                                     bail!("SWITCH");
                                 }
@@ -1349,9 +1353,9 @@ fn check_qos(
     Ok(())
 }
 
-pub fn set_take_screenshot(display_idx: usize, sid: String, tx: Sender) {
+pub fn set_take_screenshot(source: VideoSource, display_idx: usize, sid: String, tx: Sender) {
     SCREENSHOTS.lock().unwrap().insert(
-        display_idx,
+        (source, display_idx),
         Screenshot {
             sid,
             tx,

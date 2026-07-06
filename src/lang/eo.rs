@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relajsa Konekto"),
         ("Secure Connection", "Sekura Konekto"),
         ("Insecure Connection", "Nesekura Konekto"),
+        ("Continue", ""),
         ("Scale original", "Skalo originalo"),
         ("Scale adaptive", "Skalo adapta"),
         ("General", "Ĝenerala"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Montri en la minimumigita ilobreto"),
         ("All monitors", "Ĉiuj monitoroj"),
         ("#{} monitor", "Monitoro {}"),
+        ("conn-e2ee-unavailable-tip", "Ne eblis kontroli la fin-al-finan ĉifradon.\nLa fora aparato eble ankoraŭ estas agordata. Provu denove poste.\nSe tio daŭre okazas, la servilo eble estas nefidinda.\nĈu daŭrigi tamen?"),
     ].iter().cloned().collect();
 }

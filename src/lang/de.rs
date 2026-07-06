@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relay-Verbindung"),
         ("Secure Connection", "Sichere Verbindung"),
         ("Insecure Connection", "Unsichere Verbindung"),
+        ("Continue", ""),
         ("Scale original", "Keine Skalierung"),
         ("Scale adaptive", "Anpassbare Skalierung"),
         ("General", "Allgemein"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "In der minimierten Symbolleiste anzeigen"),
         ("All monitors", "Alle Bildschirme"),
         ("#{} monitor", "Bildschirm {}"),
+        ("conn-e2ee-unavailable-tip", "Ende-zu-Ende-Verschlüsselung konnte nicht verifiziert werden.\nDas entfernte Gerät wird möglicherweise noch eingerichtet. Versuchen Sie es später erneut.\nWenn dies weiterhin auftritt, ist der Server möglicherweise nicht vertrauenswürdig.\nTrotzdem fortfahren?"),
     ].iter().cloned().collect();
 }

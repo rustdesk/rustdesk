@@ -1919,6 +1919,15 @@ class RustdeskImpl {
     throw UnimplementedError("sessionHandleScreenshot");
   }
 
+  Future<void> sessionSetCommon(
+      {required UuidValue sessionId, required String key, required String value, dynamic hint}) {
+      js.context.callMethod('setByName', [
+        'common',
+        jsonEncode({'name': key, 'value': value})
+      ]);
+      return Future.value();
+  }
+
   String? sessionGetCommonSync(
       {required UuidValue sessionId,
       required String key,

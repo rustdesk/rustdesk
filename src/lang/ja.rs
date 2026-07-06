@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "中継接続"),
         ("Secure Connection", "安全な接続"),
         ("Insecure Connection", "安全でない接続"),
+        ("Continue", ""),
         ("Scale original", "オリジナルのサイズ"),
         ("Scale adaptive", "ウィンドウに合わせる"),
         ("General", "一般"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "最小化したツールバーに表示"),
         ("All monitors", "すべてのディスプレイ"),
         ("#{} monitor", "ディスプレイ {}"),
+        ("conn-e2ee-unavailable-tip", "エンドツーエンド暗号化を確認できませんでした。\nリモートデバイスはまだ準備中の可能性があります。後でもう一度お試しください。\nこの問題が続く場合、サーバーが信頼できない可能性があります。\nそれでも続行しますか？"),
     ].iter().cloned().collect();
 }

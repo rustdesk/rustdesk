@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relayanslutning"),
         ("Secure Connection", "Säker anslutning"),
         ("Insecure Connection", "Osäker anslutning"),
+        ("Continue", ""),
         ("Scale original", "Skala orginal"),
         ("Scale adaptive", "Skala adaptivt"),
         ("General", "Generellt"),
@@ -766,5 +767,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Visa i det minimerade verktygsfältet"),
         ("All monitors", "Alla skärmar"),
         ("#{} monitor", "Skärm {}"),
+        ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunde inte verifieras.\nFjärrenheten kan fortfarande konfigureras. Försök igen senare.\nOm detta fortsätter kan servern vara opålitlig.\nFortsätta ändå?"),
     ].iter().cloned().collect();
 }
