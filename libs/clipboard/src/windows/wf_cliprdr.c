@@ -286,6 +286,7 @@ struct wf_clipboard
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
+	UINT32 req_f_conn_id_expected;     // connID of the outstanding request
 	UINT32 req_f_stream_id_expected;   // streamId of the outstanding request; responses for another are dropped
 	LONG req_f_stream_id_seq;          // source of unique per-stream ids
 
@@ -1816,6 +1817,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UI
 		return rc;
 	}
 	clipboard->req_f_received = FALSE;
+	clipboard->req_f_conn_id_expected = connID;
 	clipboard->req_f_stream_id_expected = streamId;
 
 	fileContentsRequest.connID = connID;
@@ -3310,7 +3312,8 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
-		if (fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
+		if (fileContentsResponse->connID != clipboard->req_f_conn_id_expected ||
+			fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
 			return CHANNEL_RC_OK;
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
