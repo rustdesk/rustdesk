@@ -407,6 +407,7 @@ class _GeneralState extends State<_General> {
   final RxBool serviceStop =
       isWeb ? RxBool(false) : Get.find<RxBool>(tag: 'stop-service');
   RxBool serviceBtnEnabled = true.obs;
+  final GlobalKey _minToolbarOptionKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -482,15 +483,28 @@ class _GeneralState extends State<_General> {
   }
 
   Widget other() {
+    final incomingOnly = bind.isIncomingOnly();
+    final outgoingOnly = bind.isOutgoingOnly();
     final showAutoUpdate = isWindows && bind.mainIsInstalled();
     final children = <Widget>[
-      if (!isWeb && !bind.isIncomingOnly())
+      if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),
-      _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
+      if (!incomingOnly)
+        _OptionCheckBox(
+          context,
+          'allow-remote-toolbar-docking-any-edge',
+          kOptionAllowMultiEdgeToolbarDock,
+          isServer: false,
+          update: (_) {
+            reloadAllWindows();
+          },
+        ),
+      if (!isWeb && !outgoingOnly)
+        _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       if (!isWeb) wallpaper(),
-      if (!isWeb && !bind.isIncomingOnly()) ...[
+      if (!isWeb && !incomingOnly) ...[
         _OptionCheckBox(
           context,
           'Open connection in new tab',
@@ -529,40 +543,40 @@ class _GeneralState extends State<_General> {
               isServer: false,
             ),
           ),
-        if (!isWeb && !bind.isCustomClient())
-          _OptionCheckBox(
-            context,
-            'Check for software update on startup',
-            kOptionEnableCheckUpdate,
-            isServer: false,
-          ),
-        if (showAutoUpdate)
-          _OptionCheckBox(
-            context,
-            'Auto update',
-            kOptionAllowAutoUpdate,
-            isServer: true,
-          ),
-        if (isWindows && !bind.isOutgoingOnly())
-          _OptionCheckBox(
-            context,
-            'Capture screen using DirectX',
-            kOptionDirectxCapture,
-          ),
-        if (!bind.isIncomingOnly()) ...[
-          _OptionCheckBox(
-            context,
-            'Enable UDP hole punching',
-            kOptionEnableUdpPunch,
-            isServer: false,
-          ),
-          _OptionCheckBox(
-            context,
-            'Enable IPv6 P2P connection',
-            kOptionEnableIpv6Punch,
-            isServer: false,
-          ),
-        ],
+      ],
+      if (!isWeb && !bind.isCustomClient())
+        _OptionCheckBox(
+          context,
+          'Check for software update on startup',
+          kOptionEnableCheckUpdate,
+          isServer: false,
+        ),
+      if (showAutoUpdate)
+        _OptionCheckBox(
+          context,
+          'Auto update',
+          kOptionAllowAutoUpdate,
+          isServer: true,
+        ),
+      if (isWindows && !outgoingOnly)
+        _OptionCheckBox(
+          context,
+          'Capture screen using DirectX',
+          kOptionDirectxCapture,
+        ),
+      if (!isWeb && !incomingOnly) ...[
+        _OptionCheckBox(
+          context,
+          'Enable UDP hole punching',
+          kOptionEnableUdpPunch,
+          isServer: false,
+        ),
+        _OptionCheckBox(
+          context,
+          'Enable IPv6 P2P connection',
+          kOptionEnableIpv6Punch,
+          isServer: false,
+        ),
       ],
     ];
 
@@ -593,6 +607,47 @@ class _GeneralState extends State<_General> {
           }
           await mainSetLocalBoolOption(key, value);
         },
+      ));
+    }
+    children.add(_OptionCheckBox(
+      context,
+      'Show monitor switch button on the main toolbar',
+      kOptionAllowMonitorSwitchMainToolbar,
+      isServer: false,
+      update: (enabled) async {
+        if (!enabled) {
+          await mainSetLocalBoolOption(
+              kOptionAllowMonitorSwitchMinToolbar, false);
+        }
+        if (mounted) setState(() {});
+        reloadAllWindows();
+        if (enabled) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final ctx = _minToolbarOptionKey.currentContext;
+            if (ctx != null) {
+              Scrollable.ensureVisible(
+                ctx,
+                alignment: 0.5,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+              );
+            }
+          });
+        }
+      },
+    ));
+    if (mainGetLocalBoolOptionSync(kOptionAllowMonitorSwitchMainToolbar)) {
+      children.add(KeyedSubtree(
+        key: _minToolbarOptionKey,
+        child: _OptionCheckBox(
+          context,
+          'Show on the minimized toolbar',
+          kOptionAllowMonitorSwitchMinToolbar,
+          isServer: false,
+          update: (_) {
+            reloadAllWindows();
+          },
+        ).marginOnly(left: _kCheckBoxLeftMargin * 3),
       ));
     }
     return _Card(title: 'Other', children: children);
@@ -2419,7 +2474,7 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Ltd.\n$license',
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(

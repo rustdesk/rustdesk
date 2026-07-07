@@ -1914,6 +1914,15 @@ class RustdeskImpl {
     throw UnimplementedError("sessionHandleScreenshot");
   }
 
+  Future<void> sessionSetCommon(
+      {required UuidValue sessionId, required String key, required String value, dynamic hint}) {
+      js.context.callMethod('setByName', [
+        'common',
+        jsonEncode({'name': key, 'value': value})
+      ]);
+      return Future.value();
+  }
+
   String? sessionGetCommonSync(
       {required UuidValue sessionId,
       required String key,
@@ -2034,7 +2043,14 @@ class RustdeskImpl {
   }
 
   String mainResolveAvatarUrl({required String avatar, dynamic hint}) {
-    return js.context.callMethod('getByName', ['resolve_avatar_url', avatar])?.toString() ?? avatar;
+    return js.context.callMethod(
+            'getByName', ['resolve_avatar_url', avatar])?.toString() ??
+        avatar;
+  }
+
+  Future<String> mainDeployDevice(
+      {required String token, required String id, dynamic hint}) {
+    throw UnimplementedError("mainDeployDevice");
   }
 
   void dispose() {}

@@ -10,6 +10,11 @@ use crate::{
     common::get_default_sound_input,
     ui_session_interface::{InvokeUiSession, Session},
 };
+
+// Empirical no-data window before exposing the restart reconnect state to the UI.
+// Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
+const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
+const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 #[cfg(any(
@@ -153,7 +158,6 @@ impl<T: InvokeUiSession> Remote<T> {
             }
         };
 
-        let mut last_recv_time = Instant::now();
         let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
@@ -180,8 +184,20 @@ impl<T: InvokeUiSession> Remote<T> {
                     .lock()
                     .unwrap()
                     .set_connected();
+                let is_secured = peer.is_secured();
                 self.handler
-                    .set_connection_type(peer.is_secured(), direct, stream_type); // flutter -> connection_ready
+                    .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
+                if !is_secured
+                    && !crate::common::is_direct_ip_access(&self.handler.get_id())
+                    && !client::confirm_insecure_connection(&self.handler, &mut self.receiver).await
+                {
+                    self.send_close_reason(&mut peer, "").await;
+                    if kcp.is_some() {
+                        tokio::time::sleep(KCP_CLOSE_REASON_FLUSH_DELAY).await;
+                    }
+                    self.handle_disconnected(round);
+                    return;
+                }
                 self.handler.update_direct(Some(direct));
                 if conn_type == ConnType::DEFAULT_CONN || conn_type == ConnType::VIEW_CAMERA {
                     self.handler
@@ -219,6 +235,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut fps_instant = Instant::now();
 
                 let _keep_it = client::hc_connection(feedback, rendezvous_server, token).await;
+                let mut last_recv_time = Instant::now();
 
                 loop {
                     tokio::select! {
@@ -244,7 +261,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             } else {
                                 if self.handler.is_restarting_remote_device() {
                                     log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting remote device", "remote_restarting_tip", "");
+                                    self.handler.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
                                 } else {
                                     log::info!("Reset by the peer");
                                     self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
@@ -279,6 +296,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _ = status_timer.tick() => {
+                            if self.handler.is_restarting_remote_device()
+                                && last_recv_time.elapsed() >= RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT
+                            {
+                                self.handler.msgbox("restarting-show", "Restarting remote device", "Connection in progress. Please wait.", "");
+                                break;
+                            }
                             let elapsed = fps_instant.elapsed().as_millis();
                             if elapsed < 1000 {
                                 continue;
@@ -328,13 +351,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.send_close_reason(&mut peer, "kcp").await;
                     // KCP does not send messages immediately, so wait to ensure the last message is sent.
                     // 1ms works in my test, but 30ms is more reliable.
-                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    tokio::time::sleep(KCP_CLOSE_REASON_FLUSH_DELAY).await;
                 }
             }
             Err(err) => {
                 self.handler.on_establish_connection_error(err.to_string());
             }
         }
+        self.handle_disconnected(round);
+    }
+
+    fn handle_disconnected(&self, round: u32) {
         // set_disconnected_ok is used to check if new connection round is started.
         let _set_disconnected_ok = self
             .handler
@@ -350,6 +377,8 @@ impl<T: InvokeUiSession> Remote<T> {
 
         #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
         if self.handler.is_default() && _set_disconnected_ok {
+            // Linux client cleanup runs synchronously in try_stop_clipboard() before FUSE is
+            // unmounted. Keep this async path for other file-clipboard platforms.
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
         }
     }
@@ -1078,6 +1107,9 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn send_toggle_virtual_display_msg(&self, peer: &mut Stream) {
+        if self.handler.is_view_camera() {
+            return;
+        }
         if !self.peer_info.is_support_virtual_display() {
             return;
         }
@@ -1099,6 +1131,9 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     async fn send_toggle_privacy_mode_msg(&self, peer: &mut Stream) {
+        if self.handler.is_view_camera() {
+            return;
+        }
         let lc = self.handler.lc.read().unwrap();
         if lc.version >= hbb_common::get_version_number("1.2.4")
             && lc.get_toggle_option("privacy-mode")
@@ -1426,7 +1461,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.handler.set_cursor_position(cp);
                 }
                 Some(message::Union::Clipboard(cb)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard.v {
+                    let clipboard_allowed = {
+                        let lc = self.handler.lc.read().unwrap();
+                        !lc.disable_clipboard.v && !lc.view_only.v
+                    };
+                    if clipboard_allowed {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
@@ -1445,7 +1484,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::MultiClipboards(_mcb)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard.v {
+                    let clipboard_allowed = {
+                        let lc = self.handler.lc.read().unwrap();
+                        !lc.disable_clipboard.v && !lc.view_only.v
+                    };
+                    if clipboard_allowed {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         #[cfg(target_os = "ios")]

@@ -199,6 +199,20 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        // Root CLI management commands must talk to the user `--server` main IPC.
+        // Example: `sudo rustdesk --option custom-rendezvous-server` should query the
+        // user's IPC instead of root's `/tmp/<app>-0/ipc`; `connect()` still limits this
+        // routing to empty-postfix main IPC only.
+        let _user_main_ipc_scope = if crate::platform::is_installed()
+            && is_root()
+            && is_user_main_ipc_scope_cli_command(&args)
+        {
+            Some(crate::ipc::UserMainIpcScope::new())
+        } else {
+            None
+        };
+
         #[cfg(windows)]
         {
             use crate::platform;
@@ -248,11 +262,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                #[cfg(not(windows))]
-                let options = "desktopicon startmenu";
-                #[cfg(windows)]
-                let options = "desktopicon startmenu printer";
-                let res = platform::install_me(options, "".to_owned(), true, args.len() > 1);
+                let (printer_override, debug) = parse_silent_install_args(&args);
+                let options = platform::get_silent_install_options(printer_override);
+                let res = platform::install_me(options, "".to_owned(), true, debug);
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
                     Err(err) => {
@@ -418,7 +430,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--password" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -460,7 +472,7 @@ pub fn core_main() -> Option<Vec<String>> {
             println!("{}", crate::ipc::get_id());
             return None;
         } else if args[0] == "--set-id" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -507,7 +519,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--option" {
-            if config::is_disable_settings() {
+            if is_cli_setting_change_disabled() {
                 println!("Settings are disabled!");
                 return None;
             }
@@ -630,6 +642,8 @@ pub fn core_main() -> Option<Vec<String>> {
         } else if args[0] == "--deploy" {
             if config::Config::no_register_device() {
                 println!("Cannot deploy an unregistrable device!");
+            } else if config::is_outgoing_only() {
+                println!("Cannot deploy Outgoing-only clients.");
             } else if crate::platform::is_installed() && is_root() {
                 let max = args.len() - 1;
                 let pos = args.iter().position(|x| x == "--token").unwrap_or(max);
@@ -647,72 +661,28 @@ pub fn core_main() -> Option<Vec<String>> {
                     }
                 };
                 let new_id = get_value("--id");
-                let local_id = crate::ipc::get_id();
-                let id_to_deploy = new_id.clone().unwrap_or_else(|| local_id.clone());
-                let uuid = crate::encode64(hbb_common::get_uuid());
-                let pk = crate::encode64(
-                    hbb_common::config::Config::get_key_pair().1,
-                );
-                let body = serde_json::json!({
-                    "id": id_to_deploy,
-                    "uuid": uuid,
-                    "pk": pk,
-                });
-                let header = "Authorization: Bearer ".to_owned() + &token;
-                let url = crate::ui_interface::get_api_server() + "/api/devices/deploy";
-                match crate::post_request_sync(url, body.to_string(), &header) {
-                    Err(err) => {
-                        println!("Request failed: {}", err);
-                        std::process::exit(1);
+                match crate::ui_interface::deploy_device(token, new_id) {
+                    crate::ui_interface::DeployResult::Ok => {
+                        println!("Device deployed.");
                     }
-                    Ok(text) => {
-                        let parsed: serde_json::Value =
-                            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-                        let result = parsed["result"].as_str().unwrap_or("");
-                        match result {
-                            "OK" => {
-                                if let Some(ref new_id) = new_id {
-                                    if *new_id != local_id {
-                                        if let Err(err) =
-                                            crate::ipc::set_config("id", new_id.clone())
-                                        {
-                                            println!(
-                                                "Failed to persist deployed id locally: {}",
-                                                err
-                                            );
-                                            std::process::exit(1);
-                                        }
-                                    }
-                                }
-                                if let Err(err) = crate::ipc::notify_deployed() {
-                                    log::warn!("Failed to notify deployed state: {}", err);
-                                }
-                                println!("Device deployed.");
-                            }
-                            "NOT_ENABLED" => {
-                                println!("Server does not require deployment.");
-                                std::process::exit(3);
-                            }
-                            "INVALID_INPUT" => {
-                                println!("Invalid input.");
-                                std::process::exit(5);
-                            }
-                            "ID_TAKEN" => {
-                                println!(
-                                    "Id `{}` is already used by another machine on the server.",
-                                    id_to_deploy
-                                );
-                                std::process::exit(6);
-                            }
-                            _ => {
-                                if text.is_empty() {
-                                    println!("Unknown response.");
-                                } else {
-                                    println!("{}", text);
-                                }
-                                std::process::exit(1);
-                            }
-                        }
+                    crate::ui_interface::DeployResult::NotEnabled => {
+                        println!("Server does not require deployment.");
+                        std::process::exit(3);
+                    }
+                    crate::ui_interface::DeployResult::InvalidInput => {
+                        println!("Invalid input.");
+                        std::process::exit(5);
+                    }
+                    crate::ui_interface::DeployResult::IdTaken(id) => {
+                        println!(
+                            "Id `{}` is already used by another machine on the server.",
+                            id
+                        );
+                        std::process::exit(6);
+                    }
+                    crate::ui_interface::DeployResult::Error(err) => {
+                        println!("{}", err);
+                        std::process::exit(1);
                     }
                 }
             } else {
@@ -936,6 +906,82 @@ fn is_root() -> bool {
     }
     #[allow(unreachable_code)]
     crate::platform::is_root()
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
+    matches!(
+        args.first().map(String::as_str),
+        Some("--password")
+            | Some("--set-unlock-pin")
+            | Some("--get-id")
+            | Some("--set-id")
+            | Some("--config")
+            | Some("--option")
+            | Some("--assign")
+            | Some("--deploy")
+    )
+}
+
+#[inline]
+fn is_cli_setting_change_disabled() -> bool {
+    let option = config::keys::OPTION_ALLOW_COMMAND_LINE_SETTINGS_WHEN_SETTINGS_DISABLED;
+    let allow_command_line_settings =
+        config::option2bool(option, &crate::get_builtin_option(option));
+    config::is_disable_settings() && !allow_command_line_settings
+}
+
+#[cfg(windows)]
+fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
+    let mut printer_override = None;
+    let mut debug = false;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "printer=1" => printer_override = Some(true),
+            "printer=0" => printer_override = Some(false),
+            "debug" => debug = true,
+            _ => {}
+        }
+    }
+
+    (printer_override, debug)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
+        for command in [
+            "--password",
+            "--set-unlock-pin",
+            "--get-id",
+            "--set-id",
+            "--config",
+            "--option",
+            "--assign",
+            "--deploy",
+        ] {
+            assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+
+        for command in [
+            "--service",
+            "--server",
+            "--tray",
+            "--cm",
+            "--check-hwcodec-config",
+            "--connect",
+        ] {
+            assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
+        }
+    }
 }
 
 /// Check if the executable is a Quick Support version.

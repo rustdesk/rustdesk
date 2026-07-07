@@ -118,6 +118,23 @@ pub mod client {
         }
 
         fn key_sequence(&mut self, s: &str) {
+            if s.is_empty() {
+                return;
+            }
+
+            // Keep ordering deterministic:
+            // - pure ASCII printable: send via Portal keysym
+            // - any non-ASCII present (including mixed ASCII/non-ASCII): send whole
+            //   sequence via clipboard as one atomic paste
+            let ascii_only = s.chars().all(|c| {
+                let keysym = char_to_keysym(c);
+                can_input_via_keysym(c, keysym)
+            });
+            if !ascii_only {
+                input_text_via_clipboard(s, self.conn.clone(), &self.session);
+                return;
+            }
+
             for c in s.chars() {
                 let keysym = char_to_keysym(c);
                 // ASCII characters: use keysym
@@ -128,9 +145,6 @@ pub mod client {
                     if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session) {
                         log::error!("Failed to send keysym up: {:?}", e);
                     }
-                } else {
-                    // Non-ASCII: use clipboard
-                    input_text_via_clipboard(&c.to_string(), self.conn.clone(), &self.session);
                 }
             }
         }
@@ -167,8 +181,7 @@ pub mod client {
                 // ASCII characters: send keysym up if we also sent it on key_down
                 let keysym = char_to_keysym(chr);
                 if can_input_via_keysym(chr, keysym) {
-                    if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session)
-                    {
+                    if let Err(e) = send_keysym(keysym, false, self.conn.clone(), &self.session) {
                         log::error!("Failed to send keysym up: {:?}", e);
                     }
                 }

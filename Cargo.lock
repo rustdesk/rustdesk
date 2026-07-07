@@ -292,7 +292,7 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 [[package]]
 name = "arboard"
 version = "3.4.0"
-source = "git+https://github.com/rustdesk-org/arboard#85be1218668ff218a7b170c9d424fde73e069914"
+source = "git+https://github.com/rustdesk-org/arboard#c7d5781f563176df9efd8df6287e823fb1b9bed5"
 dependencies = [
  "clipboard-win",
  "core-graphics 0.23.2",
@@ -1324,7 +1324,7 @@ dependencies = [
 [[package]]
 name = "clipboard-master"
 version = "4.0.0-beta.6"
-source = "git+https://github.com/rustdesk-org/clipboard-master#ddc39f00a6211959489ae683aa6ae6eedf03a809"
+source = "git+https://github.com/rustdesk-org/clipboard-master#7762d74e38db37cfeb6ded88c964b9cdbddfb6db"
 dependencies = [
  "objc",
  "objc-foundation",
@@ -2329,7 +2329,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.8.4",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -2694,7 +2694,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3952,7 +3952,7 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.7.1"
-source = "git+https://github.com/rustdesk-org/hwcodec#398e5a8938dd8768ade0fcdc27ea80e8b4b38738"
+source = "git+https://github.com/rustdesk-org/hwcodec#778df1f99597722473b29443bac22ae6c23946fe"
 dependencies = [
  "bindgen 0.59.2",
  "cc",
@@ -4494,7 +4494,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4695,7 +4695,7 @@ dependencies = [
 [[package]]
 name = "magnum-opus"
 version = "0.4.0"
-source = "git+https://github.com/rustdesk-org/magnum-opus#5cd2bf989c148662fa3a2d9d539a71d71fd1d256"
+source = "git+https://github.com/rustdesk-org/magnum-opus#588c6e1f9ed50c3a01fa64f3bd3e7cdb0378a114"
 dependencies = [
  "bindgen 0.59.2",
  "pkg-config",
@@ -6588,7 +6588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "556af5f5c953a2ee13f45753e581a38f9778e6551bc3ccc56d90b14628fe59d8"
 dependencies = [
  "cfg-if 0.1.10",
- "rpassword 2.1.0",
+ "rpassword",
  "tempfile",
  "termios 0.3.3",
  "winapi 0.3.9",
@@ -6673,7 +6673,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6920,7 +6920,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#f9b60b1dd0f3300a1b797d7a74c116683cd232c8"
+source = "git+https://github.com/rustdesk-org/rdev#871bf1c856d6a30af2f56ab8848396a025140855"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -7153,17 +7153,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rpassword"
-version = "7.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80472be3c897911d0137b2d2b9055faf6eeac5b14e324073d83bc17b191d7e3f"
-dependencies = [
- "libc",
- "rtoolbox",
- "windows-sys 0.48.0",
-]
-
-[[package]]
 name = "rtcp"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7172,16 +7161,6 @@ dependencies = [
  "bytes",
  "thiserror 1.0.61",
  "webrtc-util",
-]
-
-[[package]]
-name = "rtoolbox"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c247d24e63230cdb56463ae328478bd5eac8b8faa8c69461a77e8e323afac90e"
-dependencies = [
- "libc",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -7270,7 +7249,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.4.6"
+version = "1.4.9"
 dependencies = [
  "android-wakelock",
  "android_logger",
@@ -7283,7 +7262,6 @@ dependencies = [
  "cfg-if 1.0.0",
  "chrono",
  "cidr-utils",
- "clap 4.5.53",
  "clipboard",
  "clipboard-master",
  "cocoa 0.24.1",
@@ -7341,7 +7319,6 @@ dependencies = [
  "repng",
  "reqwest",
  "ringbuf",
- "rpassword 7.3.1",
  "rubato",
  "runas",
  "rust-pulsectl",
@@ -7385,7 +7362,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk-portable-packer"
-version = "1.4.6"
+version = "1.4.9"
 dependencies = [
  "brotli",
  "dirs 5.0.1",
@@ -7457,7 +7434,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7514,7 +7491,7 @@ dependencies = [
  "security-framework 3.5.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9733,9 +9710,9 @@ dependencies = [
 
 [[package]]
 name = "wayland-protocols-wlr"
-version = "0.3.3"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd993de54a40a40fbe5601d9f1fbcaef0aebcc5fda447d7dc8f6dcbaae4f8953"
+checksum = "efd94963ed43cf9938a090ca4f7da58eb55325ec8200c3848963e98dc25b78ec"
 dependencies = [
  "bitflags 2.9.1",
  "wayland-backend",
@@ -10838,16 +10815,15 @@ dependencies = [
 
 [[package]]
 name = "wl-clipboard-rs"
-version = "0.9.0"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4de22eebb1d1e2bad2d970086e96da0e12cde0b411321e5b0f7b2a1f876aa26f"
+checksum = "e9651471a32e87d96ef3a127715382b2d11cc7c8bb9822ded8a7cc94072eb0a3"
 dependencies = [
  "libc",
  "log",
  "os_pipe",
- "rustix 0.38.34",
- "tempfile",
- "thiserror 1.0.61",
+ "rustix 1.1.2",
+ "thiserror 2.0.17",
  "tree_magic_mini",
  "wayland-backend",
  "wayland-client",

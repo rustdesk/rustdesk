@@ -8,6 +8,7 @@ package com.carriez.flutter_hbb
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Intent
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
@@ -66,6 +67,16 @@ class InputService : AccessibilityService() {
         var ctx: InputService? = null
         val isOpen: Boolean
             get() = ctx != null
+    }
+
+    private fun notifyInputState() {
+        val inputState = isOpen.toString()
+        Handler(Looper.getMainLooper()).post {
+            MainActivity.flutterMethodChannel?.invokeMethod(
+                "on_state_changed",
+                mapOf("name" to "input", "value" to inputState)
+            )
+        }
     }
 
     private val logTag = "input service"
@@ -716,6 +727,7 @@ class InputService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         ctx = this
+        notifyInputState()
         val info = AccessibilityServiceInfo()
         if (Build.VERSION.SDK_INT >= 33) {
             info.flags = FLAG_INPUT_METHOD_EDITOR or FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -734,7 +746,15 @@ class InputService : AccessibilityService() {
 
     override fun onDestroy() {
         ctx = null
+        // Keep this fallback even though onUnbind usually notifies first.
+        notifyInputState()
         super.onDestroy()
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        ctx = null
+        notifyInputState()
+        return super.onUnbind(intent)
     }
 
     override fun onInterrupt() {}

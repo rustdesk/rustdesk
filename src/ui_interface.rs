@@ -647,8 +647,7 @@ pub fn set_permanent_password_with_result(password: String) -> bool {
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        config::Config::set_permanent_password(&password);
-        return true;
+        return config::Config::set_permanent_password(&password);
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -712,7 +711,6 @@ pub fn is_can_input_monitoring(_prompt: bool) -> bool {
 
 #[inline]
 pub fn get_error() -> String {
-    #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
     {
         let dtype = crate::platform::linux::get_display_server();
@@ -903,8 +901,10 @@ pub fn get_async_job_status() -> String {
 #[inline]
 pub fn get_langs() -> String {
     use serde_json::json;
+    let hide_cjk = crate::lang::cjk_ui_unavailable();
     let mut x: Vec<(&str, String)> = crate::lang::LANGS
         .iter()
+        .filter(|a| !hide_cjk || !crate::lang::is_cjk_lang(a.0))
         .map(|a| (a.0, format!("{} ({})", a.1, a.0)))
         .collect();
     x.sort_by(|a, b| a.0.cmp(b.0));
@@ -1019,6 +1019,102 @@ pub fn get_api_server() -> String {
         get_option("api-server"),
         get_option("custom-rendezvous-server"),
     )
+}
+
+pub enum DeployResult {
+    Ok,
+    NotEnabled,
+    InvalidInput,
+    IdTaken(String),
+    Error(String),
+}
+
+impl DeployResult {
+    pub fn message(&self) -> String {
+        match self {
+            Self::Ok => "".to_owned(),
+            Self::NotEnabled => "The server does not require explicit deployment.".to_owned(),
+            Self::InvalidInput => "Invalid input.".to_owned(),
+            Self::IdTaken(id) => {
+                format!(
+                    "Id `{}` is already used by another machine on the server.",
+                    id
+                )
+            }
+            Self::Error(err) => err.clone(),
+        }
+    }
+}
+
+pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
+    if Config::no_register_device() {
+        return DeployResult::Error("Cannot deploy an unregistrable device!".to_owned());
+    }
+    let token = token.trim();
+    if token.is_empty() {
+        return DeployResult::Error("token is required!".to_owned());
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let local_id = Config::get_id();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let local_id = ipc::get_id();
+    let id_to_deploy = new_id.clone().unwrap_or_else(|| local_id.clone());
+    let uuid = crate::encode64(hbb_common::get_uuid());
+    let pk = crate::encode64(Config::get_key_pair().1);
+    let body = serde_json::json!({
+        "id": id_to_deploy,
+        "uuid": uuid,
+        "pk": pk,
+    });
+    let header = "Authorization: Bearer ".to_owned() + token;
+    let url = get_api_server() + "/api/devices/deploy";
+    let text = match crate::post_request_sync(url, body.to_string(), &header) {
+        Ok(text) => text,
+        Err(err) => return DeployResult::Error(format!("Request failed: {}", err)),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+    match parsed["result"].as_str().unwrap_or("") {
+        "OK" => {
+            if let Some(new_id) = new_id {
+                if new_id != local_id {
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    {
+                        Config::set_key_confirmed(false);
+                        Config::set_id(&new_id);
+                    }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    if let Err(err) = ipc::set_config("id", new_id) {
+                        return DeployResult::Error(format!(
+                            "Failed to persist deployed id locally: {}",
+                            err
+                        ));
+                    }
+                }
+            }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            if let Err(err) = ipc::notify_deployed() {
+                log::warn!("Failed to notify deployed state: {}", err);
+            }
+            #[cfg(target_os = "android")]
+            {
+                crate::rendezvous_mediator::NEEDS_DEPLOY
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                crate::rendezvous_mediator::reset_needs_deploy_notification();
+                crate::rendezvous_mediator::RendezvousMediator::restart();
+            }
+            DeployResult::Ok
+        }
+        "NOT_ENABLED" => DeployResult::NotEnabled,
+        "INVALID_INPUT" => DeployResult::InvalidInput,
+        "ID_TAKEN" => DeployResult::IdTaken(id_to_deploy),
+        _ => {
+            if text.is_empty() {
+                DeployResult::Error("Unknown response.".to_owned())
+            } else {
+                DeployResult::Error(text)
+            }
+        }
+    }
 }
 
 #[inline]

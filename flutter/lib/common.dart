@@ -1185,6 +1185,48 @@ void msgBox(SessionID sessionId, String type, String title, String text,
     VoidCallback? onSubmit,
     int? submitTimeout}) {
   dialogManager.dismissAll();
+  if (type.contains('insecure-connection')) {
+    Future<void> closeSession() async {
+      await bind.sessionSetCommon(
+        sessionId: sessionId,
+        key: 'continue-insecure-connection',
+        value: 'N',
+      );
+      dialogManager.dismissAll();
+      closeConnection();
+    }
+
+    void continueSession() {
+      unawaited(
+        bind.sessionSetCommon(
+          sessionId: sessionId,
+          key: 'continue-insecure-connection',
+          value: 'Y',
+        ),
+      );
+      dialogManager.dismissAll();
+    }
+
+    dialogManager.show(
+      (setState, close, context) => CustomAlertDialog(
+        title: null,
+        content: SelectionArea(child: msgboxContent(type, title, text)),
+        actions: [
+          dialogButton(
+            'Continue',
+            onPressed: continueSession,
+            isOutline: true,
+          ),
+          dialogButton('Disconnect', onPressed: closeSession),
+        ],
+        onSubmit: closeSession,
+        onCancel: closeSession,
+      ),
+      tag: '$sessionId-$type-$title-$text-$link',
+    );
+    return;
+  }
+
   List<Widget> buttons = [];
   bool hasOk = false;
   submit() {
@@ -3350,7 +3392,12 @@ Future<List<Rect>> getScreenRectList() async {
 }
 
 openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
-    {bool updateCursorPos = true}) {
+    {bool updateCursorPos = true, bool recordSelection = true}) {
+  if (recordSelection) {
+    ffi.ffiModel.lastUserDisplay = i;
+    ffi.ffiModel.cancelPendingRestoreTimer();
+    ffi.ffiModel.pendingMonitorRestore = null;
+  }
   final displays = i == kAllDisplayValue
       ? List.generate(pi.displays.length, (index) => index)
       : [i];
@@ -3713,14 +3760,54 @@ Widget loadPowered(BuildContext context) {
   ).marginOnly(top: 6);
 }
 
-// max 300 x 60
-Widget loadLogo() {
-  return FutureBuilder<ByteData>(
-      future: rootBundle.load('assets/logo.png'),
-      builder: (BuildContext context, AsyncSnapshot<ByteData> snapshot) {
-        if (snapshot.hasData) {
+const _kDefaultLogoAsset = 'assets/logo.png';
+const _kLightLogoAsset = 'assets/logo_light.png';
+const _kDarkLogoAsset = 'assets/logo_dark.png';
+
+List<String> _logoAssetCandidatesForBrightness(Brightness brightness) {
+  return brightness == Brightness.dark
+      ? [_kDarkLogoAsset, _kDefaultLogoAsset]
+      : [_kLightLogoAsset, _kDefaultLogoAsset];
+}
+
+Future<String?> _resolveLogoAsset(Brightness brightness) async {
+  for (final asset in _logoAssetCandidatesForBrightness(brightness)) {
+    try {
+      await rootBundle.load(asset);
+      return asset;
+    } on FlutterError {
+      continue;
+    }
+  }
+  return null;
+}
+
+class _Logo extends StatefulWidget {
+  const _Logo();
+
+  @override
+  State<_Logo> createState() => _LogoState();
+}
+
+class _LogoState extends State<_Logo> {
+  final Map<Brightness, Future<String?>> _logoFutures = {};
+
+  Future<String?> _logoFutureFor(Brightness brightness) {
+    return _logoFutures.putIfAbsent(
+      brightness,
+      () => _resolveLogoAsset(brightness),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _logoFutureFor(Theme.of(context).brightness),
+      builder: (BuildContext context, AsyncSnapshot<String?> snapshot) {
+        final asset = snapshot.data;
+        if (asset != null) {
           final image = Image.asset(
-            'assets/logo.png',
+            asset,
             fit: BoxFit.contain,
             errorBuilder: (ctx, error, stackTrace) {
               return Container();
@@ -3732,8 +3819,13 @@ Widget loadLogo() {
           ).marginOnly(left: 12, right: 12, top: 12);
         }
         return const Offstage();
-      });
+      },
+    );
+  }
 }
+
+// max 300 x 60
+Widget loadLogo() => const _Logo();
 
 Widget loadIcon(double size) {
   return Image.asset('assets/icon.png',

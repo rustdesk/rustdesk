@@ -45,7 +45,7 @@ pre_start()
   return 0
 }
 
-# When loging out from the interactive shell, the execution sequence is:
+# When logging out from the interactive shell, the execution sequence is:
 #
 # IF ~/.bash_logout exists THEN
 #     execute ~/.bash_logout

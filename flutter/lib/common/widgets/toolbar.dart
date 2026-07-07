@@ -13,13 +13,83 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 bool isEditOsPassword = false;
+const String kPeerOptionAllowWaylandKeyboard = 'allow-wayland-keyboard';
+const String kWaylandKeyboardIssueUrl =
+    'https://github.com/rustdesk/rustdesk/issues/14586';
+final Set<String> _waylandKeyboardPromptSuppressedConnectionIds = <String>{};
 
-// macOS privacy mode blacks out all online displays, so switching the remote
-// display does not weaken the local privacy protection.
-bool allowDisplaySwitchInPrivacyMode(PeerInfo pi) {
-  return pi.platform == kPeerPlatformMacOS;
+Future<bool> openWaylandKeyboardIssueUrl() {
+  return launchUrl(
+    Uri.parse(kWaylandKeyboardIssueUrl),
+    mode: LaunchMode.externalApplication,
+  );
+}
+
+bool isWaylandKeyboardPromptSuppressedForConnection(String connectionId) {
+  return _waylandKeyboardPromptSuppressedConnectionIds.contains(connectionId);
+}
+
+void setWaylandKeyboardPromptSuppressedForConnection(
+    String connectionId, bool suppressed) {
+  if (suppressed) {
+    _waylandKeyboardPromptSuppressedConnectionIds.add(connectionId);
+  } else {
+    _waylandKeyboardPromptSuppressedConnectionIds.remove(connectionId);
+  }
+}
+
+void clearWaylandKeyboardPromptSuppressedForConnection(String connectionId) {
+  _waylandKeyboardPromptSuppressedConnectionIds.remove(connectionId);
+}
+
+bool shouldShowWaylandKeyboardPrompt({
+  required String connectionId,
+  required bool isWaylandPeer,
+  required bool allowWaylandKeyboardRemembered,
+}) {
+  return isWaylandPeer &&
+      !allowWaylandKeyboardRemembered &&
+      !isWaylandKeyboardPromptSuppressedForConnection(connectionId);
+}
+
+Widget waylandKeyboardScopeChip(BuildContext context, String text) {
+  final colorScheme = Theme.of(context).colorScheme;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: colorScheme.primary.withOpacity(0.35)),
+    ),
+    child: Text(
+      text,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+bool _isWindowsMode1PrivacyImpl(String privacyModeImpl) {
+  return privacyModeImpl == kPrivacyModeImplMag ||
+      privacyModeImpl == kPrivacyModeImplExcludeFromCapture;
+}
+
+// macOS privacy mode blacks out all online displays. Windows Mode 1 also
+// covers every local monitor with privacy overlay windows, so remote display
+// switching does not weaken local privacy protection.
+//
+// Keep this separate from the capture backend capability. The legacy Windows
+// magnifier capturer is not reliable for multi-monitor capture; WebRTC's
+// screen_capturer_win_magnifier also disables it when SM_CMONITORS != 1:
+// https://webrtc.googlesource.com/src/+/1845922d5a1bf9c27deeffb4a8c8daea124434c1/modules/desktop_capture/win/screen_capturer_win_magnifier.cc
+bool allowDisplaySwitchInPrivacyMode(PeerInfo pi, String privacyModeImpl) {
+  return pi.platform == kPeerPlatformMacOS ||
+      (pi.platform == kPeerPlatformWindows &&
+          _isWindowsMode1PrivacyImpl(privacyModeImpl) &&
+          versionCmp(pi.version, '1.4.8') >= 0);
 }
 
 class TTextMenu {
@@ -93,12 +163,179 @@ handleOsPasswordAction(
   }
 }
 
+void showWaylandKeyboardInputWarningDialog(
+    {required String id,
+    required String connectionId,
+    required FFI ffi,
+    required Future<void> Function() onEnable}) {
+  bool remember = false;
+  bool consentInProgress = false;
+  bool dialogClosed = false;
+
+  final dialogFuture = ffi.dialogManager.show((setState, close, context) {
+    void safeSetState(VoidCallback fn) {
+      if (dialogClosed) {
+        return;
+      }
+      try {
+        setState(fn);
+      } catch (e) {
+        debugPrint('Ignore setState after dialog disposal: $e');
+      }
+    }
+
+    void closeDialog() {
+      if (dialogClosed) {
+        return;
+      }
+      dialogClosed = true;
+      close();
+    }
+
+    Future<void> enableAndContinue() async {
+      if (consentInProgress || dialogClosed) {
+        return;
+      }
+      consentInProgress = true;
+      safeSetState(() {});
+      try {
+        await onEnable();
+      } catch (e, st) {
+        debugPrint('Failed to enable Wayland keyboard input consent: $e');
+        debugPrintStack(stackTrace: st);
+        consentInProgress = false;
+        safeSetState(() {});
+        return;
+      }
+
+      ffi.inputModel.keyboardInputAllowed = true;
+      var rememberPersisted = true;
+      if (remember) {
+        try {
+          await bind.mainSetPeerOption(
+              id: id,
+              key: kPeerOptionAllowWaylandKeyboard,
+              value: bool2option(kPeerOptionAllowWaylandKeyboard, true));
+        } catch (e) {
+          rememberPersisted = false;
+          debugPrint('Failed to persist Wayland keyboard input consent: $e');
+        }
+      }
+      // Always suppress prompt for current connection after explicit consent.
+      setWaylandKeyboardPromptSuppressedForConnection(connectionId, true);
+      closeDialog();
+      if (remember && !rememberPersisted) {
+        // It's a rare edge case that persisting the user's choice fails.
+        // Failed to persist the user's choice, but still allow keyboard input for current session.
+        showToast(translate('Failed'));
+      }
+    }
+
+    void cancel() {
+      if (consentInProgress) {
+        return;
+      }
+      closeDialog();
+    }
+
+    return CustomAlertDialog(
+      title: null,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          msgboxContent(
+            '',
+            'wayland-keyboard-input-disabled-tip',
+            'wayland-keyboard-input-consent-tip',
+          ),
+          SizedBox(height: isMobile ? 2 : 6),
+          if (isMobile) ...[
+            Text(
+              translate('wayland-keyboard-input-applies-to-tip'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ).marginOnly(bottom: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                waylandKeyboardScopeChip(
+                    context, translate('Send clipboard keystrokes')),
+                waylandKeyboardScopeChip(
+                    context, translate('wayland-soft-keyboard-input-label')),
+              ],
+            ).marginOnly(bottom: 10),
+          ],
+          TextButton(
+            onPressed: consentInProgress
+                ? null
+                : () async {
+                    try {
+                      final opened = await openWaylandKeyboardIssueUrl();
+                      if (!opened) {
+                        // Opening this optional help link almost never fails in
+                        // normal desktop environments. Keep the result handled
+                        // for review hygiene, but avoid a low-value user toast.
+                        debugPrint('Failed to open Wayland keyboard issue URL');
+                      }
+                    } catch (e) {
+                      debugPrint(
+                          'Failed to open Wayland keyboard issue URL: $e');
+                    }
+                  },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue,
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              translate('Why this happens'),
+              style: const TextStyle(decoration: TextDecoration.underline),
+            ),
+          ).marginOnly(bottom: 6),
+          CheckboxListTile(
+            value: remember,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(translate('remember-wayland-keyboard-choice-tip')),
+            onChanged: consentInProgress
+                ? null
+                : (v) {
+                    safeSetState(() => remember = v == true);
+                  },
+          ),
+        ],
+      ),
+      actions: [
+        dialogButton(
+          'Cancel',
+          onPressed: consentInProgress ? null : cancel,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          onPressed:
+              consentInProgress ? null : () => unawaited(enableAndContinue()),
+        ),
+      ],
+      onCancel: consentInProgress ? null : cancel,
+      onSubmit: consentInProgress ? null : () => unawaited(enableAndContinue()),
+    );
+  }, clickMaskDismiss: false, backDismiss: false);
+  unawaited(dialogFuture.whenComplete(() => dialogClosed = true));
+}
+
 List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final perms = ffiModel.permissions;
   final sessionId = ffi.sessionId;
   final isDefaultConn = ffi.connType == ConnType.defaultConn;
+  final isWaylandPeer = pi.platform == kPeerPlatformLinux && pi.isWayland;
 
   List<TTextMenu> v = [];
   // elevation
@@ -148,11 +385,60 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
     v.add(TTextMenu(
         child: Text(translate('Send clipboard keystrokes')),
         onPressed: () async {
-          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data != null && data.text != null) {
-            bind.sessionInputString(
-                sessionId: sessionId, value: data.text ?? "");
+          Future<void> sendClipboardKeystrokes() async {
+            ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+            if (data != null && data.text != null) {
+              bind.sessionInputString(
+                  sessionId: sessionId, value: data.text ?? "");
+            }
           }
+
+          final allowWaylandKeyboard =
+              mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard);
+          if (shouldShowWaylandKeyboardPrompt(
+            connectionId: sessionId.toString(),
+            isWaylandPeer: isWaylandPeer,
+            allowWaylandKeyboardRemembered: allowWaylandKeyboard,
+          )) {
+            ffi.inputModel.keyboardInputAllowed = false;
+            showWaylandKeyboardInputWarningDialog(
+              id: id,
+              connectionId: sessionId.toString(),
+              ffi: ffi,
+              onEnable: sendClipboardKeystrokes,
+            );
+            return;
+          }
+          await sendClipboardKeystrokes();
+        }));
+  }
+  if (isDefaultConn &&
+      isWaylandPeer &&
+      (mainGetPeerBoolOptionSync(id, kPeerOptionAllowWaylandKeyboard) ||
+          isWaylandKeyboardPromptSuppressedForConnection(
+              sessionId.toString()))) {
+    v.add(TTextMenu(
+        child: Text(translate('wayland-keyboard-input-reset-choice-tip')),
+        onPressed: () async {
+          var persistedCleared = false;
+          try {
+            await bind.mainSetPeerOption(
+                id: id,
+                key: kPeerOptionAllowWaylandKeyboard,
+                value: bool2option(kPeerOptionAllowWaylandKeyboard, false));
+            persistedCleared = true;
+          } catch (e) {
+            debugPrint(
+                'Failed to clear persisted Wayland keyboard permission: $e');
+          } finally {
+            clearWaylandKeyboardPromptSuppressedForConnection(
+                sessionId.toString());
+            ffi.inputModel.keyboardInputAllowed = false;
+            if (isMobile) {
+              await ffi.invokeMethod("enable_soft_keyboard", false);
+            }
+          }
+          showToast(translate(persistedCleared ? 'Successful' : 'Failed'));
         }));
   }
   // reset canvas
@@ -320,7 +606,7 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
   // to-do:
   // 1. Web desktop
   // 2. Mobile, copy the image to the clipboard
-  if (isDesktop) {
+  if ((isDefaultConn || ffi.connType == ConnType.viewCamera) && isDesktop) {
     final isScreenshotSupported = bind.sessionGetCommonSync(
         sessionId: sessionId, key: 'is_screenshot_supported', param: '');
     if ('true' == isScreenshotSupported) {
@@ -692,7 +978,8 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
 
   final privacyModeState = PrivacyModeState.find(id);
   if (pi.isSupportMultiDisplay &&
-      (privacyModeState.isEmpty || allowDisplaySwitchInPrivacyMode(pi)) &&
+      (privacyModeState.isEmpty ||
+          allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value)) &&
       pi.displaysCount.value > 1 &&
       bind.mainGetUserDefaultOption(key: kKeyShowMonitorsToolbar) == 'Y') {
     final value =
@@ -766,7 +1053,8 @@ List<TToggleMenu> toolbarPrivacyMode(
   final ffiModel = ffi.ffiModel;
   final pi = ffiModel.pi;
   final sessionId = ffi.sessionId;
-  final hasPrivacyModePermission = ffiModel.permissions['privacy_mode'] != false;
+  final hasPrivacyModePermission =
+      ffiModel.permissions['privacy_mode'] != false;
 
   // Backend revocation already attempts to turn privacy mode off.
   // Still keep this menu when privacy mode is active, so users can turn it off
@@ -775,24 +1063,28 @@ List<TToggleMenu> toolbarPrivacyMode(
     return []; // No permission and not active, hide options.
   }
 
-  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc) {
-    final enabled =
-        !ffiModel.viewOnly && (hasPrivacyModePermission || privacyModeState.isNotEmpty);
+  bool checkDisplayAllowedForPrivacyMode(String targetImplKey, bool turnOn) {
+    if (!turnOn ||
+        allowDisplaySwitchInPrivacyMode(pi, targetImplKey) ||
+        (ffiModel.pi.currentDisplay == 0 &&
+            !bind.sessionIsMultiUiSession(sessionId: sessionId))) {
+      return true;
+    }
+    msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
+        'Please switch to Display 1 first', '', ffi.dialogManager);
+    return false;
+  }
+
+  getDefaultMenu(Future<void> Function(SessionID sid, String opt) toggleFunc,
+      String targetImplKey) {
+    final enabled = !ffiModel.viewOnly &&
+        (hasPrivacyModePermission || privacyModeState.isNotEmpty);
     return TToggleMenu(
         value: privacyModeState.isNotEmpty,
         onChanged: enabled
             ? (value) {
                 if (value == null) return;
-                if (!allowDisplaySwitchInPrivacyMode(pi) &&
-                    ffiModel.pi.currentDisplay != 0 &&
-                    ffiModel.pi.currentDisplay != kAllDisplayValue) {
-                  msgBox(
-                      sessionId,
-                      'custom-nook-nocancel-hasclose',
-                      'info',
-                      'Please switch to Display 1 first',
-                      '',
-                      ffi.dialogManager);
+                if (!checkDisplayAllowedForPrivacyMode(targetImplKey, value)) {
                   return;
                 }
                 final option = 'privacy-mode';
@@ -810,7 +1102,7 @@ List<TToggleMenu> toolbarPrivacyMode(
       getDefaultMenu((sid, opt) async {
         bind.sessionToggleOption(sessionId: sid, value: opt);
         togglePrivacyModeTime = DateTime.now();
-      })
+      }, kPrivacyModeImplMag)
     ];
   }
   if (privacyModeImpls.isEmpty) {
@@ -824,7 +1116,7 @@ List<TToggleMenu> toolbarPrivacyMode(
         bind.sessionTogglePrivacyMode(
             sessionId: sid, implKey: implKey, on: privacyModeState.isEmpty);
         togglePrivacyModeTime = DateTime.now();
-      })
+      }, implKey)
     ];
   } else {
     final visibleImpls = hasPrivacyModePermission
@@ -845,6 +1137,9 @@ List<TToggleMenu> toolbarPrivacyMode(
               ? (value) {
                   if (value == null) return;
                   if (value && !hasPrivacyModePermission) return;
+                  if (!checkDisplayAllowedForPrivacyMode(implKey, value)) {
+                    return;
+                  }
                   togglePrivacyModeTime = DateTime.now();
                   bind.sessionTogglePrivacyMode(
                       sessionId: sessionId, implKey: implKey, on: value);

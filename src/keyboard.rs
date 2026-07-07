@@ -2,7 +2,7 @@
 use crate::flutter;
 #[cfg(target_os = "windows")]
 use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
-#[cfg(not(any(feature = "flutter", feature = "cli")))]
+#[cfg(not(feature = "flutter"))]
 use crate::ui::CUR_SESSION;
 use crate::ui_session_interface::{InvokeUiSession, Session};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -469,7 +469,7 @@ static mut IS_LEFT_OPTION_DOWN: bool = false;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn get_keyboard_mode() -> String {
-    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    #[cfg(not(feature = "flutter"))]
     if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
         return session.get_keyboard_mode();
     }
@@ -991,7 +991,7 @@ pub fn event_to_key_events(
 }
 
 pub fn send_key_event(key_event: &KeyEvent) {
-    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    #[cfg(not(feature = "flutter"))]
     if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
         session.send_key_event(key_event);
     }
@@ -1003,7 +1003,7 @@ pub fn send_key_event(key_event: &KeyEvent) {
 }
 
 pub fn get_peer_platform() -> String {
-    #[cfg(not(any(feature = "flutter", feature = "cli")))]
+    #[cfg(not(feature = "flutter"))]
     if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
         return session.peer_platform();
     }
@@ -1245,9 +1245,47 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
 
 #[inline]
 pub fn map_keyboard_mode(_peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
+    if let Some(evt) = windows_peer_special_key(_peer, event) {
+        return vec![evt];
+    }
+
     _map_keyboard_mode(_peer, event, key_event)
         .map(|e| vec![e])
         .unwrap_or_default()
+}
+
+fn windows_peer_special_key(peer: &str, event: &Event) -> Option<KeyEvent> {
+    if peer != OS_LOWER_WINDOWS {
+        return None;
+    }
+
+    let (key, down) = match event.event_type {
+        EventType::KeyPress(key) => (key, true),
+        EventType::KeyRelease(key) => (key, false),
+        _ => return None,
+    };
+
+    // Handle only `Pause` for Windows peers for now.
+    // Windows has no normal scan code for `Pause`, so send it as a legacy control key.
+    #[cfg(target_os = "windows")]
+    let is_pause = {
+        // The Windows scan code can look like `NumLock`; VK_PAUSE distinguishes it.
+        let pause_vk_code = rdev::win_code_from_key(Key::Pause);
+        key == Key::Pause || pause_vk_code == Some(event.platform_code as _)
+    };
+    #[cfg(not(target_os = "windows"))]
+    let is_pause = key == Key::Pause;
+    if !is_pause {
+        return None;
+    }
+
+    let mut key_event = KeyEvent::new();
+    key_event.mode = KeyboardMode::Legacy.into();
+    key_event.down = down;
+    key_event.set_control_key(ControlKey::Pause);
+    let (alt, ctrl, shift, command) = client::get_modifiers_state(false, false, false, false);
+    client::legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+    Some(key_event)
 }
 
 fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Option<KeyEvent> {
@@ -1420,6 +1458,11 @@ fn is_press(event: &Event) -> bool {
 // https://github.com/rustdesk/rustdesk/wiki/FAQ#keyboard-translation-modes
 pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events: Vec<KeyEvent> = Vec::new();
+
+    if let Some(evt) = windows_peer_special_key(peer, event) {
+        events.push(evt);
+        return events;
+    }
 
     if let Some(unicode_info) = &event.unicode {
         if unicode_info.is_dead {

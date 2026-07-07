@@ -30,7 +30,6 @@ fn run_rdp(port: u16) {
         if !password.is_empty() {
             args.push(format!("/pass:{}", password));
         }
-        println!("{:?}", args);
         std::process::Command::new("cmdkey")
             .args(&args)
             .output()
@@ -70,7 +69,8 @@ pub async fn listen(
                 let id = id.clone();
                 let password = password.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
-                match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp).await {
+                let mut close_port_forward = false;
+                match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
                     Ok(Some(stream)) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
@@ -79,6 +79,9 @@ pub async fn listen(
                             }
                             log::info!("connection from {:?} closed", addr);
                        });
+                    }
+                    _ if close_port_forward => {
+                        break;
                     }
                     Err(err) => {
                         interface.on_establish_connection_error(err.to_string());
@@ -112,6 +115,7 @@ async fn connect_and_login(
     key: &str,
     token: &str,
     is_rdp: bool,
+    close_port_forward: &mut bool,
 ) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
         ConnType::RDP
@@ -121,6 +125,12 @@ async fn connect_and_login(
     let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
     interface.update_direct(Some(direct));
+    if !stream.is_secured() && !crate::common::is_direct_ip_access(id) {
+        if !confirm_insecure_connection(&interface, ui_receiver).await {
+            *close_port_forward = true;
+            return Ok(None);
+        }
+    }
     let mut buffer = Vec::new();
     let mut received = false;
 

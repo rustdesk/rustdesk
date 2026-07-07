@@ -326,12 +326,14 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
         try_sync_peer_option(&session, &session_id, &value, None);
     }
     #[cfg(not(target_os = "ios"))]
-    if sessions::get_session_by_session_id(&session_id).is_some() && value == "disable-clipboard" {
+    if sessions::get_session_by_session_id(&session_id).is_some()
+        && (value == "disable-clipboard" || value == "view-only")
+    {
         crate::flutter::update_text_clipboard_required();
     }
     #[cfg(feature = "unix-file-copy-paste")]
     if sessions::get_session_by_session_id(&session_id).is_some()
-        && value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE
+        && (value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
     {
         crate::flutter::update_file_clipboard_required();
     }
@@ -1024,7 +1026,7 @@ pub fn main_set_option(key: String, value: String) {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
-        #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         crate::common::test_rendezvous_server();
     } else {
         set_option(key, value.clone());
@@ -1153,6 +1155,22 @@ pub fn main_get_api_server() -> String {
     get_api_server()
 }
 
+pub fn main_deploy_device(token: String, id: String) -> String {
+    #[cfg(target_os = "android")]
+    {
+        let new_id = match id.trim() {
+            "" => None,
+            id => Some(id.to_owned()),
+        };
+        ui_interface::deploy_device(token, new_id).message()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (token, id);
+        "Deployment is not supported on this platform.".to_owned()
+    }
+}
+
 pub fn main_resolve_avatar_url(avatar: String) -> SyncReturn<String> {
     SyncReturn(resolve_avatar_url(avatar))
 }
@@ -1206,9 +1224,14 @@ pub fn main_set_local_option(key: String, value: String) {
     let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
     let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
+    let is_render_target =
+        |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
     if is_texture_render_key {
         let session_event = [("v", &value)];
         for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
             session.push_event("use_texture_render", &session_event, &[]);
             session.use_texture_render_changed();
             session.ui_handler.update_use_texture_render();
@@ -1216,6 +1239,9 @@ pub fn main_set_local_option(key: String, value: String) {
     }
     if is_d3d_render_key {
         for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
             session.update_supported_decodings();
         }
     }
@@ -2116,6 +2142,7 @@ pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
         config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::reset_needs_deploy_notification();
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -2471,23 +2498,13 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 }
 
 pub fn is_preset_password() -> bool {
-    let hard = config::HARD_SETTINGS
-        .read()
-        .unwrap()
-        .get("password")
-        .cloned()
-        .unwrap_or_default();
-    if hard.is_empty() {
-        return false;
-    }
-
     // On desktop, service owns the authoritative config; query it via IPC and return only a boolean.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return crate::ipc::is_permanent_password_preset();
 
     // On mobile, we have no service IPC; verify against local storage.
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return config::Config::matches_permanent_password_plain(&hard);
+    return config::Config::is_using_preset_password();
 }
 
 // Don't call this function for desktop version.
@@ -2843,8 +2860,16 @@ pub fn main_get_common(key: String) -> String {
                 crate::platform::windows::is_msi_installed(),
                 crate::common::is_custom_client(),
             ) {
-                (Ok(true), false) => format!("rustdesk-{_version}-x86_64.msi"),
-                (Ok(true), true) | (Ok(false), _) => format!("rustdesk-{_version}-x86_64.exe"),
+                (Ok(true), false) => match crate::platform::windows::release_arch_suffix() {
+                    Some(arch) => format!("rustdesk-{_version}-{arch}.msi"),
+                    None => "error:unsupported".to_owned(),
+                },
+                (Ok(true), true) | (Ok(false), _) => {
+                    match crate::platform::windows::release_arch_suffix() {
+                        Some(arch) => format!("rustdesk-{_version}-{arch}.exe"),
+                        None => "error:unsupported".to_owned(),
+                    }
+                }
                 (Err(e), _) => {
                     log::error!("Failed to check if is msi: {}", e);
                     format!("error:update-failed-check-msi-tip")
@@ -3003,6 +3028,16 @@ pub fn main_set_common(_key: String, _value: String) {
     }
 }
 
+pub fn session_set_common(session_id: SessionID, key: String, value: String) {
+    if let Some(s) = sessions::get_session_by_session_id(&session_id) {
+        if key == "continue-insecure-connection"
+        {
+            s.continue_insecure_connection(value == "Y");
+            return;
+        }
+    }
+}
+
 pub fn session_get_common_sync(
     session_id: SessionID,
     key: String,
@@ -3065,6 +3100,7 @@ pub mod server_side {
     pub unsafe extern "system" fn Java_ffi_FFI_startService(_env: JNIEnv, _class: JClass) {
         log::debug!("startService from jvm");
         config::Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::reset_needs_deploy_notification();
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 

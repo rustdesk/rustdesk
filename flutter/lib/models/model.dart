@@ -55,6 +55,8 @@ import 'package:flutter_hbb/native/custom_cursor.dart'
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 typedef ReconnectHandle = Function(OverlayDialogManager, SessionID, bool);
 final _constSessionId = Uuid().v4obj();
+// Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
+const _restartReconnectSilentDelaySecs = 5;
 
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
@@ -110,6 +112,9 @@ class CachedPeerData {
 class FfiModel with ChangeNotifier {
   CachedPeerData cachedPeerData = CachedPeerData();
   PeerInfo _pi = PeerInfo();
+  int? lastUserDisplay;
+  int? pendingMonitorRestore;
+  Timer? _pendingRestoreTimer;
   Rect? _rect;
 
   var _inputBlocked = false;
@@ -119,6 +124,7 @@ class FfiModel with ChangeNotifier {
   bool _touchMode = false;
   late VirtualMouseMode virtualMouseMode;
   Timer? _timer;
+  Timer? _restartReconnectDelayTimer;
   var _reconnects = 1;
   DateTime? _offlineReconnectStartTime;
   bool _viewOnly = false;
@@ -245,11 +251,14 @@ class FfiModel with ChangeNotifier {
 
   clear() {
     _pi = PeerInfo();
+    lastUserDisplay = null;
+    _cancelPendingMonitorRestore();
     _secure = null;
     _direct = null;
     _inputBlocked = false;
     _timer?.cancel();
     _timer = null;
+    resetRestartReconnectState();
     clearPermissions();
     waitForImageTimer?.cancel();
     timerScreenshot?.cancel();
@@ -341,6 +350,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'connection_ready') {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
+        resetRestartReconnectState();
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
@@ -922,8 +932,29 @@ class FfiModel with ChangeNotifier {
       enterUserLoginAndPasswordDialog(
           sessionId, dialogManager, 'terminal-admin-login-tip', false);
     } else if (type == 'restarting') {
-      showMsgBox(sessionId, type, title, text, link, false, dialogManager,
-          hasCancel: false);
+      // Treat restart messages as reconnect control events. Rust still sends
+      // title/text for legacy UI and translation reuse; Flutter keeps the last
+      // frame briefly, then shows the Connecting overlay.
+      if (_restartReconnectDelayTimer == null) {
+        parent.target?.inputModel.setRelativeMouseMode(false);
+        _cancelPendingMonitorRestore();
+        bind.sessionReconnect(sessionId: sessionId, forceRelay: false);
+        clearPermissions();
+        // Retry once more after the silent window so restart reconnect attempts
+        // are spaced by the empirical short cadence instead of only updating UI.
+        _restartReconnectDelayTimer =
+            Timer(Duration(seconds: _restartReconnectSilentDelaySecs), () {
+          _restartReconnectDelayTimer = null;
+          if (parent.target?.closed == true) {
+            return;
+          }
+          reconnect(dialogManager, sessionId, false);
+        });
+      }
+    } else if (type == 'restarting-show') {
+      _restartReconnectDelayTimer?.cancel();
+      _restartReconnectDelayTimer = null;
+      reconnect(dialogManager, sessionId, false);
     } else if (type == 'wait-remote-accept-nook') {
       showWaitAcceptDialog(sessionId, type, title, text, dialogManager);
     } else if (type == 'on-uac' || type == 'on-foreground-elevated') {
@@ -947,6 +978,11 @@ class FfiModel with ChangeNotifier {
       }
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
+  }
+
+  void resetRestartReconnectState() {
+    _restartReconnectDelayTimer?.cancel();
+    _restartReconnectDelayTimer = null;
   }
 
   /// Auto-retry check for "Remote desktop is offline" error.
@@ -1054,10 +1090,22 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _cancelPendingMonitorRestore() {
+    _pendingRestoreTimer?.cancel();
+    _pendingRestoreTimer = null;
+    pendingMonitorRestore = null;
+  }
+
+  void cancelPendingRestoreTimer() {
+    _pendingRestoreTimer?.cancel();
+    _pendingRestoreTimer = null;
+  }
+
   void reconnect(OverlayDialogManager dialogManager, SessionID sessionId,
       bool forceRelay) {
     // Disable relative mouse mode before reconnecting to ensure cursor is released.
     parent.target?.inputModel.setRelativeMouseMode(false);
+    _cancelPendingMonitorRestore();
     bind.sessionReconnect(sessionId: sessionId, forceRelay: forceRelay);
     clearPermissions();
     dialogManager.dismissAll();
@@ -1371,9 +1419,29 @@ class FfiModel with ChangeNotifier {
         // now replaced to _updateCurDisplay
         updateCurDisplay(sessionId);
       }
+      // After reconnecting, restore the last selected monitor once the canvas is ready.
+      // Switching earlier can offset the view if the monitor sizes differ.
+      final last = lastUserDisplay;
+      pendingMonitorRestore = (!isCache &&
+              last != null &&
+              last != currentDisplay &&
+              bind.sessionGetUseAllMyDisplaysForTheRemoteSession(
+                      sessionId: sessionId) !=
+                  'Y' &&
+              ((last == kAllDisplayValue && _pi.displays.isNotEmpty) ||
+                  (last >= 0 && last < _pi.displays.length)))
+          ? last
+          : null;
+      // Fallback if the first image event never reaches this tab (multi-UI).
+      _pendingRestoreTimer?.cancel();
+      if (pendingMonitorRestore != null) {
+        _pendingRestoreTimer = Timer(const Duration(milliseconds: 1500),
+            () => parent.target?._applyPendingMonitorRestore());
+      }
       if (displays.isNotEmpty) {
         _reconnects = 1;
         _offlineReconnectStartTime = null;
+        resetRestartReconnectState();
         waitForFirstImage.value = true;
         isRefreshing = false;
       }
@@ -3666,6 +3734,7 @@ class FFI {
 
   /// Mobile reuse FFI
   void mobileReset() {
+    ffiModel.resetRestartReconnectState();
     ffiModel.waitForFirstImage.value = true;
     ffiModel.isRefreshing = false;
     ffiModel.waitForImageDialogShow.value = true;
@@ -3879,13 +3948,32 @@ class FFI {
     }
     if (ffiModel.waitForFirstImage.value == true) {
       ffiModel.waitForFirstImage.value = false;
+      ffiModel.cancelPendingRestoreTimer();
+      ffiModel.resetRestartReconnectState();
       dialogManager.dismissAll();
-      await canvasModel.updateViewStyle();
-      await canvasModel.updateScrollStyle();
-      await canvasModel.initializeEdgeScrollEdgeThickness();
-      for (final cb in imageModel.callbacksOnFirstImage) {
-        cb(id);
+      try {
+        await canvasModel.updateViewStyle();
+        await canvasModel.updateScrollStyle();
+        await canvasModel.initializeEdgeScrollEdgeThickness();
+        for (final cb in imageModel.callbacksOnFirstImage) {
+          cb(id);
+        }
+      } finally {
+        _applyPendingMonitorRestore();
       }
+    }
+  }
+
+  void _applyPendingMonitorRestore() {
+    final restore = ffiModel.pendingMonitorRestore;
+    ffiModel._cancelPendingMonitorRestore();
+    if (restore == null || closed) return;
+    // The display list may have changed since the restore was queued.
+    final displays = ffiModel.pi.displays;
+    if ((restore == kAllDisplayValue && displays.isNotEmpty) ||
+        (restore >= 0 && restore < displays.length)) {
+      openMonitorInTheSameTab(restore, this, ffiModel.pi,
+          recordSelection: false, updateCursorPos: false);
     }
   }
 
