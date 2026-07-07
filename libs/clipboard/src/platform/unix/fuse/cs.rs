@@ -533,7 +533,7 @@ impl FuseServer {
         offset: i64,
         size: u32,
     ) -> Result<Vec<u8>, std::io::Error> {
-        // todo: async and concurrent read, generate stream_id per request
+        let request_stream_id = rand::random();
         let cb_requested = unsafe {
             // convert `size` from u32 to i32
             // yet with same bit representation
@@ -543,7 +543,7 @@ impl FuseServer {
         let (n_position_high, n_position_low) =
             ((offset >> 32) as i32, (offset & (u32::MAX as i64)) as i32);
         let request = ClipboardFile::FileContentsRequest {
-            stream_id: node.stream_id,
+            stream_id: request_stream_id,
             list_index: node.index as i32,
             dw_flags: 2,
             n_position_low,
@@ -573,7 +573,7 @@ impl FuseServer {
                     stream_id,
                     requested_data,
                 } => {
-                    if stream_id != node.stream_id {
+                    if stream_id != request_stream_id {
                         log::debug!("stream id mismatch, ignore");
                         continue;
                     }
@@ -611,11 +611,6 @@ struct FuseNode {
     /// connection id
     pub conn_id: i32,
 
-    // todo: use stream_id to identify a FileContents request-reply
-    // instead of a whole file
-    /// stream id
-    pub stream_id: i32,
-
     /// file index in peer's file list
     /// NOTE:
     /// it is NOT the same as inode, this is the index in the file list
@@ -639,7 +634,6 @@ impl FuseNode {
     pub fn from_description(inode: Inode, desc: FileDescription) -> Self {
         Self {
             conn_id: desc.conn_id,
-            stream_id: rand::random(),
             index: inode as usize - 2,
             name: desc
                 .name
@@ -656,7 +650,6 @@ impl FuseNode {
     pub fn new_root() -> Self {
         Self {
             conn_id: 0,
-            stream_id: rand::random(),
             index: 0,
             name: String::from("/"),
             parent: None,

@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Konexio igorria"),
         ("Secure Connection", "Konexio segurua"),
         ("Insecure Connection", "Konexio ez-segurua"),
+        ("Continue", ""),
         ("Scale original", "Jatorrizko eskala"),
         ("Scale adaptive", "Eskala moldagarria"),
         ("General", "Orokorra"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Erakutsi minimizatutako tresna-barran"),
         ("All monitors", "Monitore guztiak"),
         ("#{} monitor", "{}. monitorea"),
+        ("conn-e2ee-unavailable-tip", "Ezin izan da muturretik muturrerako enkriptatzea egiaztatu.\nUrruneko gailua oraindik konfiguratzen ari daiteke. Saiatu berriro geroago.\nHonek jarraitzen badu, zerbitzaria fidagaitza izan daiteke.\nHala ere jarraitu?"),
     ].iter().cloned().collect();
 }

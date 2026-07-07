@@ -79,6 +79,10 @@ mod webrtc {
         }
     }
 
+    fn tile_log2(threads: u32) -> std::os::raw::c_uint {
+        (threads as f64).log2().ceil() as _
+    }
+
     fn get_super_block_size(width: u32, height: u32, threads: u32) -> aom_superblock_size_t {
         use aom_superblock_size::*;
         let resolution = width * height;
@@ -160,8 +164,7 @@ mod webrtc {
         } else {
             AV1E_SET_TILE_COLUMNS
         };
-        // Failed on android
-        call_ctl!(ctx, tile_set, (cfg.g_threads as f64 * 1.0f64).log2().ceil());
+        call_ctl!(ctx, tile_set, tile_log2(cfg.g_threads));
         call_ctl!(ctx, AV1E_SET_ROW_MT, 1);
         call_ctl!(ctx, AV1E_SET_ENABLE_OBMC, 0);
         call_ctl!(ctx, AV1E_SET_NOISE_SENSITIVITY, 0);
@@ -196,6 +199,23 @@ mod webrtc {
         call_ctl!(ctx, AV1E_SET_MAX_REFERENCE_FRAMES, 3);
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::os::raw::c_uint;
+
+        #[test]
+        fn tile_log2_uses_c_uint_and_rounds_up() {
+            let one_thread: c_uint = tile_log2(1);
+            let three_threads: c_uint = tile_log2(3);
+            let max_threads: c_uint = tile_log2(64);
+
+            assert_eq!(one_thread, 0);
+            assert_eq!(three_threads, 2);
+            assert_eq!(max_threads, 6);
+        }
     }
 }
 

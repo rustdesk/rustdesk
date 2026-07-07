@@ -152,6 +152,7 @@ class MsgboxComponent: Reactor.Component {
         var hasOk = this.type != "connecting" && this.type != "success" && this.type.indexOf("nook") < 0;
         var hasLink = this.link != "";
         var hasClose = this.type.indexOf("hasclose") >= 0;
+        var isInsecureConnection = this.type.indexOf("insecure-connection") >= 0;
         var show_progress = this.type == "connecting";
         var me = this;
         self.timer(0, msgboxTimerFunc);
@@ -176,11 +177,12 @@ class MsgboxComponent: Reactor.Component {
                 <div style="text-align: right;">
                     <span style="display:inline-block; max-width: 250px; font-size:12px;" #error />
                     <progress #progress style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
+                    {isInsecureConnection && hasOk ? <button .button #submit .outline>{translate('Continue')}</button> : ""}
                     {hasCancel || this.hasRetry ? <button .button #cancel .outline>{translate(this.hasRetry ? "OK" : "Cancel")}</button> : ""}
                     {this.hasSkip() ? <button .button #skip .outline>{translate('Skip')}</button> : ""}
-                    {hasOk || this.hasRetry ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
+                    {!isInsecureConnection && (hasOk || this.hasRetry) ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
                     {hasLink ? <button .button #jumplink .outline>{translate('JumpLink')}</button> : ""}
-                    {hasClose ? <button .button #cancel .outline>{translate('Close')}</button> : ""}
+                    {hasClose ? (isInsecureConnection ? <button .button #cancel>{translate('Disconnect')}</button> : <button .button #cancel .outline>{translate('Close')}</button>) : ""}
                     {this.getScreenshotButtons()}
                 </div>
             </div>
@@ -193,6 +195,10 @@ class MsgboxComponent: Reactor.Component {
     }
     
     function submit() {
+        if (this.type.indexOf("insecure-connection") >= 0) {
+            this.cancel();
+            return;
+        }
         var submit_btn = this.$(button#submit);
         if (submit_btn) {
             if (submit_btn.state.disabled) return;
@@ -376,7 +382,11 @@ class MsgboxComponent: Reactor.Component {
             var el = me.$(.outline-focus);
             if (el) view.focus = el;
             else {
-                el = me.$(#submit);
+                if (me.type.indexOf("insecure-connection") >= 0) {
+                    el = me.$(#cancel);
+                } else {
+                    el = me.$(#submit);
+                }
                 if (el) {
                     view.focus = el;
                 }

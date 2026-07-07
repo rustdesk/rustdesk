@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "中继连接"),
         ("Secure Connection", "安全连接"),
         ("Insecure Connection", "非安全连接"),
+        ("Continue", ""),
         ("Scale original", "原始尺寸"),
         ("Scale adaptive", "适应窗口"),
         ("General", "常规"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "在最小化工具栏上显示"),
         ("All monitors", "所有显示器"),
         ("#{} monitor", "{}号显示器"),
+        ("conn-e2ee-unavailable-tip", "无法验证端到端加密。\n远程设备可能仍在准备中，请稍后重试。\n如果此问题持续出现，服务器可能不受信任。\n仍要继续吗？"),
     ].iter().cloned().collect();
 }

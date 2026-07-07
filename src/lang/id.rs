@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Koneksi Relay"),
         ("Secure Connection", "Koneksi aman"),
         ("Insecure Connection", "Koneksi Tidak Aman"),
+        ("Continue", ""),
         ("Scale original", "Skala asli"),
         ("Scale adaptive", "Skala adaptif"),
         ("General", "Umum"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Tampilkan di bilah alat yang diperkecil"),
         ("All monitors", "Semua monitor"),
         ("#{} monitor", "Monitor {}"),
+        ("conn-e2ee-unavailable-tip", "Tidak dapat memverifikasi enkripsi ujung ke ujung.\nPerangkat jarak jauh mungkin masih disiapkan. Coba lagi nanti.\nJika ini terus terjadi, server mungkin tidak tepercaya.\nTetap lanjutkan?"),
     ].iter().cloned().collect();
 }

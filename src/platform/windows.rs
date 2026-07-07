@@ -3647,10 +3647,9 @@ pub fn update_to(file: &str) -> ResultType<()> {
 //    `1` and `3` must be done in custom actions.
 //    We need also to handle the command line parsing to find the tray processes.
 pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
-    let cmds = format!(
-        "chcp 65001 && msiexec /i {msi} {}",
-        if quiet { "/qn LAUNCH_TRAY_APP=N" } else { "" }
-    );
+    let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
+    let cmds =
+        format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args} REBOOT=ReallySuppress /norestart");
     run_cmds(cmds, false, "update-msi")?;
     Ok(())
 }
