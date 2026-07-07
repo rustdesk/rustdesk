@@ -693,15 +693,20 @@ jobs:
 
       - name: Check sign and import sign key
         if: env.MACOS_P12_BASE64 != null
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+          MACOS_NOTARIZE_JSON: ${{ secrets.MACOS_NOTARIZE_JSON }}
+        shell: bash
         run: |
           security default-keychain -s rustdesk.keychain
           security find-identity -v
-
-      - name: Check if notarization is configured
-        env:
-          MACOS_NOTARIZE_JSON: ${{ secrets.MACOS_NOTARIZE_JSON }}
-        run: |
-          if [ -n "$MACOS_NOTARIZE_JSON" ];then echo "MACOS_NOTARIZE_ENABLE=1" >> $GITHUB_ENV; fi
+          i=
+          if [ -n "$MACOS_NOTARIZE_JSON" ];then i=1; else i=0; fi
+          echo "MACOS_NOTARIZE_ENABLE=$i" >> $GITHUB_ENV
+          if ! [[ "$MACOS_CODESIGN_IDENTITY" =~ ^[A-Za-z0-9+/]*={0,2}$ ]]; then
+            echo "FATAL: Invalid `secrets.MACOS_CODESIGN_IDENTITY` given. If signing key is stored on your Mac, you can run `security find-identity -v -p codesigning` to find out hex format of your identity." >&2
+            exit 128
+          fi
 
       - name: Import notarize key
         if: env.MACOS_P12_BASE64 != null && env.MACOS_NOTARIZE_ENABLE == 1
