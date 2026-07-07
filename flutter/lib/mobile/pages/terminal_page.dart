@@ -42,6 +42,9 @@ class _TerminalPageState extends State<TerminalPage>
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
   late bool _showTerminalExtraKeys;
+  // Ctrl lock state for virtual keyboard: active key presses are mapped to control codes
+  bool _ctrlLocked = false;
+  bool _altLocked = false;
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
@@ -94,6 +97,14 @@ class _TerminalPageState extends State<TerminalPage>
     // terminal extra keys bar is unnecessary and disabled.
     _showTerminalExtraKeys = !isWebDesktop &&
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    _terminalModel.isCtrlLocked = () => _ctrlLocked;
+    _terminalModel.clearCtrlLock = () {
+      if (_ctrlLocked) setState(() => _ctrlLocked = false);
+    };
+    _terminalModel.isAltLocked = () => _altLocked;
+    _terminalModel.clearAltLock = () {
+      if (_altLocked) setState(() => _altLocked = false);
+    };
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
@@ -324,6 +335,7 @@ class _TerminalPageState extends State<TerminalPage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Row 1: navigation and function keys
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -342,6 +354,7 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildKeyButton('PgUp'),
               ],
             ),
+            // Row 2: symbols and arrow keys
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -360,7 +373,78 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildKeyButton('PgDn'),
               ],
             ),
+            // Row 3: modifier toggle keys, aligned to Row1 via trailing placeholders
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildCtrlKeyButton(),
+                const SizedBox(width: 2),
+                _buildAltKeyButton(),
+                const SizedBox(width: 2),
+                _buildKeyButton('-'),
+                // Trailing placeholders to match Row1/Row2 slot count
+                const SizedBox(width: 2),
+                const SizedBox(width: 48),
+                const SizedBox(width: 2),
+                const SizedBox(width: 48),
+                const SizedBox(width: 2),
+                const SizedBox(width: 48),
+                const SizedBox(width: 2),
+                const SizedBox(width: 48),
+              ],
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Ctrl toggle button with highlighted locked state
+  Widget _buildCtrlKeyButton() {
+    return _buildModifierToggleButton(
+      text: 'Ctrl',
+      semanticsLabel: 'Ctrl lock',
+      isLocked: _ctrlLocked,
+      onPressed: () => setState(() => _ctrlLocked = !_ctrlLocked),
+    );
+  }
+
+  // Alt toggle button with highlighted locked state
+  Widget _buildAltKeyButton() {
+    return _buildModifierToggleButton(
+      text: 'Alt',
+      semanticsLabel: 'Alt lock',
+      isLocked: _altLocked,
+      onPressed: () => setState(() => _altLocked = !_altLocked),
+    );
+  }
+
+  /// Build a modifier toggle button (Ctrl/Alt) with one-shot behavior.
+  /// When [isLocked] is true, the button highlights in blue and the next
+  /// single-character input is mapped to its modified equivalent.
+  Widget _buildModifierToggleButton({
+    required String text,
+    required String semanticsLabel,
+    required bool isLocked,
+    required VoidCallback onPressed,
+  }) {
+    return Semantics(
+      label: translate(semanticsLabel),
+      toggled: isLocked,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        child: Text(text),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(48, 32),
+          padding: EdgeInsets.zero,
+          textStyle:
+              const TextStyle(fontSize: 12),
+          backgroundColor: isLocked
+              ? Colors.blue
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          foregroundColor: isLocked
+              ? Colors.white
+              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );

@@ -22,6 +22,19 @@ class TerminalModel with ChangeNotifier {
 
   bool _disposed = false;
 
+  /// Callback to check whether Ctrl modifier lock is currently active.
+  /// When active, keyboard input is mapped to control codes (e.g. 'b' → \x02).
+  bool Function()? isCtrlLocked;
+
+  /// Callback to clear Ctrl lock after a key is pressed (one-shot mode).
+  void Function()? clearCtrlLock;
+
+  /// Callback to check whether Alt modifier lock is currently active.
+  bool Function()? isAltLocked;
+
+  /// Callback to clear Alt lock after a key is pressed (one-shot mode).
+  void Function()? clearAltLock;
+
   final _inputBuffer = <String>[];
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
@@ -41,7 +54,54 @@ class TerminalModel with ChangeNotifier {
   /// The listener (typically TerminalPage) can use this to auto-close the tab/page.
   VoidCallback? onClosed;
 
+  /// Map keyboard input to control codes when Ctrl lock is active.
+  /// Converts a-z/A-Z to ASCII control codes 1-26, and common symbols
+  /// ([, \, ], ^, /) to their corresponding control codes.
+  String _applyCtrlKeyMapping(String data) {
+    final result = StringBuffer();
+    for (var i = 0; i < data.length; i++) {
+      final code = data.codeUnitAt(i);
+      if (code >= 0x61 && code <= 0x7A) {
+        result.writeCharCode(code - 0x60);
+      } else if (code >= 0x41 && code <= 0x5A) {
+        result.writeCharCode(code - 0x40);
+      } else if (code == 0x20) {
+        result.writeCharCode(0);
+      } else if (code == 0x5B) {
+        result.writeCharCode(27);
+      } else if (code == 0x5C) {
+        result.writeCharCode(28);
+      } else if (code == 0x5D) {
+        result.writeCharCode(29);
+      } else if (code == 0x5E) {
+        result.writeCharCode(30);
+      } else if (code == 0x2F) {
+        result.writeCharCode(31);
+      } else {
+        result.writeCharCode(code);
+      }
+    }
+    return result.toString();
+  }
+
+  /// Map keyboard input with Alt modifier: prefix ESC (0x1B) before the data.
+  String _applyAltKeyMapping(String data) {
+    return '\x1B$data';
+  }
+
   Future<void> _handleInput(String data) async {
+    // Only apply modifier key mappings to single-character input,
+    // avoiding corruption of multi-character pasted text.
+    if (data.length == 1) {
+      if (isCtrlLocked != null && isCtrlLocked!()) {
+        data = _applyCtrlKeyMapping(data);
+        clearCtrlLock?.call();
+      }
+      if (isAltLocked != null && isAltLocked!()) {
+        data = _applyAltKeyMapping(data);
+        clearAltLock?.call();
+      }
+    }
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
     // - Peer Windows: '\r' works, '\n' is just a newline.
