@@ -232,6 +232,7 @@ struct _CliprdrStream
 	FILEDESCRIPTORW m_Dsc;
 	void *m_pData;
 	UINT32 m_connID;
+	UINT32 m_streamId;   // unique CLIPRDR streamId; avoids leaking a heap pointer
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -285,6 +286,9 @@ struct wf_clipboard
 	char *req_fdata;
 	HANDLE req_fevent;
 	BOOL req_f_received;
+	UINT32 req_f_conn_id_expected;     // connID of the outstanding request
+	UINT32 req_f_stream_id_expected;   // streamId of the outstanding request; responses for another are dropped
+	LONG req_f_stream_id_seq;          // source of unique per-stream ids
 
 	size_t nFiles;
 	size_t file_array_size;
@@ -315,7 +319,7 @@ static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
 static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
-static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid,
+static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
 											  ULONG index, UINT32 flag, DWORD positionhigh,
 											  DWORD positionlow, ULONG request);
 
@@ -398,7 +402,7 @@ static ULONG STDMETHODCALLTYPE CliprdrStream_Release(IStream *This)
 static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULONG cb,
 													ULONG *pcbRead)
 {
-	int ret;
+	UINT ret;
 	CliprdrStream *instance = (CliprdrStream *)This;
 	wfClipboard *clipboard;
 
@@ -411,12 +415,23 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)This, instance->m_lIndex,
+	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId, instance->m_lIndex,
 											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
 											instance->m_lOffset.LowPart, cb);
 
-	if (ret < 0)
+	if (ret != CHANNEL_RC_OK)
+	{
+		free(clipboard->req_fdata);
+		clipboard->req_fdata = NULL;
 		return E_FAIL;
+	}
+
+	if (clipboard->req_fsize > cb)
+	{
+		free(clipboard->req_fdata);
+		clipboard->req_fdata = NULL;
+		return STG_E_READFAULT;
+	}
 
 	if (clipboard->req_fdata)
 	{
@@ -628,6 +643,7 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			instance->m_pData = pData;
 			instance->m_lOffset.QuadPart = 0;
 			instance->m_connID = connID;
+			instance->m_streamId = (UINT32)InterlockedIncrement(&clipboard->req_f_stream_id_seq);
 
 			if (instance->m_Dsc.dwFlags & FD_ATTRIBUTES)
 			{
@@ -638,16 +654,28 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			if (((instance->m_Dsc.dwFlags & FD_FILESIZE) == 0) && !isDir)
 			{
 				/* get content size of this stream */
-				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)instance,
+				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
 													  instance->m_lIndex, FILECONTENTS_SIZE, 0, 0,
 													  8) == CHANNEL_RC_OK)
 				{
 					success = TRUE;
 				}
 
-				if (clipboard->req_fdata != NULL)
+				if (clipboard->req_fdata != NULL && clipboard->req_fsize >= sizeof(LONGLONG))
 				{
-					instance->m_lSize.QuadPart = *((LONGLONG *)clipboard->req_fdata);
+					LONGLONG sz = 0;
+					CopyMemory(&sz, clipboard->req_fdata, sizeof(sz));
+					if (sz < 0)
+						success = FALSE;
+					else
+						instance->m_lSize.QuadPart = sz;
+				}
+				else
+				{
+					success = FALSE;
+				}
+				if (clipboard->req_fdata)
+				{
 					free(clipboard->req_fdata);
 					clipboard->req_fdata = NULL;
 				}
@@ -1773,12 +1801,12 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
 }
 
-UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
+static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId, ULONG index,
 									   UINT32 flag, DWORD positionhigh, DWORD positionlow,
 									   ULONG nreq)
 {
 	UINT rc;
-	CLIPRDR_FILE_CONTENTS_REQUEST fileContentsRequest;
+	CLIPRDR_FILE_CONTENTS_REQUEST fileContentsRequest = { 0 };
 
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFileContentsRequest)
 		return ERROR_INTERNAL_ERROR;
@@ -1789,12 +1817,11 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, co
 		return rc;
 	}
 	clipboard->req_f_received = FALSE;
+	clipboard->req_f_conn_id_expected = connID;
+	clipboard->req_f_stream_id_expected = streamId;
 
 	fileContentsRequest.connID = connID;
-	// streamId is `IStream*` pointer, though it is not very good on a 64-bit system.
-	// But it is OK, because it is only used to check if the stream is the same in
-	// `wf_cliprdr_server_file_contents_request()` function.
-	fileContentsRequest.streamId = (UINT32)(ULONG_PTR)streamid;
+	fileContentsRequest.streamId = streamId;
 	fileContentsRequest.listIndex = index;
 	fileContentsRequest.dwFlags = flag;
 	fileContentsRequest.nPositionLow = positionlow;
@@ -3015,6 +3042,7 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	BOOL bIsStreamFile = TRUE;
 	static LPSTREAM pStreamStc = NULL;
 	static UINT32 uStreamIdStc = 0;
+	static UINT32 uConnIdStc = 0;
 	wfClipboard *clipboard;
 	UINT rc = ERROR_INTERNAL_ERROR;
 	UINT sRc;
@@ -3088,7 +3116,8 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	vFormatEtc.lindex = fileContentsRequest->listIndex;
 	vFormatEtc.ptd = NULL;
 
-	if ((uStreamIdStc != fileContentsRequest->streamId) || !pStreamStc)
+	if ((uStreamIdStc != fileContentsRequest->streamId) ||
+		(uConnIdStc != fileContentsRequest->connID) || !pStreamStc)
 	{
 		LPENUMFORMATETC pEnumFormatEtc;
 		ULONG CeltFetched;
@@ -3119,6 +3148,7 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 						{
 							pStreamStc = vStgMedium.pstm;
 							uStreamIdStc = fileContentsRequest->streamId;
+							uConnIdStc = fileContentsRequest->connID;
 							bIsStreamFile = TRUE;
 						}
 
@@ -3282,6 +3312,9 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
+		if (fileContentsResponse->connID != clipboard->req_f_conn_id_expected ||
+			fileContentsResponse->streamId != clipboard->req_f_stream_id_expected)
+			return CHANNEL_RC_OK;
 		clipboard->req_fsize = 0;
 		clipboard->req_fdata = NULL;
 
@@ -3292,6 +3325,13 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		}
 
 		clipboard->req_fsize = fileContentsResponse->cbRequested;
+		/*
+		 * Keep the zero-size allocation: supported Windows builds use the Microsoft
+		 * CRT, where malloc(0) returns a valid pointer. wait_response_event() also
+		 * uses a non-NULL req_fdata to recognize a successful zero-byte response.
+		 * The Rust FFI derives requestedData and cbRequested from the same Vec, so a
+		 * nonzero length cannot have a NULL data pointer on the normal call path.
+		 */
 		clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
 		if (!clipboard->req_fdata)
 		{
