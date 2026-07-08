@@ -2623,6 +2623,20 @@ pub fn is_direct_ip_access(peer: &str) -> bool {
     hbb_common::is_ip_str(peer) || hbb_common::is_domain_port_str(peer)
 }
 
+// Align the maximum length of the peer id to the maximum length of the peer id in the server.
+const MAX_UNTRUSTED_PEER_ID_LEN: usize = 253;
+const UNTRUSTED_PEER_ID_FORBIDDEN_CHARS: &[char] = &['"', '<', '>', '/', '\\', '|', '?', '*'];
+
+// Shared validation for peer/connect ids that cross untrusted boundaries before
+// they are stored or written into command/script contexts.
+pub fn is_valid_untrusted_peer_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_UNTRUSTED_PEER_ID_LEN
+        && !id.chars().any(|ch| {
+            ch.is_control() || ch.is_whitespace() || UNTRUSTED_PEER_ID_FORBIDDEN_CHARS.contains(&ch)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2651,6 +2665,29 @@ mod tests {
             Instant::now() + Duration::from_secs(1),
             Duration::from_secs(1),
         )
+    }
+
+    #[test]
+    fn untrusted_peer_id_validation() {
+        let cases = [
+            ("123456789", true),
+            ("m\u{00FC}nchen-pc", true),
+            ("192.168.1.10:21118", true),
+            ("9123456234@public", true),
+            (
+                r#"1" & oWS.Run("cmd.exe /k whoami /priv",1,False) & ""#,
+                false,
+            ),
+            ("", false),
+            ("peer id", false),
+            ("peer\nid", false),
+            ("peer/id", false),
+            ("peer?id", false),
+        ];
+
+        for (id, expected) in cases {
+            assert_eq!(is_valid_untrusted_peer_id(id), expected, "{id:?}");
+        }
     }
 
     // ThrottledInterval tick at the same time as tokio interval, if no sleeps
