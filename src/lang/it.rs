@@ -332,7 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Connessione relay"),
         ("Secure Connection", "Connessione sicura"),
         ("Insecure Connection", "Connessione non sicura"),
-        ("Continue", ""),
+        ("Continue", "Continua"),
         ("Scale original", "Scala originale"),
         ("Scale adaptive", "Scala adattiva"),
         ("General", "Generale"),
@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Visualizza nella barra strumenti ridotta a icona"),
         ("All monitors", "Tutti gli schermi"),
         ("#{} monitor", "Schermo {}"),
-        ("conn-e2ee-unavailable-tip", "Impossibile verificare la crittografia end-to-end.\nIl dispositivo remoto potrebbe essere ancora in configurazione. Riprova più tardi.\nSe il problema persiste, il server potrebbe non essere attendibile.\nContinuare comunque?"),
+        ("conn-e2ee-unavailable-tip", "Impossibile verificare la crittografia end-to-end.\nIl dispositivo remoto potrebbe essere ancora in configurazione. Riprova più tardi.\nSe il problema persiste, il server potrebbe non essere attendibile.\nVuoi continuare?"),
     ].iter().cloned().collect();
 }
