@@ -159,7 +159,7 @@ fn check_update(manually: bool) -> ResultType<()> {
             } else {
                 "x86_64"
             };
-            format!("{}/rustdesk-{}.{}.dmg", download_url, version, arch)
+            format!("{}/rustdesk-{}-{}.dmg", download_url, version, arch)
         };
         log::debug!("New version available: {}", &version);
         let client = create_http_client_with_url(&download_url);
