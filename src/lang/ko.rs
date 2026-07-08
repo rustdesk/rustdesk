@@ -44,7 +44,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_change_tip", "a-z, A-Z, 0-9, -(대시) 및 _(밑줄) 문자만 허용됩니다. 첫 글자는 a-z, A-Z여야 합니다. 길이는 6에서 16 사이여야 합니다."),
         ("Website", "웹사이트"),
         ("About", "정보"),
-        ("Slogan_tip", "이 혼란스러운 세상에서 마음을 담아 만들었습니다!"),
+        ("Slogan_tip", "이 혼란스러운 세상에서 마음을 담아 만들었습니다! - 한국어 번역: 비너스걸"),
         ("Privacy Statement", "개인정보 보호정책"),
         ("Mute", "음소거"),
         ("Build Date", "빌드 날짜"),
@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "릴레이 연결"),
         ("Secure Connection", "보안 연결"),
         ("Insecure Connection", "보안되지 않은 연결"),
-        ("Continue", ""),
         ("Scale original", "원본 크기 조정"),
         ("Scale adaptive", "크기 조정 가능"),
         ("General", "일반"),
@@ -764,6 +763,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "최소화된 도구 모음에 표시"),
         ("All monitors", "모든 모니터"),
         ("#{} monitor", "#{} 모니터"),
-        ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 아직 설정 중일 수 있습니다. 나중에 다시 시도하세요.\n이 문제가 계속되면 서버를 신뢰할 수 없을 수 있습니다.\n그래도 계속하시겠습니까?"),
+        ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 여전히 설정 중일 수 있습니다. 나중에 다시 시도해 보세요.\n이런 일이 계속 발생하면 서버가 신뢰할 수 없을 수도 있습니다.\n어쨌든 계속하시겠습니까?"),
     ].iter().cloned().collect();
 }
