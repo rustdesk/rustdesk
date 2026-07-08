@@ -152,6 +152,15 @@ fn check_update(manually: bool) -> ResultType<()> {
         } else {
             format!("{}/rustdesk-{}-x86-sciter.exe", download_url, version)
         };
+        #[cfg(target_os = "macos")]
+        let download_url = {
+            let arch = if std::env::consts::ARCH == "aarch64" {
+                "aarch64"
+            } else {
+                "x86_64"
+            };
+            format!("{}/rustdesk-{}.{}.dmg", download_url, version, arch)
+        };
         log::debug!("New version available: {}", &version);
         let client = create_http_client_with_url(&download_url);
         let Some(file_path) = get_download_file_from_url(&download_url) else {
@@ -198,6 +207,8 @@ fn check_update(manually: bool) -> ResultType<()> {
         if has_no_active_conns() {
             #[cfg(target_os = "windows")]
             update_new_version(update_msi, &version, &file_path);
+            #[cfg(target_os = "macos")]
+            update_new_version_macos(&version, &file_path);
         }
     }
     Ok(())
@@ -288,6 +299,30 @@ fn update_new_version(update_msi: bool, version: &str, file_path: &PathBuf) {
             "Failed to convert the file path to string: {}",
             file_path.display()
         );
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn update_new_version_macos(version: &str, file_path: &std::path::PathBuf) {
+    log::debug!(
+        "New version downloaded, starting macOS update: version={}, file={:?}",
+        version,
+        file_path.to_str()
+    );
+    let Some(p) = file_path.to_str() else {
+        log::error!("Failed to convert file path to string: {}", file_path.display());
+        return;
+    };
+    match crate::platform::update_from_dmg(p) {
+        Ok(_) => {
+            log::debug!("macOS update process started for version \"{}\".", version);
+            // update_from_dmg launches the new binary and returns;
+            // the new process calls --update which calls update_me() and exits the old one.
+        }
+        Err(e) => {
+            log::error!("Failed to start macOS update to \"{}\": {}", version, e);
+            std::fs::remove_file(file_path).ok();
+        }
     }
 }
 
