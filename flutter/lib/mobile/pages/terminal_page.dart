@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
@@ -107,9 +108,10 @@ class _TerminalPageState extends State<TerminalPage>
     _terminalModel.clearAltLock = () {
       if (_altLocked) setState(() => _altLocked = false);
     };
-    // Load Row3 expand/collapse state from persistent storage
+    // Load Row3 expand/collapse state from persistent storage. The raw option
+    // read keeps Row3 collapsed when no value has been saved yet.
     _row3Expanded =
-        mainGetLocalBoolOptionSync(kOptionEnableShowTerminalCtrlKeys);
+        bind.mainGetLocalOption(key: kOptionShowTerminalCtrlKeys) == 'Y';
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
@@ -356,8 +358,6 @@ class _TerminalPageState extends State<TerminalPage>
                 const SizedBox(width: 2),
                 _buildKeyButton('End'),
                 const SizedBox(width: 2),
-                _buildKeyButton('PgUp'),
-                const SizedBox(width: 2),
                 _buildKeyButton('\\'),
               ],
             ),
@@ -376,8 +376,6 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildKeyButton('↓'),
                 const SizedBox(width: 2),
                 _buildKeyButton('→'),
-                const SizedBox(width: 2),
-                _buildKeyButton('PgDn'),
                 const SizedBox(width: 2),
                 _buildCollapseButton(),
               ],
@@ -430,16 +428,26 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   // Collapse/expand toggle button for Row3
+  void _toggleRow3Expanded() {
+    setState(() => _row3Expanded = !_row3Expanded);
+    mainSetLocalBoolOption(kOptionShowTerminalCtrlKeys, _row3Expanded);
+
+    // The floating keyboard height changes after Row3 is inserted/removed.
+    // Re-measure on the next frame so terminal padding uses the new height.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showTerminalExtraKeys) return;
+      setState(() {
+        _updateKeyboardHeight();
+      });
+    });
+  }
+
   Widget _buildCollapseButton() {
     return Semantics(
       label: translate(_row3Expanded ? 'collapse' : 'expand'),
       toggled: _row3Expanded,
       child: ElevatedButton(
-        onPressed: () {
-          setState(() => _row3Expanded = !_row3Expanded);
-          mainSetLocalBoolOption(
-              kOptionEnableShowTerminalCtrlKeys, _row3Expanded);
-        },
+        onPressed: _toggleRow3Expanded,
         child: Text(_row3Expanded ? '∧' : '∨'),
         style: ElevatedButton.styleFrom(
           minimumSize: const Size(48, 32),
