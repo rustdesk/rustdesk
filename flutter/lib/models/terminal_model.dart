@@ -90,6 +90,22 @@ class TerminalModel with ChangeNotifier {
   }
 
   Future<void> _handleInput(String data) async {
+    // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
+    // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
+    // - Peer Windows: '\r' works, '\n' is just a newline.
+    // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
+    //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
+    // - Peer macOS: same as Linux, raw-mode apps expect '\r'
+    //   (https://github.com/rustdesk/rustdesk/issues/14907).
+    // So on mobile / web-mobile, normalize the original lone '\n' to '\r'
+    // before modifier mappings. This keeps Ctrl+J mapped to LF instead of
+    // having the generated control code rewritten to CR afterward.
+    // We deliberately do not touch multi-character payloads (e.g. pasted text)
+    // so embedded newlines in pasted content are preserved.
+    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
+    if (isMobileOrWebMobile && data == '\n') {
+      data = '\r';
+    }
     // Only apply modifier key mappings to single-character input,
     // avoiding corruption of multi-character pasted text.
     if (data.length == 1) {
@@ -101,20 +117,6 @@ class TerminalModel with ChangeNotifier {
         data = _applyAltKeyMapping(data);
         clearAltLock?.call();
       }
-    }
-    // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
-    // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
-    // - Peer Windows: '\r' works, '\n' is just a newline.
-    // - Peer Linux: canonical-mode shells accept both, but raw-mode apps
-    //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
-    // - Peer macOS: same as Linux, raw-mode apps expect '\r'
-    //   (https://github.com/rustdesk/rustdesk/issues/14907).
-    // So on mobile / web-mobile, always normalize a lone '\n' to '\r'.
-    // We deliberately do not touch multi-character payloads (e.g. pasted text)
-    // so embedded newlines in pasted content are preserved.
-    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && data == '\n') {
-      data = '\r';
     }
     if (_terminalOpened) {
       // Send user input to remote terminal
