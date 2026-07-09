@@ -340,13 +340,15 @@ class _TerminalPageState extends State<TerminalPage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Row 1: navigation and function keys
+            // Row 1: primary navigation keys and the always-visible pipe/backslash
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildKeyButton('Esc'),
                 const SizedBox(width: 2),
                 _buildKeyButton('/'),
+                const SizedBox(width: 2),
+                _buildKeyButton('|'),
                 const SizedBox(width: 2),
                 _buildKeyButton('Home'),
                 const SizedBox(width: 2),
@@ -356,16 +358,18 @@ class _TerminalPageState extends State<TerminalPage>
                 const SizedBox(width: 2),
                 _buildKeyButton('PgUp'),
                 const SizedBox(width: 2),
-                _buildKeyButton('|'),
+                _buildKeyButton('\\'),
               ],
             ),
-            // Row 2: symbols and arrow keys
+            // Row 2: edit shortcuts, tilde, arrows, and the collapse toggle
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildKeyButton('Tab'),
                 const SizedBox(width: 2),
                 _buildKeyButton('Ctrl+C'),
+                const SizedBox(width: 2),
+                _buildKeyButton('~'),
                 const SizedBox(width: 2),
                 _buildKeyButton('←'),
                 const SizedBox(width: 2),
@@ -378,7 +382,7 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildCollapseButton(),
               ],
             ),
-            // Row 3: modifier toggle keys (collapsed by default)
+            // Row 3: modifier toggles and paging keys, shown only when expanded
             if (_row3Expanded)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -389,10 +393,10 @@ class _TerminalPageState extends State<TerminalPage>
                   const SizedBox(width: 2),
                   _buildKeyButton('-'),
                   const SizedBox(width: 2),
-                  _buildKeyButton('~'),
-                  // Trailing placeholders to match Row1/Row2 width
+                  _buildKeyButton('PgUp'),
                   const SizedBox(width: 2),
-                  const SizedBox(width: 48),
+                  _buildKeyButton('PgDn'),
+                  // Trailing placeholders keep Row3 width aligned with Row1/Row2.
                   const SizedBox(width: 2),
                   const SizedBox(width: 48),
                   const SizedBox(width: 2),
