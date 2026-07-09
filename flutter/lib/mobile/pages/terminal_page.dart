@@ -390,6 +390,13 @@ class _TerminalPageState extends State<TerminalPage>
                   _buildKeyButton('-'),
                   const SizedBox(width: 2),
                   _buildKeyButton('~'),
+                  // Trailing placeholders to match Row1/Row2 width
+                  const SizedBox(width: 2),
+                  const SizedBox(width: 48),
+                  const SizedBox(width: 2),
+                  const SizedBox(width: 48),
+                  const SizedBox(width: 2),
+                  const SizedBox(width: 48),
                 ],
               ),
           ],
