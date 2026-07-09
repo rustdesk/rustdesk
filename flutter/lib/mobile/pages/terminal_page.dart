@@ -45,6 +45,8 @@ class _TerminalPageState extends State<TerminalPage>
   // Ctrl lock state for virtual keyboard: active key presses are mapped to control codes
   bool _ctrlLocked = false;
   bool _altLocked = false;
+  // Row3 expand/collapse state for compact keyboard layout
+  bool _row3Expanded = false;
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
@@ -105,6 +107,9 @@ class _TerminalPageState extends State<TerminalPage>
     _terminalModel.clearAltLock = () {
       if (_altLocked) setState(() => _altLocked = false);
     };
+    // Load Row3 expand/collapse state from persistent storage
+    _row3Expanded =
+        mainGetLocalBoolOptionSync(kOptionEnableShowTerminalCtrlKeys);
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
@@ -343,8 +348,6 @@ class _TerminalPageState extends State<TerminalPage>
                 const SizedBox(width: 2),
                 _buildKeyButton('/'),
                 const SizedBox(width: 2),
-                _buildKeyButton('|'),
-                const SizedBox(width: 2),
                 _buildKeyButton('Home'),
                 const SizedBox(width: 2),
                 _buildKeyButton('↑'),
@@ -352,6 +355,8 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildKeyButton('End'),
                 const SizedBox(width: 2),
                 _buildKeyButton('PgUp'),
+                const SizedBox(width: 2),
+                _buildKeyButton('|'),
               ],
             ),
             // Row 2: symbols and arrow keys
@@ -362,8 +367,6 @@ class _TerminalPageState extends State<TerminalPage>
                 const SizedBox(width: 2),
                 _buildKeyButton('Ctrl+C'),
                 const SizedBox(width: 2),
-                _buildKeyButton('~'),
-                const SizedBox(width: 2),
                 _buildKeyButton('←'),
                 const SizedBox(width: 2),
                 _buildKeyButton('↓'),
@@ -371,28 +374,24 @@ class _TerminalPageState extends State<TerminalPage>
                 _buildKeyButton('→'),
                 const SizedBox(width: 2),
                 _buildKeyButton('PgDn'),
+                const SizedBox(width: 2),
+                _buildCollapseButton(),
               ],
             ),
-            // Row 3: modifier toggle keys, aligned to Row1 via trailing placeholders
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildCtrlKeyButton(),
-                const SizedBox(width: 2),
-                _buildAltKeyButton(),
-                const SizedBox(width: 2),
-                _buildKeyButton('-'),
-                // Trailing placeholders to match Row1/Row2 slot count
-                const SizedBox(width: 2),
-                const SizedBox(width: 48),
-                const SizedBox(width: 2),
-                const SizedBox(width: 48),
-                const SizedBox(width: 2),
-                const SizedBox(width: 48),
-                const SizedBox(width: 2),
-                const SizedBox(width: 48),
-              ],
-            ),
+            // Row 3: modifier toggle keys (collapsed by default)
+            if (_row3Expanded)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildCtrlKeyButton(),
+                  const SizedBox(width: 2),
+                  _buildAltKeyButton(),
+                  const SizedBox(width: 2),
+                  _buildKeyButton('-'),
+                  const SizedBox(width: 2),
+                  _buildKeyButton('~'),
+                ],
+              ),
           ],
         ),
       ),
@@ -416,6 +415,31 @@ class _TerminalPageState extends State<TerminalPage>
       semanticsLabel: 'Alt lock',
       isLocked: _altLocked,
       onPressed: () => setState(() => _altLocked = !_altLocked),
+    );
+  }
+
+  // Collapse/expand toggle button for Row3
+  Widget _buildCollapseButton() {
+    return Semantics(
+      label: translate(_row3Expanded ? 'collapse' : 'expand'),
+      toggled: _row3Expanded,
+      child: ElevatedButton(
+        onPressed: () {
+          setState(() => _row3Expanded = !_row3Expanded);
+          mainSetLocalBoolOption(
+              kOptionEnableShowTerminalCtrlKeys, _row3Expanded);
+        },
+        child: Text(_row3Expanded ? '∧' : '∨'),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(48, 32),
+          padding: EdgeInsets.zero,
+          textStyle: const TextStyle(fontSize: 12),
+          backgroundColor:
+              Theme.of(context).colorScheme.surfaceContainerHighest,
+          foregroundColor:
+              Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 
