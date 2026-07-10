@@ -499,6 +499,7 @@ class InputModel {
   // window is focused (the common case).
   bool get _blockMouseWhenUnfocused => shouldBlockUnfocusedMouseInput(
         isDesktop: isDesktop,
+        // isFocused: set by onWindowFocus/onWindowBlur (DesktopTab)
         isWindowFocused: stateGlobal.isFocused.isTrue,
         isOptionEnabled: () =>
             mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly),
