@@ -1904,12 +1904,18 @@ mod desktop {
 
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
-                // Xwayland display and xauth may not be available in a short time after login.
-                if is_xwayland_running() && !self.is_login_wayland() {
+                // Prefer the session's actual display protocol over the mere presence of
+                // Xwayland. A Wayland session commonly has Xwayland running for X11
+                // compatibility apps, but its display/xauth must still be discovered via the
+                // Wayland path. Routing it through the Xwayland path makes the legacy get_env()
+                // shell pipeline (deprecated, see get_envs) run every refresh, and where the
+                // Xwayland process exports no XAUTHORITY the DISPLAY && XAUTHORITY success
+                // condition can never be met, turning refresh() into a continuous fork storm.
+                if self.is_wayland() {
+                    self.get_display_xauth_wayland();
+                } else if is_xwayland_running() {
                     self.get_display_xauth_xwayland();
                     self.is_rustdesk_subprocess = false;
-                } else if self.is_wayland() {
-                    self.get_display_xauth_wayland();
                 }
                 return;
             }
@@ -1934,11 +1940,12 @@ mod desktop {
 
             self.get_home();
             if self.is_wayland() {
-                if is_xwayland_running() {
-                    self.get_display_xauth_xwayland();
-                } else {
-                    self.get_display_xauth_wayland();
-                }
+                // Always use Wayland discovery for a Wayland session, regardless of whether
+                // Xwayland is running for X11 compatibility apps. get_display_xauth_wayland()
+                // still collects optional DISPLAY/XAUTHORITY when present, and uses native
+                // /proc scanning (get_envs) instead of the deprecated per-variable get_env()
+                // shell pipeline.
+                self.get_display_xauth_wayland();
                 self.is_rustdesk_subprocess = false;
             } else {
                 self.get_display_x11();
