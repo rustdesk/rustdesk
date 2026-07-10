@@ -1421,7 +1421,7 @@ class InputModel {
     }
 
     _flingTimer = Timer(Duration(milliseconds: delay), () {
-      if (_stopFling) {
+      if (_stopFling || _blockMouseWhenUnfocused) {
         _fling = false;
         return;
       }
