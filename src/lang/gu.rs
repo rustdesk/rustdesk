@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "બધા મોનિટર"),
         ("#{} monitor", "મોનિટર {}"),
         ("conn-e2ee-unavailable-tip", "એન્ડ-ટુ-એન્ડ એન્ક્રિપ્શન ચકાસી શકાયું નથી.\nરિમોટ ઉપકરણ હજી સેટ થઈ રહ્યું હોઈ શકે છે. પછીથી ફરી પ્રયાસ કરો.\nજો આ ચાલુ રહે, તો સર્વર અવિશ્વસનીય હોઈ શકે છે.\nશું તેમ છતાં ચાલુ રાખવું?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }

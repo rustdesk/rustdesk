@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "सभी मॉनिटर"),
         ("#{} monitor", "मॉनिटर {}"),
         ("conn-e2ee-unavailable-tip", "एंड-टू-एंड एन्क्रिप्शन सत्यापित नहीं किया जा सका।\nदूरस्थ डिवाइस अभी भी सेट अप हो रहा हो सकता है। बाद में फिर प्रयास करें।\nयदि यह समस्या बनी रहती है, तो सर्वर अविश्वसनीय हो सकता है।\nफिर भी जारी रखें?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }

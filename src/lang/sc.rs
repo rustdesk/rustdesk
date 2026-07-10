@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Totu sos ischermos"),
         ("#{} monitor", "Ischermu {}"),
         ("conn-e2ee-unavailable-tip", "No est istadu possìbile verificare sa tzifratzione de punta a punta.\nSu dispositivu remotu podet èssere ancora in fase de configuratzione. Torra a proare prus a tardu.\nSi custu sighit a acontèssere, su server podet non èssere fidadu.\nBoles sighire comente siat?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }

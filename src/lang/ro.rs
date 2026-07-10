@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Toate monitoarele"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "Criptarea end-to-end nu a putut fi verificată.\nDispozitivul la distanță poate fi încă în curs de configurare. Încercați din nou mai târziu.\nDacă acest lucru continuă, serverul poate să nu fie de încredere.\nContinuați oricum?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }

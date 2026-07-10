@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "จอภาพทั้งหมด"),
         ("#{} monitor", "จอภาพ {}"),
         ("conn-e2ee-unavailable-tip", "ไม่สามารถยืนยันการเข้ารหัสแบบต้นทางถึงปลายทางได้\nอุปกรณ์ระยะไกลอาจยังอยู่ระหว่างการตั้งค่า โปรดลองอีกครั้งภายหลัง\nหากปัญหานี้ยังเกิดขึ้นต่อไป เซิร์ฟเวอร์อาจไม่น่าเชื่อถือ\nต้องการดำเนินการต่อหรือไม่?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }

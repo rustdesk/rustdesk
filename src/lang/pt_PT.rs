@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Todos os monitores"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "Não foi possível verificar a encriptação de ponta a ponta.\nO dispositivo remoto ainda pode estar a ser configurado. Tente novamente mais tarde.\nSe isto continuar a acontecer, o servidor pode não ser fidedigno.\nContinuar mesmo assim?"),
+        ("Only control the remote when its window is focused", ""),
     ].iter().cloned().collect();
 }
