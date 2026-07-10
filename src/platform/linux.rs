@@ -58,6 +58,9 @@ lazy_static::lazy_static! {
     };
     static ref ACTIVE_USER_LOOKUP_CACHE: std::sync::Mutex<Option<ActiveUserLookupCache>> =
         std::sync::Mutex::new(None);
+    static ref GNOME_FRACTIONAL_SCALING_CACHE: std::sync::Mutex<
+        Option<(Instant, Option<bool>)>,
+    > = Default::default();
     // https://github.com/rustdesk/rustdesk/issues/13705
     // Check if `sudo -E` actually preserves environment.
     //
@@ -88,6 +91,89 @@ lazy_static::lazy_static! {
                 .unwrap_or(false)
         }
     };
+}
+
+pub fn gnome_fractional_scaling_enabled() -> Option<bool> {
+    use std::{io::Read, process::Stdio};
+
+    if let Ok(cache) = GNOME_FRACTIONAL_SCALING_CACHE.lock() {
+        if let Some((updated_at, result)) = *cache {
+            if updated_at.elapsed() < Duration::from_secs(10) {
+                return result;
+            }
+        }
+    }
+
+    let result = (|| {
+        let is_gnome_desktop = std::env::var("XDG_CURRENT_DESKTOP")
+            .unwrap_or_default()
+            .split(':')
+            .any(|desktop| {
+                desktop.eq_ignore_ascii_case("gnome") || desktop.eq_ignore_ascii_case("unity")
+            });
+        let is_gnome_session = std::env::var("DESKTOP_SESSION")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !is_gnome_desktop
+            && !is_gnome_session.contains("gnome")
+            && std::env::var_os("GNOME_DESKTOP_SESSION_ID").is_none()
+        {
+            return None;
+        }
+        let mut child = match Command::new("gsettings")
+            .args(["get", "org.gnome.mutter", "experimental-features"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(err) => {
+                log::warn!("Failed to start gsettings: {err}");
+                return None;
+            }
+        };
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(None) => {
+                    log::warn!("Timed out while checking GNOME fractional scaling");
+                    if let Err(err) = child.kill() {
+                        log::debug!("Failed to kill timed-out gsettings process: {err}");
+                    }
+                    if let Err(err) = child.wait() {
+                        log::debug!("Failed to reap timed-out gsettings process: {err}");
+                    }
+                    return None;
+                }
+                Err(err) => {
+                    log::warn!("Failed to wait for gsettings: {err}");
+                    if let Err(err) = child.kill() {
+                        log::debug!("Failed to kill gsettings process: {err}");
+                    }
+                    if let Err(err) = child.wait() {
+                        log::debug!("Failed to reap gsettings process: {err}");
+                    }
+                    return None;
+                }
+            }
+        };
+        if !status.success() {
+            return None;
+        }
+        let mut stdout = Vec::new();
+        child.stdout.take()?.read_to_end(&mut stdout).ok()?;
+        String::from_utf8(stdout)
+            .ok()
+            .map(|features| features.contains("scale-monitor-framebuffer"))
+    })();
+    if let Ok(mut cache) = GNOME_FRACTIONAL_SCALING_CACHE.lock() {
+        *cache = Some((Instant::now(), result));
+    }
+    result
 }
 
 #[inline]
