@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -44,9 +45,10 @@ fn connection_meta(
 }
 
 lazy_static::lazy_static! {
-    static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
+    static ref SOLVING_PK_MISMATCH: Mutex<HashSet<String>> = Default::default();
     static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
     static ref LAST_RELAY_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
+    static ref EXITED_HOSTS: Mutex<HashSet<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
@@ -153,7 +155,7 @@ impl RendezvousMediator {
         loop {
             let timeout = Arc::new(RwLock::new(CONNECT_TIMEOUT));
             let conn_start_time = Instant::now();
-            *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
+            SOLVING_PK_MISMATCH.lock().await.clear();
             if !config::option2bool("stop-service", &Config::get_option("stop-service"))
                 && !crate::platform::installing_service()
             {
@@ -161,11 +163,13 @@ impl RendezvousMediator {
                 let servers = Config::get_rendezvous_servers();
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
                 MANUAL_RESTARTED.store(false, Ordering::SeqCst);
+                EXITED_HOSTS.lock().await.clear();
                 for host in servers.clone() {
                     let server = server.clone();
                     let timeout = timeout.clone();
+                    let total_servers = servers.len();
                     futs.push(tokio::spawn(async move {
-                        if let Err(err) = Self::start(server, host).await {
+                        if let Err(err) = Self::start(server, host.clone()).await {
                             let err = format!("rendezvous mediator error: {err}");
                             // When user reboot, there might be below error, waiting too long
                             // (CONNECT_TIMEOUT 18s) will make user think there is bug
@@ -176,8 +180,12 @@ impl RendezvousMediator {
                             }
                             log::error!("{err}");
                         }
-                        // SHOULD_EXIT here is to ensure once one exits, the others also exit.
-                        SHOULD_EXIT.store(true, Ordering::SeqCst);
+                        EXITED_HOSTS.lock().await.insert(host.clone());
+                        // If all hosts have exited or manual restart, signal all to stop.
+                        let all_exited = EXITED_HOSTS.lock().await.len() >= total_servers;
+                        if all_exited || MANUAL_RESTARTED.load(Ordering::SeqCst) {
+                            SHOULD_EXIT.store(true, Ordering::SeqCst);
+                        }
                     }));
                 }
                 join_all(futs).await;
@@ -435,7 +443,7 @@ impl RendezvousMediator {
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
         let mut last_recv_msg = Instant::now();
-        // we won't support connecting to multiple rendzvous servers any more, so we can use a global variable here.
+        // Support connecting to multiple rendezvous servers simultaneously (custom + builtin).
         Config::set_host_key_confirmed(&rz.host_prefix, false);
         loop {
             let mut update_latency = || {
@@ -780,11 +788,11 @@ impl RendezvousMediator {
     async fn handle_uuid_mismatch(&mut self, socket: Sink<'_>) -> ResultType<()> {
         {
             let mut solving = SOLVING_PK_MISMATCH.lock().await;
-            if solving.is_empty() || *solving == self.host {
+            if !solving.contains(&self.host) {
                 log::info!("UUID_MISMATCH received from {}", self.host);
                 Config::set_key_confirmed(false);
                 Config::update_id();
-                *solving = self.host.clone();
+                solving.insert(self.host.clone());
             } else {
                 return Ok(());
             }
@@ -794,7 +802,7 @@ impl RendezvousMediator {
 
     async fn register_peer(&mut self, socket: Sink<'_>) -> ResultType<()> {
         let solving = SOLVING_PK_MISMATCH.lock().await;
-        if !(solving.is_empty() || *solving == self.host) {
+        if solving.contains(&self.host) {
             return Ok(());
         }
         drop(solving);
