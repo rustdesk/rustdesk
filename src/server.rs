@@ -24,24 +24,16 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
-use scrap::camera;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
 use service::{EmptyExtraFieldService, GenericService, Service, Subscriber};
-use video_service::VideoSource;
 
 use crate::ipc::Data;
 
 pub mod audio_service;
-#[cfg(target_os = "windows")]
-pub mod terminal_helper;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod terminal_service;
 cfg_if::cfg_if! {
-if #[cfg(not(target_os = "ios"))] {
+if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
-#[cfg(target_os = "android")]
-pub use clipboard_service::is_clipboard_service_ok;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 #[cfg(target_os = "linux")]
@@ -50,24 +42,20 @@ pub mod uinput;
 pub mod rdp_input;
 #[cfg(target_os = "linux")]
 pub mod dbus;
-#[cfg(not(target_os = "android"))]
 pub mod input_service;
 } else {
 mod clipboard_service {
 pub const NAME: &'static str = "";
 }
-}
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
 pub mod input_service {
-    pub const NAME_CURSOR: &'static str = "";
-    pub const NAME_POS: &'static str = "";
-    pub const NAME_WINDOW_FOCUS: &'static str = "";
+pub const NAME_CURSOR: &'static str = "";
+pub const NAME_POS: &'static str = "";
+pub const NAME_WINDOW_FOCUS: &'static str = "";
+}
+}
 }
 
 mod connection;
-mod login_failure_check;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
@@ -75,27 +63,15 @@ mod service;
 mod video_qos;
 pub mod video_service;
 
-#[cfg(all(target_os = "windows", feature = "flutter"))]
-pub mod printer_service;
-
 pub type Childs = Arc<Mutex<Vec<std::process::Child>>>;
 type ConnMap = HashMap<i32, ConnInner>;
 
-#[derive(Clone, Default)]
-pub struct ConnectionMeta {
-    pub control_permissions: Option<ControlPermissions>,
-    pub controlled_context: Option<ControlledContext>,
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-// 3s is enough for at least one initial sync attempt:
-// 0.3s backoff + up to 1s connect timeout + up to 1s response timeout.
-const CONFIG_SYNC_INITIAL_WAIT_SECS: u64 = 3;
 
 lazy_static::lazy_static! {
     pub static ref CHILD_PROCESS: Childs = Default::default();
+    pub static ref CONN_COUNT: Arc<Mutex<usize>> = Default::default();
     // A client server used to provide local services(audio, video, clipboard, etc.)
     // for all initiative connections.
     //
@@ -123,18 +99,10 @@ pub fn new() -> ServerPtr {
     };
     server.add_service(Box::new(audio_service::new()));
     #[cfg(not(target_os = "ios"))]
-    {
-        server.add_service(Box::new(display_service::new()));
-        server.add_service(Box::new(clipboard_service::new(
-            clipboard_service::NAME.to_owned(),
-        )));
-        #[cfg(feature = "unix-file-copy-paste")]
-        server.add_service(Box::new(clipboard_service::new(
-            clipboard_service::FILE_NAME.to_owned(),
-        )));
-    }
+    server.add_service(Box::new(display_service::new()));
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
+        server.add_service(Box::new(clipboard_service::new()));
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
@@ -143,52 +111,23 @@ pub fn new() -> ServerPtr {
                 // wayland does not support multiple displays currently
                 server.add_service(Box::new(input_service::new_window_focus()));
             }
-            #[cfg(not(target_os = "linux"))]
-            server.add_service(Box::new(input_service::new_window_focus()));
         }
     }
-    #[cfg(all(target_os = "windows", feature = "flutter"))]
-    {
-        match printer_service::init(&crate::get_app_name()) {
-            Ok(()) => {
-                log::info!("printer service initialized");
-                server.add_service(Box::new(printer_service::new(
-                    printer_service::NAME.to_owned(),
-                )));
-            }
-            Err(e) => {
-                log::error!("printer service init failed: {}", e);
-            }
-        }
-    }
-    // Terminal service is created per connection, not globally
     Arc::new(RwLock::new(server))
 }
 
-async fn accept_connection_(
-    server: ServerPtr,
-    socket: Stream,
-    secure: bool,
-    meta: ConnectionMeta,
-) -> ResultType<()> {
+async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
-    // see "Only one usage of each socket address is normally permitted" on windows sometimes,
+    // see “Only one usage of each socket address is normally permitted” on windows sometimes,
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
-        create_tcp_connection(
-            server,
-            Stream::from(stream, stream_addr),
-            addr,
-            secure,
-            meta,
-        )
-        .await?;
+        create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }
     Ok(())
 }
@@ -198,7 +137,6 @@ pub async fn create_tcp_connection(
     stream: Stream,
     addr: SocketAddr,
     secure: bool,
-    meta: ConnectionMeta,
 ) -> ResultType<()> {
     let mut stream = stream;
     let id = server.write().unwrap().get_new_id();
@@ -257,16 +195,14 @@ pub async fn create_tcp_connection(
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        if let Ok(task) = Command::new("/usr/bin/caffeinate")
+        Command::new("/usr/bin/caffeinate")
             .arg("-u")
             .arg("-t 5")
             .spawn()
-        {
-            super::CHILD_PROCESS.lock().unwrap().push(task);
-        }
+            .ok();
         log::info!("wake up macos");
     }
-    Connection::start(addr, stream, id, Arc::downgrade(&server), meta).await;
+    Connection::start(addr, stream, id, Arc::downgrade(&server)).await;
     Ok(())
 }
 
@@ -275,10 +211,9 @@ pub async fn accept_connection(
     socket: Stream,
     peer_addr: SocketAddr,
     secure: bool,
-    meta: ConnectionMeta,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure, meta).await {
-        log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
+    if let Err(err) = accept_connection_(server, socket, secure).await {
+        log::error!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }
 
@@ -289,18 +224,9 @@ pub async fn create_relay_connection(
     peer_addr: SocketAddr,
     secure: bool,
     ipv4: bool,
-    meta: ConnectionMeta,
 ) {
-    if let Err(err) = create_relay_connection_(
-        server,
-        relay_server,
-        uuid.clone(),
-        peer_addr,
-        secure,
-        ipv4,
-        meta,
-    )
-    .await
+    if let Err(err) =
+        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure, ipv4).await
     {
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
@@ -318,7 +244,6 @@ async fn create_relay_connection_(
     peer_addr: SocketAddr,
     secure: bool,
     ipv4: bool,
-    meta: ConnectionMeta,
 ) -> ResultType<()> {
     let mut stream = socket_client::connect_tcp(
         socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
@@ -333,59 +258,28 @@ async fn create_relay_connection_(
         ..Default::default()
     });
     stream.send(&msg_out).await?;
-    create_tcp_connection(server, stream, peer_addr, secure, meta).await?;
+    create_tcp_connection(server, stream, peer_addr, secure).await?;
     Ok(())
 }
 
 impl Server {
     fn is_video_service_name(name: &str) -> bool {
-        name.starts_with(VideoSource::Monitor.service_name_prefix())
-            || name.starts_with(VideoSource::Camera.service_name_prefix())
-    }
-
-    pub fn try_add_primary_camera_service(&mut self) {
-        if !camera::primary_camera_exists() {
-            return;
-        }
-        let primary_camera_name =
-            video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
-        if !self.contains(&primary_camera_name) {
-            self.add_service(Box::new(video_service::new(
-                VideoSource::Camera,
-                camera::PRIMARY_CAMERA_IDX,
-            )));
-        }
+        name.starts_with(video_service::NAME)
     }
 
     pub fn try_add_primay_video_service(&mut self) {
-        let primary_video_service_name = video_service::get_service_name(
-            VideoSource::Monitor,
-            *display_service::PRIMARY_DISPLAY_IDX,
-        );
+        let primary_video_service_name =
+            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         if !self.contains(&primary_video_service_name) {
             self.add_service(Box::new(video_service::new(
-                VideoSource::Monitor,
                 *display_service::PRIMARY_DISPLAY_IDX,
             )));
         }
     }
 
-    pub fn add_camera_connection(&mut self, conn: ConnInner) {
-        if camera::primary_camera_exists() {
-            let primary_camera_name =
-                video_service::get_service_name(VideoSource::Camera, camera::PRIMARY_CAMERA_IDX);
-            if let Some(s) = self.services.get(&primary_camera_name) {
-                s.on_subscribe(conn.clone());
-            }
-        }
-        self.connections.insert(conn.id(), conn);
-    }
-
     pub fn add_connection(&mut self, conn: ConnInner, noperms: &Vec<&'static str>) {
-        let primary_video_service_name = video_service::get_service_name(
-            VideoSource::Monitor,
-            *display_service::PRIMARY_DISPLAY_IDX,
-        );
+        let primary_video_service_name =
+            video_service::get_service_name(*display_service::PRIMARY_DISPLAY_IDX);
         for s in self.services.values() {
             let name = s.name();
             if Self::is_video_service_name(&name) && name != primary_video_service_name {
@@ -398,6 +292,7 @@ impl Server {
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
         self.connections.insert(conn.id(), conn);
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
     }
 
     pub fn remove_connection(&mut self, conn: &ConnInner) {
@@ -405,6 +300,7 @@ impl Server {
             s.on_unsubscribe(conn.id());
         }
         self.connections.remove(&conn.id());
+        *CONN_COUNT.lock().unwrap() = self.connections.len();
         #[cfg(target_os = "macos")]
         self.update_enable_retina();
     }
@@ -450,15 +346,10 @@ impl Server {
         self.id_count
     }
 
-    pub fn set_video_service_opt(
-        &self,
-        display: Option<(VideoSource, usize)>,
-        opt: &str,
-        value: &str,
-    ) {
+    pub fn set_video_service_opt(&self, display: Option<usize>, opt: &str, value: &str) {
         for (k, v) in self.services.iter() {
-            if let Some((source, display)) = display {
-                if k != &video_service::get_service_name(source, display) {
+            if let Some(display) = display {
+                if k != &video_service::get_service_name(display) {
                     continue;
                 }
             }
@@ -486,14 +377,13 @@ impl Server {
     fn capture_displays(
         &mut self,
         conn: ConnInner,
-        source: VideoSource,
         displays: &[usize],
         include: bool,
         exclude: bool,
     ) {
         let displays = displays
             .iter()
-            .map(|d| video_service::get_service_name(source, *d))
+            .map(|d| video_service::get_service_name(*d))
             .collect::<Vec<_>>();
         let keys = self.services.keys().cloned().collect::<Vec<_>>();
         for name in keys.iter() {
@@ -604,10 +494,11 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        wait_initial_config_sync().await;
+        tokio::spawn(async { sync_and_watch_config_dir().await });
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         scrap::hwcodec::start_check_process();
         crate::RendezvousMediator::start_all().await;
     } else {
@@ -689,49 +580,19 @@ pub async fn start_ipc_url_server() {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn wait_initial_config_sync() {
+async fn sync_and_watch_config_dir() {
     if crate::platform::is_root() {
         return;
     }
 
-    // Non-server process should not block startup, but still keeps background sync/watch alive.
-    if !crate::is_server() {
-        tokio::spawn(async move {
-            sync_and_watch_config_dir(None).await;
-        });
-        return;
-    }
-
-    let (sync_done_tx, mut sync_done_rx) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(async move {
-        sync_and_watch_config_dir(Some(sync_done_tx)).await;
-    });
-
-    // Server process waits up to N seconds for initial root->local sync to reduce stale-start window.
-    tokio::select! {
-        _ = &mut sync_done_rx => {
-        }
-        _ = tokio::time::sleep(Duration::from_secs(CONFIG_SYNC_INITIAL_WAIT_SECS)) => {
-            log::warn!(
-                "timed out waiting {}s for initial config sync, continue startup and keep syncing in background",
-                CONFIG_SYNC_INITIAL_WAIT_SECS
-            );
-        }
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Sender<()>>) {
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
-    let mut is_root_config_empty = false;
-    let mut sync_done_tx = sync_done_tx;
     let tries = if crate::is_server() { 30 } else { 3 };
     log::debug!("#tries of ipc service connection: {}", tries);
     use hbb_common::sleep;
     for i in 1..=tries {
         sleep(i as f32 * CONFIG_SYNC_INTERVAL_SECS).await;
-        match crate::ipc::connect_service(1000).await {
+        match crate::ipc::connect(1000, "_service").await {
             Ok(mut conn) => {
                 if !synced {
                     if conn.send(&Data::SyncConfig(None)).await.is_ok() {
@@ -740,8 +601,6 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                 Data::SyncConfig(Some(configs)) => {
                                     let (config, config2) = *configs;
                                     let _chk = crate::ipc::CheckIfRestart::new();
-                                    #[cfg(target_os = "macos")]
-                                    let _chk_pk = crate::CheckIfResendPk::new();
                                     if !config.is_empty() {
                                         if cfg0.0 != config {
                                             cfg0.0 = config.clone();
@@ -753,51 +612,28 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                                             Config2::set(config2);
                                             log::info!("sync config2 from root");
                                         }
-                                    } else {
-                                        // only on macos, because this issue was only reproduced on macos
-                                        #[cfg(target_os = "macos")]
-                                        {
-                                            // root config is empty, mark for sync in watch loop
-                                            // to prevent root from generating a new config on login screen
-                                            is_root_config_empty = true;
-                                        }
                                     }
                                     synced = true;
-                                    // Notify startup waiter once initial sync phase finishes successfully.
-                                    if let Some(tx) = sync_done_tx.take() {
-                                        let _ = tx.send(());
-                                    }
                                 }
                                 _ => {}
                             };
                         };
-                    }
-                    if !synced {
-                        log::warn!(
-                            "initial config sync from root failed, reconnecting to ipc_service"
-                        );
-                        continue;
                     }
                 }
 
                 loop {
                     sleep(CONFIG_SYNC_INTERVAL_SECS).await;
                     let cfg = (Config::get(), Config2::get());
-                    let should_sync =
-                        cfg != cfg0 || (is_root_config_empty && !cfg.0.is_empty());
-                    if should_sync {
-                        if is_root_config_empty {
-                            log::info!("root config is empty, sync our config to root");
-                        } else {
-                            log::info!("config updated, sync to root");
-                        }
+                    if cfg != cfg0 {
+                        log::info!("config updated, sync to root");
                         match conn.send(&Data::SyncConfig(Some(cfg.clone().into()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
-                                match crate::ipc::connect_service(1000).await {
+                                match crate::ipc::connect(1000, "_service").await {
                                     Ok(mut _conn) => {
                                         conn = _conn;
                                         log::info!("reconnected to ipc_service");
+                                        break;
                                     }
                                     _ => {}
                                 }
@@ -805,7 +641,6 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                             _ => {
                                 cfg0 = cfg;
                                 conn.next_timeout(1000).await.ok();
-                                is_root_config_empty = false;
                             }
                         }
                     }
@@ -815,10 +650,6 @@ async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Se
                 log::info!("#{} try: failed to connect to ipc_service", i);
             }
         }
-    }
-    // Notify startup waiter even when initial sync is skipped/failed, to avoid unnecessary waiting.
-    if let Some(tx) = sync_done_tx.take() {
-        let _ = tx.send(());
     }
     log::warn!("skipped config sync");
 }

@@ -5,7 +5,7 @@ use hbb_common::{
 };
 use scrap::{
     aom::{AomDecoder, AomEncoder, AomEncoderConfig},
-    codec::{EncoderApi, EncoderCfg},
+    codec::{EncoderApi, EncoderCfg, Quality as Q},
     Capturer, Display, TraitCapturer, VpxDecoder, VpxDecoderConfig, VpxEncoder, VpxEncoderConfig,
     VpxVideoCodecId::{self, *},
     STRIDE_ALIGN,
@@ -27,15 +27,23 @@ Usage:
 Options:
   -h --help             Show this screen.
   --count=COUNT         Capture frame count [default: 100].
-  --quality=QUALITY     Video quality [default: 1.0].
+  --quality=QUALITY     Video quality [default: Balanced].
+                        Valid values: Best, Balanced, Low.
   --i444                I444.
 ";
 
 #[derive(Debug, serde::Deserialize, Clone, Copy)]
 struct Args {
     flag_count: usize,
-    flag_quality: f32,
+    flag_quality: Quality,
     flag_i444: bool,
+}
+
+#[derive(Debug, serde::Deserialize, Clone, Copy)]
+enum Quality {
+    Best,
+    Balanced,
+    Low,
 }
 
 fn main() {
@@ -62,6 +70,11 @@ fn main() {
         "benchmark {}x{} quality:{:?}, i444:{:?}",
         width, height, quality, args.flag_i444
     );
+    let quality = match quality {
+        Quality::Best => Q::Best,
+        Quality::Balanced => Q::Balanced,
+        Quality::Low => Q::Low,
+    };
     [VP8, VP9].map(|codec| {
         test_vpx(
             &mut c,
@@ -85,7 +98,7 @@ fn test_vpx(
     codec_id: VpxVideoCodecId,
     width: usize,
     height: usize,
-    quality: f32,
+    quality: Q,
     yuv_count: usize,
     i444: bool,
 ) {
@@ -164,7 +177,7 @@ fn test_av1(
     c: &mut Capturer,
     width: usize,
     height: usize,
-    quality: f32,
+    quality: Q,
     yuv_count: usize,
     i444: bool,
 ) {
@@ -234,7 +247,7 @@ mod hw {
 
     use super::*;
 
-    pub fn test(c: &mut Capturer, width: usize, height: usize, quality: f32, yuv_count: usize) {
+    pub fn test(c: &mut Capturer, width: usize, height: usize, quality: Q, yuv_count: usize) {
         let mut h264s = Vec::new();
         let mut h265s = Vec::new();
         if let Some(info) = HwRamEncoder::try_get(CodecFormat::H264) {
@@ -250,7 +263,7 @@ mod hw {
     fn test_encoder(
         width: usize,
         height: usize,
-        quality: f32,
+        quality: Q,
         info: CodecInfo,
         c: &mut Capturer,
         yuv_count: usize,

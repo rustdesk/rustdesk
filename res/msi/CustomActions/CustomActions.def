@@ -2,7 +2,7 @@ LIBRARY "CustomActions"
 
 EXPORTS
     CustomActionHello
-    RemoveRuntimeGeneratedFiles
+    RemoveInstallFolder
     TerminateProcesses
     AddFirewallRules
     SetPropertyIsServiceRunning
@@ -12,5 +12,3 @@ EXPORTS
     SetPropertyFromConfig
     AddRegSoftwareSASGeneration
     RemoveAmyuniIdd
-    InstallPrinter
-    UninstallPrinter

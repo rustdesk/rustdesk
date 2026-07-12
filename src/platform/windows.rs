@@ -13,78 +13,46 @@ use hbb_common::{
     libc::{c_int, wchar_t},
     log,
     message_proto::{DisplayInfo, Resolution, WindowsSession},
-    sleep,
-    sysinfo::{Pid, System},
-    timeout, tokio,
+    sleep, timeout, tokio,
 };
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
-    fs,
-    io::{self, prelude::*},
+    fs, io,
+    io::prelude::*,
     mem,
-    os::{
-        raw::c_ulong,
-        windows::{ffi::OsStringExt, process::CommandExt},
-    },
+    os::windows::process::CommandExt,
     path::*,
+    process::{Command, Stdio},
     ptr::null_mut,
     sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use wallpaper;
-#[cfg(not(debug_assertions))]
-use winapi::um::libloaderapi::{LoadLibraryExW, LOAD_LIBRARY_SEARCH_USER_DIRS};
 use winapi::{
     ctypes::c_void,
     shared::{minwindef::*, ntdef::NULL, windef::*, winerror::*},
+    um::sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
     um::{
         errhandlingapi::GetLastError,
-        handleapi::{CloseHandle, INVALID_HANDLE_VALUE},
-        libloaderapi::{
-            GetProcAddress, LoadLibraryA, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32,
-        },
+        handleapi::CloseHandle,
+        libloaderapi::{GetProcAddress, LoadLibraryA},
         minwinbase::STILL_ACTIVE,
         processthreadsapi::{
             GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, OpenProcess,
             OpenProcessToken, ProcessIdToSessionId, PROCESS_INFORMATION, STARTUPINFOW,
         },
-        securitybaseapi::{
-            AllocateAndInitializeSid, DuplicateToken, EqualSid, FreeSid, GetTokenInformation,
-        },
+        securitybaseapi::GetTokenInformation,
         shellapi::ShellExecuteW,
-        sysinfoapi::{GetNativeSystemInfo, SYSTEM_INFO},
         winbase::*,
         wingdi::*,
         winnt::{
-            SecurityImpersonation, TokenElevation, TokenGroups, TokenImpersonation, TokenType,
-            DOMAIN_ALIAS_RID_ADMINS, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
+            TokenElevation, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
             ES_SYSTEM_REQUIRED, HANDLE, PROCESS_ALL_ACCESS, PROCESS_QUERY_LIMITED_INFORMATION,
-            PSID, SECURITY_BUILTIN_DOMAIN_RID, SECURITY_NT_AUTHORITY, SID_IDENTIFIER_AUTHORITY,
-            TOKEN_ELEVATION, TOKEN_GROUPS, TOKEN_QUERY, TOKEN_TYPE,
+            TOKEN_ELEVATION, TOKEN_QUERY,
         },
         winreg::HKEY_CURRENT_USER,
-        winspool::{
-            EnumPrintersW, GetDefaultPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL,
-            PRINTER_INFO_1W,
-        },
         winuser::*,
-    },
-};
-use windows::Win32::{
-    Foundation::{CloseHandle as WinCloseHandle, HANDLE as WinHANDLE},
-    Security::{
-        GetTokenInformation as WinGetTokenInformation, IsWellKnownSid, TokenUser,
-        WinLocalSystemSid, TOKEN_QUERY as WIN_TOKEN_QUERY, TOKEN_USER,
-    },
-    System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
-        TH32CS_SNAPPROCESS,
-    },
-    System::Threading::{
-        OpenProcess as WinOpenProcess, OpenProcessToken as WinOpenProcessToken,
-        QueryFullProcessImageNameW as WinQueryFullProcessImageNameW,
-        PROCESS_QUERY_LIMITED_INFORMATION as WIN_PROCESS_QUERY_LIMITED_INFORMATION,
     },
 };
 use windows_service::{
@@ -97,21 +65,12 @@ use windows_service::{
 };
 use winreg::{enums::*, RegKey};
 
-mod acl;
-pub(crate) use acl::current_process_user_sid_string;
-pub use acl::{
-    set_path_permission, set_path_permission_for_portable_service_shmem_dir,
-    set_path_permission_for_portable_service_shmem_file,
-    validate_path_for_portable_service_shmem_dir,
-};
-
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
 pub const EXPLORER_EXE: &'static str = "explorer.exe";
 pub const SET_FOREGROUND_WINDOW: &'static str = "SET_FOREGROUND_WINDOW";
 
 const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
 const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
-pub const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
 
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
@@ -124,56 +83,21 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
             let center_x = rect.left + (rect.right - rect.left) / 2;
             let center_y = rect.top + (rect.bottom - rect.top) / 2;
             center_x >= display.x
-                && center_x < display.x + display.width
+                && center_x <= display.x + display.width
                 && center_y >= display.y
-                && center_y < display.y + display.height
+                && center_y <= display.y + display.height
         })
     }
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
     unsafe {
-        let mut out = mem::MaybeUninit::<POINT>::uninit();
-        if GetCursorPos(out.as_mut_ptr()) == FALSE {
+        #[allow(invalid_value)]
+        let mut out = mem::MaybeUninit::uninit().assume_init();
+        if GetCursorPos(&mut out) == FALSE {
             return None;
         }
-        let out = out.assume_init();
-        Some((out.x, out.y))
-    }
-}
-
-pub fn set_cursor_pos(x: i32, y: i32) -> bool {
-    unsafe {
-        if SetCursorPos(x, y) == FALSE {
-            let err = GetLastError();
-            log::warn!("SetCursorPos failed: x={}, y={}, error_code={}", x, y, err);
-            return false;
-        }
-        true
-    }
-}
-
-/// Clip cursor to a rectangle. Pass None to unclip.
-pub fn clip_cursor(rect: Option<(i32, i32, i32, i32)>) -> bool {
-    unsafe {
-        let result = match rect {
-            Some((left, top, right, bottom)) => {
-                let r = RECT {
-                    left,
-                    top,
-                    right,
-                    bottom,
-                };
-                ClipCursor(&r)
-            }
-            None => ClipCursor(std::ptr::null()),
-        };
-        if result == FALSE {
-            let err = GetLastError();
-            log::warn!("ClipCursor failed: rect={:?}, error_code={}", rect, err);
-            return false;
-        }
-        true
+        return Some((out.x, out.y));
     }
 }
 
@@ -540,12 +464,10 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn get_current_session(rdp: BOOL) -> DWORD;
-    fn is_session_locked(session_id: DWORD) -> BOOL;
     fn LaunchProcessWin(
         cmd: *const u16,
         session_id: DWORD,
         as_user: BOOL,
-        show: BOOL,
         token_pid: &mut DWORD,
     ) -> HANDLE;
     fn GetSessionUserTokenWin(
@@ -557,7 +479,6 @@ extern "C" {
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
-    fn is_windows_10_or_greater() -> BOOL;
     fn handleMask(
         out: *mut u8,
         mask: *const u8,
@@ -576,60 +497,6 @@ extern "C" {
     fn is_local_system() -> BOOL;
     fn alloc_console_and_redirect();
     fn is_service_running_w(svc_name: *const u16) -> bool;
-}
-
-pub fn get_current_session_id(share_rdp: bool) -> DWORD {
-    unsafe { get_current_session(if share_rdp { TRUE } else { FALSE }) }
-}
-
-#[inline]
-fn resolve_expected_active_session_id_for_service(session_id: u32) -> Option<u32> {
-    let share_rdp_enabled = is_share_rdp();
-    if get_available_sessions(false)
-        .iter()
-        .any(|e| e.sid == session_id)
-    {
-        return Some(session_id);
-    }
-    let current_active_session =
-        unsafe { get_current_session(if share_rdp_enabled { TRUE } else { FALSE }) };
-    if current_active_session == u32::MAX {
-        None
-    } else {
-        Some(current_active_session)
-    }
-}
-
-#[inline]
-fn authorize_service_scoped_ipc_connection(
-    stream: &ipc::Connection,
-    expected_active_session_id: Option<u32>,
-) -> bool {
-    let (authorized, peer_pid, peer_session_id, peer_is_system) =
-        stream.service_authorization_status_for_session(expected_active_session_id);
-    if !authorized {
-        ipc::log_rejected_windows_ipc_connection(
-            crate::POSTFIX_SERVICE,
-            peer_pid,
-            peer_session_id,
-            expected_active_session_id,
-            peer_is_system,
-            None,
-        );
-        return false;
-    }
-    if let Err(err) =
-        ipc::ensure_peer_executable_matches_current_by_pid_opt(peer_pid, crate::POSTFIX_SERVICE)
-    {
-        log::warn!(
-                "Rejected unauthorized connection on protected service-scoped IPC channel due to executable mismatch: postfix={}, peer_pid={:?}, err={}",
-                crate::POSTFIX_SERVICE,
-                peer_pid,
-                err
-            );
-        return false;
-    }
-    true
 }
 
 extern "system" {
@@ -686,11 +553,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             let current_active_session = unsafe { get_current_session(share_rdp()) };
             if session_id != current_active_session {
                 session_id = current_active_session;
-                // https://github.com/rustdesk/rustdesk/discussions/10039
-                let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
-                if count == 0 {
-                    h_process = launch_server(session_id, true).await.unwrap_or(NULL);
-                }
+                h_process = launch_server(session_id, true).await.unwrap_or(NULL);
             }
         }
         let res = timeout(super::SERVICE_INTERVAL, incoming.next()).await;
@@ -698,15 +561,6 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             Ok(res) => match res {
                 Some(Ok(stream)) => {
                     let mut stream = ipc::Connection::new(stream);
-                    // Keep IPC authorization consistent with the session we are currently serving.
-                    // Recompute expected session right before authorization to avoid using a stale
-                    // session_id after awaiting incoming.next().
-                    let expected_active_session_id =
-                        resolve_expected_active_session_id_for_service(session_id);
-                    if !authorize_service_scoped_ipc_connection(&stream, expected_active_session_id)
-                    {
-                        continue;
-                    }
                     if let Ok(Some(data)) = stream.next_timeout(1000).await {
                         match data {
                             ipc::Data::Close => {
@@ -748,11 +602,8 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                     if tmp != session_id && stored_usid != Some(session_id) {
                         log::info!("session changed from {} to {}", session_id, tmp);
                         session_id = tmp;
-                        let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
-                        if count == 0 {
-                            send_close_async("").await.ok();
-                            close_sent = true;
-                        }
+                        send_close_async("").await.ok();
+                        close_sent = true;
                     }
                     let mut exit_code: DWORD = 0;
                     if h_process.is_null()
@@ -797,14 +648,12 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
         // in case started some elsewhere
         send_close_async("").await.ok();
     }
+    let host_only = if hbb_common::config::LocalConfig::get_option("host-only") == "Y" { " --host-only" } else { "" };
     let cmd = format!(
-        "\"{}\" --server",
-        std::env::current_exe()?.to_str().unwrap_or("")
+        "\"{}\" --server{}",
+        std::env::current_exe()?.to_str().unwrap_or(""),
+        host_only
     );
-    launch_privileged_process(session_id, &cmd)
-}
-
-pub fn launch_privileged_process(session_id: DWORD, cmd: &str) -> ResultType<HANDLE> {
     use std::os::windows::ffi::OsStrExt;
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
@@ -812,12 +661,9 @@ pub fn launch_privileged_process(session_id: DWORD, cmd: &str) -> ResultType<HAN
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, FALSE, &mut token_pid) };
+    let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE, &mut token_pid) };
     if h.is_null() {
-        log::error!(
-            "Failed to launch privileged process: {}",
-            io::Error::last_os_error()
-        );
+        log::error!("Failed to launch server: {}", io::Error::last_os_error());
         if token_pid == 0 {
             log::error!("No process winlogon.exe");
         }
@@ -826,65 +672,22 @@ pub fn launch_privileged_process(session_id: DWORD, cmd: &str) -> ResultType<HAN
 }
 
 pub fn run_as_user(arg: Vec<&str>) -> ResultType<Option<std::process::Child>> {
-    run_exe_in_cur_session(std::env::current_exe()?.to_str().unwrap_or(""), arg, false)
-}
-
-pub fn run_exe_direct(
-    exe: &str,
-    arg: Vec<&str>,
-    show: bool,
-) -> ResultType<Option<std::process::Child>> {
-    let mut cmd = std::process::Command::new(exe);
-    for a in arg {
-        cmd.arg(a);
-    }
-    if !show {
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    match cmd.spawn() {
-        Ok(child) => Ok(Some(child)),
-        Err(e) => bail!("Failed to start process: {}", e),
-    }
-}
-
-pub fn run_exe_in_cur_session(
-    exe: &str,
-    arg: Vec<&str>,
-    show: bool,
-) -> ResultType<Option<std::process::Child>> {
-    if is_root() {
-        let Some(session_id) = get_current_process_session_id() else {
-            bail!("Failed to get current process session id");
-        };
-        run_exe_in_session(exe, arg, session_id, show)
-    } else {
-        run_exe_direct(exe, arg, show)
-    }
-}
-
-pub fn run_exe_in_session(
-    exe: &str,
-    arg: Vec<&str>,
-    session_id: DWORD,
-    show: bool,
-) -> ResultType<Option<std::process::Child>> {
+    let cmd = format!(
+        "\"{}\" {}",
+        std::env::current_exe()?.to_str().unwrap_or(""),
+        arg.join(" "),
+    );
+    let Some(session_id) = get_current_process_session_id() else {
+        bail!("Failed to get current process session id");
+    };
     use std::os::windows::ffi::OsStrExt;
-    let cmd = format!("\"{}\" {}", exe, arg.join(" "),);
     let wstr: Vec<u16> = std::ffi::OsStr::new(&cmd)
         .encode_wide()
         .chain(Some(0).into_iter())
         .collect();
     let wstr = wstr.as_ptr();
     let mut token_pid = 0;
-    let h = unsafe {
-        LaunchProcessWin(
-            wstr,
-            session_id,
-            TRUE,
-            if show { TRUE } else { FALSE },
-            &mut token_pid,
-        )
-    };
+    let h = unsafe { LaunchProcessWin(wstr, session_id, TRUE, &mut token_pid) };
     if h.is_null() {
         if token_pid == 0 {
             bail!(
@@ -928,79 +731,7 @@ pub fn send_sas() {
     }
     unsafe {
         log::info!("SAS received");
-
-        // Check and temporarily set SoftwareSASGeneration if needed
-        let mut original_value: Option<u32> = None;
-        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-
-        if let Ok(policy_key) = hklm.open_subkey_with_flags(
-            "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
-            KEY_READ | KEY_WRITE,
-        ) {
-            // Read current value
-            match policy_key.get_value::<u32, _>("SoftwareSASGeneration") {
-                Ok(value) => {
-                    /*
-                    - 0 = None (disabled)
-                    - 1 = Services
-                    - 2 = Ease of Access applications
-                    - 3 = Services and Ease of Access applications (Both)
-                                      */
-                    if value != 1 && value != 3 {
-                        original_value = Some(value);
-                        log::info!("SoftwareSASGeneration is {}, setting to 1", value);
-                        // Set to 1 for SendSAS to work
-                        if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &1u32) {
-                            log::error!("Failed to set SoftwareSASGeneration: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::info!(
-                        "SoftwareSASGeneration not found or error reading: {}, setting to 1",
-                        e
-                    );
-                    original_value = Some(0); // Mark that we need to restore (delete) it
-                                              // Create and set to 1
-                    if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &1u32) {
-                        log::error!("Failed to set SoftwareSASGeneration: {}", e);
-                    }
-                }
-            }
-        } else {
-            log::error!("Failed to open registry key for SoftwareSASGeneration");
-        }
-
-        // Send SAS
         SendSAS(FALSE);
-
-        // Restore original value if we changed it
-        if let Some(original) = original_value {
-            if let Ok(policy_key) = hklm.open_subkey_with_flags(
-                "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
-                KEY_WRITE,
-            ) {
-                if original == 0 {
-                    // It didn't exist before, delete it
-                    if let Err(e) = policy_key.delete_value("SoftwareSASGeneration") {
-                        log::error!("Failed to delete SoftwareSASGeneration: {}", e);
-                    } else {
-                        log::info!("Deleted SoftwareSASGeneration (restored to original state)");
-                    }
-                } else {
-                    // Restore the original value
-                    if let Err(e) = policy_key.set_value("SoftwareSASGeneration", &original) {
-                        log::error!(
-                            "Failed to restore SoftwareSASGeneration to {}: {}",
-                            original,
-                            e
-                        );
-                    } else {
-                        log::info!("Restored SoftwareSASGeneration to {}", original);
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -1054,12 +785,8 @@ pub fn set_share_rdp(enable: bool) {
 }
 
 pub fn get_current_process_session_id() -> Option<u32> {
-    get_session_id_of_process(unsafe { GetCurrentProcessId() })
-}
-
-pub fn get_session_id_of_process(pid: DWORD) -> Option<u32> {
     let mut sid = 0;
-    if unsafe { ProcessIdToSessionId(pid, &mut sid) == TRUE } {
+    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut sid) == TRUE } {
         Some(sid)
     } else {
         None
@@ -1217,45 +944,11 @@ pub fn get_active_user_home() -> Option<PathBuf> {
     None
 }
 
-#[cfg(not(feature = "flutter"))]
-#[inline]
-pub fn portable_service_logon_helper_paths() -> Option<(PathBuf, PathBuf)> {
-    // Keep parity with history for now: derive LocalAppData from user profile path.
-    // If users report redirected/non-standard LocalAppData issues, switch to:
-    // `BaseDirs::new()?.data_local_dir()` for Known Folder-based resolution.
-    let user_dir = hbb_common::directories_next::UserDirs::new()?;
-    let dir = user_dir
-        .home_dir()
-        .join("AppData")
-        .join("Local")
-        .join("rustdesk-sciter");
-    let dst = dir.join("rustdesk.exe");
-    Some((dir, dst))
-}
-
 pub fn is_prelogin() -> bool {
     let Some(username) = get_current_session_username() else {
         return false;
     };
     username.is_empty() || username == "SYSTEM"
-}
-
-pub fn is_locked() -> bool {
-    let Some(session_id) = get_current_process_session_id() else {
-        return false;
-    };
-    unsafe { is_session_locked(session_id) == TRUE }
-}
-
-#[inline]
-pub fn is_logon_ui() -> ResultType<bool> {
-    let Some(current_sid) = get_current_process_session_id() else {
-        return Ok(false);
-    };
-    let pids = get_pids("LogonUI.exe")?;
-    Ok(pids
-        .into_iter()
-        .any(|pid| get_session_id_of_process(pid) == Some(current_sid)))
 }
 
 pub fn is_root() -> bool {
@@ -1317,28 +1010,7 @@ pub fn get_install_options() -> String {
     if let Some(start_menu_shortcuts) = start_menu_shortcuts {
         opts.insert(REG_NAME_INSTALL_STARTMENUSHORTCUTS, start_menu_shortcuts);
     }
-    let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
-    if let Some(printer) = printer {
-        opts.insert(REG_NAME_INSTALL_PRINTER, printer);
-    }
     serde_json::to_string(&opts).unwrap_or("{}".to_owned())
-}
-
-pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static str {
-    let install_printer = match printer_override {
-        Some(override_value) => override_value,
-        None => {
-            let app_name = crate::get_app_name();
-            let subkey = format!(".{}", app_name.to_lowercase());
-            let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
-            printer.as_deref() == Some("1")
-        }
-    };
-    if install_printer && is_win_10_or_greater() {
-        "desktopicon startmenu printer"
-    } else {
-        "desktopicon startmenu"
-    }
 }
 
 // This function return Option<String>, because some registry value may be empty.
@@ -1459,43 +1131,10 @@ pub fn copy_exe_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> 
     ))
 }
 
-#[inline]
-pub fn rename_exe_cmd(src_exe: &str, path: &str) -> ResultType<String> {
-    let src_exe_filename = PathBuf::from(src_exe)
-        .file_name()
-        .ok_or(anyhow!("Can't get file name of {src_exe}"))?
-        .to_string_lossy()
-        .to_string();
-    let app_name = crate::get_app_name().to_lowercase();
-    if src_exe_filename.to_lowercase() == format!("{app_name}.exe") {
-        Ok("".to_owned())
-    } else {
-        Ok(format!(
-            "
-        move /Y \"{path}\\{src_exe_filename}\" \"{path}\\{app_name}.exe\"
-        ",
-        ))
-    }
-}
-
-#[inline]
-pub fn remove_meta_toml_cmd(is_msi: bool, path: &str) -> String {
-    if is_msi && crate::is_custom_client() {
-        format!(
-            "
-        del /F /Q \"{path}\\meta.toml\"
-        ",
-        )
-    } else {
-        "".to_owned()
-    }
-}
-
 fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
     reg_value_desktop_shortcuts: Option<String>,
-    reg_value_printer: Option<String>,
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
@@ -1503,7 +1142,7 @@ fn get_after_install(
     // reg delete HKEY_CURRENT_USER\Software\Classes for
     // https://github.com/rustdesk/rustdesk/commit/f4bdfb6936ae4804fc8ab1cf560db192622ad01a
     // and https://github.com/leanflutter/uni_links_desktop/blob/1b72b0226cec9943ca8a84e244c149773f384e46/lib/src/protocol_registrar_impl_windows.dart#L30
-    let hcu = RegKey::predef(HKEY_CURRENT_USER);
+    let hcu = winreg::RegKey::predef(HKEY_CURRENT_USER);
     hcu.delete_subkey_all(format!("Software\\Classes\\{}", exe))
         .ok();
 
@@ -1519,20 +1158,12 @@ fn get_after_install(
             )
         })
         .unwrap_or_default();
-    let reg_printer = reg_value_printer
-        .map(|v| {
-            format!(
-                "reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {REG_NAME_INSTALL_PRINTER} /t REG_SZ /d \"{v}\""
-            )
-        })
-        .unwrap_or_default();
 
     format!("
     chcp 65001
     reg add HKEY_CLASSES_ROOT\\.{ext} /f
     {desktop_shortcuts}
     {start_menu_shortcuts}
-    {reg_printer}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -1553,7 +1184,7 @@ fn get_after_install(
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false, false);
+    let uninstall_str = get_uninstall(false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1577,11 +1208,7 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     }
     let app_name = crate::get_app_name();
 
-    let current_exe = std::env::current_exe()?;
-
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let cur_exe = current_exe.to_str().unwrap_or("").to_owned();
-    let shortcut_icon_location = get_shortcut_icon_location(&path, &cur_exe);
     let mk_shortcut = write_cmds(
         format!(
             "
@@ -1590,7 +1217,6 @@ sLinkFile = \"{tmp_path}\\{app_name}.lnk\"
 
 Set oLink = oWS.CreateShortcut(sLinkFile)
     oLink.TargetPath = \"{exe}\"
-    {shortcut_icon_location}
 oLink.Save
         "
         ),
@@ -1619,10 +1245,9 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &cur_exe, &tmp_path)?;
+    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path)?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
-    let mut reg_value_printer = "0".to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -1642,18 +1267,9 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
         );
         reg_value_start_menu_shortcuts = "1".to_owned();
     }
-    let install_printer = options.contains("printer") && is_win_10_or_greater();
-    if install_printer {
-        reg_value_printer = "1".to_owned();
-    }
 
-    let meta = std::fs::symlink_metadata(&current_exe)?;
-    let mut size = meta.len() / 1024;
-    if let Some(parent_dir) = current_exe.parent() {
-        if let Some(d) = parent_dir.to_str() {
-            size = get_directory_size_kb(d);
-        }
-    }
+    let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
+    let size = meta.len() / 1024;
     // https://docs.microsoft.com/zh-cn/windows/win32/msi/uninstall-registry-key?redirectedfrom=MSDNa
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
@@ -1686,19 +1302,6 @@ copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\
 ")
     };
 
-    let install_remote_printer = if install_printer {
-        // No need to use `|| true` here.
-        // The script will not exit even if `--install-remote-printer` panics.
-        format!("\"{}\" --install-remote-printer", &src_exe)
-    } else if is_win_10_or_greater() {
-        format!("\"{}\" --uninstall-remote-printer", &src_exe)
-    } else {
-        "".to_owned()
-    };
-
-    // Remember to check if `update_me` need to be changed if changing the `cmds`.
-    // No need to merge the existing dup code, because the code in these two functions are too critical.
-    // New code should be written in a common function.
     let cmds = format!(
         "
 {uninstall_str}
@@ -1706,7 +1309,7 @@ chcp 65001
 md \"{path}\"
 {copy_exe}
 reg add {subkey} /f
-reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{display_icon}\"
+reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
 reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
 reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
@@ -1727,17 +1330,14 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {dels}
 {import_config}
 {after_install}
-{install_remote_printer}
 {sleep}
     ",
-        display_icon = get_custom_icon(&path, &cur_exe).unwrap_or(exe.to_string()),
         version = crate::VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
         after_install = get_after_install(
             &exe,
             Some(reg_value_start_menu_shortcuts),
-            Some(reg_value_desktop_shortcuts),
-            Some(reg_value_printer)
+            Some(reg_value_desktop_shortcuts)
         ),
         sleep = if debug { "timeout 300" } else { "" },
         dels = if debug { "" } else { &dels },
@@ -1751,11 +1351,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(
-        get_after_install(&exe, None, None, None),
-        true,
-        "after_install",
-    )
+    run_cmds(get_after_install(&exe, None, None), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
@@ -1785,39 +1381,22 @@ fn get_before_uninstall(kill_self: bool) -> String {
     )
 }
 
-/// Constructs the uninstall command string for the application.
-///
-/// # Parameters
-/// - `kill_self`: The command will kill the process of current app name. If `true`, it will kill
-///   the current process as well. If `false`, it will exclude the current process from the kill
-///   command.
-/// - `uninstall_printer`: If `true`, includes commands to uninstall the remote printer.
-///
-/// # Details
-/// The `uninstall_printer` parameter determines whether the command to uninstall the remote printer
-/// is included in the generated uninstall script. If `uninstall_printer` is `false`, the printer
-/// related command is omitted from the script.
-fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
+fn get_uninstall(kill_self: bool) -> String {
     let reg_uninstall_string = get_reg("UninstallString");
     if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
         return reg_uninstall_string;
     }
 
     let mut uninstall_cert_cmd = "".to_string();
-    let mut uninstall_printer_cmd = "".to_string();
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_path) = exe.to_str() {
             uninstall_cert_cmd = format!("\"{}\" --uninstall-cert", exe_path);
-            if uninstall_printer {
-                uninstall_printer_cmd = format!("\"{}\" --uninstall-remote-printer", &exe_path);
-            }
         }
     }
     let (subkey, path, start_menu, _) = get_install_info();
     format!(
         "
     {before_uninstall}
-    {uninstall_printer_cmd}
     {uninstall_cert_cmd}
     reg delete {subkey} /f
     {uninstall_amyuni_idd}
@@ -1833,7 +1412,7 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
 }
 
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    run_cmds(get_uninstall(kill_self, true), true, "uninstall")
+    run_cmds(get_uninstall(kill_self), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
@@ -1882,13 +1461,15 @@ fn to_le(v: &mut [u16]) -> &[u8] {
     unsafe { v.align_to().1 }
 }
 
-fn get_undone_file(tmp: &Path) -> ResultType<PathBuf> {
-    Ok(tmp.with_file_name(format!(
+fn get_undone_file(tmp: &PathBuf) -> ResultType<PathBuf> {
+    let mut tmp1 = tmp.clone();
+    tmp1.set_file_name(format!(
         "{}.undone",
         tmp.file_name()
             .ok_or(anyhow!("Failed to get filename of {:?}", tmp))?
             .to_string_lossy()
-    )))
+    ));
+    Ok(tmp1)
 }
 
 fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
@@ -1966,163 +1547,6 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
     "".to_owned()
 }
 
-fn get_public_base_dir() -> PathBuf {
-    if let Ok(allusersprofile) = std::env::var("ALLUSERSPROFILE") {
-        let path = PathBuf::from(&allusersprofile);
-        if path.exists() {
-            return path;
-        }
-    }
-    if let Ok(public) = std::env::var("PUBLIC") {
-        let path = PathBuf::from(public).join("Documents");
-        if path.exists() {
-            return path;
-        }
-    }
-    let program_data_dir = PathBuf::from("C:\\ProgramData");
-    if program_data_dir.exists() {
-        return program_data_dir;
-    }
-    std::env::temp_dir()
-}
-
-#[inline]
-pub fn get_custom_client_staging_dir() -> PathBuf {
-    get_public_base_dir()
-        .join("RustDesk")
-        .join("RustDeskCustomClientStaging")
-}
-
-/// Removes the custom client staging directory.
-///
-/// Current behavior: intentionally a no-op (does not delete).
-///
-/// Rationale
-/// - The staging directory only contains a small `custom.txt`, leaving it is harmless.
-/// - Deleting directories under a public location (e.g., C:\\ProgramData\\RustDesk) is
-///   susceptible to TOCTOU attacks if an unprivileged user can replace the path with a
-///   symlink/junction between checks and deletion.
-///
-/// Future work:
-/// - Use the files (if needed) in the installation directory instead of a public location.
-///   This directory only contains a small `custom.txt` file.
-/// - Pass the custom client name directly via command line
-///   or environment variable during update installation. Then no staging directory is needed.
-#[inline]
-pub fn remove_custom_client_staging_dir(staging_dir: &Path) -> ResultType<bool> {
-    if !staging_dir.exists() {
-        return Ok(false);
-    }
-
-    // First explicitly removes `custom.txt` to ensure stale config is never replayed,
-    // even if the subsequent directory removal fails.
-    //
-    // `std::fs::remove_file` on a symlink removes the symlink itself, not the target,
-    // so this is safe even in a TOCTOU race.
-    let custom_txt_path = staging_dir.join("custom.txt");
-    if custom_txt_path.exists() {
-        allow_err!(std::fs::remove_file(&custom_txt_path));
-    }
-
-    // Intentionally not deleting. See the function docs for rationale.
-    log::debug!(
-        "Skip deleting staging directory {:?} (intentional to avoid TOCTOU)",
-        staging_dir
-    );
-    Ok(false)
-}
-
-// Prepare custom client update by copying staged custom.txt to current directory and loading it.
-// Returns:
-// 1. Ok(true) if preparation was successful or no staging directory exists.
-// 2. Ok(false) if custom.txt file exists but has invalid contents or fails security checks
-//    (e.g., is a symlink or has invalid contents).
-// 3. Err if any unexpected error occurs during file operations.
-pub fn prepare_custom_client_update() -> ResultType<bool> {
-    let custom_client_staging_dir = get_custom_client_staging_dir();
-    let current_exe = std::env::current_exe()?;
-    let current_exe_dir = current_exe
-        .parent()
-        .ok_or(anyhow!("Cannot get parent directory of current exe"))?;
-
-    let staging_dir = custom_client_staging_dir.clone();
-    let clear_staging_on_exit = crate::SimpleCallOnReturn {
-        b: true,
-        f: Box::new(
-            move || match remove_custom_client_staging_dir(&staging_dir) {
-                Ok(existed) => {
-                    if existed {
-                        log::info!("Custom client staging directory removed successfully.");
-                    }
-                }
-                Err(e) => {
-                    log::error!(
-                        "Failed to remove custom client staging directory {:?}: {}",
-                        staging_dir,
-                        e
-                    );
-                }
-            },
-        ),
-    };
-
-    if custom_client_staging_dir.exists() {
-        let custom_txt_path = custom_client_staging_dir.join("custom.txt");
-        if !custom_txt_path.exists() {
-            return Ok(true);
-        }
-
-        let metadata = std::fs::symlink_metadata(&custom_txt_path)?;
-        if metadata.is_symlink() {
-            log::error!(
-                "custom.txt is a symlink. Refusing to load custom client for security reasons."
-            );
-            drop(clear_staging_on_exit);
-            return Ok(false);
-        }
-        if metadata.is_file() {
-            // Copy custom.txt to current directory
-            let local_custom_file_path = current_exe_dir.join("custom.txt");
-            log::debug!(
-                "Copying staged custom file from {:?} to {:?}",
-                custom_txt_path,
-                local_custom_file_path
-            );
-
-            // No need to check symlink before copying.
-            // `load_custom_client()` will fail if the file is not valid.
-            fs::copy(&custom_txt_path, &local_custom_file_path)?;
-            log::info!("Staged custom client file copied to current directory.");
-
-            // Load custom client
-            let is_custom_file_exists =
-                local_custom_file_path.exists() && local_custom_file_path.is_file();
-            crate::load_custom_client();
-
-            // Remove the copied custom.txt file
-            allow_err!(fs::remove_file(&local_custom_file_path));
-
-            // Check if loaded successfully
-            if is_custom_file_exists && !crate::common::is_custom_client() {
-                // The custom.txt file existed, but its contents are invalid.
-                log::error!("Failed to load custom client from custom.txt.");
-                drop(clear_staging_on_exit);
-                // ERROR_INVALID_DATA
-                return Ok(false);
-            }
-        } else {
-            log::info!("No custom client files found in staging directory.");
-        }
-    } else {
-        log::info!(
-            "Custom client staging directory {:?} does not exist.",
-            custom_client_staging_dir
-        );
-    }
-
-    Ok(true)
-}
-
 pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     let mut exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // if defined portable appname entry, replace original executable name with it.
@@ -2132,169 +1556,29 @@ pub fn get_license_from_exe_name() -> ResultType<CustomServer> {
     get_custom_server_from_string(&exe)
 }
 
-// We can't directly use `RegKey::set_value` to update the registry value, because it will fail with `ERROR_ACCESS_DENIED`
-// So we have to use `run_cmds` to update the registry value.
-pub fn update_install_option(k: &str, v: &str) -> ResultType<()> {
-    // Don't update registry if not installed or not server process.
-    if !is_installed() || !crate::is_server() {
-        return Ok(());
-    }
-    if ![REG_NAME_INSTALL_PRINTER].contains(&k) || !["0", "1"].contains(&v) {
-        return Ok(());
-    }
-    let app_name = crate::get_app_name();
-    let ext = app_name.to_lowercase();
-    let cmds =
-        format!("chcp 65001 && reg add HKEY_CLASSES_ROOT\\.{ext} /f /v {k} /t REG_SZ /d \"{v}\"");
-    run_cmds(cmds, false, "update_install_option")?;
-    Ok(())
-}
-
 #[inline]
 pub fn is_win_server() -> bool {
     unsafe { is_windows_server() > 0 }
 }
 
-#[inline]
-pub fn is_win_10_or_greater() -> bool {
-    unsafe { is_windows_10_or_greater() > 0 }
-}
-
-pub fn bootstrap() -> bool {
+pub fn bootstrap() {
     if let Ok(lic) = get_license_from_exe_name() {
         *config::EXE_RENDEZVOUS_SERVER.write().unwrap() = lic.host.clone();
     }
-
-    #[cfg(debug_assertions)]
-    {
-        true
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        // This function will cause `'sciter.dll' was not found neither in PATH nor near the current executable.` when debugging RustDesk.
-        // Only call set_safe_load_dll() on Windows 10 or greater
-        if is_win_10_or_greater() {
-            set_safe_load_dll()
-        } else {
-            true
-        }
-    }
-}
-
-#[cfg(not(debug_assertions))]
-fn set_safe_load_dll() -> bool {
-    if !unsafe { set_default_dll_directories() } {
-        return false;
-    }
-
-    // `SetDllDirectoryW` should never fail.
-    // https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setdlldirectoryw
-    if unsafe { SetDllDirectoryW(wide_string("").as_ptr()) == FALSE } {
-        eprintln!("SetDllDirectoryW failed: {}", io::Error::last_os_error());
-        return false;
-    }
-
-    true
-}
-
-// https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-setdefaultdlldirectories
-#[cfg(not(debug_assertions))]
-unsafe fn set_default_dll_directories() -> bool {
-    let module = LoadLibraryExW(
-        wide_string("Kernel32.dll").as_ptr(),
-        0 as _,
-        LOAD_LIBRARY_SEARCH_SYSTEM32,
-    );
-    if module.is_null() {
-        return false;
-    }
-
-    match CString::new("SetDefaultDllDirectories") {
-        Err(e) => {
-            eprintln!("CString::new failed: {}", e);
-            return false;
-        }
-        Ok(func_name) => {
-            let func = GetProcAddress(module, func_name.as_ptr());
-            if func.is_null() {
-                eprintln!("GetProcAddress failed: {}", io::Error::last_os_error());
-                return false;
-            }
-            type SetDefaultDllDirectories = unsafe extern "system" fn(DWORD) -> BOOL;
-            let func: SetDefaultDllDirectories = std::mem::transmute(func);
-            if func(LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_USER_DIRS) == FALSE {
-                eprintln!(
-                    "SetDefaultDllDirectories failed: {}",
-                    io::Error::last_os_error()
-                );
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn get_custom_icon(install_dir: &str, exe: &str) -> Option<String> {
-    const RELATIVE_ICON_PATH: &str = "data\\flutter_assets\\assets\\icon.ico";
-    if crate::is_custom_client() {
-        if let Some(p) = PathBuf::from(exe).parent() {
-            let alter_icon_path = p.join(RELATIVE_ICON_PATH);
-            if alter_icon_path.exists() {
-                // During installation, files under `install_dir` may not exist yet.
-                // So we validate the icon from the current executable directory first.
-                // But for shortcut/registry icon location, we should point to the final
-                // installed path so the icon works across different Windows users.
-                if let Ok(metadata) = std::fs::symlink_metadata(&alter_icon_path) {
-                    if metadata.is_symlink() {
-                        log::warn!(
-                            "Custom icon at {:?} is a symlink, refusing to use it.",
-                            alter_icon_path
-                        );
-                        return None;
-                    }
-                    if metadata.is_file() {
-                        return if install_dir.is_empty() {
-                            Some(alter_icon_path.to_string_lossy().to_string())
-                        } else {
-                            Some(format!("{}\\{}", install_dir, RELATIVE_ICON_PATH))
-                        };
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-#[inline]
-fn get_shortcut_icon_location(install_dir: &str, exe: &str) -> String {
-    if exe.is_empty() {
-        return "".to_owned();
-    }
-
-    get_custom_icon(install_dir, exe)
-        .map(|p| format!("oLink.IconLocation = \"{}\"", p))
-        .unwrap_or_default()
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    // https://github.com/rustdesk/rustdesk/issues/13735
-    // Replace ':' with '_' for filename since ':' is not allowed in Windows filenames
-    // https://github.com/rustdesk/hbb_common/blob/8b0e25867375ba9e6bff548acf44fe6d6ffa7c0e/src/config.rs#L1384
-    let filename = id.replace(':', "_");
-    let shortcut_icon_location = get_shortcut_icon_location("", &exe);
     let shortcut = write_cmds(
         format!(
             "
 Set oWS = WScript.CreateObject(\"WScript.Shell\")
 strDesktop = oWS.SpecialFolders(\"Desktop\")
 Set objFSO = CreateObject(\"Scripting.FileSystemObject\")
-sLinkFile = objFSO.BuildPath(strDesktop, \"{filename}.lnk\")
+sLinkFile = objFSO.BuildPath(strDesktop, \"{id}.lnk\")
 Set oLink = oWS.CreateShortcut(sLinkFile)
     oLink.TargetPath = \"{exe}\"
     oLink.Arguments = \"--connect {id}\"
-    {shortcut_icon_location}
 oLink.Save
         "
         ),
@@ -2306,7 +1590,6 @@ oLink.Save
     .to_owned();
     std::process::Command::new("cscript")
         .arg(&shortcut)
-        .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     allow_err!(std::fs::remove_file(shortcut));
     Ok(())
@@ -2436,33 +1719,16 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
         is_run_as_system,
         crate::username(),
     );
-    let mut arg_elevate = if is_setup {
+    let arg_elevate = if is_setup {
         "--noinstall --elevate"
     } else {
         "--elevate"
-    }
-    .to_owned();
-    let mut arg_run_as_system = if is_setup {
+    };
+    let arg_run_as_system = if is_setup {
         "--noinstall --run-as-system"
     } else {
         "--run-as-system"
-    }
-    .to_owned();
-    let shmem_name_from_args = crate::portable_service::portable_service_shmem_name_from_args();
-    if shmem_name_from_args.is_none() && crate::portable_service::has_portable_service_shmem_arg() {
-        log::error!("Invalid portable service shared memory argument, aborting elevation flow");
-        // This is a malformed bootstrap argument in a privilege-sensitive path.
-        // Keep fail-closed process termination here to avoid continuing elevation
-        // with inconsistent shared-memory contract.
-        std::process::exit(1);
-    }
-    if let Some(shmem_name) = shmem_name_from_args {
-        let shmem_arg = crate::portable_service::portable_service_shmem_arg(&shmem_name);
-        arg_elevate.push(' ');
-        arg_elevate.push_str(&shmem_arg);
-        arg_run_as_system.push(' ');
-        arg_run_as_system.push_str(&shmem_arg);
-    }
+    };
     if is_root() {
         if is_run_as_system {
             log::info!("run portable service");
@@ -2473,7 +1739,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
             Ok(elevated) => {
                 if elevated {
                     if !is_run_as_system {
-                        if run_as_system(arg_run_as_system.as_str()).is_ok() {
+                        if run_as_system(arg_run_as_system).is_ok() {
                             std::process::exit(0);
                         } else {
                             log::error!(
@@ -2484,7 +1750,7 @@ pub fn elevate_or_run_as_system(is_setup: bool, is_elevate: bool, is_run_as_syst
                     }
                 } else {
                     if !is_elevate {
-                        if let Ok(true) = elevate(arg_elevate.as_str()) {
+                        if let Ok(true) = elevate(arg_elevate) {
                             std::process::exit(0);
                         } else {
                             log::error!("Failed to elevate, error {}", io::Error::last_os_error());
@@ -2539,115 +1805,6 @@ pub fn is_elevated(process_id: Option<DWORD>) -> ResultType<bool> {
         }
 
         Ok(token_elevation.TokenIsElevated != 0)
-    }
-}
-
-#[inline]
-unsafe fn read_token_user_buffer(token: WinHANDLE, subject: &str) -> ResultType<Vec<u8>> {
-    let mut token_user_size = 0u32;
-    let get_info_result = WinGetTokenInformation(token, TokenUser, None, 0, &mut token_user_size);
-    match get_info_result {
-        Ok(()) => {
-            if token_user_size == 0 {
-                bail!(
-                    "Failed to get {} token user size: unexpected zero buffer size",
-                    subject
-                );
-            }
-        }
-        Err(e) => {
-            // Allow expected size-probe failures if Windows still returns required size.
-            let is_insufficient_buffer =
-                e.code() == windows::core::HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER as u32);
-            let is_bad_length =
-                e.code() == windows::core::HRESULT::from_win32(ERROR_BAD_LENGTH as u32);
-            if (!is_insufficient_buffer && !is_bad_length) || token_user_size == 0 {
-                bail!("Failed to get {} token user size: {}", subject, e);
-            }
-        }
-    }
-
-    let mut buffer = vec![0u8; token_user_size as usize];
-    WinGetTokenInformation(
-        token,
-        TokenUser,
-        Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-        token_user_size,
-        &mut token_user_size,
-    )
-    .map_err(|e| anyhow!("Failed to get {} token user: {}", subject, e))?;
-
-    let min_size = std::mem::size_of::<TOKEN_USER>();
-    if buffer.len() < min_size {
-        bail!(
-            "Failed to parse {} token user: buffer too small (got {}, need >= {})",
-            subject,
-            buffer.len(),
-            min_size
-        );
-    }
-    Ok(buffer)
-}
-
-/// Similar to `is_root()` / `is_local_system()` but for an arbitrary process.
-///
-/// Returns `true` if the target process is running as LocalSystem (SID: S-1-5-18).
-///
-/// TODO: After a few releases of real-world validation, consider replacing
-/// the legacy `is_local_system()` with this implementation.
-pub fn is_process_running_as_system(process_id: DWORD) -> ResultType<bool> {
-    unsafe {
-        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
-            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
-
-        let mut token = WinHANDLE::default();
-        let result = (|| -> ResultType<bool> {
-            WinOpenProcessToken(process, WIN_TOKEN_QUERY, &mut token)
-                .map_err(|e| anyhow!("Failed to open process {} token: {}", process_id, e))?;
-
-            let token_subject = format!("process {}", process_id);
-            let buffer = read_token_user_buffer(token, token_subject.as_str())?;
-            let token_user: TOKEN_USER =
-                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
-            Ok(IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool())
-        })();
-
-        if !token.is_invalid() {
-            let _ = WinCloseHandle(token);
-        }
-        let _ = WinCloseHandle(process);
-        result
-    }
-}
-
-pub fn get_process_executable_path(process_id: DWORD) -> ResultType<PathBuf> {
-    const PROCESS_IMAGE_PATH_BUFFER_LEN: usize = 32 * 1024;
-    unsafe {
-        let process = WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, process_id)
-            .map_err(|e| anyhow!("Failed to open process {}: {}", process_id, e))?;
-
-        let result = (|| -> ResultType<PathBuf> {
-            let mut buffer = vec![0u16; PROCESS_IMAGE_PATH_BUFFER_LEN];
-            let mut length = PROCESS_IMAGE_PATH_BUFFER_LEN as u32;
-            WinQueryFullProcessImageNameW(
-                process,
-                windows::Win32::System::Threading::PROCESS_NAME_FORMAT(0),
-                windows::core::PWSTR(buffer.as_mut_ptr()),
-                &mut length,
-            )
-            .map_err(|e| anyhow!("Failed to query process {} image path: {}", process_id, e))?;
-            if length == 0 {
-                bail!(
-                    "Failed to query process {} image path: empty result",
-                    process_id
-                );
-            }
-            buffer.truncate(length as usize);
-            Ok(PathBuf::from(OsString::from_wide(&buffer)))
-        })();
-
-        let _ = WinCloseHandle(process);
-        result
     }
 }
 
@@ -2717,177 +1874,6 @@ pub fn send_message_to_hnwd(
     return true;
 }
 
-pub fn get_logon_user_token(user: &str, pwd: &str) -> ResultType<HANDLE> {
-    let user_split = user.split("\\").collect::<Vec<&str>>();
-    let wuser = wide_string(user_split.get(1).unwrap_or(&user));
-    let wpc = wide_string(user_split.get(0).unwrap_or(&""));
-    let wpwd = wide_string(pwd);
-    let mut ph_token: HANDLE = std::ptr::null_mut();
-    let res = unsafe {
-        LogonUserW(
-            wuser.as_ptr(),
-            wpc.as_ptr(),
-            wpwd.as_ptr(),
-            LOGON32_LOGON_INTERACTIVE,
-            LOGON32_PROVIDER_DEFAULT,
-            &mut ph_token as _,
-        )
-    };
-    if res == FALSE {
-        bail!(
-            "Failed to log on user {}: {}",
-            user,
-            std::io::Error::last_os_error()
-        );
-    } else {
-        if ph_token.is_null() {
-            bail!(
-                "Failed to log on user {}: {}",
-                user,
-                std::io::Error::last_os_error()
-            );
-        }
-        Ok(ph_token)
-    }
-}
-
-// Ensure the token returned is a primary token.
-// If the provided token is an impersonation token, it duplicates it to a primary token.
-// If the provided token is already a primary token, it returns it as is.
-// The caller is responsible for closing the returned token handle.
-pub fn ensure_primary_token(user_token: HANDLE) -> ResultType<HANDLE> {
-    if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
-        bail!("Invalid user token provided");
-    }
-
-    unsafe {
-        let mut token_type: TOKEN_TYPE = 0;
-        let mut return_length: DWORD = 0;
-
-        if GetTokenInformation(
-            user_token,
-            TokenType,
-            &mut token_type as *mut _ as *mut _,
-            std::mem::size_of::<TOKEN_TYPE>() as DWORD,
-            &mut return_length,
-        ) == FALSE
-        {
-            bail!(
-                "Failed to get token type, error {}",
-                io::Error::last_os_error()
-            );
-        }
-
-        if token_type == TokenImpersonation {
-            let mut duplicate_token: HANDLE = std::ptr::null_mut();
-            let dup_res = DuplicateToken(user_token, SecurityImpersonation, &mut duplicate_token);
-            CloseHandle(user_token);
-            if dup_res == FALSE {
-                bail!(
-                    "Failed to duplicate token, error {}",
-                    io::Error::last_os_error()
-                );
-            }
-            Ok(duplicate_token)
-        } else {
-            Ok(user_token)
-        }
-    }
-}
-
-pub fn is_user_token_admin(user_token: HANDLE) -> ResultType<bool> {
-    if user_token.is_null() || user_token == INVALID_HANDLE_VALUE {
-        bail!("Invalid user token provided");
-    }
-
-    unsafe {
-        let mut dw_size: DWORD = 0;
-        GetTokenInformation(
-            user_token,
-            TokenGroups,
-            std::ptr::null_mut(),
-            0,
-            &mut dw_size,
-        );
-
-        let last_error = GetLastError();
-        if last_error != ERROR_INSUFFICIENT_BUFFER {
-            bail!(
-                "Failed to get token groups buffer size, error: {}",
-                last_error
-            );
-        }
-        if dw_size == 0 {
-            bail!("Token groups buffer size is zero");
-        }
-
-        let mut buffer = vec![0u8; dw_size as usize];
-        if GetTokenInformation(
-            user_token,
-            TokenGroups,
-            buffer.as_mut_ptr() as *mut _,
-            dw_size,
-            &mut dw_size,
-        ) == FALSE
-        {
-            bail!(
-                "Failed to get token groups information, error: {}",
-                io::Error::last_os_error()
-            );
-        }
-
-        let p_token_groups = buffer.as_ptr() as *const TOKEN_GROUPS;
-        let group_count = (*p_token_groups).GroupCount;
-
-        if group_count == 0 {
-            return Ok(false);
-        }
-
-        let mut nt_authority: SID_IDENTIFIER_AUTHORITY = SID_IDENTIFIER_AUTHORITY {
-            Value: SECURITY_NT_AUTHORITY,
-        };
-        let mut administrators_group: PSID = std::ptr::null_mut();
-        if AllocateAndInitializeSid(
-            &mut nt_authority,
-            2,
-            SECURITY_BUILTIN_DOMAIN_RID,
-            DOMAIN_ALIAS_RID_ADMINS,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            &mut administrators_group,
-        ) == FALSE
-        {
-            bail!(
-                "Failed to allocate administrators group SID, error: {}",
-                io::Error::last_os_error()
-            );
-        }
-        if administrators_group.is_null() {
-            bail!("Failed to create administrators group SID");
-        }
-
-        let mut is_admin = false;
-        let groups =
-            std::slice::from_raw_parts((*p_token_groups).Groups.as_ptr(), group_count as usize);
-        for group in groups {
-            if EqualSid(administrators_group, group.Sid) == TRUE {
-                is_admin = true;
-                break;
-            }
-        }
-
-        if !administrators_group.is_null() {
-            FreeSid(administrators_group);
-        }
-
-        Ok(is_admin)
-    }
-}
-
 pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) -> ResultType<()> {
     let last_error_table = HashMap::from([
         (
@@ -2941,6 +1927,16 @@ pub fn create_process_with_logon(user: &str, pwd: &str, exe: &str, arg: &str) ->
         }
     }
     return Ok(());
+}
+
+pub fn set_path_permission(dir: &PathBuf, permission: &str) -> ResultType<()> {
+    std::process::Command::new("icacls")
+        .arg(dir.as_os_str())
+        .arg("/grant")
+        .arg(format!("*S-1-1-0:(OI)(CI){}", permission))
+        .arg("/T")
+        .spawn()?;
+    Ok(())
 }
 
 #[inline]
@@ -3039,7 +2035,7 @@ pub fn user_accessible_folder() -> ResultType<PathBuf> {
     } else if dir2.exists() {
         dir = dir2;
     } else {
-        bail!("no valid user accessible folder");
+        bail!("no vaild user accessible folder");
     }
     Ok(dir)
 }
@@ -3186,9 +2182,9 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
 pub fn install_service() -> bool {
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
-    let (_, path, _, exe) = get_install_info();
+    let (_, _, _, exe) = get_install_info();
     let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &exe, &tmp_path).unwrap_or_default();
+    let tray_shortcut = get_tray_shortcut(&exe, &tmp_path).unwrap_or_default();
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
@@ -3216,451 +2212,7 @@ if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
     std::process::exit(0);
 }
 
-/// Calculate the total size of a directory in KB
-/// Does not follow symlinks to prevent directory traversal attacks.
-fn get_directory_size_kb(path: &str) -> u64 {
-    let mut total_size = 0u64;
-    let mut stack = vec![PathBuf::from(path)];
-
-    while let Some(current_path) = stack.pop() {
-        let entries = match std::fs::read_dir(&current_path) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
-
-        for entry in entries {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(_) => continue,
-            };
-
-            let metadata = match std::fs::symlink_metadata(entry.path()) {
-                Ok(metadata) => metadata,
-                Err(_) => continue,
-            };
-
-            if metadata.is_symlink() {
-                continue;
-            }
-
-            if metadata.is_dir() {
-                stack.push(entry.path());
-            } else {
-                total_size = total_size.saturating_add(metadata.len());
-            }
-        }
-    }
-
-    total_size / 1024
-}
-
-pub fn update_me(debug: bool) -> ResultType<()> {
-    let app_name = crate::get_app_name();
-    let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
-    let (subkey, path, _, exe) = get_install_info();
-    let is_installed = std::fs::metadata(&exe).is_ok();
-    if !is_installed {
-        bail!("{} is not installed.", &app_name);
-    }
-
-    let app_exe_name = &format!("{}.exe", &app_name);
-    let main_window_pids =
-        crate::platform::get_pids_of_process_with_args::<_, &str>(&app_exe_name, &[]);
-    let main_window_sessions = main_window_pids
-        .iter()
-        .map(|pid| get_session_id_of_process(pid.as_u32()))
-        .flatten()
-        .collect::<Vec<_>>();
-    kill_process_by_pids(&app_exe_name, main_window_pids)?;
-    let tray_pids = crate::platform::get_pids_of_process_with_args(&app_exe_name, &["--tray"]);
-    let tray_sessions = tray_pids
-        .iter()
-        .map(|pid| get_session_id_of_process(pid.as_u32()))
-        .flatten()
-        .collect::<Vec<_>>();
-    kill_process_by_pids(&app_exe_name, tray_pids)?;
-    let is_service_running = is_self_service_running();
-
-    let mut version_major = "0";
-    let mut version_minor = "0";
-    let mut version_build = "0";
-    let versions: Vec<&str> = crate::VERSION.split(".").collect();
-    if versions.len() > 0 {
-        version_major = versions[0];
-    }
-    if versions.len() > 1 {
-        version_minor = versions[1];
-    }
-    if versions.len() > 2 {
-        version_build = versions[2];
-    }
-    let version = crate::VERSION.replace("-", ".");
-    let size = get_directory_size_kb(&path);
-    let build_date = crate::BUILD_DATE;
-    // Use the icon in the previous installation directory if possible.
-    let display_icon = get_custom_icon("", &exe).unwrap_or(exe.to_string());
-
-    let is_msi = is_msi_installed().ok();
-
-    fn get_reg_cmd(
-        subkey: &str,
-        is_msi: Option<bool>,
-        display_icon: &str,
-        version: &str,
-        build_date: &str,
-        version_major: &str,
-        version_minor: &str,
-        version_build: &str,
-        size: u64,
-    ) -> String {
-        let reg_display_icon = if is_msi.unwrap_or(false) {
-            "".to_string()
-        } else {
-            format!(
-                "reg add {} /f /v DisplayIcon /t REG_SZ /d \"{}\"",
-                subkey, display_icon
-            )
-        };
-        format!(
-            "
-{reg_display_icon}
-reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
-reg add {subkey} /f /v BuildDate /t REG_SZ /d \"{build_date}\"
-reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
-reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
-reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
-reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
-        "
-        )
-    }
-
-    let reg_cmd = {
-        let reg_cmd_main = get_reg_cmd(
-            &subkey,
-            is_msi,
-            &display_icon,
-            &version,
-            &build_date,
-            &version_major,
-            &version_minor,
-            &version_build,
-            size,
-        );
-        let reg_cmd_msi = if let Some(reg_msi_key) = get_reg_msi_key(&subkey, is_msi) {
-            get_reg_cmd(
-                &reg_msi_key,
-                is_msi,
-                &display_icon,
-                &version,
-                &build_date,
-                &version_major,
-                &version_minor,
-                &version_build,
-                size,
-            )
-        } else {
-            "".to_owned()
-        };
-        format!("{}{}", reg_cmd_main, reg_cmd_msi)
-    };
-
-    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
-    let restore_service_cmd = if is_service_running {
-        format!("sc start {}", &app_name)
-    } else {
-        "".to_owned()
-    };
-
-    // No need to check the install option here, `is_rd_printer_installed` rarely fails.
-    let is_printer_installed = remote_printer::is_rd_printer_installed(&app_name).unwrap_or(false);
-    // Do nothing if the printer is not installed or failed to query if the printer is installed.
-    let (uninstall_printer_cmd, install_printer_cmd) = if is_printer_installed {
-        (
-            format!("\"{}\" --uninstall-remote-printer", &src_exe),
-            format!("\"{}\" --install-remote-printer", &src_exe),
-        )
-    } else {
-        ("".to_owned(), "".to_owned())
-    };
-
-    // We do not try to remove all files in the old version.
-    // Because I don't know whether additional files will be installed here after installation, such as drivers.
-    // Just copy files to the installation directory works fine.
-    //if exist \"{path}\" rd /s /q \"{path}\"
-    // md \"{path}\"
-    //
-    // We need `taskkill` because:
-    // 1. There may be some other processes like `rustdesk --connect` are running.
-    // 2. Sometimes, the main window and the tray icon are showing
-    // while I cannot find them by `tasklist` or the methods above.
-    // There's should be 4 processes running: service, server, tray and main window.
-    // But only 2 processes are shown in the tasklist.
-    let cmds = format!(
-        "
-chcp 65001
-sc stop {app_name}
-taskkill /F /IM {app_name}.exe{filter}
-{reg_cmd}
-{copy_exe}
-{rename_exe}
-{remove_meta_toml}
-{restore_service_cmd}
-{uninstall_printer_cmd}
-{install_printer_cmd}
-{sleep}
-    ",
-        app_name = app_name,
-        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
-        rename_exe = rename_exe_cmd(&src_exe, &path)?,
-        remove_meta_toml = remove_meta_toml_cmd(is_msi.unwrap_or(true), &path),
-        sleep = if debug { "timeout 300" } else { "" },
-    );
-
-    let _restore_session_guard = crate::common::SimpleCallOnReturn {
-        b: true,
-        f: Box::new(move || {
-            let is_root = is_root();
-            if tray_sessions.is_empty() {
-                log::info!("No tray process found.");
-            } else {
-                log::info!(
-                    "Try to restore the tray process..., sessions: {:?}",
-                    &tray_sessions
-                );
-                // When not running as root, only spawn once since run_exe_direct
-                // doesn't target specific sessions.
-                let mut spawned_non_root_tray = false;
-                for s in tray_sessions.clone().into_iter() {
-                    if s != 0 {
-                        // We need to check if is_root here because if `update_me()` is called from
-                        // the main window running with administrator permission,
-                        // `run_exe_in_session()` will fail with error 1314 ("A required privilege is
-                        // not held by the client").
-                        //
-                        // This issue primarily affects the MSI-installed version running in Administrator
-                        // session during testing, but we check permissions here to be safe.
-                        if is_root {
-                            allow_err!(run_exe_in_session(&exe, vec!["--tray"], s, true));
-                        } else if !spawned_non_root_tray {
-                            // Only spawn once for non-root since run_exe_direct doesn't take session parameter
-                            allow_err!(run_exe_direct(&exe, vec!["--tray"], false));
-                            spawned_non_root_tray = true;
-                        }
-                    }
-                }
-            }
-            if main_window_sessions.is_empty() {
-                log::info!("No main window process found.");
-            } else {
-                log::info!("Try to restore the main window process...");
-                std::thread::sleep(std::time::Duration::from_millis(2000));
-                // When not running as root, only spawn once since run_exe_direct
-                // doesn't target specific sessions.
-                let mut spawned_non_root_main = false;
-                for s in main_window_sessions.clone().into_iter() {
-                    if s != 0 {
-                        if is_root {
-                            allow_err!(run_exe_in_session(&exe, vec![], s, true));
-                        } else if !spawned_non_root_main {
-                            // Only spawn once for non-root since run_exe_direct doesn't take session parameter
-                            allow_err!(run_exe_direct(&exe, vec![], false));
-                            spawned_non_root_main = true;
-                        }
-                    }
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(300));
-        }),
-    };
-
-    run_cmds(cmds, debug, "update")?;
-
-    std::thread::sleep(std::time::Duration::from_millis(2000));
-    log::info!("Update completed.");
-
-    Ok(())
-}
-
-fn get_reg_msi_key(subkey: &str, is_msi: Option<bool>) -> Option<String> {
-    // Only proceed if it's a custom client and MSI is installed.
-    // `is_msi.unwrap_or(true)` is intentional: subsequent code validates the registry,
-    // hence no early return is required upon MSI detection failure.
-    if !(crate::common::is_custom_client() && is_msi.unwrap_or(true)) {
-        return None;
-    }
-
-    // Get the uninstall string from registry
-    let uninstall_string = get_reg_of(subkey, "UninstallString");
-    if uninstall_string.is_empty() {
-        return None;
-    }
-
-    // Find the product code (GUID) in the uninstall string
-    // Handle both quoted and unquoted GUIDs: /X {GUID} or /X "{GUID}"
-    let start = uninstall_string.rfind('{')?;
-    let end = uninstall_string.rfind('}')?;
-    if start >= end {
-        return None;
-    }
-    let product_code = &uninstall_string[start..=end];
-
-    // Build the MSI registry key path
-    let pos = subkey.rfind('\\')?;
-    let reg_msi_key = format!("{}{}", &subkey[..=pos], product_code);
-
-    Some(reg_msi_key)
-}
-
-// Double confirm the process name
-fn kill_process_by_pids(name: &str, pids: Vec<Pid>) -> ResultType<()> {
-    let name = name.to_lowercase();
-    let s = System::new_all();
-    // No need to check all names of `pids` first, and kill them then.
-    // It's rare case that they're not matched.
-    for pid in pids {
-        if let Some(process) = s.process(pid) {
-            if process.name().to_lowercase() != name {
-                bail!("Failed to kill the process, the names are mismatched.");
-            }
-            if !process.kill() {
-                bail!("Failed to kill the process");
-            }
-        } else {
-            bail!("Failed to kill the process, the pid is not found");
-        }
-    }
-    Ok(())
-}
-
-pub fn handle_custom_client_staging_dir_before_update(
-    custom_client_staging_dir: &PathBuf,
-) -> ResultType<()> {
-    let Some(current_exe_dir) = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-    else {
-        bail!("Failed to get current exe directory");
-    };
-
-    // Clean up existing staging directory
-    if custom_client_staging_dir.exists() {
-        log::debug!(
-            "Removing existing custom client staging directory: {:?}",
-            custom_client_staging_dir
-        );
-        if let Err(e) = remove_custom_client_staging_dir(custom_client_staging_dir) {
-            bail!(
-                "Failed to remove existing custom client staging directory {:?}: {}",
-                custom_client_staging_dir,
-                e
-            );
-        }
-    }
-
-    let src_path = current_exe_dir.join("custom.txt");
-    if src_path.exists() {
-        // Verify that custom.txt is not a symlink before copying
-        let metadata = match std::fs::symlink_metadata(&src_path) {
-            Ok(m) => m,
-            Err(e) => {
-                bail!(
-                    "Failed to read metadata for custom.txt at {:?}: {}",
-                    src_path,
-                    e
-                );
-            }
-        };
-
-        if metadata.is_symlink() {
-            allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-            bail!(
-                "custom.txt at {:?} is a symlink, refusing to stage for security reasons.",
-                src_path
-            );
-        }
-
-        if metadata.is_file() {
-            if !custom_client_staging_dir.exists() {
-                if let Err(e) = std::fs::create_dir_all(custom_client_staging_dir) {
-                    bail!("Failed to create parent directory {:?} when staging custom client files: {}", custom_client_staging_dir, e);
-                }
-            }
-            let dst_path = custom_client_staging_dir.join("custom.txt");
-            if let Err(e) = std::fs::copy(&src_path, &dst_path) {
-                allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-                bail!(
-                    "Failed to copy custom txt from {:?} to {:?}: {}",
-                    src_path,
-                    dst_path,
-                    e
-                );
-            }
-        } else {
-            log::warn!(
-                "custom.txt at {:?} is not a regular file, skipping.",
-                src_path
-            );
-        }
-    } else {
-        log::info!("No custom txt found to stage for update.");
-    }
-
-    Ok(())
-}
-
-// Used for auto update and manual update in the main window.
-pub fn update_to(file: &str) -> ResultType<()> {
-    if file.ends_with(".exe") {
-        let custom_client_staging_dir = get_custom_client_staging_dir();
-        if crate::is_custom_client() {
-            handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
-        } else {
-            // Clean up any residual staging directory from previous custom client
-            allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-        }
-        if !run_uac(file, "--update")? {
-            bail!(
-                "Failed to run the update exe with UAC, error: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
-    } else if file.ends_with(".msi") {
-        if let Err(e) = update_me_msi(file, false) {
-            bail!("Failed to run the update msi: {}", e);
-        }
-    } else {
-        // unreachable!()
-        bail!("Unsupported update file format: {}", file);
-    }
-    Ok(())
-}
-
-// Don't launch tray app when running with `\qn`.
-// 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
-//   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.
-// 2. We are not able to launch the tray app if the UI is in the login screen.
-// `fn update_me()` can handle the above cases, but for msi update, we need to do more work to handle the above cases.
-//    1. Record the tray app session ids.
-//    2. Do the update.
-//    3. Restore the tray app sessions.
-//    `1` and `3` must be done in custom actions.
-//    We need also to handle the command line parsing to find the tray processes.
-pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
-    let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
-    let cmds =
-        format!("chcp 65001 && msiexec /i \"{msi}\"{quiet_args} REBOOT=ReallySuppress /norestart");
-    run_cmds(cmds, false, "update-msi")?;
-    Ok(())
-}
-
-pub fn get_tray_shortcut(
-    install_dir: &str,
-    exe: &str,
-    icon_source_exe: &str,
-    tmp_path: &str,
-) -> ResultType<String> {
-    let shortcut_icon_location = get_shortcut_icon_location(install_dir, icon_source_exe);
+pub fn get_tray_shortcut(exe: &str, tmp_path: &str) -> ResultType<String> {
     Ok(write_cmds(
         format!(
             "
@@ -3670,7 +2222,6 @@ sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
 Set oLink = oWS.CreateShortcut(sLinkFile)
     oLink.TargetPath = \"{exe}\"
     oLink.Arguments = \"--tray\"
-    {shortcut_icon_location}
 oLink.Save
         ",
             app_name = crate::get_app_name(),
@@ -3734,44 +2285,6 @@ fn run_after_run_cmds(silent: bool) {
 }
 
 #[inline]
-pub fn try_remove_temp_update_files() {
-    let temp_dir = std::env::temp_dir();
-    let Ok(entries) = std::fs::read_dir(&temp_dir) else {
-        log::debug!("Failed to read temp directory: {:?}", temp_dir);
-        return;
-    };
-
-    let one_hour = std::time::Duration::from_secs(60 * 60);
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                // Match files like rustdesk-*.msi or rustdesk-*.exe
-                if file_name.starts_with("rustdesk-")
-                    && (file_name.ends_with(".msi") || file_name.ends_with(".exe"))
-                {
-                    // Skip files modified within the last hour to avoid deleting files being downloaded
-                    if let Ok(metadata) = std::fs::metadata(&path) {
-                        if let Ok(modified) = metadata.modified() {
-                            if let Ok(elapsed) = modified.elapsed() {
-                                if elapsed < one_hour {
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                    if let Err(e) = std::fs::remove_file(&path) {
-                        log::debug!("Failed to remove temp update file {:?}: {}", path, e);
-                    } else {
-                        log::info!("Removed temp update file: {:?}", path);
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[inline]
 pub fn try_kill_broker() {
     allow_err!(std::process::Command::new("cmd")
         .arg("/c")
@@ -3781,6 +2294,23 @@ pub fn try_kill_broker() {
         ))
         .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
         .spawn());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_uninstall_cert() {
+        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
+    }
+
+    #[test]
+    fn test_get_unicode_char_by_vk() {
+        let chr = get_char_from_vk(0x41); // VK_A
+        assert_eq!(chr, Some('a'));
+        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
+        assert_eq!(chr, None)
+    }
 }
 
 pub fn message_box(text: &str) {
@@ -3943,19 +2473,10 @@ pub fn is_x64() -> bool {
     unsafe { sys_info.u.s().wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 }
 }
 
-pub fn release_arch_suffix() -> Option<&'static str> {
-    match std::env::consts::ARCH {
-        "x86_64" => Some("x86_64"),
-        "aarch64" => Some("aarch64"),
-        _ => None,
-    }
-}
-
 pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
     // Kill rustdesk.exe without extra arg, should only be called by --server
     // We can find the exact process which occupies the ipc, see more from https://github.com/winsiderss/systeminformer
-    let app_name = crate::get_app_name().to_lowercase();
-    log::info!("try kill main window process");
+    log::info!("try kill rustdesk main window process");
     use hbb_common::sysinfo::System;
     let mut sys = System::new();
     sys.refresh_processes();
@@ -3964,6 +2485,7 @@ pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
         .map(|x| x.user_id())
         .unwrap_or_default();
     let my_pid = std::process::id();
+    let app_name = crate::get_app_name().to_lowercase();
     if app_name.is_empty() {
         bail!("app name is empty");
     }
@@ -4006,15 +2528,7 @@ pub fn try_kill_rustdesk_main_window_process() -> ResultType<()> {
 fn nt_terminate_process(process_id: DWORD) -> ResultType<()> {
     type NtTerminateProcess = unsafe extern "system" fn(HANDLE, DWORD) -> DWORD;
     unsafe {
-        let h_module = if is_win_10_or_greater() {
-            LoadLibraryExA(
-                CString::new("ntdll.dll")?.as_ptr(),
-                std::ptr::null_mut(),
-                LOAD_LIBRARY_SEARCH_SYSTEM32,
-            )
-        } else {
-            LoadLibraryA(CString::new("ntdll.dll")?.as_ptr())
-        };
+        let h_module = LoadLibraryA(CString::new("ntdll.dll")?.as_ptr());
         if !h_module.is_null() {
             let f_nt_terminate_process: NtTerminateProcess = std::mem::transmute(GetProcAddress(
                 h_module,
@@ -4115,21 +2629,16 @@ pub mod reg_display_settings {
         None
     }
 
-    pub fn restore_reg_connectivity(reg_recovery: RegRecovery, force: bool) -> ResultType<()> {
+    pub fn restore_reg_connectivity(reg_recovery: RegRecovery) -> ResultType<()> {
         let hklm = winreg::RegKey::predef(HKEY_LOCAL_MACHINE);
         let reg_item = hklm.open_subkey_with_flags(&reg_recovery.path, KEY_READ | KEY_WRITE)?;
-        if !force {
-            let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
-            let new_reg_value = RegValue {
-                bytes: reg_recovery.new.0,
-                vtype: isize_to_reg_type(reg_recovery.new.1),
-            };
-            // Compare if the current value is the same as the new value.
-            // If they are not the same, the registry value has been changed by other processes.
-            // So we do not restore the registry value.
-            if cur_reg_value != new_reg_value {
-                return Ok(());
-            }
+        let cur_reg_value = reg_item.get_raw_value(&reg_recovery.key)?;
+        let new_reg_value = RegValue {
+            bytes: reg_recovery.new.0,
+            vtype: isize_to_reg_type(reg_recovery.new.1),
+        };
+        if cur_reg_value != new_reg_value {
+            return Ok(());
         }
         let reg_value = RegValue {
             bytes: reg_recovery.old.0,
@@ -4156,542 +2665,5 @@ pub mod reg_display_settings {
             11 => RegType::REG_QWORD,
             _ => RegType::REG_NONE,
         }
-    }
-}
-
-pub fn get_printer_names() -> ResultType<Vec<String>> {
-    let mut needed_bytes = 0;
-    let mut returned_count = 0;
-
-    unsafe {
-        // First call to get required buffer size
-        EnumPrintersW(
-            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
-            std::ptr::null_mut(),
-            1,
-            std::ptr::null_mut(),
-            0,
-            &mut needed_bytes,
-            &mut returned_count,
-        );
-
-        let mut buffer = vec![0u8; needed_bytes as usize];
-
-        if EnumPrintersW(
-            PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS,
-            std::ptr::null_mut(),
-            1,
-            buffer.as_mut_ptr() as *mut _,
-            needed_bytes,
-            &mut needed_bytes,
-            &mut returned_count,
-        ) == 0
-        {
-            return Err(anyhow!("Failed to enumerate printers"));
-        }
-
-        let ptr = buffer.as_ptr() as *const PRINTER_INFO_1W;
-        let printers = std::slice::from_raw_parts(ptr, returned_count as usize);
-
-        Ok(printers
-            .iter()
-            .filter_map(|p| {
-                let name = p.pName;
-                if !name.is_null() {
-                    let mut len = 0;
-                    while len < 500 {
-                        if name.add(len).is_null() || *name.add(len) == 0 {
-                            break;
-                        }
-                        len += 1;
-                    }
-                    if len > 0 && len < 500 {
-                        Some(String::from_utf16_lossy(std::slice::from_raw_parts(
-                            name, len,
-                        )))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect())
-    }
-}
-
-extern "C" {
-    fn PrintXPSRawData(printer_name: *const u16, raw_data: *const u8, data_size: c_ulong) -> DWORD;
-}
-
-pub fn send_raw_data_to_printer(printer_name: Option<String>, data: Vec<u8>) -> ResultType<()> {
-    let mut printer_name = printer_name.unwrap_or_default();
-    if printer_name.is_empty() {
-        // use GetDefaultPrinter to get the default printer name
-        let mut needed_bytes = 0;
-        unsafe {
-            GetDefaultPrinterW(std::ptr::null_mut(), &mut needed_bytes);
-        }
-        if needed_bytes > 0 {
-            let mut default_printer_name = vec![0u16; needed_bytes as usize];
-            unsafe {
-                GetDefaultPrinterW(
-                    default_printer_name.as_mut_ptr() as *mut _,
-                    &mut needed_bytes,
-                );
-            }
-            printer_name = String::from_utf16_lossy(&default_printer_name[..needed_bytes as usize]);
-        }
-    } else {
-        if let Ok(names) = crate::platform::windows::get_printer_names() {
-            if !names.contains(&printer_name) {
-                // Don't set the first printer as current printer.
-                // It may not be the desired printer.
-                bail!("Printer name \"{}\" not found", &printer_name);
-            }
-        }
-    }
-    if printer_name.is_empty() {
-        return Err(anyhow!("Failed to get printer name"));
-    }
-
-    log::info!("Sending data to printer: {}", &printer_name);
-    let printer_name = wide_string(&printer_name);
-    unsafe {
-        let res = PrintXPSRawData(
-            printer_name.as_ptr(),
-            data.as_ptr() as *const u8,
-            data.len() as c_ulong,
-        );
-        if res != 0 {
-            bail!("Failed to send data to the printer, see logs in C:\\Windows\\temp\\test_rustdesk.log for more details.");
-        } else {
-            log::info!("Successfully sent data to the printer");
-        }
-    }
-
-    Ok(())
-}
-
-fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
-    let name = name.as_ref().to_lowercase();
-    let mut pids = Vec::new();
-
-    unsafe {
-        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)?;
-        if snapshot == WinHANDLE::default() {
-            return Ok(pids);
-        }
-
-        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-
-        if Process32FirstW(snapshot, &mut entry).is_ok() {
-            loop {
-                let proc_name = OsString::from_wide(&entry.szExeFile)
-                    .to_string_lossy()
-                    .to_lowercase();
-
-                if proc_name.contains(&name) {
-                    pids.push(entry.th32ProcessID);
-                }
-
-                if !Process32NextW(snapshot, &mut entry).is_ok() {
-                    break;
-                }
-            }
-        }
-
-        let _ = WinCloseHandle(snapshot);
-    }
-
-    Ok(pids)
-}
-
-pub fn is_msi_installed() -> std::io::Result<bool> {
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let uninstall_key = hklm.open_subkey(format!(
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{}",
-        crate::get_app_name()
-    ))?;
-    Ok(1 == uninstall_key.get_value::<u32, _>("WindowsInstaller")?)
-}
-
-pub fn is_cur_exe_the_installed() -> bool {
-    let (_, _, _, exe) = get_install_info();
-    // Check if is installed, because `exe` is the default path if is not installed.
-    if !std::fs::metadata(&exe).is_ok() {
-        return false;
-    }
-    let mut path = std::env::current_exe().unwrap_or_default();
-    if let Ok(linked) = path.read_link() {
-        path = linked;
-    }
-    let path = path.to_string_lossy().to_lowercase();
-    path == exe.to_lowercase()
-}
-
-#[cfg(not(target_pointer_width = "64"))]
-pub fn get_pids_with_first_arg_check_session<S1: AsRef<str>, S2: AsRef<str>>(
-    name: S1,
-    arg: S2,
-    same_session_id: bool,
-) -> ResultType<Vec<hbb_common::sysinfo::Pid>> {
-    // Though `wmic` can return the sessionId, for simplicity we only return processid.
-    let pids = get_pids_with_first_arg_by_wmic(name, arg);
-    if !same_session_id {
-        return Ok(pids);
-    }
-    let Some(cur_sid) = get_current_process_session_id() else {
-        bail!("Can't get current process session id");
-    };
-    let mut same_session_pids = vec![];
-    for pid in pids.into_iter() {
-        let mut sid = 0;
-        if unsafe { ProcessIdToSessionId(pid.as_u32(), &mut sid) == TRUE } {
-            if sid == cur_sid {
-                same_session_pids.push(pid);
-            }
-        } else {
-            // Only log here, because this call almost never fails.
-            log::warn!(
-                "Failed to get session id of the process id, error: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
-    }
-    Ok(same_session_pids)
-}
-
-#[cfg(not(target_pointer_width = "64"))]
-fn get_pids_with_args_from_wmic_output<S2: AsRef<str>>(
-    output: std::borrow::Cow<'_, str>,
-    name: &str,
-    args: &[S2],
-) -> Vec<hbb_common::sysinfo::Pid> {
-    // CommandLine=
-    // ProcessId=33796
-    //
-    // CommandLine=
-    // ProcessId=34668
-    //
-    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe" --tray
-    // ProcessId=13728
-    //
-    // CommandLine="C:\Program Files\RustDesk\RustDesk.exe"
-    // ProcessId=10136
-    let mut pids = Vec::new();
-    let mut proc_found = false;
-    for line in output.lines() {
-        if line.starts_with("ProcessId=") {
-            if proc_found {
-                if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
-                    pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
-                }
-                proc_found = false;
-            }
-        } else if line.starts_with("CommandLine=") {
-            proc_found = false;
-            let cmd = line["CommandLine=".len()..].trim().to_lowercase();
-            if args.is_empty() {
-                if cmd.ends_with(&name) || cmd.ends_with(&format!("{}\"", &name)) {
-                    proc_found = true;
-                }
-            } else {
-                proc_found = args.iter().all(|arg| cmd.contains(arg.as_ref()));
-            }
-        }
-    }
-    pids
-}
-
-// Note the args are not compared strictly, only check if the args are contained in the command line.
-// If we want to check the args strictly, we need to parse the command line and compare each arg.
-// Maybe we have to introduce some external crate like `shell_words` to do this.
-#[cfg(not(target_pointer_width = "64"))]
-pub(super) fn get_pids_with_args_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
-    name: S1,
-    args: &[S2],
-) -> Vec<hbb_common::sysinfo::Pid> {
-    let name = name.as_ref().to_lowercase();
-    std::process::Command::new("wmic.exe")
-        .args([
-            "process",
-            "where",
-            &format!("name='{}'", name),
-            "get",
-            "commandline,processid",
-            "/value",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map(|output| {
-            get_pids_with_args_from_wmic_output::<S2>(
-                String::from_utf8_lossy(&output.stdout),
-                &name,
-                args,
-            )
-        })
-        .unwrap_or_default()
-}
-
-#[cfg(not(target_pointer_width = "64"))]
-fn get_pids_with_first_arg_from_wmic_output(
-    output: std::borrow::Cow<'_, str>,
-    name: &str,
-    arg: &str,
-) -> Vec<hbb_common::sysinfo::Pid> {
-    let mut pids = Vec::new();
-    let mut proc_found = false;
-    for line in output.lines() {
-        if line.starts_with("ProcessId=") {
-            if proc_found {
-                if let Ok(pid) = line["ProcessId=".len()..].trim().parse::<u32>() {
-                    pids.push(hbb_common::sysinfo::Pid::from_u32(pid));
-                }
-                proc_found = false;
-            }
-        } else if line.starts_with("CommandLine=") {
-            proc_found = false;
-            let cmd = line["CommandLine=".len()..].trim().to_lowercase();
-            if cmd.is_empty() {
-                continue;
-            }
-            if !arg.is_empty() && cmd.starts_with(arg) {
-                proc_found = true;
-            } else {
-                for x in [&format!("{}\"", name), &format!("{}", name)] {
-                    if cmd.contains(x) {
-                        let cmd = cmd.split(x).collect::<Vec<_>>()[1..].join("");
-                        if arg.is_empty() {
-                            if cmd.trim().is_empty() {
-                                proc_found = true;
-                            }
-                        } else if cmd.trim().starts_with(arg) {
-                            proc_found = true;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    pids
-}
-
-// Note the args are not compared strictly, only check if the args are contained in the command line.
-// If we want to check the args strictly, we need to parse the command line and compare each arg.
-// Maybe we have to introduce some external crate like `shell_words` to do this.
-#[cfg(not(target_pointer_width = "64"))]
-pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
-    name: S1,
-    arg: S2,
-) -> Vec<hbb_common::sysinfo::Pid> {
-    let name = name.as_ref().to_lowercase();
-    let arg = arg.as_ref().to_lowercase();
-    std::process::Command::new("wmic.exe")
-        .args([
-            "process",
-            "where",
-            &format!("name='{}'", name),
-            "get",
-            "commandline,processid",
-            "/value",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map(|output| {
-            get_pids_with_first_arg_from_wmic_output(
-                String::from_utf8_lossy(&output.stdout),
-                &name,
-                &arg,
-            )
-        })
-        .unwrap_or_default()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Test-only reusable Win32 HANDLE RAII helper.
-    // If a future non-test path needs the same pattern, move it out of this test module.
-    //
-    // This struct is similar to `hbb_common::platform::windows::RAIIHandle`,
-    // but `RAIIHandle` depends on `WinApi` crate, while this `HandleGuard` only depends on `windows` crate.
-    struct HandleGuard(WinHANDLE);
-
-    impl HandleGuard {
-        #[inline]
-        fn new(handle: WinHANDLE) -> Self {
-            Self(handle)
-        }
-
-        #[inline]
-        fn get(&self) -> WinHANDLE {
-            self.0
-        }
-    }
-
-    impl Drop for HandleGuard {
-        fn drop(&mut self) {
-            unsafe {
-                if !self.0.is_invalid() {
-                    let _ = WinCloseHandle(self.0);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_invalid_pid_errors() {
-        assert!(is_process_running_as_system(u32::MAX).is_err());
-    }
-
-    #[test]
-    fn test_is_process_running_as_system_matches_current_process_token_user() {
-        let pid = unsafe { windows::Win32::System::Threading::GetCurrentProcessId() };
-        let actual = is_process_running_as_system(pid).unwrap();
-
-        let expected = unsafe {
-            // Keep this test consistent: use only the `windows` crate APIs/types.
-            let process = HandleGuard::new(
-                WinOpenProcess(WIN_PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-                    .expect("WinOpenProcess should succeed for current process"),
-            );
-            let mut token = WinHANDLE::default();
-            WinOpenProcessToken(process.get(), WIN_TOKEN_QUERY, &mut token)
-                .expect("WinOpenProcessToken should succeed for current process");
-            let token = HandleGuard::new(token);
-
-            let mut token_user_size = 0u32;
-            let _ = WinGetTokenInformation(token.get(), TokenUser, None, 0, &mut token_user_size);
-            assert_ne!(token_user_size, 0, "TokenUser size should be non-zero");
-
-            let mut buffer = vec![0u8; token_user_size as usize];
-            WinGetTokenInformation(
-                token.get(),
-                TokenUser,
-                Some(buffer.as_mut_ptr() as *mut core::ffi::c_void),
-                token_user_size,
-                &mut token_user_size,
-            )
-            .expect("WinGetTokenInformation(TokenUser) should succeed for current process");
-
-            let min_size = std::mem::size_of::<TOKEN_USER>();
-            assert!(
-                buffer.len() >= min_size,
-                "TokenUser buffer too small (got {}, need >= {})",
-                buffer.len(),
-                min_size
-            );
-            let token_user: TOKEN_USER =
-                std::ptr::read_unaligned(buffer.as_ptr() as *const TOKEN_USER);
-            let expected = IsWellKnownSid(token_user.User.Sid, WinLocalSystemSid).as_bool();
-            expected
-        };
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_uninstall_cert() {
-        println!("uninstall driver certs: {:?}", cert::uninstall_cert());
-    }
-
-    #[test]
-    fn test_get_unicode_char_by_vk() {
-        let chr = get_char_from_vk(0x41); // VK_A
-        assert_eq!(chr, Some('a'));
-        let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
-        assert_eq!(chr, None)
-    }
-
-    #[cfg(not(target_pointer_width = "64"))]
-    #[test]
-    fn test_get_pids_with_args_from_wmic_output() {
-        let output = r#"
-CommandLine=
-ProcessId=33796
-
-CommandLine=
-ProcessId=34668
-
-CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
-ProcessId=13728
-
-CommandLine="C:\Program Files\testapp\TestApp.exe"
-ProcessId=10136
-"#;
-        let name = "testapp.exe";
-        let args = vec!["--tray"];
-        let pids = super::get_pids_with_args_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            &args,
-        );
-        assert_eq!(pids.len(), 1);
-        assert_eq!(pids[0].as_u32(), 13728);
-
-        let args: Vec<&str> = vec![];
-        let pids = super::get_pids_with_args_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            &args,
-        );
-        assert_eq!(pids.len(), 1);
-        assert_eq!(pids[0].as_u32(), 10136);
-
-        let args = vec!["--other"];
-        let pids = super::get_pids_with_args_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            &args,
-        );
-        assert_eq!(pids.len(), 0);
-    }
-
-    #[cfg(not(target_pointer_width = "64"))]
-    #[test]
-    fn test_get_pids_with_first_arg_from_wmic_output() {
-        let output = r#"
-CommandLine=
-ProcessId=33796
-
-CommandLine=
-ProcessId=34668
-
-CommandLine="C:\Program Files\testapp\TestApp.exe" --tray
-ProcessId=13728
-
-CommandLine="C:\Program Files\testapp\TestApp.exe"
-ProcessId=10136
-    "#;
-        let name = "testapp.exe";
-        let arg = "--tray";
-        let pids = super::get_pids_with_first_arg_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            arg,
-        );
-        assert_eq!(pids.len(), 1);
-        assert_eq!(pids[0].as_u32(), 13728);
-
-        let arg = "";
-        let pids = super::get_pids_with_first_arg_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            arg,
-        );
-        assert_eq!(pids.len(), 1);
-        assert_eq!(pids[0].as_u32(), 10136);
-
-        let arg = "--other";
-        let pids = super::get_pids_with_first_arg_from_wmic_output(
-            String::from_utf8_lossy(output.as_bytes()),
-            name,
-            arg,
-        );
-        assert_eq!(pids.len(), 0);
     }
 }

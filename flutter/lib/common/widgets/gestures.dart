@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_hbb/common/widgets/remote_input.dart';
 
 enum GestureState {
   none,
@@ -25,7 +24,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragStartCallback? onOneFingerPanStart;
   GestureDragUpdateCallback? onOneFingerPanUpdate;
   GestureDragEndCallback? onOneFingerPanEnd;
-  GestureDragCancelCallback? onOneFingerPanCancel;
 
   // twoFingerScale : scale + pan event
   GestureScaleStartCallback? onTwoFingerScaleStart;
@@ -88,7 +86,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       // end
       switch (_currentState) {
         case GestureState.oneFingerPan:
-          debugPrint("OneFingerState.pan onEnd");
+          debugPrint("TwoFingerState.pan onEnd");
           if (onOneFingerPanEnd != null) {
             onOneFingerPanEnd!(_getDragEndDetails(d));
           }
@@ -97,12 +95,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           debugPrint("TwoFingerState.scale onEnd");
           if (onTwoFingerScaleEnd != null) {
             onTwoFingerScaleEnd!(d);
-          }
-          if (isSpecialHoldDragActive) {
-            // If we are in special drag mode, we need to reset the state.
-            // Otherwise, the next `onTwoFingerScaleUpdate()` will handle a wrong `focalPoint`.
-            _currentState = GestureState.none;
-            return;
           }
           break;
         case GestureState.threeFingerVerticalDrag:
@@ -170,27 +162,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   DragEndDetails _getDragEndDetails(ScaleEndDetails d) =>
       DragEndDetails(velocity: d.velocity);
-
-  @override
-  void rejectGesture(int pointer) {
-    super.rejectGesture(pointer);
-    switch (_currentState) {
-      case GestureState.oneFingerPan:
-        if (onOneFingerPanCancel != null) {
-          onOneFingerPanCancel!();
-        }
-        break;
-      case GestureState.twoFingerScale:
-        // Reset scale state if needed, currently self-contained
-        break;
-      case GestureState.threeFingerVerticalDrag:
-        // Reset drag state if needed, currently self-contained
-        break;
-      default:
-        break;
-    }
-    _currentState = GestureState.none;
-  }
 }
 
 class HoldTapMoveGestureRecognizer extends GestureRecognizer {
@@ -739,7 +710,6 @@ RawGestureDetector getMixinGestureDetector({
   GestureDragStartCallback? onOneFingerPanStart,
   GestureDragUpdateCallback? onOneFingerPanUpdate,
   GestureDragEndCallback? onOneFingerPanEnd,
-  GestureDragCancelCallback? onOneFingerPanCancel,
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
   GestureScaleEndCallback? onTwoFingerScaleEnd,
   GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate,
@@ -788,7 +758,6 @@ RawGestureDetector getMixinGestureDetector({
             ..onOneFingerPanStart = onOneFingerPanStart
             ..onOneFingerPanUpdate = onOneFingerPanUpdate
             ..onOneFingerPanEnd = onOneFingerPanEnd
-            ..onOneFingerPanCancel = onOneFingerPanCancel
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
             ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
             ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;

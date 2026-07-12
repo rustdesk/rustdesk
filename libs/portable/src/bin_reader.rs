@@ -1,7 +1,7 @@
 use std::{
     fs::{self},
     io::{Cursor, Read},
-    path::Path,
+    path::PathBuf,
 };
 
 #[cfg(windows)]
@@ -42,7 +42,7 @@ impl BinaryData {
         buf
     }
 
-    pub fn write_to_file(&self, prefix: &Path) {
+    pub fn write_to_file(&self, prefix: &PathBuf) {
         let p = prefix.join(&self.path);
         if let Some(parent) = p.parent() {
             if !parent.exists() {
@@ -122,7 +122,7 @@ impl BinaryReader {
     }
 
     #[cfg(linux)]
-    pub fn configure_permission(&self, prefix: &Path) {
+    pub fn configure_permission(&self, prefix: &PathBuf) {
         use std::os::unix::prelude::PermissionsExt;
 
         let exe_path = prefix.join(&self.exe);

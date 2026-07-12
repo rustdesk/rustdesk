@@ -1,5 +1,7 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
+    codec::{
+        base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, Quality as Q,
+    },
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
@@ -13,7 +15,7 @@ use hbb_common::{
 };
 use hwcodec::{
     common::{
-        DataFormat, HwcodecErrno,
+        DataFormat,
         Quality::{self, *},
         RateControl::{self, *},
     },
@@ -29,7 +31,6 @@ const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 30;
 const DEFAULT_GOP: i32 = i32::MAX;
 const DEFAULT_HW_QUALITY: Quality = Quality_Default;
-pub const ERR_HEVC_POC: i32 = HwcodecErrno::HWCODEC_ERR_HEVC_COULD_NOT_FIND_POC as i32;
 
 crate::generate_call_macro!(call_yuv, false);
 
@@ -45,7 +46,7 @@ pub struct HwRamEncoderConfig {
     pub mc_name: Option<String>,
     pub width: usize,
     pub height: usize,
-    pub quality: f32,
+    pub quality: Q,
     pub keyframe_interval: Option<usize>,
 }
 
@@ -65,8 +66,12 @@ impl EncoderApi for HwRamEncoder {
         match cfg {
             EncoderCfg::HWRAM(config) => {
                 let rc = Self::rate_control(&config);
-                let mut bitrate =
-                    Self::bitrate(&config.name, config.width, config.height, config.quality);
+                let b = Self::convert_quality(&config.name, config.quality);
+                let base_bitrate = base_bitrate(config.width as _, config.height as _);
+                let mut bitrate = base_bitrate * b / 100;
+                if base_bitrate <= 0 {
+                    bitrate = base_bitrate;
+                }
                 bitrate = Self::check_bitrate_range(&config, bitrate);
                 let gop = config.keyframe_interval.unwrap_or(DEFAULT_GOP as _) as i32;
                 let ctx = EncodeContext {
@@ -170,19 +175,15 @@ impl EncoderApi for HwRamEncoder {
         false
     }
 
-    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
-        let mut bitrate = Self::bitrate(
-            &self.config.name,
-            self.config.width,
-            self.config.height,
-            ratio,
-        );
+    fn set_quality(&mut self, quality: crate::codec::Quality) -> ResultType<()> {
+        let b = Self::convert_quality(&self.config.name, quality);
+        let mut bitrate = base_bitrate(self.config.width as _, self.config.height as _) * b / 100;
         if bitrate > 0 {
-            bitrate = Self::check_bitrate_range(&self.config, bitrate);
+            bitrate = Self::check_bitrate_range(&self.config, self.bitrate);
             self.encoder.set_bitrate(bitrate as _).ok();
             self.bitrate = bitrate;
         }
-        self.config.quality = ratio;
+        self.config.quality = quality;
         Ok(())
     }
 
@@ -190,8 +191,16 @@ impl EncoderApi for HwRamEncoder {
         self.bitrate
     }
 
+    fn support_abr(&self) -> bool {
+        ["qsv", "vaapi", "mediacodec", "videotoolbox"]
+            .iter()
+            .all(|&x| !self.config.name.contains(x))
+    }
+
     fn support_changing_quality(&self) -> bool {
-        ["vaapi"].iter().all(|&x| !self.config.name.contains(x))
+        ["vaapi", "mediacodec", "videotoolbox"]
+            .iter()
+            .all(|&x| !self.config.name.contains(x))
     }
 
     fn latency_free(&self) -> bool {
@@ -248,35 +257,21 @@ impl HwRamEncoder {
         RC_CBR
     }
 
-    pub fn bitrate(name: &str, width: usize, height: usize, ratio: f32) -> u32 {
-        Self::calc_bitrate(width, height, ratio, name.contains("h264"))
-    }
-
-    pub fn calc_bitrate(width: usize, height: usize, ratio: f32, h264: bool) -> u32 {
-        let base = base_bitrate(width as _, height as _) as f32 * ratio;
-        let threshold = 2000.0;
-        let decay_rate = 0.001; // 1000 * 0.001 = 1
-        let factor: f32 = if cfg!(target_os = "android") {
-            // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
-            if base > threshold {
-                1.0 + 4.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                5.0
-            }
-        } else if h264 {
-            if base > threshold {
-                1.0 + 1.0 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                2.0
-            }
-        } else {
-            if base > threshold {
-                1.0 + 0.5 / (1.0 + (base - threshold) * decay_rate)
-            } else {
-                1.5
-            }
+    pub fn convert_quality(name: &str, quality: crate::codec::Quality) -> u32 {
+        use crate::codec::Quality;
+        let quality = match quality {
+            Quality::Best => 150,
+            Quality::Balanced => 100,
+            Quality::Low => 50,
+            Quality::Custom(b) => b,
         };
-        (base * factor) as u32
+        let factor = if name.contains("mediacodec") {
+            // https://stackoverflow.com/questions/26110337/what-are-valid-bit-rates-to-set-for-mediacodec?rq=3
+            5
+        } else {
+            1
+        };
+        quality * factor
     }
 
     pub fn check_bitrate_range(_config: &HwRamEncoderConfig, bitrate: u32) -> u32 {
@@ -364,7 +359,7 @@ impl HwRamDecoder {
             }
         }
     }
-    pub fn decode<'a>(&'a mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage<'a>>> {
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwRamDecoderImage>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| HwRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
@@ -678,8 +673,6 @@ impl HwCodecConfig {
 }
 
 pub fn check_available_hwcodec() -> String {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    hwcodec::common::setup_parent_death_signal();
     let ctx = EncodeContext {
         name: String::from(""),
         mc_name: None,
@@ -687,7 +680,7 @@ pub fn check_available_hwcodec() -> String {
         height: 720,
         pixfmt: DEFAULT_PIXFMT,
         align: HW_STRIDE_ALIGN as _,
-        kbs: 1000,
+        kbs: 0,
         fps: DEFAULT_FPS,
         gop: DEFAULT_GOP,
         quality: DEFAULT_HW_QUALITY,
@@ -702,8 +695,8 @@ pub fn check_available_hwcodec() -> String {
     #[cfg(not(feature = "vram"))]
     let vram_string = "".to_owned();
     let c = HwCodecConfig {
-        ram_encode: Encoder::available_encoders(ctx, Some(vram_string)),
-        ram_decode: Decoder::available_decoders(),
+        ram_encode: Encoder::available_encoders(ctx, Some(vram_string.clone())),
+        ram_decode: Decoder::available_decoders(Some(vram_string)),
         #[cfg(feature = "vram")]
         vram_encode: vram.0,
         #[cfg(feature = "vram")]
@@ -726,8 +719,6 @@ pub fn start_check_process() {
             if let Some(_) = exe.file_name().to_owned() {
                 let arg = "--check-hwcodec-config";
                 if let Ok(mut child) = std::process::Command::new(exe).arg(arg).spawn() {
-                    #[cfg(windows)]
-                    hwcodec::common::child_exit_when_parent_exit(child.id());
                     // wait up to 30 seconds, it maybe slow on windows startup for poorly performing machines
                     for _ in 0..30 {
                         std::thread::sleep(std::time::Duration::from_secs(1));

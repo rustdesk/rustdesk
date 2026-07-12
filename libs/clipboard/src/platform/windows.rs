@@ -6,11 +6,10 @@
 #![allow(deref_nullptr)]
 
 use crate::{
-    send_data, send_data_exclude, ClipboardFile, CliprdrError, CliprdrServiceContext,
-    ProgressPercent, ResultType, ERR_CODE_INVALID_PARAMETER, ERR_CODE_SEND_MSG,
-    ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
+    allow_err, send_data, ClipboardFile, CliprdrError, CliprdrServiceContext, ResultType,
+    ERR_CODE_INVALID_PARAMETER, ERR_CODE_SEND_MSG, ERR_CODE_SERVER_FUNCTION_NONE, VEC_MSG_CHANNEL,
 };
-use hbb_common::{allow_err, log};
+use hbb_common::log;
 use std::{
     boxed::Box,
     ffi::{CStr, CString},
@@ -381,9 +380,6 @@ pub type pcCliprdrTempDirectory = ::std::option::Option<
 pub type pcNotifyClipboardMsg = ::std::option::Option<
     unsafe extern "C" fn(connID: UINT32, msg: *const NOTIFICATION_MESSAGE) -> UINT,
 >;
-pub type pcHandleClipboardFiles = ::std::option::Option<
-    unsafe extern "C" fn(connID: UINT32, nFiles: size_t, fileNames: *mut *mut WCHAR) -> UINT,
->;
 pub type pcCliprdrClientFormatList = ::std::option::Option<
     unsafe extern "C" fn(
         context: *mut CliprdrClientContext,
@@ -495,7 +491,6 @@ pub struct _cliprdr_client_context {
     pub MonitorReady: pcCliprdrMonitorReady,
     pub TempDirectory: pcCliprdrTempDirectory,
     pub NotifyClipboardMsg: pcNotifyClipboardMsg,
-    pub HandleClipboardFiles: pcHandleClipboardFiles,
     pub ClientFormatList: pcCliprdrClientFormatList,
     pub ServerFormatList: pcCliprdrServerFormatList,
     pub ClientFormatListResponse: pcCliprdrClientFormatListResponse,
@@ -533,7 +528,6 @@ impl CliprdrClientContext {
         enable_others: bool,
         response_wait_timeout_secs: u32,
         notify_callback: pcNotifyClipboardMsg,
-        handle_clipboard_files: pcHandleClipboardFiles,
         client_format_list: pcCliprdrClientFormatList,
         client_format_list_response: pcCliprdrClientFormatListResponse,
         client_format_data_request: pcCliprdrClientFormatDataRequest,
@@ -552,7 +546,6 @@ impl CliprdrClientContext {
             MonitorReady: None,
             TempDirectory: None,
             NotifyClipboardMsg: notify_callback,
-            HandleClipboardFiles: handle_clipboard_files,
             ClientFormatList: client_format_list,
             ServerFormatList: None,
             ClientFormatListResponse: client_format_list_response,
@@ -609,12 +602,6 @@ impl CliprdrServiceContext for CliprdrClientContext {
         let ret = server_clip_file(self, conn_id, msg);
         ret_to_result(ret)
     }
-
-    fn get_progress_percent(&self) -> Option<ProgressPercent> {
-        None
-    }
-
-    fn cancel(&mut self) {}
 }
 
 fn ret_to_result(ret: u32) -> Result<(), CliprdrError> {
@@ -627,7 +614,6 @@ fn ret_to_result(ret: u32) -> Result<(), CliprdrError> {
         e => Err(CliprdrError::Unknown(e)),
     }
 }
-
 pub fn empty_clipboard(context: &mut CliprdrClientContext, conn_id: i32) -> bool {
     unsafe { TRUE == empty_cliprdr(context, conn_id as u32) }
 }
@@ -657,7 +643,6 @@ pub fn server_clip_file(
                 conn_id,
                 &format_list
             );
-            send_data_exclude(conn_id as _, ClipboardFile::TryEmpty);
             ret = server_format_list(context, conn_id, format_list);
             log::debug!(
                 "server_format_list called, conn_id {}, return {}",
@@ -754,18 +739,6 @@ pub fn server_clip_file(
                 stream_id,
                 ret
             );
-        }
-        ClipboardFile::TryEmpty => {
-            log::debug!("empty_clipboard called");
-            let ret = empty_clipboard(context, conn_id);
-            log::debug!(
-                "empty_clipboard called, conn_id {}, return {}",
-                conn_id,
-                ret
-            );
-        }
-        ClipboardFile::Files { .. } => {
-            // unreachable
         }
     }
     ret
@@ -976,7 +949,6 @@ pub fn create_cliprdr_context(
         enable_others,
         response_wait_timeout_secs,
         Some(notify_callback),
-        Some(handle_clipboard_files),
         Some(client_format_list),
         Some(client_format_list_response),
         Some(client_format_data_request),
@@ -1024,61 +996,6 @@ extern "C" fn notify_callback(conn_id: UINT32, msg: *const NOTIFICATION_MESSAGE)
                 return ERR_CODE_INVALID_PARAMETER;
             }
         }
-    };
-    // no need to handle result here
-    allow_err!(send_data(conn_id as _, data));
-
-    0
-}
-
-extern "C" fn handle_clipboard_files(
-    conn_id: UINT32,
-    n_files: size_t,
-    file_names: *mut *mut WCHAR,
-) -> UINT {
-    if n_files == 0 {
-        return 0;
-    }
-
-    let data = unsafe {
-        let mut files = Vec::new();
-        use std::ffi::OsString;
-        use std::os::windows::ffi::OsStringExt;
-        for i in 0..n_files {
-            let file_name_ptr = *file_names.offset(i as isize);
-            if !file_name_ptr.is_null() {
-                let mut len = 0;
-                while *file_name_ptr.offset(len) != 0 {
-                    len += 1;
-                }
-                let slice = std::slice::from_raw_parts(file_name_ptr, len as usize);
-                let os_string = OsString::from_wide(slice);
-                match os_string.to_str() {
-                    Some(n) => match std::fs::metadata(n) {
-                        Ok(meta) => {
-                            if meta.is_file() {
-                                files.push((n.to_owned(), meta.len()));
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "handle_clipboard_files: Failed to get metadata for file '{}': {}",
-                                n,
-                                e
-                            );
-                        }
-                    },
-                    None => {
-                        log::warn!("handle_clipboard_files: Failed to convert file name to UTF-8");
-                    }
-                };
-            }
-        }
-        if files.is_empty() {
-            return 0;
-        }
-
-        ClipboardFile::Files { files }
     };
     // no need to handle result here
     allow_err!(send_data(conn_id as _, data));

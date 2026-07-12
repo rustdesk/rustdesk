@@ -31,12 +31,14 @@ object KeyEventConverter {
         }
 
         var action = 0
-        if (keyEventProto.getDown() || keyEventProto.getPress()) {
+        if (keyEventProto.getDown()) {
             action = KeyEvent.ACTION_DOWN
         } else {
             action = KeyEvent.ACTION_UP
         }
 
+        // FIXME: The last parameter is the repeat count, not modifiers ?
+        // https://developer.android.com/reference/android/view/KeyEvent#KeyEvent(long,%20long,%20int,%20int,%20int)
         return KeyEvent(0, 0, action, chrValue, 0, modifiers)
     }
 

@@ -33,4 +33,4 @@ if [ -z $release ]; then
 fi
 set -f
 #shellcheck disable=2086
-VCPKG_ROOT=/vcpkg cargo build --locked $argv
+VCPKG_ROOT=/vcpkg cargo build $argv

@@ -8,9 +8,7 @@ import argparse
 import datetime
 import subprocess
 import re
-import platform
 from pathlib import Path
-from itertools import chain
 import shutil
 
 g_indent_unit = "\t"
@@ -49,7 +47,7 @@ def make_parser():
         "--dist-dir",
         type=str,
         default="../../rustdesk",
-        help="The dist directory to install.",
+        help="The dist direcotry to install.",
     )
     parser.add_argument(
         "--arp",
@@ -85,7 +83,7 @@ def make_parser():
         "-m",
         "--manufacturer",
         type=str,
-        default="Purslane Tech Pte. Ltd.",
+        default="PURSLANE",
         help="The app manufacturer.",
     )
     return parser
@@ -189,17 +187,6 @@ def replace_app_name_in_langs(app_name):
         with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
 
-def replace_app_name_in_custom_actions(app_name):
-    custion_actions_dir = Path(sys.argv[0]).parent.joinpath("CustomActions")
-    for file_path in chain(custion_actions_dir.glob("*.cpp"), custion_actions_dir.glob("*.h")):
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            line = re.sub(r"\bRustDesk\b", app_name, line)
-            line = line.replace(f"{app_name} v4 Printer Driver", "RustDesk v4 Printer Driver")
-            lines[i] = line
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.writelines(lines)
 
 def gen_upgrade_info():
     def func(lines, index_start):
@@ -336,9 +323,7 @@ def gen_custom_ARPSYSTEMCOMPONENT_True(args, dist_dir):
             f'{indent}<RegistryValue Type="integer" Name="Language" Value="[ProductLanguage]" />\n'
         )
 
-        # EstimatedSize in uninstall registry must be in KB.
-        estimated_size_bytes = get_folder_size(dist_dir)
-        estimated_size = max(1, (estimated_size_bytes + 1023) // 1024)
+        estimated_size = get_folder_size(dist_dir)
         lines_new.append(
             f'{indent}<RegistryValue Type="integer" Name="EstimatedSize" Value="{estimated_size}" />\n'
         )
@@ -499,7 +484,7 @@ def update_license_file(app_name):
         license_content = f.read()
     license_content = license_content.replace("website rustdesk.com and other ", "")
     license_content = license_content.replace("RustDesk", app_name)
-    license_content = re.sub(r"Purslane(?: Tech Pte\.)? Ltd", app_name, license_content, flags=re.IGNORECASE)
+    license_content = re.sub("Purslane Ltd", app_name, license_content, flags=re.IGNORECASE)
     with open(license_file, "w", encoding="utf-8") as f:
         f.write(license_content)
 
@@ -557,4 +542,3 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     replace_app_name_in_langs(args.app_name)
-    replace_app_name_in_custom_actions(args.app_name)

@@ -47,7 +47,7 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
             format!("{}-{}", target_arch, target_os)
         }
     } else if target_os == "windows" {
-        format!("{}-windows-static", target_arch)
+        "x64-windows-static".to_owned()
     } else {
         format!("{}-{}", target_arch, target_os)
     };
@@ -55,22 +55,24 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         target = target.replace("x64", "x86");
     }
     println!("cargo:info={}", target);
-    if let Ok(vcpkg_root) = std::env::var("VCPKG_INSTALLED_ROOT") {
-        path = vcpkg_root.into();
-    } else {
-        path.push("installed");
-    }
+    path.push("installed");
     path.push(target);
     println!(
-        "cargo:rustc-link-lib=static={}",
-        name.trim_start_matches("lib")
+        "{}",
+        format!(
+            "cargo:rustc-link-lib=static={}",
+            name.trim_start_matches("lib")
+        )
     );
     println!(
-        "cargo:rustc-link-search={}",
-        path.join("lib").to_str().unwrap()
+        "{}",
+        format!(
+            "cargo:rustc-link-search={}",
+            path.join("lib").to_str().unwrap()
+        )
     );
     let include = path.join("include");
-    println!("cargo:include={}", include.to_str().unwrap());
+    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
     include
 }
 
@@ -105,17 +107,23 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
     path.push(directories.pop().unwrap());
     // Link the library.
     println!(
-        "cargo:rustc-link-lib=static={}",
-        name.trim_start_matches("lib")
+        "{}",
+        format!(
+            "cargo:rustc-link-lib=static={}",
+            name.trim_start_matches("lib")
+        )
     );
     // Add the library path.
     println!(
-        "cargo:rustc-link-search={}",
-        path.join("lib").to_str().unwrap()
+        "{}",
+        format!(
+            "cargo:rustc-link-search={}",
+            path.join("lib").to_str().unwrap()
+        )
     );
     // Add the include path.
     let include = path.join("include");
-    println!("cargo:include={}", include.to_str().unwrap());
+    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
     include
 }
 
@@ -227,12 +235,6 @@ fn ffmpeg() {
 */
 
 fn main() {
-    // in this crate, these are also valid configurations
-    println!("cargo:rustc-check-cfg=cfg(dxgi,quartz,x11)");
-
-    // there is problem with cfg(target_os) in build.rs, so use our workaround
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
     // please install x64 toolchain by "rustup toolchain install stable-x86_64-pc-windows-msvc",
@@ -250,6 +252,8 @@ fn main() {
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
     // ffmpeg();
 
+    // there is problem with cfg(target_os) in build.rs, so use our workaround
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "ios" {
         // nothing
     } else if target_os == "android" {

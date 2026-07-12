@@ -2,12 +2,10 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -19,7 +17,7 @@ import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
-import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
+import '../widgets/button.dart';
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -41,7 +39,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   double? get height => bind.isIncomingOnly() ? null : em * 3;
 
   void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/pricing";
+    const url = "https://rustdesk.com/pricing.html";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
@@ -181,9 +179,6 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
     _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
-    try {
-      stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
-    } catch (_) {}
   }
 }
 
@@ -202,25 +197,16 @@ class _ConnectionPageState extends State<ConnectionPage>
   final _idController = IDTextEditingController();
 
   final RxBool _idInputFocused = false.obs;
-  final FocusNode _idFocusNode = FocusNode();
-  final TextEditingController _idEditingController = TextEditingController();
-
-  String selectedConnectionType = 'Connect';
 
   bool isWindowMinimized = false;
+  List<Peer> peers = [];
 
-  final AllPeersLoader _allPeersLoader = AllPeersLoader();
-
-  // https://github.com/flutter/flutter/issues/157244
-  Iterable<Peer> _autocompleteOpts = [];
-
-  final _menuOpen = false.obs;
+  bool isPeersLoading = false;
+  bool isPeersLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _allPeersLoader.init(setState);
-    _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
@@ -231,7 +217,6 @@ class _ConnectionPageState extends State<ConnectionPage>
         }
       });
     }
-    Get.put<TextEditingController>(_idEditingController);
     Get.put<IDTextEditingController>(_idController);
     windowManager.addListener(this);
   }
@@ -240,10 +225,6 @@ class _ConnectionPageState extends State<ConnectionPage>
   void dispose() {
     _idController.dispose();
     windowManager.removeListener(this);
-    _allPeersLoader.clear();
-    _idFocusNode.removeListener(onFocusChanged);
-    _idFocusNode.dispose();
-    _idEditingController.dispose();
     if (Get.isRegistered<IDTextEditingController>()) {
       Get.delete<IDTextEditingController>();
     }
@@ -287,20 +268,6 @@ class _ConnectionPageState extends State<ConnectionPage>
     bind.mainOnMainWindowClose();
   }
 
-  void onFocusChanged() {
-    _idInputFocused.value = _idFocusNode.hasFocus;
-    if (_idFocusNode.hasFocus) {
-      if (_allPeersLoader.needLoad) {
-        _allPeersLoader.getAllPeers();
-      }
-
-      final textLength = _idEditingController.value.text.length;
-      // Select all to facilitate removing text, just following the behavior of address input of chrome.
-      _idEditingController.selection =
-          TextSelection(baseOffset: 0, extentOffset: textLength);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
@@ -327,15 +294,21 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   /// Callback for the connect button.
   /// Connects to the selected peer.
-  void onConnect(
-      {bool isFileTransfer = false,
-      bool isViewCamera = false,
-      bool isTerminal = false}) {
+  void onConnect({bool isFileTransfer = false}) {
     var id = _idController.id;
-    connect(context, id,
-        isFileTransfer: isFileTransfer,
-        isViewCamera: isViewCamera,
-        isTerminal: isTerminal);
+    connect(context, id, isFileTransfer: isFileTransfer);
+  }
+
+  Future<void> _fetchPeers() async {
+    setState(() {
+      isPeersLoading = true;
+    });
+    await Future.delayed(Duration(milliseconds: 100));
+    peers = await getAllPeers();
+    setState(() {
+      isPeersLoading = false;
+      isPeersLoaded = true;
+    });
   }
 
   /// UI for the remote ID TextField.
@@ -350,16 +323,44 @@ class _ConnectionPageState extends State<ConnectionPage>
       child: Ink(
         child: Column(
           children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
             Row(
               children: [
                 Expanded(
-                    child: RawAutocomplete<Peer>(
+                    child: Row(
+                  children: [
+                    AutoSizeText(
+                      translate('Control Remote Desktop'),
+                      maxLines: 1,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.merge(TextStyle(height: 1)),
+                    ).marginOnly(right: 4),
+                    Tooltip(
+                      waitDuration: Duration(milliseconds: 300),
+                      message: translate("id_input_tip"),
+                      child: Icon(
+                        Icons.help_outline_outlined,
+                        size: 16,
+                        color: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.color
+                            ?.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                )),
+              ],
+            ).marginOnly(bottom: 15),
+            Row(
+              children: [
+                Expanded(
+                    child: Autocomplete<Peer>(
                   optionsBuilder: (TextEditingValue textEditingValue) {
                     if (textEditingValue.text == '') {
-                      _autocompleteOpts = const Iterable<Peer>.empty();
-                    } else if (_allPeersLoader.peers.isEmpty &&
-                        !_allPeersLoader.isPeersLoaded) {
+                      return const Iterable<Peer>.empty();
+                    } else if (peers.isEmpty && !isPeersLoaded) {
                       Peer emptyPeer = Peer(
                         id: '',
                         username: '',
@@ -373,10 +374,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                         rdpPort: '',
                         rdpUsername: '',
                         loginName: '',
-                        device_group_name: '',
-                        note: '',
                       );
-                      _autocompleteOpts = [emptyPeer];
+                      return [emptyPeer];
                     } else {
                       String textWithoutSpaces =
                           textEditingValue.text.replaceAll(" ", "");
@@ -387,7 +386,8 @@ class _ConnectionPageState extends State<ConnectionPage>
                         );
                       }
                       String textToFind = textEditingValue.text.toLowerCase();
-                      _autocompleteOpts = _allPeersLoader.peers
+
+                      return peers
                           .where((peer) =>
                               peer.id.toLowerCase().contains(textToFind) ||
                               peer.username
@@ -398,20 +398,27 @@ class _ConnectionPageState extends State<ConnectionPage>
                                   .contains(textToFind) ||
                               peer.alias.toLowerCase().contains(textToFind))
                           .toList();
-                      _allPeersLoader.queryOnlines(_autocompleteOpts);
                     }
-                    return _autocompleteOpts;
                   },
-                  focusNode: _idFocusNode,
-                  textEditingController: _idEditingController,
                   fieldViewBuilder: (
                     BuildContext context,
                     TextEditingController fieldTextEditingController,
                     FocusNode fieldFocusNode,
                     VoidCallback onFieldSubmitted,
                   ) {
-                    updateTextAndPreserveSelection(
-                        fieldTextEditingController, _idController.text);
+                    fieldTextEditingController.text = _idController.text;
+                    Get.put<TextEditingController>(fieldTextEditingController);
+                    fieldFocusNode.addListener(() async {
+                      _idInputFocused.value = fieldFocusNode.hasFocus;
+                      if (fieldFocusNode.hasFocus && !isPeersLoading) {
+                        _fetchPeers();
+                      }
+                    });
+                    final textLength =
+                        fieldTextEditingController.value.text.length;
+                    // select all to facilitate removing text, just following the behavior of address input of chrome
+                    fieldTextEditingController.selection =
+                        TextSelection(baseOffset: 0, extentOffset: textLength);
                     return Obx(() => TextField(
                           autocorrect: false,
                           enableSuggestions: false,
@@ -441,7 +448,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                           onSubmitted: (_) {
                             onConnect();
                           },
-                        ).workaroundFreezeLinuxMint());
+                        ));
                   },
                   onSelected: (option) {
                     setState(() {
@@ -452,7 +459,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                   optionsViewBuilder: (BuildContext context,
                       AutocompleteOnSelected<Peer> onSelected,
                       Iterable<Peer> options) {
-                    options = _autocompleteOpts;
                     double maxHeight = options.length * 50;
                     if (options.length == 1) {
                       maxHeight = 52;
@@ -484,8 +490,7 @@ class _ConnectionPageState extends State<ConnectionPage>
                                     maxHeight: maxHeight,
                                     maxWidth: 319,
                                   ),
-                                  child: _allPeersLoader.peers.isEmpty &&
-                                          !_allPeersLoader.isPeersLoaded
+                                  child: peers.isEmpty && isPeersLoading
                                       ? Container(
                                           height: 80,
                                           child: Center(
@@ -515,97 +520,21 @@ class _ConnectionPageState extends State<ConnectionPage>
             ),
             Padding(
               padding: const EdgeInsets.only(top: 13.0),
-              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                SizedBox(
-                  height: 28.0,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      onConnect();
-                    },
-                    child: Text(translate("Connect")),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Button(
+                    isOutline: true,
+                    onTap: () => onConnect(isFileTransfer: true),
+                    text: "Transfer file",
                   ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  height: 28.0,
-                  width: 28.0,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(
+                    width: 17,
                   ),
-                  child: Center(
-                    child: StatefulBuilder(
-                      builder: (context, setState) {
-                        var offset = Offset(0, 0);
-                        return Obx(() => InkWell(
-                              child: _menuOpen.value
-                                  ? Transform.rotate(
-                                      angle: pi,
-                                      child: Icon(IconFont.more, size: 14),
-                                    )
-                                  : Icon(IconFont.more, size: 14),
-                              onTapDown: (e) {
-                                offset = e.globalPosition;
-                              },
-                              onTap: () async {
-                                _menuOpen.value = true;
-                                final x = offset.dx;
-                                final y = offset.dy;
-                                await mod_menu
-                                    .showMenu(
-                                  context: context,
-                                  position: RelativeRect.fromLTRB(x, y, x, y),
-                                  items: [
-                                    (
-                                      'Transfer file',
-                                      () => onConnect(isFileTransfer: true)
-                                    ),
-                                    (
-                                      'View camera',
-                                      () => onConnect(isViewCamera: true)
-                                    ),
-                                    (
-                                      '${translate('Terminal')} (beta)',
-                                      () => onConnect(isTerminal: true)
-                                    ),
-                                  ]
-                                      .map((e) => MenuEntryButton<String>(
-                                            childBuilder: (TextStyle? style) =>
-                                                Text(
-                                              translate(e.$1),
-                                              style: style,
-                                            ),
-                                            proc: () => e.$2(),
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal:
-                                                    kDesktopMenuPadding.left),
-                                            dismissOnClicked: true,
-                                          ))
-                                      .map((e) => e.build(
-                                          context,
-                                          const MenuConfig(
-                                              commonColor: CustomPopupMenuTheme
-                                                  .commonColor,
-                                              height:
-                                                  CustomPopupMenuTheme.height,
-                                              dividerHeight:
-                                                  CustomPopupMenuTheme
-                                                      .dividerHeight)))
-                                      .expand((i) => i)
-                                      .toList(),
-                                  elevation: 8,
-                                )
-                                    .then((_) {
-                                  _menuOpen.value = false;
-                                });
-                              },
-                            ));
-                      },
-                    ),
-                  ),
-                ),
-              ]),
-            ),
+                  Button(onTap: onConnect, text: "Connect"),
+                ],
+              ),
+            )
           ],
         ),
       ),

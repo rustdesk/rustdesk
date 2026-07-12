@@ -1,9 +1,7 @@
-#[cfg(not(target_os = "ios"))]
-use hbb_common::whoami;
+use hbb_common::config::Config;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config::Config,
     config::{self, RENDEZVOUS_PORT},
     log,
     protobuf::Message as _,
@@ -47,7 +45,7 @@ pub(super) fn start_listening() -> ResultType<()> {
                             }
                             if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
                                 let mut msg_out = Message::new();
-                                let mut hostname = crate::whoami_hostname();
+                                let mut hostname = whoami::hostname();
                                 // The default hostname is "localhost" which is a bit confusing
                                 if hostname == "localhost" {
                                     hostname = "unknown".to_owned();

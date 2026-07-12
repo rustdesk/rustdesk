@@ -1,8 +1,6 @@
 #include <windows.h>
 #include <wtsapi32.h>
 #include <tlhelp32.h>
-#include <comdef.h>
-#include <xpsprint.h>
 #include <cstdio>
 #include <cstdint>
 #include <intrin.h>
@@ -13,7 +11,6 @@
 #include <versionhelpers.h>
 #include <vector>
 #include <sddl.h>
-#include <memory>
 
 extern "C" uint32_t get_session_user_info(PWSTR bufin, uint32_t nin, uint32_t id);
 
@@ -225,12 +222,7 @@ extern "C"
         return IsWindowsServer();
     }
 
-    bool is_windows_10_or_greater()
-    {
-        return IsWindows10OrGreater();
-    }
-
-    HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user, BOOL show, DWORD *pDwTokenPid)
+    HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user, DWORD *pDwTokenPid)
     {
         HANDLE hProcess = NULL;
         HANDLE hToken = NULL;
@@ -240,13 +232,8 @@ extern "C"
             ZeroMemory(&si, sizeof si);
             si.cb = sizeof si;
             si.dwFlags = STARTF_USESHOWWINDOW;
-            if (show)
-            {
-                si.lpDesktop = (LPWSTR)L"winsta0\\default";
-                si.wShowWindow = SW_SHOW;
-            }
             wchar_t buf[MAX_PATH];
-            wcscpy_s(buf, MAX_PATH, cmd);
+            wcscpy_s(buf, sizeof(buf), cmd);
             PROCESS_INFORMATION pi;
             LPVOID lpEnvironment = NULL;
             DWORD dwCreationFlags = DETACHED_PROCESS;
@@ -551,9 +538,6 @@ extern "C"
         DWORD count;
         auto rdp = "rdp";
         auto nrdp = strlen(rdp);
-        // https://github.com/rustdesk/rustdesk/discussions/937#discussioncomment-12373814 citrix session
-        auto ica = "ica";
-        auto nica = strlen(ica);
         if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
         {
             for (DWORD i = 0; i < count; i++)
@@ -569,7 +553,7 @@ extern "C"
                         WTSFreeMemory(pInfos);
                         return id;
                     }
-                    if (!strnicmp(info.pWinStationName, rdp, nrdp) || !strnicmp(info.pWinStationName, ica, nica))
+                    if (!strnicmp(info.pWinStationName, rdp, nrdp))
                     {
                         rdp_or_console = info.SessionId;
                     }
@@ -578,30 +562,6 @@ extern "C"
             WTSFreeMemory(pInfos);
         }
         return rdp_or_console;
-    }
-
-    BOOL is_session_locked(DWORD session_id)
-    {
-        if (session_id == 0xFFFFFFFF) {
-            return FALSE;
-        }
-        PWTSINFOEXW pInfo = NULL;
-        DWORD bytes = 0;
-        BOOL locked = FALSE;
-        if (WTSQuerySessionInformationW(
-                WTS_CURRENT_SERVER_HANDLE,
-                session_id,
-                WTSSessionInfoEx,
-                (LPWSTR *)&pInfo,
-                &bytes)) {
-            if (pInfo && pInfo->Level == 1) {
-                locked = (pInfo->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK);
-            }
-            if (pInfo) {
-                WTSFreeMemory(pInfo);
-            }
-        }
-        return locked;
     }
 
     uint32_t get_active_user(PWSTR bufin, uint32_t nin, BOOL rdp)
@@ -649,8 +609,6 @@ extern "C"
                 auto info = pInfos[i];
                 auto rdp = "rdp";
                 auto nrdp = strlen(rdp);
-                auto ica = "ica";
-                auto nica = strlen(ica);
                 if (info.State == WTSActive) {
                     if (info.pWinStationName == NULL)
                         continue;
@@ -662,9 +620,6 @@ extern "C"
                     }
                     else if (include_rdp && !strnicmp(info.pWinStationName, rdp, nrdp)) {
                         sessionIds.push_back(std::wstring(L"RDP:") + std::to_wstring(info.SessionId));
-                    }
-                    else if (include_rdp && !strnicmp(info.pWinStationName, ica, nica)) {
-                        sessionIds.push_back(std::wstring(L"ICA:") + std::to_wstring(info.SessionId));
                     }
                 }
             }
@@ -892,167 +847,3 @@ extern "C"
         return isRunning;
     }
 } // end of extern "C"
-
-// Remote printing 
-extern "C"
-{
-// Dynamic loading of XPS Print functions
-typedef HRESULT(WINAPI *StartXpsPrintJobFunc)(
-    LPCWSTR printerName,
-    LPCWSTR jobName,
-    LPCWSTR outputFileName,
-    HANDLE progressEvent,
-    HANDLE completionEvent,
-    UINT8* printablePagesOn,
-    UINT32 printablePagesOnCount,
-    IXpsPrintJob** xpsPrintJob,
-    IXpsPrintJobStream** documentStream,
-    IXpsPrintJobStream** printTicketStream);
-
-static HMODULE xpsPrintModule = nullptr;
-static StartXpsPrintJobFunc StartXpsPrintJobPtr = nullptr;
-
-static bool InitXpsPrint()
-{
-    if (xpsPrintModule == nullptr)
-    {
-        xpsPrintModule = LoadLibraryA("XpsPrint.dll");
-        if (xpsPrintModule == nullptr)
-        {
-            flog("Failed to load XpsPrint.dll. Error: %d\n", GetLastError());
-            return false;
-        }
-        
-        StartXpsPrintJobPtr = (StartXpsPrintJobFunc)GetProcAddress(xpsPrintModule, "StartXpsPrintJob");
-        if (StartXpsPrintJobPtr == nullptr)
-        {
-            flog("Failed to get StartXpsPrintJob function. Error: %d\n", GetLastError());
-            FreeLibrary(xpsPrintModule);
-            xpsPrintModule = nullptr;
-            return false;
-        }
-    }
-    return true;
-}
-#pragma warning(push)
-#pragma warning(disable : 4995)
-
-#define PRINT_XPS_CHECK_HR(hr, msg)                      \
-    if (FAILED(hr))                                      \
-    {                                                    \
-        _com_error err(hr);                              \
-        flog("%s Error: %s\n", msg, err.ErrorMessage()); \
-        return -1;                                       \
-    }
-
-    int PrintXPSRawData(LPWSTR printerName, BYTE *rawData, ULONG dataSize)
-    {
-        // Check if XPS Print DLL is available
-        if (!InitXpsPrint())
-        {
-            flog("XPS Print functionality not available on this system\n");
-            return -1;
-        }
-
-        BOOL isCoInitializeOk = FALSE;
-        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        if (hr == RPC_E_CHANGED_MODE)
-        {
-            hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        }
-        if (hr == S_OK)
-        {
-            isCoInitializeOk = TRUE;
-        }
-        std::shared_ptr<int> coInitGuard(nullptr, [isCoInitializeOk](int *) {
-            if (isCoInitializeOk) CoUninitialize();
-        });
-
-        IXpsOMObjectFactory *xpsFactory = nullptr;
-        hr = CoCreateInstance(
-            __uuidof(XpsOMObjectFactory),
-            nullptr,
-            CLSCTX_INPROC_SERVER,
-            __uuidof(IXpsOMObjectFactory),
-            reinterpret_cast<LPVOID *>(&xpsFactory));
-        PRINT_XPS_CHECK_HR(hr, "Failed to create XPS object factory.");
-        std::shared_ptr<IXpsOMObjectFactory> xpsFactoryGuard(
-            xpsFactory,
-            [](IXpsOMObjectFactory *xpsFactory) {
-                xpsFactory->Release();
-        });
-
-        HANDLE completionEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-        if (completionEvent == nullptr)
-        {
-            flog("Failed to create completion event. Last error: %d\n", GetLastError());
-            return -1;
-        }
-        std::shared_ptr<HANDLE> completionEventGuard(
-            &completionEvent,
-            [](HANDLE *completionEvent) {
-                CloseHandle(*completionEvent);
-        });
-
-        IXpsPrintJob *job = nullptr;
-        IXpsPrintJobStream *jobStream = nullptr;
-        // `StartXpsPrintJob()` is deprecated, but we still use it for compatibility.
-        // We may change to use the `Print Document Package API` in the future.
-        // https://learn.microsoft.com/en-us/windows/win32/printdocs/xpsprint-functions
-        hr = StartXpsPrintJobPtr(
-            printerName,
-            L"Print Job 1",
-            nullptr,
-            nullptr,
-            completionEvent,
-            nullptr,
-            0,
-            &job,
-            &jobStream,
-            nullptr);
-        PRINT_XPS_CHECK_HR(hr, "Failed to start XPS print job.");
-
-        std::shared_ptr<IXpsPrintJobStream> jobStreamGuard(jobStream, [](IXpsPrintJobStream *jobStream) {
-                jobStream->Release();
-        });
-        BOOL jobOk = FALSE;
-        std::shared_ptr<IXpsPrintJob> jobGuard(job, [&jobOk](IXpsPrintJob* job) {
-            if (jobOk == FALSE)
-            {
-                job->Cancel();
-            }
-            job->Release();
-        });
-
-        DWORD bytesWritten = 0;
-        hr = jobStream->Write(rawData, dataSize, &bytesWritten);
-        PRINT_XPS_CHECK_HR(hr, "Failed to write data to print job stream.");
-
-        hr = jobStream->Close();
-        PRINT_XPS_CHECK_HR(hr, "Failed to close print job stream.");
-
-        // Wait about 5 minutes for the print job to complete.
-        DWORD waitMillis = 300 * 1000;
-        DWORD waitResult = WaitForSingleObject(completionEvent, waitMillis);
-        if (waitResult != WAIT_OBJECT_0)
-        {
-            flog("Wait for print job completion failed. Last error: %d\n", GetLastError());
-            return -1;
-        }
-        jobOk = TRUE;
-
-        return 0;
-    }
-
-    void CleanupXpsPrint()
-    {
-        if (xpsPrintModule != nullptr)
-        {
-            FreeLibrary(xpsPrintModule);
-            xpsPrintModule = nullptr;
-            StartXpsPrintJobPtr = nullptr;
-        }
-    }
-
-#pragma warning(pop)
-}

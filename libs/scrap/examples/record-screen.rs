@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use std::{io, thread};
 
 use docopt::Docopt;
-use scrap::codec::{EncoderApi, EncoderCfg};
+use scrap::codec::{EncoderApi, EncoderCfg, Quality as Q};
 use webm::mux;
 use webm::mux::Track;
 
@@ -31,7 +31,8 @@ Options:
   -h --help                 Show this screen.
   --time=<s>                Recording duration in seconds.
   --fps=<fps>               Frames per second [default: 30].
-  --quality=<quality>       Video quality [default: 1.0].
+  --quality=<quality>       Video quality [default: Balanced].
+                            Valid values: Best, Balanced, Low.
   --ba=<kbps>               Audio bitrate in kilobits per second [default: 96].
   --codec CODEC             Configure the codec used. [default: vp9]
                             Valid values: vp8, vp9.
@@ -43,7 +44,14 @@ struct Args {
     flag_codec: Codec,
     flag_time: Option<u64>,
     flag_fps: u64,
-    flag_quality: f32,
+    flag_quality: Quality,
+}
+
+#[derive(Debug, serde::Deserialize)]
+enum Quality {
+    Best,
+    Balanced,
+    Low,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -97,7 +105,11 @@ fn main() -> io::Result<()> {
     let mut vt = webm.add_video_track(width, height, None, mux_codec);
 
     // Setup the encoder.
-    let quality = args.flag_quality;
+    let quality = match args.flag_quality {
+        Quality::Best => Q::Best,
+        Quality::Balanced => Q::Balanced,
+        Quality::Low => Q::Low,
+    };
     let mut vpx = vpx_encode::VpxEncoder::new(
         EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
             width,

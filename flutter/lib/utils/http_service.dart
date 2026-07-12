@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_hbb/consts.dart';
 import 'package:http/http.dart' as http;
 import '../models/platform_model.dart';
-import 'package:flutter_hbb/common.dart';
 export 'package:http/http.dart' show Response;
 
 enum HttpMethod { get, post, put, delete }
@@ -17,19 +15,11 @@ class HttpService {
   }) async {
     headers ??= {'Content-Type': 'application/json'};
 
-    // Use Rust HTTP implementation for non-web platforms for consistency.
-    var useFlutterHttp = (isWeb || kIsWeb);
-    if (!useFlutterHttp) {
-      final enableFlutterHttpOnRust =
-          mainGetLocalBoolOptionSync(kOptionEnableFlutterHttpOnRust);
-      // Use flutter http if:
-      // Not `enableFlutterHttpOnRust` and no proxy is set
-      useFlutterHttp =
-          !(enableFlutterHttpOnRust || await bind.mainGetProxyStatus());
-    }
+    // Determine if there is currently a proxy setting, and if so, use FFI to call the Rust HTTP method.
+    final isProxy = await bind.mainGetProxyStatus();
 
-    if (useFlutterHttp) {
-      return await _pollFlutterHttp(url, method, headers: headers, body: body);
+    if (!isProxy) {
+      return await _pollFultterHttp(url, method, headers: headers, body: body);
     }
 
     String headersJson = jsonEncode(headers);
@@ -44,7 +34,7 @@ class HttpService {
     return _parseHttpResponse(resJson);
   }
 
-  Future<http.Response> _pollFlutterHttp(
+  Future<http.Response> _pollFultterHttp(
     Uri url,
     HttpMethod method, {
     Map<String, String>? headers,
@@ -97,8 +87,7 @@ class HttpService {
       int statusCode = parsedJson['status_code'];
       return http.Response(body, statusCode, headers: headers);
     } catch (e) {
-      print('Failed to parse response\n$responseJson\nError:\n$e');
-      throw Exception('Failed to parse response.\n$responseJson');
+      throw Exception('Failed to parse response: $e');
     }
   }
 }

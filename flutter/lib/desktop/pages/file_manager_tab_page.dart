@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
@@ -41,15 +40,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        onTabCloseButton: () async {
-          if (await desktopTryShowTabAuditDialogCloseCancelled(
-            id: params['id'],
-            tabController: tabController,
-          )) {
-            return;
-          }
-          tabController.closeBy(params['id']);
-        },
+        onTabCloseButton: () => tabController.closeBy(params['id']),
         page: FileManagerPage(
           key: ValueKey(params['id']),
           id: params['id'],
@@ -57,7 +48,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
           isSharedPassword: params['isSharedPassword'],
           tabController: tabController,
           forceRelay: params['forceRelay'],
-          connToken: params['connToken'],
         )));
   }
 
@@ -66,7 +56,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     super.initState();
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      debugPrint(
+      print(
           "[FileTransfer] call ${call.method} with args ${call.arguments} from window $fromWindowId to ${windowId()}");
       // for simplify, just replace connectionId
       if (call.method == kWindowEventNewFileTransfer) {
@@ -78,15 +68,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            onTabCloseButton: () async {
-              if (await desktopTryShowTabAuditDialogCloseCancelled(
-                id: id,
-                tabController: tabController,
-              )) {
-                return;
-              }
-              tabController.closeBy(id);
-            },
+            onTabCloseButton: () => tabController.closeBy(id),
             page: FileManagerPage(
               key: ValueKey(id),
               id: id,
@@ -94,7 +76,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
               isSharedPassword: args['isSharedPassword'],
               tabController: tabController,
               forceRelay: args['forceRelay'],
-              connToken: args['connToken'],
             )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
@@ -120,13 +101,11 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         ));
     final tabWidget = isLinux
         ? buildVirtualWindowFrame(context, child)
-        : workaroundWindowBorder(
-            context,
-            Container(
-              decoration: BoxDecoration(
-                  border: Border.all(color: MyTheme.color(context).border!)),
-              child: child,
-            ));
+        : Container(
+            decoration: BoxDecoration(
+                border: Border.all(color: MyTheme.color(context).border!)),
+            child: child,
+          );
     return isMacOS || kUseCompatibleUiMode
         ? tabWidget
         : SubWindowDragToResizeArea(
@@ -149,14 +128,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   Future<bool> handleWindowCloseButton() async {
     final connLength = tabController.state.value.tabs.length;
-    if (connLength == 1) {
-      if (await desktopTryShowTabAuditDialogCloseCancelled(
-        id: tabController.state.value.tabs[0].key,
-        tabController: tabController,
-      )) {
-        return false;
-      }
-    }
     if (connLength <= 1) {
       tabController.clear();
       return true;

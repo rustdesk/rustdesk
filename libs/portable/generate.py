@@ -2,7 +2,6 @@
 
 import os
 import optparse
-import subprocess
 from hashlib import md5
 import brotli
 import datetime
@@ -66,15 +65,11 @@ def write_app_metadata(output_folder: str):
     print(f"App metadata has been written to {output_path}")
 
 def build_portable(output_folder: str, target: str):
-    current_dir = os.getcwd()
-    try:
-        os.chdir(output_folder)
-        cmd = ["cargo", "build", "--locked", "--release"]
-        if target:
-            cmd.extend(["--target", target])
-        subprocess.run(cmd, check=True)
-    finally:
-        os.chdir(current_dir)
+    os.chdir(output_folder)
+    if target:
+        os.system("cargo build --release --target " + target)
+    else:
+        os.system("cargo build --release")
 
 # Linux: python3 generate.py -f ../rustdesk-portable-packer/test -o . -e ./test/main.py
 # Windows: python3 .\generate.py -f ..\rustdesk\flutter\build\windows\runner\Debug\ -o . -e ..\rustdesk\flutter\build\windows\runner\Debug\rustdesk.exe

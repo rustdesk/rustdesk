@@ -29,4 +29,4 @@ TODO
 
 ## X11
 
-## macOS
+## OSX

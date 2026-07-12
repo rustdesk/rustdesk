@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 #
 # Script to build F-Droid release of RustDesk
 #
@@ -7,7 +9,7 @@
 #               2024, Vasyl Gello <vasek.gello@gmail.com>
 #
 
-# The script is invoked by F-Droid builder system step-by-step.
+# The script is invoked by F-Droid builder system ste-by-step.
 #
 # It accepts the following arguments:
 #
@@ -16,46 +18,10 @@
 # - Android architecture to build APK for: armeabi-v7a arm64-v8av x86 x86_64
 # - The build step to execute:
 #
+#   + sudo-deps: as root, install needed Debian packages into builder VM
 #   + prebuild: patch sources and do other stuff before the build
 #   + build: perform actual build of APK file
 #
-
-# Start of functions
-
-# Install Flutter of version `VERSION` from Github repository
-# into directory `FLUTTER_DIR` and apply patches if needed
-
-prepare_flutter() {
-	VERSION="${1}"
-	FLUTTER_DIR="${2}"
-
-	if [ ! -f "${FLUTTER_DIR}/bin/flutter" ]; then
-		git clone https://github.com/flutter/flutter "${FLUTTER_DIR}"
-	fi
-
-	pushd "${FLUTTER_DIR}"
-
-	git restore .
-	git checkout "${VERSION}"
-
-	# Patch flutter
-
-	if dpkg --compare-versions "${VERSION}" ge "3.24.4"; then
-		git apply "${ROOTDIR}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
-	fi
-
-	flutter config --no-analytics
-
-	popd # ${FLUTTER_DIR}
-}
-
-# Start of script
-
-set -x
-
-# Note current working directory as root dir for patches
-
-ROOTDIR="${PWD}"
 
 # Parse command-line arguments
 
@@ -135,31 +101,18 @@ prebuild)
 		.env.CARGO_NDK_VERSION \
 		.github/workflows/flutter-build.yml)"
 
-	# Flutter used to compile main Rustdesk library
-
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
 		.github/workflows/flutter-build.yml)"
-
 	if [ -z "${FLUTTER_VERSION}" ]; then
 		FLUTTER_VERSION="$(yq -r \
 			.env.FLUTTER_VERSION \
 			.github/workflows/flutter-build.yml)"
 	fi
 
-	# Flutter used to compile Flutter<->Rust bridge files
-
-	CARGO_EXPAND_VERSION="$(yq -r \
-		.env.CARGO_EXPAND_VERSION \
-		.github/workflows/bridge.yml)"
-
-	FLUTTER_BRIDGE_VERSION="$(yq -r \
-		.env.FLUTTER_VERSION \
-		.github/workflows/bridge.yml)"
-
 	FLUTTER_RUST_BRIDGE_VERSION="$(yq -r \
 		.env.FLUTTER_RUST_BRIDGE_VERSION \
-		.github/workflows/bridge.yml)"
+		.github/workflows/flutter-build.yml)"
 
 	NDK_VERSION="$(yq -r \
 		.env.NDK_VERSION \
@@ -174,7 +127,6 @@ prebuild)
 		.github/workflows/flutter-build.yml)"
 
 	if [ -z "${CARGO_NDK_VERSION}" ] || [ -z "${FLUTTER_VERSION}" ] ||
-		[ -z "${FLUTTER_BRIDGE_VERSION}" ] ||
 		[ -z "${FLUTTER_RUST_BRIDGE_VERSION}" ] ||
 		[ -z "${NDK_VERSION}" ] || [ -z "${RUST_VERSION}" ] ||
 		[ -z "${VCPKG_COMMIT_ID}" ]; then
@@ -183,9 +135,13 @@ prebuild)
 	fi
 
 	# Map NDK version to revision
-	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
-		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
-		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
+
+	NDK_VERSION="$(wget \
+		-qO- \
+		-H "Accept: application/vnd.github+json" \
+		-H "X-GitHub-Api-Version: 2022-11-28" \
+		'https://api.github.com/repos/android/ndk/releases' |
+		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
@@ -205,6 +161,24 @@ prebuild)
 
 	if [ ! -d "${ANDROID_NDK_ROOT}" ]; then
 		sdkmanager --install "ndk;${NDK_VERSION}"
+	fi
+
+	# Install Flutter
+
+	if [ ! -f "${HOME}/flutter/bin/flutter" ]; then
+		pushd "${HOME}"
+
+		git clone https://github.com/flutter/flutter
+
+		pushd flutter
+
+		git reset --hard "${FLUTTER_VERSION}"
+
+		flutter config --no-analytics
+
+		popd # flutter
+
+		popd # ${HOME}
 	fi
 
 	# Install Rust
@@ -231,19 +205,14 @@ prebuild)
 
 	cargo install \
 		cargo-ndk \
-		--version "${CARGO_NDK_VERSION}" \
-		--locked
+		--version "${CARGO_NDK_VERSION}"
 
 	# Install rust bridge generator
 
-	cargo install \
-		cargo-expand \
-		--version "${CARGO_EXPAND_VERSION}" \
-		--locked
+	cargo install cargo-expand
 	cargo install flutter_rust_bridge_codegen \
 		--version "${FLUTTER_RUST_BRIDGE_VERSION}" \
-		--features "uuid" \
-		--locked
+		--features "uuid"
 
 	# Populate native vcpkg dependencies
 
@@ -306,80 +275,11 @@ prebuild)
 
 	git apply res/fdroid/patches/*.patch
 
-	# If Flutter version used to generate bridge files differs from Flutter
-	# version used to compile Rustdesk library, generate bridge using the
-	# `FLUTTER_BRIDGE_VERSION` an restore the pubspec later
-
-	if [ "${FLUTTER_VERSION}" != "${FLUTTER_BRIDGE_VERSION}" ]; then
-		# Find first libclang.so and set BRIDGE_LLVM_PATH
-
-		BRIDGE_LLVM_PATH="$(find /usr/lib/ -name libclang.so | head -n1)"
-
-		if [ -z "${BRIDGE_LLVM_PATH}" ]; then
-			echo 'ERROR: Can not find libclang.so for bridge generator!' >&2
-			exit 1
-		fi
-
-		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
-		BRIDGE_LLVM_PATH="$(dirname "${BRIDGE_LLVM_PATH}")"
-
-		# Install Flutter bridge version
-
-		prepare_flutter "${FLUTTER_BRIDGE_VERSION}" "${HOME}/flutter"
-
-		# Save changes
-
-		git add .
-
-		# Edit pubspec to make flutter bridge version work
-
-		sed \
-			-i \
-			-e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
-			flutter/pubspec.yaml
-
-		# Download Flutter dependencies
-
-		pushd flutter
-
-		flutter clean
-		flutter packages pub get
-
-		popd # flutter
-
-		# Generate FFI bindings
-
-		flutter_rust_bridge_codegen \
-			--rust-input ./src/flutter_ffi.rs \
-			--dart-output ./flutter/lib/generated_bridge.dart \
-			--llvm-path "${BRIDGE_LLVM_PATH}"
-
-		# Add bridge files to save-list
-
-		git add -f ./flutter/lib/generated_bridge.* ./src/bridge_generated.*
-
-		# Restore everything
-
-		git checkout '*'
-		git clean -dffx
-		git reset
-
-		unset BRIDGE_LLVM_PATH
-	fi
-
-	# Install Flutter version for RustDesk library build
-
-	prepare_flutter "${FLUTTER_VERSION}" "${HOME}/flutter"
-
-	# gms is not in these files now, but we still keep the following line for future reference(maybe).
-
 	sed \
 		-i \
 		-e '/gms/d' \
 		flutter/android/build.gradle \
 		flutter/android/app/build.gradle
-
-	# `firebase_analytics` is not in these files now, but we still keep the following lines.
 
 	sed \
 		-i \
@@ -396,6 +296,33 @@ prebuild)
 		-e '/firebase/Id' \
 		flutter/lib/main.dart
 
+	if [ "${FLUTTER_VERSION}" = "3.13.9" ]; then
+		# Fix for android 3.13.9
+		# https://github.com/rustdesk/rustdesk/blob/285e974d1a52c891d5fcc28e963d724e085558bc/.github/workflows/flutter-build.yml#L862
+
+		sed \
+			-i \
+			-e 's/uni_links_desktop/#uni_links_desktop/g' \
+			flutter/pubspec.yaml
+
+		set --
+
+		while read -r _1; do
+			set -- "$@" "${_1}"
+		done 0<<.a
+$(find flutter/lib/ -type f -name "*dart*")
+.a
+
+		sed \
+			-i \
+			-e 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g' \
+			"$@"
+
+		set --
+	fi
+
+	sed -i "s/FLUTTER_VERSION_PLACEHOLDER/${FLUTTER_VERSION}/" flutter-sdk/.gclient
+
 	;;
 build)
 	# build: perform actual build of APK file
@@ -407,12 +334,9 @@ build)
 	# '.github/workflows/flutter-build.yml'
 	#
 
-	# Flutter used to compile main Rustdesk library
-
 	FLUTTER_VERSION="$(yq -r \
 		.env.ANDROID_FLUTTER_VERSION \
 		.github/workflows/flutter-build.yml)"
-
 	if [ -z "${FLUTTER_VERSION}" ]; then
 		FLUTTER_VERSION="$(yq -r \
 			.env.FLUTTER_VERSION \
@@ -424,9 +348,13 @@ build)
 		.github/workflows/flutter-build.yml)"
 
 	# Map NDK version to revision
-	NDK_VERSION="$(curl https://gitlab.com/fdroid/android-sdk-transparency-log/-/raw/master/signed/checksums.json |
-		jq -r ".\"https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip\"[0].\"source.properties\"" |
-		sed -n -E 's/.*Pkg.Revision = ([0-9.]+).*/\1/p')"
+
+	NDK_VERSION="$(wget \
+		-qO- \
+		-H "Accept: application/vnd.github+json" \
+		-H "X-GitHub-Api-Version: 2022-11-28" \
+		'https://api.github.com/repos/android/ndk/releases' |
+		jq -r ".[] | select(.tag_name == \"${NDK_VERSION}\") | .body | match(\"ndkVersion \\\"(.*)\\\"\").captures[0].string")"
 
 	if [ -z "${NDK_VERSION}" ]; then
 		echo "ERROR: Can not map Android NDK codename to revision!" >&2
@@ -444,10 +372,15 @@ build)
 
 	pushd flutter
 
-	flutter clean
 	flutter packages pub get
 
 	popd # flutter
+
+	# Generate FFI bindings
+
+	flutter_rust_bridge_codegen \
+		--rust-input ./src/flutter_ffi.rs \
+		--dart-output ./flutter/lib/generated_bridge.dart
 
 	# Build host android deps
 
@@ -460,7 +393,6 @@ build)
 		--target "${RUST_TARGET}" \
 		--bindgen \
 		build \
-		--locked \
 		--release \
 		--features "${RUSTDESK_FEATURES}"
 

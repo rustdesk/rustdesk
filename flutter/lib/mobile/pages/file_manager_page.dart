@@ -5,22 +5,18 @@ import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:get/get.dart';
 import 'package:toggle_switch/toggle_switch.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage(
-      {Key? key,
-      required this.id,
-      this.password,
-      this.isSharedPassword,
-      this.forceRelay})
+      {Key? key, required this.id, this.password, this.isSharedPassword})
       : super(key: key);
   final String id;
   final String? password;
   final bool? isSharedPassword;
-  final bool? forceRelay;
 
   @override
   State<StatefulWidget> createState() => _FileManagerPageState();
@@ -71,7 +67,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
       showLocal ? model.localController : model.remoteController;
   FileDirectory get currentDir => currentFileController.directory.value;
   DirectoryOptions get currentOptions => currentFileController.options.value;
-  final _uniqueKey = UniqueKey();
 
   @override
   void initState() {
@@ -79,14 +74,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
     gFFI.start(widget.id,
         isFileTransfer: true,
         password: widget.password,
-        isSharedPassword: widget.isSharedPassword,
-        forceRelay: widget.forceRelay);
+        isSharedPassword: widget.isSharedPassword);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     gFFI.ffiModel.updateEventListener(gFFI.sessionId, widget.id);
-    WakelockManager.enable(_uniqueKey);
+    WakelockPlus.enable();
   }
 
   @override
@@ -94,9 +88,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
     model.close().whenComplete(() {
       gFFI.close();
       gFFI.dialogManager.dismissAll();
-      WakelockManager.disable(_uniqueKey);
+      WakelockPlus.disable();
     });
-    model.jobController.clear();
     super.dispose();
   }
 
@@ -117,7 +110,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
           leading: Row(children: [
             IconButton(
                 icon: Icon(Icons.close),
-                onPressed: () => clientClose(gFFI.sessionId, gFFI)),
+                onPressed: () =>
+                    clientClose(gFFI.sessionId, gFFI.dialogManager)),
           ]),
           centerTitle: true,
           title: ToggleSwitch(
@@ -231,7 +225,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                   errorText: errorText,
                                 ),
                                 controller: name,
-                              ).workaroundFreezeLinuxMint(),
+                              ),
                             ],
                           ),
                           actions: [
@@ -355,21 +349,15 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return Offstage();
       }
 
-      // Find the first job that is in progress (the one actually transferring data)
-      // Rust backend processes jobs sequentially, so the first inProgress job is the active one
-      final activeJob = jobTable
-              .firstWhereOrNull((job) => job.state == JobState.inProgress) ??
-          jobTable.last;
-
-      switch (activeJob.state) {
+      switch (jobTable.last.state) {
         case JobState.inProgress:
           return BottomSheetBody(
             leading: CircularProgressIndicator(),
             title: translate("Waiting"),
             text:
-                "${translate("Speed")}:  ${readableFileSize(activeJob.speed)}/s",
+                "${translate("Speed")}:  ${readableFileSize(jobTable.last.speed)}/s",
             onCanceled: () {
-              model.jobController.cancelJob(activeJob.id);
+              model.jobController.cancelJob(jobTable.last.id);
               jobTable.clear();
             },
           );
@@ -377,7 +365,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           return BottomSheetBody(
             leading: Icon(Icons.check),
             title: "${translate("Successful")}!",
-            text: activeJob.display(),
+            text: jobTable.last.display(),
             onCanceled: () => jobTable.clear(),
           );
         case JobState.error:
@@ -434,7 +422,6 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   final _listScrollController = ScrollController();
   final _breadCrumbScroller = ScrollController();
-  late final ascending = Rx<bool>(controller.sortAscending);
 
   bool get isLocal => widget.controller.isLocal;
   FileController get controller => widget.controller;
@@ -646,17 +633,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                             ))
                         .toList();
                   },
-                  onSelected: (sortBy) {
-                    // If selecting the same sort option, flip the order
-                    // If selecting a different sort option, use ascending order
-                    if (controller.sortBy.value == sortBy) {
-                      ascending.value = !controller.sortAscending;
-                    } else {
-                      ascending.value = true;
-                    }
-                    controller.changeSortStyle(sortBy,
-                        ascending: ascending.value);
-                  }),
+                  onSelected: controller.changeSortStyle),
             ],
           )
         ],

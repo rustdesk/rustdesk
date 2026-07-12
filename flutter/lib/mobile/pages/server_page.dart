@@ -17,7 +17,7 @@ import 'home_page.dart';
 
 class ServerPage extends StatefulWidget implements PageShape {
   @override
-  final title = translate("Share screen");
+  final title = translate("Share Screen");
 
   @override
   final icon = const Icon(Icons.mobile_screen_share);
@@ -56,18 +56,13 @@ class _DropDownAction extends StatelessWidget {
           final verificationMethod = gFFI.serverModel.verificationMethod;
           final showPasswordOption = approveMode != 'click';
           final isApproveModeFixed = isOptionFixed(kOptionApproveMode);
-          final isNumericOneTimePasswordFixed =
-              isOptionFixed(kOptionAllowNumericOneTimePassword);
-          final isAllowNumericOneTimePassword =
-              gFFI.serverModel.allowNumericOneTimePassword;
           return [
-            if (!isChangeIdDisabled())
-              PopupMenuItem(
-                enabled: gFFI.serverModel.connectStatus > 0,
-                value: "changeID",
-                child: Text(translate("Change ID")),
-              ),
-            if (!isChangeIdDisabled()) const PopupMenuDivider(),
+            PopupMenuItem(
+              enabled: gFFI.serverModel.connectStatus > 0,
+              value: "changeID",
+              child: Text(translate("Change ID")),
+            ),
+            const PopupMenuDivider(),
             PopupMenuItem(
               value: 'AcceptSessionsViaPassword',
               child: listTile(
@@ -88,8 +83,7 @@ class _DropDownAction extends StatelessWidget {
             ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption &&
-                verificationMethod != kUseTemporaryPassword &&
-                !isChangePermanentPasswordDisabled())
+                verificationMethod != kUseTemporaryPassword)
               PopupMenuItem(
                 value: "setPermanentPassword",
                 child: Text(translate("Set permanent password")),
@@ -99,14 +93,6 @@ class _DropDownAction extends StatelessWidget {
               PopupMenuItem(
                 value: "setTemporaryPasswordLength",
                 child: Text(translate("One-time password length")),
-              ),
-            if (showPasswordOption &&
-                verificationMethod != kUsePermanentPassword)
-              PopupMenuItem(
-                value: "allowNumericOneTimePassword",
-                child: listTile(translate("Numeric one-time password"),
-                    isAllowNumericOneTimePassword),
-                enabled: !isNumericOneTimePasswordFixed,
               ),
             if (showPasswordOption) const PopupMenuDivider(),
             if (showPasswordOption)
@@ -138,9 +124,6 @@ class _DropDownAction extends StatelessWidget {
             setPasswordDialog();
           } else if (value == "setTemporaryPasswordLength") {
             setTemporaryPasswordLengthDialog(gFFI.dialogManager);
-          } else if (value == "allowNumericOneTimePassword") {
-            gFFI.serverModel.switchAllowNumericOneTimePassword();
-            gFFI.serverModel.updatePasswordModel();
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
@@ -150,12 +133,7 @@ class _DropDownAction extends StatelessWidget {
             }
 
             if (value == kUsePermanentPassword &&
-                (await bind.mainGetCommon(key: "permanent-password-set")) !=
-                    "true") {
-              if (isChangePermanentPasswordDisabled()) {
-                callback();
-                return;
-              }
+                (await bind.mainGetPermanentPassword()).isEmpty) {
               setPasswordDialog(notEmptyCallback: callback);
             } else {
               callback();
@@ -468,6 +446,7 @@ class ServerInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isPermanent = model.verificationMethod == kUsePermanentPassword;
     final serverModel = Provider.of<ServerModel>(context);
 
     const Color colorPositive = Colors.green;
@@ -507,8 +486,6 @@ class ServerInfo extends StatelessWidget {
       }
     }
 
-    final showOneTime = serverModel.approveMode != 'click' &&
-        serverModel.verificationMethod != kUsePermanentPassword;
     return PaddingCard(
         title: translate('Your Device'),
         child: Column(
@@ -546,10 +523,10 @@ class ServerInfo extends StatelessWidget {
             ]),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(
-                !showOneTime ? '-' : model.serverPasswd.value.text,
+                isPermanent ? '-' : model.serverPasswd.value.text,
                 style: textStyleValue,
               ),
-              !showOneTime
+              isPermanent
                   ? SizedBox.shrink()
                   : Row(children: [
                       IconButton(
@@ -583,20 +560,10 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
-    final hideStopService = isAndroid &&
-        bind.mainGetBuildinOption(key: kOptionHideStopService) == 'Y';
-    final allowPermChangeInAcceptWindow = option2bool(
-        kOptionEnablePermChangeInAcceptWindow,
-        bind.mainGetBuildinOption(
-          key: kOptionEnablePermChangeInAcceptWindow,
-        ));
-    final permissionChangeLocked = isAndroid &&
-        serverModel.clients.any((c) => !c.disconnected) &&
-        !allowPermChangeInAcceptWindow;
     return PaddingCard(
         title: translate("Permissions"),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          serverModel.mediaOk && !hideStopService
+          serverModel.mediaOk
               ? ElevatedButton.icon(
                       style: ButtonStyle(
                           backgroundColor:
@@ -606,30 +573,21 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                       label: Text(translate("Stop service")))
                   .marginOnly(bottom: 8)
               : SizedBox.shrink(),
-          if (!hideStopService || !serverModel.mediaOk)
-            PermissionRow(
-                translate("Screen Capture"),
-                serverModel.mediaOk,
-                !serverModel.mediaOk &&
-                        gFFI.userModel.userName.value.isEmpty &&
-                        bind.mainGetLocalOption(key: "show-scam-warning") != "N"
-                    ? () => showScamWarning(context, serverModel)
-                    : serverModel.toggleService),
           PermissionRow(
-            translate("Input Control"),
-            serverModel.inputOk,
-            serverModel.toggleInput,
-          ),
-          PermissionRow(
-            translate("Transfer file"),
-            serverModel.fileOk,
-            serverModel.toggleFile,
-            enabled: !permissionChangeLocked,
-          ),
+              translate("Screen Capture"),
+              serverModel.mediaOk,
+              !serverModel.mediaOk &&
+                      gFFI.userModel.userName.value.isEmpty &&
+                      bind.mainGetLocalOption(key: "show-scam-warning") != "N"
+                  ? () => showScamWarning(context, serverModel)
+                  : serverModel.toggleService),
+          PermissionRow(translate("Input Control"), serverModel.inputOk,
+              serverModel.toggleInput),
+          PermissionRow(translate("Transfer file"), serverModel.fileOk,
+              serverModel.toggleFile),
           hasAudioPermission
               ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
-                  serverModel.toggleAudio,
-                  enabled: !permissionChangeLocked)
+                  serverModel.toggleAudio)
               : Row(children: [
                   Icon(Icons.info_outline).marginOnly(right: 15),
                   Expanded(
@@ -637,26 +595,18 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     translate("android_version_audio_tip"),
                     style: const TextStyle(color: MyTheme.darkGray),
                   ))
-                ]),
-          PermissionRow(
-            translate("Enable clipboard"),
-            serverModel.clipboardOk,
-            serverModel.toggleClipboard,
-            enabled: !permissionChangeLocked,
-          ),
+                ])
         ]));
   }
 }
 
 class PermissionRow extends StatelessWidget {
-  const PermissionRow(this.name, this.isOk, this.onPressed,
-      {Key? key, this.enabled = true})
+  const PermissionRow(this.name, this.isOk, this.onPressed, {Key? key})
       : super(key: key);
 
   final String name;
   final bool isOk;
   final VoidCallback onPressed;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -665,11 +615,9 @@ class PermissionRow extends StatelessWidget {
         contentPadding: EdgeInsets.all(0),
         title: Text(name),
         value: isOk,
-        onChanged: enabled
-            ? (bool value) {
-                onPressed();
-              }
-            : null);
+        onChanged: (bool value) {
+          onPressed();
+        });
   }
 }
 
@@ -682,8 +630,9 @@ class ConnectionManager extends StatelessWidget {
     return Column(
         children: serverModel.clients
             .map((client) => PaddingCard(
-                title: translate(
-                    client.isFileTransfer ? "Transfer file" : "Share screen"),
+                title: translate(client.isFileTransfer
+                    ? "File Connection"
+                    : "Screen Connection"),
                 titleIcon: client.isFileTransfer
                     ? Icon(Icons.folder_outlined)
                     : Icon(Icons.mobile_screen_share),
@@ -869,7 +818,13 @@ class ClientInfo extends StatelessWidget {
                   flex: -1,
                   child: Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: _buildAvatar(context))),
+                      child: CircleAvatar(
+                          backgroundColor: str2color(
+                              client.name,
+                              Theme.of(context).brightness == Brightness.light
+                                  ? 255
+                                  : 150),
+                          child: Text(client.name[0])))),
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -881,20 +836,6 @@ class ClientInfo extends StatelessWidget {
             ],
           ),
         ]));
-  }
-
-  Widget _buildAvatar(BuildContext context) {
-    final fallback = CircleAvatar(
-      backgroundColor: str2color(client.name,
-          Theme.of(context).brightness == Brightness.light ? 255 : 150),
-      child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
-    );
-    return buildAvatarWidget(
-          avatar: client.avatar,
-          size: 40,
-          fallback: fallback,
-        ) ??
-        fallback;
   }
 }
 

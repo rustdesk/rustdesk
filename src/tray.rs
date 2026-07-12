@@ -10,15 +10,17 @@ use std::time::Duration;
 
 pub fn start_tray() {
     if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
+        #[cfg(target_os = "macos")]
+        {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
         #[cfg(not(target_os = "macos"))]
         {
             return;
         }
     }
-
-    #[cfg(target_os = "linux")]
-    crate::server::check_zombie();
-
     allow_err!(make_tray());
 }
 
@@ -54,22 +56,9 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let hide_stop_service = crate::ui_interface::get_builtin_option(
-        hbb_common::config::keys::OPTION_HIDE_STOP_SERVICE,
-    ) == "Y";
-    // The tray icon is only shown when the service is running, so we don't need to check
-    // the `stop-service` option here.
-    let quit_i = if !hide_stop_service {
-        Some(MenuItem::new(translate("Stop service".to_owned()), true, None))
-    } else {
-        None
-    };
+    let quit_i = MenuItem::new(translate("Exit".to_owned()), true, None);
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
-    if let Some(quit_i) = &quit_i {
-        tray_menu.append_items(&[&open_i, quit_i]).ok();
-    } else {
-        tray_menu.append_items(&[&open_i]).ok();
-    }
+    tray_menu.append_items(&[&open_i, &quit_i]).ok();
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -110,11 +99,9 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
         #[cfg(target_os = "linux")]
         {
-            // Do not use "xdg-open", it won't read the config.
+            // Do not use "xdg-open", it won't read config
             if crate::dbus::invoke_new_connection(crate::get_uri_prefix()).is_err() {
-                if let Ok(task) = crate::run_me::<&str>(vec![]) {
-                    crate::server::CHILD_PROCESS.lock().unwrap().push(task);
-                }
+                crate::run_me::<&str>(vec![]).ok();
             }
         }
     };
@@ -136,28 +123,14 @@ fn make_tray() -> hbb_common::ResultType<()> {
         );
 
         if let tao::event::Event::NewEvents(tao::event::StartCause::Init) = event {
-            // for fixing https://github.com/rustdesk/rustdesk/discussions/10210#discussioncomment-14600745
-            // so we start tray, but not to show it
-            if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
-                return;
-            }
             // We create the icon once the event loop is actually running
             // to prevent issues like https://github.com/tauri-apps/tray-icon/issues/90
-            let mut builder = TrayIconBuilder::new()
+            let tray = TrayIconBuilder::new()
                 .with_menu(Box::new(tray_menu.clone()))
                 .with_tooltip(tooltip(0))
-                .with_icon(icon.clone());
-            #[cfg(target_os = "macos")]
-            {
-                builder = builder.with_icon_as_template(true);
-            }
-            #[cfg(target_os = "windows")]
-            {
-                // Required since tray-icon 0.17
-                // Fixes #15215, #15222, #15410
-                builder = builder.with_menu_on_left_click(false);
-            }
-            let tray = builder.build();
+                .with_icon(icon.clone())
+                .with_icon_as_template(true) // mac only
+                .build();
             match tray {
                 Ok(tray) => _tray_icon = Arc::new(Mutex::new(Some(tray))),
                 Err(err) => {
@@ -177,19 +150,15 @@ fn make_tray() -> hbb_common::ResultType<()> {
         }
 
         if let Ok(event) = menu_channel.try_recv() {
-            if let Some(quit_i) = &quit_i {
-                if event.id == quit_i.id() {
-                    /* failed in windows, seems no permission to check system process
-                    if !crate::check_process("--server", false) {
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
-                    */
-                    if !crate::platform::uninstall_service(false, false) {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                } else if event.id == open_i.id() {
-                    open_func();
+            if event.id == quit_i.id() {
+                /* failed in windows, seems no permission to check system process
+                if !crate::check_process("--server", false) {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+                */
+                if !crate::platform::uninstall_service(false, false) {
+                    *control_flow = ControlFlow::Exit;
                 }
             } else if event.id == open_i.id() {
                 open_func();

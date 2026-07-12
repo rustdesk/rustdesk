@@ -452,7 +452,7 @@ pub(super) mod install {
     use std::{
         fs::File,
         io::{BufReader, BufWriter, Write},
-        path::Path,
+        path::PathBuf,
     };
     use zip::ZipArchive;
 
@@ -488,7 +488,7 @@ pub(super) mod install {
         Ok(())
     }
 
-    fn download_file(id: &str, url: &str, filename: &Path) -> bool {
+    fn download_file(id: &str, url: &str, filename: &PathBuf) -> bool {
         let file = match File::create(filename) {
             Ok(f) => f,
             Err(e) => {
@@ -505,7 +505,7 @@ pub(super) mod install {
         true
     }
 
-    fn do_install_file(filename: &Path, target_dir: &Path) -> ResultType<()> {
+    fn do_install_file(filename: &PathBuf, target_dir: &PathBuf) -> ResultType<()> {
         let mut zip = ZipArchive::new(BufReader::new(File::open(filename)?))?;
         for i in 0..zip.len() {
             let mut file = zip.by_index(i)?;

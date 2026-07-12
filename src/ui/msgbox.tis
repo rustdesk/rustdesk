@@ -132,17 +132,6 @@ class MsgboxComponent: Reactor.Component {
         return this.type.indexOf("skip") >= 0;
     }
 
-    function getScreenshotButtons() {
-        var isScreenshot = this.type.indexOf("take-screenshot") >= 0;
-        return isScreenshot 
-            ? <div>
-                <button .button #screenshotSaveAs .outline>{translate('Save as')}...</button>
-                <button .button #screenshotCopyToClip .outline>{translate('Copy to clipboard')}</button>
-                <button .button #screenshotCancel .outline>{translate('Cancel')}</button>
-            </div>
-            : "";
-    }
-
     function render() {
         this.set_outline_focus();
         var color = this.getColor();
@@ -152,7 +141,6 @@ class MsgboxComponent: Reactor.Component {
         var hasOk = this.type != "connecting" && this.type != "success" && this.type.indexOf("nook") < 0;
         var hasLink = this.link != "";
         var hasClose = this.type.indexOf("hasclose") >= 0;
-        var isInsecureConnection = this.type.indexOf("insecure-connection") >= 0;
         var show_progress = this.type == "connecting";
         var me = this;
         self.timer(0, msgboxTimerFunc);
@@ -177,13 +165,11 @@ class MsgboxComponent: Reactor.Component {
                 <div style="text-align: right;">
                     <span style="display:inline-block; max-width: 250px; font-size:12px;" #error />
                     <progress #progress style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
-                    {isInsecureConnection && hasOk ? <button .button #submit .outline>{translate('Continue')}</button> : ""}
                     {hasCancel || this.hasRetry ? <button .button #cancel .outline>{translate(this.hasRetry ? "OK" : "Cancel")}</button> : ""}
                     {this.hasSkip() ? <button .button #skip .outline>{translate('Skip')}</button> : ""}
-                    {!isInsecureConnection && (hasOk || this.hasRetry) ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
+                    {hasOk || this.hasRetry ? <button .button #submit>{translate(this.hasRetry ? "Retry" : "OK")}</button> : ""}
                     {hasLink ? <button .button #jumplink .outline>{translate('JumpLink')}</button> : ""}
-                    {hasClose ? (isInsecureConnection ? <button .button #cancel>{translate('Disconnect')}</button> : <button .button #cancel .outline>{translate('Close')}</button>) : ""}
-                    {this.getScreenshotButtons()}
+                    {hasClose ? <button .button #cancel .outline>{translate('Close')}</button> : ""}
                 </div>
             </div>
             </div>
@@ -195,14 +181,8 @@ class MsgboxComponent: Reactor.Component {
     }
     
     function submit() {
-        if (this.type.indexOf("insecure-connection") >= 0) {
-            this.cancel();
-            return;
-        }
-        var submit_btn = this.$(button#submit);
-        if (submit_btn) {
-            if (submit_btn.state.disabled) return;
-            submit_btn.sendEvent("click");
+        if (this.$(button#submit)) {
+            this.$(button#submit).sendEvent("click");
         }
     }
     
@@ -264,39 +244,6 @@ class MsgboxComponent: Reactor.Component {
         } else {
             this.close();
         }
-    }
-
-    event click $(button#screenshotSaveAs) {
-        this.close();
-
-        handler.leave(handler.get_keyboard_mode());
-        const filter = "Png file (*.png)";
-        const defaultExt = "png";
-        const initialPath = System.path(#USER_DOCUMENTS, "screenshot");
-        const caption = "Save as";
-        var url = view.selectFile(#save, filter, defaultExt, initialPath, caption);
-        handler.enter(handler.get_keyboard_mode());
-        if(url) {
-            var res = handler.handle_screenshot("0:" + URL.toPath(url));
-            if (res) {
-                msgbox("custom-error-nocancel-nook-hasclose", "Take screenshot", res, "", function() {});
-            }
-        } else {
-            handler.handle_screenshot("2");
-        }
-    }
-
-    event click $(button#screenshotCopyToClip) {
-        this.close();
-        var res = handler.handle_screenshot("1");
-        if (res) {
-            msgbox("custom-error-nocancel-nook-hasclose", "Take screenshot", res, "", function() {});
-        }
-    }
-
-    event click $(button#screenshotCancel) {
-        this.close();
-        handler.handle_screenshot("2");
     }
     
     event keydown (evt) {
@@ -370,9 +317,6 @@ class MsgboxComponent: Reactor.Component {
         if (this.type == "multiple-sessions-nocancel") {
             values.sid = (this.$$(select))[0].value;
         }
-        if (this.type == "remote-printer-selector") {
-            values.name = (this.$$(select))[0].value;
-        }
         return values;
     }
     
@@ -382,11 +326,7 @@ class MsgboxComponent: Reactor.Component {
             var el = me.$(.outline-focus);
             if (el) view.focus = el;
             else {
-                if (me.type.indexOf("insecure-connection") >= 0) {
-                    el = me.$(#cancel);
-                } else {
-                    el = me.$(#submit);
-                }
+                el = me.$(#submit);
                 if (el) {
                     view.focus = el;
                 }

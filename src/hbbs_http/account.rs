@@ -1,6 +1,7 @@
 use super::HbbHttpResponse;
-use crate::hbbs_http::create_http_client_with_url;
+use crate::hbbs_http::create_http_client;
 use hbb_common::{config::LocalConfig, log, ResultType};
+use reqwest::blocking::Client;
 use serde_derive::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
@@ -16,7 +17,6 @@ lazy_static::lazy_static! {
 
 const QUERY_INTERVAL_SECS: f32 = 1.0;
 const QUERY_TIMEOUT_SECS: u64 = 60 * 3;
-
 const REQUESTING_ACCOUNT_AUTH: &str = "Requesting account auth";
 const WAITING_ACCOUNT_AUTH: &str = "Waiting account auth";
 const LOGIN_ACCOUNT_AUTH: &str = "Login account auth";
@@ -80,10 +80,6 @@ pub enum UserStatus {
 pub struct UserPayload {
     pub name: String,
     #[serde(default)]
-    pub display_name: Option<String>,
-    #[serde(default)]
-    pub avatar: Option<String>,
-    #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
@@ -108,7 +104,7 @@ pub struct AuthBody {
 }
 
 pub struct OidcSession {
-    warmed_api_server: Option<String>,
+    client: Client,
     state_msg: &'static str,
     failed_msg: String,
     code_url: Option<OidcAuthUrl>,
@@ -135,7 +131,7 @@ impl Default for UserStatus {
 impl OidcSession {
     fn new() -> Self {
         Self {
-            warmed_api_server: None,
+            client: create_http_client(),
             state_msg: REQUESTING_ACCOUNT_AUTH,
             failed_msg: "".to_owned(),
             code_url: None,
@@ -146,33 +142,25 @@ impl OidcSession {
         }
     }
 
-    fn ensure_client(api_server: &str) {
-        let mut write_guard = OIDC_SESSION.write().unwrap();
-        if write_guard.warmed_api_server.as_deref() == Some(api_server) {
-            return;
-        }
-        // This URL is used to detect the appropriate TLS implementation for the server.
-        let login_option_url = format!("{}/api/login-options", api_server);
-        let _ = create_http_client_with_url(&login_option_url);
-        write_guard.warmed_api_server = Some(api_server.to_owned());
-    }
-
     fn auth(
         api_server: &str,
         op: &str,
         id: &str,
         uuid: &str,
     ) -> ResultType<HbbHttpResponse<OidcAuthUrl>> {
-        Self::ensure_client(api_server);
-        let body = serde_json::json!({
-            "op": op,
-            "id": id,
-            "uuid": uuid,
-            "deviceInfo": crate::ui_interface::get_login_device_info(),
-        })
-        .to_string();
-        let resp = crate::post_request_sync(format!("{}/api/oidc/auth", api_server), body, "")?;
-        HbbHttpResponse::parse(&resp)
+        Ok(OIDC_SESSION
+            .read()
+            .unwrap()
+            .client
+            .post(format!("{}/api/oidc/auth", api_server))
+            .json(&serde_json::json!({
+                "op": op,
+                "id": id,
+                "uuid": uuid,
+                "deviceInfo": crate::ui_interface::get_login_device_info(),
+            }))
+            .send()?
+            .try_into()?)
     }
 
     fn query(
@@ -185,20 +173,13 @@ impl OidcSession {
             &format!("{}/api/oidc/auth-query", api_server),
             &[("code", code), ("id", id), ("uuid", uuid)],
         )?;
-        Self::ensure_client(api_server);
-        #[derive(Deserialize)]
-        struct HttpResponseBody {
-            body: String,
-        }
-
-        let resp = crate::http_request_sync(
-            url.to_string(),
-            "GET".to_owned(),
-            None,
-            "{}".to_owned(),
-        )?;
-        let resp = serde_json::from_str::<HttpResponseBody>(&resp)?;
-        HbbHttpResponse::parse(&resp.body)
+        Ok(OIDC_SESSION
+            .read()
+            .unwrap()
+            .client
+            .get(url)
+            .send()?
+            .try_into()?)
     }
 
     fn reset(&mut self) {
@@ -270,13 +251,7 @@ impl OidcSession {
                             );
                             LocalConfig::set_option(
                                 "user_info".to_owned(),
-                                serde_json::json!({
-                                    "name": auth_body.user.name,
-                                    "display_name": auth_body.user.display_name,
-                                    "avatar": auth_body.user.avatar,
-                                    "status": auth_body.user.status
-                                })
-                                .to_string(),
+                                serde_json::json!({ "name": auth_body.user.name, "status": auth_body.user.status }).to_string(),
                             );
                         }
                     }

@@ -111,17 +111,11 @@ pub struct Enigo {
     double_click_interval: u32,
     last_click_time: Option<std::time::Instant>,
     multiple_click: i64,
-    ignore_flags: bool,
     flags: CGEventFlags,
     char_to_vkey_map: Map<String, Map<char, CGKeyCode>>,
 }
 
 impl Enigo {
-    /// Set if ignore flags when posting events.
-    pub fn set_ignore_flags(&mut self, ignore: bool) {
-        self.ignore_flags = ignore;
-    }
-
     ///
     pub fn reset_flag(&mut self) {
         self.flags = CGEventFlags::CGEventFlagNull;
@@ -141,29 +135,8 @@ impl Enigo {
         self.flags |= flag;
     }
 
-    // Just check F11 for minimal changes.
-    // Since enigo (legacy mode) is deprecated, it is currently in maintenance only.
-    fn post(&self, event: CGEvent, keycode: Option<u16>) {
-        if keycode == Some(kVK_F11) {
-            // Some key events require the flags to work.
-            // We can't simply set the flag to `CGEventFlags::CGEventFlagNull`.
-            // eg. `F11` requires flags `CGEventFlags::CGEventFlagSecondaryFn | 0x20000000` to work.
-            self.post_event(event, false);
-        } else {
-            // macOS system may use the previous event flag to generate the next event.
-            // Only found this issue when locking the screen.
-            // When we use enigo to lock the screen, the next mouse event will have the flag
-            // `CGEventFlagControl | CGEventFlagCommand | 0x20000000`.
-            // The key event will also have the flag `CGEventFlagControl | CGEventFlagCommand | 0x20000000`.
-            // Therefore, we need to set the flag to `event.set_flags(self.flags)` to avoid this.
-            self.post_event(event, true);
-        }
-    }
-
-    fn post_event(&self, event: CGEvent, force_flags: bool) {
-        if !self.ignore_flags && (force_flags || self.flags != CGEventFlags::CGEventFlagNull) {
-            event.set_flags(self.flags);
-        }
+    fn post(&self, event: CGEvent) {
+        event.set_flags(self.flags);
         event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, ENIGO_INPUT_EXTRA_VALUE);
         event.post(CGEventTapLocation::HID);
     }
@@ -191,7 +164,6 @@ impl Default for Enigo {
             double_click_interval,
             multiple_click: 1,
             last_click_time: None,
-            ignore_flags: false,
             flags: CGEventFlags::CGEventFlagNull,
             char_to_vkey_map: Default::default(),
         }
@@ -208,56 +180,42 @@ impl MouseControllable for Enigo {
     }
 
     fn mouse_move_to(&mut self, x: i32, y: i32) {
-        // For absolute movement, we don't set delta values
-        // This maintains backward compatibility
-        self.mouse_move_to_impl(x, y, None);
+        let pressed = Self::pressed_buttons();
+
+        let event_type = if pressed & 1 > 0 {
+            CGEventType::LeftMouseDragged
+        } else if pressed & 2 > 0 {
+            CGEventType::RightMouseDragged
+        } else {
+            CGEventType::MouseMoved
+        };
+
+        let dest = CGPoint::new(x as f64, y as f64);
+        if let Some(src) = self.event_source.as_ref() {
+            if let Ok(event) =
+                CGEvent::new_mouse_event(src.clone(), event_type, dest, CGMouseButton::Left)
+            {
+                self.post(event);
+            }
+        }
     }
 
     fn mouse_move_relative(&mut self, x: i32, y: i32) {
         let (display_width, display_height) = Self::main_display_size();
         let (current_x, y_inv) = Self::mouse_location_raw_coords();
         let current_y = (display_height as i32) - y_inv;
-        // Use saturating arithmetic to prevent overflow/wraparound
-        let mut new_x = current_x.saturating_add(x);
-        let mut new_y = current_y.saturating_add(y);
+        let new_x = current_x + x;
+        let new_y = current_y + y;
 
-        // Define screen center and edge margins for cursor reset
-        let center_x = (display_width / 2) as i32;
-        let center_y = (display_height / 2) as i32;
-        // Margin calculation: 5% of the smaller screen dimension with a minimum of 50px.
-        // This provides a comfortable buffer zone to detect when the cursor is approaching
-        // screen edges, allowing us to reset it to center before it hits the boundary.
-        // This ensures continuous relative mouse movement without getting stuck at edges.
-        let margin = (display_width.min(display_height) / 20).max(50) as i32;
-
-        // Check if cursor is approaching screen boundaries
-        // Use saturating_sub to prevent negative thresholds on very small displays
-        let right = (display_width as i32).saturating_sub(margin);
-        let bottom = (display_height as i32).saturating_sub(margin);
-        let near_edge = new_x < margin
-            || new_x > right
-            || new_y < margin
-            || new_y > bottom;
-
-        if near_edge {
-            // Reset cursor to screen center to allow continuous movement
-            // The delta values are still passed correctly for games/apps
-            new_x = center_x;
-            new_y = center_y;
+        if new_x < 0
+            || new_x as usize > display_width
+            || new_y < 0
+            || new_y as usize > display_height
+        {
+            return;
         }
 
-        // Clamp to screen bounds as a safety measure.
-        // Use saturating_sub(1) to ensure coordinates don't exceed the last valid pixel.
-        let max_x = (display_width as i32).saturating_sub(1).max(0);
-        let max_y = (display_height as i32).saturating_sub(1).max(0);
-        new_x = new_x.clamp(0, max_x);
-        new_y = new_y.clamp(0, max_y);
-
-        // Pass delta values for relative movement
-        // This is critical for browser Pointer Lock API support
-        // The delta fields (MOUSE_EVENT_DELTA_X/Y) are used by browsers
-        // to calculate movementX/Y in Pointer Lock mode
-        self.mouse_move_to_impl(new_x, new_y, Some((x, y)));
+        self.mouse_move_to(new_x, new_y);
     }
 
     fn mouse_down(&mut self, button: MouseButton) -> crate::ResultType {
@@ -302,7 +260,7 @@ impl MouseControllable for Enigo {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
-                self.post(event, None);
+                self.post(event);
             }
         }
         Ok(())
@@ -341,7 +299,7 @@ impl MouseControllable for Enigo {
                 if let Some(v) = btn_value {
                     event.set_integer_value_field(EventField::MOUSE_EVENT_BUTTON_NUMBER, v);
                 }
-                self.post(event, None);
+                self.post(event);
             }
         }
     }
@@ -427,7 +385,7 @@ impl KeyboardControllable for Enigo {
             if let Some(src) = self.event_source.as_ref() {
                 if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), 0, true) {
                     event.set_string(cluster);
-                    self.post(event, None);
+                    self.post(event);
                 }
             }
         }
@@ -441,11 +399,11 @@ impl KeyboardControllable for Enigo {
 
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, true) {
-                self.post(event, Some(keycode));
+                self.post(event);
             }
 
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), keycode, false) {
-                self.post(event, Some(keycode));
+                self.post(event);
             }
         }
     }
@@ -457,17 +415,18 @@ impl KeyboardControllable for Enigo {
         }
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), code, true) {
-                self.post(event, Some(code));
+                self.post(event);
             }
         }
         Ok(())
     }
 
     fn key_up(&mut self, key: Key) {
-        let code = self.key_to_keycode(key);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) = CGEvent::new_keyboard_event(src.clone(), code, false) {
-                self.post(event, Some(code));
+            if let Ok(event) =
+                CGEvent::new_keyboard_event(src.clone(), self.key_to_keycode(key), false)
+            {
+                self.post(event);
             }
         }
     }
@@ -484,43 +443,6 @@ impl Enigo {
             unsafe { msg_send![ns_event, pressedMouseButtons] }
         } else {
             0
-        }
-    }
-
-    /// Internal implementation for mouse movement with optional delta values.
-    ///
-    /// The `delta` parameter is crucial for browser Pointer Lock API support.
-    /// When a browser enters Pointer Lock mode, it reads mouse delta values
-    /// (MOUSE_EVENT_DELTA_X/Y) directly from CGEvent to calculate movementX/Y.
-    /// Without setting these fields, the browser sees zero movement.
-    fn mouse_move_to_impl(&mut self, x: i32, y: i32, delta: Option<(i32, i32)>) {
-        let pressed = Self::pressed_buttons();
-
-        // Determine event type and corresponding mouse button based on pressed buttons.
-        // The CGMouseButton must match the event type for drag events.
-        let (event_type, button) = if pressed & 1 > 0 {
-            (CGEventType::LeftMouseDragged, CGMouseButton::Left)
-        } else if pressed & 2 > 0 {
-            (CGEventType::RightMouseDragged, CGMouseButton::Right)
-        } else if pressed & 4 > 0 {
-            (CGEventType::OtherMouseDragged, CGMouseButton::Center)
-        } else {
-            (CGEventType::MouseMoved, CGMouseButton::Left) // Button doesn't matter for MouseMoved
-        };
-
-        let dest = CGPoint::new(x as f64, y as f64);
-        if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) =
-                CGEvent::new_mouse_event(src.clone(), event_type, dest, button)
-            {
-                // Set delta fields for relative mouse movement
-                // This is essential for Pointer Lock API in browsers
-                if let Some((dx, dy)) = delta {
-                    event.set_integer_value_field(EventField::MOUSE_EVENT_DELTA_X, dx as i64);
-                    event.set_integer_value_field(EventField::MOUSE_EVENT_DELTA_Y, dy as i64);
-                }
-                self.post(event, None);
-            }
         }
     }
 

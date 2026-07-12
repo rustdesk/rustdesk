@@ -446,8 +446,6 @@ pub mod amyuni_idd {
             if crate::platform::windows::is_x64() {
                 log::info!("Uninstalling driver by deviceinstaller64.exe");
                 install_if_x86_on_x64(&work_dir, "remove usbmmidd")?;
-                // Sleep some time to wait for the driver to be uninstalled.
-                std::thread::sleep(Duration::from_secs(2));
                 return Ok(());
             }
         }
@@ -531,24 +529,11 @@ pub mod amyuni_idd {
     }
 
     #[inline]
-    fn plug_monitor_(
-        add: bool,
-        wait_timeout: Option<Duration>,
-    ) -> Result<(), win_device::DeviceError> {
+    fn plug_monitor_(add: bool) -> Result<(), win_device::DeviceError> {
         let cmd = if add { 0x10 } else { 0x00 };
         let cmd = [cmd, 0x00, 0x00, 0x00];
-        let now = Instant::now();
-        let c1 = get_monitor_count();
         unsafe {
             win_device::device_io_control(&INTERFACE_GUID, PLUG_MONITOR_IO_CONTROL_CDOE, &cmd, 0)?;
-        }
-        if let Some(wait_timeout) = wait_timeout {
-            while now.elapsed() < wait_timeout {
-                if get_monitor_count() != c1 {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(30));
-            }
         }
         // No need to consider concurrency here.
         if add {
@@ -567,16 +552,12 @@ pub mod amyuni_idd {
 
     // `std::thread::sleep()` with a timeout is acceptable here.
     // Because user can wait for a while to plug in a monitor.
-    fn plug_in_monitor_(
-        add: bool,
-        is_driver_async_installed: bool,
-        wait_timeout: Option<Duration>,
-    ) -> ResultType<()> {
+    fn plug_in_monitor_(add: bool, is_driver_async_installed: bool) -> ResultType<()> {
         let timeout = Duration::from_secs(3);
         let now = Instant::now();
         let reg_connectivity_old = reg_display_settings::read_reg_connectivity();
         loop {
-            match plug_monitor_(add, wait_timeout) {
+            match plug_monitor_(add) {
                 Ok(_) => {
                     break;
                 }
@@ -641,7 +622,7 @@ pub mod amyuni_idd {
             bail!("Failed to install driver.");
         }
 
-        plug_in_monitor_(true, is_async, Some(Duration::from_millis(3_000)))
+        plug_in_monitor_(true, is_async)
     }
 
     pub fn plug_in_monitor() -> ResultType<()> {
@@ -655,7 +636,7 @@ pub mod amyuni_idd {
             bail!("There are already {VIRTUAL_DISPLAY_MAX_COUNT} monitors plugged in.");
         }
 
-        plug_in_monitor_(true, is_async, None)
+        plug_in_monitor_(true, is_async)
     }
 
     // `index` the display index to plug out. -1 means plug out all.
@@ -669,8 +650,8 @@ pub mod amyuni_idd {
         // we still forcibly plug out all virtual displays.
         //
         // 1. RustDesk plug in 2 virtual displays. (RustDesk)
-        // 2. Other process plug out all virtual displays. (User manually)
-        // 3. Other process plug in 1 virtual display. (User manually)
+        // 2. Other process plug out all virtual displays. (User mannually)
+        // 3. Other process plug in 1 virtual display. (User mannually)
         // 4. RustDesk plug out all virtual displays in this call. (RustDesk disconnect)
         //
         // This is not a normal scenario, RustDesk will plug out virtual display unexpectedly.
@@ -719,7 +700,7 @@ pub mod amyuni_idd {
         }
 
         for _i in 0..to_plug_out_count {
-            let _ = plug_monitor_(false, None);
+            let _ = plug_monitor_(false);
         }
         Ok(())
     }

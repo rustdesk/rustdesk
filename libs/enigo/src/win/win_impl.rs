@@ -223,7 +223,7 @@ impl KeyboardControllable for Enigo {
             // Windows uses uft-16 encoding. We need to check
             // for variable length characters. As such some
             // characters can be 32 bit long and those are
-            // encoded in so-called high and low surrogates
+            // encoded in such called hight and low surrogates
             // each 16 bit wide that needs to be send after
             // another to the SendInput function without
             // being interrupted by "keyup"
@@ -269,7 +269,7 @@ impl KeyboardControllable for Enigo {
                     for pos in 0..mod_len {
                         let rpos = mod_len - 1 - pos;
                         if flag & (0x0001 << rpos) != 0 {
-                            self.key_up(modifiers[rpos]);
+                            self.key_up(modifiers[pos]);
                         }
                     }
 
@@ -298,18 +298,7 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        match key {
-            Key::Layout(c) => {
-                let code = self.get_layoutdependent_keycode(c);
-                if code as u16 != 0xFFFF {
-                    let vk = code & 0x00FF;
-                    keybd_event(KEYEVENTF_KEYUP, vk, 0);
-                }
-            }
-            _ => {
-                keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
-            }
-        }
+        keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
     }
 
     fn get_key_state(&mut self, key: Key) -> bool {

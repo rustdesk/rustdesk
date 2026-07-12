@@ -31,161 +31,24 @@ LExit:
     return WcaFinalize(er);
 }
 
-// Helper function to safely delete a file using handle-based deletion.
-// Directories are refused after opening the handle.
-BOOL SafeDeleteItem(LPCWSTR fullPath)
-{
-    // Open the file/directory with delete and attribute-read access plus FILE_FLAG_OPEN_REPARSE_POINT
-    // to prevent following symlinks.
-    // Use shared access to allow deletion even when other processes have the file open.
-    DWORD flags = FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT;
-    HANDLE hFile = CreateFileW(
-        fullPath,
-        DELETE | FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,  // Allow shared access
-        NULL,
-        OPEN_EXISTING,
-        flags,
-        NULL
-    );
-
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Failed to open '%ls'. Error: %lu", fullPath, GetLastError());
-        return FALSE;
-    }
-
-    BY_HANDLE_FILE_INFORMATION fileInfo;
-    if (FALSE == GetFileInformationByHandle(hFile, &fileInfo))
-    {
-        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Failed to inspect '%ls'. Error: %lu", fullPath, GetLastError());
-        CloseHandle(hFile);
-        return FALSE;
-    }
-
-    if (fileInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Refusing to delete directory '%ls'.", fullPath);
-        CloseHandle(hFile);
-        return FALSE;
-    }
-
-    // Use SetFileInformationByHandle to mark for deletion.
-    // The file will be deleted when the handle is closed.
-    FILE_DISPOSITION_INFO dispInfo;
-    dispInfo.DeleteFile = TRUE;
-
-    BOOL result = SetFileInformationByHandle(
-        hFile,
-        FileDispositionInfo,
-        &dispInfo,
-        sizeof(dispInfo)
-    );
-
-    if (!result)
-    {
-        DWORD error = GetLastError();
-        WcaLog(LOGMSG_STANDARD, "SafeDeleteItem: Failed to mark '%ls' for deletion. Error: %lu", fullPath, error);
-    }
-
-    CloseHandle(hFile);
-    return result;
-}
-
-BOOL PathEndsWithSlash(LPCWSTR path)
-{
-    size_t length = 0;
-    HRESULT hr = StringCchLengthW(path, MAX_PATH, &length);
-    if (FAILED(hr) || length == 0)
-    {
-        return FALSE;
-    }
-
-    WCHAR last = path[length - 1];
-    return last == L'\\' || last == L'/';
-}
-
-void ClearReadOnlyAttribute(LPCWSTR fullPath, DWORD attributes)
-{
-    if (!(attributes & FILE_ATTRIBUTE_READONLY))
-    {
-        return;
-    }
-
-    DWORD writableAttributes = attributes & ~FILE_ATTRIBUTE_READONLY;
-    if (writableAttributes == 0)
-    {
-        writableAttributes = FILE_ATTRIBUTE_NORMAL;
-    }
-
-    if (SetFileAttributesW(fullPath, writableAttributes))
-    {
-        WcaLog(LOGMSG_STANDARD, "Runtime cleanup cleared read-only attribute for '%ls'.", fullPath);
-        return;
-    }
-
-    WcaLog(LOGMSG_STANDARD, "Runtime cleanup failed to clear read-only attribute for '%ls'. Error: %lu", fullPath, GetLastError());
-}
-
-BOOL DeleteRuntimeGeneratedFile(LPCWSTR installFolder, LPCWSTR fileName)
-{
-    WCHAR fullPath[MAX_PATH];
-    LPCWSTR separator = PathEndsWithSlash(installFolder) ? L"" : L"\\";
-    HRESULT hr = StringCchPrintfW(fullPath, MAX_PATH, L"%s%s%s", installFolder, separator, fileName);
-    if (FAILED(hr))
-    {
-        WcaLog(LOGMSG_STANDARD, "Runtime cleanup path is too long for '%ls'.", fileName);
-        return FALSE;
-    }
-
-    DWORD attributes = GetFileAttributesW(fullPath);
-    if (attributes == INVALID_FILE_ATTRIBUTES)
-    {
-        DWORD error = GetLastError();
-        if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
-        {
-            return TRUE;
-        }
-
-        WcaLog(LOGMSG_STANDARD, "Runtime cleanup cannot stat '%ls'. Error: %lu", fullPath, error);
-        return FALSE;
-    }
-
-    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
-    {
-        WcaLog(LOGMSG_STANDARD, "Runtime cleanup skipped directory '%ls'.", fullPath);
-        return FALSE;
-    }
-
-    ClearReadOnlyAttribute(fullPath, attributes);
-    WcaLog(LOGMSG_STANDARD, "Runtime cleanup deleting '%ls'.", fullPath);
-    return SafeDeleteItem(fullPath);
-}
-
-// See `Package.wxs` for the sequence of this custom action.
+// CAUTION: We can't simply remove the install folder here, because silent repair/upgrade will fail.
+// `RemoveInstallFolder()` is a deferred custom action, it will be executed after the files are copied.
+// `msiexec /i package.msi /qn`
 //
-// Upgrade/uninstall sequence:
-//   1. InstallInitialize
-//   2. RemoveExistingProducts
-//      ├─ TerminateProcesses
-//      ├─ TryStopDeleteService
-//      ├─ RemoveRuntimeGeneratedFiles - <-- Here
-//      └─ RemoveFiles
-//   3. InstallValidate
-//   4. InstallFiles
-//   5. InstallExecute
-//   6. InstallFinalize
-UINT __stdcall RemoveRuntimeGeneratedFiles(
+// So we need to delete the files separately in install folder.
+UINT __stdcall RemoveInstallFolder(
     __in MSIHANDLE hInstall)
 {
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
+    int nResult = 0;
     LPWSTR installFolder = NULL;
     LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
+    WCHAR runtimeBroker[1024] = { 0, };
 
-    hr = WcaInitialize(hInstall, "RemoveRuntimeGeneratedFiles");
+    hr = WcaInitialize(hInstall, "RemoveInstallFolder");
     ExitOnFailure(hr, "Failed to initialize");
 
     hr = WcaGetProperty(L"CustomActionData", &pwzData);
@@ -193,20 +56,25 @@ UINT __stdcall RemoveRuntimeGeneratedFiles(
 
     pwz = pwzData;
     hr = WcaReadStringFromCaData(&pwz, &installFolder);
-    ExitOnFailure(hr, "failed to read install folder from custom action data: %ls", pwz);
+    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
-    if (installFolder == NULL || installFolder[0] == L'\0') {
-        WcaLog(LOGMSG_STANDARD, "Install folder path is empty, skipping runtime cleanup.");
-        goto LExit;
+    StringCchPrintfW(runtimeBroker, sizeof(runtimeBroker) / sizeof(runtimeBroker[0]), L"%ls\\RuntimeBroker_rustdesk.exe", installFolder);
+
+    SHFILEOPSTRUCTW fileOp;
+    ZeroMemory(&fileOp, sizeof(SHFILEOPSTRUCT));
+    fileOp.wFunc = FO_DELETE;
+    fileOp.pFrom = runtimeBroker;
+    fileOp.fFlags = FOF_NOCONFIRMATION | FOF_SILENT;
+
+    nResult = SHFileOperationW(&fileOp);
+    if (nResult == 0)
+    {
+        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has been deleted.", runtimeBroker);
     }
-
-    if (PathIsRootW(installFolder)) {
-        WcaLog(LOGMSG_STANDARD, "Refusing runtime cleanup in root folder '%ls'.", installFolder);
-        goto LExit;
+    else
+    {
+        WcaLog(LOGMSG_STANDARD, "The external file \"%ls\" has not been deleted, error code: 0x%02X. Please refer to https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shfileoperationa for the error codes.", runtimeBroker, nResult);
     }
-
-    WcaLog(LOGMSG_STANDARD, "Removing runtime-generated files from install folder: %ls", installFolder);
-    DeleteRuntimeGeneratedFile(installFolder, L"RuntimeBroker_rustdesk.exe");
 
 LExit:
     ReleaseStr(pwzData);
@@ -241,12 +109,9 @@ bool TerminateProcessIfNotContainsParam(pfnNtQueryInformationProcess NtQueryInfo
             {
                 if (pebUpp.CommandLine.Length > 0)
                 {
-                    // Allocate extra space for null terminator
-                    WCHAR *commandLine = (WCHAR *)malloc(pebUpp.CommandLine.Length + sizeof(WCHAR));
+                    WCHAR *commandLine = (WCHAR *)malloc(pebUpp.CommandLine.Length);
                     if (commandLine != NULL)
                     {
-                        // Initialize all bytes to zero for safety
-                        memset(commandLine, 0, pebUpp.CommandLine.Length + sizeof(WCHAR));
                         if (ReadProcessMemory(process, pebUpp.CommandLine.Buffer,
                                               commandLine, pebUpp.CommandLine.Length, &dwBytesRead))
                         {
@@ -603,10 +468,10 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     }
 
     if (IsServiceRunningW(svcName)) {
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stopped after 1000 ms.", svcName);
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is not stoped after 1000 ms.", svcName);
     }
     else {
-        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stopped.", svcName);
+        WcaLog(LOGMSG_STANDARD, "Service \"%ls\" is stoped.", svcName);
     }
 
     if (MyDeleteServiceW(svcName)) {
@@ -632,7 +497,7 @@ UINT __stdcall TryStopDeleteService(__in MSIHANDLE hInstall)
     }
 
     // It's really strange that we need sleep here.
-    // But the upgrading may be stuck at "copying new files" because the file is in using.
+    // But the upgrading may be stucked at "copying new files" because the file is in using.
     // Steps to reproduce: Install -> stop service in tray --> start service -> upgrade
     // Sleep(300);
 
@@ -745,7 +610,7 @@ UINT __stdcall AddRegSoftwareSASGeneration(__in MSIHANDLE hInstall)
     }
 
     // Why RegSetValueExW always return 998?
-    //
+    // 
     result = RegCreateKeyExW(HKEY_LOCAL_MACHINE, subKey, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
     if (result != ERROR_SUCCESS) {
         WcaLog(LOGMSG_STANDARD, "Failed to create or open registry key: %d", result);
@@ -861,7 +726,7 @@ void TryCreateStartServiceByShell(LPWSTR svcName, LPWSTR svcBinary, LPWSTR szSvc
     i = 0;
     j = 0;
     // svcBinary is a string with double quotes, we need to escape it for shell arguments.
-    // It is original used for `CreateServiceW`.
+    // It is orignal used for `CreateServiceW`.
     // eg. "C:\Program Files\MyApp\MyApp.exe" --service -> \"C:\Program Files\MyApp\MyApp.exe\" --service
     while (true) {
         if (svcBinary[j] == L'"') {
@@ -1012,56 +877,4 @@ void TryStopDeleteServiceByShell(LPWSTR svcName)
     else {
         WcaLog(LOGMSG_STANDARD, "Failed to delete service: \"%ls\" with shell, current status: %d.", svcName, svcStatus.dwCurrentState);
     }
-}
-
-UINT __stdcall InstallPrinter(
-    __in MSIHANDLE hInstall)
-{
-    HRESULT hr = S_OK;
-    DWORD er = ERROR_SUCCESS;
-
-    int nResult = 0;
-    LPWSTR installFolder = NULL;
-    LPWSTR pwz = NULL;
-    LPWSTR pwzData = NULL;
-
-    hr = WcaInitialize(hInstall, "InstallPrinter");
-    ExitOnFailure(hr, "Failed to initialize");
-
-    hr = WcaGetProperty(L"CustomActionData", &pwzData);
-    ExitOnFailure(hr, "failed to get CustomActionData");
-
-    pwz = pwzData;
-    hr = WcaReadStringFromCaData(&pwz, &installFolder);
-    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
-
-    WcaLog(LOGMSG_STANDARD, "Try to install RD printer in : %ls", installFolder);
-    RemotePrinter::installUpdatePrinter(installFolder);
-    WcaLog(LOGMSG_STANDARD, "Install RD printer done");
-
-LExit:
-    if (pwzData) {
-        ReleaseStr(pwzData);
-    }
-
-    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
-    return WcaFinalize(er);
-}
-
-UINT __stdcall UninstallPrinter(
-    __in MSIHANDLE hInstall)
-{
-    HRESULT hr = S_OK;
-    DWORD er = ERROR_SUCCESS;
-
-    hr = WcaInitialize(hInstall, "UninstallPrinter");
-    ExitOnFailure(hr, "Failed to initialize");
-
-    WcaLog(LOGMSG_STANDARD, "Try to uninstall RD printer");
-    RemotePrinter::uninstallPrinter();
-    WcaLog(LOGMSG_STANDARD, "Uninstall RD printer done");
-
-LExit:
-    er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
-    return WcaFinalize(er);
 }

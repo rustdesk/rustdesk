@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    codec::{enable_vram_option, EncoderApi, EncoderCfg},
+    codec::{base_bitrate, enable_vram_option, EncoderApi, EncoderCfg, Quality},
     hwcodec::HwCodecConfig,
     AdapterDevice, CodecFormat, EncodeInput, EncodeYuvFormat, Pixfmt,
 };
@@ -17,7 +17,7 @@ use hbb_common::{
     ResultType,
 };
 use hwcodec::{
-    common::{DataFormat, Driver, MAX_GOP},
+    common::{AdapterVendor::*, DataFormat, Driver, MAX_GOP},
     vram::{
         decode::{self, DecodeFrame, Decoder},
         encode::{self, EncodeFrame, Encoder},
@@ -30,8 +30,8 @@ use hwcodec::{
 // https://cybersided.com/two-monitors-two-gpus/
 // https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getadapterluid#remarks
 lazy_static::lazy_static! {
-    static ref ENOCDE_NOT_USE: Arc<Mutex<HashMap<String, bool>>> = Default::default();
-    static ref FALLBACK_GDI_DISPLAYS: Arc<Mutex<HashSet<String>>> = Default::default();
+    static ref ENOCDE_NOT_USE: Arc<Mutex<HashMap<usize, bool>>> = Default::default();
+    static ref FALLBACK_GDI_DISPLAYS: Arc<Mutex<HashSet<usize>>> = Default::default();
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ pub struct VRamEncoderConfig {
     pub device: AdapterDevice,
     pub width: usize,
     pub height: usize,
-    pub quality: f32,
+    pub quality: Quality,
     pub feature: FeatureContext,
     pub keyframe_interval: Option<usize>,
 }
@@ -51,6 +51,7 @@ pub struct VRamEncoder {
     bitrate: u32,
     last_frame_len: usize,
     same_bad_len_counter: usize,
+    config: VRamEncoderConfig,
 }
 
 impl EncoderApi for VRamEncoder {
@@ -60,12 +61,12 @@ impl EncoderApi for VRamEncoder {
     {
         match cfg {
             EncoderCfg::VRAM(config) => {
-                let bitrate = Self::bitrate(
-                    config.feature.data_format,
-                    config.width,
-                    config.height,
-                    config.quality,
-                );
+                let b = Self::convert_quality(config.quality, &config.feature);
+                let base_bitrate = base_bitrate(config.width as _, config.height as _);
+                let mut bitrate = base_bitrate * b / 100;
+                if base_bitrate <= 0 {
+                    bitrate = base_bitrate;
+                }
                 let gop = config.keyframe_interval.unwrap_or(MAX_GOP as _) as i32;
                 let ctx = EncodeContext {
                     f: config.feature.clone(),
@@ -86,6 +87,7 @@ impl EncoderApi for VRamEncoder {
                         bitrate,
                         last_frame_len: 0,
                         same_bad_len_counter: 0,
+                        config,
                     }),
                     Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
@@ -99,12 +101,7 @@ impl EncoderApi for VRamEncoder {
         frame: EncodeInput,
         ms: i64,
     ) -> ResultType<hbb_common::message_proto::VideoFrame> {
-        let (texture, rotation) = frame.texture()?;
-        if rotation != 0 {
-            // to-do: support rotation
-            // Both the encoder and display(w,h) information need to be changed.
-            bail!("rotation not supported");
-        }
+        let texture = frame.texture()?;
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
         for frame in self
@@ -170,13 +167,9 @@ impl EncoderApi for VRamEncoder {
         true
     }
 
-    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
-        let bitrate = Self::bitrate(
-            self.ctx.f.data_format,
-            self.ctx.d.width as _,
-            self.ctx.d.height as _,
-            ratio,
-        );
+    fn set_quality(&mut self, quality: Quality) -> ResultType<()> {
+        let b = Self::convert_quality(quality, &self.ctx.f);
+        let bitrate = base_bitrate(self.ctx.d.width as _, self.ctx.d.height as _) * b / 100;
         if bitrate > 0 {
             if self.encoder.set_bitrate((bitrate) as _).is_ok() {
                 self.bitrate = bitrate;
@@ -187,6 +180,10 @@ impl EncoderApi for VRamEncoder {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn support_abr(&self) -> bool {
+        self.config.device.vendor_id != ADAPTER_VENDOR_INTEL as u32
     }
 
     fn support_changing_quality(&self) -> bool {
@@ -283,29 +280,43 @@ impl VRamEncoder {
         }
     }
 
-    pub fn bitrate(fmt: DataFormat, width: usize, height: usize, ratio: f32) -> u32 {
-        crate::hwcodec::HwRamEncoder::calc_bitrate(width, height, ratio, fmt == DataFormat::H264)
+    pub fn convert_quality(quality: Quality, f: &FeatureContext) -> u32 {
+        match quality {
+            Quality::Best => {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
+                    200
+                } else {
+                    150
+                }
+            }
+            Quality::Balanced => {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
+                    150
+                } else {
+                    100
+                }
+            }
+            Quality::Low => {
+                if f.driver == Driver::MFX && f.data_format == DataFormat::H264 {
+                    75
+                } else {
+                    50
+                }
+            }
+            Quality::Custom(b) => b,
+        }
     }
 
-    pub fn set_not_use(video_service_name: String, not_use: bool) {
-        log::info!("set {video_service_name} not use vram encode to {not_use}");
-        ENOCDE_NOT_USE
-            .lock()
-            .unwrap()
-            .insert(video_service_name, not_use);
+    pub fn set_not_use(display: usize, not_use: bool) {
+        log::info!("set display#{display} not use vram encode to {not_use}");
+        ENOCDE_NOT_USE.lock().unwrap().insert(display, not_use);
     }
 
-    pub fn set_fallback_gdi(video_service_name: String, fallback: bool) {
+    pub fn set_fallback_gdi(display: usize, fallback: bool) {
         if fallback {
-            FALLBACK_GDI_DISPLAYS
-                .lock()
-                .unwrap()
-                .insert(video_service_name);
+            FALLBACK_GDI_DISPLAYS.lock().unwrap().insert(display);
         } else {
-            FALLBACK_GDI_DISPLAYS
-                .lock()
-                .unwrap()
-                .remove(&video_service_name);
+            FALLBACK_GDI_DISPLAYS.lock().unwrap().remove(&display);
         }
     }
 }
@@ -367,7 +378,7 @@ impl VRamDecoder {
             }
         }
     }
-    pub fn decode<'a>(&'a mut self, data: &[u8]) -> ResultType<Vec<VRamDecoderImage<'a>>> {
+    pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<VRamDecoderImage>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| VRamDecoderImage { frame: f }).collect()),
             Err(e) => Err(anyhow!(e)),
