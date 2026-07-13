@@ -361,6 +361,7 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null &&
+              !model._blockMouseWhenUnfocused &&
               !(model.isViewOnly && !model.showMyCursor) &&
               model.keyboardPerm &&
               !model.isViewCamera) {
@@ -1325,6 +1326,7 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
+    if (_blockMouseWhenUnfocused) return;
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
@@ -1334,6 +1336,7 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (_blockMouseWhenUnfocused) return;
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform != kPeerPlatformAndroid) {
@@ -1719,14 +1722,17 @@ class InputModel {
         'type': _kMouseEventMove,
       }, lastMousePos, edgeScroll: useEdgeScroll);
 
-  void tryMoveEdgeOnExit(Offset pos) => handleMouse(
-        {
-          'buttons': 0,
-          'type': _kMouseEventMove,
-        },
-        pos,
-        onExit: true,
-      );
+  void tryMoveEdgeOnExit(Offset pos) {
+    if (_blockMouseWhenUnfocused) return;
+    handleMouse(
+      {
+        'buttons': 0,
+        'type': _kMouseEventMove,
+      },
+      pos,
+      onExit: true,
+    );
+  }
 
   static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
