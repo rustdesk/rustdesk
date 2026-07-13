@@ -16,7 +16,6 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
-import 'input_focus_gate.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
@@ -491,19 +490,12 @@ class InputModel {
   bool get useEdgeScroll =>
       parent.target!.canvasModel.scrollStyle == ScrollStyle.scrolledge;
 
-  // Opt-in (default off, desktop only): drop mouse input while this session
-  // window is NOT the focused OS window, so a mouse passing over an unfocused
-  // multi-session window won't move/click that remote. Button-up is
-  // intentionally not gated (see onPointUpImage) so a press can always be
-  // released. The option is read lazily, so the read is skipped while the
-  // window is focused (the common case).
-  bool get _blockMouseWhenUnfocused => shouldBlockUnfocusedMouseInput(
-        isDesktop: isDesktop,
-        // isFocused: set by onWindowFocus/onWindowBlur (DesktopTab)
-        isWindowFocused: stateGlobal.isFocused.isTrue,
-        isOptionEnabled: () =>
-            mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly),
-      );
+  // https://github.com/rustdesk/rustdesk/discussions/13398
+  // `isFocused` is set by onWindowFocus/onWindowBlur (DesktopTab).
+  bool get _blockMouseWhenUnfocused =>
+      isDesktop &&
+      stateGlobal.isFocused.isFalse &&
+      mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly);
 
   /// Check if the connected server supports relative mouse mode.
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
