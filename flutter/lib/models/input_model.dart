@@ -1336,7 +1336,13 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
-    if (_blockMouseWhenUnfocused) return;
+    if (_blockMouseWhenUnfocused) {
+      // Track state while dropping so a refocus mid-gesture continues cleanly.
+      _lastScale = e.scale;
+      _trackpadLastDelta = Offset.zero;
+      _trackpadScrollUnsent = Offset.zero;
+      return;
+    }
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform != kPeerPlatformAndroid) {
@@ -1668,7 +1674,10 @@ class InputModel {
   /// scroll deltas that are independent of cursor position. Games and 3D applications
   /// handle scroll events the same way regardless of mouse mode.
   void onPointerSignalImage(PointerSignalEvent e) {
-    if (_blockMouseWhenUnfocused) return;
+    if (_blockMouseWhenUnfocused) {
+      _lastWheelTsUs = 0;
+      return;
+    }
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (e is PointerScrollEvent) {
