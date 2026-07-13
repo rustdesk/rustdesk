@@ -324,7 +324,7 @@ pub fn core_main() -> Option<Vec<String>> {
                         println!("Error: Password file is empty.");
                         std::process::exit(1);
                     }
-                    hbb_common::config::Config::set_permanent_password(password.clone());
+                    hbb_common::config::Config::set_permanent_password(&password);
                     if hbb_common::config::Config::verify_permanent_password(&password) {
                         println!("Success");
                     } else {
