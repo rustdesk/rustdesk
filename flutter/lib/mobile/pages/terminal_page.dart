@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/models/input_modifier_utils.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
@@ -150,7 +151,8 @@ class _TerminalPageState extends State<TerminalPage>
 
   void _updateKeyboardHeight() {
     if (_keyboardKey.currentContext != null) {
-      final renderBox = _keyboardKey.currentContext!.findRenderObject() as RenderBox;
+      final renderBox =
+          _keyboardKey.currentContext!.findRenderObject() as RenderBox;
       _keyboardHeight = renderBox.size.height;
     }
   }
@@ -163,7 +165,11 @@ class _TerminalPageState extends State<TerminalPage>
     final rows = (realHeight / _cellHeight!).floor();
     final extraSpace = realHeight - rows * _cellHeight!;
     final topBottom = max(0.0, extraSpace / 2.0);
-    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
+    return EdgeInsets.only(
+        left: 5.0,
+        right: 5.0,
+        top: topBottom,
+        bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
   }
 
   @override
@@ -180,7 +186,8 @@ class _TerminalPageState extends State<TerminalPage>
 
   Widget buildBody() {
     final scaffold = Scaffold(
-      resizeToAvoidBottomInset: false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
+      resizeToAvoidBottomInset:
+          false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
@@ -205,16 +212,18 @@ class _TerminalPageState extends State<TerminalPage>
                     deleteDetection: isIOS,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
-                      final selection = _terminalModel.terminalController.selection;
+                      final selection =
+                          _terminalModel.terminalController.selection;
                       if (selection != null) {
-                        final text = _terminalModel.terminal.buffer.getText(selection);
+                        final text =
+                            _terminalModel.terminal.buffer.getText(selection);
                         _terminalModel.terminalController.clearSelection();
                         await Clipboard.setData(ClipboardData(text: text));
                       } else {
                         final data = await Clipboard.getData('text/plain');
                         final text = data?.text;
                         if (text != null) {
-                          _terminalModel.terminal.paste(text);
+                          await _terminalModel.pasteText(text);
                         }
                       }
                     },
@@ -244,7 +253,9 @@ class _TerminalPageState extends State<TerminalPage>
           return RawGestureDetector(
             behavior: HitTestBehavior.translucent,
             gestures: <Type, GestureRecognizerFactory>{
-              HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(
+              HorizontalDragGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                      HorizontalDragGestureRecognizer>(
                 () => HorizontalDragGestureRecognizer(
                   debugOwner: this,
                   // Only respond to touch input, exclude mouse/trackpad
@@ -262,7 +273,8 @@ class _TerminalPageState extends State<TerminalPage>
                     }
                     ..onEnd = (details) {
                       // Check if swipe started from left edge and moved right
-                      if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                      if (_swipeStartX < edgeThreshold &&
+                          (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
                         clientClose(sessionId, _ffi);
                       }
                       _swipeStartX = 0;
@@ -429,8 +441,21 @@ class _TerminalPageState extends State<TerminalPage>
 
   // Collapse/expand toggle button for Row3
   void _toggleRow3Expanded() {
-    setState(() => _row3Expanded = !_row3Expanded);
-    mainSetLocalBoolOption(kOptionShowTerminalCtrlKeys, _row3Expanded);
+    final willExpand = !_row3Expanded;
+    final shouldClearModifiers = shouldClearTerminalModifiersWhenRow3Collapses(
+      wasExpanded: _row3Expanded,
+      willExpand: willExpand,
+      ctrlLocked: _ctrlLocked,
+      altLocked: _altLocked,
+    );
+    setState(() {
+      _row3Expanded = willExpand;
+      if (shouldClearModifiers) {
+        _ctrlLocked = false;
+        _altLocked = false;
+      }
+    });
+    mainSetLocalBoolOption(kOptionShowTerminalCtrlKeys, willExpand);
 
     // The floating keyboard height changes after Row3 is inserted/removed.
     // Re-measure on the next frame so terminal padding uses the new height.
@@ -455,8 +480,7 @@ class _TerminalPageState extends State<TerminalPage>
           textStyle: const TextStyle(fontSize: 12),
           backgroundColor:
               Theme.of(context).colorScheme.surfaceContainerHighest,
-          foregroundColor:
-              Theme.of(context).colorScheme.onSurfaceVariant,
+          foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
@@ -480,8 +504,7 @@ class _TerminalPageState extends State<TerminalPage>
         style: ElevatedButton.styleFrom(
           minimumSize: const Size(48, 32),
           padding: EdgeInsets.zero,
-          textStyle:
-              const TextStyle(fontSize: 12),
+          textStyle: const TextStyle(fontSize: 12),
           backgroundColor: isLocked
               ? Colors.blue
               : Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -510,7 +533,7 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   void _sendKeyToTerminal(String key) {
-    String? send;
+    String send;
 
     switch (key) {
       case 'Esc':
@@ -554,9 +577,7 @@ class _TerminalPageState extends State<TerminalPage>
         break;
     }
 
-    if (send != null) {
-      _terminalModel.sendVirtualKey(send);
-    }
+    _terminalModel.sendVirtualKey(send);
   }
 
   // https://github.com/TerminalStudio/xterm.dart/issues/42#issuecomment-877495472

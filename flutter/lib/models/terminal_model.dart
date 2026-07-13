@@ -8,6 +8,7 @@ import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
 
 import 'model.dart';
+import 'input_modifier_utils.dart';
 import 'platform_model.dart';
 
 class TerminalModel with ChangeNotifier {
@@ -54,42 +55,10 @@ class TerminalModel with ChangeNotifier {
   /// The listener (typically TerminalPage) can use this to auto-close the tab/page.
   VoidCallback? onClosed;
 
-  /// Map keyboard input to control codes when Ctrl lock is active.
-  /// Converts a-z/A-Z to ASCII control codes 1-26, and common symbols
-  /// ([, \, ], ^, /) to their corresponding control codes.
-  String _applyCtrlKeyMapping(String data) {
-    final result = StringBuffer();
-    for (var i = 0; i < data.length; i++) {
-      final code = data.codeUnitAt(i);
-      if (code >= 0x61 && code <= 0x7A) {
-        result.writeCharCode(code - 0x60);
-      } else if (code >= 0x41 && code <= 0x5A) {
-        result.writeCharCode(code - 0x40);
-      } else if (code == 0x20) {
-        result.writeCharCode(0);
-      } else if (code == 0x5B) {
-        result.writeCharCode(27);
-      } else if (code == 0x5C) {
-        result.writeCharCode(28);
-      } else if (code == 0x5D) {
-        result.writeCharCode(29);
-      } else if (code == 0x5E) {
-        result.writeCharCode(30);
-      } else if (code == 0x2F) {
-        result.writeCharCode(31);
-      } else {
-        result.writeCharCode(code);
-      }
-    }
-    return result.toString();
-  }
-
-  /// Map keyboard input with Alt modifier: prefix ESC (0x1B) before the data.
-  String _applyAltKeyMapping(String data) {
-    return '\x1B$data';
-  }
-
-  Future<void> _handleInput(String data) async {
+  Future<void> _handleInput(
+    String data, {
+    bool applyModifiers = true,
+  }) async {
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
     // - Peer Windows: '\r' works, '\n' is just a newline.
@@ -106,17 +75,18 @@ class TerminalModel with ChangeNotifier {
     if (isMobileOrWebMobile && data == '\n') {
       data = '\r';
     }
-    // Only apply modifier key mappings to single-character input,
-    // avoiding corruption of multi-character pasted text.
-    if (data.length == 1) {
-      if (isCtrlLocked != null && isCtrlLocked!()) {
-        data = _applyCtrlKeyMapping(data);
-        clearCtrlLock?.call();
-      }
-      if (isAltLocked != null && isAltLocked!()) {
-        data = _applyAltKeyMapping(data);
-        clearAltLock?.call();
-      }
+    final ctrlLocked = isCtrlLocked?.call() ?? false;
+    final altLocked = isAltLocked?.call() ?? false;
+    // Only normal key input should use modifier locks. Explicit paste input
+    // bypasses this block so one-character clipboard data is not rewritten.
+    if (applyModifiers && data.length == 1 && (ctrlLocked || altLocked)) {
+      data = applyTerminalInputModifiers(
+        data,
+        ctrlLocked: ctrlLocked,
+        altLocked: altLocked,
+      );
+      if (ctrlLocked) clearCtrlLock?.call();
+      if (altLocked) clearAltLock?.call();
     }
     if (_terminalOpened) {
       // Send user input to remote terminal
@@ -236,6 +206,16 @@ class TerminalModel with ChangeNotifier {
 
   Future<void> sendVirtualKey(String data) async {
     return _handleInput(data);
+  }
+
+  Future<void> pasteText(String data) async {
+    return _handleInput(
+      terminalPastePayload(
+        data,
+        bracketedPasteMode: terminal.bracketedPasteMode,
+      ),
+      applyModifiers: false,
+    );
   }
 
   Future<void> closeTerminal() async {

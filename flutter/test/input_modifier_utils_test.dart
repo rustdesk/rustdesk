@@ -122,4 +122,65 @@ void main() {
       );
     });
   });
+
+  group('applyTerminalInputModifiers', () {
+    test('maps Ctrl underscore to unit separator', () {
+      expect(
+        applyTerminalInputModifiers(
+          '_',
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        '\x1F',
+      );
+    });
+
+    test('keeps pasted single characters unchanged when modifiers are skipped',
+        () {
+      expect(
+        applyTerminalInputModifiers(
+          'd',
+          ctrlLocked: true,
+          altLocked: true,
+          applyModifiers: false,
+        ),
+        'd',
+      );
+    });
+  });
+
+  group('terminalPastePayload', () {
+    test('wraps paste text when bracketed paste mode is active', () {
+      expect(
+        terminalPastePayload('d', bracketedPasteMode: true),
+        '\x1B[200~d\x1B[201~',
+      );
+    });
+  });
+
+  group('shouldClearTerminalModifiersWhenRow3Collapses', () {
+    test('clears visible modifier state when expanded row is collapsed', () {
+      expect(
+        shouldClearTerminalModifiersWhenRow3Collapses(
+          wasExpanded: true,
+          willExpand: false,
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not clear modifiers when row expands', () {
+      expect(
+        shouldClearTerminalModifiersWhenRow3Collapses(
+          wasExpanded: false,
+          willExpand: true,
+          ctrlLocked: true,
+          altLocked: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

@@ -36,3 +36,71 @@ bool shouldReleaseStaleMobileShift({
   }
   return true;
 }
+
+/// Applies the terminal Ctrl/Alt one-shot modifiers to a single input payload.
+///
+/// Paste calls pass [applyModifiers] as false so clipboard data is preserved
+/// even when a visible modifier button is currently active.
+String applyTerminalInputModifiers(
+  String data, {
+  required bool ctrlLocked,
+  required bool altLocked,
+  bool applyModifiers = true,
+}) {
+  if (!applyModifiers) {
+    return data;
+  }
+  var result = data;
+  if (ctrlLocked) {
+    result = _applyTerminalCtrlModifier(result);
+  }
+  if (altLocked) {
+    result = '\x1B$result';
+  }
+  return result;
+}
+
+/// Builds the exact payload xterm sends for paste, without applying modifiers.
+String terminalPastePayload(String text, {required bool bracketedPasteMode}) {
+  if (!bracketedPasteMode) {
+    return text;
+  }
+  return '\x1B[200~$text\x1B[201~';
+}
+
+/// Returns true when collapsing Row3 should also clear hidden modifier state.
+bool shouldClearTerminalModifiersWhenRow3Collapses({
+  required bool wasExpanded,
+  required bool willExpand,
+  required bool ctrlLocked,
+  required bool altLocked,
+}) {
+  return wasExpanded && !willExpand && (ctrlLocked || altLocked);
+}
+
+String _applyTerminalCtrlModifier(String data) {
+  final result = StringBuffer();
+  for (var i = 0; i < data.length; i++) {
+    final code = data.codeUnitAt(i);
+    if (code >= 0x61 && code <= 0x7A) {
+      result.writeCharCode(code - 0x60);
+    } else if (code >= 0x41 && code <= 0x5A) {
+      result.writeCharCode(code - 0x40);
+    } else if (code == 0x20) {
+      result.writeCharCode(0);
+    } else if (code == 0x5B) {
+      result.writeCharCode(27);
+    } else if (code == 0x5C) {
+      result.writeCharCode(28);
+    } else if (code == 0x5D) {
+      result.writeCharCode(29);
+    } else if (code == 0x5E) {
+      result.writeCharCode(30);
+    } else if (code == 0x5F || code == 0x2F) {
+      result.writeCharCode(31);
+    } else {
+      result.writeCharCode(code);
+    }
+  }
+  return result.toString();
+}
