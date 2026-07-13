@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/input_modifier_utils.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:flutter_hbb/mobile/terminal_keyboard_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../../desktop/pages/terminal_connection_manager.dart';
@@ -151,8 +152,7 @@ class _TerminalPageState extends State<TerminalPage>
 
   void _updateKeyboardHeight() {
     if (_keyboardKey.currentContext != null) {
-      final renderBox =
-          _keyboardKey.currentContext!.findRenderObject() as RenderBox;
+      final renderBox = _keyboardKey.currentContext!.findRenderObject() as RenderBox;
       _keyboardHeight = renderBox.size.height;
     }
   }
@@ -165,11 +165,37 @@ class _TerminalPageState extends State<TerminalPage>
     final rows = (realHeight / _cellHeight!).floor();
     final extraSpace = realHeight - rows * _cellHeight!;
     final topBottom = max(0.0, extraSpace / 2.0);
-    return EdgeInsets.only(
-        left: 5.0,
-        right: 5.0,
-        top: topBottom,
-        bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
+    return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
+  }
+
+  /// Pastes clipboard text through TerminalModel so keyboard-only modifiers and
+  /// mobile Enter normalization never alter clipboard data.
+  Future<void> _pasteClipboardText() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || !mounted) return;
+
+    await _terminalModel.pasteText(text);
+    if (mounted) {
+      _terminalModel.terminalController.clearSelection();
+    }
+  }
+
+  KeyEventResult _handleTerminalKeyEvent(FocusNode _, KeyEvent event) {
+    final hardwareKeyboard = HardwareKeyboard.instance;
+    final shouldPaste = shouldHandleTerminalPasteShortcut(
+      logicalKey: event.logicalKey,
+      isKeyDown: event is KeyDownEvent,
+      controlPressed: hardwareKeyboard.isControlPressed,
+      metaPressed: hardwareKeyboard.isMetaPressed,
+    );
+    if (!shouldPaste) return KeyEventResult.ignored;
+
+    // The key callback is synchronous, while clipboard access is asynchronous.
+    // Mark the event handled immediately so xterm's default paste action cannot
+    // send the same clipboard content through Terminal.onOutput.
+    unawaited(_pasteClipboardText());
+    return KeyEventResult.handled;
   }
 
   @override
@@ -186,8 +212,7 @@ class _TerminalPageState extends State<TerminalPage>
 
   Widget buildBody() {
     final scaffold = Scaffold(
-      resizeToAvoidBottomInset:
-          false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
+      resizeToAvoidBottomInset: false, // Disable automatic layout adjustment; manually control UI updates to prevent flickering when the keyboard shows/hides
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
@@ -210,21 +235,16 @@ class _TerminalPageState extends State<TerminalPage>
                     //
                     // Android works fine without this workaround.
                     deleteDetection: isIOS,
+                    onKeyEvent: _handleTerminalKeyEvent,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
-                      final selection =
-                          _terminalModel.terminalController.selection;
+                      final selection = _terminalModel.terminalController.selection;
                       if (selection != null) {
-                        final text =
-                            _terminalModel.terminal.buffer.getText(selection);
+                        final text = _terminalModel.terminal.buffer.getText(selection);
                         _terminalModel.terminalController.clearSelection();
                         await Clipboard.setData(ClipboardData(text: text));
                       } else {
-                        final data = await Clipboard.getData('text/plain');
-                        final text = data?.text;
-                        if (text != null) {
-                          await _terminalModel.pasteText(text);
-                        }
+                        await _pasteClipboardText();
                       }
                     },
                   );
@@ -253,9 +273,7 @@ class _TerminalPageState extends State<TerminalPage>
           return RawGestureDetector(
             behavior: HitTestBehavior.translucent,
             gestures: <Type, GestureRecognizerFactory>{
-              HorizontalDragGestureRecognizer:
-                  GestureRecognizerFactoryWithHandlers<
-                      HorizontalDragGestureRecognizer>(
+              HorizontalDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<HorizontalDragGestureRecognizer>(
                 () => HorizontalDragGestureRecognizer(
                   debugOwner: this,
                   // Only respond to touch input, exclude mouse/trackpad
@@ -273,8 +291,7 @@ class _TerminalPageState extends State<TerminalPage>
                     }
                     ..onEnd = (details) {
                       // Check if swipe started from left edge and moved right
-                      if (_swipeStartX < edgeThreshold &&
-                          (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
+                      if (_swipeStartX < edgeThreshold && (_swipeCurrentX - _swipeStartX) > swipeThreshold) {
                         clientClose(sessionId, _ffi);
                       }
                       _swipeStartX = 0;
@@ -354,63 +371,32 @@ class _TerminalPageState extends State<TerminalPage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Row 1: primary navigation keys and the always-visible pipe/backslash
+            // Row 1 follows the latest reviewed PR layout.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildKeyButton('Esc'),
-                const SizedBox(width: 2),
-                _buildKeyButton('/'),
-                const SizedBox(width: 2),
-                _buildKeyButton('|'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Home'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↑'),
-                const SizedBox(width: 2),
-                _buildKeyButton('End'),
-                const SizedBox(width: 2),
-                _buildKeyButton('\\'),
-              ],
+              children: _buildKeyboardKeyButtons(terminalKeyboardRow1Keys),
             ),
-            // Row 2: edit shortcuts, tilde, arrows, and the collapse toggle
+            // Row 2 ends with the full-width Row3 collapse/expand toggle.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildKeyButton('Tab'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Ctrl+C'),
-                const SizedBox(width: 2),
-                _buildKeyButton('~'),
-                const SizedBox(width: 2),
-                _buildKeyButton('←'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↓'),
-                const SizedBox(width: 2),
-                _buildKeyButton('→'),
-                const SizedBox(width: 2),
+                ..._buildKeyboardKeyButtons(terminalKeyboardRow2Keys),
+                const SizedBox(width: terminalKeyboardKeySpacing),
                 _buildCollapseButton(),
               ],
             ),
-            // Row 3: modifier toggles and paging keys, shown only when expanded
+            // Row 3 restores paging keys and trailing alignment placeholders.
             if (_row3Expanded)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildCtrlKeyButton(),
-                  const SizedBox(width: 2),
-                  _buildAltKeyButton(),
-                  const SizedBox(width: 2),
-                  _buildKeyButton('-'),
-                  const SizedBox(width: 2),
-                  _buildKeyButton('PgUp'),
-                  const SizedBox(width: 2),
-                  _buildKeyButton('PgDn'),
-                  // Trailing placeholders keep Row3 width aligned with Row1/Row2.
-                  const SizedBox(width: 2),
-                  const SizedBox(width: 48),
-                  const SizedBox(width: 2),
-                  const SizedBox(width: 48),
+                  ..._buildKeyboardKeyButtons(terminalKeyboardRow3Keys),
+                  for (var i = 0;
+                      i < terminalKeyboardRow3TrailingPlaceholderCount;
+                      i++) ...[
+                    const SizedBox(width: terminalKeyboardKeySpacing),
+                    const SizedBox(width: terminalKeyboardKeyWidth),
+                  ],
                 ],
               ),
           ],
@@ -423,7 +409,7 @@ class _TerminalPageState extends State<TerminalPage>
   Widget _buildCtrlKeyButton() {
     return _buildModifierToggleButton(
       text: 'Ctrl',
-      semanticsLabel: 'Ctrl lock',
+      semanticsLabel: 'Ctrl',
       isLocked: _ctrlLocked,
       onPressed: () => setState(() => _ctrlLocked = !_ctrlLocked),
     );
@@ -433,7 +419,7 @@ class _TerminalPageState extends State<TerminalPage>
   Widget _buildAltKeyButton() {
     return _buildModifierToggleButton(
       text: 'Alt',
-      semanticsLabel: 'Alt lock',
+      semanticsLabel: 'Alt',
       isLocked: _altLocked,
       onPressed: () => setState(() => _altLocked = !_altLocked),
     );
@@ -469,13 +455,13 @@ class _TerminalPageState extends State<TerminalPage>
 
   Widget _buildCollapseButton() {
     return Semantics(
-      label: translate(_row3Expanded ? 'collapse' : 'expand'),
+      label: translate('Show terminal extra keys'),
       toggled: _row3Expanded,
       child: ElevatedButton(
         onPressed: _toggleRow3Expanded,
         child: Text(_row3Expanded ? '∧' : '∨'),
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(48, 32),
+          minimumSize: const Size(terminalKeyboardKeyWidth, 32),
           padding: EdgeInsets.zero,
           textStyle: const TextStyle(fontSize: 12),
           backgroundColor:
@@ -484,6 +470,17 @@ class _TerminalPageState extends State<TerminalPage>
         ),
       ),
     );
+  }
+
+  /// Builds a fixed-width key sequence with the reviewed 2dp spacing.
+  List<Widget> _buildKeyboardKeyButtons(List<String> labels) {
+    return [
+      for (var i = 0; i < labels.length; i++) ...[
+        _buildKeyButton(labels[i]),
+        if (i < labels.length - 1)
+          const SizedBox(width: terminalKeyboardKeySpacing),
+      ],
+    ];
   }
 
   /// Build a modifier toggle button (Ctrl/Alt) with one-shot behavior.
@@ -496,13 +493,14 @@ class _TerminalPageState extends State<TerminalPage>
     required VoidCallback onPressed,
   }) {
     return Semantics(
-      label: translate(semanticsLabel),
+      // Ctrl and Alt are technical key names and intentionally stay unchanged.
+      label: semanticsLabel,
       toggled: isLocked,
       child: ElevatedButton(
         onPressed: onPressed,
         child: Text(text),
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(48, 32),
+          minimumSize: const Size(terminalKeyboardKeyWidth, 32),
           padding: EdgeInsets.zero,
           textStyle: const TextStyle(fontSize: 12),
           backgroundColor: isLocked
@@ -517,13 +515,16 @@ class _TerminalPageState extends State<TerminalPage>
   }
 
   Widget _buildKeyButton(String label) {
+    if (label == 'Ctrl') return _buildCtrlKeyButton();
+    if (label == 'Alt') return _buildAltKeyButton();
+
     return ElevatedButton(
       onPressed: () {
         _sendKeyToTerminal(label);
       },
       child: Text(label),
       style: ElevatedButton.styleFrom(
-        minimumSize: const Size(48, 32),
+        minimumSize: const Size(terminalKeyboardKeyWidth, 32),
         padding: EdgeInsets.zero,
         textStyle: const TextStyle(fontSize: 12),
         backgroundColor: Theme.of(context).colorScheme.surfaceVariant,

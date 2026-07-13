@@ -123,6 +123,25 @@ void main() {
     });
   });
 
+  group('shouldApplyTerminalInputModifiers', () {
+    test('accepts ordinary single-character keyboard input', () {
+      expect(shouldApplyTerminalInputModifiers('a'), isTrue);
+      expect(shouldApplyTerminalInputModifiers(' '), isTrue);
+      expect(shouldApplyTerminalInputModifiers('/'), isTrue);
+    });
+
+    test('rejects terminal control bytes and multi-character sequences', () {
+      for (final input in ['\x00', '\x03', '\t', '\n', '\r', '\x1B', '\x7F']) {
+        expect(
+          shouldApplyTerminalInputModifiers(input),
+          isFalse,
+          reason: '${input.codeUnits} must not consume a one-shot modifier',
+        );
+      }
+      expect(shouldApplyTerminalInputModifiers('\x1B[A'), isFalse);
+    });
+  });
+
   group('applyTerminalInputModifiers', () {
     test('maps Ctrl underscore to unit separator', () {
       expect(
@@ -135,16 +154,37 @@ void main() {
       );
     });
 
-    test('keeps pasted single characters unchanged when modifiers are skipped',
-        () {
+    test('maps the complete Ctrl symbol range', () {
+      const mappings = {
+        '[': '\x1B',
+        r'\': '\x1C',
+        ']': '\x1D',
+        '^': '\x1E',
+        '_': '\x1F',
+        '/': '\x1F',
+      };
+
+      for (final entry in mappings.entries) {
+        expect(
+          applyTerminalInputModifiers(
+            entry.key,
+            ctrlLocked: true,
+            altLocked: false,
+          ),
+          entry.value,
+          reason: 'Ctrl+${entry.key} should map to ${entry.value.codeUnits}',
+        );
+      }
+    });
+
+    test('applies Ctrl before Alt for combined modifiers', () {
       expect(
         applyTerminalInputModifiers(
-          'd',
+          'b',
           ctrlLocked: true,
           altLocked: true,
-          applyModifiers: false,
         ),
-        'd',
+        '\x1B\x02',
       );
     });
   });
@@ -154,6 +194,129 @@ void main() {
       expect(
         terminalPastePayload('d', bracketedPasteMode: true),
         '\x1B[200~d\x1B[201~',
+      );
+    });
+
+    test('keeps a lone newline unchanged when bracketed paste is disabled', () {
+      expect(
+        terminalPastePayload('\n', bracketedPasteMode: false),
+        '\n',
+      );
+    });
+  });
+
+  group('prepareTerminalInputPayload', () {
+    test('normalizes a mobile keyboard Enter to carriage return', () {
+      expect(
+        prepareTerminalInputPayload(
+          '\n',
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: false,
+          altLocked: false,
+        ),
+        '\r',
+      );
+    });
+
+    test('keeps Ctrl+J as line feed on mobile', () {
+      expect(
+        prepareTerminalInputPayload(
+          'j',
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        '\n',
+      );
+    });
+
+    test('does not apply Alt to a terminal control byte', () {
+      expect(
+        prepareTerminalInputPayload(
+          '\x1B',
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: false,
+          altLocked: true,
+        ),
+        '\x1B',
+      );
+    });
+
+    test('preserves a lone pasted newline when modifiers are locked', () {
+      expect(
+        prepareTerminalInputPayload(
+          '\n',
+          source: TerminalInputSource.paste,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: true,
+          altLocked: true,
+        ),
+        '\n',
+      );
+    });
+
+    test('wraps paste without applying locked modifiers', () {
+      expect(
+        prepareTerminalInputPayload(
+          'd',
+          source: TerminalInputSource.paste,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: true,
+          ctrlLocked: true,
+          altLocked: true,
+        ),
+        '\x1B[200~d\x1B[201~',
+      );
+    });
+  });
+
+  group('shouldHandleTerminalPasteShortcut', () {
+    test('handles Ctrl+V and Meta+V key-down events', () {
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: true,
+          controlPressed: true,
+          metaPressed: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: true,
+          controlPressed: false,
+          metaPressed: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('ignores key-up and unmodified V events', () {
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: false,
+          controlPressed: true,
+          metaPressed: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: true,
+          controlPressed: false,
+          metaPressed: false,
+        ),
+        isFalse,
       );
     });
   });
@@ -180,6 +343,18 @@ void main() {
           altLocked: true,
         ),
         isFalse,
+      );
+    });
+
+    test('clears Alt state when expanded row is collapsed', () {
+      expect(
+        shouldClearTerminalModifiersWhenRow3Collapses(
+          wasExpanded: true,
+          willExpand: false,
+          ctrlLocked: false,
+          altLocked: true,
+        ),
+        isTrue,
       );
     });
   });

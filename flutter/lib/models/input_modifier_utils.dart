@@ -1,5 +1,12 @@
 import 'package:flutter/services.dart';
 
+/// Identifies where terminal input originated so paste data can bypass all
+/// keyboard-only transformations.
+enum TerminalInputSource {
+  keyboard,
+  paste,
+}
+
 /// Returns true when a stale mobile one-shot Shift state should be released
 /// by replaying a tracked Shift key-down as a synthesized key-up.
 ///
@@ -39,17 +46,11 @@ bool shouldReleaseStaleMobileShift({
 
 /// Applies the terminal Ctrl/Alt one-shot modifiers to a single input payload.
 ///
-/// Paste calls pass [applyModifiers] as false so clipboard data is preserved
-/// even when a visible modifier button is currently active.
 String applyTerminalInputModifiers(
   String data, {
   required bool ctrlLocked,
   required bool altLocked,
-  bool applyModifiers = true,
 }) {
-  if (!applyModifiers) {
-    return data;
-  }
   var result = data;
   if (ctrlLocked) {
     result = _applyTerminalCtrlModifier(result);
@@ -66,6 +67,66 @@ String terminalPastePayload(String text, {required bool bracketedPasteMode}) {
     return text;
   }
   return '\x1B[200~$text\x1B[201~';
+}
+
+/// Returns whether one-shot Ctrl/Alt may transform and consume this input.
+///
+/// xterm emits terminal control keys as either one control byte or a longer
+/// escape sequence. Neither form is ordinary text input, so a pending modifier
+/// must survive until the user enters a printable character.
+bool shouldApplyTerminalInputModifiers(String data) {
+  if (data.length != 1) return false;
+  final codeUnit = data.codeUnitAt(0);
+  return codeUnit >= 0x20 && codeUnit != 0x7F;
+}
+
+/// Builds the payload sent to the remote terminal for keyboard and paste input.
+///
+/// Keyboard input keeps the mobile Enter workaround and one-shot Ctrl/Alt
+/// mapping. Paste input deliberately bypasses both transformations so even a
+/// one-character clipboard payload is preserved exactly.
+String prepareTerminalInputPayload(
+  String data, {
+  required TerminalInputSource source,
+  required bool isMobileOrWebMobile,
+  required bool bracketedPasteMode,
+  required bool ctrlLocked,
+  required bool altLocked,
+}) {
+  if (source == TerminalInputSource.paste) {
+    return terminalPastePayload(
+      data,
+      bracketedPasteMode: bracketedPasteMode,
+    );
+  }
+
+  var result = data;
+  if (isMobileOrWebMobile && result == '\n') {
+    result = '\r';
+  }
+  if (shouldApplyTerminalInputModifiers(result) &&
+      (ctrlLocked || altLocked)) {
+    result = applyTerminalInputModifiers(
+      result,
+      ctrlLocked: ctrlLocked,
+      altLocked: altLocked,
+    );
+  }
+  return result;
+}
+
+/// Returns true for the platform paste shortcuts handled by xterm by default.
+/// Only key-down is accepted to prevent one clipboard operation from firing
+/// again for the matching key-up event.
+bool shouldHandleTerminalPasteShortcut({
+  required LogicalKeyboardKey logicalKey,
+  required bool isKeyDown,
+  required bool controlPressed,
+  required bool metaPressed,
+}) {
+  return isKeyDown &&
+      logicalKey == LogicalKeyboardKey.keyV &&
+      (controlPressed || metaPressed);
 }
 
 /// Returns true when collapsing Row3 should also clear hidden modifier state.

@@ -7,8 +7,8 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
 
-import 'model.dart';
 import 'input_modifier_utils.dart';
+import 'model.dart';
 import 'platform_model.dart';
 
 class TerminalModel with ChangeNotifier {
@@ -37,6 +37,11 @@ class TerminalModel with ChangeNotifier {
   void Function()? clearAltLock;
 
   final _inputBuffer = <String>[];
+
+  /// Exposes buffered input only for lifecycle regression tests.
+  @visibleForTesting
+  int get debugBufferedInputCount => _inputBuffer.length;
+
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];
@@ -55,10 +60,7 @@ class TerminalModel with ChangeNotifier {
   /// The listener (typically TerminalPage) can use this to auto-close the tab/page.
   VoidCallback? onClosed;
 
-  Future<void> _handleInput(
-    String data, {
-    bool applyModifiers = true,
-  }) async {
+  Future<void> _handleInput(String data) async {
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
     // - Peer Windows: '\r' works, '\n' is just a newline.
@@ -69,25 +71,37 @@ class TerminalModel with ChangeNotifier {
     // So on mobile / web-mobile, normalize the original lone '\n' to '\r'
     // before modifier mappings. This keeps Ctrl+J mapped to LF instead of
     // having the generated control code rewritten to CR afterward.
-    // We deliberately do not touch multi-character payloads (e.g. pasted text)
-    // so embedded newlines in pasted content are preserved.
-    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && data == '\n') {
-      data = '\r';
-    }
+    // Multi-character keyboard payloads, such as terminal escape sequences,
+    // remain unchanged. Paste input follows a separate preprocessing path.
     final ctrlLocked = isCtrlLocked?.call() ?? false;
     final altLocked = isAltLocked?.call() ?? false;
-    // Only normal key input should use modifier locks. Explicit paste input
-    // bypasses this block so one-character clipboard data is not rewritten.
-    if (applyModifiers && data.length == 1 && (ctrlLocked || altLocked)) {
-      data = applyTerminalInputModifiers(
-        data,
-        ctrlLocked: ctrlLocked,
-        altLocked: altLocked,
-      );
+    // Use the same predicate for transformation and consumption. Control keys
+    // and escape sequences must not silently consume a pending one-shot lock.
+    final shouldConsumeModifiers = shouldApplyTerminalInputModifiers(data) &&
+        (ctrlLocked || altLocked);
+    data = prepareTerminalInputPayload(
+      data,
+      source: TerminalInputSource.keyboard,
+      isMobileOrWebMobile: isMobile || (isWeb && !isWebDesktop),
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: ctrlLocked,
+      altLocked: altLocked,
+    );
+    if (shouldConsumeModifiers) {
       if (ctrlLocked) clearCtrlLock?.call();
       if (altLocked) clearAltLock?.call();
     }
+    return _sendInputPayload(data);
+  }
+
+  /// Sends an already prepared payload without applying keyboard semantics.
+  /// Both normal input and paste use this transport path after their source-
+  /// specific preprocessing has completed.
+  Future<void> _sendInputPayload(String data) async {
+    // Clipboard reads and native sends may complete after the terminal page has
+    // closed. Never send or re-buffer input once this model is disposed.
+    if (_disposed) return;
+
     if (_terminalOpened) {
       // Send user input to remote terminal
       try {
@@ -209,13 +223,15 @@ class TerminalModel with ChangeNotifier {
   }
 
   Future<void> pasteText(String data) async {
-    return _handleInput(
-      terminalPastePayload(
-        data,
-        bracketedPasteMode: terminal.bracketedPasteMode,
-      ),
-      applyModifiers: false,
+    final payload = prepareTerminalInputPayload(
+      data,
+      source: TerminalInputSource.paste,
+      isMobileOrWebMobile: false,
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: false,
+      altLocked: false,
     );
+    return _sendInputPayload(payload);
   }
 
   Future<void> closeTerminal() async {
