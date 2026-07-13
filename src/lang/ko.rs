@@ -764,6 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "모든 모니터"),
         ("#{} monitor", "#{} 모니터"),
         ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 여전히 설정 중일 수 있습니다. 나중에 다시 시도해 보세요.\n이런 일이 계속 발생하면 서버가 신뢰할 수 없을 수도 있습니다.\n어쨌든 계속하시겠습니까?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

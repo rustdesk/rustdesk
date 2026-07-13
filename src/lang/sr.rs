@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Svi monitori"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "Није могуће проверити енд-то-енд шифровање.\nУдаљени уређај се можда још подешава. Покушајте поново касније.\nАко се ово настави, сервер можда није поуздан.\nНаставити свеједно?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

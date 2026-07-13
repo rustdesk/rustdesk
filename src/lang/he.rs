@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "כל המסכים"),
         ("#{} monitor", "מסך {}"),
         ("conn-e2ee-unavailable-tip", "לא ניתן לאמת הצפנה מקצה לקצה.\nייתכן שהמכשיר המרוחק עדיין בתהליך הגדרה. נסה שוב מאוחר יותר.\nאם זה ממשיך לקרות, ייתכן שהשרת אינו מהימן.\nלהמשיך בכל זאת?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

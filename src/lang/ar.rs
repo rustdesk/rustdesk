@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "جميع الشاشات"),
         ("#{} monitor", "الشاشة رقم {}"),
         ("conn-e2ee-unavailable-tip", "تعذر التحقق من التشفير من طرف إلى طرف.\nقد يكون الجهاز البعيد ما يزال قيد الإعداد. حاول مرة أخرى لاحقًا.\nإذا استمر حدوث ذلك، فقد يكون الخادم غير موثوق به.\nهل تريد المتابعة على أي حال؟"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

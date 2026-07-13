@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Minden monitor"),
         ("#{} monitor", "{}. monitor"),
         ("conn-e2ee-unavailable-tip", "A végpontok közötti titkosítás nem volt ellenőrizhető.\nA távoli eszköz talán még beállítás alatt áll. Próbálja újra később.\nHa ez továbbra is előfordul, a szerver lehet, hogy nem megbízható.\nFolytatja így is?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

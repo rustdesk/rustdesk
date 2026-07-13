@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Усі монітори"),
         ("#{} monitor", "Монітор {}"),
         ("conn-e2ee-unavailable-tip", "Не вдалося перевірити наскрізне шифрування.\nВіддалений пристрій, можливо, ще налаштовується. Спробуйте пізніше.\nЯкщо це повторюється, сервер може бути ненадійним.\nПродовжити все одно?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

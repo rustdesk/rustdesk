@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Alle skærme"),
         ("#{} monitor", "Skærm {}"),
         ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunne ikke bekræftes.\nDen eksterne enhed er muligvis stadig ved at blive konfigureret. Prøv igen senere.\nHvis dette fortsætter, er serveren muligvis ikke pålidelig.\nFortsæt alligevel?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

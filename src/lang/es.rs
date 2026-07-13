@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Todos los monitores"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "No se pudo verificar el cifrado de extremo a extremo.\nEs posible que el dispositivo remoto aún se esté configurando. Inténtelo de nuevo más tarde.\nSi esto sigue ocurriendo, es posible que el servidor no sea de confianza.\n¿Continuar de todos modos?"),
-        ("Only control the remote when its window is focused", "Controlar el equipo remoto solo cuando su ventana esté enfocada"),
+        ("control-remote-when-focus", "Controlar el equipo remoto solo cuando su ventana esté enfocada"),
     ].iter().cloned().collect();
 }

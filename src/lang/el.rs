@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Όλες οι οθόνες"),
         ("#{} monitor", "Οθόνη {}"),
         ("conn-e2ee-unavailable-tip", "Δεν ήταν δυνατή η επαλήθευση της κρυπτογράφησης από άκρο σε άκρο.\nΗ απομακρυσμένη συσκευή μπορεί να ρυθμίζεται ακόμα. Δοκιμάστε ξανά αργότερα.\nΑν αυτό συνεχιστεί, ο διακομιστής μπορεί να μην είναι αξιόπιστος.\nΣυνέχεια παρ' όλα αυτά;"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

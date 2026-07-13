@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Всички монитори"),
         ("#{} monitor", "Монитор {}"),
         ("conn-e2ee-unavailable-tip", "Шифроването от край до край не може да бъде проверено.\nОтдалеченото устройство може все още да се настройва. Опитайте отново по-късно.\nАко това продължи, сървърът може да не е надежден.\nДа се продължи ли въпреки това?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

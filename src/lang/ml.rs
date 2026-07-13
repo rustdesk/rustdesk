@@ -765,6 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "എല്ലാ മോണിറ്ററുകളും"),
         ("#{} monitor", "മോണിറ്റർ {}"),
         ("conn-e2ee-unavailable-tip", "എൻഡ്-ടു-എൻഡ് എൻക്രിപ്ഷൻ പരിശോധിക്കാൻ കഴിഞ്ഞില്ല.\nദൂരസ്ഥ ഉപകരണം ഇനിയും സജ്ജീകരണത്തിലായിരിക്കാം. പിന്നീട് വീണ്ടും ശ്രമിക്കുക.\nഇത് തുടർന്നാൽ സർവർ വിശ്വസനീയമല്ലായിരിക്കാം.\nഎങ്കിലും തുടരണമോ?"),
-        ("Only control the remote when its window is focused", ""),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

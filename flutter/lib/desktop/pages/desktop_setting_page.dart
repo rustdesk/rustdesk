@@ -513,7 +513,7 @@ class _GeneralState extends State<_General> {
         ),
         _OptionCheckBox(
           context,
-          'Only control the remote when its window is focused',
+          'control-remote-when-focus',
           kOptionControlFocusedWindowOnly,
           isServer: false,
         ),
