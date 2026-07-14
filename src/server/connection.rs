@@ -73,8 +73,14 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
+const FAILURE_IDX_ID_WHITELIST: usize = 2;
+
 lazy_static::lazy_static! {
-    static ref LOGIN_FAILURES: [Arc::<Mutex<HashMap<String, (i32, i32, i32)>>>; 2] = Default::default();
+    // [0] password, [1] 2FA, [2] ID whitelist.
+    // The ID whitelist has its own bucket: its counters never decay, and a peer rejected by
+    // it can never clear them with a successful login, so sharing the password bucket would
+    // let a rejected ID lock out whitelisted peers behind the same IP / IPv6 prefix.
+    static ref LOGIN_FAILURES: [Arc::<Mutex<HashMap<String, (i32, i32, i32)>>>; 3] = Default::default();
     static ref SESSIONS: Arc::<Mutex<HashMap<SessionKey, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
     pub static ref AUTHED_CONNS: Arc::<Mutex<Vec<AuthedConn>>> = Default::default();
@@ -1373,6 +1379,32 @@ impl Connection {
         true
     }
 
+    async fn check_id_whitelist(&mut self) -> bool {
+        let id_whitelist: Vec<String> = Config::get_option(keys::OPTION_ID_WHITELIST)
+            .split(',')
+            .map(|x| x.trim().to_owned())
+            .filter(|x| !x.is_empty())
+            .collect();
+        if id_whitelist_allows(&id_whitelist, &self.lr.my_id) {
+            return true;
+        }
+        // Rate limit rejections so that the whitelist can not be used as an oracle to
+        // enumerate allowed IDs. Whitelisted peers return above without touching this
+        // bucket, so a rejected ID can not lock them out.
+        let (failure, res) = self.check_failure(FAILURE_IDX_ID_WHITELIST).await;
+        if !res {
+            return false;
+        }
+        self.update_failure(failure, false, FAILURE_IDX_ID_WHITELIST);
+        self.send_login_error("Your ID is blocked by the peer")
+            .await;
+        self.post_alarm_audit(
+            AlarmAuditType::IdWhitelist,
+            json!({ "id": self.lr.my_id.clone(), "ip": self.ip.clone(), "name": self.lr.my_name.clone() }),
+        );
+        false
+    }
+
     async fn on_open(&mut self, addr: SocketAddr) -> bool {
         log::debug!("#{} Connection opened from {}.", self.inner.id, addr);
         if !self.check_whitelist(&addr).await {
@@ -1506,7 +1538,7 @@ impl Connection {
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
-        if typ == AlarmAuditType::IpWhitelist {
+        if typ == AlarmAuditType::IpWhitelist || typ == AlarmAuditType::IdWhitelist {
             if let Some(audit_ref) = self.conn_audit_ref() {
                 v["conn_audit_ref"] = json!(audit_ref);
             }
@@ -2528,6 +2560,9 @@ impl Connection {
                 return true;
             }
             self.reset_session_scope_for_login();
+            if !self.check_id_whitelist().await {
+                return false;
+            }
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(
@@ -2808,6 +2843,11 @@ impl Connection {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {
                 self.handle_login_request_without_validation(&lr).await;
+                // Switching sides authorizes without a password, so it must not bypass the
+                // whitelist, which can be a locked policy pushed by the server.
+                if !self.check_id_whitelist().await {
+                    return false;
+                }
                 SWITCH_SIDES_UUID
                     .lock()
                     .unwrap()
@@ -6057,6 +6097,7 @@ pub enum AlarmAuditType {
     TerminalOsLoginBackoff = 7,
     TerminalOsLoginConcurrency = 8,
     SessionScopeViolation = 9,
+    IdWhitelist = 10,
 }
 
 pub enum FileAuditType {
@@ -6674,10 +6715,143 @@ mod raii {
     }
 }
 
+// An empty whitelist allows everyone.
+//
+// A peer connecting across servers reports `<its id>@<its own server>` (see
+// `create_login_msg`), so the bare id is matched as well. That suffix is self-asserted and
+// unsigned, so matching only the full form would reject the honest cross-server peer while
+// an attacker just reports the bare id: it can produce false rejects but no true ones.
+fn id_whitelist_allows(id_whitelist: &[String], my_id: &str) -> bool {
+    if id_whitelist.is_empty() {
+        return true;
+    }
+    let bare_id = my_id.split('@').next().unwrap_or(my_id);
+    id_whitelist
+        .iter()
+        .any(|x| wildcard_match(x, my_id) || wildcard_match(x, bare_id))
+}
+
+// Simple glob matching for the ID whitelist: '*' matches any sequence of characters
+// (including the empty one), '?' matches exactly one character. Case-insensitive.
+fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let p: Vec<char> = pattern.trim().to_lowercase().chars().collect();
+    let t: Vec<char> = text.trim().to_lowercase().chars().collect();
+    let (mut pi, mut ti) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some((pi + 1, ti));
+            pi += 1;
+        } else if let Some((sp, st)) = star {
+            pi = sp;
+            ti = st + 1;
+            star = Some((sp, st + 1));
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
 #[cfg(test)]
 mod test {
     #[allow(unused)]
     use super::*;
+
+    #[test]
+    fn test_wildcard_match() {
+        // Exact match.
+        assert!(wildcard_match("123456789", "123456789"));
+        assert!(!wildcard_match("123456789", "123456780"));
+        assert!(!wildcard_match("12345678", "123456789"));
+        assert!(!wildcard_match("123456789", "12345678"));
+        // Case-insensitive.
+        assert!(wildcard_match("MyCustomId", "mycustomid"));
+        // '*' matches any sequence.
+        assert!(wildcard_match("*", "123456789"));
+        assert!(wildcard_match("*", ""));
+        assert!(wildcard_match("123*", "123456789"));
+        assert!(wildcard_match("123*", "123"));
+        assert!(!wildcard_match("123*", "124456789"));
+        assert!(wildcard_match("*789", "123456789"));
+        assert!(wildcard_match("1*9", "123456789"));
+        assert!(wildcard_match("1*4*9", "123456789"));
+        assert!(!wildcard_match("1*4*9", "123456780"));
+        assert!(wildcard_match("*456*", "123456789"));
+        // '?' matches exactly one character.
+        assert!(wildcard_match("12345678?", "123456789"));
+        assert!(!wildcard_match("123456789?", "123456789"));
+        assert!(wildcard_match("???456???", "123456789"));
+        assert!(wildcard_match("1?3*7?9", "123456789"));
+        // Whitespace around entries is ignored.
+        assert!(wildcard_match(" 123456789 ", "123456789"));
+    }
+
+    #[test]
+    fn test_id_whitelist_allows() {
+        let list = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+
+        // An empty whitelist allows everyone.
+        assert!(id_whitelist_allows(&[], "123456789"));
+
+        // Same server: the peer reports a bare id.
+        assert!(id_whitelist_allows(&list(&["123456789"]), "123456789"));
+        assert!(!id_whitelist_allows(&list(&["123456789"]), "987654321"));
+
+        // Cross server: the peer appends its own server, which must not reject it.
+        assert!(id_whitelist_allows(
+            &list(&["123456789"]),
+            "123456789@example.com:21116"
+        ));
+        // Cross server from web, whose server is a WebSocket URI.
+        assert!(id_whitelist_allows(
+            &list(&["123456789"]),
+            "123456789@ws://example.com:21118"
+        ));
+        // A different id is still rejected, suffix or not.
+        assert!(!id_whitelist_allows(
+            &list(&["123456789"]),
+            "987654321@example.com:21116"
+        ));
+
+        // An entry pinned to one server keeps matching that exact form.
+        assert!(id_whitelist_allows(
+            &list(&["123456789@example.com:21116"]),
+            "123456789@example.com:21116"
+        ));
+        assert!(!id_whitelist_allows(
+            &list(&["123456789@example.com:21116"]),
+            "123456789@other.com:21116"
+        ));
+        // ... and no longer matches the bare id, which is the point of pinning.
+        assert!(!id_whitelist_allows(
+            &list(&["123456789@example.com:21116"]),
+            "123456789"
+        ));
+
+        // Wildcards keep working on both forms.
+        assert!(id_whitelist_allows(&list(&["abc*"]), "abcdef"));
+        assert!(id_whitelist_allows(
+            &list(&["abc*"]),
+            "abcdef@example.com:21116"
+        ));
+        assert!(id_whitelist_allows(
+            &list(&["*"]),
+            "123456789@example.com:21116"
+        ));
+
+        // Any entry of the list is enough.
+        assert!(id_whitelist_allows(
+            &list(&["111111111", "123456789", "222222222"]),
+            "123456789@example.com:21116"
+        ));
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

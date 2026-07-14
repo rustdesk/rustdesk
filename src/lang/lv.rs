@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Visi monitori"),
         ("#{} monitor", "Monitors {}"),
         ("conn-e2ee-unavailable-tip", "Neizdevās pārbaudīt pilnīgu šifrēšanu.\nAttālā ierīce, iespējams, vēl tiek iestatīta. Mēģiniet vēlreiz vēlāk.\nJa tas turpinās, serveris var nebūt uzticams.\nVai tomēr turpināt?"),
+        ("ID whitelisting", "ID baltais saraksts"),
+        ("Use ID whitelisting", "Izmantot balto ID sarakstu"),
+        ("id_whitelist_tip", "Man var piekļūt tikai baltajā sarakstā iekļautie ID"),
+        ("id_whitelist_wildcard_tip", "Tiek atbalstītas aizstājzīmes: '*' atbilst jebkuram rakstzīmju skaitam, '?' — tieši vienai rakstzīmei"),
+        ("Invalid ID", "Nederīgs ID"),
+        ("Your ID is blocked by the peer", "Jūsu ID ir bloķējusi otra puse"),
+        ("Your ip is blocked by the peer", "Jūsu IP adresi ir bloķējusi otra puse"),
+        ("id_whitelist_caveat_tip", "ID paziņo klients, kas veido savienojumu. Baltais saraksts samazina pakļautību un neaizstāj paroli vai 2FA"),
+        ("whitelist_cidr_tip", "Tiek atbalstīts CIDR pieraksts, piemēram 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

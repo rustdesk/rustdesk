@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Tất cả màn hình"),
         ("#{} monitor", "Màn hình {}"),
         ("conn-e2ee-unavailable-tip", "Không thể xác minh mã hóa đầu cuối.\nThiết bị từ xa có thể vẫn đang được thiết lập. Hãy thử lại sau.\nNếu điều này tiếp tục xảy ra, máy chủ có thể không đáng tin cậy.\nVẫn tiếp tục?"),
+        ("ID whitelisting", "Danh sách trắng ID"),
+        ("Use ID whitelisting", "Sử dụng danh sách trắng ID"),
+        ("id_whitelist_tip", "Chỉ ID trong danh sách trắng mới có thể truy cập"),
+        ("id_whitelist_wildcard_tip", "Hỗ trợ ký tự đại diện: '*' khớp với số lượng ký tự bất kỳ, '?' khớp với đúng một ký tự"),
+        ("Invalid ID", "ID không hợp lệ"),
+        ("Your ID is blocked by the peer", "ID của bạn đã bị phía bên kia chặn"),
+        ("Your ip is blocked by the peer", "IP của bạn đã bị phía bên kia chặn"),
+        ("id_whitelist_caveat_tip", "ID do máy khách kết nối tự khai báo. Danh sách trắng giúp giảm mức độ lộ diện và không thay thế mật khẩu hay 2FA"),
+        ("whitelist_cidr_tip", "Hỗ trợ ký hiệu CIDR, ví dụ 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

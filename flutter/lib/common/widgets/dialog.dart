@@ -205,6 +205,10 @@ void changeWhiteList({Function()? callback}) async {
           const SizedBox(
             height: 8.0,
           ),
+          Text(translate("whitelist_cidr_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
           Row(
             children: [
               Expanded(
@@ -272,6 +276,108 @@ void changeWhiteList({Function()? callback}) async {
               }
               await bind.mainSetOption(
                   key: kOptionWhitelist, value: newWhiteList);
+              callback?.call();
+              close();
+            },
+          ),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
+void changeIdWhiteList({Function()? callback}) async {
+  final curIdWhiteList = await bind.mainGetOption(key: kOptionIdWhitelist);
+  var newIdWhiteListField = curIdWhiteList == defaultOptionWhitelist
+      ? ''
+      : curIdWhiteList.split(',').join('\n');
+  var controller = TextEditingController(text: newIdWhiteListField);
+  var msg = "";
+  var isInProgress = false;
+  final isOptFixed = isOptionFixed(kOptionIdWhitelist);
+  gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("ID whitelisting")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(translate("whitelist_sep")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Text(translate("id_whitelist_wildcard_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Text(translate("id_whitelist_caveat_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                        maxLines: null,
+                        decoration: InputDecoration(
+                          errorText: msg.isEmpty ? null : translate(msg),
+                        ),
+                        controller: controller,
+                        enabled: !isOptFixed,
+                        autofocus: true)
+                    .workaroundFreezeLinuxMint(),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 4.0,
+          ),
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        if (!isOptFixed)
+          dialogButton("Clear", onPressed: () async {
+            await bind.mainSetOption(
+                key: kOptionIdWhitelist, value: defaultOptionWhitelist);
+            callback?.call();
+            close();
+          }, isOutline: true),
+        if (!isOptFixed)
+          dialogButton(
+            "OK",
+            onPressed: () async {
+              setState(() {
+                msg = "";
+                isInProgress = true;
+              });
+              newIdWhiteListField = controller.text.trim();
+              var newIdWhiteList = "";
+              if (newIdWhiteListField.isEmpty) {
+                // pass
+              } else {
+                final ids =
+                    newIdWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                // test id, wildcards '*' and '?' are allowed;
+                // '@' '.' ':' occur in cross-server IDs like "123456789@server:port"
+                final idMatch = RegExp(r"^[a-zA-Z0-9\_\-\*\?\@\.\:]+$");
+                for (final id in ids) {
+                  if (!idMatch.hasMatch(id)) {
+                    msg = "${translate("Invalid ID")} $id";
+                    setState(() {
+                      isInProgress = false;
+                    });
+                    return;
+                  }
+                }
+                newIdWhiteList = ids.join(',');
+              }
+              if (newIdWhiteList.trim().isEmpty) {
+                newIdWhiteList = defaultOptionWhitelist;
+              }
+              await bind.mainSetOption(
+                  key: kOptionIdWhitelist, value: newIdWhiteList);
               callback?.call();
               close();
             },

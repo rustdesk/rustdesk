@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Alle skærme"),
         ("#{} monitor", "Skærm {}"),
         ("conn-e2ee-unavailable-tip", "End-to-end-kryptering kunne ikke bekræftes.\nDen eksterne enhed er muligvis stadig ved at blive konfigureret. Prøv igen senere.\nHvis dette fortsætter, er serveren muligvis ikke pålidelig.\nFortsæt alligevel?"),
+        ("ID whitelisting", "ID whitelisting"),
+        ("Use ID whitelisting", "Brug ID whitelisting"),
+        ("id_whitelist_tip", "Kun ID'er på whitelisten kan få adgang til mig"),
+        ("id_whitelist_wildcard_tip", "Jokertegn understøttes: '*' matcher et vilkårligt antal tegn, '?' matcher præcist ét tegn"),
+        ("Invalid ID", "Ugyldigt ID"),
+        ("Your ID is blocked by the peer", "Dit ID er blokeret af modparten"),
+        ("Your ip is blocked by the peer", "Din IP-adresse er blokeret af modparten"),
+        ("id_whitelist_caveat_tip", "ID'et rapporteres af den klient, der opretter forbindelse. Whitelisten reducerer eksponeringen og erstatter ikke adgangskode eller 2FA"),
+        ("whitelist_cidr_tip", "CIDR-notation understøttes, f.eks. 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

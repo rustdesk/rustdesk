@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Ĉiuj monitoroj"),
         ("#{} monitor", "Monitoro {}"),
         ("conn-e2ee-unavailable-tip", "Ne eblis kontroli la fin-al-finan ĉifradon.\nLa fora aparato eble ankoraŭ estas agordata. Provu denove poste.\nSe tio daŭre okazas, la servilo eble estas nefidinda.\nĈu daŭrigi tamen?"),
+        ("ID whitelisting", "Listo de ID akceptataj"),
+        ("Use ID whitelisting", "Uzi liston de ID akceptataj"),
+        ("id_whitelist_tip", "Nur la ID en la blanka listo povas kontroli mian komputilon"),
+        ("id_whitelist_wildcard_tip", "Ĵokeroj estas subtenataj: '*' kongruas kun iu ajn nombro da signoj, '?' kun ekzakte unu signo"),
+        ("Invalid ID", "ID nevalida"),
+        ("Your ID is blocked by the peer", "Via ID estas blokita de la alia flanko"),
+        ("Your ip is blocked by the peer", "Via IP estas blokita de la alia flanko"),
+        ("id_whitelist_caveat_tip", "La ID estas raportata de la konektiĝanta kliento. La blanka listo malpliigas la eksponiĝon kaj ne anstataŭas la pasvorton aŭ 2FA"),
+        ("whitelist_cidr_tip", "La notacio CIDR estas subtenata, ekzemple 192.168.1.0/24"),
     ].iter().cloned().collect();
 }
