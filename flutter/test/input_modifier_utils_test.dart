@@ -130,6 +130,10 @@ void main() {
       expect(shouldApplyTerminalInputModifiers('/'), isTrue);
     });
 
+    test('accepts supplementary-plane single-character keyboard input', () {
+      expect(shouldApplyTerminalInputModifiers('😀'), isTrue);
+    });
+
     test('rejects terminal control bytes and multi-character sequences', () {
       for (final input in ['\x00', '\x03', '\t', '\n', '\r', '\x1B', '\x7F']) {
         expect(
@@ -278,13 +282,16 @@ void main() {
   });
 
   group('shouldHandleTerminalPasteShortcut', () {
-    test('handles Ctrl+V and Meta+V key-down events', () {
+    test('handles exact Ctrl+V and Meta+V key-down events', () {
       expect(
         shouldHandleTerminalPasteShortcut(
           logicalKey: LogicalKeyboardKey.keyV,
           isKeyDown: true,
+          isKeyRepeat: false,
           controlPressed: true,
           metaPressed: false,
+          altPressed: false,
+          shiftPressed: false,
         ),
         isTrue,
       );
@@ -292,8 +299,38 @@ void main() {
         shouldHandleTerminalPasteShortcut(
           logicalKey: LogicalKeyboardKey.keyV,
           isKeyDown: true,
+          isKeyRepeat: false,
           controlPressed: false,
           metaPressed: true,
+          altPressed: false,
+          shiftPressed: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('handles exact Ctrl+V and Meta+V key-repeat events', () {
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: false,
+          isKeyRepeat: true,
+          controlPressed: true,
+          metaPressed: false,
+          altPressed: false,
+          shiftPressed: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyV,
+          isKeyDown: false,
+          isKeyRepeat: true,
+          controlPressed: false,
+          metaPressed: true,
+          altPressed: false,
+          shiftPressed: false,
         ),
         isTrue,
       );
@@ -304,8 +341,11 @@ void main() {
         shouldHandleTerminalPasteShortcut(
           logicalKey: LogicalKeyboardKey.keyV,
           isKeyDown: false,
+          isKeyRepeat: false,
           controlPressed: true,
           metaPressed: false,
+          altPressed: false,
+          shiftPressed: false,
         ),
         isFalse,
       );
@@ -313,8 +353,70 @@ void main() {
         shouldHandleTerminalPasteShortcut(
           logicalKey: LogicalKeyboardKey.keyV,
           isKeyDown: true,
+          isKeyRepeat: false,
           controlPressed: false,
           metaPressed: false,
+          altPressed: false,
+          shiftPressed: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('ignores paste shortcuts with extra modifiers', () {
+      for (final state in [
+        (control: true, meta: false, alt: true, shift: false),
+        (control: true, meta: false, alt: false, shift: true),
+        (control: false, meta: true, alt: false, shift: true),
+        (control: true, meta: true, alt: false, shift: false),
+      ]) {
+        expect(
+          shouldHandleTerminalPasteShortcut(
+            logicalKey: LogicalKeyboardKey.keyV,
+            isKeyDown: true,
+            isKeyRepeat: false,
+            controlPressed: state.control,
+            metaPressed: state.meta,
+            altPressed: state.alt,
+            shiftPressed: state.shift,
+          ),
+          isFalse,
+        );
+      }
+    });
+
+    test('ignores paste shortcut repeats with extra modifiers', () {
+      for (final state in [
+        (control: true, meta: false, alt: true, shift: false),
+        (control: true, meta: false, alt: false, shift: true),
+        (control: false, meta: true, alt: false, shift: true),
+        (control: true, meta: true, alt: false, shift: false),
+      ]) {
+        expect(
+          shouldHandleTerminalPasteShortcut(
+            logicalKey: LogicalKeyboardKey.keyV,
+            isKeyDown: false,
+            isKeyRepeat: true,
+            controlPressed: state.control,
+            metaPressed: state.meta,
+            altPressed: state.alt,
+            shiftPressed: state.shift,
+          ),
+          isFalse,
+        );
+      }
+    });
+
+    test('ignores non-V key events', () {
+      expect(
+        shouldHandleTerminalPasteShortcut(
+          logicalKey: LogicalKeyboardKey.keyC,
+          isKeyDown: true,
+          isKeyRepeat: false,
+          controlPressed: true,
+          metaPressed: false,
+          altPressed: false,
+          shiftPressed: false,
         ),
         isFalse,
       );

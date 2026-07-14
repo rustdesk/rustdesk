@@ -186,8 +186,11 @@ class _TerminalPageState extends State<TerminalPage>
     final shouldPaste = shouldHandleTerminalPasteShortcut(
       logicalKey: event.logicalKey,
       isKeyDown: event is KeyDownEvent,
+      isKeyRepeat: event is KeyRepeatEvent,
       controlPressed: hardwareKeyboard.isControlPressed,
       metaPressed: hardwareKeyboard.isMetaPressed,
+      altPressed: hardwareKeyboard.isAltPressed,
+      shiftPressed: hardwareKeyboard.isShiftPressed,
     );
     if (!shouldPaste) return KeyEventResult.ignored;
 

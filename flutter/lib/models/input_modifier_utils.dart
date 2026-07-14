@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// Identifies where terminal input originated so paste data can bypass all
 /// keyboard-only transformations.
@@ -75,7 +76,7 @@ String terminalPastePayload(String text, {required bool bracketedPasteMode}) {
 /// escape sequence. Neither form is ordinary text input, so a pending modifier
 /// must survive until the user enters a printable character.
 bool shouldApplyTerminalInputModifiers(String data) {
-  if (data.length != 1) return false;
+  if (data.characters.length != 1) return false;
   final codeUnit = data.codeUnitAt(0);
   return codeUnit >= 0x20 && codeUnit != 0x7F;
 }
@@ -104,8 +105,7 @@ String prepareTerminalInputPayload(
   if (isMobileOrWebMobile && result == '\n') {
     result = '\r';
   }
-  if (shouldApplyTerminalInputModifiers(result) &&
-      (ctrlLocked || altLocked)) {
+  if (shouldApplyTerminalInputModifiers(result) && (ctrlLocked || altLocked)) {
     result = applyTerminalInputModifiers(
       result,
       ctrlLocked: ctrlLocked,
@@ -116,17 +116,21 @@ String prepareTerminalInputPayload(
 }
 
 /// Returns true for the platform paste shortcuts handled by xterm by default.
-/// Only key-down is accepted to prevent one clipboard operation from firing
-/// again for the matching key-up event.
+/// Key repeats are consumed too so repeated paste shortcuts keep using the
+/// source-aware paste path instead of falling through to xterm's default paste.
 bool shouldHandleTerminalPasteShortcut({
   required LogicalKeyboardKey logicalKey,
   required bool isKeyDown,
+  required bool isKeyRepeat,
   required bool controlPressed,
   required bool metaPressed,
+  required bool altPressed,
+  required bool shiftPressed,
 }) {
-  return isKeyDown &&
-      logicalKey == LogicalKeyboardKey.keyV &&
-      (controlPressed || metaPressed);
+  if (!isKeyDown && !isKeyRepeat) return false;
+  if (logicalKey != LogicalKeyboardKey.keyV) return false;
+  if (altPressed || shiftPressed) return false;
+  return controlPressed != metaPressed;
 }
 
 /// Returns true when collapsing Row3 should also clear hidden modifier state.
