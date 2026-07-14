@@ -1391,10 +1391,8 @@ class ScreenAdjustor {
       double left = wndRect.left + (wndRect.width - width) / 2;
       double top = wndRect.top + (wndRect.height - height) / 2;
 
-      Rect frameRect = _screen!.frame;
-      if (!isFullscreen) {
-        frameRect = _screen!.visibleFrame;
-      }
+      // Adjust Window exits fullscreen before setting the window frame.
+      Rect frameRect = _screen!.visibleFrame;
       if (isLinux && bind.mainCurrentIsWayland()) {
         // In testing, Wayland at 200% reported an unscaled screen frame while
         // GTK window sizes used logical units, so convert the frame first.
