@@ -12,11 +12,63 @@ use hbb_common::{
 };
 use reqwest::{blocking::Client as SyncClient, Client as AsyncClient};
 
+// honour bind-interface for http too, so api-server and hbbs requests leave by
+// the same interface as the rest of the traffic
+macro_rules! apply_bind_options {
+    ($builder:expr) => {{
+        let mut builder = $builder;
+        #[cfg(any(
+            target_os = "android",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "solaris",
+        ))]
+        // reqwest's interface() is client-wide, so it cannot follow the
+        // per-family decision hbb_common makes. Only pin when the interface
+        // serves both families; otherwise the family that should fall back to
+        // the default interface would be pinned to one that cannot carry it.
+        if let (Some(device), Some(_)) = (
+            Config::get_bind_device(true),
+            Config::get_bind_device(false),
+        ) {
+            builder = builder.interface(&device);
+        }
+        // hyper-util maps a single local address to its own family only
+        // (set_local_address), so the other family keeps falling back to the
+        // os default -- which is the per-family behaviour we want here.
+        if let Some(ip) =
+            Config::get_bind_source_ip(true).or_else(|| Config::get_bind_source_ip(false))
+        {
+            builder = builder.local_address(ip);
+        }
+        builder
+    }};
+}
+
+// Fallback client for when build() fails. It must keep the binding: a plain
+// <$Client>::new() is unbound, so with a strict binding configured it would send
+// requests out of an interface the user ruled out -- the leak the option exists
+// to prevent. If even this fails, <$Client>::new() panics rather than returning,
+// so there is no silent unbound path.
+macro_rules! bound_fallback_client {
+    ($Client:ty) => {
+        apply_bind_options!(<$Client>::builder().no_proxy())
+            .build()
+            .unwrap_or_else(|e| {
+                log::error!("Failed to create a bound fallback client: {}", e);
+                <$Client>::new()
+            })
+    };
+}
+
 macro_rules! configure_http_client {
     ($builder:expr, $tls_type:expr, $danger_accept_invalid_cert:expr, $Client: ty) => {{
         // https://github.com/rustdesk/rustdesk/issues/11569
         // https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html#method.no_proxy
-        let mut builder = $builder.no_proxy();
+        let mut builder = apply_bind_options!($builder.no_proxy());
 
         match $tls_type {
             TlsType::Plain => {}
@@ -73,24 +125,24 @@ macro_rules! configure_http_client {
                             builder = builder.proxy(p);
                             builder.build().unwrap_or_else(|e| {
                                 info!("Failed to create a proxied client: {}", e);
-                                <$Client>::new()
+                                bound_fallback_client!($Client)
                             })
                         }
                         Err(e) => {
                             info!("Failed to set up proxy: {}", e);
-                            <$Client>::new()
+                            bound_fallback_client!($Client)
                         }
                     }
                 }
                 Err(e) => {
                     info!("Failed to configure proxy: {}", e);
-                    <$Client>::new()
+                    bound_fallback_client!($Client)
                 }
             }
         } else {
             builder.build().unwrap_or_else(|e| {
                 info!("Failed to create a client: {}", e);
-                <$Client>::new()
+                bound_fallback_client!($Client)
             })
         };
 
