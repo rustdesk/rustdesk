@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
@@ -8,6 +10,7 @@ import 'package:toggle_switch/toggle_switch.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../consts.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage(
@@ -72,6 +75,51 @@ class _FileManagerPageState extends State<FileManagerPage> {
   FileDirectory get currentDir => currentFileController.directory.value;
   DirectoryOptions get currentOptions => currentFileController.options.value;
   final _uniqueKey = UniqueKey();
+
+  Future<void> _importFiles() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null) return;
+
+    var imported = 0;
+    for (final selected in result.files) {
+      final sourcePath = selected.path;
+      final name = selected.name.replaceAll('\\', '/').split('/').last;
+      if (sourcePath == null ||
+          !PathUtil.validName(name, currentOptions.isWindows)) {
+        continue;
+      }
+      try {
+        final destination =
+            PathUtil.join(currentDir.path, name, currentOptions.isWindows);
+        if (await File(destination).exists()) {
+          final overwrite = await model.showFileConfirmDialog(
+              translate('Overwrite'), destination, false, false);
+          if (overwrite == false) break;
+          if (overwrite != true) continue;
+        }
+        await File(sourcePath).copy(destination);
+        imported++;
+      } catch (e) {
+        debugPrint('Failed to import $name: $e');
+      }
+    }
+    await currentFileController.refresh();
+    showToast(
+        translate(imported == result.files.length ? 'Successful' : 'Failed'));
+  }
+
+  Future<void> _exportFile(Entry entry) async {
+    try {
+      final exported = await gFFI
+          .invokeMethod(AndroidChannel.kExportFile, {'path': entry.path});
+      if (exported == true) {
+        showToast(translate('Successful'));
+      }
+    } catch (e) {
+      debugPrint('Failed to export ${entry.name}: $e');
+      showToast(translate('Failed'));
+    }
+  }
 
   @override
   void initState() {
@@ -159,6 +207,19 @@ class _FileManagerPageState extends State<FileManagerPage> {
                       ),
                       value: "refresh",
                     ),
+                    if (isAndroid)
+                    PopupMenuItem(
+                      enabled: showLocal && currentDir.path.isNotEmpty,
+                      value: "import",
+                      child: Row(
+                        children: [
+                          Icon(Icons.add_to_drive,
+                              color: Theme.of(context).iconTheme.color),
+                          SizedBox(width: 5),
+                          Text(translate("Add"))
+                        ],
+                      ),
+                    ),
                     PopupMenuItem(
                       enabled: currentDir.path != "/",
                       child: Row(
@@ -203,6 +264,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 onSelected: (v) {
                   if (v == "refresh") {
                     currentFileController.refresh();
+                  } else if (v == "import") {
+                    _importFiles();
                   } else if (v == "select") {
                     model.localController.selectedItems.clear();
                     model.remoteController.selectedItems.clear();
@@ -300,6 +363,15 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 setState(() {});
               },
               actions: [
+                if (isAndroid &&
+                    selectedItems?.isLocal == true &&
+                    selectedItems?.items.length == 1 &&
+                    selectedItems?.items.single.isFile == true)
+                  IconButton(
+                    tooltip: translate("Save as"),
+                    icon: Icon(Icons.save_alt),
+                    onPressed: () => _exportFile(selectedItems!.items.single),
+                  ),
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
                   onPressed: () => setState(() => showLocal = !showLocal),

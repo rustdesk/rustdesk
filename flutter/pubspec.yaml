@@ -29,7 +29,7 @@ dependencies:
 
   ffi: ^2.1.0
   path_provider: ^2.1.1
-  external_path: ^1.0.3
+  #external_path: ^1.0.3
   provider: ^6.0.5
   tuple: ^2.0.0
   wakelock_plus: ^1.1.3

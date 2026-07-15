@@ -9,6 +9,7 @@ package com.carriez.flutter_hbb
 
 import ffi.FFI
 
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -24,6 +25,7 @@ import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.webkit.MimeTypeMap
 import android.util.DisplayMetrics
 import androidx.annotation.RequiresApi
 import org.json.JSONArray
@@ -33,6 +35,8 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
+import java.io.File
+import java.io.FileInputStream
 
 
 class MainActivity : FlutterActivity() {
@@ -46,6 +50,8 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
+    private var pendingExportFile: File? = null
+    private var pendingExportResult: MethodChannel.Result? = null
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
@@ -91,6 +97,35 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_EXPORT_FILE) {
+            val source = pendingExportFile
+            val channelResult = pendingExportResult
+            pendingExportFile = null
+            pendingExportResult = null
+            val destination = data?.data
+
+            if (resultCode != Activity.RESULT_OK || source == null || destination == null) {
+                channelResult?.success(false)
+                return
+            }
+
+            thread {
+                try {
+                    FileInputStream(source).use { input ->
+                        contentResolver.openOutputStream(destination, "w")?.use { output ->
+                            input.copyTo(output)
+                        } ?: throw IllegalStateException("Unable to open the selected destination")
+                    }
+                    runOnUiThread { channelResult?.success(true) }
+                } catch (e: Exception) {
+                    Log.e(logTag, "Failed to export file", e)
+                    runOnUiThread {
+                        channelResult?.error("export_failed", e.message, null)
+                    }
+                }
+            }
+            return
+        }
         if (requestCode == REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION && resultCode == RES_FAILED) {
             flutterMethodChannel?.invokeMethod("on_media_projection_canceled", null)
         }
@@ -255,6 +290,42 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else {
                         result.success(false)
+                    }
+                }
+                EXPORT_FILE -> {
+                    val path = (call.arguments as? Map<*, *>)?.get("path") as? String
+                    val source = path?.let { runCatching { File(it).canonicalFile }.getOrNull() }
+                    val allowedRoots = listOfNotNull(filesDir, getExternalFilesDir(null)).mapNotNull {
+                        runCatching { it.canonicalFile }.getOrNull()
+                    }
+                    val isAllowed = source != null && allowedRoots.any { root ->
+                        source == root || source.path.startsWith(root.path + File.separator)
+                    }
+
+                    if (!isAllowed || source?.isFile != true) {
+                        result.error("invalid_source", "The file is outside app-scoped storage", null)
+                    } else if (pendingExportResult != null) {
+                        result.error("export_in_progress", "Another export is already in progress", null)
+                    } else {
+                        val mimeType = MimeTypeMap.getSingleton()
+                            .getMimeTypeFromExtension(source.extension.lowercase())
+                            ?: "application/octet-stream"
+                        pendingExportFile = source
+                        pendingExportResult = result
+                        try {
+                            startActivityForResult(
+                                Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = mimeType
+                                    putExtra(Intent.EXTRA_TITLE, source.name)
+                                },
+                                REQ_EXPORT_FILE
+                            )
+                        } catch (e: Exception) {
+                            pendingExportFile = null
+                            pendingExportResult = null
+                            result.error("picker_unavailable", e.message, null)
+                        }
                     }
                 }
                 GET_VALUE -> {
