@@ -1024,7 +1024,7 @@ pub fn get_full_name() -> String {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("install.exe")
+    !config::is_disable_installation() && name.to_lowercase().ends_with("install.exe")
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {

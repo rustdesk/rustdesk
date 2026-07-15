@@ -127,6 +127,10 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
+    if config::is_disable_installation() {
+        args.retain(|arg| arg != "--install");
+        flutter_args.retain(|arg| arg != "--install");
+    }
     if args.len() > 0 {
         if args[0] == "--version" {
             println!("{}", crate::VERSION);

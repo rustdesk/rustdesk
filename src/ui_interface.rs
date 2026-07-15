@@ -98,12 +98,18 @@ pub fn get_id() -> String {
 
 #[inline]
 pub fn goto_install() {
+    if config::is_disable_installation() {
+        return;
+    }
     allow_err!(crate::run_me(vec!["--install"]));
     std::process::exit(0);
 }
 
 #[inline]
 pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
+    if config::is_disable_installation() {
+        return;
+    }
     #[cfg(windows)]
     std::thread::spawn(move || {
         allow_err!(crate::platform::windows::install_me(
