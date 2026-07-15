@@ -357,11 +357,14 @@ void changeIdWhiteList({Function()? callback}) async {
               if (newIdWhiteListField.isEmpty) {
                 // pass
               } else {
-                final ids =
-                    newIdWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                final ids = newIdWhiteListField
+                    .trim()
+                    .split(RegExp(r"[\s,;\n]+"))
+                    .where((e) => e.isNotEmpty)
+                    .toList();
                 // test id, wildcards '*' and '?' are allowed;
                 // '@' '.' ':' occur in cross-server IDs like "123456789@server:port"
-                final idMatch = RegExp(r"^[a-zA-Z0-9\_\-\*\?\@\.\:]+$");
+                final idMatch = RegExp(r"^[a-zA-Z0-9_*?@.:-]+$");
                 for (final id in ids) {
                   if (!idMatch.hasMatch(id)) {
                     msg = "${translate("Invalid ID")} $id";
