@@ -2484,6 +2484,10 @@ class _KeyboardMenu extends StatelessWidget {
             ? (v) async {
                 if (v != null) {
                   await stateGlobal.setInputSource(ffi.sessionId, v);
+                  // Keep native input released while the toolbar owns focus.
+                  // This bypasses RemotePage's input-state cache, so explicit
+                  // pointer input must reassert it until ownership is centralized.
+                  if (isMacOS) ffi.inputModel.enterOrLeave(false);
                   await ffi.ffiModel.checkDesktopKeyboardMode();
                   await ffi.inputModel.updateKeyboardMode();
                 }
