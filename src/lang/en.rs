@@ -250,6 +250,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("elevation_username_tip", "Input username or domain\\username"),
         ("allow-insecure-tls-fallback-tip", "By default, RustDesk verifies the server certificate for protocols using TLS.\nWith this option enabled, RustDesk will fall back to skipping the verification step and proceed in case of verification failure."),
         ("disable-udp-tip", "Controls whether to use TCP only.\nWhen this option enabled, RustDesk will not use UDP 21116 any more, TCP 21116 will be used instead."),
+        ("bind-interface-tip", "Bind RustDesk to a network interface or source IP address, for both incoming and outgoing connections. Use this to keep RustDesk reachable on a chosen interface (e.g. the LAN) no matter what a VPN does to the routing. Picking an interface keeps working when its address changes; picking an address binds that one address only. If the selection is unavailable, RustDesk falls back to all interfaces."),
         ("server-oss-not-support-tip", "NOTE: RustDesk server OSS doesn't include this feature."),
         ("note-at-conn-end-tip", "Ask for note at end of connection"),
         ("rel-mouse-not-supported-peer-tip", "Relative Mouse Mode is not supported by the connected peer."),

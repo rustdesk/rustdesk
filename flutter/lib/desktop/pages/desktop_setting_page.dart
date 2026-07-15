@@ -1669,7 +1669,9 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
     final hideWebSocket = isWeb ||
         bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y';
 
-    if (hideServer && hideProxy && hideWebSocket) {
+    // the interface binding tile below is shown whenever this is not web, and
+    // no build option hides it, so the card must stay for it
+    if (hideServer && hideProxy && hideWebSocket && isWeb) {
       return Offstage();
     }
 
@@ -1777,6 +1779,16 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     'Use WebSocket',
                     '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
                     kOptionAllowWebSocket),
+              if (!isWeb && (!hideServer || !hideProxy || !hideWebSocket))
+                divider,
+              if (!isWeb)
+                listTile(
+                  icon: Icons.settings_ethernet,
+                  title: 'Network interface',
+                  showTooltip: true,
+                  tooltipMessage: 'bind-interface-tip',
+                  onTap: () => changeBindInterface(setState),
+                ),
               if (!isWeb)
                 futureBuilder(
                   future: bind.mainIsUsingPublicServer(),
@@ -1786,8 +1798,10 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                     } else {
                       return Column(
                         children: [
-                          if (!hideServer || !hideProxy || !hideWebSocket)
-                            divider,
+                          // this block only renders when !isWeb, and the
+                          // network interface tile above is always shown then,
+                          // so there is always a preceding item to separate
+                          divider,
                           switchWidget(
                               Icons.no_encryption_outlined,
                               'Allow insecure TLS fallback',
@@ -3169,6 +3183,90 @@ void changeSocks5Proxy() async {
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress)
               const LinearProgressIndicator().marginOnly(top: 8),
+          ],
+        ),
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        if (!isOptFixed) dialogButton('OK', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+// bind RustDesk to a network interface or source ip, for incoming and outgoing
+// connections, e.g. to stay reachable on the LAN regardless of a VPN.
+// empty (the default) lets the os choose, and is also where it falls back to
+// when the selected one is unavailable and Strict is off.
+void changeBindInterface(StateSetter parentSetState) async {
+  // one entry per interface, which pins the device and so survives the
+  // interface changing address, and one per address, which binds that source
+  // ip only. Both go into the same option, see bind-interface in hbb_common.
+  final entries = <DropdownMenuEntry<String>>[
+    DropdownMenuEntry(value: '', label: translate('Default (all interfaces)')),
+  ];
+  try {
+    final interfaces = await NetworkInterface.list(
+      includeLoopback: false,
+      type: InternetAddressType.any,
+    );
+    for (final itf in interfaces) {
+      entries.add(DropdownMenuEntry(value: itf.name, label: itf.name));
+      for (final addr in itf.addresses) {
+        entries.add(DropdownMenuEntry(
+            value: addr.address, label: '${addr.address} (${itf.name})'));
+      }
+    }
+  } catch (e) {
+    debugPrint('Failed to list network interfaces: $e');
+  }
+
+  String value = bind.mainGetOptionSync(key: kOptionBindInterface);
+  // keep the saved value selectable even if its interface/address is gone now
+  if (value.isNotEmpty && !entries.any((e) => e.value == value)) {
+    entries.insert(1, DropdownMenuEntry(value: value, label: value));
+  }
+  final isOptFixed = isOptionFixed(kOptionBindInterface);
+
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() async {
+      await bind.mainSetOption(key: kOptionBindInterface, value: value);
+      parentSetState(() {});
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Network interface')),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 480, maxWidth: 480),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // DropdownMenu (not DropdownButton): its menu renders correctly
+            // inside the overlay-based dialog, see common/widgets/dialog.dart.
+            DropdownMenu<String>(
+              initialSelection: value,
+              width: 460,
+              enabled: !isOptFixed,
+              // pure selection (no type-to-filter); avoids the focus-first,
+              // select-second double click
+              requestFocusOnTap: false,
+              inputDecorationTheme: const InputDecorationTheme(
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                border: OutlineInputBorder(),
+              ),
+              onSelected: (v) => setState(() => value = v ?? ''),
+              dropdownMenuEntries: entries,
+            ).marginOnly(bottom: 10),
+            Text(
+              translate('bind-interface-tip'),
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ).marginOnly(top: 8),
           ],
         ),
       ),
