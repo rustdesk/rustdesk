@@ -1365,9 +1365,11 @@ class ScreenAdjustor {
   }
 
   Future<Rect?> _getAdjustedWindowFrame(Size mediaSize) async {
-    if (_screen != null) {
-      // See the platform coordinate-unit notes above ScreenAdjustor.
-      double scale = isWindows ? _screen!.scaleFactor : 1.0;
+    final screen = _screen;
+    if (screen != null) {
+      // Windows window frames use physical pixels while Flutter view sizes are
+      // logical. macOS and Linux window frames use the same units as Flutter.
+      double scale = isWindows ? screen.scaleFactor : 1.0;
       final wndRect = await WindowController.fromWindowId(windowId).getFrame();
       // On Windows, wndRect is GetWindowRect while mediaSize is GetClientRect.
       // https://stackoverflow.com/a/7561083
@@ -1392,11 +1394,11 @@ class ScreenAdjustor {
       double top = wndRect.top + (wndRect.height - height) / 2;
 
       // Adjust Window exits fullscreen before setting the window frame.
-      Rect frameRect = _screen!.visibleFrame;
+      Rect frameRect = screen.visibleFrame;
       if (isLinux && bind.mainCurrentIsWayland()) {
         // In testing, Wayland at 200% reported an unscaled screen frame while
         // GTK window sizes used logical units, so convert the frame first.
-        double screenScale = _screen!.scaleFactor;
+        double screenScale = screen.scaleFactor;
         if (screenScale > 1) {
           frameRect = Rect.fromLTRB(
             frameRect.left / screenScale,
@@ -1443,9 +1445,13 @@ class ScreenAdjustor {
     // A resolution change is adjusted after a delay, when the menu context may
     // already be disposed. Each desktop_multi_window window has its own engine,
     // so that engine's first view is the current window.
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (context == null && views.isEmpty) {
+      return;
+    }
     final view = context != null
         ? View.of(context)
-        : WidgetsBinding.instance.platformDispatcher.views.first;
+        : views.first;
     await updateScreen();
     if (_screen != null) {
       final wasFullscreen = isFullscreen;
@@ -1491,9 +1497,13 @@ class ScreenAdjustor {
 
   Future<bool> isWindowCanBeAdjusted([BuildContext? context]) async {
     // Capture the view before awaiting because the menu context may be disposed.
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (context == null && views.isEmpty) {
+      return false;
+    }
     final view = context != null
         ? View.of(context)
-        : WidgetsBinding.instance.platformDispatcher.views.first;
+        : views.first;
     final mediaSize = MediaQueryData.fromView(view).size;
     final viewStyle =
         await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
