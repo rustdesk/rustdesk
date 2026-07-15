@@ -1460,6 +1460,7 @@ class ScreenAdjustor {
       if (wasFullscreen) {
         // Wait for the native fullscreen exit to update the window frame.
         await Future.delayed(Duration(milliseconds: 700));
+        await updateScreen();
       }
       if (isLinux) {
         if (await wc.isMaximized()) {
@@ -1504,6 +1505,9 @@ class ScreenAdjustor {
   }
 
   Future<bool> isWindowCanBeAdjusted([BuildContext? context]) async {
+    if (isWeb) {
+      return false;
+    }
     // Capture the view before awaiting because the menu context may be disposed.
     final views = WidgetsBinding.instance.platformDispatcher.views;
     if (context == null && views.isEmpty) {
@@ -1513,6 +1517,7 @@ class ScreenAdjustor {
         ? View.of(context)
         : views.first;
     final mediaSize = MediaQueryData.fromView(view).size;
+    await updateScreen();
     final viewStyle =
         await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
     if (viewStyle != kRemoteViewStyleOriginal) {
