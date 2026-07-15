@@ -147,6 +147,32 @@ void main() {
   });
 
   group('applyTerminalInputModifiers', () {
+    test('keeps decomposed graphemes intact under Ctrl', () {
+      const decomposedEAcute = 'e\u0301';
+
+      expect(
+        applyTerminalInputModifiers(
+          decomposedEAcute,
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        decomposedEAcute,
+      );
+    });
+
+    test('keeps non-ASCII graphemes intact under Ctrl', () {
+      for (final input in ['é', '😀']) {
+        expect(
+          applyTerminalInputModifiers(
+            input,
+            ctrlLocked: true,
+            altLocked: false,
+          ),
+          input,
+        );
+      }
+    });
+
     test('maps Ctrl underscore to unit separator', () {
       expect(
         applyTerminalInputModifiers(
@@ -249,6 +275,23 @@ void main() {
           altLocked: true,
         ),
         '\x1B',
+      );
+    });
+
+    test('keeps decomposed graphemes intact with locked keyboard modifiers',
+        () {
+      const decomposedEAcute = 'e\u0301';
+
+      expect(
+        prepareTerminalInputPayload(
+          decomposedEAcute,
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: true,
+          bracketedPasteMode: false,
+          ctrlLocked: true,
+          altLocked: false,
+        ),
+        decomposedEAcute,
       );
     });
 

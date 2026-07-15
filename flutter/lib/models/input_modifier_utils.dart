@@ -144,28 +144,43 @@ bool shouldClearTerminalModifiersWhenRow3Collapses({
 }
 
 String _applyTerminalCtrlModifier(String data) {
-  final result = StringBuffer();
-  for (var i = 0; i < data.length; i++) {
-    final code = data.codeUnitAt(i);
-    if (code >= 0x61 && code <= 0x7A) {
-      result.writeCharCode(code - 0x60);
-    } else if (code >= 0x41 && code <= 0x5A) {
-      result.writeCharCode(code - 0x40);
-    } else if (code == 0x20) {
-      result.writeCharCode(0);
-    } else if (code == 0x5B) {
-      result.writeCharCode(27);
-    } else if (code == 0x5C) {
-      result.writeCharCode(28);
-    } else if (code == 0x5D) {
-      result.writeCharCode(29);
-    } else if (code == 0x5E) {
-      result.writeCharCode(30);
-    } else if (code == 0x5F || code == 0x2F) {
-      result.writeCharCode(31);
-    } else {
-      result.writeCharCode(code);
-    }
+  // Ctrl mappings are defined only for ASCII scalars. A visible character can
+  // be multiple scalars (for example, a decomposed accent), so leave those
+  // graphemes untouched instead of rewriting only their ASCII base letter.
+  final graphemes = data.characters.toList(growable: false);
+  if (graphemes.length != 1) {
+    return data;
   }
-  return result.toString();
+
+  final runes = graphemes.single.runes.toList(growable: false);
+  if (runes.length != 1) {
+    return data;
+  }
+
+  final code = runes.single;
+  if (code >= 0x61 && code <= 0x7A) {
+    return String.fromCharCode(code - 0x60);
+  }
+  if (code >= 0x41 && code <= 0x5A) {
+    return String.fromCharCode(code - 0x40);
+  }
+  if (code == 0x20) {
+    return String.fromCharCode(0);
+  }
+  if (code == 0x5B) {
+    return String.fromCharCode(27);
+  }
+  if (code == 0x5C) {
+    return String.fromCharCode(28);
+  }
+  if (code == 0x5D) {
+    return String.fromCharCode(29);
+  }
+  if (code == 0x5E) {
+    return String.fromCharCode(30);
+  }
+  if (code == 0x5F || code == 0x2F) {
+    return String.fromCharCode(31);
+  }
+  return data;
 }
