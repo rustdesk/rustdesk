@@ -774,5 +774,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "تم حظر عنوان IP الخاص بك من قبل الطرف الآخر"),
         ("id_whitelist_caveat_tip", "يتم الإبلاغ عن المعرف من قبل العميل المتصل. القائمة البيضاء تقلل من التعرض ولا تغني عن كلمة المرور أو 2FA"),
         ("whitelist_cidr_tip", "يتم دعم صيغة CIDR، مثال: 192.168.1.0/24"),
+        ("Network interface", ""),
+        ("Default (all interfaces)", ""),
+        ("bind-interface-tip", ""),
+        ("Strict (no fallback)", ""),
+        ("bind-strict-tip", ""),
     ].iter().cloned().collect();
 }

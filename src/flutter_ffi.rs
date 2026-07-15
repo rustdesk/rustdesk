@@ -1019,6 +1019,10 @@ pub fn main_set_option(key: String, value: String) {
         || key.eq(config::keys::OPTION_ALLOW_WEBSOCKET)
         || key.eq(config::keys::OPTION_DISABLE_UDP)
         || key.eq("api-server")
+        // restart so the new interface binding applies now, not on next reconnect.
+        // desktop goes through CheckIfRestart in ipc.rs instead.
+        || key.eq(config::keys::OPTION_BIND_INTERFACE)
+        || key.eq(config::keys::OPTION_BIND_STRICT)
     {
         if is_allow_tls_fallback {
             hbb_common::tls::reset_tls_cache();
