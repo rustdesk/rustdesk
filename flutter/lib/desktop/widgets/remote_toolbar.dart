@@ -1370,7 +1370,14 @@ class ScreenAdjustor {
       // Windows window frames use physical pixels while Flutter view sizes are
       // logical. macOS and Linux window frames use the same units as Flutter.
       double scale = isWindows ? screen.scaleFactor : 1.0;
-      final wndRect = await WindowController.fromWindowId(windowId).getFrame();
+      final Rect wndRect;
+      try {
+        wndRect = await WindowController.fromWindowId(windowId).getFrame();
+      } catch (e) {
+        debugPrint(
+            "Failed to get frame of window $windowId, it may be hidden");
+        return null;
+      }
       // On Windows, wndRect is GetWindowRect while mediaSize is GetClientRect.
       // https://stackoverflow.com/a/7561083
       double magicWidth =
