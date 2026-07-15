@@ -1406,13 +1406,14 @@ class ScreenAdjustor {
           );
         }
       }
-      // A window frame cannot be smaller than its client area. Negative values
-      // mean the native frame and Flutter view metrics are not synchronized.
-      if (magicWidth < 0 || magicHeight < 0) {
+      // A window frame cannot be smaller than its client area. Tolerate small
+      // floating-point differences; larger negative values mean the native
+      // frame and Flutter view metrics are not synchronized.
+      if (magicWidth < -0.1 || magicHeight < -0.1) {
         return null;
       }
-      // During the macOS fullscreen exit animation, WindowController.getFrame()
-      // once returned a transient 4.0x60.0 frame. Reject it for safety.
+      // Transient fullscreen metrics once produced a calculated 4.0x60.0
+      // target frame. Reject implausibly small targets to avoid hiding the window.
       if (width < 300 || height < 300) {
         return null;
       }
