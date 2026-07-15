@@ -1454,18 +1454,26 @@ class ScreenAdjustor {
         : views.first;
     await updateScreen();
     if (_screen != null) {
+      final wc = WindowController.fromWindowId(windowId);
       final wasFullscreen = isFullscreen;
       cbExitFullscreen();
       if (wasFullscreen) {
         // Wait for the native fullscreen exit to update the window frame.
         await Future.delayed(Duration(milliseconds: 700));
       }
+      if (isLinux) {
+        if (await wc.isMaximized()) {
+          // setFrame may be ignored while the native window is maximized.
+          await wc.unmaximize();
+          stateGlobal.setMaximized(false);
+        }
+      }
       final mediaSize = MediaQueryData.fromView(view).size;
       final frame = await _getAdjustedWindowFrame(mediaSize);
       if (frame == null) {
         return;
       }
-      await WindowController.fromWindowId(windowId).setFrame(frame);
+      await wc.setFrame(frame);
       stateGlobal.setMaximized(false);
     }
   }
