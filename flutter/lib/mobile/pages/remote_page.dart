@@ -986,6 +986,14 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
+    // On wide screens (foldables, tablets, phones in landscape) the key groups
+    // fit in one or two flowing rows, so keep them on the same row instead of
+    // forcing a line break before each group. Narrow (portrait phone) screens
+    // keep the forced breaks so each group starts on its own row.
+    final isWideScreen = size.width >= 600;
+    // A zero-height box wider than any screen makes `Wrap` start a new run.
+    final groupBreak =
+        isWideScreen ? const SizedBox.shrink() : const SizedBox(width: 9999);
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
@@ -1037,7 +1045,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
           active: _more),
     ];
     final fn = <Widget>[
-      SizedBox(width: 9999),
+      groupBreak,
     ];
     for (var i = 1; i <= 12; ++i) {
       final name = 'F$i';
@@ -1046,7 +1054,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }));
     }
     final more = <Widget>[
-      SizedBox(width: 9999),
+      groupBreak,
       wrap('Esc', () {
         inputModel.inputKey('VK_ESCAPE');
       }),
@@ -1093,7 +1101,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap('Enter', () {
         inputModel.inputKey('VK_ENTER');
       }),
-      SizedBox(width: 9999),
+      groupBreak,
       wrap('', () {
         inputModel.inputKey('VK_LEFT');
       }, icon: Icons.keyboard_arrow_left),
