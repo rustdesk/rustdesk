@@ -98,11 +98,18 @@ use windows_service::{
 use winreg::{enums::*, RegKey};
 
 mod acl;
+mod installer_handoff;
+mod installer_shell;
 pub(crate) use acl::current_process_user_sid_string;
 pub use acl::{
     set_path_permission, set_path_permission_for_portable_service_shmem_dir,
     set_path_permission_for_portable_service_shmem_file,
     validate_path_for_portable_service_shmem_dir,
+};
+use installer_handoff::run_cmds;
+use installer_shell::{
+    embedded_shortcut_commands, embedded_tray_shortcut_commands, escape_nested_cmd_ampersands,
+    shortcut_bytes, validate_install_value,
 };
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
@@ -1499,6 +1506,7 @@ fn get_after_install(
 ) -> String {
     let app_name = crate::get_app_name();
     let ext = app_name.to_lowercase();
+    let nested_exe = escape_nested_cmd_ampersands(exe);
 
     // reg delete HKEY_CURRENT_USER\Software\Classes for
     // https://github.com/rustdesk/rustdesk/commit/f4bdfb6936ae4804fc8ab1cf560db192622ad01a
@@ -1534,17 +1542,17 @@ fn get_after_install(
     {start_menu_shortcuts}
     {reg_printer}
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
-    reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
+    reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{nested_exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open\\command /f
-    reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{exe}\\\" --play \\\"%%1\\\"\"
+    reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" --play \\\"%%1\\\"\"
     reg add HKEY_CLASSES_ROOT\\{ext} /f
     reg add HKEY_CLASSES_ROOT\\{ext} /f /v \"URL Protocol\" /t REG_SZ /d \"\"
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f
-    reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{exe}\\\" \\\"%%1\\\"\"
+    reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
     {create_service}
@@ -1578,48 +1586,38 @@ pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> Res
     let app_name = crate::get_app_name();
 
     let current_exe = std::env::current_exe()?;
-
-    let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let cur_exe = current_exe.to_str().unwrap_or("").to_owned();
-    let shortcut_icon_location = get_shortcut_icon_location(&path, &cur_exe);
-    let mk_shortcut = write_cmds(
-        format!(
-            "
-Set oWS = WScript.CreateObject(\"WScript.Shell\")
-sLinkFile = \"{tmp_path}\\{app_name}.lnk\"
-
-Set oLink = oWS.CreateShortcut(sLinkFile)
-    oLink.TargetPath = \"{exe}\"
-    {shortcut_icon_location}
-oLink.Save
-        "
-        ),
-        "vbs",
+    let cur_exe = current_exe
+        .to_str()
+        .ok_or_else(|| anyhow!("Current executable path is not valid Unicode"))?
+        .to_owned();
+    for value in [&path, &exe, &cur_exe] {
+        validate_install_value(value)?;
+    }
+    let config_path = Config::file();
+    validate_install_value(
+        config_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Configuration path is not valid Unicode"))?,
+    )?;
+    if let Some(icon) = get_custom_icon(&path, &cur_exe) {
+        validate_install_value(&icon)?;
+    }
+    // The elevated runner expands this to `%~f0.dir`, beside its protected copy.
+    // Do not stage privileged shortcut artifacts in the user-writable `%TEMP%`.
+    let tmp_path = "%RUSTDESK_OUTPUT_DIR%".to_owned();
+    let shortcut_icon_location = get_custom_icon(&path, &cur_exe);
+    let mk_shortcut_commands = embedded_shortcut_commands(
+        shortcut_bytes(&exe, None, shortcut_icon_location.as_deref())?,
+        &format!("{app_name}.lnk"),
         "mk_shortcut",
-    )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned();
-    // https://superuser.com/questions/392061/how-to-make-a-shortcut-from-cmd
-    let uninstall_shortcut = write_cmds(
-        format!(
-            "
-Set oWS = WScript.CreateObject(\"WScript.Shell\")
-sLinkFile = \"{tmp_path}\\Uninstall {app_name}.lnk\"
-Set oLink = oWS.CreateShortcut(sLinkFile)
-    oLink.TargetPath = \"{exe}\"
-    oLink.Arguments = \"--uninstall\"
-    oLink.IconLocation = \"msiexec.exe\"
-oLink.Save
-        "
-        ),
-        "vbs",
+    );
+    let uninstall_shortcut_commands = embedded_shortcut_commands(
+        shortcut_bytes(&exe, Some("--uninstall"), Some("msiexec.exe"))?,
+        &format!("Uninstall {app_name}.lnk"),
         "uninstall_shortcut",
-    )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &cur_exe, &tmp_path)?;
+    );
+    let tray_shortcut_commands =
+        embedded_tray_shortcut_commands(&app_name, &exe, shortcut_icon_location.as_deref())?;
     let mut reg_value_desktop_shortcuts = "0".to_owned();
     let mut reg_value_start_menu_shortcuts = "0".to_owned();
     let mut reg_value_printer = "0".to_owned();
@@ -1660,15 +1658,12 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
     // Note: without if exist, the bat may exit in advance on some Windows7 https://github.com/rustdesk/rustdesk/issues/895
     let dels = format!(
         "
-if exist \"{mk_shortcut}\" del /f /q \"{mk_shortcut}\"
-if exist \"{uninstall_shortcut}\" del /f /q \"{uninstall_shortcut}\"
-if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
 if exist \"{tmp_path}\\{app_name}.lnk\" del /f /q \"{tmp_path}\\{app_name}.lnk\"
 if exist \"{tmp_path}\\Uninstall {app_name}.lnk\" del /f /q \"{tmp_path}\\Uninstall {app_name}.lnk\"
 if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} Tray.lnk\"
         "
     );
-    let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
+    let src_exe = cur_exe.clone();
 
     // potential bug here: if run_cmd cancelled, but config file is changed.
     if let Some(lic) = get_license() {
@@ -1681,7 +1676,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         "".to_owned()
     } else {
         format!("
-cscript \"{tray_shortcut}\"
+{tray_shortcut_commands}
 copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 ")
     };
@@ -1716,11 +1711,11 @@ reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
 reg add {subkey} /f /v VersionMajor /t REG_DWORD /d {version_major}
 reg add {subkey} /f /v VersionMinor /t REG_DWORD /d {version_minor}
 reg add {subkey} /f /v VersionBuild /t REG_DWORD /d {version_build}
-reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\"
+reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{nested_exe}\\\" --uninstall\"
 reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
-cscript \"{mk_shortcut}\"
-cscript \"{uninstall_shortcut}\"
+{mk_shortcut_commands}
+{uninstall_shortcut_commands}
 {tray_shortcuts}
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
@@ -1731,6 +1726,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 {sleep}
     ",
         display_icon = get_custom_icon(&path, &cur_exe).unwrap_or(exe.to_string()),
+        nested_exe = escape_nested_cmd_ampersands(&exe),
         version = crate::VERSION.replace("-", "."),
         build_date = crate::BUILD_DATE,
         after_install = get_after_install(
@@ -1836,10 +1832,9 @@ pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
     run_cmds(get_uninstall(kill_self, true), true, "uninstall")
 }
 
-fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
-    let mut cmds = cmds;
+fn write_vbs(cmds: String, tip: &str) -> ResultType<PathBuf> {
+    const UTF16LE_BOM: &[u8] = &[0xFF, 0xFE];
     let mut tmp = std::env::temp_dir();
-    // When dir contains these characters, the bat file will not execute in elevated mode.
     if vec!["&", "@", "^"]
         .drain(..)
         .any(|s| tmp.to_string_lossy().to_string().contains(s))
@@ -1848,31 +1843,14 @@ fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathB
             tmp = dir;
         }
     }
-    tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
-    let mut file = std::fs::File::create(&tmp)?;
-    if ext == "bat" {
-        let tmp2 = get_undone_file(&tmp)?;
-        std::fs::File::create(&tmp2).ok();
-        cmds = format!(
-            "
-{cmds}
-if exist \"{path}\" del /f /q \"{path}\"
-",
-            path = tmp2.to_string_lossy()
-        );
-    }
-    // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
-    // in some windows, \r\n required for cmd file to run
-    cmds = cmds.replace("\r\n", "\n").replace("\n", "\r\n");
-    if ext == "vbs" {
-        let mut v: Vec<u16> = cmds.encode_utf16().collect();
-        // utf8 -> utf16le which vbs support it only
-        file.write_all(to_le(&mut v))?;
-    } else {
-        file.write_all(cmds.as_bytes())?;
-    }
+    tmp.push(format!("{}_{}.vbs", crate::get_app_name(), tip));
+    let mut file = fs::File::create(&tmp)?;
+    let cmds = cmds.replace("\r\n", "\n").replace('\n', "\r\n");
+    let mut utf16: Vec<u16> = cmds.encode_utf16().collect();
+    file.write_all(UTF16LE_BOM)?;
+    file.write_all(to_le(&mut utf16))?;
     file.sync_all()?;
-    return Ok(tmp);
+    Ok(tmp)
 }
 
 fn to_le(v: &mut [u16]) -> &[u8] {
@@ -1880,37 +1858,6 @@ fn to_le(v: &mut [u16]) -> &[u8] {
         *b = b.to_le()
     }
     unsafe { v.align_to().1 }
-}
-
-fn get_undone_file(tmp: &Path) -> ResultType<PathBuf> {
-    Ok(tmp.with_file_name(format!(
-        "{}.undone",
-        tmp.file_name()
-            .ok_or(anyhow!("Failed to get filename of {:?}", tmp))?
-            .to_string_lossy()
-    )))
-}
-
-fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
-    let tmp = write_cmds(cmds, "bat", tip)?;
-    let tmp2 = get_undone_file(&tmp)?;
-    let tmp_fn = tmp.to_str().unwrap_or("");
-    // https://github.com/rustdesk/rustdesk/issues/6786#issuecomment-1879655410
-    // Specify cmd.exe explicitly to avoid the replacement of cmd commands.
-    let res = runas::Command::new("cmd.exe")
-        .args(&["/C", &tmp_fn])
-        .show(show)
-        .force_prompt(true)
-        .status();
-    if !show {
-        allow_err!(std::fs::remove_file(tmp));
-    }
-    let _ = res?;
-    if tmp2.exists() {
-        allow_err!(std::fs::remove_file(tmp2));
-        bail!("{} failed", tip);
-    }
-    Ok(())
 }
 
 pub fn toggle_blank_screen(v: bool) {
@@ -2288,7 +2235,7 @@ pub fn create_shortcut(id: &str) -> ResultType<()> {
     // https://github.com/rustdesk/hbb_common/blob/8b0e25867375ba9e6bff548acf44fe6d6ffa7c0e/src/config.rs#L1384
     let filename = id.replace(':', "_");
     let shortcut_icon_location = get_shortcut_icon_location("", &exe);
-    let shortcut = write_cmds(
+    let shortcut = write_vbs(
         format!(
             "
 Set oWS = WScript.CreateObject(\"WScript.Shell\")
@@ -2302,7 +2249,6 @@ Set oLink = oWS.CreateShortcut(sLinkFile)
 oLink.Save
         "
         ),
-        "vbs",
         "connect_shortcut",
     )?
     .to_str()
@@ -3187,29 +3133,51 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     std::process::exit(0);
 }
 
+fn get_install_service_commands(path: &str, exe: &str) -> ResultType<String> {
+    let app_name = crate::get_app_name();
+    for value in [path, exe] {
+        validate_install_value(value)?;
+    }
+    let config_path = Config::file();
+    validate_install_value(
+        config_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Configuration path is not valid Unicode"))?,
+    )?;
+    if let Some(icon) = get_custom_icon(path, exe) {
+        validate_install_value(&icon)?;
+    }
+    let shortcut_icon_location = get_custom_icon(path, exe);
+    let tray_shortcut_commands =
+        embedded_tray_shortcut_commands(&app_name, exe, shortcut_icon_location.as_deref())?;
+    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
+    Ok(format!(
+        "
+chcp 65001
+taskkill /F /IM {app_name}.exe{filter}
+{tray_shortcut_commands}
+copy /Y \"%RUSTDESK_OUTPUT_DIR%\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+{import_config}
+{create_service}
+    ",
+        import_config = get_import_config(exe),
+        create_service = get_create_service(exe),
+    ))
+}
+
 pub fn install_service() -> bool {
     log::info!("Installing service...");
     let _installing = crate::platform::InstallingService::new();
     let (_, path, _, exe) = get_install_info();
-    let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
-    let tray_shortcut = get_tray_shortcut(&path, &exe, &exe, &tmp_path).unwrap_or_default();
-    let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     Config::set_option("stop-service".into(), "".into());
+    let cmds = match get_install_service_commands(&path, &exe) {
+        Ok(cmds) => cmds,
+        Err(err) => {
+            log::error!("Failed to prepare service installation: {err}");
+            return true;
+        }
+    };
     crate::ipc::EXIT_RECV_CLOSE.store(false, Ordering::Relaxed);
-    let cmds = format!(
-        "
-chcp 65001
-taskkill /F /IM {app_name}.exe{filter}
-cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
-{import_config}
-{create_service}
-if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
-    ",
-        app_name = crate::get_app_name(),
-        import_config = get_import_config(&exe),
-        create_service = get_create_service(&exe),
-    );
     if let Err(err) = run_cmds(cmds, false, "install") {
         Config::set_option("stop-service".into(), "Y".into());
         crate::ipc::EXIT_RECV_CLOSE.store(true, Ordering::Relaxed);
@@ -3658,39 +3626,13 @@ pub fn update_me_msi(msi: &str, quiet: bool) -> ResultType<()> {
     Ok(())
 }
 
-pub fn get_tray_shortcut(
-    install_dir: &str,
-    exe: &str,
-    icon_source_exe: &str,
-    tmp_path: &str,
-) -> ResultType<String> {
-    let shortcut_icon_location = get_shortcut_icon_location(install_dir, icon_source_exe);
-    Ok(write_cmds(
-        format!(
-            "
-Set oWS = WScript.CreateObject(\"WScript.Shell\")
-sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
-
-Set oLink = oWS.CreateShortcut(sLinkFile)
-    oLink.TargetPath = \"{exe}\"
-    oLink.Arguments = \"--tray\"
-    {shortcut_icon_location}
-oLink.Save
-        ",
-            app_name = crate::get_app_name(),
-        ),
-        "vbs",
-        "tray_shortcut",
-    )?
-    .to_str()
-    .unwrap_or("")
-    .to_owned())
-}
-
 fn get_import_config(exe: &str) -> String {
     if config::is_outgoing_only() {
         return "".to_string();
     }
+    let exe = escape_nested_cmd_ampersands(exe);
+    let config_path = Config::file();
+    let config_path = escape_nested_cmd_ampersands(config_path.to_str().unwrap_or(""));
     format!("
 sc stop {app_name}
 sc delete {app_name}
@@ -3700,7 +3642,6 @@ sc stop {app_name}
 sc delete {app_name}
 ",
     app_name = crate::get_app_name(),
-    config_path=Config::file().to_str().unwrap_or(""),
 )
 }
 
@@ -3714,6 +3655,7 @@ fn get_create_service(exe: &str) -> String {
 if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
 ", app_name = crate::get_app_name())
     } else {
+        let exe = escape_nested_cmd_ampersands(exe);
         format!("
 sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
 sc start {app_name}
@@ -4609,6 +4551,17 @@ mod tests {
         assert_eq!(chr, Some('a'));
         let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
         assert_eq!(chr, None)
+    }
+
+    #[test]
+    fn vbs_files_use_utf16le_with_bom_and_crlf() {
+        const EXPECTED: &[u8] = &[0xFF, 0xFE, b'a', 0, b'\r', 0, b'\n', 0, b'b', 0];
+        let tip = format!("vbs_encoding_{}", uuid::Uuid::new_v4().simple());
+        let path = write_vbs("a\nb".to_owned(), &tip).expect("VBS file should be written");
+        let bytes = std::fs::read(&path).expect("VBS file should be readable");
+        std::fs::remove_file(path).expect("VBS file should be removed");
+
+        assert_eq!(bytes, EXPECTED);
     }
 
     #[cfg(not(target_pointer_width = "64"))]

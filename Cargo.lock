@@ -7211,18 +7211,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "runas"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96d6b6c505282b007a9b009f2aa38b2fd0359b81a0430ceacc60f69ade4c6a0"
-dependencies = [
- "libc",
- "security-framework-sys",
- "which",
- "windows-sys 0.48.0",
-]
-
-[[package]]
 name = "rust-ini"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7340,7 +7328,6 @@ dependencies = [
  "reqwest",
  "ringbuf",
  "rubato",
- "runas",
  "rust-pulsectl",
  "samplerate",
  "sciter-rs",
