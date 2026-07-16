@@ -4004,6 +4004,11 @@ bool whitelistNotEmpty() {
   return v != '' && v != ',';
 }
 
+bool idWhitelistNotEmpty() {
+  final v = bind.mainGetOptionSync(key: kOptionIdWhitelist);
+  return v != '' && v != ',';
+}
+
 // `setMovable()` is only supported on macOS.
 //
 // On macOS, the window can be dragged by the tab bar by default.

@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "सभी मॉनिटर"),
         ("#{} monitor", "मॉनिटर {}"),
         ("conn-e2ee-unavailable-tip", "एंड-टू-एंड एन्क्रिप्शन सत्यापित नहीं किया जा सका।\nदूरस्थ डिवाइस अभी भी सेट अप हो रहा हो सकता है। बाद में फिर प्रयास करें।\nयदि यह समस्या बनी रहती है, तो सर्वर अविश्वसनीय हो सकता है।\nफिर भी जारी रखें?"),
+        ("ID whitelisting", "ID श्वेतसूची (Whitelisting)"),
+        ("Use ID whitelisting", "ID श्वेतसूची का उपयोग करें"),
+        ("id_whitelist_tip", "केवल श्वेतसूचीबद्ध ID ही मुझ तक पहुंच सकते हैं"),
+        ("id_whitelist_wildcard_tip", "वाइल्डकार्ड समर्थित हैं: '*' किसी भी संख्या के अक्षरों से मेल खाता है, '?' ठीक एक अक्षर से"),
+        ("Invalid ID", "अमान्य ID"),
+        ("Your ID is blocked by the peer", "आपकी ID दूसरे पक्ष द्वारा अवरुद्ध कर दी गई है"),
+        ("Your ip is blocked by the peer", "आपका IP दूसरे पक्ष द्वारा अवरुद्ध कर दिया गया है"),
+        ("id_whitelist_caveat_tip", "ID कनेक्ट करने वाले क्लाइंट द्वारा बताई जाती है। श्वेतसूची जोखिम कम करती है और पासवर्ड या 2FA का विकल्प नहीं है"),
+        ("whitelist_cidr_tip", "CIDR नोटेशन समर्थित है, उदाहरण के लिए 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

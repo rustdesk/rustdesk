@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "すべてのディスプレイ"),
         ("#{} monitor", "ディスプレイ {}"),
         ("conn-e2ee-unavailable-tip", "エンドツーエンド暗号化を確認できませんでした。\nリモートデバイスはまだ準備中の可能性があります。後でもう一度お試しください。\nこの問題が続く場合、サーバーが信頼できない可能性があります。\nそれでも続行しますか？"),
+        ("ID whitelisting", "ID ホワイトリスト"),
+        ("Use ID whitelisting", "ID ホワイトリストを使用する"),
+        ("id_whitelist_tip", "ホワイトリストに登録された ID からのみ接続を許可します"),
+        ("id_whitelist_wildcard_tip", "ワイルドカードが使用できます。'*' は任意の数の文字、'?' はちょうど1文字に一致します"),
+        ("Invalid ID", "無効な ID"),
+        ("Your ID is blocked by the peer", "あなたの ID は接続先によってブロックされています"),
+        ("Your ip is blocked by the peer", "あなたの IP アドレスは接続先によってブロックされています"),
+        ("id_whitelist_caveat_tip", "ID は接続するクライアントから申告されます。ホワイトリストは露出を減らすもので、パスワードや 2FA の代わりにはなりません"),
+        ("whitelist_cidr_tip", "CIDR 表記に対応しています。例: 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

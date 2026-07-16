@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Totu sos ischermos"),
         ("#{} monitor", "Ischermu {}"),
         ("conn-e2ee-unavailable-tip", "No est istadu possìbile verificare sa tzifratzione de punta a punta.\nSu dispositivu remotu podet èssere ancora in fase de configuratzione. Torra a proare prus a tardu.\nSi custu sighit a acontèssere, su server podet non èssere fidadu.\nBoles sighire comente siat?"),
+        ("ID whitelisting", "ID autorizados"),
+        ("Use ID whitelisting", "Imprea elencu ID autorizados"),
+        ("id_whitelist_tip", "Si podent connètere a custa iscrivania petzi sos ID autorizados"),
+        ("id_whitelist_wildcard_tip", "Sos caràteres jolly sunt suportados: '*' currispondet a cale si siat nùmeru de caràteres, '?' a unu caràtere ebbia"),
+        ("Invalid ID", "ID non vàlidu"),
+        ("Your ID is blocked by the peer", "S'ID tuo est blocadu dae s'àtera parte"),
+        ("Your ip is blocked by the peer", "S'indiritzu IP tuo est blocadu dae s'àtera parte"),
+        ("id_whitelist_caveat_tip", "S'ID est decraradu dae su cliente chi si connetet. Custu elencu minimat s'espositzione e non sostituit sa crae o su 2FA"),
+        ("whitelist_cidr_tip", "Sa notatzione CIDR est suportada, pro esempru 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

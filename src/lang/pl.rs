@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Wszystkie ekrany"),
         ("#{} monitor", "Ekran {}"),
         ("conn-e2ee-unavailable-tip", "Nie można zweryfikować szyfrowania end-to-end.\nUrządzenie zdalne może nadal się konfigurować. Spróbuj ponownie później.\nJeśli problem będzie się powtarzał, serwer może być niezaufany.\nKontynuować mimo to?"),
+        ("ID whitelisting", "Biała lista ID"),
+        ("Use ID whitelisting", "Użyj białej listy ID"),
+        ("id_whitelist_tip", "Zezwalaj na łączenie z tym komputerem tylko z ID znajdujących się na białej liście"),
+        ("id_whitelist_wildcard_tip", "Obsługiwane są symbole wieloznaczne: '*' odpowiada dowolnej liczbie znaków, '?' dokładnie jednemu znakowi"),
+        ("Invalid ID", "Nieprawidłowe ID"),
+        ("Your ID is blocked by the peer", "Twoje ID zostało zablokowane przez drugą stronę"),
+        ("Your ip is blocked by the peer", "Twój adres IP został zablokowany przez drugą stronę"),
+        ("id_whitelist_caveat_tip", "ID jest zgłaszane przez łączącego się klienta. Biała lista zmniejsza ekspozycję i nie zastępuje hasła ani 2FA"),
+        ("whitelist_cidr_tip", "Obsługiwana jest notacja CIDR, na przykład 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

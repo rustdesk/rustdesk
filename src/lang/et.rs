@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Kõik kuvarid"),
         ("#{} monitor", "Kuvar {}"),
         ("conn-e2ee-unavailable-tip", "Otspunktkrüptimist ei saanud kontrollida.\nKaugseade võib olla veel seadistamisel. Proovige hiljem uuesti.\nKui see jätkub, ei pruugi server olla usaldusväärne.\nKas jätkata siiski?"),
+        ("ID whitelisting", "ID lubamisloend"),
+        ("Use ID whitelisting", "Kasuta ID-lubamisloendit"),
+        ("id_whitelist_tip", "Ainult lubamisloendis ID saab mulle ligi"),
+        ("id_whitelist_wildcard_tip", "Metamärgid on toetatud: '*' vastab suvalisele arvule märkidele, '?' täpselt ühele märgile"),
+        ("Invalid ID", "Sobimatu ID"),
+        ("Your ID is blocked by the peer", "Teine pool on sinu ID blokeerinud"),
+        ("Your ip is blocked by the peer", "Teine pool on sinu IP-aadressi blokeerinud"),
+        ("id_whitelist_caveat_tip", "ID edastab ühenduv klient. Lubamisloend vähendab eksponeeritust ega asenda parooli või 2FA-d"),
+        ("whitelist_cidr_tip", "Toetatud on CIDR-tähistus, näiteks 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

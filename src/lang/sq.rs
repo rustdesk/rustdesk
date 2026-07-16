@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Të gjithë monitorët"),
         ("#{} monitor", "Monitori {}"),
         ("conn-e2ee-unavailable-tip", "Enkriptimi nga skaji në skaj nuk mund të verifikohej.\nPajisja e largët mund të jetë ende duke u konfiguruar. Provoni përsëri më vonë.\nNëse kjo vazhdon të ndodhë, serveri mund të mos jetë i besueshëm.\nTë vazhdohet gjithsesi?"),
+        ("ID whitelisting", "Lista e bardhë e ID-ve"),
+        ("Use ID whitelisting", "Përdor listën e bardhë të ID-ve"),
+        ("id_whitelist_tip", "Vetëm ID-të e listës së bardhë mund të më aksesojnë."),
+        ("id_whitelist_wildcard_tip", "Mbështeten karakteret zëvendësuese: '*' përputhet me çdo numër karakteresh, '?' me saktësisht një karakter"),
+        ("Invalid ID", "ID e pavlefshme"),
+        ("Your ID is blocked by the peer", "ID-ja juaj është bllokuar nga pala tjetër"),
+        ("Your ip is blocked by the peer", "IP-ja juaj është bllokuar nga pala tjetër"),
+        ("id_whitelist_caveat_tip", "ID-ja raportohet nga klienti që lidhet. Lista e bardhë zvogëlon ekspozimin dhe nuk zëvendëson fjalëkalimin ose 2FA"),
+        ("whitelist_cidr_tip", "Mbështetet shënimi CIDR, për shembull 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

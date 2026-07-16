@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Visi monitoriai"),
         ("#{} monitor", "Monitorius {}"),
         ("conn-e2ee-unavailable-tip", "Nepavyko patikrinti galinio šifravimo.\nNuotolinis įrenginys galbūt vis dar nustatomas. Bandykite dar kartą vėliau.\nJei tai kartojasi, serveris gali būti nepatikimas.\nVis tiek tęsti?"),
+        ("ID whitelisting", "ID baltasis sąrašas"),
+        ("Use ID whitelisting", "Naudoti patikimą ID sąrašą"),
+        ("id_whitelist_tip", "Mane gali pasiekti tik baltajame sąraše esantys ID"),
+        ("id_whitelist_wildcard_tip", "Palaikomi pakaitos simboliai: '*' atitinka bet kokį simbolių skaičių, '?' – lygiai vieną simbolį"),
+        ("Invalid ID", "Netinkamas ID"),
+        ("Your ID is blocked by the peer", "Jūsų ID užblokavo nuotolinis įrenginys"),
+        ("Your ip is blocked by the peer", "Jūsų IP adresą užblokavo nuotolinis įrenginys"),
+        ("id_whitelist_caveat_tip", "ID praneša prisijungiantis klientas. Šis sąrašas sumažina atakos paviršių ir nepakeičia slaptažodžio ar 2FA"),
+        ("whitelist_cidr_tip", "Palaikomas CIDR žymėjimas, pavyzdžiui 192.168.1.0/24"),
     ].iter().cloned().collect();
 }
