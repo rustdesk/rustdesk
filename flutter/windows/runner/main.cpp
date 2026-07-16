@@ -68,6 +68,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   bool is_disable_installation =
       rustdesk_is_disable_installation && rustdesk_is_disable_installation() != 0;
   const auto installParam = std::string("--install");
+  // Flutter reads the original process command line, not only rust_args, so
+  // remove the `--install` injected by the portable wrapper here as well. This
+  // also lets `no-install.exe` continue as a portable app when installation is
+  // disabled. See: https://github.com/rustdesk/rustdesk-server-pro/issues/991#issuecomment-4978376890
   if (is_disable_installation) {
     command_line_arguments.erase(
         std::remove(command_line_arguments.begin(),

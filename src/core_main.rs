@@ -127,6 +127,9 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
+    // The portable wrapper injects `--install` when its name ends with `install.exe`,
+    // including `no-install.exe`. Drop the argument instead of exiting so disabled
+    // clients can continue running as portable applications.
     if config::is_disable_installation() {
         args.retain(|arg| arg != "--install");
         flutter_args.retain(|arg| arg != "--install");
