@@ -81,11 +81,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
     if (result == null) return;
 
     var imported = 0;
+    var failed = false;
     for (final selected in result.files) {
       final sourcePath = selected.path;
       final name = selected.name.replaceAll('\\', '/').split('/').last;
       if (sourcePath == null ||
           !PathUtil.validName(name, currentOptions.isWindows)) {
+        failed = true;
         continue;
       }
       try {
@@ -100,12 +102,16 @@ class _FileManagerPageState extends State<FileManagerPage> {
         await File(sourcePath).copy(destination);
         imported++;
       } catch (e) {
+        failed = true;
         debugPrint('Failed to import $name: $e');
       }
     }
     await currentFileController.refresh();
-    showToast(
-        translate(imported == result.files.length ? 'Successful' : 'Failed'));
+    if (failed) {
+      showToast(translate('Failed'));
+    } else if (imported > 0) {
+      showToast(translate('Successful'));
+    }
   }
 
   Future<void> _exportFile(Entry entry) async {
