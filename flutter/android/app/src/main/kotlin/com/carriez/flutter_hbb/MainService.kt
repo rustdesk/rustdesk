@@ -339,6 +339,15 @@ class MainService : Service() {
             intent.getParcelableExtra<Intent>(EXT_MEDIA_PROJECTION_RES_INTENT)?.let {
                 mediaProjection =
                     mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
+                mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                    override fun onStop() {
+                        Log.d(logTag, "MediaProjection stopped")
+                        _isReady = false
+                        stopCapture()
+                        mediaProjection = null
+                        checkMediaPermission()
+                    }
+                }, null)
                 checkMediaPermission()
                 _isReady = true
             } ?: let {

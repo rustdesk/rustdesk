@@ -9,6 +9,16 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    afterEvaluate {
+        if (project.hasProperty('android')) {
+            if (project.android.namespace == null) {
+                project.android.namespace = project.group.toString()
+            }
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions.jvmTarget = project.android.compileOptions.targetCompatibility.toString()
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(':app')
