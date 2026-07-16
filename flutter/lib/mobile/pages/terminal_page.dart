@@ -310,7 +310,25 @@ class _TerminalPageState extends State<TerminalPage>
     );
   }
 
+  static const _keyRow1 = ['Esc', '/', '|', 'Home', '↑', 'End', 'PgUp'];
+  static const _keyRow2 = ['Tab', 'Ctrl+C', '~', '←', '↓', '→', 'PgDn'];
+
+  Widget _buildKeyRow(List<String> labels) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 2,
+      runSpacing: 2,
+      children: [for (final label in labels) _buildKeyButton(label)],
+    );
+  }
+
   Widget _buildFloatingKeyboard() {
+    // On wide screens (unfolded foldables, tablets, phones in landscape) all
+    // keys fit in a single row, so lay them out in one flowing row to halve
+    // the bar's height. Narrow (portrait phone) screens keep the original two
+    // fixed rows. The Wrap still breaks into a second row when the keys
+    // genuinely don't fit.
+    final isWideScreen = MediaQuery.of(context).size.width >= 600;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),
       left: 0,
@@ -323,44 +341,14 @@ class _TerminalPageState extends State<TerminalPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildKeyButton('Esc'),
-                const SizedBox(width: 2),
-                _buildKeyButton('/'),
-                const SizedBox(width: 2),
-                _buildKeyButton('|'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Home'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↑'),
-                const SizedBox(width: 2),
-                _buildKeyButton('End'),
-                const SizedBox(width: 2),
-                _buildKeyButton('PgUp'),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildKeyButton('Tab'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Ctrl+C'),
-                const SizedBox(width: 2),
-                _buildKeyButton('~'),
-                const SizedBox(width: 2),
-                _buildKeyButton('←'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↓'),
-                const SizedBox(width: 2),
-                _buildKeyButton('→'),
-                const SizedBox(width: 2),
-                _buildKeyButton('PgDn'),
-              ],
-            ),
-          ],
+          children: isWideScreen
+              ? [
+                  _buildKeyRow([..._keyRow1, ..._keyRow2])
+                ]
+              : [
+                  _buildKeyRow(_keyRow1),
+                  _buildKeyRow(_keyRow2),
+                ],
         ),
       ),
     );
