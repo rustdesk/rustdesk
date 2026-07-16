@@ -75,10 +75,11 @@ class TerminalModel with ChangeNotifier {
     // remain unchanged. Paste input follows a separate preprocessing path.
     final ctrlLocked = isCtrlLocked?.call() ?? false;
     final altLocked = isAltLocked?.call() ?? false;
+    final modifiersActive = ctrlLocked || altLocked;
     // Use the same predicate for transformation and consumption. Control keys
     // and escape sequences must not silently consume a pending one-shot lock.
-    final shouldConsumeModifiers = shouldApplyTerminalInputModifiers(data) &&
-        (ctrlLocked || altLocked);
+    final shouldConsumeModifiers =
+        modifiersActive && shouldApplyTerminalInputModifiers(data);
     data = prepareTerminalInputPayload(
       data,
       source: TerminalInputSource.keyboard,

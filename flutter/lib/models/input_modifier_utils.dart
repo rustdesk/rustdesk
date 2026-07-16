@@ -105,7 +105,7 @@ String prepareTerminalInputPayload(
   if (isMobileOrWebMobile && result == '\n') {
     result = '\r';
   }
-  if (shouldApplyTerminalInputModifiers(result) && (ctrlLocked || altLocked)) {
+  if ((ctrlLocked || altLocked) && shouldApplyTerminalInputModifiers(result)) {
     result = applyTerminalInputModifiers(
       result,
       ctrlLocked: ctrlLocked,

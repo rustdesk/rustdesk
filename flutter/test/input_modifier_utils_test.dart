@@ -278,6 +278,23 @@ void main() {
       );
     });
 
+    test('keeps large keyboard payloads unchanged when modifiers are inactive',
+        () {
+      final payload = 'd' * (1024 * 1024);
+
+      expect(
+        prepareTerminalInputPayload(
+          payload,
+          source: TerminalInputSource.keyboard,
+          isMobileOrWebMobile: false,
+          bracketedPasteMode: false,
+          ctrlLocked: false,
+          altLocked: false,
+        ),
+        payload,
+      );
+    });
+
     test('keeps decomposed graphemes intact with locked keyboard modifiers',
         () {
       const decomposedEAcute = 'e\u0301';
