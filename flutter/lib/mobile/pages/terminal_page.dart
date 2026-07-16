@@ -137,6 +137,20 @@ class _TerminalPageState extends State<TerminalPage>
     }
   }
 
+  /// Re-measure the key bar after this frame; its height changes when the
+  /// layout switches between one and two rows (e.g. on rotation, or when a
+  /// foldable is folded/unfolded), and the terminal padding must follow.
+  void _scheduleKeyboardHeightUpdate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _keyboardKey.currentContext == null) return;
+      final renderBox =
+          _keyboardKey.currentContext!.findRenderObject() as RenderBox;
+      if (_keyboardHeight != renderBox.size.height) {
+        setState(() => _keyboardHeight = renderBox.size.height);
+      }
+    });
+  }
+
   EdgeInsets _calculatePadding(double heightPx) {
     if (_cellHeight == null) {
       return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
@@ -328,7 +342,9 @@ class _TerminalPageState extends State<TerminalPage>
     // the bar's height. Narrow (portrait phone) screens keep the original two
     // fixed rows. The Wrap still breaks into a second row when the keys
     // genuinely don't fit.
-    final isWideScreen = MediaQuery.of(context).size.width >= 600;
+    final isWideScreen =
+        MediaQuery.sizeOf(context).width >= kMobilePageConstraints.maxWidth;
+    _scheduleKeyboardHeightUpdate();
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),
       left: 0,

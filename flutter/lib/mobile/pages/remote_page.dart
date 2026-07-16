@@ -990,7 +990,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     // fit in one or two flowing rows, so keep them on the same row instead of
     // forcing a line break before each group. Narrow (portrait phone) screens
     // keep the forced breaks so each group starts on its own row.
-    final isWideScreen = size.width >= 600;
+    final isWideScreen = size.width >= kMobilePageConstraints.maxWidth;
     // A zero-height box wider than any screen makes `Wrap` start a new run.
     final groupBreak =
         isWideScreen ? const SizedBox.shrink() : const SizedBox(width: 9999);
