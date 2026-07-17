@@ -78,6 +78,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Future<void> _importFiles() async {
     var imported = 0;
     var failed = false;
+    final importController = currentFileController;
+    final importDirectory = currentDir.path;
+    final importIsWindows = currentOptions.isWindows;
     try {
       final selectedFiles = await gFFI.invokeMethodWithResult<List<dynamic>>(
           AndroidChannel.kPickImportFiles);
@@ -89,12 +92,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
         final name = selectedName?.replaceAll('\\', '/').split('/').last;
         if (uri == null ||
             name == null ||
-            !PathUtil.validName(name, currentOptions.isWindows)) {
+            !PathUtil.validName(name, importIsWindows)) {
           failed = true;
           continue;
         }
         final destination =
-            PathUtil.join(currentDir.path, name, currentOptions.isWindows);
+          PathUtil.join(importDirectory, name, importIsWindows);
         var overwrite = false;
         if (await File(destination).exists()) {
           final overwriteResult = await model.showFileConfirmDialog(
@@ -121,7 +124,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       failed = true;
       debugPrint('Failed to select files for import: $e');
     }
-    await currentFileController.refresh();
+    await importController.refresh();
     if (failed) {
       showToast(translate('Failed'));
     } else if (imported > 0) {
