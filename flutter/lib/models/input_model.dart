@@ -493,8 +493,10 @@ class InputModel {
 
   // https://github.com/rustdesk/rustdesk/discussions/13398
   // `isFocused` is set by onWindowFocus/onWindowBlur (DesktopTab).
+  // Windows only: Linux focus events are unreliable under the rdev keyboard
+  // grab, and macOS already ignores mouse input to unfocused windows.
   bool get _blockMouseWhenUnfocused =>
-      isDesktop &&
+      isWindows &&
       stateGlobal.isFocused.isFalse &&
       mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly);
 

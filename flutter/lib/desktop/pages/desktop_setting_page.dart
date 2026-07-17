@@ -511,12 +511,13 @@ class _GeneralState extends State<_General> {
           kOptionOpenNewConnInTabs,
           isServer: false,
         ),
-        _OptionCheckBox(
-          context,
-          'control-remote-when-focus',
-          kOptionControlFocusedWindowOnly,
-          isServer: false,
-        ),
+        if (isWindows)
+          _OptionCheckBox(
+            context,
+            'control-remote-when-focus',
+            kOptionControlFocusedWindowOnly,
+            isServer: false,
+          ),
         // though this is related to GUI, but opengl problem affects all users, so put in config rather than local
         if (isLinux)
           Tooltip(
