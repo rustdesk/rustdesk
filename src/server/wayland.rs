@@ -107,8 +107,38 @@ struct CapDisplayInfo {
     capturer: CapturerPtr,
 }
 
+/// Set the uinput absolute-pointer range to the whole logical desktop so the compositor maps
+/// injected coordinates 1:1 instead of stretching a single-monitor range across all outputs. The
+/// PipeWire path does this inline in `check_init`; the DRM path bypasses check_init so it must do it
+/// too, otherwise on a multi-monitor host the injected pointer lands on the wrong output — and the
+/// hardware cursor, which lives on whichever CRTC the pointer is over, never appears on the captured
+/// CRTC (the "cursor not visible" symptom). Reads the layout from the Wayland outputs, so it is
+/// independent of the capture backend. DRM-only: check_init keeps its own inline copy so the
+/// drm-off build stays byte-identical to upstream.
+#[cfg(feature = "drm")]
+async fn update_uinput_resolution() {
+    if crate::input_service::wayland_use_uinput() {
+        if let Some((minx, maxx, miny, maxy)) =
+            scrap::wayland::display::get_desktop_rect_for_uinput()
+        {
+            log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
+            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
+        } else {
+            log::warn!("Failed to get desktop rect for uinput");
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 pub(super) async fn ensure_inited() -> ResultType<()> {
+    // DRM/KMS capture (opt-in): the root service owns the reader and the capturer self-inits over
+    // IPC, so there is no PipeWire recorder to initialize here. But we still must set the uinput
+    // desktop rect (check_init does this on the PipeWire path, and the DRM path skips check_init).
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        update_uinput_resolution().await;
+        return Ok(());
+    }
     check_init().await
 }
 
@@ -116,6 +146,10 @@ pub(super) fn is_inited() -> Option<Message> {
     if is_x11() {
         None
     } else {
+        #[cfg(feature = "drm")]
+        if super::drm_capturer::is_available() {
+            return None;
+        }
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             let mut msg_out = Message::new();
             let res = MessageBox {
@@ -221,6 +255,12 @@ pub(super) async fn check_init() -> ResultType<()> {
 }
 
 pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        if let Some(displays) = super::drm_capturer::get_display_infos() {
+            return Ok(displays);
+        }
+    }
     check_init().await?;
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
@@ -235,6 +275,12 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
 }
 
 pub(super) fn get_primary() -> ResultType<usize> {
+    // DRM connector order is not the compositor's primary; resolve the real primary from the
+    // compositor layout (matched by normalized connector name) instead of hardcoding index 0.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        return Ok(super::drm_capturer::get_primary_index());
+    }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
         let cap_display_info: *const CapDisplayInfo = *addr as _;
@@ -251,6 +297,19 @@ pub fn clear() {
     if is_x11() {
         return;
     }
+    // The DRM path augments its geometry from the compositor's Wayland outputs (logical origin +
+    // scale), which scrap caches process-wide. The PipeWire path clears that cache on session close,
+    // but the DRM path opens no PipeWire session, so without this it would keep matching DRM outputs
+    // against STALE geometry after a monitor hotplug/rotation/scale change. Invalidate it on teardown
+    // so the next session re-reads fresh geometry (lazily, on the next enumeration) and self-heals.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        scrap::wayland::display::clear_wayland_displays_cache();
+    }
+    // NOTE: intentionally do NOT reset the DRM probe cache here. `clear()` runs on every capturer
+    // teardown (which happens on each video-service restart), and re-probing `_drm` from the async
+    // enumeration path blocks the executor long enough to trip "deadline has elapsed" and spiral
+    // into a restart loop. DRM availability is fixed at service start, so the cache stays valid.
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
     for (_, addr) in write_lock.iter() {
         let cap_display_info: *mut CapDisplayInfo = *addr as _;
@@ -270,6 +329,12 @@ pub(super) fn get_capturer_for_display(
 ) -> ResultType<super::video_service::CapturerInfo> {
     if is_x11() {
         bail!("Do not call this function if not wayland");
+    }
+    // DRM/KMS capture path: build the capturer straight from the service `_drm` stream, bypassing
+    // the PipeWire CAP_DISPLAY_INFO machinery entirely.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        return super::drm_capturer::get_capturer_info(display_idx);
     }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.get(&display_idx) {

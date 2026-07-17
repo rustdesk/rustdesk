@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import glob
 import pathlib
 import platform
 import zipfile
@@ -129,6 +130,12 @@ def make_parser():
         '--unix-file-copy-paste',
         action='store_true',
         help='Build with unix file copy paste feature'
+    )
+    parser.add_argument(
+        '--drm',
+        action='store_true',
+        help='Linux only: build the DRM/KMS capture backend (bundles libdrmtap.so, '
+             'dlopen-ed in-process by the root service). Off by default.'
     )
     parser.add_argument(
         '--skip-cargo',
@@ -282,6 +289,8 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if not windows and not osx and args.drm:
+        features.append('drm')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
@@ -289,22 +298,29 @@ def get_features(args):
     return features
 
 
-def generate_control_file(version):
+def generate_control_file(version, extra_depends="", package_name="rustdesk"):
     control_file_path = "../res/DEBIAN/control"
     system2('/bin/rm -rf %s' % control_file_path)
 
-    content = """Package: rustdesk
+    # An alternative-build package (e.g. the opt-in unattended-wayland / DRM
+    # variant) installs the same files as the stock `rustdesk` package, so it
+    # must conflict with / replace it: you install one OR the other, not both.
+    variant_control = ""
+    if package_name != "rustdesk":
+        variant_control = "Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n"
+
+    content = """Package: %s
 Section: net
 Priority: optional
 Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-Depends: libgtk-3-0t64 | libgtk-3-0, libxcb-randr0, libxdo3 | libxdo4, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2t64 | libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpam0g, gstreamer1.0-pipewire%s
+%sDepends: libgtk-3-0t64 | libgtk-3-0, libxcb-randr0, libxdo3 | libxdo4, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2t64 | libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpam0g, gstreamer1.0-pipewire%s%s
 Recommends: libayatana-appindicator3-1
 Description: A remote control software.
 
-""" % (version, get_deb_arch(), get_deb_extra_depends())
+""" % (package_name, version, get_deb_arch(), variant_control, get_deb_extra_depends(), extra_depends)
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
@@ -314,6 +330,98 @@ def ffi_bindgen_function_refactor():
     # workaround ffigen
     system2(
         'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
+
+
+# libdrmtap is fetched at build time by cloning the rustdesk-org fork at a pinned
+# ref — the same way rustdesk sources its other native build deps (vcpkg,
+# flutter_rust_bridge, ...), rather than carrying a git submodule. The ref can be
+# a branch or a tag; rustdesk-org/libdrmtap main tracks the current release.
+# Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for local testing or another fork.
+LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
+LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'main')
+
+
+def _single_real_so(paths, where):
+    # Return the one real libdrmtap.so.0.* object among `paths`, failing if there are zero or several.
+    # glob order is arbitrary, so silently taking [0] could ship a stale or wrong-arch object left
+    # over from an earlier build; a mismatch should fail the build loudly instead.
+    real = sorted(p for p in paths if os.path.isfile(p) and not os.path.islink(p))
+    if len(real) != 1:
+        raise Exception(
+            f'expected exactly one real libdrmtap.so.0.* in {where}, found {len(real)}: {real}')
+    return real[0]
+
+
+def build_libdrmtap_so():
+    # Build libdrmtap.so from the rustdesk-org fork cloned at LIBDRMTAP_REF. The
+    # pivot dlopen-s this .so in-process in the root service (which already holds
+    # CAP_SYS_ADMIN) — no setcap helper, no privileged child. Only the shared
+    # library target is built (the source also carries a helper binary we do not
+    # ship). Returns the path to the built versioned .so (e.g. libdrmtap.so.0.4.x).
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    # Allow a caller (e.g. CI) to build the .so ahead of time and hand it in via
+    # DRMTAP_PREBUILT_DIR (must contain the real libdrmtap.so.0.* object).
+    prebuilt_dir = os.environ.get('DRMTAP_PREBUILT_DIR')
+    if prebuilt_dir:
+        # DRMTAP_PREBUILT_DIR explicitly names the artifact source, so honor it strictly: fail
+        # (rather than silently falling back to a source build) if it holds no single real .so.
+        prebuilt = glob.glob(os.path.join(prebuilt_dir, 'libdrmtap.so.0.*'))
+        return _single_real_so(prebuilt, f'DRMTAP_PREBUILT_DIR={prebuilt_dir}')
+    # Clone the pinned source if it is not already present (a shallow clone at the
+    # ref). third_party/libdrmtap is not a submodule anymore; it is git-ignored.
+    src = os.path.join(repo_root, 'third_party', 'libdrmtap')
+    if not os.path.exists(os.path.join(src, 'meson.build')):
+        if os.path.isdir(src):
+            shutil.rmtree(src)
+        os.makedirs(os.path.dirname(src), exist_ok=True)
+        system2(f'git clone --depth 1 --branch {LIBDRMTAP_REF} {LIBDRMTAP_REPO} {src}')
+    build_dir = os.path.join(src, 'build-pkg')
+    if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
+        system2(f'meson setup {build_dir} {src} --buildtype=release')
+    # Build only the shared library target ('drmtap'), not the bundled helper binary.
+    system2(f'meson compile -C {build_dir} drmtap')
+    sos = glob.glob(os.path.join(build_dir, 'libdrmtap.so.0.*'))
+    # keep the real object (libdrmtap.so.0.4.x), not the .so/.so.0 symlinks or meson's .p dir, and
+    # require exactly one so a stale object from an earlier build is never silently picked.
+    return _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
+
+
+def append_drm_ldconfig_postinst():
+    # The DRM package installs libdrmtap.so under a private dir; register it with the
+    # dynamic linker so the in-process dlopen("libdrmtap.so.0") resolves. Only the DRM
+    # package calls this, so the stock package's postinst stays byte-identical to upstream.
+    with open('tmpdeb/DEBIAN/postinst', 'a') as f:
+        f.write(
+            '\n'
+            'if [ "$1" = configure ] && [ -d /usr/lib/rustdesk ]; then\n'
+            '\tldconfig /usr/lib/rustdesk 2>/dev/null || ldconfig 2>/dev/null || true\n'
+            'fi\n'
+        )
+
+
+def finalize_deb(version, ships_so, so_basename=None):
+    # Shared deb finalization for build_flutter_deb / build_deb_from_folder. Any DRM .so is assumed
+    # already staged at tmpdeb/usr/lib/rustdesk/. For a DRM build this adds the soname symlink + the
+    # ld.so.conf.d drop-in, names the package rustdesk-unattended-wayland with libdrmtap's runtime
+    # deps (libdrm / EGL / GLESv2), and appends the ldconfig postinst; otherwise it builds the stock
+    # rustdesk package. Then it writes the control, checksums, builds, and renames the .deb.
+    if ships_so:
+        system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
+        system2('mkdir -p tmpdeb/etc/ld.so.conf.d')
+        with open('tmpdeb/etc/ld.so.conf.d/rustdesk-unattended-wayland.conf', 'w') as f:
+            f.write('/usr/lib/rustdesk\n')
+    package_name = 'rustdesk-unattended-wayland' if ships_so else 'rustdesk'
+    drm_depends = ", libdrm2, libegl1, libgles2" if ships_so else ""
+    system2('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version, drm_depends, package_name)
+    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
+    if ships_so:
+        append_drm_ldconfig_postinst()
+    md5_file_folder("tmpdeb/")
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+    system2('/bin/rm -rf tmpdeb/')
+    system2('/bin/rm -rf ../res/DEBIAN/control')
+    os.rename('rustdesk.deb', f'../{package_name}-{version}.deb')
 
 
 def build_flutter_deb(version, features):
@@ -352,16 +460,21 @@ def build_flutter_deb(version, features):
         'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-
-    system2('mkdir -p tmpdeb/DEBIAN')
-    generate_control_file(version)
-    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file_folder("tmpdeb/")
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
-
-    system2('/bin/rm -rf tmpdeb/')
-    system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    # Bundle libdrmtap.so for the DRM/KMS capture path — but ONLY when this build
+    # actually enabled the `drm` feature, so normal packages stay opt-out. The root
+    # service dlopen-s it in-process (no setcap helper); it lives in a private dir
+    # that postinst registers with ldconfig so dlopen("libdrmtap.so.0") resolves.
+    # Bundle libdrmtap.so for a DRM build (opt-in), then finalize the deb. A DRM build ships as a
+    # separately-named rustdesk-unattended-wayland package (finalize_deb marks it
+    # Conflicts/Replaces/Provides rustdesk), so installing it is an explicit choice.
+    ships_so = 'drm' in features
+    so_basename = None
+    if ships_so:
+        so_path = build_libdrmtap_so()
+        so_basename = os.path.basename(so_path)
+        system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+        system2(f'cp {so_path} tmpdeb/usr/lib/rustdesk/')
+    finalize_deb(version, ships_so, so_basename)
     os.chdir("..")
 
 
@@ -389,16 +502,19 @@ def build_deb_from_folder(version, binary_folder):
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-
-    system2('mkdir -p tmpdeb/DEBIAN')
-    generate_control_file(version)
-    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    md5_file_folder("tmpdeb/")
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
-
-    system2('/bin/rm -rf tmpdeb/')
-    system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    # A staged bundle (binary_folder) carries its own libdrmtap.so.0* for a --drm build, so we do
+    # not rebuild it here; the `cp -r` above placed it under usr/share/rustdesk/. Move it to the
+    # private lib dir, then finalize the deb the same way build_flutter_deb does.
+    bundled_glob = glob.glob('tmpdeb/usr/share/rustdesk/libdrmtap.so.0.*')
+    ships_so = any(os.path.isfile(p) and not os.path.islink(p) for p in bundled_glob)
+    so_basename = None
+    if ships_so:
+        so = _single_real_so(bundled_glob, 'the staged --drm bundle')
+        so_basename = os.path.basename(so)
+        system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+        system2(f'mv {so} tmpdeb/usr/lib/rustdesk/')
+        system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
+    finalize_deb(version, ships_so, so_basename)
     os.chdir("..")
 
 

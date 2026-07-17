@@ -396,11 +396,24 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     if let Some(hcursor) = crate::get_cursor()? {
         if hcursor != state.hcursor {
             let msg;
+            // On the DRM path get_cursor_data() may return a snapshot whose id has advanced past the
+            // requested `hcursor` (it returns the latest hardware cursor); file it in the cache AND
+            // record state.hcursor under the id ACTUALLY served, so a later reappearance of that exact
+            // shape dedupes correctly instead of being suppressed. Everything below is fully
+            // `#[cfg(feature = "drm")]`-gated so the drm-off build stays byte-identical to upstream.
+            #[cfg(feature = "drm")]
+            let mut drm_served_id = hcursor;
             if let Some(cached) = state.cached_cursor_data.get(&hcursor) {
                 super::log::trace!("Cursor data cached, hcursor: {}", hcursor);
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
+                #[cfg(feature = "drm")]
+                let hcursor = data.id;
+                #[cfg(feature = "drm")]
+                {
+                    drm_served_id = hcursor;
+                }
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
@@ -408,7 +421,14 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 state.cached_cursor_data.insert(hcursor, msg.clone());
                 super::log::trace!("Cursor data updated, hcursor: {}", hcursor);
             }
-            state.hcursor = hcursor;
+            #[cfg(not(feature = "drm"))]
+            {
+                state.hcursor = hcursor;
+            }
+            #[cfg(feature = "drm")]
+            {
+                state.hcursor = drm_served_id;
+            }
             sp.send_shared(msg.clone());
             state.cursor_data = msg;
         }
