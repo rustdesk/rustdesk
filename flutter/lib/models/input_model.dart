@@ -451,6 +451,8 @@ class InputModel {
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
   int _lastWheelTsUs = 0;
+  // A move dropped while unfocused; the next event re-syncs the cursor first.
+  bool _refocusSyncPending = false;
 
   // Wheel acceleration thresholds.
   static const int _wheelAccelFastThresholdUs = 40000; // 40ms
@@ -497,6 +499,7 @@ class InputModel {
   // grab, and macOS already ignores mouse input to unfocused windows.
   bool get _blockMouseWhenUnfocused =>
       isWindows &&
+      stateGlobal.focusEventsSeen &&
       stateGlobal.isFocused.isFalse &&
       mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly);
 
@@ -1295,7 +1298,10 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
-    if (_blockMouseWhenUnfocused) return;
+    if (_blockMouseWhenUnfocused) {
+      _refocusSyncPending = true;
+      return;
+    }
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
 
@@ -1599,7 +1605,10 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
-    if (_blockMouseWhenUnfocused) return;
+    if (_blockMouseWhenUnfocused) {
+      _refocusSyncPending = true;
+      return;
+    }
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1721,6 +1730,13 @@ class InputModel {
         dy = -accel;
       } else if (dy < 0) {
         dy = accel;
+      }
+      if (_refocusSyncPending) {
+        _refocusSyncPending = false;
+        if (!_relativeMouse.enabled.value) {
+          handleMouse({'buttons': 0, 'type': _kMouseEventMove},
+              _pointerPositionForRemoteCanvas(e));
+        }
       }
       bind.sessionSendMouse(
           sessionId: sessionId,
@@ -1918,6 +1934,13 @@ class InputModel {
     bool moveCanvas = true,
     bool edgeScroll = false,
   }) {
+    if (_refocusSyncPending && !_blockMouseWhenUnfocused) {
+      _refocusSyncPending = false;
+      if (evt['type'] != _kMouseEventMove && !_relativeMouse.enabled.value) {
+        handleMouse({'buttons': 0, 'type': _kMouseEventMove}, offset,
+            moveCanvas: moveCanvas);
+      }
+    }
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {

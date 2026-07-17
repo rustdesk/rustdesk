@@ -162,7 +162,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
       // and let OS to handle events instead.
       _rawKeyFocusNode.unfocus();
     }
-    stateGlobal.isFocused.value = false;
+    stateGlobal.updateFocus(false);
   }
 
   @override
@@ -172,7 +172,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     if (isWindows) {
       _isWindowBlur = false;
     }
-    stateGlobal.isFocused.value = true;
+    stateGlobal.updateFocus(true);
   }
 
   @override

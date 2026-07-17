@@ -338,11 +338,6 @@ class _DesktopTabState extends State<DesktopTab>
     super.initState();
     DesktopMultiWindow.addListener(this);
     windowManager.addListener(this);
-    // `onWindowFocus`/`onWindowBlur` only deliver focus *changes*; a window that
-    // opens already focused would otherwise stay marked unfocused. Seed true so
-    // input gating (see kOptionControlFocusedWindowOnly) doesn't wrongly block a
-    // just-opened window; the first real blur will correct it.
-    stateGlobal.isFocused.value = true;
 
     Future.delayed(Duration(milliseconds: 500), () {
       if (isMainWindow) {
@@ -381,12 +376,20 @@ class _DesktopTabState extends State<DesktopTab>
 
   @override
   void onWindowFocus() {
-    stateGlobal.isFocused.value = true;
+    stateGlobal.updateFocus(true);
   }
 
   @override
   void onWindowBlur() {
-    stateGlobal.isFocused.value = false;
+    stateGlobal.updateFocus(false);
+  }
+
+  @override
+  void onWindowRestore() {
+    // Restore can fire without activation, so drop to unknown focus, not true.
+    stateGlobal.invalidateFocus();
+    stateGlobal.setMinimized(false);
+    super.onWindowRestore();
   }
 
   @override
@@ -398,6 +401,10 @@ class _DesktopTabState extends State<DesktopTab>
 
   @override
   void onWindowMaximize() {
+    // Un-minimize of a maximized window fires maximize, not restore.
+    if (stateGlobal.isMinimized) {
+      stateGlobal.invalidateFocus();
+    }
     stateGlobal.setMinimized(false);
     _setMaximized(true);
     super.onWindowMaximize();
