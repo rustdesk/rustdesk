@@ -481,6 +481,47 @@ pub enum Data {
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
+    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
+    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
+    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
+    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
+    // the header extensible: a future zero-copy `DrmFrameDmabuf { fd, stride, modifier, .. }` slots
+    // in as a sibling variant without changing the transport.
+    /// Client -> service: begin streaming the chosen display.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmStart { display: i32 },
+    /// Service -> client: the enumerated DRM displays (sent once, before frames).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplayList(Vec<DrmDisplayInfo>),
+    /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrame { width: u32, height: u32 },
+    /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmCursor {
+        id: u64,
+        width: u32,
+        height: u32,
+        hotx: i32,
+        hoty: i32,
+    },
+}
+
+/// One enumerated DRM display shipped over `_drm` (physical geometry). The serializable IPC
+/// form of `scrap::drm_reader::DisplaySnapshot`; the server augments it with the Wayland
+/// logical geometry/scale, which needs the user session.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DrmDisplayInfo {
+    pub name: String,
+    pub crtc_id: u32,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub active: bool,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1445,6 +1486,443 @@ pub async fn start_pa() {
         Err(err) => {
             log::error!("Failed to start pa ipc server: {}", err);
         }
+    }
+}
+
+/// Filesystem path of the `_drm` capture socket. It lives beside the hardened `_service` socket in
+/// the shared `/tmp/<app>-service` directory (cross-uid, traversable) so the root `--service` and
+/// the user `--server` share one uid-independent path. Derived from the real `_service` path so we
+/// inherit hbb_common's directory convention WITHOUT teaching hbb_common about a drm-specific
+/// postfix (keeps the isolation clean: no shared-lib change). Both ends call this.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn drm_ipc_path() -> String {
+    let service_path = Config::ipc_path("_service");
+    let dir = std::path::Path::new(&service_path)
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("/tmp"));
+    dir.join("ipc_drm").to_string_lossy().into_owned()
+}
+
+/// Connect (from the user `--server`) to the root service's `_drm` capture channel. Uses the
+/// derived `drm_ipc_path()` rather than `Config::ipc_path` since `_drm` is not a hbb_common
+/// service postfix (Option 2 isolation — no shared-lib change).
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnClient>> {
+    connect_with_path(ms_timeout, &drm_ipc_path()).await
+}
+
+/// Bind the `_drm` listener. Unlike `new_listener`, this does not route through hbb_common's
+/// service-postfix machinery — it places the socket in the shared service dir directly, so the
+/// drm-off build needs no hbb_common change. The socket is 0666 (world-connectable) so the
+/// unprivileged `--server` can reach it; every accepted peer is still authorized in
+/// `handle_drm_conn` (root or the active session uid + exe identity), so connectable != authorized.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+async fn new_drm_listener() -> ResultType<Incoming> {
+    let path = drm_ipc_path();
+    // Ensure the shared service dir exists at its hardened (0711) mode. Passing the `_service`
+    // postfix reuses hbb_common's expected mode for that directory; it only creates/chmods the
+    // directory (no pid/socket side effects) and is idempotent with the real `_service` listener.
+    let _ = ensure_secure_ipc_parent_dir(&path, "_service")?;
+    // Clear any stale socket from a previous run before binding.
+    std::fs::remove_file(&path).ok();
+    let mut endpoint = Endpoint::new(path.clone());
+    endpoint.set_security_attributes(SecurityAttributes::allow_everyone_create()?);
+    let incoming = endpoint.incoming()?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).map_err(|err| {
+        std::fs::remove_file(&path).ok();
+        err
+    })?;
+    log::info!("Started drm ipc server at path: {}", &path);
+    Ok(incoming)
+}
+
+/// Message from a per-connection DRM worker thread (which owns the `!Send` `DrmReader`) to its
+/// async socket task. The worker does the blocking device I/O; the task only forwards to the wire.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+enum DrmProducerMsg {
+    /// Enumerated displays, sent once before any frame so the task can answer the handshake.
+    Displays(Vec<DrmDisplayInfo>),
+    /// A captured frame header + its packed BGRA pixels.
+    Frame {
+        width: u32,
+        height: u32,
+        data: Bytes,
+    },
+    /// A changed hardware-cursor shape + its packed RGBA pixels.
+    Cursor {
+        id: u64,
+        width: u32,
+        height: u32,
+        hotx: i32,
+        hoty: i32,
+        colors: Vec<u8>,
+    },
+}
+
+/// Sets the shared stop flag when the async task ends (any path), so the blocking worker thread
+/// terminates promptly even while it is between channel sends (e.g. spinning on WouldBlock).
+#[cfg(all(target_os = "linux", feature = "drm"))]
+struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+#[cfg(all(target_os = "linux", feature = "drm"))]
+impl Drop for DrmStopGuard {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Cached DRM display enumeration. The pre-warm populates it and each capture open refreshes it, so
+/// a consumer's handshake can send the display list without first paying a DRM enumeration open.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static DRM_DISPLAY_CACHE: std::sync::Mutex<Vec<DrmDisplayInfo>> = std::sync::Mutex::new(Vec::new());
+
+/// Snapshot a reader's enumerated displays as the IPC `DrmDisplayInfo` form. `displays()` lists all
+/// device outputs regardless of the reader's target CRTC, so a capture reader can refresh the cache.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<DrmDisplayInfo> {
+    reader
+        .displays()
+        .into_iter()
+        // Only offer outputs actually bound to a CRTC (i.e. scanning out). A
+        // CONNECTED-but-unbound connector (e.g. a virtual/dummy HDMI plug the
+        // compositor is not driving) enumerates with `crtc_id == 0`. Such an
+        // entry has no scanout to capture, yet was still shipped to the client as
+        // a selectable monitor; picking it made libdrmtap's `open(crtc=0)`
+        // AUTO-SELECT the first active CRTC (the primary) and stream ITS frames at
+        // the wrong geometry (e.g. a 3840x2160 frame into a 1280x1024 encoder ->
+        // `src rect > dst rect`), which failed every frame and drove a ~1/sec
+        // capturer restart loop (the flap that leaked EGL contexts to OOM). Drop
+        // these here so they are never offered; the client keeps its real monitors.
+        .filter(|d| d.active && d.crtc_id != 0)
+        .map(|d| DrmDisplayInfo {
+            name: d.name,
+            crtc_id: d.crtc_id,
+            x: d.x,
+            y: d.y,
+            width: d.width,
+            height: d.height,
+            active: d.active,
+        })
+        .collect()
+}
+
+/// Best-effort warm-up at listener start: loads libdrmtap, initializes EGL, enumerates displays into
+/// the cache, and maps the first framebuffer once. Moves that one-time cost (which otherwise lands
+/// on the first consumer and can push the first frame past the client's initial-frame timeout) off
+/// the critical path. Runs on its own thread since `DrmReader` is `!Send` and `open`/`grab` block.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_prewarm() {
+    let t = std::time::Instant::now();
+    match scrap::drm_reader::DrmReader::open(None, 0) {
+        Some(mut r) => {
+            let displays = drm_displays_from_reader(&mut r);
+            let n = displays.len();
+            let _ = r.grab(); // force the first framebuffer map / import
+            *DRM_DISPLAY_CACHE.lock().unwrap() = displays;
+            log::info!("drm: pre-warm ok ({n} displays) in {:?}", t.elapsed());
+        }
+        None => log::info!("drm: pre-warm skipped (reader unavailable)"),
+    }
+}
+
+/// DRM/KMS capture producer. Runs in the ROOT `--service` (which holds CAP_SYS_ADMIN, so libdrmtap
+/// reads the scanout in-process — no helper, no setcap). One dedicated `current_thread` runtime
+/// owns the `_drm` listener and `tokio::spawn`s a task per accepted consumer, so a multi-monitor
+/// client (which opens one `_drm` connection per captured display) is served CONCURRENTLY instead
+/// of serially. The `!Send` `DrmReader` never runs on this runtime: each connection offloads its
+/// blocking `grab()` loop to a private std worker thread (see `handle_drm_conn`), which keeps the
+/// connection future `Send` (thus spawnable) and lets the tasks multiplex on the one listener
+/// thread while the workers capture in parallel.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_drm() {
+    match new_drm_listener().await {
+        Ok(mut incoming) => {
+            // Warm libdrmtap/EGL + enumeration off-thread so the first consumer does not pay that
+            // one-time cost on its critical path.
+            std::thread::spawn(drm_prewarm);
+            loop {
+                match incoming.next().await {
+                    Some(Ok(stream)) => {
+                        tokio::spawn(async move {
+                            if let Err(err) = handle_drm_conn(Connection::new(stream)).await {
+                                log::info!("drm ipc connection ended: {}", err);
+                            }
+                        });
+                    }
+                    Some(Err(err)) => log::error!("Couldn't get drm client: {:?}", err),
+                    // Stream exhausted: without this the `if let Some` form would re-poll the dead
+                    // stream forever and busy-spin the root service. Stop the producer instead.
+                    None => {
+                        log::error!("drm ipc listener stream ended; stopping drm producer");
+                        break;
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to start drm ipc server: {}", err);
+        }
+    }
+}
+
+/// Handle one `_drm` consumer. `DrmReader` is `!Send` and `grab()` is a blocking C call, so it
+/// cannot live on the shared listener runtime; this task spawns a private std worker thread that
+/// owns the reader (`drm_capture_worker`) and streams `DrmProducerMsg`s back over a bounded channel
+/// (capacity 2 = backpressure: a slow consumer throttles capture instead of growing memory). The
+/// task itself stays fully async — hence `Send`, hence `tokio::spawn`able — and only forwards
+/// messages to the wire. On any error / disconnect it returns; the `DrmStopGuard` plus dropping the
+/// channels tears the worker down, and the client falls back to PipeWire/portal.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    // The `_drm` socket is world-connectable (0666) so the unprivileged `--server` can reach it,
+    // so we MUST authorize the peer here — this is a dedicated listener that does not go through
+    // the generic `start()` accept loop where service-scoped channels are checked. Same policy as
+    // `_service`: peer must be root or the active session uid, with a `/proc/pid/exe` identity
+    // match. Without this any local process could connect and receive the screen contents.
+    if !authorize_service_scoped_ipc_connection(&stream, "_drm") {
+        log::warn!("drm: rejected unauthorized connection to _drm");
+        return Ok(());
+    }
+
+    // Admission bound: each accepted _drm consumer spawns a worker thread that opens a DRM context.
+    // The peer is authorized (root/active-session), but we still cap concurrency so a buggy or
+    // compromised --server cannot exhaust root-service threads/memory by opening an unbounded number
+    // of streams. One connection per served display is plenty; MAX_DRM_CONNS covers multi-monitor
+    // plus a little slack for a reconnect overlapping an old worker still tearing down.
+    const MAX_DRM_CONNS: usize = 8;
+    static DRM_CONN_COUNT: AtomicUsize = AtomicUsize::new(0);
+    struct DrmConnGuard;
+    impl Drop for DrmConnGuard {
+        fn drop(&mut self) {
+            DRM_CONN_COUNT.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+    if DRM_CONN_COUNT.fetch_add(1, Ordering::SeqCst) >= MAX_DRM_CONNS {
+        DRM_CONN_COUNT.fetch_sub(1, Ordering::SeqCst);
+        log::warn!("drm: too many concurrent _drm connections (>= {MAX_DRM_CONNS}); rejecting");
+        return Ok(());
+    }
+    let _conn_guard = DrmConnGuard;
+
+    // worker -> task: display list, frames, cursor (bounded = backpressure).
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
+    // task -> worker: the chosen CRTC, sent once after the client's DrmStart.
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<u32>();
+    let stop = Arc::new(AtomicBool::new(false));
+    let _stop_guard = DrmStopGuard(stop.clone());
+    let worker_stop = stop.clone();
+    std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop));
+
+    // Handshake: the worker sends the display list (from the pre-warmed cache, or a throwaway
+    // enumeration open if the cache is empty). A closed channel (no Displays) means the reader was
+    // unavailable, so let the client fall back.
+    let displays = match frame_rx.recv().await {
+        Some(DrmProducerMsg::Displays(d)) => d,
+        _ => {
+            log::info!("drm: reader unavailable; closing _drm connection (client falls back)");
+            return Ok(());
+        }
+    };
+    stream.send(&Data::DrmDisplayList(displays.clone())).await?;
+
+    // Wait for the client to choose a display before streaming.
+    let display_idx = loop {
+        match stream.next_timeout(10_000).await? {
+            Some(Data::DrmStart { display }) => break display,
+            Some(_) => continue,
+            None => return Ok(()),
+        }
+    };
+    // Resolve the chosen display's CRTC. `displays` here is already filtered to
+    // CRTC-bound outputs (see drm_displays_from_reader), so a valid selection
+    // always yields a non-zero crtc_id. Reject a 0 (out-of-range index, or an
+    // unbound display that somehow slipped through) rather than passing it to
+    // `open(crtc=0)`, whose "auto-select the first/primary CRTC" sentinel would
+    // silently stream the WRONG monitor at a mismatched geometry and flap the
+    // capturer. Closing lets the consumer fall back (PipeWire) for that display.
+    let target_crtc = usize::try_from(display_idx)
+        .ok()
+        .and_then(|i| displays.get(i))
+        .map(|d| d.crtc_id)
+        .unwrap_or(0);
+    if target_crtc == 0 {
+        log::warn!(
+            "drm: client selected display {display_idx} with no bound CRTC; closing _drm (client falls back)"
+        );
+        return Ok(());
+    }
+    // Hand the CRTC to the worker; an error means it already gave up (reader vanished).
+    if crtc_tx.send(target_crtc).is_err() {
+        return Ok(());
+    }
+
+    // Forward frames + cursor updates until the worker ends or the client disconnects (a wire send
+    // error on a dropped client propagates out and tears the worker down via the guard).
+    while let Some(msg) = frame_rx.recv().await {
+        match msg {
+            DrmProducerMsg::Frame {
+                width,
+                height,
+                data,
+            } => {
+                stream.send(&Data::DrmFrame { width, height }).await?;
+                stream.send_raw(data).await?;
+            }
+            DrmProducerMsg::Cursor {
+                id,
+                width,
+                height,
+                hotx,
+                hoty,
+                colors,
+            } => {
+                stream
+                    .send(&Data::DrmCursor {
+                        id,
+                        width,
+                        height,
+                        hotx,
+                        hoty,
+                    })
+                    .await?;
+                stream.send_raw(Bytes::from(colors)).await?;
+            }
+            DrmProducerMsg::Displays(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// The blocking half of a `_drm` connection: owns the `!Send` `DrmReader`(s) on its own thread and
+/// streams messages to the async task. Ends (thread exits, reader closes) when the device is
+/// unavailable, errors/stalls, or the task drops the channels / sets the stop flag.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_capture_worker(
+    frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
+    crtc_rx: std::sync::mpsc::Receiver<u32>,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    // ~30 fps producer ceiling; the consumer's encoder/QoS sets the effective rate and the bounded
+    // channel throttles us further if it is slower. Also avoids a busy-spin when `grab()` returns
+    // the same scanout repeatedly.
+    const FRAME_INTERVAL: Duration = Duration::from_millis(33);
+    // Bound continuous no-frame (WouldBlock) time so a wedged device ends the stream (~5s) instead
+    // of freezing forever; the client then falls back.
+    const MAX_STALLED: u32 = 150;
+
+    let t_conn = std::time::Instant::now();
+
+    // Send the display list. Prefer the pre-warmed cache (skips a per-connection enumeration open);
+    // fall back to a throwaway enumeration reader if the pre-warm has not populated it yet.
+    let displays = {
+        let cached = DRM_DISPLAY_CACHE.lock().unwrap().clone();
+        if !cached.is_empty() {
+            cached
+        } else {
+            let mut enum_reader = match scrap::drm_reader::DrmReader::open(None, 0) {
+                Some(r) => r,
+                None => return,
+            };
+            drm_displays_from_reader(&mut enum_reader)
+        }
+    };
+    if frame_tx
+        .blocking_send(DrmProducerMsg::Displays(displays))
+        .is_err()
+    {
+        return;
+    }
+
+    // Wait for the task to relay the client's chosen CRTC (Err => the task gave up / disconnected).
+    let target_crtc = match crtc_rx.recv() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let t_open = std::time::Instant::now();
+    let mut reader = match scrap::drm_reader::DrmReader::open(None, target_crtc) {
+        Some(r) => r,
+        None => {
+            log::warn!("drm: failed to open crtc {target_crtc}; closing _drm connection");
+            // The cached display list handed out a CRTC that no longer opens (a hotplug/modeset
+            // likely invalidated it). Drop the cache so the next connection re-enumerates from the
+            // live device instead of serving the same stale, unopenable CRTC on every reconnect.
+            DRM_DISPLAY_CACHE.lock().unwrap().clear();
+            return;
+        }
+    };
+    // Refresh the cache from the live device so the next consumer's handshake uses fresh geometry.
+    *DRM_DISPLAY_CACHE.lock().unwrap() = drm_displays_from_reader(&mut reader);
+    log::debug!(
+        "drm: capture reader for crtc {target_crtc} opened in {:?}",
+        t_open.elapsed()
+    );
+
+    let mut last_cursor_id: u64 = 0;
+    let mut stalled: u32 = 0;
+    let mut logged_first = false;
+    while !stop.load(Ordering::Relaxed) {
+        match reader.grab() {
+            Ok((buf, w, h)) => {
+                stalled = 0;
+                if !logged_first {
+                    logged_first = true;
+                    log::debug!(
+                        "drm: first frame {w}x{h} for crtc {target_crtc} in {:?}",
+                        t_conn.elapsed()
+                    );
+                }
+                if frame_tx
+                    .blocking_send(DrmProducerMsg::Frame {
+                        width: w as u32,
+                        height: h as u32,
+                        data: Bytes::copy_from_slice(buf),
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                stalled += 1;
+                if stalled > MAX_STALLED {
+                    log::info!("drm: capture stalled (no frame); closing _drm connection");
+                    break;
+                }
+                std::thread::sleep(FRAME_INTERVAL);
+                continue;
+            }
+            Err(err) => {
+                log::warn!("drm: capture error: {err}; closing _drm connection");
+                break;
+            }
+        }
+
+        // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel).
+        if let Some(c) = reader.cursor() {
+            if c.id != last_cursor_id {
+                last_cursor_id = c.id;
+                if frame_tx
+                    .blocking_send(DrmProducerMsg::Cursor {
+                        id: c.id,
+                        width: c.width,
+                        height: c.height,
+                        hotx: c.hotx,
+                        hoty: c.hoty,
+                        colors: c.colors,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        }
+
+        std::thread::sleep(FRAME_INTERVAL);
     }
 }
 

@@ -1676,6 +1676,61 @@ jobs:
                 mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
             done
 
+            # --- opt-in unattended-wayland (DRM/KMS) variant: a separate deb ---
+            # Bundles libdrmtap.so (dlopen-ed in-process by the root service) so
+            # enabling consent-free capture is an explicit install choice (the package
+            # name states what it does). Built last so the drm relink can't leak into
+            # the stock deb/rpm above. x86_64 only (the unattended/kiosk/server use
+            # case); the package Conflicts/Replaces the stock rustdesk package.
+            if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+              pushd /workspace
+              echo -e "start packaging unattended-wayland (DRM) deb"
+              # drm-only build deps (meson builds libdrmtap.so from the cloned source),
+              # installed here — not in the stock install list — so the default
+              # drm-off build stays identical to upstream. libdrmtap's meson.build
+              # needs meson >= 0.57 (fs.read) + `meson compile` (>= 0.54); the distro
+              # apt meson is far older on the 18.04 build container, so install it via
+              # pip (pinned < 0.62 for the container's python 3.6). The EGL/GLES dev
+              # packages must be the mesa-specific names (libegl1-mesa-dev /
+              # libgles2-mesa-dev): the newer libegl-dev / libgles-dev metapackages
+              # do not exist on the ubuntu18.04 build container.
+              apt-get install -y ninja-build libdrm-dev libegl1-mesa-dev libgles2-mesa-dev python3-pip
+              python3 -m pip install --upgrade pip
+              python3 -m pip install 'meson>=0.57,<0.62'
+              # libdrmtap is sourced by cloning the rustdesk-org fork at a pinned
+              # ref (it is no longer a git submodule). DRMTAP_REPO / DRMTAP_REF are
+              # exported so build.py reuses the exact same source. We clone + build
+              # the .so here and hand it to build.py via DRMTAP_PREBUILT_DIR, because
+              # a later build step in this container disturbs the working tree.
+              # rustdesk-org/libdrmtap main tracks the current release (0.4.8+).
+              export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
+              export DRMTAP_REF="main"
+              git config --global --add safe.directory '*' || true
+              rm -rf third_party/libdrmtap
+              git clone --depth 1 --branch "$DRMTAP_REF" "$DRMTAP_REPO" third_party/libdrmtap
+              test -f third_party/libdrmtap/meson.build || { echo "FATAL: libdrmtap source missing"; exit 1; }
+              # Build libdrmtap.so now, while the cloned source is definitely
+              # present, and stash the real object OUTSIDE the source tree. A later
+              # build step in this container disturbs that working tree (it ends up
+              # empty by the time build.py runs), so build.py picks up this prebuilt
+              # .so via DRMTAP_PREBUILT_DIR instead of rebuilding from source.
+              meson setup third_party/libdrmtap/build-pkg third_party/libdrmtap --buildtype=release
+              meson compile -C third_party/libdrmtap/build-pkg drmtap
+              mkdir -p "$PWD/prebuilt-libdrmtap"
+              find third_party/libdrmtap/build-pkg -maxdepth 1 -name 'libdrmtap.so.0.*' -type f \
+                -exec cp -a {} "$PWD/prebuilt-libdrmtap/" \;
+              export DRMTAP_PREBUILT_DIR="$PWD/prebuilt-libdrmtap"
+              [ -n "$(find "$DRMTAP_PREBUILT_DIR" -name 'libdrmtap.so.0.*' -type f)" ] \
+                || { echo "FATAL: prebuilt libdrmtap.so missing"; exit 1; }
+              ls -l "$DRMTAP_PREBUILT_DIR"
+              cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm --release
+              python3 ./build.py --flutter --drm --skip-cargo
+              for name in rustdesk-unattended-wayland*??.deb; do
+                mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
+              done
+              popd
+            fi
+
       - name: Publish debian/rpm package
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
@@ -1692,6 +1747,13 @@ jobs:
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+
+      - name: Upload unattended-wayland deb
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        with:
+          name: rustdesk-unattended-wayland-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: rustdesk-unattended-wayland-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       # only x86_64 for arch since we can not find newest arm64 docker image to build
       # old arch image does not make sense for arch since it is "arch" which always update to date

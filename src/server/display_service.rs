@@ -328,6 +328,16 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
+            // On the DRM/KMS capture path the PipeWire enumeration (which is what feeds
+            // `SYNC_DISPLAYS` via `check_update_displays`) is bypassed, so populate the sync list
+            // from the DRM display list here. Without this the display service broadcasts an empty
+            // list that overwrites the login peer-info displays and the client shows "No displays".
+            #[cfg(feature = "drm")]
+            if super::drm_capturer::is_available() {
+                if let Some(displays) = super::drm_capturer::get_display_infos() {
+                    SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+                }
+            }
             return get_displays_msg();
         }
     }
@@ -534,6 +544,7 @@ fn normalize_primary_display_idx(primary_display_idx: usize, display_len: usize)
 pub fn get_primary_2(all: &Vec<Display>) -> usize {
     all.iter().position(|d| d.is_primary()).unwrap_or(0)
 }
+
 
 #[inline]
 #[cfg(windows)]
