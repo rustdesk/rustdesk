@@ -1537,11 +1537,12 @@ class InputModel {
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
-    if (_blockMouseWhenUnfocused) return;
+    // Reset drag coords even when dropped, so a resumed drag isn't stale.
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
     _remoteWindowCoords = [];
     _windowRect = null;
+    if (_blockMouseWhenUnfocused) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
 
@@ -1744,10 +1745,13 @@ class InputModel {
     }
   }
 
-  void refreshMousePos() => handleMouse({
-        'buttons': 0,
-        'type': _kMouseEventMove,
-      }, lastMousePos, edgeScroll: useEdgeScroll);
+  void refreshMousePos() {
+    if (_blockMouseWhenUnfocused) return;
+    handleMouse({
+      'buttons': 0,
+      'type': _kMouseEventMove,
+    }, lastMousePos, edgeScroll: useEdgeScroll);
+  }
 
   void tryMoveEdgeOnExit(Offset pos) {
     if (_blockMouseWhenUnfocused) return;
