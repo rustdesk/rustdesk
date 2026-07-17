@@ -25,6 +25,8 @@ import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import android.util.DisplayMetrics
 import androidx.annotation.RequiresApi
@@ -37,6 +39,7 @@ import io.flutter.plugin.common.MethodChannel
 import kotlin.concurrent.thread
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
 
 class MainActivity : FlutterActivity() {
@@ -50,6 +53,7 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mainService: MainService? = null
+    private var pendingImportResult: MethodChannel.Result? = null
     private var pendingExportFile: File? = null
     private var pendingExportResult: MethodChannel.Result? = null
 
@@ -97,6 +101,30 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_IMPORT_FILES) {
+            val channelResult = pendingImportResult
+            pendingImportResult = null
+            if (resultCode != Activity.RESULT_OK || data == null) {
+                channelResult?.success(emptyList<Map<String, String>>())
+                return
+            }
+
+            val uris = linkedSetOf<Uri>()
+            data.data?.let { uris.add(it) }
+            data.clipData?.let { clipData ->
+                for (index in 0 until clipData.itemCount) {
+                    uris.add(clipData.getItemAt(index).uri)
+                }
+            }
+            val files = uris.map { uri ->
+                mapOf(
+                    "uri" to uri.toString(),
+                    "name" to (displayName(uri) ?: uri.lastPathSegment.orEmpty())
+                )
+            }
+            channelResult?.success(files)
+            return
+        }
         if (requestCode == REQ_EXPORT_FILE) {
             val source = pendingExportFile
             val channelResult = pendingExportResult
@@ -292,17 +320,86 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                PICK_IMPORT_FILES -> {
+                    if (pendingImportResult != null) {
+                        result.error("import_picker_in_progress", "Another import picker is already open", null)
+                    } else {
+                        pendingImportResult = result
+                        try {
+                            startActivityForResult(
+                                Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = "*/*"
+                                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                                },
+                                REQ_IMPORT_FILES
+                            )
+                        } catch (e: Exception) {
+                            pendingImportResult = null
+                            result.error("picker_unavailable", e.message, null)
+                        }
+                    }
+                }
+                IMPORT_FILE -> {
+                    val arguments = call.arguments as? Map<*, *>
+                    val uri = (arguments?.get("uri") as? String)?.let {
+                        runCatching { Uri.parse(it) }.getOrNull()
+                    }
+                    val path = arguments?.get("path") as? String
+                    val overwrite = arguments?.get("overwrite") as? Boolean ?: false
+                    val destination = path?.let { canonicalAppScopedFile(it) }
+
+                    if (uri?.scheme != "content") {
+                        result.error("invalid_uri", "The selected document URI is invalid", null)
+                    } else if (destination == null ||
+                        destination.isDirectory ||
+                        destination.parentFile?.isDirectory != true) {
+                        result.error("invalid_destination", "The destination is outside app-scoped storage", null)
+                    } else {
+                        thread {
+                            var temporary: File? = null
+                            var reservedDestination = false
+                            try {
+                                val temporaryFile = File.createTempFile(
+                                    ".rustdesk-import-",
+                                    ".tmp",
+                                    destination.parentFile
+                                )
+                                temporary = temporaryFile
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    FileOutputStream(temporaryFile).use { output ->
+                                        input.copyTo(output)
+                                    }
+                                } ?: throw IllegalStateException("Unable to open the selected document")
+                                if (!overwrite) {
+                                    reservedDestination = destination.createNewFile()
+                                    if (!reservedDestination) {
+                                        throw IllegalStateException("The destination already exists")
+                                    }
+                                }
+                                if (!temporaryFile.renameTo(destination)) {
+                                    if (reservedDestination) {
+                                        destination.delete()
+                                    }
+                                    throw IllegalStateException("Unable to replace the destination")
+                                }
+                                runOnUiThread { result.success(true) }
+                            } catch (e: Exception) {
+                                Log.e(logTag, "Failed to import file", e)
+                                runOnUiThread {
+                                    result.error("import_failed", e.message, null)
+                                }
+                            } finally {
+                                temporary?.delete()
+                            }
+                        }
+                    }
+                }
                 EXPORT_FILE -> {
                     val path = (call.arguments as? Map<*, *>)?.get("path") as? String
-                    val source = path?.let { runCatching { File(it).canonicalFile }.getOrNull() }
-                    val allowedRoots = listOfNotNull(filesDir, getExternalFilesDir(null)).mapNotNull {
-                        runCatching { it.canonicalFile }.getOrNull()
-                    }
-                    val isAllowed = source != null && allowedRoots.any { root ->
-                        source == root || source.path.startsWith(root.path + File.separator)
-                    }
+                    val source = path?.let { canonicalAppScopedFile(it) }
 
-                    if (!isAllowed || source?.isFile != true) {
+                    if (source?.isFile != true) {
                         result.error("invalid_source", "The file is outside app-scoped storage", null)
                     } else if (pendingExportResult != null) {
                         result.error("export_in_progress", "Another export is already in progress", null)
@@ -349,6 +446,29 @@ class MainActivity : FlutterActivity() {
                     result.error("-1", "No such method", null)
                 }
             }
+        }
+    }
+
+    private fun canonicalAppScopedFile(path: String): File? {
+        val file = runCatching { File(path).canonicalFile }.getOrNull() ?: return null
+        val allowedRoots = listOfNotNull(filesDir, getExternalFilesDir(null)).mapNotNull {
+            runCatching { it.canonicalFile }.getOrNull()
+        }
+        return file.takeIf { candidate ->
+            allowedRoots.any { root ->
+                candidate == root || candidate.path.startsWith(root.path + File.separator)
+            }
+        }
+    }
+
+    private fun displayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (e: Exception) {
+            Log.w(logTag, "Failed to read selected document name", e)
+            null
         }
     }
 

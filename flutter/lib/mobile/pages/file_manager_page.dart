@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
@@ -77,34 +76,50 @@ class _FileManagerPageState extends State<FileManagerPage> {
   final _uniqueKey = UniqueKey();
 
   Future<void> _importFiles() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-    if (result == null) return;
-
     var imported = 0;
     var failed = false;
-    for (final selected in result.files) {
-      final sourcePath = selected.path;
-      final name = selected.name.replaceAll('\\', '/').split('/').last;
-      if (sourcePath == null ||
-          !PathUtil.validName(name, currentOptions.isWindows)) {
-        failed = true;
-        continue;
-      }
-      try {
+    try {
+      final selectedFiles = await gFFI.invokeMethodWithResult<List<dynamic>>(
+          AndroidChannel.kPickImportFiles);
+      if (selectedFiles == null || selectedFiles.isEmpty) return;
+
+      for (final selected in selectedFiles) {
+        final uri = (selected as Map<dynamic, dynamic>)['uri'] as String?;
+        final selectedName = selected['name'] as String?;
+        final name = selectedName?.replaceAll('\\', '/').split('/').last;
+        if (uri == null ||
+            name == null ||
+            !PathUtil.validName(name, currentOptions.isWindows)) {
+          failed = true;
+          continue;
+        }
         final destination =
             PathUtil.join(currentDir.path, name, currentOptions.isWindows);
+        var overwrite = false;
         if (await File(destination).exists()) {
-          final overwrite = await model.showFileConfirmDialog(
+          final overwriteResult = await model.showFileConfirmDialog(
               translate('Overwrite'), destination, false, false);
-          if (overwrite == false) break;
-          if (overwrite != true) continue;
+          if (overwriteResult == false) break;
+          if (overwriteResult != true) continue;
+          overwrite = true;
         }
-        await File(sourcePath).copy(destination);
-        imported++;
-      } catch (e) {
-        failed = true;
-        debugPrint('Failed to import $name: $e');
+        try {
+          final success = await gFFI.invokeMethod(
+              AndroidChannel.kImportFile,
+              {'uri': uri, 'path': destination, 'overwrite': overwrite});
+          if (success == true) {
+            imported++;
+          } else {
+            failed = true;
+          }
+        } catch (e) {
+          failed = true;
+          debugPrint('Failed to import $name: $e');
+        }
       }
+    } catch (e) {
+      failed = true;
+      debugPrint('Failed to select files for import: $e');
     }
     await currentFileController.refresh();
     if (failed) {
@@ -214,18 +229,18 @@ class _FileManagerPageState extends State<FileManagerPage> {
                       value: "refresh",
                     ),
                     if (isAndroid)
-                    PopupMenuItem(
-                      enabled: showLocal && currentDir.path.isNotEmpty,
-                      value: "import",
-                      child: Row(
-                        children: [
-                          Icon(Icons.add_to_drive,
-                              color: Theme.of(context).iconTheme.color),
-                          SizedBox(width: 5),
-                          Text(translate("Add"))
-                        ],
+                      PopupMenuItem(
+                        enabled: showLocal && currentDir.path.isNotEmpty,
+                        value: "import",
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_to_drive,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text(translate("Add"))
+                          ],
+                        ),
                       ),
-                    ),
                     PopupMenuItem(
                       enabled: currentDir.path != "/",
                       child: Row(

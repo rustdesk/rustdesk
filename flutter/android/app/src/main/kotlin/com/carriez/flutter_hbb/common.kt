@@ -39,6 +39,7 @@ const val EXT_LOGIN_REQ_NOTIFY = "LOGIN_REQ_NOTIFY"
 const val REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION = 101
 const val REQ_REQUEST_MEDIA_PROJECTION = 201
 const val REQ_EXPORT_FILE = 301
+const val REQ_IMPORT_FILES = 302
 
 // Activity responseCode
 const val RES_FAILED = -100
@@ -48,6 +49,8 @@ const val START_ACTION = "start_action"
 const val GET_START_ON_BOOT_OPT = "get_start_on_boot_opt"
 const val SET_START_ON_BOOT_OPT = "set_start_on_boot_opt"
 const val SYNC_APP_DIR_CONFIG_PATH = "sync_app_dir"
+const val PICK_IMPORT_FILES = "pick_import_files"
+const val IMPORT_FILE = "import_file"
 const val EXPORT_FILE = "export_file"
 const val GET_VALUE = "get_value"
 
