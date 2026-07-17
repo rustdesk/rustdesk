@@ -308,3 +308,44 @@ fn handle_config_options(config_options: HashMap<String, String>) {
 pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
 }
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn register_switch_grant(switch_uuid: String) {
+    tokio::spawn(async move {
+        let api_server = crate::ui_interface::get_api_server();
+        if api_server.is_empty() {
+            return;
+        }
+        use hbb_common::sodiumoxide::crypto::{hash::sha256, sign};
+        let switch_code = crate::encode64(sha256::hash(switch_uuid.as_bytes()).0);
+        let id = Config::get_id();
+        let kp = Config::get_key_pair();
+        let Some(sk) = sign::SecretKey::from_slice(&kp.0) else {
+            log::warn!("Failed to register switch grant: no device key");
+            return;
+        };
+        let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code), &sk);
+        let body = json!({
+            "id": id,
+            "switch_code": switch_code,
+            "signature": crate::encode64(signed),
+        })
+        .to_string();
+        let url = format!("{}/api/switch-grant", api_server);
+        if let Err(e) = crate::post_request(url, body, "").await {
+            log::warn!("Failed to register switch grant: {}", e);
+        }
+    });
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn switch_grant_signed_msg(id: &str, switch_code: &str) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(13 + id.len() + 1 + switch_code.len());
+    msg.extend_from_slice(b"switch-grant\0");
+    msg.extend_from_slice(id.as_bytes());
+    msg.push(0);
+    msg.extend_from_slice(switch_code.as_bytes());
+    msg
+}
