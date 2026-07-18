@@ -1035,7 +1035,9 @@ pub fn try_fix_logical_size(shared_displays: &mut Vec<crate::Display>) {
                         {
                             // If "Full Workspace" is selected in the portal dialog,
                             // the physical size reported by portal may not match the display info.
-                            debug!(
+                            // Warn rather than debug: skipping here on a fractionally scaled
+                            // output leads to clients misplacing input (#15601).
+                            warn!(
                             "Physical size of capturable ({:?}) does not match display info: ({:?}) - ({:?}). Skipping logical size fix.",
                             capturable.position,
                             capturable.physical_size,
