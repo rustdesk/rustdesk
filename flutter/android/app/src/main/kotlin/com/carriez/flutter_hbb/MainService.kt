@@ -214,6 +214,17 @@ class MainService : Service() {
 
     // video
     private var mediaProjection: MediaProjection? = null
+    private val mediaProjectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            Log.d(logTag, "MediaProjection stopped")
+            stopCapture()
+            virtualDisplay?.release()
+            virtualDisplay = null
+            mediaProjection = null
+            _isReady = false
+            checkMediaPermission()
+        }
+    }
     private var surface: Surface? = null
     private val sendVP9Thread = Executors.newSingleThreadExecutor()
     private var videoEncoder: MediaCodec? = null
@@ -337,15 +348,13 @@ class MainService : Service() {
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
             intent.getParcelableExtra<Intent>(EXT_MEDIA_PROJECTION_RES_INTENT)?.let {
-                mediaProjection =
+                releaseMediaProjection()
+                val projection =
                     mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
-                mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                    override fun onStop() {
-                        Log.d(logTag, "MediaProjection stopped")
-                    }
-                }, null)
-                checkMediaPermission()
+                projection.registerCallback(mediaProjectionCallback, Handler(Looper.getMainLooper()))
+                mediaProjection = projection
                 _isReady = true
+                checkMediaPermission()
             } ?: let {
                 Log.d(logTag, "getParcelableExtra intent null, invoke requestMediaProjection")
                 requestMediaProjection()
@@ -365,6 +374,12 @@ class MainService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         startActivity(intent)
+    }
+
+    private fun releaseMediaProjection() {
+        mediaProjection?.unregisterCallback(mediaProjectionCallback)
+        mediaProjection?.stop()
+        mediaProjection = null
     }
 
     @SuppressLint("WrongConstant")
@@ -491,7 +506,7 @@ class MainService : Service() {
             virtualDisplay = null
         }
 
-        mediaProjection = null
+        releaseMediaProjection()
         checkMediaPermission()
         stopForeground(true)
         stopService(Intent(this, FloatingWindowService::class.java))
