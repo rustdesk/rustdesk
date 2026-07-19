@@ -460,6 +460,15 @@ class _RemotePageState extends State<RemotePage>
     if (isMacOS) stateGlobal.getInputSource(force: true);
     stateGlobal.isFocused.value = true;
 
+    // On macOS, normal pointer mode waits for PointerEnter or PointerDown to clear
+    // local focus loss. After switching directly between two fullscreen remote
+    // Spaces without moving or clicking, Flutter may delay PointerEnter until the
+    // pointer moves. Clearing the latch here could let the off-screen session
+    // reclaim keyboard input.
+    //
+    // Test case: After switching directly between two fullscreen remote Spaces,
+    // the newly visible session may require a slight pointer movement to regain keyboard input.
+
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
       if (isMacOS) {
