@@ -4126,24 +4126,27 @@ impl Connection {
     }
 
     fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) -> bool {
-        let video_source = self.video_source();
-        let source_count = Self::video_source_count(video_source);
+        let source_count = Self::video_source_count(self.video_source());
         if display_idx >= source_count {
             // Do not remap an explicit switch: its resolution belongs to the requested source.
             log::warn!(
                 "Ignore switch to invalid {:?} index {}, available source count: {}",
-                video_source,
+                self.video_source(),
                 display_idx,
                 source_count
             );
             return false;
         }
 
-        let new_service_name = video_service::get_service_name(video_source, display_idx);
-        let old_service_name = video_service::get_service_name(video_source, self.display_idx);
+        let new_service_name = video_service::get_service_name(self.video_source(), display_idx);
+        let old_service_name =
+            video_service::get_service_name(self.video_source(), self.display_idx);
         let mut lock = server.write().unwrap();
         if !lock.contains(&new_service_name) {
-            lock.add_service(Box::new(video_service::new(video_source, display_idx)));
+            lock.add_service(Box::new(video_service::new(
+                self.video_source(),
+                display_idx,
+            )));
         }
         // For versions greater than 1.2.4, a `CaptureDisplays` message will be sent immediately.
         // Unnecessary capturers will be removed then.
