@@ -150,10 +150,18 @@ pub(super) async fn check_init() -> ResultType<()> {
                         miny,
                         maxy
                     );
-                    match input_service::update_mouse_resolution(minx, maxx, miny, maxy).await {
-                        Ok(()) => super::display_service::set_wayland_uinput_rect((
+                    // Bound the IPC wait like the periodic refresh does, so a hung
+                    // response can't stall session init.
+                    match timeout(
+                        3_000,
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => super::display_service::set_wayland_uinput_rect((
                             minx, maxx, miny, maxy,
                         )),
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
                         Err(err) => log::error!("Failed to update mouse resolution: {}", err),
                     }
                 } else {
