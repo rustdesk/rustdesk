@@ -220,27 +220,15 @@ pub(super) async fn check_init() -> ResultType<()> {
     Ok(())
 }
 
-pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
+pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     check_init().await?;
+    // Keep one read guard so clear/reinitialization cannot split these across cache snapshots.
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
         let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.displays.clone())
-        }
-    } else {
-        bail!("Failed to get capturer display info");
-    }
-}
-
-pub(super) fn get_primary() -> ResultType<usize> {
-    let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.values().next() {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
-        unsafe {
-            let cap_display_info = &*cap_display_info;
-            Ok(cap_display_info.primary)
+            Ok((cap_display_info.displays.clone(), cap_display_info.primary))
         }
     } else {
         bail!("Failed to get capturer display info");
