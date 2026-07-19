@@ -29,6 +29,79 @@ lazy_static::lazy_static! {
     // It should not be updated when displays changed.
     pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
+    #[cfg(target_os = "linux")]
+    static ref WAYLAND_UINPUT_RECT: Mutex<WaylandUinputRect> = Default::default();
+}
+
+#[cfg(target_os = "linux")]
+const WAYLAND_LAYOUT_CHECK_INTERVAL: Duration = Duration::from_millis(1500);
+
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct WaylandUinputRect {
+    rect: Option<(i32, i32, i32, i32)>,
+    last_check: Option<std::time::Instant>,
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
+    WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+}
+
+// The uinput absolute range is set when the session inits. If the compositor layout
+// changes afterwards (monitor scale/position change, or a portal virtual output
+// appearing once the capture starts), injected coordinates get rescaled by the stale
+// range and land offset, https://github.com/rustdesk/rustdesk/issues/15601
+#[cfg(target_os = "linux")]
+fn refresh_wayland_uinput_rect_if_changed() {
+    if is_x11() || !crate::input_service::wayland_use_uinput() {
+        return;
+    }
+    {
+        let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
+        if let Some(last_check) = lock.last_check {
+            if last_check.elapsed() < WAYLAND_LAYOUT_CHECK_INTERVAL {
+                return;
+            }
+        }
+        lock.last_check = Some(std::time::Instant::now());
+    }
+    let Some(rect) = scrap::wayland::display::get_desktop_rect_for_uinput_live() else {
+        return;
+    };
+    if WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect) {
+        return;
+    }
+    let (minx, maxx, miny, maxy) = rect;
+    log::info!(
+        "desktop layout changed, update mouse resolution: ({}, {}), ({}, {})",
+        minx,
+        maxx,
+        miny,
+        maxy
+    );
+    match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => {
+            // Bound the IPC wait, this runs on the display service loop and
+            // `set_resolution()` has no timeout on the response read.
+            match rt.block_on(timeout(
+                3_000,
+                crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+            )) {
+                // Record the rect only after a successful apply, so a transient
+                // failure is retried on the next check.
+                Ok(Ok(())) => WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect),
+                Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to build tokio runtime: {}", err);
+        }
+    }
 }
 
 // https://github.com/rustdesk/rustdesk/pull/8537
@@ -242,6 +315,12 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             sp.send(msg_out);
             log::info!("Displays changed");
         }
+
+        #[cfg(target_os = "linux")]
+        if sp.has_subscribes() {
+            refresh_wayland_uinput_rect_if_changed();
+        }
+
         std::thread::sleep(Duration::from_millis(300));
     }
 

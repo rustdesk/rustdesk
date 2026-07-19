@@ -14,6 +14,9 @@ lazy_static! {
     static ref DISPLAYS: Mutex<Option<Arc<Displays>>> = Mutex::new(None);
 }
 
+static MISSING_LOGICAL_SIZE_WARNED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 const COMMAND_TIMEOUT: Duration = Duration::from_millis(1000);
 
 pub struct Displays {
@@ -217,7 +220,23 @@ pub fn clear_wayland_displays_cache() {
 // Return (min_x, max_x, min_y, max_y)
 pub fn get_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
     let wayland_displays = get_displays();
-    let displays = &wayland_displays.displays;
+    desktop_rect_of(&wayland_displays.displays)
+}
+
+// Same rect, but always read from the compositor. Skips the displays cache and the
+// primary-monitor detection (which may spawn external commands), so it is cheap
+// enough to poll for layout changes. https://github.com/rustdesk/rustdesk/issues/15601
+pub fn get_desktop_rect_for_uinput_live() -> Option<(i32, i32, i32, i32)> {
+    match get_wayland_displays() {
+        Ok(displays) => desktop_rect_of(&displays),
+        Err(err) => {
+            warn!("Failed to get wayland displays: {}", err);
+            None
+        }
+    }
+}
+
+fn desktop_rect_of(displays: &[WaylandDisplayInfo]) -> Option<(i32, i32, i32, i32)> {
     if displays.is_empty() {
         return None;
     }
@@ -243,14 +262,71 @@ pub fn get_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
             // This may occur if the Wayland compositor does not provide logical size information,
             // or if display information is incomplete. We fall back to physical size, which provides
             // usable dimensions, but may not always be correct depending on compositor behavior.
-            warn!(
+            // Warn only once, the live path polls this while a session is active.
+            if !MISSING_LOGICAL_SIZE_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                warn!(
                     "Display at ({}, {}) is missing logical_size; falling back to physical size ({}, {}).",
                     d.x, d.y, d.width, d.height
                 );
+            }
             (d.width, d.height)
         };
         max_x = max_x.max(d.x + size.0);
         max_y = max_y.max(d.y + size.1);
     }
     Some((min_x, max_x, min_y, max_y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn display(
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        logical_size: Option<(i32, i32)>,
+    ) -> WaylandDisplayInfo {
+        WaylandDisplayInfo {
+            name: "".to_owned(),
+            x,
+            y,
+            width,
+            height,
+            logical_size,
+            refresh_rate: 60,
+        }
+    }
+
+    #[test]
+    fn test_desktop_rect_empty() {
+        assert_eq!(desktop_rect_of(&[]), None);
+    }
+
+    #[test]
+    fn test_desktop_rect_single_display_uses_physical_size() {
+        let displays = [display(0, 0, 2880, 1800, Some((1859, 1162)))];
+        assert_eq!(desktop_rect_of(&displays), Some((0, 2880, 0, 1800)));
+    }
+
+    #[test]
+    fn test_desktop_rect_multi_display_uses_logical_size() {
+        // Laptop panel at 155% below two stacked externals at 100%.
+        let displays = [
+            display(0, 718, 2880, 1800, Some((1859, 1162))),
+            display(1859, 0, 1920, 1080, Some((1920, 1080))),
+            display(1859, 1080, 1920, 1080, Some((1920, 1080))),
+        ];
+        assert_eq!(desktop_rect_of(&displays), Some((0, 3779, 0, 2160)));
+    }
+
+    #[test]
+    fn test_desktop_rect_missing_logical_size_falls_back_to_physical() {
+        let displays = [
+            display(0, 0, 2560, 1440, None),
+            display(2560, 0, 2560, 1440, Some((2560, 1440))),
+        ];
+        assert_eq!(desktop_rect_of(&displays), Some((0, 5120, 0, 1440)));
+    }
 }
