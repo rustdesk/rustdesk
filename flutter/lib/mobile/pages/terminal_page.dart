@@ -181,26 +181,6 @@ class _TerminalPageState extends State<TerminalPage>
     }
   }
 
-  KeyEventResult _handleTerminalKeyEvent(FocusNode _, KeyEvent event) {
-    final hardwareKeyboard = HardwareKeyboard.instance;
-    final shouldPaste = shouldHandleTerminalPasteShortcut(
-      logicalKey: event.logicalKey,
-      isKeyDown: event is KeyDownEvent,
-      isKeyRepeat: event is KeyRepeatEvent,
-      controlPressed: hardwareKeyboard.isControlPressed,
-      metaPressed: hardwareKeyboard.isMetaPressed,
-      altPressed: hardwareKeyboard.isAltPressed,
-      shiftPressed: hardwareKeyboard.isShiftPressed,
-    );
-    if (!shouldPaste) return KeyEventResult.ignored;
-
-    // The key callback is synchronous, while clipboard access is asynchronous.
-    // Mark the event handled immediately so xterm's default paste action cannot
-    // send the same clipboard content through Terminal.onOutput.
-    unawaited(_pasteClipboardText());
-    return KeyEventResult.handled;
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -238,7 +218,6 @@ class _TerminalPageState extends State<TerminalPage>
                     //
                     // Android works fine without this workaround.
                     deleteDetection: isIOS,
-                    onKeyEvent: _handleTerminalKeyEvent,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;

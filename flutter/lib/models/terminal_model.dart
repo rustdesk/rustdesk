@@ -82,6 +82,9 @@ class TerminalModel with ChangeNotifier {
         modifiersActive && shouldApplyTerminalInputModifiers(data);
     data = prepareTerminalInputPayload(
       data,
+      // IME soft-keyboard paste prompts currently arrive from xterm as normal
+      // text input with no paste-origin metadata. Keep them on the keyboard path;
+      // clipboard-content heuristics can misclassify ordinary typing.
       source: TerminalInputSource.keyboard,
       isMobileOrWebMobile: isMobile || (isWeb && !isWebDesktop),
       bracketedPasteMode: terminal.bracketedPasteMode,

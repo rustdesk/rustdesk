@@ -115,24 +115,6 @@ String prepareTerminalInputPayload(
   return result;
 }
 
-/// Returns true for the platform paste shortcuts handled by xterm by default.
-/// Key repeats are consumed too so repeated paste shortcuts keep using the
-/// source-aware paste path instead of falling through to xterm's default paste.
-bool shouldHandleTerminalPasteShortcut({
-  required LogicalKeyboardKey logicalKey,
-  required bool isKeyDown,
-  required bool isKeyRepeat,
-  required bool controlPressed,
-  required bool metaPressed,
-  required bool altPressed,
-  required bool shiftPressed,
-}) {
-  if (!isKeyDown && !isKeyRepeat) return false;
-  if (logicalKey != LogicalKeyboardKey.keyV) return false;
-  if (altPressed || shiftPressed) return false;
-  return controlPressed != metaPressed;
-}
-
 /// Returns true when collapsing Row3 should also clear hidden modifier state.
 bool shouldClearTerminalModifiersWhenRow3Collapses({
   required bool wasExpanded,
