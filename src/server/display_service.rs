@@ -38,22 +38,14 @@ struct SyncDisplaysInfo {
 }
 
 impl SyncDisplaysInfo {
-    fn check_changed(&mut self, displays: Vec<DisplayInfo>) {
-        if self.displays.len() != displays.len() {
-            self.displays = displays;
-            if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                self.is_synced = false;
-            }
+    fn check_changed(&mut self, displays: &[DisplayInfo]) {
+        if self.displays.as_slice() == displays {
             return;
         }
-        for (i, d) in displays.iter().enumerate() {
-            if d != &self.displays[i] {
-                self.displays = displays;
-                if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                    self.is_synced = false;
-                }
-                return;
-            }
+
+        self.displays = displays.to_vec();
+        if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
+            self.is_synced = false;
         }
     }
 
@@ -348,10 +340,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
             }
         })
         .collect::<Vec<DisplayInfo>>();
-    SYNC_DISPLAYS
-        .lock()
-        .unwrap()
-        .check_changed(displays.clone());
+    SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
     displays
 }
 
