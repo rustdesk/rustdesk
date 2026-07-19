@@ -4206,8 +4206,8 @@ impl Connection {
             return;
         }
 
-        if let Some(sever) = self.server.upgrade() {
-            let mut lock = sever.write().unwrap();
+        if let Some(server) = self.server.upgrade() {
+            let mut lock = server.write().unwrap();
             for display in valid_add.iter() {
                 let service_name = video_service::get_service_name(video_source, *display);
                 if !lock.contains(&service_name) {

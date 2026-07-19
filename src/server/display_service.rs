@@ -301,6 +301,11 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
+    let _ = update_sync_displays(all);
+}
+
+// Return the converted input snapshot while updating the shared display cache.
+pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
     // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
     #[cfg(target_os = "linux")]
@@ -343,7 +348,11 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             }
         })
         .collect::<Vec<DisplayInfo>>();
-    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+    SYNC_DISPLAYS
+        .lock()
+        .unwrap()
+        .check_changed(displays.clone());
+    displays
 }
 
 pub fn is_inited_msg() -> Option<Message> {
@@ -372,8 +381,7 @@ pub async fn update_get_sync_displays_on_login() -> ResultType<(Vec<DisplayInfo>
     let displays = display_service::try_get_displays_add_amyuni_headless();
     let displays = displays?;
     let primary_display_idx = get_primary_2(&displays);
-    check_update_displays(&displays);
-    let sync_displays = SYNC_DISPLAYS.lock().unwrap().displays.clone();
+    let sync_displays = update_sync_displays(&displays);
     let primary_display_idx =
         normalize_primary_display_idx(primary_display_idx, sync_displays.len());
     Ok((sync_displays, primary_display_idx))

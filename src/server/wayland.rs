@@ -175,8 +175,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
-                super::display_service::check_update_displays(&all);
-                let mut displays = super::display_service::get_sync_displays();
+                let mut displays = super::display_service::update_sync_displays(&all);
                 for display in displays.iter_mut() {
                     display.cursor_embedded = is_cursor_embedded();
                 }
