@@ -4186,12 +4186,18 @@ impl Connection {
             .copied()
             .filter(|display| *display < source_count)
             .collect::<Vec<_>>();
+        let valid_sub = sub
+            .iter()
+            .copied()
+            .filter(|display| *display < source_count)
+            .collect::<Vec<_>>();
         let valid_set = set
             .iter()
             .copied()
             .filter(|display| *display < source_count)
             .collect::<Vec<_>>();
-        let invalid_count = add.len() + set.len() - valid_add.len() - valid_set.len();
+        let invalid_count =
+            add.len() + sub.len() + set.len() - valid_add.len() - valid_sub.len() - valid_set.len();
         if invalid_count != 0 {
             log::warn!(
                 "Ignore {} invalid {:?} indices, available source count: {}",
@@ -4200,7 +4206,9 @@ impl Connection {
                 source_count
             );
         }
+        // Passing an invalid sub request as an empty exclude list would unsubscribe all services.
         if (!add.is_empty() && valid_add.is_empty())
+            || (add.is_empty() && !sub.is_empty() && valid_sub.is_empty())
             || (add.is_empty() && sub.is_empty() && !set.is_empty() && valid_set.is_empty())
         {
             return;
@@ -4223,7 +4231,7 @@ impl Connection {
             if !add.is_empty() {
                 lock.capture_displays(self.inner.clone(), video_source, &valid_add, true, false);
             } else if !sub.is_empty() {
-                lock.capture_displays(self.inner.clone(), video_source, sub, false, true);
+                lock.capture_displays(self.inner.clone(), video_source, &valid_sub, false, true);
             } else {
                 lock.capture_displays(self.inner.clone(), video_source, &valid_set, true, true);
             }
