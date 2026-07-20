@@ -22,6 +22,7 @@ import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
+import 'macos_full_screen_focus_recovery.dart';
 
 import 'package:flutter_hbb/native/custom_cursor.dart'
     if (dart.library.html) 'package:flutter_hbb/web/custom_cursor.dart';
@@ -94,7 +95,7 @@ class _RemotePageState extends State<RemotePage>
   bool _macOSLocalFocusLost = false;
   bool _macOSInputActive = false;
   bool _macOSInputSuppressed = false;
-  bool _macOSFullScreenFocusRecoveryPending = false;
+  final _macOSFullScreenFocusRecovery = MacOSFullScreenFocusRecovery();
   bool _macOSExplicitFocusRequestPending = false;
   StreamSubscription<DesktopTabState>? _tabStateSubscription;
   final _cursorOverImage = false.obs;
@@ -271,7 +272,7 @@ class _RemotePageState extends State<RemotePage>
 
   void _onMacOSTabStateChanged(DesktopTabState _) {
     if (!_isSelectedTab) {
-      _macOSFullScreenFocusRecoveryPending = false;
+      _macOSFullScreenFocusRecovery.cancel();
       _syncMacOSKeyboardGrab();
       return;
     }
@@ -285,7 +286,7 @@ class _RemotePageState extends State<RemotePage>
   }
 
   void _releaseMacOSRemoteInput() {
-    _macOSFullScreenFocusRecoveryPending = false;
+    _macOSFullScreenFocusRecovery.cancel();
     _macOSExplicitFocusRequestPending = false;
     _macOSInputSuppressed = true;
     _macOSLocalFocusLost = true;
@@ -330,7 +331,8 @@ class _RemotePageState extends State<RemotePage>
     final lifecycleAllowsInput = allowInactiveLifecycle ||
         _macOSLifecycleState == null ||
         _macOSLifecycleState == AppLifecycleState.resumed;
-    // Window focus alone must not enable the global hook without pointer presence.
+    // Input stays pointer-gated except for focused fullscreen recovery, which
+    // compensates when macOS omits PointerEnter during a Space switch.
     final shouldFocus = lifecycleAllowsInput &&
         _isMacOSKeyboardContextActive &&
         !_macOSInputSuppressed &&
@@ -356,45 +358,73 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
-  void _restoreMacOSKeyboardAfterFullScreen() {
-    // Returning while hidden intentionally preserves the pending recovery.
-    if (!_macOSFullScreenFocusRecoveryPending ||
-        _macOSLifecycleState == AppLifecycleState.hidden) {
+  void _restoreMacOSKeyboardAfterFullScreen({
+    required int generation,
+    bool allowHiddenLifecycle = false,
+  }) {
+    // Fullscreen callbacks preserve recovery while hidden. Native window focus
+    // may bypass a stale hidden lifecycle for the newly visible Space.
+    if (!_macOSFullScreenFocusRecovery.isCurrent(generation) ||
+        (!allowHiddenLifecycle &&
+            _macOSLifecycleState == AppLifecycleState.hidden)) {
       return;
     }
-    if (!stateGlobal.isFocused.value ||
-        _isWindowBlur ||
-        !_isSelectedTab ||
-        !_cursorOverImage.value) {
+    final contextActive =
+        stateGlobal.isFocused.value && !_isWindowBlur && _isSelectedTab;
+    // macOS can focus a fullscreen Space without sending PointerEnter. Native
+    // window focus is authoritative here; a later blur cancels this generation
+    // before an off-screen window can restore input.
+    final shouldInferPointerInside = !_cursorOverImage.value &&
+        allowHiddenLifecycle &&
+        stateGlobal.fullscreen.isTrue &&
+        contextActive;
+    final canRestore =
+        contextActive && (_cursorOverImage.value || shouldInferPointerInside);
+    if (!_macOSFullScreenFocusRecovery.consume(generation)) return;
+    if (!canRestore) {
       // Consuming recovery here requires a later pointer/window/tab event.
-      _macOSFullScreenFocusRecoveryPending = false;
       return;
     }
-    _macOSFullScreenFocusRecoveryPending = false;
+    if (shouldInferPointerInside) {
+      _cursorOverImage.value = true;
+    }
     _macOSLocalFocusLost = false;
     stateGlobal.getInputSource(force: true);
     _syncMacOSKeyboardGrab(reassert: true, allowInactiveLifecycle: true);
   }
 
-  void _scheduleMacOSKeyboardAfterFullScreen() {
+  void _scheduleMacOSKeyboardAfterFullScreen({
+    required int generation,
+    bool allowHiddenLifecycle = false,
+  }) {
     // Fullscreen can deliver FocusNode loss after its callback; wait for frame
     // completion and then advance one event-loop turn before restoring.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Timer.run(() {
-        if (mounted) _restoreMacOSKeyboardAfterFullScreen();
+        if (mounted) {
+          _restoreMacOSKeyboardAfterFullScreen(
+            generation: generation,
+            allowHiddenLifecycle: allowHiddenLifecycle,
+          );
+        }
       });
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  void _queueMacOSKeyboardAfterFullScreen() {
-    _macOSFullScreenFocusRecoveryPending = true;
+  void _queueMacOSKeyboardAfterFullScreen({
+    bool allowHiddenLifecycle = false,
+  }) {
+    final generation = _macOSFullScreenFocusRecovery.queue();
     if (_macOSLifecycleState == AppLifecycleState.paused ||
         _macOSLifecycleState == AppLifecycleState.detached) {
-      _macOSFullScreenFocusRecoveryPending = false;
+      _macOSFullScreenFocusRecovery.cancel();
       return;
     }
-    _scheduleMacOSKeyboardAfterFullScreen();
+    _scheduleMacOSKeyboardAfterFullScreen(
+      generation: generation,
+      allowHiddenLifecycle: allowHiddenLifecycle,
+    );
   }
 
   @override
@@ -409,13 +439,14 @@ class _RemotePageState extends State<RemotePage>
       _macOSInputActive = false;
     }
 
-    if (!_macOSFullScreenFocusRecoveryPending) return;
+    final generation = _macOSFullScreenFocusRecovery.pendingGeneration;
+    if (generation == null) return;
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.resumed) {
-      _scheduleMacOSKeyboardAfterFullScreen();
+      _scheduleMacOSKeyboardAfterFullScreen(generation: generation);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      _macOSFullScreenFocusRecoveryPending = false;
+      _macOSFullScreenFocusRecovery.cancel();
     }
   }
 
@@ -429,7 +460,7 @@ class _RemotePageState extends State<RemotePage>
       _isWindowBlur = true;
     }
     if (isMacOS) {
-      _macOSFullScreenFocusRecoveryPending = false;
+      _macOSFullScreenFocusRecovery.cancel();
       // A blur or Space switch may not emit PointerExit, so cursor state alone
       // cannot prevent the old remote surface from reclaiming the keyboard.
       _macOSLocalFocusLost = true;
@@ -460,14 +491,18 @@ class _RemotePageState extends State<RemotePage>
     if (isMacOS) stateGlobal.getInputSource(force: true);
     stateGlobal.isFocused.value = true;
 
-    // On macOS, normal pointer mode waits for PointerEnter or PointerDown to clear
-    // local focus loss. After switching directly between two fullscreen remote
-    // Spaces without moving or clicking, Flutter may delay PointerEnter until the
-    // pointer moves. Clearing the latch here could let the off-screen session
-    // reclaim keyboard input.
-    //
-    // Test case: After switching directly between two fullscreen remote Spaces,
-    // the newly visible session may require a slight pointer movement to regain keyboard input.
+    // Normal macOS windows wait for PointerEnter or PointerDown. A focused
+    // fullscreen Space queues delayed recovery; if this window blurs again, the
+    // pending recovery is cancelled before native input can reactivate.
+    // Regression: switch directly between fullscreen remote Spaces without
+    // moving or clicking; only the newly focused session may receive input.
+    if (isMacOS &&
+        stateGlobal.fullscreen.isTrue &&
+        !_ffi.inputModel.relativeMouseMode.value) {
+      // Native window focus is authoritative when a secondary engine retains a
+      // stale hidden lifecycle state after its fullscreen Space becomes visible.
+      _queueMacOSKeyboardAfterFullScreen(allowHiddenLifecycle: true);
+    }
 
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
@@ -541,7 +576,7 @@ class _RemotePageState extends State<RemotePage>
     super.onWindowMinimize();
     WakelockManager.disable(_uniqueKey);
     if (isMacOS) {
-      _macOSFullScreenFocusRecoveryPending = false;
+      _macOSFullScreenFocusRecovery.cancel();
       _isWindowBlur = true;
       _cursorOverImage.value = false;
       stateGlobal.isFocused.value = false;
