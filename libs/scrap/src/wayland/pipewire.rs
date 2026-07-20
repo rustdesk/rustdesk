@@ -272,9 +272,10 @@ impl PipeWireRecorder {
         src.set_property("path", &format!("{}", capturable.path))?;
         src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
-        // For some reason pipewire blocks on destruction of AppSink if this is not set to true,
-        // see: https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/982
-        src.set_property("always-copy", &true)?;
+        // Keep PipeWire's buffer pool enabled so DMA-BUF memory reaches the GL
+        // importer. always-copy=true disables that pool and leaves DMA-BUF caps
+        // attached to ordinary copied memory, which cannot be imported.
+        src.set_property("always-copy", &false)?;
 
         // COSMIC/Wayland fix: insert videoconvert between pipewiresrc and appsink.
         // xdg-desktop-portal-cosmic's modifier negotiation fails when the downstream
@@ -284,12 +285,67 @@ impl PipeWireRecorder {
         // settle on a format it can deliver via its SHM path.
         let convert = gst::ElementFactory::make("videoconvert", None)?;
 
+        // Niri on the proprietary NVIDIA driver offers DMA-BUF frames with DRM
+        // modifiers. videoconvert only accepts CPU-memory frames, so bridge the
+        // portal's DMA-BUF through EGL/GL and download it before conversion.
+        // NVIDIA block-linear modifiers must use the external-OES import path;
+        // otherwise glupload fixates a 2D texture and rejects the buffer.
+        // This also keeps the existing system-memory conversion and appsink
+        // format contract intact.
+        let gl_upload = gst::ElementFactory::make("glupload", None)?;
+        let gl_caps_filter = gst::ElementFactory::make("capsfilter", None)?;
+        let gl_caps = gst::Caps::builder("video/x-raw")
+            .features(&["memory:GLMemory"])
+            .field("texture-target", &"external-oes")
+            .build();
+        gl_caps_filter.set_property("caps", &gl_caps)?;
+        let gl_convert = gst::ElementFactory::make("glcolorconvert", None)?;
+        let gl_output_caps_filter = gst::ElementFactory::make("capsfilter", None)?;
+        let gl_output_caps = gst::Caps::builder("video/x-raw")
+            .features(&["memory:GLMemory"])
+            .field("format", &"RGBA")
+            .field("texture-target", &"2D")
+            .build();
+        gl_output_caps_filter.set_property("caps", &gl_output_caps)?;
+        let gl_download = gst::ElementFactory::make("gldownload", None)?;
+
+        // Direct external-OES imports keep PipeWire's original BGRx VideoMeta
+        // even though glupload exposes the imported texture as RGBA. Remove
+        // that stale layout metadata before glcolorconvert maps the GL frame.
+        // VideoCropMeta is a separate meta and remains available downstream.
+        let gl_upload_src = gl_upload
+            .get_static_pad("src")
+            .ok_or_else(|| GStreamerError("glupload has no src pad".into()))?;
+        gl_upload_src.add_probe(gst::PadProbeType::BUFFER, |_, info| {
+            if let Some(gst::PadProbeData::Buffer(buffer)) = info.data.as_mut() {
+                let buffer = buffer.make_mut();
+                if let Some(meta) = buffer.get_meta_mut::<gstreamer_video::VideoMeta>() {
+                    meta.remove();
+                }
+            }
+            gst::PadProbeReturn::Ok
+        });
+
         let sink = gst::ElementFactory::make("appsink", None)?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
-        pipeline.add_many(&[&src, &convert, &sink])?;
-        src.link(&convert)?;
+        pipeline.add_many(&[
+            &src,
+            &gl_upload,
+            &gl_caps_filter,
+            &gl_convert,
+            &gl_output_caps_filter,
+            &gl_download,
+            &convert,
+            &sink,
+        ])?;
+        src.link(&gl_upload)?;
+        gl_upload.link(&gl_caps_filter)?;
+        gl_caps_filter.link(&gl_convert)?;
+        gl_convert.link(&gl_output_caps_filter)?;
+        gl_output_caps_filter.link(&gl_download)?;
+        gl_download.link(&convert)?;
         convert.link(&sink)?;
 
         let appsink = sink
