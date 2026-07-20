@@ -667,7 +667,8 @@ pub fn core_main() -> Option<Vec<String>> {
                         None
                     }
                 };
-                let new_id = get_value("--id");
+                // An empty --id (e.g. an unset var) would deploy a blank id; the Android flow guards this too (#15146).
+                let new_id = get_value("--id").filter(|s| !s.is_empty());
                 match crate::ui_interface::deploy_device(token, new_id) {
                     crate::ui_interface::DeployResult::Ok => {
                         println!("Device deployed.");
