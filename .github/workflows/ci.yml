@@ -249,3 +249,18 @@ jobs:
         use-cross: ${{ matrix.job.use-cross }}
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+
+    # The opt-in `drm` (DRM/KMS capture) feature is off in the default workspace test above, so the
+    # `_drm` unit tests would otherwise never run in CI. `drm` is a pure runtime-dlopen backend with no
+    # link-time deps (no libdrm/EGL/gbm, no GPU), so compiling just the rustdesk crate with the feature
+    # on is cheap and needs no extra system packages. Run the pure-userspace `_drm` tests here (the
+    # SCM_RIGHTS framing round-trips incl. MSG_CTRUNC/surplus-fd, and the peer-auth + admission-bound
+    # decisions) so the new screen-content channel is covered on every PR, alongside the ipc/auth tests.
+    # Linux-only; the main build/test above stays on default features so the shipped drm-off config
+    # remains the primary verified one.
+    - name: Run drm unit tests (Linux)
+      if: matrix.job.target == 'x86_64-unknown-linux-gnu'
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1
+      with:
+        command: test
+        args: --locked --target=${{ matrix.job.target }} -p rustdesk --features drm drm_conn_tests
