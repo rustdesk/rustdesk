@@ -120,6 +120,17 @@ const REG_NAME_INSTALL_DESKTOPSHORTCUTS: &str = "DESKTOPSHORTCUTS";
 const REG_NAME_INSTALL_STARTMENUSHORTCUTS: &str = "STARTMENUSHORTCUTS";
 pub const REG_NAME_INSTALL_PRINTER: &str = "PRINTER";
 
+fn validate_install_app_name(app_name: &str) -> ResultType<()> {
+    if app_name.is_empty()
+        || !app_name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        bail!("Application name must match [a-zA-Z0-9-]+");
+    }
+    Ok(())
+}
+
 pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
     unsafe {
         let hwnd = GetForegroundWindow();
@@ -4552,6 +4563,17 @@ mod tests {
         assert_eq!(chr, Some('a'));
         let chr = get_char_from_vk(VK_ESCAPE as u32); // VK_ESC
         assert_eq!(chr, None)
+    }
+
+    #[test]
+    fn install_app_names_enforce_ascii_command_safety() {
+        assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
+        for app_name in ["", "RustDesk_Admin", "RustDesk&whoami", "RustDesk应用"] {
+            assert!(
+                validate_install_app_name(app_name).is_err(),
+                "unsafe application name was accepted: {app_name}"
+            );
+        }
     }
 
     #[test]
