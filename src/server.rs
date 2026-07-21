@@ -68,6 +68,8 @@ pub mod input_service {
 
 mod connection;
 mod login_failure_check;
+#[cfg(target_os = "macos")]
+mod memory_watchdog;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
@@ -605,6 +607,8 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
+        #[cfg(target_os = "macos")]
+        memory_watchdog::start();
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]

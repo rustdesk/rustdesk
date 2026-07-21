@@ -25,6 +25,8 @@ def main() -> None:
     service_rs = read("src/service.rs")
     keyboard_rs = read("src/keyboard.rs")
     input_service_rs = read("src/server/input_service.rs")
+    server_rs = read("src/server.rs")
+    memory_watchdog_rs = read("src/server/memory_watchdog.rs")
     macos_rs = read("src/platform/macos.rs")
     macos_mm = read("src/platform/macos.mm")
     mac_install_script = read("src/platform/privileges_scripts/install.scpt")
@@ -78,6 +80,14 @@ def main() -> None:
         "activate_application_at_point(x, y)",
         "en.mouse_down(MouseButton::Left)",
     )
+
+    assert 'mod memory_watchdog;' in server_rs
+    assert 'memory_watchdog::start();' in server_rs
+    assert '"rdh-memory-restart-threshold-mib"' in memory_watchdog_rs
+    assert 'std::env::var("XPC_SERVICE_NAME")' in memory_watchdog_rs
+    assert "crate::Connection::alive_conns().len()" in memory_watchdog_rs
+    assert "REQUIRED_IDLE_OVER_LIMIT_SAMPLES: u8 = 2" in memory_watchdog_rs
+    assert "std::process::exit(RESTART_EXIT_CODE)" in memory_watchdog_rs
 
     diagnostic_markers = (
         "macos-input-trace",

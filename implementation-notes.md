@@ -32,4 +32,20 @@
   checks the latest official release, rehearses the merge in an ephemeral runner,
   and runs the RDH static invariants.
 
+## macOS user-server memory recovery
+
+- The RDH `--server` now contains a low-frequency RSS watchdog with a 1 GiB default
+  threshold. It is active only when the exact RDH launchd job is supervising the
+  process.
+- Restart requires two idle over-limit samples five minutes apart plus a final
+  30-second check. Any active incoming connection or memory recovery resets the
+  candidate restart.
+- Recovery exits only the user server with a nonzero status so the existing
+  launchd `KeepAlive` policy relaunches it. It never unloads or restarts the root
+  service and therefore does not require an administrator prompt.
+- `rdh-memory-restart-threshold-mib=0` disables the watchdog. Invalid values disable
+  it explicitly instead of silently falling back.
+- This mitigates the long-running leak but does not identify or fix its allocation
+  source; heap profiling remains a separate follow-up.
+
 No public compatibility layer is retained for the removed shortcut mapping.
