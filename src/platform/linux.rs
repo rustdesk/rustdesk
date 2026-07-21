@@ -976,6 +976,15 @@ pub fn get_active_userid_fresh() -> String {
     get_values_of_seat0(&[1])[0].clone()
 }
 
+#[inline]
+/// The cached active uid as a number, or `None` when the cache is empty. Unlike `get_active_userid`
+/// this NEVER falls back to a blocking `loginctl` seat0 lookup, so it is safe to call on an async
+/// runtime thread and on a hot path (e.g. per-frame re-auth): a cache miss returns `None` for the
+/// caller to treat as "active session momentarily unknown" rather than stalling on a subprocess.
+pub fn get_active_userid_cached() -> Option<u32> {
+    get_active_user_id_name_from_cache().and_then(|(uid, _)| uid.parse::<u32>().ok())
+}
+
 fn get_cm() -> bool {
     // We use `CMD_PS` instead of `ps` to suppress some audit messages on some systems.
     if let Ok(output) = Command::new(CMD_PS.as_str()).args(vec!["aux"]).output() {
