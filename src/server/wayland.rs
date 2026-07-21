@@ -378,6 +378,40 @@ pub(super) fn get_capturer_for_display(
         unsafe {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
+            // review 4.5: reaching here with DRM active means get_capturer_info bailed (a demoted
+            // display) and we fell through to PipeWire. Serve this stream ONLY if its rect matches the
+            // geometry we advertised for this index. The portal typically exposes one whole-desktop
+            // stream, so on a multi-monitor host that rect is the FULL desktop while the advertised DRM
+            // geometry is a single connector -> serving it would stretch the frame and offset all
+            // input. Bail instead; get_display_infos advertised the display offline, so the client
+            // re-enumerates against a consistent list. A single-display host matches (whole-desktop ==
+            // that display) and is served normally. On a pure-PipeWire host is_available() is false and
+            // this guard is skipped, preserving upstream behavior exactly.
+            #[cfg(feature = "drm")]
+            if super::drm_capturer::is_available() {
+                if let Some(advertised) = super::drm_capturer::get_display_infos()
+                    .and_then(|l| l.get(display_idx).cloned())
+                {
+                    let consistent = advertised.x == rect.0 .0
+                        && advertised.y == rect.0 .1
+                        && advertised.width as usize == rect.1
+                        && advertised.height as usize == rect.2;
+                    if !consistent {
+                        bail!(
+                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
+                            display_idx,
+                            advertised.width,
+                            advertised.height,
+                            advertised.x,
+                            advertised.y,
+                            rect.1,
+                            rect.2,
+                            rect.0 .0,
+                            rect.0 .1
+                        );
+                    }
+                }
+            }
             Ok(super::video_service::CapturerInfo {
                 origin: rect.0,
                 width: rect.1,
