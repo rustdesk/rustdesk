@@ -3173,6 +3173,7 @@ pub fn install_service() -> bool {
     let cmds = match get_install_service_commands(&path, &exe) {
         Ok(cmds) => cmds,
         Err(err) => {
+            Config::set_option("stop-service".into(), "Y".into());
             log::error!("Failed to prepare service installation: {err}");
             return true;
         }
