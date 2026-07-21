@@ -365,7 +365,17 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
-            return Ok(Some(id));
+            // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
+            // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
+            // sentinel. Returning that sentinel here would hide the cursor globally, including on the
+            // PipeWire display where it is still visible, so only report a hidden DRM cursor when it
+            // is authoritative -- a pure-DRM session. A visible DRM cursor is always authoritative;
+            // otherwise fall through to the normal cursor path.
+            if id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                return Ok(Some(id));
+            }
         }
     }
     let mut res = None;
@@ -392,14 +402,21 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(c) = crate::server::drm_capturer::drm_cursor() {
-            let mut cd: CursorData = Default::default();
-            cd.id = c.id;
-            cd.width = c.width;
-            cd.height = c.height;
-            cd.hotx = c.hotx;
-            cd.hoty = c.hoty;
-            cd.colors = c.colors.into();
-            return Ok(cd);
+            // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
+            // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
+            // by the normal path instead of being hidden everywhere.
+            if c.id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                let mut cd: CursorData = Default::default();
+                cd.id = c.id;
+                cd.width = c.width;
+                cd.height = c.height;
+                cd.hotx = c.hotx;
+                cd.hoty = c.hoty;
+                cd.colors = c.colors.into();
+                return Ok(cd);
+            }
         }
     }
     let mut res = None;

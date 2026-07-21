@@ -444,6 +444,14 @@ def finalize_deb(version, ships_so, so_basename=None):
     # rustdesk package. Then it writes the control, checksums, builds, and renames the .deb.
     if ships_so:
         system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
+        # TODO(drm, Debian Policy 10.2): dropping /usr/lib/rustdesk into the SYSTEM-WIDE
+        # linker search path (/etc/ld.so.conf.d) lets a privately-bundled library shadow a
+        # system library for EVERY binary on the host, which Debian Policy 10.2 forbids.
+        # The correct fix is to make the in-process dlopen resolve libdrmtap by ABSOLUTE
+        # path ("/usr/lib/rustdesk/libdrmtap.so.0") -- or link the rustdesk cdylib with an
+        # rpath of /usr/lib/rustdesk -- and then drop this ld.so.conf.d drop-in entirely.
+        # That change lives at the dlopen call site in src/ (drmtap_dl.rs), owned by
+        # another engineer, so it is out of scope for this packaging file; kept until then.
         system2('mkdir -p tmpdeb/etc/ld.so.conf.d')
         with open('tmpdeb/etc/ld.so.conf.d/rustdesk-unattended-wayland.conf', 'w') as f:
             f.write('/usr/lib/rustdesk\n')
@@ -515,7 +523,7 @@ def build_flutter_deb(version, features):
     os.chdir("..")
 
 
-def build_deb_from_folder(version, binary_folder):
+def build_deb_from_folder(version, binary_folder, want_drm=False):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
@@ -544,6 +552,22 @@ def build_deb_from_folder(version, binary_folder):
     # private lib dir, then finalize the deb the same way build_flutter_deb does.
     bundled_glob = glob.glob('tmpdeb/usr/share/rustdesk/libdrmtap.so.0.*')
     ships_so = any(os.path.isfile(p) and not os.path.islink(p) for p in bundled_glob)
+    # The variant must be decided by the EXPLICIT --drm request, not merely by what happens
+    # to be staged. Cross-check the two and fail loudly on a mismatch: a drm binary staged
+    # WITHOUT its libdrmtap.so.0.* would otherwise be silently shipped as the stock
+    # `rustdesk` package (no drm deps, no ldconfig, a dlopen that can never resolve), and a
+    # bundle that DOES carry the .so would be shipped as the consent-bypass variant even
+    # when --drm was never asked for.
+    if want_drm and not ships_so:
+        raise Exception(
+            '--drm was requested but no real libdrmtap.so.0.* is staged under '
+            'usr/share/rustdesk/ in the bundle; refusing to package a drm binary as the '
+            'stock rustdesk package (it would ship without the capture library or its deps)')
+    if ships_so and not want_drm:
+        raise Exception(
+            'the staged bundle carries libdrmtap.so.0.* but --drm was not passed; refusing '
+            'to silently ship the consent-bypass unattended-wayland variant (pass --drm to '
+            'build it deliberately)')
     so_basename = None
     if ships_so:
         so = _single_real_so(bundled_glob, 'the staged --drm bundle')
@@ -641,7 +665,7 @@ def main():
     portable = args.portable
     package = args.package
     if package:
-        build_deb_from_folder(version, package)
+        build_deb_from_folder(version, package, args.drm)
         return
     res_dir = 'resources'
     external_resources(flutter, args, res_dir)

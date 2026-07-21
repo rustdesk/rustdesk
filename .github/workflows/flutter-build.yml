@@ -1683,6 +1683,21 @@ jobs:
             # the stock deb/rpm above. x86_64 only (the unattended/kiosk/server use
             # case); the package Conflicts/Replaces the stock rustdesk package.
             if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+              # The drm variant below rebuilds target/release/liblibrustdesk.so with the
+              # drm feature and re-runs `flutter build linux`, which overwrites the stock
+              # cdylib inside flutter/build/linux/x64/release/bundle/. The archlinux
+              # `makepkg` step (a later, separate action) ships THAT bundle verbatim, so
+              # without care the official Arch package would carry the drm cdylib.
+              # Snapshot the stock bundle now and restore it after the drm build
+              # (unconditionally, below) so makepkg only ever sees the stock cdylib.
+              STOCK_BUNDLE=/workspace/flutter/build/linux/x64/release/bundle
+              rm -rf /workspace/.stock-bundle
+              cp -a "$STOCK_BUNDLE" /workspace/.stock-bundle
+              # Build the drm variant in a failure-tolerant subshell: a drm-only breakage
+              # (EOL ubuntu18.04 apt, pip, the libdrmtap fork clone, meson) must NOT abort
+              # the stock deb/rpm/arch publish steps that run after this container.
+              (
+              set -e
               pushd /workspace
               echo -e "start packaging unattended-wayland (DRM) deb"
               # drm-only build deps (meson builds libdrmtap.so from the cloned source),
@@ -1755,6 +1770,11 @@ jobs:
                 mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
               done
               popd
+              ) || echo "WARN: unattended-wayland (DRM) variant build failed; shipping stock release only"
+              # Restore the stock flutter bundle so the archlinux makepkg step ships the
+              # stock cdylib, whether the drm variant above succeeded OR failed.
+              rm -rf "$STOCK_BUNDLE"
+              mv /workspace/.stock-bundle "$STOCK_BUNDLE"
             fi
 
       - name: Publish debian/rpm package
@@ -1763,8 +1783,12 @@ jobs:
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
+          # Stock debs only: `rustdesk-<version>-<arch>.deb` (version starts with a digit).
+          # `rustdesk-[0-9]*.deb` deliberately EXCLUDES `rustdesk-unattended-wayland-*.deb`,
+          # the opt-in consent-bypass variant, which stays an Actions artifact (uploaded by
+          # name in the step below) and must never land on the public release.
           files: |
-            rustdesk-*.deb
+            rustdesk-[0-9]*.deb
             rustdesk-*.rpm
 
       - name: Upload deb

@@ -232,9 +232,16 @@ impl DrmReader {
     /// The scanout `dma_buf_fd` is dup'd into an `OwnedFd` BEFORE the frame is
     /// released, so we keep an independently-owned reference to the buffer that
     /// survives `drmtap_frame_release` (the dma-buf refcount keeps the memory
-    /// alive while the peer also holds a reference). The descriptor is validated
-    /// on METADATA ONLY (no pixel access on the export side): the fourcc gate
-    /// (kept from `grab()`), `MAX_DIM`, and `num_planes` in `1..=4`.
+    /// alive while the peer also holds a reference). The exported fd is
+    /// READ-ONLY: libdrmtap exports the scanout via `drmPrimeHandleToFD` with
+    /// `DRM_RDWR` dropped (`O_RDONLY`), and `dup()` shares the same open file
+    /// description, so it preserves that access mode — the unprivileged
+    /// `--server` that receives the fd over `SCM_RIGHTS` can map the scanout for
+    /// reading but can never write into the live framebuffer. The descriptor is
+    /// validated on METADATA ONLY (no pixel access on the export side):
+    /// geometry `<= MAX_DIM` and `num_planes` in `1..=4`. There is deliberately
+    /// NO fourcc gate here (that is the CPU-mapped `grab()` fallback's job); the
+    /// format check is delegated to the unprivileged converter.
     ///
     /// Returns the owned fd + the validated descriptor with `dma_buf_fd` reset to
     /// `-1` (the `OwnedFd` owns the fd now; the descriptor's local int must never
@@ -319,7 +326,10 @@ impl DrmReader {
             }
             // dup the fd into an OwnedFd BEFORE releasing the frame: after release
             // the library may recycle its handle, but our dup (an independent fd on
-            // the same open dma-buf) keeps the buffer alive for the peer.
+            // the same open dma-buf) keeps the buffer alive for the peer. dup(2)
+            // shares the same open file description, so it preserves the O_RDONLY
+            // access mode of libdrmtap's exported scanout fd (DRM_RDWR dropped) --
+            // the peer's fd stays read-only and cannot write the live scanout.
             let dup_fd = hbb_common::libc::dup(raw_fd);
             if dup_fd < 0 {
                 let e = io::Error::last_os_error();

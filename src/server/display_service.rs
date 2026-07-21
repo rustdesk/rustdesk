@@ -311,6 +311,23 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.get(idx).cloned()
 }
 
+// True when at least one advertised (synced) display is NOT served by the DRM/KMS capture path,
+// i.e. a mixed DRM + PipeWire session. The cursor service (platform::linux::get_cursor /
+// get_cursor_data) uses this to decide whether a hidden DRM hardware-cursor sentinel is
+// authoritative: in a pure-DRM session it is (the pointer is genuinely off every captured CRTC),
+// but in a mixed session the sentinel only means the pointer moved onto a PipeWire-served display,
+// whose cursor must come from the normal path instead of being hidden everywhere.
+//
+// When DRM capture is active the advertised list is enumerated from the DRM display list, so a DRM
+// list shorter than the synced list means at least one advertised display is served by PipeWire.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub fn has_non_drm_backed_display() -> bool {
+    match super::drm_capturer::get_display_infos() {
+        Some(drm) => drm.len() < SYNC_DISPLAYS.lock().unwrap().displays.len(),
+        None => false,
+    }
+}
+
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
@@ -401,7 +418,6 @@ pub fn get_primary() -> usize {
 pub fn get_primary_2(all: &Vec<Display>) -> usize {
     all.iter().position(|d| d.is_primary()).unwrap_or(0)
 }
-
 
 #[inline]
 #[cfg(windows)]
