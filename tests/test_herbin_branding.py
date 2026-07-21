@@ -85,8 +85,10 @@ def main() -> None:
     assert 'memory_watchdog::start();' in server_rs
     assert '"rdh-memory-restart-threshold-mib"' in memory_watchdog_rs
     assert 'std::env::var("XPC_SERVICE_NAME")' in memory_watchdog_rs
-    assert "crate::Connection::alive_conns().len()" in memory_watchdog_rs
-    assert "REQUIRED_IDLE_OVER_LIMIT_SAMPLES: u8 = 2" in memory_watchdog_rs
+    assert "DAILY_CHECK_HOUR: u32 = 6" in memory_watchdog_rs
+    assert "UNATTENDED_WINDOW_START_HOUR: u32 = 0" in memory_watchdog_rs
+    assert "UNATTENDED_WINDOW_END_HOUR: u32 = 7" in memory_watchdog_rs
+    assert "Connection::alive_conns" not in memory_watchdog_rs
     assert "std::process::exit(RESTART_EXIT_CODE)" in memory_watchdog_rs
 
     diagnostic_markers = (

@@ -13,8 +13,8 @@ RDH keeps only these deviations from upstream:
 2. A macOS controlled-side workaround that activates the regular application under
    the cursor immediately before a remote left-button-down event.
 3. A dedicated ad-hoc-signed macOS CI build until Developer ID signing is available.
-4. A launchd-gated macOS `--server` memory watchdog that restarts only after two
-   idle over-limit samples and a final idle recheck.
+4. A launchd-gated macOS `--server` memory watchdog that checks once daily at
+   06:00 and restarts an over-limit server within the unattended window.
 
 Custom keyboard mapping and high-volume mouse diagnostics must remain absent.
 
@@ -25,9 +25,12 @@ The macOS `--server` process monitors its own resident memory only when
 `XPC_SERVICE_NAME` proves that the RDH launchd agent is supervising it.
 
 - The default threshold is 1024 MiB.
-- The first sample is delayed for 10 minutes, then sampling occurs every 5 minutes.
-- Two consecutive over-limit samples must occur with no active remote connection.
-- A final 30-second gate rechecks both memory and active connections.
+- Memory is checked once daily at 06:00 local time.
+- 06:00 is inside the configured unattended window of 00:00 through 06:59. Active
+  connections are intentionally not checked in this window, so an over-limit
+  server restarts even if a remote session happens to be connected.
+- If sleep or clock movement delays the 06:00 wake beyond 07:00, that day's check
+  is skipped instead of restarting outside the unattended window.
 - Recovery exits only the user `--server` with a nonzero status. The existing
   launchd `KeepAlive` policy relaunches it; the root service is not restarted and
   no administrator prompt is involved.
@@ -101,8 +104,8 @@ Review the patch for:
 - Dock and non-regular overlay applications remain excluded;
 - bundle ID and service namespace stay separate from official RustDesk;
 - the custom client still skips the official update checker.
-- the memory watchdog remains launchd-gated, connection-aware, and scoped to the
-  user `--server` process;
+- the memory watchdog remains launchd-gated, scheduled once daily at 06:00, and
+  scoped to the user `--server` process;
 
 Commit and push the candidate branch only after these checks pass:
 

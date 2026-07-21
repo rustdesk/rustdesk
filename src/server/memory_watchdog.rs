@@ -1,3 +1,4 @@
+use chrono::{Local, Timelike};
 use hbb_common::{
     config::Config,
     log,
@@ -8,10 +9,11 @@ use std::{sync::Once, thread, time::Duration};
 const THRESHOLD_OPTION: &str = "rdh-memory-restart-threshold-mib";
 const DEFAULT_THRESHOLD_MIB: u64 = 1024;
 const MIB: u64 = 1024 * 1024;
-const INITIAL_GRACE: Duration = Duration::from_secs(10 * 60);
-const SAMPLE_INTERVAL: Duration = Duration::from_secs(5 * 60);
-const FINAL_IDLE_GRACE: Duration = Duration::from_secs(30);
-const REQUIRED_IDLE_OVER_LIMIT_SAMPLES: u8 = 2;
+const DAILY_CHECK_HOUR: u32 = 6;
+const UNATTENDED_WINDOW_START_HOUR: u32 = 0;
+const UNATTENDED_WINDOW_END_HOUR: u32 = 7;
+const SECONDS_PER_HOUR: u64 = 60 * 60;
+const SECONDS_PER_DAY: u64 = 24 * SECONDS_PER_HOUR;
 const RESTART_EXIT_CODE: i32 = 75;
 
 static START: Once = Once::new();
@@ -70,76 +72,67 @@ fn configured_threshold_bytes() -> Option<u64> {
     };
 
     log::info!(
-        "RDH memory watchdog enabled: threshold={} MiB, idle_samples={}, sample_interval={}s",
+        "RDH memory watchdog enabled: threshold={} MiB, daily_check={:02}:00, unattended_window={:02}:00-{:02}:00",
         threshold_mib,
-        REQUIRED_IDLE_OVER_LIMIT_SAMPLES,
-        SAMPLE_INTERVAL.as_secs()
+        DAILY_CHECK_HOUR,
+        UNATTENDED_WINDOW_START_HOUR,
+        UNATTENDED_WINDOW_END_HOUR
     );
     Some(threshold_bytes)
 }
 
 fn run(threshold_bytes: u64) {
-    thread::sleep(INITIAL_GRACE);
-
     let current_pid = Pid::from_u32(std::process::id());
     let mut system = System::new();
-    let mut idle_over_limit_samples = 0;
 
     loop {
+        let now = Local::now();
+        thread::sleep(Duration::from_secs(seconds_until_next_check(
+            now.num_seconds_from_midnight(),
+        )));
+
+        let check_time = Local::now();
+        if !is_unattended_window(check_time.hour()) {
+            log::warn!(
+                "RDH memory watchdog skipped delayed daily check outside unattended window: hour={}",
+                check_time.hour()
+            );
+            continue;
+        }
+
         let Some(rss_bytes) = current_rss_bytes(&mut system, current_pid) else {
             log::error!("RDH memory watchdog could not read the --server RSS");
-            idle_over_limit_samples = 0;
-            thread::sleep(SAMPLE_INTERVAL);
             continue;
         };
-        let active_connections = crate::Connection::alive_conns().len();
-        idle_over_limit_samples = next_idle_over_limit_samples(
-            rss_bytes,
-            threshold_bytes,
-            active_connections,
-            idle_over_limit_samples,
-        );
 
         if rss_bytes >= threshold_bytes {
-            if active_connections > 0 {
-                log::warn!(
-                    "RDH memory watchdog deferred restart: rss={} MiB, active_connections={}",
-                    rss_bytes / MIB,
-                    active_connections
-                );
-            } else {
-                log::warn!(
-                    "RDH memory watchdog observed idle over-limit server: rss={} MiB, sample={}/{}",
-                    rss_bytes / MIB,
-                    idle_over_limit_samples,
-                    REQUIRED_IDLE_OVER_LIMIT_SAMPLES
-                );
-            }
-        }
-
-        if idle_over_limit_samples >= REQUIRED_IDLE_OVER_LIMIT_SAMPLES {
-            thread::sleep(FINAL_IDLE_GRACE);
-            let final_rss_bytes = current_rss_bytes(&mut system, current_pid);
-            let final_active_connections = crate::Connection::alive_conns().len();
-            if final_rss_bytes.is_some_and(|rss| rss >= threshold_bytes)
-                && final_active_connections == 0
-            {
-                log::error!(
-                    "RDH memory watchdog restarting idle --server for high RSS; launchd will relaunch it"
-                );
-                std::process::exit(RESTART_EXIT_CODE);
-            }
-
-            log::info!(
-                "RDH memory watchdog cancelled restart during final gate: rss_mib={:?}, active_connections={}",
-                final_rss_bytes.map(|rss| rss / MIB),
-                final_active_connections
+            log::error!(
+                "RDH memory watchdog restarting over-limit --server during unattended window: rss={} MiB; active connections intentionally ignored; launchd will relaunch it",
+                rss_bytes / MIB
             );
-            idle_over_limit_samples = 0;
+            std::process::exit(RESTART_EXIT_CODE);
         }
 
-        thread::sleep(SAMPLE_INTERVAL);
+        log::info!(
+            "RDH memory watchdog daily check passed: rss={} MiB, threshold={} MiB",
+            rss_bytes / MIB,
+            threshold_bytes / MIB
+        );
     }
+}
+
+fn seconds_until_next_check(now_seconds: u32) -> u64 {
+    let now_seconds = u64::from(now_seconds);
+    let scheduled_seconds = u64::from(DAILY_CHECK_HOUR) * SECONDS_PER_HOUR;
+    if now_seconds < scheduled_seconds {
+        scheduled_seconds - now_seconds
+    } else {
+        SECONDS_PER_DAY - now_seconds + scheduled_seconds
+    }
+}
+
+fn is_unattended_window(hour: u32) -> bool {
+    (UNATTENDED_WINDOW_START_HOUR..UNATTENDED_WINDOW_END_HOUR).contains(&hour)
 }
 
 fn current_rss_bytes(system: &mut System, pid: Pid) -> Option<u64> {
@@ -147,39 +140,23 @@ fn current_rss_bytes(system: &mut System, pid: Pid) -> Option<u64> {
     system.process(pid).map(|process| process.memory())
 }
 
-fn next_idle_over_limit_samples(
-    rss_bytes: u64,
-    threshold_bytes: u64,
-    active_connections: usize,
-    previous_samples: u8,
-) -> u8 {
-    if rss_bytes < threshold_bytes || active_connections > 0 {
-        return 0;
-    }
-
-    previous_samples.saturating_add(1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn requires_consecutive_idle_over_limit_samples() {
-        let first = next_idle_over_limit_samples(1024, 1000, 0, 0);
-        let second = next_idle_over_limit_samples(1024, 1000, 0, first);
-
-        assert_eq!(first, 1);
-        assert_eq!(second, REQUIRED_IDLE_OVER_LIMIT_SAMPLES);
+    fn schedules_next_daily_check() {
+        assert_eq!(seconds_until_next_check(5 * 60 * 60), 60 * 60);
+        assert_eq!(
+            seconds_until_next_check(6 * 60 * 60 + 60),
+            23 * 60 * 60 + 59 * 60
+        );
     }
 
     #[test]
-    fn active_connection_resets_over_limit_samples() {
-        assert_eq!(next_idle_over_limit_samples(1024, 1000, 1, 1), 0);
-    }
-
-    #[test]
-    fn memory_recovery_resets_over_limit_samples() {
-        assert_eq!(next_idle_over_limit_samples(999, 1000, 0, 1), 0);
+    fn unattended_window_is_midnight_until_seven() {
+        assert!(is_unattended_window(0));
+        assert!(is_unattended_window(6));
+        assert!(!is_unattended_window(7));
     }
 }
