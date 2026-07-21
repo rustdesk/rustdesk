@@ -1710,7 +1710,8 @@ jobs:
               # this once rustdesk-org carries v0.4.13).
               export DRMTAP_REPO="https://github.com/fxd0h/libdrmtap"
               export DRMTAP_REF="v0.4.13"
-              export DRMTAP_SHA="${DRMTAP_SHA:-c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a}"
+              # Literal (not overridable by an inherited env var) so the tag/commit pair is immutable in CI.
+              export DRMTAP_SHA="c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a"
               # Guard: refuse a loose/branch ref so a moving `main` can never silently
               # regress the pin. Only an EXACT vX.Y.Z tag is accepted (a strict anchored
               # match, so values like v0.4.13-ci or a branch that resolves under
