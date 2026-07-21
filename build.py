@@ -413,57 +413,27 @@ def build_libdrmtap_so():
     return _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
 
 
-def append_drm_ldconfig_postinst():
-    # The DRM package installs libdrmtap.so under a private dir; register it with the
-    # dynamic linker so the in-process dlopen("libdrmtap.so.0") resolves. Only the DRM
-    # package calls this, so the stock package's postinst stays byte-identical to upstream.
-    #
-    # This block is appended AFTER the stock postinst, which has already run
-    # `systemctl start rustdesk`. On a FRESH install that ordering is a trap: the root
-    # service's DRM pre-warm can dlopen("libdrmtap.so.0") BEFORE this ldconfig has
-    # populated the linker cache, the dlopen fails, and that failure is cached in the
-    # DRMTAP_LIB OnceLock for the life of the process — so DRM stays disabled until a
-    # manual restart. So immediately after ldconfig we `try-restart` the unit: it re-runs
-    # the pre-warm against the now-resolvable soname. `try-restart` is a no-op when the
-    # unit is not running, so it never spuriously starts the service.
-    with open('tmpdeb/DEBIAN/postinst', 'a') as f:
-        f.write(
-            '\n'
-            'if [ "$1" = configure ] && [ -d /usr/lib/rustdesk ]; then\n'
-            '\tldconfig /usr/lib/rustdesk 2>/dev/null || ldconfig 2>/dev/null || true\n'
-            '\tif command -v systemctl >/dev/null 2>&1; then\n'
-            '\t\tsystemctl try-restart rustdesk 2>/dev/null || true\n'
-            '\tfi\n'
-            'fi\n'
-        )
-
-
 def finalize_deb(version, ships_so, so_basename=None):
     # Shared deb finalization for build_flutter_deb / build_deb_from_folder. Any DRM .so is assumed
-    # already staged at tmpdeb/usr/lib/rustdesk/. For a DRM build this adds the soname symlink + the
-    # ld.so.conf.d drop-in, names the package rustdesk-unattended-wayland with libdrmtap's runtime
-    # deps (libdrm / EGL / GLESv2), and appends the ldconfig postinst; otherwise it builds the stock
-    # rustdesk package. Then it writes the control, checksums, builds, and renames the .deb.
+    # already staged at tmpdeb/usr/lib/rustdesk/. For a DRM build this adds the soname symlink and
+    # names the package rustdesk-unattended-wayland with libdrmtap's runtime deps (libdrm / EGL /
+    # GLESv2); the .so is dlopen'd by absolute path so no ld.so.conf.d drop-in or ldconfig postinst is
+    # needed and the stock postinst is used unchanged. Otherwise it builds the stock rustdesk package.
+    # Then it writes the control, checksums, builds, and renames the .deb.
     if ships_so:
+        # Only the soname symlink is needed. libdrmtap is resolved by ABSOLUTE path
+        # (/usr/lib/rustdesk/libdrmtap.so.0) at the in-process dlopen site (drmtap_dl.rs), so the deb
+        # does NOT drop /usr/lib/rustdesk into the system-wide /etc/ld.so.conf.d search path -- that
+        # would let this private library shadow a system library for every binary on the host, which
+        # Debian Policy 10.2 forbids. No ld.so.conf.d drop-in and no ldconfig trigger are shipped.
         system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
-        # TODO(drm, Debian Policy 10.2): dropping /usr/lib/rustdesk into the SYSTEM-WIDE
-        # linker search path (/etc/ld.so.conf.d) lets a privately-bundled library shadow a
-        # system library for EVERY binary on the host, which Debian Policy 10.2 forbids.
-        # The correct fix is to make the in-process dlopen resolve libdrmtap by ABSOLUTE
-        # path ("/usr/lib/rustdesk/libdrmtap.so.0") -- or link the rustdesk cdylib with an
-        # rpath of /usr/lib/rustdesk -- and then drop this ld.so.conf.d drop-in entirely.
-        # That change lives at the dlopen call site in src/ (drmtap_dl.rs), owned by
-        # another engineer, so it is out of scope for this packaging file; kept until then.
-        system2('mkdir -p tmpdeb/etc/ld.so.conf.d')
-        with open('tmpdeb/etc/ld.so.conf.d/rustdesk-unattended-wayland.conf', 'w') as f:
-            f.write('/usr/lib/rustdesk\n')
     package_name = 'rustdesk-unattended-wayland' if ships_so else 'rustdesk'
     drm_depends = ", libdrm2, libegl1, libgles2" if ships_so else ""
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version, drm_depends, package_name)
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    if ships_so:
-        append_drm_ldconfig_postinst()
+    # No ldconfig postinst: libdrmtap is dlopen'd by absolute path (see drmtap_dl.rs), so there is
+    # nothing to register with the linker cache and the stock postinst is used unchanged.
     md5_file_folder("tmpdeb/")
     system2('dpkg-deb -b tmpdeb rustdesk.deb;')
     system2('/bin/rm -rf tmpdeb/')
@@ -509,8 +479,8 @@ def build_flutter_deb(version, features):
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     # Bundle libdrmtap.so for the DRM/KMS capture path — but ONLY when this build
     # actually enabled the `drm` feature, so normal packages stay opt-out. The root
-    # service dlopen-s it in-process (no setcap helper); it lives in a private dir
-    # that postinst registers with ldconfig so dlopen("libdrmtap.so.0") resolves.
+    # service dlopen-s it in-process (no setcap helper) from its private dir by
+    # absolute path (/usr/lib/rustdesk/libdrmtap.so.0), so no linker-path registration.
     # Bundle libdrmtap.so for a DRM build (opt-in), then finalize the deb. A DRM build ships as a
     # separately-named rustdesk-unattended-wayland package (finalize_deb marks it
     # Conflicts/Replaces/Provides rustdesk), so installing it is an explicit choice.
@@ -557,7 +527,7 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
     # The variant must be decided by the EXPLICIT --drm request, not merely by what happens
     # to be staged. Cross-check the two and fail loudly on a mismatch: a drm binary staged
     # WITHOUT its libdrmtap.so.0.* would otherwise be silently shipped as the stock
-    # `rustdesk` package (no drm deps, no ldconfig, a dlopen that can never resolve), and a
+    # `rustdesk` package (no drm deps, a dlopen that can never resolve), and a
     # bundle that DOES carry the .so would be shipped as the consent-bypass variant even
     # when --drm was never asked for.
     if want_drm and not ships_so:
