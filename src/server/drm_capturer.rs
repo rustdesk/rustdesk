@@ -574,6 +574,17 @@ const DRM_PROBE_MAX_FAILURES: u32 = 5;
 // is_available() never calls query_displays() (up to ~4s of IPC) while holding DRM_STATE.
 static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// RAII release for the single-flight probe guard. Whichever path acquires DRM_PROBE_IN_FLIGHT (the
+/// cold probe in is_available, or refresh_available_async) holds one of these so the guard clears on
+/// EVERY exit -- normal return, an early return, a panic in query_displays, or a poisoned DRM_STATE.
+/// A single leaked release would wedge the guard true and freeze every future probe AND refresh.
+struct ProbeInFlightGuard;
+impl Drop for ProbeInFlightGuard {
+    fn drop(&mut self) {
+        DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
 /// Whether the root service offers DRM/KMS capture. The positive result and a definitive negative
 /// (connected, but no displays) are cached; a transient probe error stays `Unknown` for a few
 /// retries. Normally the cache is warmed at `--server` startup (`warm_availability`), so the first
@@ -615,6 +626,9 @@ pub(super) fn is_available() -> bool {
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..));
     }
+    // Release the guard on every exit from here (including a panic in query_displays or a poisoned
+    // DRM_STATE lock) so a probe error can never wedge the single-flight guard true.
+    let _in_flight = ProbeInFlightGuard;
     let t = Instant::now();
     let result = query_displays();
     let mut st = DRM_STATE.lock().unwrap();
@@ -648,8 +662,8 @@ pub(super) fn is_available() -> bool {
         }
     };
     drop(st);
-    DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
     available
+    // `_in_flight` drops here, releasing DRM_PROBE_IN_FLIGHT.
 }
 
 /// Refresh a stale positive verdict off the hot path: probe on a background thread and, on a non-empty
@@ -663,20 +677,14 @@ fn refresh_available_async() {
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
     }
-    // Release the single-flight guard via RAII so it clears on EVERY exit -- normal return, a panic in
-    // query_displays, or a poisoned DRM_STATE. Without this, one dropped release (e.g. the closure never
-    // runs because thread creation failed, or it unwinds) would leave the guard stuck true and freeze
-    // every future probe and refresh for the process lifetime.
-    struct ReleaseGuard;
-    impl Drop for ReleaseGuard {
-        fn drop(&mut self) {
-            DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
-        }
-    }
+    // The detached thread releases the single-flight guard via the shared ProbeInFlightGuard so it
+    // clears on every exit -- normal return, a panic in query_displays, or a poisoned DRM_STATE. If
+    // thread creation itself fails the closure never runs, so that path releases the guard explicitly
+    // below. Either way a one-off failure cannot leave the guard stuck true and freeze future probes.
     let spawned = std::thread::Builder::new()
         .name("drm-avail-refresh".into())
         .spawn(|| {
-            let _release = ReleaseGuard;
+            let _in_flight = ProbeInFlightGuard;
             let result = query_displays();
             let mut st = DRM_STATE.lock().unwrap();
             if let ProbeState::Available(since, list) = &mut *st {
