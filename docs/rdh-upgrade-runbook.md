@@ -96,7 +96,8 @@ Do not install local build dependencies. Dispatch the candidate workflow:
 ```bash
 gh workflow run codex-macos-herbin.yml \
   --repo Herbin-s/rustdesk \
-  --ref "$CANDIDATE_BRANCH" \
+  --ref master \
+  -f source_ref="$CANDIDATE_BRANCH" \
   -f rdh_revision=1
 ```
 

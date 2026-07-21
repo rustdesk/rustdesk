@@ -113,6 +113,8 @@ def main() -> None:
 
     assert "Ad-hoc sign app (not notarized)" in macos_workflow
     assert "tests/test_herbin_branding.py" in macos_workflow
+    assert "source_ref:" in macos_workflow
+    assert "ref: ${{ inputs.source_ref }}" in macos_workflow
     assert "RDH_REVISION" in macos_workflow
     assert "shasum -a 256" in macos_workflow
 

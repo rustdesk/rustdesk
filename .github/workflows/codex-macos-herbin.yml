@@ -3,6 +3,10 @@ name: RDH macOS Candidate Build
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: Branch or tag containing the RDH candidate source
+        required: true
+        default: "master"
       rdh_revision:
         description: RDH revision for this upstream version
         required: true
@@ -34,6 +38,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+          ref: ${{ inputs.source_ref }}
           submodules: recursive
 
       - name: Resolve candidate version
@@ -46,6 +51,7 @@ jobs:
           echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> "$GITHUB_ENV"
           echo "RDH_REVISION=$RDH_REVISION" >> "$GITHUB_ENV"
           echo "VERSION=${UPSTREAM_VERSION}-rdh.${RDH_REVISION}" >> "$GITHUB_ENV"
+          echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Verify RDH patch invariants
         run: |
@@ -165,7 +171,7 @@ jobs:
             echo "artifact=$DMG"
             echo "upstream_version=$UPSTREAM_VERSION"
             echo "rdh_revision=$RDH_REVISION"
-            echo "source_commit=$GITHUB_SHA"
+            echo "source_commit=$SOURCE_COMMIT"
             echo "signature=ad-hoc"
             echo "notarized=false"
           } > rdh-build-metadata.txt
@@ -188,5 +194,5 @@ jobs:
             echo "- RDH revision: \`${RDH_REVISION}\`"
             echo "- Artifact: \`rustdesk-herbin-${VERSION}-aarch64.dmg\`"
             echo "- Signature: ad-hoc (not notarized; Gatekeeper acceptance is not claimed)"
-            echo "- Source: \`${GITHUB_SHA}\`"
+            echo "- Source: \`${SOURCE_COMMIT}\`"
           } >> "$GITHUB_STEP_SUMMARY"
