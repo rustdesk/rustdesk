@@ -8,6 +8,7 @@ import zipfile
 import urllib.request
 import shutil
 import hashlib
+import subprocess
 import argparse
 import sys
 from pathlib import Path
@@ -342,6 +343,10 @@ def ffi_bindgen_function_refactor():
 # local testing or another fork.
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
 LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'v0.4.13')
+# The immutable commit the release tag must resolve to. `git clone --branch` follows a mutable tag,
+# so verifying this after clone catches a moved/compromised tag swapping the .so. Keep in sync with
+# LIBDRMTAP_REF on every bump (override via DRMTAP_SHA together with DRMTAP_REF for a local fork).
+LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a')
 
 
 def _single_real_so(paths, where):
@@ -378,6 +383,12 @@ def build_libdrmtap_so():
             shutil.rmtree(src)
         os.makedirs(os.path.dirname(src), exist_ok=True)
         system2(f'git clone --depth 1 --branch {LIBDRMTAP_REF} {LIBDRMTAP_REPO} {src}')
+        got_sha = subprocess.check_output(
+            ['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
+        if got_sha != LIBDRMTAP_SHA:
+            raise Exception(
+                f'libdrmtap {LIBDRMTAP_REF} resolved to {got_sha}, expected {LIBDRMTAP_SHA} '
+                f'(moved/compromised tag?)')
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         system2(f'meson setup {build_dir} {src} --buildtype=release')

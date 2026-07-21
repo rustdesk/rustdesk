@@ -228,14 +228,20 @@ pub(super) async fn check_init() -> ResultType<()> {
                     num_cpus::get()
                 );
 
-                // Create individual CapDisplayInfo for each display with its own capturer
+                // Create every per-display capturer FIRST into owned temporary storage, so a failure
+                // partway does not publish a partial set. If `Capturer::new` errors, the `?` returns
+                // and the already-staged capturers drop cleanly (no leaked raw pointers, and
+                // CAP_DISPLAY_INFO stays empty so the next check_init retries instead of seeing a
+                // non-empty map and skipping re-init).
+                let mut staged = Vec::with_capacity(num);
                 for (idx, display) in all.into_iter().enumerate() {
-                    let capturer =
-                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
-                            format!("Failed to create capturer for display {}", idx)
-                        })?));
-                    let capturer = CapturerPtr(capturer);
-
+                    let capturer = Capturer::new(display)
+                        .with_context(|| format!("Failed to create capturer for display {}", idx))?;
+                    staged.push((idx, capturer));
+                }
+                // All capturers created: publish them atomically.
+                for (idx, capturer) in staged {
+                    let capturer = CapturerPtr(Box::into_raw(Box::new(capturer)));
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                         rects: rects.clone(),
                         displays: displays.clone(),
@@ -244,14 +250,11 @@ pub(super) async fn check_init() -> ResultType<()> {
                         current: idx,
                         capturer,
                     }));
-
                     lock.insert(idx, cap_display_info as u64);
                 }
-                // Mark PipeWire initialized only AFTER every per-display capturer was created and
-                // stored. Setting it earlier meant a partial failure above (a `Capturer::new` error
-                // propagated by `?`) returned Err with the flag already true, so the next check_init
-                // saw "initialized", skipped re-init, and left CAP_DISPLAY_INFO empty (no capture).
-                // This matters more now that the per-display DRM->PipeWire fallback funnels through here.
+                // Mark PipeWire initialized only AFTER the full set was published, so a partial
+                // failure above leaves the flag false and the next check_init retries. This matters
+                // more now that the per-display DRM->PipeWire fallback funnels through here.
                 *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
