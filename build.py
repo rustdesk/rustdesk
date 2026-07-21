@@ -335,19 +335,21 @@ def ffi_bindgen_function_refactor():
 
 # libdrmtap is fetched at build time by cloning the rustdesk-org fork at a pinned
 # ref — the same way rustdesk sources its other native build deps (vcpkg,
-# flutter_rust_bridge, ...), rather than carrying a git submodule. The ref is an
-# EXACT release tag (vX.Y.Z), NOT a moving branch, and it is the ONLY pin for the
-# drm backend: rustdesk dlopens this .so at runtime and does not depend on the
-# libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
+# flutter_rust_bridge, ...), rather than carrying a git submodule. It is the ONLY
+# pin for the drm backend: rustdesk dlopens this .so at runtime and does not depend on
+# the libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
 # libdrm/seccomp/cap). Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for
 # local testing or another fork.
-# Source-of-truth fork that publishes the pinned release tag (rustdesk-org syncs from it; point
-# DRMTAP_REPO there once it carries the tag).
-LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/fxd0h/libdrmtap')
-LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'v0.4.13')
-# The immutable commit the release tag must resolve to. `git clone --branch` follows a mutable tag,
-# so verifying this after clone catches a moved/compromised tag swapping the .so. Keep in sync with
-# LIBDRMTAP_REF on every bump (override via DRMTAP_SHA together with DRMTAP_REF for a local fork).
+# Point at the maintainer-owned rustdesk-org repo. It has no release tag yet, so track its `main`
+# branch and pin the exact commit via LIBDRMTAP_SHA below: the post-clone sha check makes this
+# fail-closed, so `main` moving off the pinned commit fails the build instead of silently shipping a
+# different .so. If rustdesk-org later publishes an immutable vX.Y.Z tag, set DRMTAP_REF to it.
+LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
+LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'main')
+# The immutable commit the ref must resolve to. `git clone --branch` follows a mutable ref (a branch
+# even more than a tag), so verifying this after clone catches a moved/compromised ref swapping the
+# .so. Keep in sync with LIBDRMTAP_REF on every bump (override via DRMTAP_SHA together with DRMTAP_REF
+# for a local fork). This commit is libdrmtap v0.4.13.
 LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a')
 
 
