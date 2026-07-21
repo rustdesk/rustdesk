@@ -341,7 +341,9 @@ def ffi_bindgen_function_refactor():
 # libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
 # libdrm/seccomp/cap). Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for
 # local testing or another fork.
-LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
+# Source-of-truth fork that publishes the pinned release tag (rustdesk-org syncs from it; point
+# DRMTAP_REPO there once it carries the tag).
+LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/fxd0h/libdrmtap')
 LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'v0.4.13')
 # The immutable commit the release tag must resolve to. `git clone --branch` follows a mutable tag,
 # so verifying this after clone catches a moved/compromised tag swapping the .so. Keep in sync with
@@ -383,12 +385,19 @@ def build_libdrmtap_so():
             shutil.rmtree(src)
         os.makedirs(os.path.dirname(src), exist_ok=True)
         system2(f'git clone --depth 1 --branch {LIBDRMTAP_REF} {LIBDRMTAP_REPO} {src}')
+    # Verify the immutable-commit pin on BOTH a fresh clone AND a reused checkout: a stale or
+    # mismatched third_party/libdrmtap left by an earlier/failed clone must not be built. On a
+    # mismatch, remove it and fail; the next run re-clones cleanly.
+    try:
         got_sha = subprocess.check_output(
             ['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
-        if got_sha != LIBDRMTAP_SHA:
-            raise Exception(
-                f'libdrmtap {LIBDRMTAP_REF} resolved to {got_sha}, expected {LIBDRMTAP_SHA} '
-                f'(moved/compromised tag?)')
+    except Exception:
+        got_sha = None
+    if got_sha != LIBDRMTAP_SHA:
+        shutil.rmtree(src, ignore_errors=True)
+        raise Exception(
+            f'libdrmtap {LIBDRMTAP_REF} at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
+            f'(moved/compromised tag or stale checkout; removed, re-run to re-clone)')
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         system2(f'meson setup {build_dir} {src} --buildtype=release')
