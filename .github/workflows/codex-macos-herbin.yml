@@ -20,7 +20,6 @@ env:
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   MAC_RUST_VERSION: "1.81"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
 jobs:
   build-macos-herbin:
@@ -60,7 +59,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install llvm create-dmg pkg-config
+          brew install llvm create-dmg nasm pkg-config
 
       - name: Install Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
