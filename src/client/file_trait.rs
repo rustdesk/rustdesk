@@ -6,7 +6,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn get_home_dir(&self) -> String {
@@ -16,7 +15,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn get_next_job_id(&self) -> i32 {
@@ -26,7 +24,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn update_next_job_id(&self, id: i32) {
@@ -36,7 +33,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
@@ -90,7 +86,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn confirm_delete_files(&self, id: i32, file_num: i32) {
@@ -100,7 +95,6 @@ pub trait FileManager: Interface {
     #[cfg(not(any(
         target_os = "android",
         target_os = "ios",
-        feature = "cli",
         feature = "flutter"
     )))]
     fn set_no_confirm(&self, id: i32) {

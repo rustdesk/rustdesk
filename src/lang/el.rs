@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Αναμεταδιδόμενη σύνδεση"),
         ("Secure Connection", "Ασφαλής σύνδεση"),
         ("Insecure Connection", "Μη ασφαλής σύνδεση"),
+        ("Continue", ""),
         ("Scale original", "Κλιμάκωση πρωτότυπου"),
         ("Scale adaptive", "Προσαρμοσμένη κλίμακα"),
         ("General", "Γενικά"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Εμφάνιση στην ελαχιστοποιημένη γραμμή εργαλείων"),
         ("All monitors", "Όλες οι οθόνες"),
         ("#{} monitor", "Οθόνη {}"),
+        ("conn-e2ee-unavailable-tip", "Δεν ήταν δυνατή η επαλήθευση της κρυπτογράφησης από άκρο σε άκρο.\nΗ απομακρυσμένη συσκευή μπορεί να ρυθμίζεται ακόμα. Δοκιμάστε ξανά αργότερα.\nΑν αυτό συνεχιστεί, ο διακομιστής μπορεί να μην είναι αξιόπιστος.\nΣυνέχεια παρ' όλα αυτά;"),
     ].iter().cloned().collect();
 }

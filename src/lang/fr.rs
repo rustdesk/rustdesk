@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Connexion via relais"),
         ("Secure Connection", "Connexion sécurisée"),
         ("Insecure Connection", "Connexion non sécurisée"),
+        ("Continue", ""),
         ("Scale original", "Échelle originale"),
         ("Scale adaptive", "Échelle adaptative"),
         ("General", "Général"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Afficher dans la barre d’outils réduite"),
         ("All monitors", "Tous les moniteurs"),
         ("#{} monitor", "Moniteur {}"),
+        ("conn-e2ee-unavailable-tip", "Impossible de vérifier le chiffrement de bout en bout.\nL'appareil distant est peut-être encore en cours de configuration. Réessayez plus tard.\nSi le problème persiste, le serveur n'est peut-être pas fiable.\nContinuer quand même ?"),
     ].iter().cloned().collect();
 }

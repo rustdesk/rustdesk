@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Kết nối chuyển tiếp"),
         ("Secure Connection", "Kết nối bảo mật"),
         ("Insecure Connection", "Kết nối không bảo mật"),
+        ("Continue", ""),
         ("Scale original", "Tỷ lệ gốc"),
         ("Scale adaptive", "Tỷ lệ thích ứng"),
         ("General", "Chung"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Hiển thị trên thanh công cụ thu nhỏ"),
         ("All monitors", "Tất cả màn hình"),
         ("#{} monitor", "Màn hình {}"),
+        ("conn-e2ee-unavailable-tip", "Không thể xác minh mã hóa đầu cuối.\nThiết bị từ xa có thể vẫn đang được thiết lập. Hãy thử lại sau.\nNếu điều này tiếp tục xảy ra, máy chủ có thể không đáng tin cậy.\nVẫn tiếp tục?"),
     ].iter().cloned().collect();
 }

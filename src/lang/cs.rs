@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Připojení předávací server"),
         ("Secure Connection", "Zabezpečené připojení"),
         ("Insecure Connection", "Nezabezpečené připojení"),
+        ("Continue", ""),
         ("Scale original", "Originální měřítko"),
         ("Scale adaptive", "Adaptivní měřítko"),
         ("General", "Obecné"),
@@ -763,5 +764,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Show on the minimized toolbar", "Zobrazit na minimalizovaném panelu nástrojů"),
         ("All monitors", "Všechny monitory"),
         ("#{} monitor", "Monitor č. {}"),
+        ("conn-e2ee-unavailable-tip", "Nepodařilo se ověřit koncové šifrování.\nVzdálené zařízení se možná stále nastavuje. Zkuste to znovu později.\nPokud se to bude opakovat, server nemusí být důvěryhodný.\nPřesto pokračovat?"),
     ].iter().cloned().collect();
 }

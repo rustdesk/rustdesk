@@ -1857,14 +1857,32 @@ impl TerminalServiceProxy {
         // Process each session with its own lock
         for (terminal_id, session_arc) in sessions {
             if let Ok(mut session) = session_arc.try_lock() {
-                // Check if reader thread is still alive and we haven't sent closed message yet
+                // Check if the session has ended (reader thread finished or child exited).
+                // On Linux, the PTY reader thread may not return EOF when the shell exits
+                // (the cloned master fd keeps the read side open), so we also poll the child
+                // process via try_wait() as a fallback detection mechanism.
                 let mut should_send_closed = false;
                 if !session.closed_message_sent {
                     if let Some(thread) = &session.reader_thread {
                         if thread.is_finished() {
                             should_send_closed = true;
-                            session.closed_message_sent = true;
                         }
+                    }
+                    if !should_send_closed {
+                        if let Some(child) = &mut session.child {
+                            match child.try_wait() {
+                                Ok(Some(_)) => {
+                                    should_send_closed = true;
+                                }
+                                Ok(None) => {} // still running
+                                Err(e) => {
+                                    log::warn!("Terminal {} child wait error: {}", terminal_id, e);
+                                }
+                            }
+                        }
+                    }
+                    if should_send_closed {
+                        session.closed_message_sent = true;
                     }
                 }
                 // It's Ok to put the closed message here.
@@ -2018,7 +2036,8 @@ impl TerminalServiceProxy {
                         }
                     }
                 } else {
-                    // For persistent sessions, just clear the child reference
+                    // For persistent sessions, clear the child reference and remove the session
+                    // if the closed message has been sent (shell has exited).
                     if let Some(session_arc) = sessions.get(&terminal_id) {
                         let mut session = session_arc.lock().unwrap();
                         if let Some(mut child) = session.child.take() {
@@ -2027,6 +2046,12 @@ impl TerminalServiceProxy {
                                 exit_code = status.exit_code() as i32;
                             }
                             add_to_reaper(child);
+                        }
+                        if session.closed_message_sent {
+                            // Shell has exited, remove the dead session
+                            drop(session);
+                            sessions.remove(&terminal_id);
+                            service.lock().unwrap().sessions.remove(&terminal_id);
                         }
                     }
                 }
