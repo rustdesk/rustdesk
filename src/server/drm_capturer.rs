@@ -635,7 +635,27 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
         ProbeState::Available(list) => list.clone(),
         _ => return None,
     };
-    Some(augment_with_wayland_geometry(&list))
+    let multi = list.len() > 1;
+    let mut infos = augment_with_wayland_geometry(&list);
+    // review 4.5: on a multi-monitor host a display demoted to PipeWire has no geometry-consistent
+    // per-connector stream to fall through to -- the portal exposes a single whole-desktop stream, so
+    // serving it for one connector would stretch the frame and offset all input. Advertise such a
+    // display OFFLINE while keeping its list position, so the index space stays aligned with
+    // get_capturer_info() (dropping it would shift every later index) and the client re-enumerates
+    // against a consistent list instead of driving a display the server then refuses. A single-display
+    // host is left online: there the whole-desktop stream IS that display, so the PipeWire fallback is
+    // geometry-consistent and get_capturer_for_display serves it.
+    if multi {
+        let failures = DRM_DISPLAY_FAILURES.lock().unwrap();
+        for (idx, info) in infos.iter_mut().enumerate() {
+            if let Some((count, since)) = failures.get(&(idx as i32)).copied() {
+                if count >= DRM_GRAB_MAX_FAILURES && since.elapsed() < DEMOTE_COOLDOWN {
+                    info.online = false;
+                }
+            }
+        }
+    }
+    Some(infos)
 }
 
 /// Index (into the cached DRM display list) of the compositor's PRIMARY output. DRM connector order
