@@ -507,7 +507,9 @@ class _RemotePageState extends State<RemotePage>
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
       if (isMacOS) {
-        // Relative mode does not emit PointerEnter after window focus returns.
+        // Native relative mode retains pointer capture and does not emit
+        // PointerEnter after window focus returns, so restore both latches.
+        _cursorOverImage.value = true;
         _macOSLocalFocusLost = false;
       } else {
         _rawKeyFocusNode.requestFocus();
