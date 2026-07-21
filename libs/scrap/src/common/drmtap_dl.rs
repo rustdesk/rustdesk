@@ -178,8 +178,16 @@ const DRMTAP_ABI_MAJOR: c_int = 0;
 
 impl DrmtapLib {
     fn load() -> Option<Self> {
-        // soname first (what a packaged .so installs), then the dev symlink.
-        const LIB_NAMES: [&str; 2] = ["libdrmtap.so.0", "libdrmtap.so"];
+        // Absolute install path FIRST: the deb bundles the .so privately under /usr/lib/rustdesk and
+        // deliberately does NOT register that dir in the system-wide ld.so search path (Debian Policy
+        // 10.2 forbids a private lib shadowing system libraries for every binary), so the packaged
+        // build must resolve it by absolute path. The bare sonames remain as a fallback for a dev build
+        // where the .so is reachable via LD_LIBRARY_PATH or a local ldconfig.
+        const LIB_NAMES: [&str; 3] = [
+            "/usr/lib/rustdesk/libdrmtap.so.0",
+            "libdrmtap.so.0",
+            "libdrmtap.so",
+        ];
         unsafe {
             let (lib, name) = LIB_NAMES
                 .iter()

@@ -2007,6 +2007,34 @@ pub async fn start_drm() {
 /// task itself stays fully async — hence `Send`, hence `tokio::spawn`able — and only forwards
 /// messages to the wire. On any error / disconnect it returns; the `DrmStopGuard` plus dropping the
 /// channels tears the worker down, and the client falls back to PipeWire/portal.
+/// Concurrency cap on accepted `_drm` consumer connections. Each accepted consumer spawns a worker
+/// that opens a DRM context, so even though the peer is authorized we still bound how many a single
+/// (buggy or compromised) --server can open, to keep it from exhausting root-service threads/memory.
+/// One connection per served display is plenty; the slack covers a reconnect overlapping an old worker
+/// still tearing down.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+const MAX_DRM_CONNS: usize = 8;
+
+/// Whether a new `_drm` connection is admitted, given the live count taken BEFORE it (the value
+/// `AtomicUsize::fetch_add` returns). Pure, so the admission bound is unit-testable without the runtime
+/// counter: admit while strictly below the cap, reject at or above it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_conn_admitted(prev_count: usize) -> bool {
+    prev_count < MAX_DRM_CONNS
+}
+
+/// Whether a `_drm` peer may keep receiving frames (review 3.3): root (uid 0) always, any other peer
+/// only while it still matches the active-session uid, and an unknown peer never (fail closed). Pure,
+/// so the per-frame re-authorization decision is unit-testable without a live logind session.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_peer_authorized(peer_uid: Option<u32>, active_uid: Option<u32>) -> bool {
+    match peer_uid {
+        Some(0) => true,
+        Some(uid) => active_uid == Some(uid),
+        None => false,
+    }
+}
+
 #[cfg(all(target_os = "linux", feature = "drm"))]
 async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -2027,7 +2055,6 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // compromised --server cannot exhaust root-service threads/memory by opening an unbounded number
     // of streams. One connection per served display is plenty; MAX_DRM_CONNS covers multi-monitor
     // plus a little slack for a reconnect overlapping an old worker still tearing down.
-    const MAX_DRM_CONNS: usize = 8;
     static DRM_CONN_COUNT: AtomicUsize = AtomicUsize::new(0);
     struct DrmConnGuard;
     impl Drop for DrmConnGuard {
@@ -2035,7 +2062,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             DRM_CONN_COUNT.fetch_sub(1, Ordering::SeqCst);
         }
     }
-    if DRM_CONN_COUNT.fetch_add(1, Ordering::SeqCst) >= MAX_DRM_CONNS {
+    if !drm_conn_admitted(DRM_CONN_COUNT.fetch_add(1, Ordering::SeqCst)) {
         DRM_CONN_COUNT.fetch_sub(1, Ordering::SeqCst);
         log::warn!("drm: too many concurrent _drm connections (>= {MAX_DRM_CONNS}); rejecting");
         return Ok(());
@@ -2134,11 +2161,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         // unknown (typically mid-switch), which we treat as fail-closed and stop. The stop latency is
         // therefore bounded by the service loop's active-uid cache cadence (a few hundred ms), plus we
         // stop as soon as the cache goes empty at the start of a switch.
-        let peer_ok = match peer_uid {
-            Some(0) => true,
-            Some(uid) => active_uid_cached() == Some(uid),
-            None => false,
-        };
+        let peer_ok = drm_peer_authorized(peer_uid, active_uid_cached());
         if !peer_ok {
             log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
             break;
@@ -3736,5 +3759,33 @@ mod drm_conn_tests {
         let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
         let euid = unsafe { libc::geteuid() };
         assert_eq!(peer_uid_from_fd(a.as_raw_fd()), Some(euid));
+    }
+
+    // Per-frame _drm re-auth decision (review 3.3): root always passes; a non-root peer passes only
+    // while it still equals the active-session uid; an unknown peer or active session fails closed.
+    #[test]
+    fn drm_peer_authorized_matrix() {
+        // root (uid 0) is always authorized, regardless of the active session (even unknown).
+        assert!(drm_peer_authorized(Some(0), Some(1000)));
+        assert!(drm_peer_authorized(Some(0), None));
+        // a non-root peer is authorized only while it matches the active-session uid.
+        assert!(drm_peer_authorized(Some(1000), Some(1000)));
+        // a non-root peer whose session is no longer active (switched away) is rejected.
+        assert!(!drm_peer_authorized(Some(1000), Some(1001)));
+        // fail closed when the active session is momentarily unknown (mid session switch).
+        assert!(!drm_peer_authorized(Some(1000), None));
+        // fail closed when the peer uid could not be determined.
+        assert!(!drm_peer_authorized(None, Some(1000)));
+        assert!(!drm_peer_authorized(None, None));
+    }
+
+    // _drm admission bound (review 6): admit strictly below MAX_DRM_CONNS, reject at and above it.
+    // `prev_count` is the live count taken before this connection (what fetch_add returns).
+    #[test]
+    fn drm_conn_admission_bound() {
+        assert!(drm_conn_admitted(0));
+        assert!(drm_conn_admitted(MAX_DRM_CONNS - 1)); // last admitted slot
+        assert!(!drm_conn_admitted(MAX_DRM_CONNS)); // cap reached -> rejected
+        assert!(!drm_conn_admitted(MAX_DRM_CONNS + 5)); // over cap -> rejected
     }
 }
