@@ -335,11 +335,11 @@ def ffi_bindgen_function_refactor():
 # libdrmtap is fetched at build time by cloning the rustdesk-org fork at a pinned
 # ref — the same way rustdesk sources its other native build deps (vcpkg,
 # flutter_rust_bridge, ...), rather than carrying a git submodule. The ref is an
-# EXACT release tag (vX.Y.Z), NOT a moving branch: the bundled runtime .so version must
-# match the `libdrmtap-sys = "=0.4.13"` crate pinned in libs/scrap/Cargo.toml (the dlopen
-# loader only checks ABI-major, so a minor skew between the two artifacts would go undetected).
-# Bump this tag and the crate pin together. Override the repo/ref via env (DRMTAP_REPO /
-# DRMTAP_REF) for local testing or another fork.
+# EXACT release tag (vX.Y.Z), NOT a moving branch, and it is the ONLY pin for the
+# drm backend: rustdesk dlopens this .so at runtime and does not depend on the
+# libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
+# libdrm/seccomp/cap). Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for
+# local testing or another fork.
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
 LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'v0.4.13')
 

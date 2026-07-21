@@ -494,7 +494,11 @@ pub enum Data {
     // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    DrmStart { display: i32 },
+    // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
+    // (drmtap_open_render failed, or an old .so lacks the split symbols). The service then streams the
+    // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
+    // detile, so a render-node-less seat still captures instead of losing the stream.
+    DrmStart { display: i32, need_cpu: bool },
     /// Service -> client: the enumerated DRM displays (sent once, before frames).
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmDisplayList(Vec<DrmDisplayInfo>),
@@ -1651,8 +1655,12 @@ impl Drop for DrmStopGuard {
 /// and modifier; eliding then would serve a stale EGLImage. libdrmtap's own import cache keys on
 /// `fb_id + dma-buf inode` and can re-import ONLY when it is handed a real fd. Because always sending
 /// the fd is cheap (the converter still imports once per `fb_id` and closes the surplus fd) and is
-/// strictly safe, `DRM_FD_ELISION` defaults to `false` for v1 (always send). The ledger is fully
-/// wired so flipping the const on enables elision once the recycled-fb_id case is validated.
+/// strictly safe, `DRM_FD_ELISION` defaults to `false` for v1 (always send). The ledger's `epoch`
+/// tracks `DRM_DISPLAY_GENERATION` (bumped by the udev listener on a connector-topology change), so a
+/// hotplug/modeset invalidates every cached buffer and forces a real fd; but the ledger still cannot
+/// see the dma-buf inode, so a recycled fb_id within the SAME generation (identical geometry +
+/// modifier) would elide onto a stale EGLImage. Enabling elision needs that inode case validated
+/// first.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 const DRM_FD_ELISION: bool = false;
 
@@ -1660,14 +1668,14 @@ const DRM_FD_ELISION: bool = false;
 struct SeenBuf {
     modifier: u64,
     dims: (u32, u32),
-    epoch: u32,
+    epoch: u64,
 }
 
 #[cfg(all(target_os = "linux", feature = "drm"))]
 struct ExportLedger {
     seen: HashMap<u32, SeenBuf>,
     order: std::collections::VecDeque<u32>, // insertion order, for evict-oldest
-    epoch: u32,
+    epoch: u64,
 }
 
 #[cfg(all(target_os = "linux", feature = "drm"))]
@@ -1852,7 +1860,22 @@ fn drm_udev_listener() {
     // datagram is truncated by `recv` and simply re-enumerates on the next matching event.
     let mut buf = [0u8; 8192];
     loop {
-        let n = unsafe { libc::recv(sock, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
+        // recvmsg (not recv) so the source address is available: bound to the kernel-uevent multicast
+        // group, a genuine uevent comes from the kernel (source nl_pid == 0) via a multicast group
+        // (nl_groups != 0). A local unprivileged process could otherwise UNICAST a spoofed
+        // "change@.../drm/..." datagram to this root listener and drive it to re-enumerate at will;
+        // dropping any non-kernel/non-multicast source closes that.
+        let mut src: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+        let mut iov = libc::iovec {
+            iov_base: buf.as_mut_ptr() as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        let mut mhdr: libc::msghdr = unsafe { std::mem::zeroed() };
+        mhdr.msg_name = &mut src as *mut libc::sockaddr_nl as *mut libc::c_void;
+        mhdr.msg_namelen = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
+        mhdr.msg_iov = &mut iov;
+        mhdr.msg_iovlen = 1;
+        let n = unsafe { libc::recvmsg(sock, &mut mhdr, 0) };
         if n <= 0 {
             let err = std::io::Error::last_os_error();
             if n < 0 && err.kind() == std::io::ErrorKind::Interrupted {
@@ -1860,6 +1883,14 @@ fn drm_udev_listener() {
             }
             log::info!("drm: udev uevent recv ended ({err}); hotplug refresh stopped");
             break;
+        }
+        // Trust only a kernel-originated (nl_pid == 0), multicast-delivered (nl_groups != 0) datagram
+        // with a full source address; drop a unicast or user-spoofed message.
+        if (mhdr.msg_namelen as usize) < std::mem::size_of::<libc::sockaddr_nl>()
+            || src.nl_pid != 0
+            || src.nl_groups == 0
+        {
+            continue;
         }
         if !uevent_is_drm_change(&buf[..n as usize]) {
             continue;
@@ -2010,8 +2041,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 
     // worker -> task: display list, frames, cursor (bounded = backpressure).
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
-    // task -> worker: the chosen CRTC, sent once after the client's DrmStart.
-    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<u32>();
+    // task -> worker: the chosen CRTC + whether the consumer needs the CPU path, sent once after the
+    // client's DrmStart.
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
@@ -2031,9 +2063,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 
     // Wait for the client to choose a display before streaming. `recv_msg_timeout2` gates only the
     // wait for the first byte, so a timeout leaves the stream at a clean frame boundary.
-    let display_idx = loop {
+    let (display_idx, need_cpu) = loop {
         match conn.recv_msg_timeout2(10_000).await {
-            Some(Ok((Data::DrmStart { display }, _fd))) => break display,
+            Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => break (display, need_cpu),
             Some(Ok((_, _fd))) => continue, // ignore unexpected messages; drop any stray fd
             Some(Err(e)) => return Err(e),
             None => return Ok(()), // timed out: client never chose a display
@@ -2057,8 +2089,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         );
         return Ok(());
     }
-    // Hand the CRTC to the worker; an error means it already gave up (reader vanished).
-    if crtc_tx.send(target_crtc).is_err() {
+    // Hand the CRTC + the consumer's CPU-path request to the worker; an error means it already gave up
+    // (reader vanished).
+    if crtc_tx.send((target_crtc, need_cpu)).is_err() {
         return Ok(());
     }
 
@@ -2075,6 +2108,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     while let Some(msg) = frame_rx.recv().await {
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
+        // Keep the ledger's epoch at the live generation so a hotplug/modeset (which may recycle an
+        // fb_id onto a new buffer) invalidates every cached buffer and forces a real fd on the next
+        // frame. Cheap (one field write) and only observable when DRM_FD_ELISION is enabled.
+        ledger.epoch = gen;
         if gen != seen_gen {
             seen_gen = gen;
             let fresh = DRM_DISPLAY_CACHE.lock().unwrap().clone();
@@ -2134,7 +2171,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
-    crtc_rx: std::sync::mpsc::Receiver<u32>,
+    crtc_rx: std::sync::mpsc::Receiver<(u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     use std::sync::atomic::Ordering;
@@ -2170,8 +2207,9 @@ fn drm_capture_worker(
         return;
     }
 
-    // Wait for the task to relay the client's chosen CRTC (Err => the task gave up / disconnected).
-    let target_crtc = match crtc_rx.recv() {
+    // Wait for the task to relay the client's chosen CRTC + CPU-path request (Err => the task gave up
+    // / disconnected).
+    let (target_crtc, need_cpu) = match crtc_rx.recv() {
         Ok(c) => c,
         Err(_) => return,
     };
@@ -2199,10 +2237,12 @@ fn drm_capture_worker(
     static DRM_CONN_EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let conn_epoch = DRM_CONN_EPOCH.fetch_add(1, Ordering::Relaxed);
 
-    // Prefer the zero-copy split export (root does NO EGL / convert / copy). If the loaded libdrmtap
-    // predates the split API, or grab_desc later reports ENOTSUP (no transferable dma-buf on this
-    // seat), fall back to the CPU-mapped path for this connection (pixels cross the wire).
-    let mut use_dmabuf = reader.supports_grab_desc();
+    // Prefer the zero-copy split export (root does NO EGL / convert / copy). Fall back to the
+    // CPU-mapped path for this connection (pixels cross the wire) when: the loaded libdrmtap predates
+    // the split API, grab_desc later reports ENOTSUP (no transferable dma-buf on this seat), OR the
+    // consumer asked for the CPU path because it has no render-node convert context (need_cpu) — in
+    // that last case the dma-buf fd would be useless to it and the stream would be lost.
+    let mut use_dmabuf = reader.supports_grab_desc() && !need_cpu;
 
     let mut last_cursor_id: u64 = 0;
     let mut stalled: u32 = 0;
