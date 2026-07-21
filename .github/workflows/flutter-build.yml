@@ -1702,9 +1702,17 @@ jobs:
               # exported so build.py reuses the exact same source. We clone + build
               # the .so here and hand it to build.py via DRMTAP_PREBUILT_DIR, because
               # a later build step in this container disturbs the working tree.
-              # rustdesk-org/libdrmtap main tracks the current release (0.4.8+).
+              # DRMTAP_REF is an EXACT release tag (vX.Y.Z), NOT a branch: the bundled
+              # .so version must match the `libdrmtap-sys = "=0.4.13"` crate pin in
+              # libs/scrap/Cargo.toml (the loader only checks ABI-major). Bump both together.
               export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
-              export DRMTAP_REF="main"
+              export DRMTAP_REF="v0.4.13"
+              # Guard: refuse a loose/branch ref so a moving `main` can never silently
+              # regress the pin. Only a vX.Y.Z tag is accepted.
+              case "$DRMTAP_REF" in
+                v[0-9]*.[0-9]*.[0-9]*) ;;
+                *) echo "FATAL: DRMTAP_REF must be a pinned vX.Y.Z tag, got '$DRMTAP_REF'"; exit 1;;
+              esac
               git config --global --add safe.directory '*' || true
               rm -rf third_party/libdrmtap
               git clone --depth 1 --branch "$DRMTAP_REF" "$DRMTAP_REPO" third_party/libdrmtap
@@ -1723,6 +1731,16 @@ jobs:
               [ -n "$(find "$DRMTAP_PREBUILT_DIR" -name 'libdrmtap.so.0.*' -type f)" ] \
                 || { echo "FATAL: prebuilt libdrmtap.so missing"; exit 1; }
               ls -l "$DRMTAP_PREBUILT_DIR"
+              # Lock-freshness guard, BEFORE the `--locked` build (which itself fails on a
+              # checksum mismatch): prove Cargo.lock is in sync with Cargo.toml and actually
+              # contains the pinned libdrmtap-sys (the integrator must have run
+              # `cargo update -p libdrmtap-sys --precise 0.4.13`). This turns a stale/loose lock
+              # into an explicit, readable failure instead of a confusing error deep in the build.
+              # The `=0.4.13` requirement in libs/scrap/Cargo.toml + `--locked` already force the
+              # exact resolved version + its checksum; this only confirms the lock was regenerated.
+              cargo update --locked --dry-run
+              cargo tree --locked --features drm -p libdrmtap-sys -i >/dev/null \
+                || { echo "FATAL: Cargo.lock does not contain the pinned libdrmtap-sys (run: cargo update -p libdrmtap-sys --precise 0.4.13)"; exit 1; }
               cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm --release
               python3 ./build.py --flutter --drm --skip-cargo
               for name in rustdesk-unattended-wayland*??.deb; do

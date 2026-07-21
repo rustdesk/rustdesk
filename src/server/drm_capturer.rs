@@ -1,22 +1,34 @@
 // Server-side (`--server`, unprivileged) consumer of the root `--service`'s DRM/KMS capture stream.
 //
-// The architecture pivot moved the scanout read into the root service; this process no longer
-// links or dlopens libdrmtap. It connects to the service's `_drm` channel, learns the display
-// geometry from the service, and pulls packed-BGRA frames. This mirrors the Windows
-// `portable_service` CapturerPortable split (a privileged process captures, this process presents),
-// but over rustdesk's own IPC instead of shared memory.
+// The phase-2 split moved only the privileged EXPORT (open + grab the scanout dma-buf fd) into the
+// root service; the EGL detile / RGBA convert now runs HERE, in the unprivileged process. So this
+// process DOES dlopen libdrmtap again (its unprivileged render half: `drmtap_open_render` +
+// `drmtap_convert_dmabuf`), holding one render-node context on the receive thread. It connects to
+// the service's `_drm` channel, learns the display geometry, then on each frame receives a small
+// dma-buf descriptor + the scanout fd (over SCM_RIGHTS) and converts it to linear pixels locally.
+// This mirrors the Windows `portable_service` CapturerPortable split (a privileged process captures,
+// this process presents), but over rustdesk's own IPC and with only the fd (not the pixels) crossing
+// the socket. A CPU-fallback path is kept: an older `.so` or a seat with no transferable dma-buf
+// makes the service send `DrmFrame` + packed-BGRA over the wire, which this side stores as-is.
 //
 // `TraitCapturer::frame()` is synchronous (the encoder loop calls it) while the IPC receive is
 // async, so a dedicated background thread runs the receive loop and keeps only the newest frame
 // (latest-wins, so a slow encoder never backs the socket up). `frame()` returns that frame as a
 // borrowed `PixelBuffer`, `WouldBlock` when nothing new arrived within the timeout, and a hard
 // `Err` once the stream ends (the caller then rebuilds the capturer or falls back to PipeWire).
+//
+// The render context (`RenderConverter`) is created ONCE on the receive thread and dropped there on
+// exit (NOT in `IpcDrmCapturer::Drop`): libdrmtap's EGL state + import-once EGLImage cache are
+// thread-local, so both convert and close must run on the same thread.
 
 use crate::ipc::{connect_drm, Data, DrmDisplayInfo};
 use hbb_common::{anyhow::anyhow, log, message_proto::DisplayInfo, tokio, ResultType};
+use scrap::drm_render::RenderConverter;
+use scrap::drmtap_dl::drmtap_dmabuf_desc;
 use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
 use std::collections::BTreeMap;
 use std::io;
+use std::os::fd::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -26,8 +38,12 @@ use std::time::{Duration, Instant};
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
 
 struct FrameSlot {
-    // (width, height, packed-BGRA) of the newest frame not yet consumed by `frame()`; latest-wins.
-    latest: Option<(usize, usize, Vec<u8>)>,
+    // (width, height, pixel format, packed pixels) of the newest frame not yet consumed by
+    // `frame()`; latest-wins. The pixel format is carried per frame because the split convert path
+    // reads it from the actual convert output (XRGB8888 -> BGRA, XBGR8888 -> RGBA) rather than
+    // assuming BGRA; the CPU-fallback path stores BGRA. The row stride is recoverable from
+    // `pixels.len() / height` (the convert output may carry a padded stride).
+    latest: Option<(usize, usize, Pixfmt, Vec<u8>)>,
     // Set once the stream ends so `frame()` returns a hard error (triggers a capturer rebuild).
     ended: Option<String>,
 }
@@ -47,6 +63,10 @@ pub struct IpcDrmCapturer {
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
+    // Pixel format of `cur`, taken from the frame stored in the slot (BGRA on the CPU-fallback path;
+    // BGRA/RGBA per the convert output on the dma-buf path). Honored by `frame()` instead of a
+    // hardcoded BGRA so an EGL-less / source-order convert is not shipped with red/blue swapped.
+    cur_fmt: Pixfmt,
     // Whether this capturer ever delivered a frame. Used to distinguish a stream that fails to
     // produce ANY frame (a permanent grab failure — unsupported scanout on that CRTC) from a normal
     // teardown, so DRM can fall back to PipeWire for that display instead of rebuilding it forever.
@@ -117,6 +137,7 @@ impl IpcDrmCapturer {
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
+                cur_fmt: Pixfmt::BGRA,
                 got_frame: false,
             },
             displays,
@@ -149,11 +170,12 @@ impl TraitCapturer for IpcDrmCapturer {
                 slot = guard;
             }
             // Deliver a pending frame before surfacing an end, so the last frame is not dropped.
-            if let Some((w, h, buf)) = slot.latest.take() {
+            if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
                 self.cur = buf;
                 self.cur_w = w;
                 self.cur_h = h;
+                self.cur_fmt = fmt;
                 if !self.got_frame {
                     // First frame of this session: DRM capture works for this display, clear its
                     // failure streak.
@@ -187,7 +209,7 @@ impl TraitCapturer for IpcDrmCapturer {
         }
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             &self.cur,
-            Pixfmt::BGRA,
+            self.cur_fmt,
             self.cur_w,
             self.cur_h,
         )))
@@ -212,42 +234,114 @@ async fn recv_thread(
             return;
         }
     };
-    let displays = match conn.next_timeout(HANDSHAKE_TIMEOUT_MS).await {
-        Ok(Some(Data::DrmDisplayList(v))) => v,
-        Ok(other) => {
+    let displays = match conn.recv_msg_timeout2(HANDSHAKE_TIMEOUT_MS).await {
+        Some(Ok((Data::DrmDisplayList(v), _fd))) => v,
+        Some(Ok((other, _fd))) => {
             let _ = tx.send(Err(anyhow!("expected DrmDisplayList, got {:?}", other)));
             return;
         }
-        Err(err) => {
+        Some(Err(err)) => {
             let _ = tx.send(Err(err));
             return;
         }
+        None => {
+            let _ = tx.send(Err(anyhow!("timed out waiting for DrmDisplayList")));
+            return;
+        }
     };
-    if let Err(err) = conn.send(&Data::DrmStart { display }).await {
+    if let Err(err) = conn.send_msg(&Data::DrmStart { display }, None).await {
         let _ = tx.send(Err(err));
         return;
     }
     let _ = tx.send(Ok(displays));
 
+    // Open the unprivileged render-node convert context ONCE, on THIS thread; it is dropped on this
+    // same thread when the loop exits (its EGL state + import-once cache are thread-local). `None`
+    // means no usable render node (a locked-down seat, or an old `.so` without the split symbols): the
+    // CPU-fallback `DrmFrame` path still works, but a `DrmFrameDmabuf` we cannot convert ends the
+    // stream so the caller falls back (PipeWire per-display).
+    let mut converter = RenderConverter::open_render();
+    if converter.is_none() {
+        log::info!(
+            "drm: no render-node convert context (drmtap_open_render failed or old .so); \
+             only the CPU-fallback frame path will work on this stream"
+        );
+    }
+
     // Stream until stopped or the connection ends. Poll the header read with a short timeout (rather
-    // than blocking indefinitely on `next()`) so a dropped capturer re-checks `stop` and tears down
-    // promptly even when the producer has stalled (no frames arriving). A header is always followed
-    // immediately by its `next_raw()` body, so only the header read needs the poll.
+    // than blocking indefinitely) so a dropped capturer re-checks `stop` and tears down promptly even
+    // when the producer has stalled (no frames arriving). A dma-buf frame carries its fd inline on the
+    // header (no body); a CPU-fallback frame and a cursor each carry a `next_raw()` body immediately
+    // after their header, so only the header read needs the poll.
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
         }
-        let msg = match conn.next_timeout2(200).await {
+        // The decoded `Data` plus any SCM_RIGHTS fd that rode this frame (the scanout dma-buf fd).
+        let (msg, recv_fd) = match conn.recv_msg_timeout2(200).await {
             None => continue, // timeout: re-check stop at the loop top
-            Some(Ok(Some(d))) => d,
-            Some(Ok(None)) => break "desynchronized frame".to_owned(),
+            Some(Ok(pair)) => pair,
             Some(Err(err)) => break format!("recv: {err}"),
         };
         match msg {
+            // Zero-copy split path: a dma-buf descriptor + (usually) the scanout fd. Import + EGL
+            // detile/convert to linear pixels HERE, then copy them latest-wins into the slot. That
+            // copy out of the context-owned convert buffer is the ONE remaining pixel copy in the
+            // whole pipeline (only the fd + this small descriptor crossed the socket).
+            Data::DrmFrameDmabuf(desc) => {
+                let conv = match converter.as_mut() {
+                    Some(c) => c,
+                    None => break "no DRM render node; cannot convert dma-buf frame".to_owned(),
+                };
+                // The fd number valid in THIS process: the received fd when the producer attached
+                // one, or -1 for an import-once cache hit (libdrmtap reuses the EGLImage it holds for
+                // `fb_id`). `has_fd` set but no fd delivered is a protocol desync.
+                let received_fd: RawFd = if desc.has_fd {
+                    match recv_fd.as_ref() {
+                        Some(f) => f.as_raw_fd(),
+                        None => {
+                            break "dma-buf frame set has_fd but carried no SCM_RIGHTS fd".to_owned()
+                        }
+                    }
+                } else {
+                    -1
+                };
+                // Rebuild the libdrmtap descriptor from the wire fields; `convert` overwrites its
+                // `dma_buf_fd` with `received_fd` (the exporter's local int is meaningless here).
+                let mut ddesc = drmtap_dmabuf_desc {
+                    dma_buf_fd: -1,
+                    width: desc.width,
+                    height: desc.height,
+                    format: desc.format,
+                    modifier: desc.modifier,
+                    fb_id: desc.fb_id,
+                    num_planes: desc.num_planes,
+                    offsets: desc.offsets,
+                    pitches: desc.pitches,
+                    hdr_eotf: desc.hdr_eotf,
+                    hdr_max_nits: desc.hdr_max_nits,
+                };
+                match conv.convert(&mut ddesc, received_fd) {
+                    Ok((data, w, h, fmt)) => {
+                        let mut slot = shared.slot.lock().unwrap();
+                        slot.latest = Some((w as usize, h as usize, fmt, data.to_vec()));
+                        shared.cv.notify_one();
+                    }
+                    // Transient convert contention: skip this frame (latest-wins keeps the newest),
+                    // do not tear the stream down.
+                    Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                    Err(err) => break format!("convert: {err}"),
+                }
+                // `recv_fd` (the OwnedFd, if any) is dropped/closed at the end of this iteration, AFTER
+                // convert has imported it (the EGLImage import holds its own reference to the buffer).
+            }
+            // CPU-fallback path (old `.so` / no transferable dma-buf): the producer packed BGRA and
+            // sent it over the wire after the header. Store it as-is (BGRA); no convert needed.
             Data::DrmFrame { width, height } => match conn.next_raw().await {
                 Ok(raw) => {
                     let mut slot = shared.slot.lock().unwrap();
-                    slot.latest = Some((width as usize, height as usize, raw.to_vec()));
+                    slot.latest =
+                        Some((width as usize, height as usize, Pixfmt::BGRA, raw.to_vec()));
                     shared.cv.notify_one();
                 }
                 Err(err) => break format!("frame body: {err}"),
@@ -272,10 +366,24 @@ async fn recv_thread(
                 ),
                 Err(err) => break format!("cursor body: {err}"),
             },
+            // Live hotplug: the service pushed a fresh display list after a connector-topology change.
+            // Swap it into the sticky positive availability cache directly (no re-probe over `_drm`, so
+            // this never trips the wayland::clear() re-probe restart loop). A subsequent
+            // get_display_infos()/get_primary_index() then reports the fresh geometry.
+            Data::DrmDisplaysChanged(list) => {
+                if !list.is_empty() {
+                    swap_available_displays(list);
+                }
+            }
             _ => {} // ignore any unexpected control message
         }
     };
     log::info!("drm capture stream ended: {end_reason}");
+    // Drop the render context on THIS thread (its EGL state + cached imports are thread-local; a
+    // cross-thread close would strand them — the 0.4.8 EGL-leak/OOM class). Explicit so it releases
+    // before the post-loop cleanup rather than at some later scope exit, and NEVER in
+    // `IpcDrmCapturer::Drop` (which runs on the encoder thread).
+    drop(converter);
     // Drop only THIS stream's cursor entry so a torn-down monitor does not erase the cursor state of
     // other still-active streams.
     remove_drm_cursor(display);
@@ -372,9 +480,11 @@ fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
 #[tokio::main(flavor = "current_thread")]
 async fn query_displays_async() -> ResultType<Vec<DrmDisplayInfo>> {
     let mut conn = connect_drm(1000).await?;
-    match conn.next_timeout(HANDSHAKE_TIMEOUT_MS).await? {
-        Some(Data::DrmDisplayList(v)) => Ok(v),
-        other => Err(anyhow!("expected DrmDisplayList, got {:?}", other)),
+    match conn.recv_msg_timeout2(HANDSHAKE_TIMEOUT_MS).await {
+        Some(Ok((Data::DrmDisplayList(v), _fd))) => Ok(v),
+        Some(Ok((other, _fd))) => Err(anyhow!("expected DrmDisplayList, got {:?}", other)),
+        Some(Err(err)) => Err(err),
+        None => Err(anyhow!("timed out waiting for DrmDisplayList")),
     }
 }
 
@@ -567,9 +677,17 @@ fn match_wayland_display<'a>(
 /// Normalize a connector name for cross-source matching: DRM inserts a single-letter type
 /// discriminator that the compositor drops ("HDMI-A-1" -> "HDMI-1", "DVI-D-1" -> "DVI-1"); names
 /// like "DP-1" / "eDP-1" pass through unchanged.
+///
+/// The middle component is only folded when it is a single *letter* (a type discriminator: the "A"
+/// in HDMI-A, the "D" in DVI-D). A single *digit* middle component is NOT a discriminator but a
+/// DisplayPort MST port index: "DP-1-2" is sink 2 downstream of DP connector 1 and is a DISTINCT
+/// output from "DP-2". Folding it (the old `parts[1].len() == 1` guard did) aliased the MST sink onto
+/// a real "DP-2", so primary selection and geometry augmentation attached the wrong logical position
+/// and scale. The `is_ascii_alphabetic` predicate preserves "DP-1-2" verbatim while still folding the
+/// letter discriminators.
 fn normalize_connector(name: &str) -> String {
     let parts: Vec<&str> = name.split('-').collect();
-    if parts.len() == 3 && parts[1].len() == 1 {
+    if parts.len() == 3 && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic()) {
         format!("{}-{}", parts[0], parts[2])
     } else {
         name.to_string()
@@ -579,6 +697,21 @@ fn normalize_connector(name: &str) -> String {
 /// Reset the probe cache so the next session re-probes (called on capture teardown).
 pub(super) fn clear() {
     *DRM_STATE.lock().unwrap() = ProbeState::Unknown;
+}
+
+/// Swap the sticky positive availability cache to a freshly-enumerated display list, driven by a
+/// service-pushed `DrmDisplaysChanged` hotplug signal on a live stream. This is the off-hot-path cache
+/// refresh that keeps mid-session hotplug geometry fresh WITHOUT the blocking `_drm` re-probe that
+/// `wayland::clear()` deliberately avoids (that re-probe blocks the async enumeration executor long
+/// enough to trip "deadline has elapsed" and spiral into a restart loop). It only replaces an already
+/// `Available` verdict — never flips `Unknown`/`Unavailable` to `Available` — so a stray signal cannot
+/// force DRM on; establishing availability stays the job of the probe path.
+fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
+    let mut st = DRM_STATE.lock().unwrap();
+    if matches!(&*st, ProbeState::Available(_)) {
+        log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+        *st = ProbeState::Available(list);
+    }
 }
 
 fn display_info_from_drm(d: &DrmDisplayInfo) -> DisplayInfo {
