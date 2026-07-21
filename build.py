@@ -385,19 +385,18 @@ def build_libdrmtap_so():
             shutil.rmtree(src)
         os.makedirs(os.path.dirname(src), exist_ok=True)
         system2(f'git clone --depth 1 --branch {LIBDRMTAP_REF} {LIBDRMTAP_REPO} {src}')
-    # Verify the immutable-commit pin on BOTH a fresh clone AND a reused checkout: a stale or
-    # mismatched third_party/libdrmtap left by an earlier/failed clone must not be built. On a
-    # mismatch, remove it and fail; the next run re-clones cleanly.
-    try:
+    # Verify the immutable-commit pin whenever the source is a GIT checkout — a fresh clone OR a
+    # reused/stale/mismatched one left by an earlier or failed clone: reject and remove it (the next
+    # run re-clones cleanly). A NON-git tree placed here on purpose (a developer building unreleased
+    # local libdrmtap source) has no tag to verify and is used as-is.
+    if os.path.isdir(os.path.join(src, '.git')):
         got_sha = subprocess.check_output(
             ['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
-    except Exception:
-        got_sha = None
-    if got_sha != LIBDRMTAP_SHA:
-        shutil.rmtree(src, ignore_errors=True)
-        raise Exception(
-            f'libdrmtap {LIBDRMTAP_REF} at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
-            f'(moved/compromised tag or stale checkout; removed, re-run to re-clone)')
+        if got_sha != LIBDRMTAP_SHA:
+            shutil.rmtree(src, ignore_errors=True)
+            raise Exception(
+                f'libdrmtap {LIBDRMTAP_REF} at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
+                f'(moved/compromised tag or stale checkout; removed, re-run to re-clone)')
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         system2(f'meson setup {build_dir} {src} --buildtype=release')
