@@ -68,6 +68,46 @@ pub struct drmtap_frame_info {
     pub _priv: *mut c_void,
 }
 
+// Descriptor of an externally-supplied scanout DMA-BUF (the split-capture
+// contract). Mirrors `drmtap_dmabuf_desc` in libdrmtap include/drmtap.h EXACTLY
+// (field order + widths); a mismatch mis-reads CCS/HDR scanouts. The privileged
+// exporter fills it in one call via `drmtap_grab_desc`; the unprivileged
+// converter receives it over IPC, overwrites `dma_buf_fd` with the fd it got via
+// SCM_RIGHTS, and passes it to `drmtap_convert_dmabuf`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct drmtap_dmabuf_desc {
+    pub dma_buf_fd: c_int, // scanout DMA-BUF; -1 for an already-imported fb_id
+    pub width: u32,
+    pub height: u32,
+    pub format: u32,           // DRM fourcc of the scanout
+    pub modifier: u64,         // DRM format modifier (tiling/compression)
+    pub fb_id: u32,            // import-once cache key; 0 disables caching
+    pub num_planes: u32,       // used entries in offsets/pitches (1..4); 0 => 1
+    pub offsets: [u32; 4],     // per-plane byte offsets (CCS main+aux+clear-color)
+    pub pitches: [u32; 4],     // per-plane strides; pitches[0] = main stride
+    pub hdr_eotf: u32,         // DRMTAP_EOTF_* (SDR=0, PQ=2, HLG=3)
+    pub hdr_max_nits: u32,     // mastering/content peak luminance cd/m2; 0=unknown
+}
+
+impl Default for drmtap_dmabuf_desc {
+    fn default() -> Self {
+        Self {
+            dma_buf_fd: -1,
+            width: 0,
+            height: 0,
+            format: 0,
+            modifier: 0,
+            fb_id: 0,
+            num_planes: 0,
+            offsets: [0; 4],
+            pitches: [0; 4],
+            hdr_eotf: 0,
+            hdr_max_nits: 0,
+        }
+    }
+}
+
 #[repr(C)]
 pub struct drmtap_cursor_info {
     pub x: i32,
@@ -91,6 +131,14 @@ type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
+// Split-capture entry points (libdrmtap >= 0.4.9). Bound OPTIONALLY (see below).
+// `grab_desc` runs on the privileged export side; `open_render`/`convert_dmabuf`
+// on the unprivileged converter side.
+type FnGrabDesc =
+    unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
+type FnOpenRender = unsafe extern "C" fn(*const c_char) -> *mut drmtap_ctx;
+type FnConvertDmabuf =
+    unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
 /// The dlopen'd libdrmtap with its resolved entry points. The `Library` is kept
 /// alive for the process lifetime (this lives in a `OnceLock`), so the raw fn
@@ -104,6 +152,15 @@ pub struct DrmtapLib {
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
+    // Split-capture symbols (present only on libdrmtap >= 0.4.9). `None` on an
+    // older .so; callers gate on `Some(..)` and fall back to the mapped path.
+    // Root needs `grab_desc`; the unprivileged converter needs
+    // `open_render` + `convert_dmabuf`.
+    pub grab_desc: Option<FnGrabDesc>,
+    pub open_render: Option<FnOpenRender>,
+    pub convert_dmabuf: Option<FnConvertDmabuf>,
+    // Parsed (major, minor, patch) from `drmtap_version()`, for feature gating.
+    pub version: (c_int, c_int, c_int),
 }
 
 // SAFETY: the resolved fn pointers are plain C entry points with no interior
@@ -152,6 +209,14 @@ impl DrmtapLib {
             let frame_release: FnFrameRelease = *lib.get(b"drmtap_frame_release").ok()?;
             let get_cursor: FnGetCursor = *lib.get(b"drmtap_get_cursor").ok()?;
             let cursor_release: FnCursorRelease = *lib.get(b"drmtap_cursor_release").ok()?;
+            // Split-capture symbols are bound OPTIONALLY (not through the `.ok()?`
+            // chain above): a pre-0.4.9 .so lacks them, and forcing them here would
+            // fail the WHOLE load and silently disable DRM. Each side checks the
+            // symbol it needs before taking the split path.
+            let grab_desc: Option<FnGrabDesc> = lib.get(b"drmtap_grab_desc").ok().map(|s| *s);
+            let open_render: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
+            let convert_dmabuf: Option<FnConvertDmabuf> =
+                lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -161,6 +226,10 @@ impl DrmtapLib {
                 frame_release,
                 get_cursor,
                 cursor_release,
+                grab_desc,
+                open_render,
+                convert_dmabuf,
+                version: (major, minor, patch),
             })
         }
     }

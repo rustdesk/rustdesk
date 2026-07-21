@@ -68,6 +68,8 @@ use serde_derive::{Deserialize, Serialize};
 use std::cell::Cell;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicBool, Ordering},
@@ -487,17 +489,32 @@ pub enum Data {
     // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
     // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
     // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
-    // the header extensible: a future zero-copy `DrmFrameDmabuf { fd, stride, modifier, .. }` slots
-    // in as a sibling variant without changing the transport.
+    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
+    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
+    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmStart { display: i32 },
     /// Service -> client: the enumerated DRM displays (sent once, before frames).
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmDisplayList(Vec<DrmDisplayInfo>),
+    /// Service -> client: the connector topology changed mid-stream (a monitor hotplug/unplug/modeset,
+    /// observed by the service's udev DRM-uevent listener). Carries the freshly-enumerated list so the
+    /// consumer can swap its sticky positive availability cache off the hot path, WITHOUT re-probing
+    /// `_drm` (which would trip the enumeration restart loop). Interleaved with frames on the same
+    /// stream; carries no `send_raw()` body and no fd.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplaysChanged(Vec<DrmDisplayInfo>),
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
+    /// CPU-fallback path (old .so, no render node): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmFrame { width: u32, height: u32 },
+    /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
+    /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
+    /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
+    /// the EGL detile/convert itself (see `DmabufDesc`).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrameDmabuf(DmabufDesc),
     /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmCursor {
@@ -513,7 +530,7 @@ pub enum Data {
 /// form of `scrap::drm_reader::DisplaySnapshot`; the server augments it with the Wayland
 /// logical geometry/scale, which needs the user session.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct DrmDisplayInfo {
     pub name: String,
     pub crtc_id: u32,
@@ -522,6 +539,41 @@ pub struct DrmDisplayInfo {
     pub width: u32,
     pub height: u32,
     pub active: bool,
+}
+
+/// Serializable metadata descriptor of a scanout dma-buf, shipped over `_drm` as the JSON payload of
+/// `Data::DrmFrameDmabuf`. It mirrors `scrap::drm_reader::drmtap_dmabuf_desc` field-for-field EXCEPT
+/// the process-local `dma_buf_fd` (which never serializes — it rides SCM_RIGHTS ancillary), and adds
+/// `buffer_id` (the producer's stable pool key) and `has_fd` (whether this message's `send_msg`
+/// carries the fd, vs an import-once cache hit that omits it). The converter rebuilds a
+/// `drmtap_dmabuf_desc` from these fields and overwrites its `dma_buf_fd` with the received fd.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DmabufDesc {
+    /// Producer-side stable pool key (e.g. fb_id + a connection epoch). Distinct from `fb_id`, which
+    /// is libdrmtap's import-once cache key.
+    pub buffer_id: u64,
+    pub width: u32,
+    pub height: u32,
+    /// DRM fourcc of the scanout.
+    pub format: u32,
+    /// DRM format modifier (tiling/compression).
+    pub modifier: u64,
+    /// KMS framebuffer id — libdrmtap's import-once cache key. 0 disables caching for this frame.
+    pub fb_id: u32,
+    /// Used entries in `offsets`/`pitches` (1..4); 0 is treated as 1.
+    pub num_planes: u32,
+    /// Per-plane byte offsets into the dma-buf (CCS main + aux + clear-color).
+    pub offsets: [u32; 4],
+    /// Per-plane strides in bytes; `pitches[0]` is the main-surface stride.
+    pub pitches: [u32; 4],
+    /// DRMTAP_EOTF_* (SDR=0, PQ=2, HLG=3). PQ triggers the HDR->SDR tone-map on convert.
+    pub hdr_eotf: u32,
+    /// Content/mastering peak luminance (cd/m2); 0 = unknown.
+    pub hdr_max_nits: u32,
+    /// True: this message's `send_msg` attaches the dma-buf fd in an SCM_RIGHTS cmsg. False: an
+    /// import-once cache hit for `fb_id` — no fd attached, converter reuses its cached EGLImage.
+    pub has_fd: bool,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1505,10 +1557,14 @@ pub(crate) fn drm_ipc_path() -> String {
 
 /// Connect (from the user `--server`) to the root service's `_drm` capture channel. Uses the
 /// derived `drm_ipc_path()` rather than `Config::ipc_path` since `_drm` is not a hbb_common
-/// service postfix (Option 2 isolation — no shared-lib change).
+/// service postfix (Option 2 isolation — no shared-lib change). Returns a [`DrmConn`] (bespoke
+/// SCM_RIGHTS framing) rather than the `Framed<_, BytesCodec>` `ConnectionTmpl`: the `_drm` channel
+/// must carry the scanout dma-buf fd as ancillary data, which the codec cannot do (see `DrmConn`).
 #[cfg(all(target_os = "linux", feature = "drm"))]
-pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<ConnectionTmpl<ConnClient>> {
-    connect_with_path(ms_timeout, &drm_ipc_path()).await
+pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<DrmConn> {
+    let path = drm_ipc_path();
+    let stream = timeout(ms_timeout, tokio::net::UnixStream::connect(&path)).await??;
+    Ok(DrmConn::new(stream))
 }
 
 /// Bind the `_drm` listener. Unlike `new_listener`, this does not route through hbb_common's
@@ -1542,8 +1598,20 @@ async fn new_drm_listener() -> ResultType<Incoming> {
 enum DrmProducerMsg {
     /// Enumerated displays, sent once before any frame so the task can answer the handshake.
     Displays(Vec<DrmDisplayInfo>),
-    /// A captured frame header + its packed BGRA pixels.
+    /// A captured frame (split/zero-copy path): the serializable dma-buf descriptor plus the (owned)
+    /// scanout fd to hand to the peer via SCM_RIGHTS. The worker always produces a real `fd` here; the
+    /// async task's `ExportLedger` decides whether to actually attach it (`desc.has_fd`) or elide it as
+    /// an import-once cache hit. The `OwnedFd` is closed once the send has dup'd it into the peer (or
+    /// immediately, when elided).
     Frame {
+        desc: DmabufDesc,
+        fd: Option<OwnedFd>,
+    },
+    /// A captured frame (CPU-mapped fallback path): a full packed-BGRA frame body. Used when the
+    /// loaded libdrmtap predates the split API (no `drmtap_grab_desc`) or the seat has no transferable
+    /// dma-buf (ENOTSUP). Forwarded as `Data::DrmFrame{width,height}` + `send_raw(BGRA)`, exactly like
+    /// the pre-split protocol, so an unprivileged converter is never required.
+    FrameCpu {
         width: u32,
         height: u32,
         data: Bytes,
@@ -1570,10 +1638,118 @@ impl Drop for DrmStopGuard {
     }
 }
 
+/// Producer-side fd-elision ledger (root `--service`, one per `_drm` connection). Decides, per
+/// exported frame, whether the scanout dma-buf fd must ride an SCM_RIGHTS cmsg (`has_fd = true`) or
+/// can be elided as an import-once cache hit (`has_fd = false`) because the peer's converter already
+/// imported that `fb_id`. Keyed by `fb_id -> (modifier, dims)`; a change in any of those (a resize,
+/// a modifier/tiling change, or a recycled fb_id that also changed geometry) forces a real fd, and a
+/// modeset/hotplug that invalidates the CRTC ends the connection (so a reconnect starts with a fresh,
+/// empty ledger — matching the peer's fresh, empty converter cache).
+///
+/// SAFETY / CORRECTNESS: eliding relies solely on `(fb_id, modifier, dims)` uniquely identifying a
+/// buffer, but the kernel can recycle an `fb_id` onto a *different* buffer with identical geometry
+/// and modifier; eliding then would serve a stale EGLImage. libdrmtap's own import cache keys on
+/// `fb_id + dma-buf inode` and can re-import ONLY when it is handed a real fd. Because always sending
+/// the fd is cheap (the converter still imports once per `fb_id` and closes the surplus fd) and is
+/// strictly safe, `DRM_FD_ELISION` defaults to `false` for v1 (always send). The ledger is fully
+/// wired so flipping the const on enables elision once the recycled-fb_id case is validated.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+const DRM_FD_ELISION: bool = false;
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+struct SeenBuf {
+    modifier: u64,
+    dims: (u32, u32),
+    epoch: u32,
+}
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+struct ExportLedger {
+    seen: HashMap<u32, SeenBuf>,
+    order: std::collections::VecDeque<u32>, // insertion order, for evict-oldest
+    epoch: u32,
+}
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+impl ExportLedger {
+    // Grow-once, hard-capped (preallocated model): a hostile/buggy peer or a fb_id churn cannot grow
+    // this unbounded; oldest keys are evicted so a real fd is simply re-sent for them later.
+    const MAX_LEDGER: usize = 32;
+
+    fn new() -> Self {
+        Self {
+            seen: HashMap::new(),
+            order: std::collections::VecDeque::new(),
+            epoch: 0,
+        }
+    }
+
+    /// Returns true if this frame's fd must be attached (new/changed/recycled buffer, caching
+    /// disabled, or elision off), false if the converter already holds `fb_id` imported.
+    fn should_send_fd(&mut self, desc: &DmabufDesc) -> bool {
+        // fb_id == 0 disables caching for that frame; elision-off always sends.
+        if !DRM_FD_ELISION || desc.fb_id == 0 {
+            return true;
+        }
+        let ident = SeenBuf {
+            modifier: desc.modifier,
+            dims: (desc.width, desc.height),
+            epoch: self.epoch,
+        };
+        if let Some(prev) = self.seen.get(&desc.fb_id) {
+            if prev.modifier == ident.modifier
+                && prev.dims == ident.dims
+                && prev.epoch == ident.epoch
+            {
+                return false; // import-once cache hit: elide the fd
+            }
+        } else {
+            // New key: record insertion order and evict the oldest if at capacity.
+            if self.order.len() >= Self::MAX_LEDGER {
+                if let Some(old) = self.order.pop_front() {
+                    self.seen.remove(&old);
+                }
+            }
+            self.order.push_back(desc.fb_id);
+        }
+        self.seen.insert(desc.fb_id, ident);
+        true
+    }
+}
+
+/// Build a [`DrmConn`] from an already-authorized `_drm` `Connection` (root `--service` side). The
+/// parity `Connection` wraps a tokio `UnixStream` but exposes no way to move it out, so we `dup()`
+/// its fd into a fresh, independently-owned tokio `UnixStream` for the bespoke SCM_RIGHTS framing.
+/// A dup gives a NEW fd number, which registers as its own epoll entry in tokio's reactor (reusing
+/// the same fd number would double-register); the caller drops the parity `Connection` afterwards,
+/// closing ITS fd, while the dup keeps the socket alive via the shared open file description.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn dup_to_drm_conn(stream: &Connection) -> ResultType<DrmConn> {
+    let raw = stream.inner.get_ref().as_raw_fd();
+    let dup = unsafe { hbb_common::libc::dup(raw) };
+    if dup < 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    // SAFETY: `dup` is a freshly dup'd, owned fd for a connected SOCK_STREAM unix socket.
+    let std_stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(dup) };
+    std_stream.set_nonblocking(true)?;
+    let tokio_stream = tokio::net::UnixStream::from_std(std_stream)?;
+    Ok(DrmConn::new(tokio_stream))
+}
+
 /// Cached DRM display enumeration. The pre-warm populates it and each capture open refreshes it, so
 /// a consumer's handshake can send the display list without first paying a DRM enumeration open.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 static DRM_DISPLAY_CACHE: std::sync::Mutex<Vec<DrmDisplayInfo>> = std::sync::Mutex::new(Vec::new());
+
+/// Monotonic generation bumped by the udev DRM-uevent listener ONLY when a connector-topology change
+/// actually altered `DRM_DISPLAY_CACHE` (a monitor hotplug/unplug/modeset). Each live `handle_drm_conn`
+/// forward loop watches this (one atomic load per frame) and, on a bump, pushes a `DrmDisplaysChanged`
+/// with the fresh list to its consumer — the cheap live-refresh path that avoids a consumer re-probe.
+/// `Release`/`Acquire` order it after the cache write so a reader that sees the new generation also sees
+/// the new cache (the cache `Mutex` re-synchronizes the contents regardless).
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Snapshot a reader's enumerated displays as the IPC `DrmDisplayInfo` form. `displays()` lists all
 /// device outputs regardless of the reader's target CRTC, so a capture reader can refresh the cache.
@@ -1605,6 +1781,110 @@ fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<Dr
         .collect()
 }
 
+/// True if a kernel uevent datagram is a DRM-subsystem topology change (a connector hotplug/modeset).
+/// A uevent is NUL-separated `KEY=value` records; we require `SUBSYSTEM=drm` plus a `change` action or
+/// `HOTPLUG=1`, so an `add`/`remove` of an unrelated node (a render device, a fb) does not trigger a
+/// re-enumeration. Byte-exact record matching avoids any allocation/UTF-8 handling on the hot recv path.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn uevent_is_drm_change(msg: &[u8]) -> bool {
+    let mut is_drm = false;
+    let mut is_change = false;
+    for rec in msg.split(|&b| b == 0) {
+        if rec == b"SUBSYSTEM=drm" {
+            is_drm = true;
+        } else if rec == b"ACTION=change" || rec == b"HOTPLUG=1" {
+            is_change = true;
+        }
+    }
+    is_drm && is_change
+}
+
+/// Listen for DRM connector hotplug/modeset uevents and refresh the display cache when the topology
+/// actually changes. Uses a raw `NETLINK_KOBJECT_UEVENT` socket (the same hotplug stream udev consumes)
+/// so no libudev dependency is added; the root `--service` already runs privileged and joining the
+/// kernel-uevent multicast group needs no extra cap. On a real change it re-enumerates (off any hot
+/// path — this is a dedicated thread, so the blocking `open`/`displays` is fine), and only when the
+/// enumerated set differs does it swap `DRM_DISPLAY_CACHE` and bump `DRM_DISPLAY_GENERATION`; live
+/// `handle_drm_conn` loops then push the fresh list to their consumers. Best-effort: if the socket is
+/// unavailable it logs and returns, and DRM capture still works (a consumer reconnect re-reads the
+/// fresh list) — just without the mid-session live refresh.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_udev_listener() {
+    use hbb_common::libc;
+    use std::sync::atomic::Ordering;
+
+    let sock = unsafe {
+        libc::socket(
+            libc::AF_NETLINK,
+            libc::SOCK_DGRAM | libc::SOCK_CLOEXEC,
+            libc::NETLINK_KOBJECT_UEVENT,
+        )
+    };
+    if sock < 0 {
+        log::info!(
+            "drm: udev uevent socket unavailable ({}); hotplug refresh disabled",
+            std::io::Error::last_os_error()
+        );
+        return;
+    }
+    // Own the fd so it is closed on every return / unwind path.
+    let _owned = unsafe { OwnedFd::from_raw_fd(sock) };
+    let mut addr: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+    addr.nl_family = libc::AF_NETLINK as u16;
+    // Group 1 = kernel-originated uevents (udev re-broadcasts on group 2); pid 0 => kernel assigns.
+    addr.nl_groups = 1;
+    let rc = unsafe {
+        libc::bind(
+            sock,
+            &addr as *const libc::sockaddr_nl as *const libc::sockaddr,
+            std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+        )
+    };
+    if rc < 0 {
+        log::info!(
+            "drm: udev uevent bind failed ({}); hotplug refresh disabled",
+            std::io::Error::last_os_error()
+        );
+        return;
+    }
+    log::info!("drm: udev DRM-uevent listener started");
+    // Fixed-size receive buffer (preallocated model): a uevent is well under 8 KiB; a rare larger
+    // datagram is truncated by `recv` and simply re-enumerates on the next matching event.
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = unsafe { libc::recv(sock, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
+        if n <= 0 {
+            let err = std::io::Error::last_os_error();
+            if n < 0 && err.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            log::info!("drm: udev uevent recv ended ({err}); hotplug refresh stopped");
+            break;
+        }
+        if !uevent_is_drm_change(&buf[..n as usize]) {
+            continue;
+        }
+        // Re-enumerate and diff. Only a real change swaps the cache + bumps the generation, so a
+        // uevent that does not alter the captured topology stays silent (no consumer churn).
+        if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
+            let fresh = drm_displays_from_reader(&mut r);
+            let changed = {
+                let mut cache = DRM_DISPLAY_CACHE.lock().unwrap();
+                if *cache != fresh {
+                    *cache = fresh;
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
+                log::info!("drm: connector topology changed (udev); display cache refreshed");
+            }
+        }
+    }
+}
+
 /// Best-effort warm-up at listener start: loads libdrmtap, initializes EGL, enumerates displays into
 /// the cache, and maps the first framebuffer once. Moves that one-time cost (which otherwise lands
 /// on the first consumer and can push the first frame past the client's initial-frame timeout) off
@@ -1616,7 +1896,16 @@ fn drm_prewarm() {
         Some(mut r) => {
             let displays = drm_displays_from_reader(&mut r);
             let n = displays.len();
-            let _ = r.grab(); // force the first framebuffer map / import
+            // Warm the first framebuffer export. On the split path, grab_desc() exports a dma-buf fd
+            // WITHOUT loading libEGL/libGLESv2 into the root service (the convert now runs in the
+            // unprivileged --server); only an old .so (no grab_desc) still force-maps via grab().
+            if r.supports_grab_desc() {
+                if let Ok((fd, _desc)) = r.grab_desc() {
+                    drop(fd); // close the warm-up fd; we only wanted to prime the device/import path
+                }
+            } else {
+                let _ = r.grab();
+            }
             *DRM_DISPLAY_CACHE.lock().unwrap() = displays;
             log::info!("drm: pre-warm ok ({n} displays) in {:?}", t.elapsed());
         }
@@ -1640,6 +1929,10 @@ pub async fn start_drm() {
             // Warm libdrmtap/EGL + enumeration off-thread so the first consumer does not pay that
             // one-time cost on its critical path.
             std::thread::spawn(drm_prewarm);
+            // Watch for connector hotplug/modeset uevents so a mid-session topology change refreshes
+            // the display cache and is pushed to live consumers (best-effort; own thread since it
+            // blocks on recv and re-enumeration is a blocking `!Send` open).
+            std::thread::spawn(drm_udev_listener);
             loop {
                 match incoming.next().await {
                     Some(Ok(stream)) => {
@@ -1673,7 +1966,7 @@ pub async fn start_drm() {
 /// messages to the wire. On any error / disconnect it returns; the `DrmStopGuard` plus dropping the
 /// channels tears the worker down, and the client falls back to PipeWire/portal.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
+async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -1707,6 +2000,14 @@ async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
     }
     let _conn_guard = DrmConnGuard;
 
+    // Move the authorized `_drm` stream onto the bespoke SCM_RIGHTS framing (see `DrmConn`). ALL
+    // further traffic — display list, `DrmStart`, frame descriptors + their ancillary fd, and the
+    // cursor / CPU-fallback bodies — goes through `conn` so no `Framed` read buffer ever competes with
+    // a `recvmsg` for the fd. The parity `Connection` (used only for the authorization above) is
+    // dropped here, closing its fd; the dup inside `conn` keeps the socket alive.
+    let mut conn = dup_to_drm_conn(&stream)?;
+    drop(stream);
+
     // worker -> task: display list, frames, cursor (bounded = backpressure).
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     // task -> worker: the chosen CRTC, sent once after the client's DrmStart.
@@ -1726,14 +2027,16 @@ async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
             return Ok(());
         }
     };
-    stream.send(&Data::DrmDisplayList(displays.clone())).await?;
+    conn.send_msg(&Data::DrmDisplayList(displays.clone()), None).await?;
 
-    // Wait for the client to choose a display before streaming.
+    // Wait for the client to choose a display before streaming. `recv_msg_timeout2` gates only the
+    // wait for the first byte, so a timeout leaves the stream at a clean frame boundary.
     let display_idx = loop {
-        match stream.next_timeout(10_000).await? {
-            Some(Data::DrmStart { display }) => break display,
-            Some(_) => continue,
-            None => return Ok(()),
+        match conn.recv_msg_timeout2(10_000).await {
+            Some(Ok((Data::DrmStart { display }, _fd))) => break display,
+            Some(Ok((_, _fd))) => continue, // ignore unexpected messages; drop any stray fd
+            Some(Err(e)) => return Err(e),
+            None => return Ok(()), // timed out: client never chose a display
         }
     };
     // Resolve the chosen display's CRTC. `displays` here is already filtered to
@@ -1760,16 +2063,43 @@ async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
     }
 
     // Forward frames + cursor updates until the worker ends or the client disconnects (a wire send
-    // error on a dropped client propagates out and tears the worker down via the guard).
+    // error on a dropped client propagates out and tears the worker down via the guard). The
+    // per-connection `ExportLedger` decides, for the zero-copy path, whether each frame's fd must ride
+    // an SCM_RIGHTS cmsg or can be elided as an import-once cache hit.
+    let mut ledger = ExportLedger::new();
+    // Live hotplug: the udev listener bumps DRM_DISPLAY_GENERATION when the connector topology changes.
+    // Seed from the value current at handshake (the list already sent reflects it) and, whenever it
+    // moves, push the fresh list to this consumer. Piggybacked on the frame cadence so it costs only one
+    // atomic load per frame; a genuinely idle stream tears down after MAX_STALLED and the consumer
+    // reconnects to a fresh list anyway.
+    let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     while let Some(msg) = frame_rx.recv().await {
+        let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
+        if gen != seen_gen {
+            seen_gen = gen;
+            let fresh = DRM_DISPLAY_CACHE.lock().unwrap().clone();
+            if !fresh.is_empty() {
+                conn.send_msg(&Data::DrmDisplaysChanged(fresh), None).await?;
+            }
+        }
         match msg {
-            DrmProducerMsg::Frame {
+            DrmProducerMsg::Frame { mut desc, fd } => {
+                // The worker always supplies a real fd; the ledger decides whether to attach it.
+                let send_fd = fd.is_some() && ledger.should_send_fd(&desc);
+                desc.has_fd = send_fd;
+                let borrowed = if send_fd { fd.as_ref().map(|f| f.as_fd()) } else { None };
+                conn.send_msg(&Data::DrmFrameDmabuf(desc), borrowed).await?;
+                // `fd` (OwnedFd) is closed here whether or not it was attached (the cmsg dup'd it into
+                // the peer). Closing immediately bounds our fd usage to ~1 in flight per frame.
+            }
+            DrmProducerMsg::FrameCpu {
                 width,
                 height,
                 data,
             } => {
-                stream.send(&Data::DrmFrame { width, height }).await?;
-                stream.send_raw(data).await?;
+                // CPU-mapped fallback: pixels cross the wire, exactly like the pre-split protocol.
+                conn.send_msg(&Data::DrmFrame { width, height }, None).await?;
+                conn.send_raw(data).await?;
             }
             DrmProducerMsg::Cursor {
                 id,
@@ -1779,16 +2109,18 @@ async fn handle_drm_conn(mut stream: Connection) -> ResultType<()> {
                 hoty,
                 colors,
             } => {
-                stream
-                    .send(&Data::DrmCursor {
+                conn.send_msg(
+                    &Data::DrmCursor {
                         id,
                         width,
                         height,
                         hotx,
                         hoty,
-                    })
-                    .await?;
-                stream.send_raw(Bytes::from(colors)).await?;
+                    },
+                    None,
+                )
+                .await?;
+                conn.send_raw(Bytes::from(colors)).await?;
             }
             DrmProducerMsg::Displays(_) => {}
         }
@@ -1862,28 +2194,66 @@ fn drm_capture_worker(
         t_open.elapsed()
     );
 
+    // A per-connection buffer-pool epoch so `buffer_id` is unique across connections even for the same
+    // fb_id (the consumer may key a pool by buffer_id).
+    static DRM_CONN_EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let conn_epoch = DRM_CONN_EPOCH.fetch_add(1, Ordering::Relaxed);
+
+    // Prefer the zero-copy split export (root does NO EGL / convert / copy). If the loaded libdrmtap
+    // predates the split API, or grab_desc later reports ENOTSUP (no transferable dma-buf on this
+    // seat), fall back to the CPU-mapped path for this connection (pixels cross the wire).
+    let mut use_dmabuf = reader.supports_grab_desc();
+
     let mut last_cursor_id: u64 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
     while !stop.load(Ordering::Relaxed) {
-        match reader.grab() {
-            Ok((buf, w, h)) => {
+        // Grab one frame in the current mode, producing an OWNED message (no borrow of `reader`
+        // outlives this, so `reader.cursor()` below is free to run). The dma-buf path ships only the
+        // descriptor + fd; the CPU path copies the packed BGRA once (Bytes::copy_from_slice).
+        let grabbed: std::io::Result<DrmProducerMsg> = if use_dmabuf {
+            match reader.grab_desc() {
+                Ok((fd, d)) => Ok(DrmProducerMsg::Frame {
+                    desc: DmabufDesc {
+                        buffer_id: (d.fb_id as u64) | ((conn_epoch as u64) << 32),
+                        width: d.width,
+                        height: d.height,
+                        format: d.format,
+                        modifier: d.modifier,
+                        fb_id: d.fb_id,
+                        num_planes: d.num_planes,
+                        offsets: d.offsets,
+                        pitches: d.pitches,
+                        hdr_eotf: d.hdr_eotf,
+                        hdr_max_nits: d.hdr_max_nits,
+                        has_fd: true, // the async task's ExportLedger may downgrade this
+                    },
+                    fd: Some(fd),
+                }),
+                Err(err) => Err(err),
+            }
+        } else {
+            match reader.grab() {
+                Ok((buf, w, h)) => Ok(DrmProducerMsg::FrameCpu {
+                    width: w as u32,
+                    height: h as u32,
+                    data: Bytes::copy_from_slice(buf),
+                }),
+                Err(err) => Err(err),
+            }
+        };
+        match grabbed {
+            Ok(msg) => {
                 stalled = 0;
                 if !logged_first {
                     logged_first = true;
                     log::debug!(
-                        "drm: first frame {w}x{h} for crtc {target_crtc} in {:?}",
-                        t_conn.elapsed()
+                        "drm: first frame for crtc {target_crtc} in {:?} ({} path)",
+                        t_conn.elapsed(),
+                        if use_dmabuf { "dma-buf" } else { "cpu" }
                     );
                 }
-                if frame_tx
-                    .blocking_send(DrmProducerMsg::Frame {
-                        width: w as u32,
-                        height: h as u32,
-                        data: Bytes::copy_from_slice(buf),
-                    })
-                    .is_err()
-                {
+                if frame_tx.blocking_send(msg).is_err() {
                     break;
                 }
             }
@@ -1894,6 +2264,17 @@ fn drm_capture_worker(
                     break;
                 }
                 std::thread::sleep(FRAME_INTERVAL);
+                continue;
+            }
+            Err(err) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
+                // The split export cannot work on this seat/driver (ENOTSUP). Switch this connection
+                // to the CPU-mapped fallback (pixels over the wire) instead of tearing down or
+                // rebuild-looping; the reader is already open and usable via grab().
+                log::warn!(
+                    "drm: grab_desc unsupported ({err}); switching to CPU-mapped fallback for this connection"
+                );
+                use_dmabuf = false;
+                logged_first = false;
                 continue;
             }
             Err(err) => {
@@ -1994,6 +2375,336 @@ where
                 bail!("reset by the peer");
             }
         }
+    }
+}
+
+/// Ancillary-fd transport for the `_drm` channel.
+///
+/// `ConnectionTmpl`'s `Framed<_, BytesCodec>` cannot carry (nor collect) an SCM_RIGHTS control
+/// message: tokio's `AsyncRead` never does a `recvmsg` with a control buffer, so a fd sent alongside
+/// a `Framed` byte-frame is silently dropped on receive, and interleaving a raw `sendmsg` with the
+/// codec desyncs its internal read buffer. So the WHOLE `_drm` channel moves onto this bespoke
+/// length-prefixed `sendmsg`/`recvmsg` framing, owning the raw `tokio::net::UnixStream` directly:
+/// handshake (`DrmDisplayList`/`DrmStart`), frame descriptors, and the CPU-fallback/cursor bodies all
+/// go through it so no `Framed` read buffer ever competes with a `recvmsg`.
+///
+/// Framing: each frame is a 4-byte big-endian length prefix + payload. `send_msg`/`recv_msg` carry a
+/// JSON `Data`; `send_raw`/`next_raw` carry an opaque body. The dma-buf fd (when present) rides an
+/// SCM_RIGHTS cmsg bound to the frame's first (prefix) byte, so reading the prefix with a control
+/// buffer reliably collects it (`MSG_CTRUNC` is rejected). Reads use exact-length loops so they never
+/// cross a frame boundary and thus never discard a following frame's ancillary fd.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub struct DrmConn {
+    /// The raw stream. Obtained from `connect_drm` (client) or the accepted `_drm` listener stream
+    /// (service). All framing is done by hand on this fd; there is no `Framed` codec.
+    stream: tokio::net::UnixStream,
+    /// Grow-once accumulation buffer for `recv_msg`/`next_raw` length-prefixed reads (preallocated
+    /// model: it grows to the largest frame seen and is then reused, never per-frame reallocated).
+    read_buf: Vec<u8>,
+}
+
+/// Cap on a JSON `Data` message read by `recv_msg` (headers/handshake are tiny; this only bounds a
+/// hostile/oversized length prefix). Distinct from the raw-body cap because a body can be a whole
+/// CPU-fallback frame.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+const MAX_DRM_JSON_BYTES: usize = 8 * 1024 * 1024;
+/// Cap on a raw body read by `next_raw` (CPU-fallback BGRA / cursor RGBA). Covers a 256 MiB 8K
+/// scanout (`DrmReader` bounds a frame to that) with margin.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+const MAX_DRM_RAW_BYTES: usize = 512 * 1024 * 1024;
+/// Control-buffer capacity for one SCM_RIGHTS cmsg carrying a single fd. `CMSG_SPACE(sizeof(int))` is
+/// 24 bytes on our targets; 64 gives headroom and the `align(8)` matches `cmsghdr` alignment.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+const DRM_CMSG_CAP: usize = 64;
+
+/// Aligned storage for the SCM_RIGHTS control buffer (`msg_control` must be `cmsghdr`-aligned).
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[repr(align(8))]
+struct DrmCmsgBuf([u8; DRM_CMSG_CAP]);
+
+/// One non-blocking `sendmsg`: writes `buf` and, when `pass_fd` is `Some`, attaches exactly one
+/// SCM_RIGHTS cmsg carrying that fd. The cmsg is attached ONLY when a fd is present (a -1 fd in an
+/// SCM_RIGHTS cmsg fails the whole call). Returns bytes sent, or a `WouldBlock`/other io error.
+///
+/// SAFETY: `fd` must be a valid open socket fd; `buf` a valid readable slice; `pass_fd` (if any) a
+/// valid open fd. The ancillary data is delivered by the kernel with the first byte of `buf`.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+unsafe fn drm_sendmsg(fd: RawFd, buf: &[u8], pass_fd: Option<RawFd>) -> std::io::Result<usize> {
+    use hbb_common::libc;
+    let mut iov = libc::iovec {
+        iov_base: buf.as_ptr() as *mut libc::c_void,
+        iov_len: buf.len(),
+    };
+    let mut msg: libc::msghdr = std::mem::zeroed();
+    msg.msg_iov = &mut iov;
+    msg.msg_iovlen = 1;
+    let mut cbuf = DrmCmsgBuf([0u8; DRM_CMSG_CAP]);
+    if let Some(sfd) = pass_fd {
+        msg.msg_control = cbuf.0.as_mut_ptr() as *mut libc::c_void;
+        msg.msg_controllen = libc::CMSG_SPACE(std::mem::size_of::<libc::c_int>() as u32) as _;
+        let cmsg = libc::CMSG_FIRSTHDR(&msg);
+        // Sized above so CMSG_FIRSTHDR is non-null; guard anyway to avoid UB on any platform quirk.
+        if cmsg.is_null() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "drm: CMSG_FIRSTHDR null",
+            ));
+        }
+        (*cmsg).cmsg_level = libc::SOL_SOCKET;
+        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<libc::c_int>() as u32) as _;
+        let sfd_c: libc::c_int = sfd;
+        std::ptr::copy_nonoverlapping(
+            &sfd_c as *const libc::c_int as *const u8,
+            libc::CMSG_DATA(cmsg),
+            std::mem::size_of::<libc::c_int>(),
+        );
+    }
+    let n = libc::sendmsg(fd, &msg, libc::MSG_NOSIGNAL);
+    if n < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(n as usize)
+    }
+}
+
+/// One non-blocking `recvmsg` into `buf` with a control buffer. Collects at most one SCM_RIGHTS fd
+/// (any surplus fds are closed); rejects a truncated cmsg (`MSG_CTRUNC`) as a hard error after closing
+/// whatever it parsed. Returns (bytes read, fd). Received fds are `O_CLOEXEC` (`MSG_CMSG_CLOEXEC`).
+///
+/// SAFETY: `fd` must be a valid open socket fd; `buf` a valid writable slice.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+unsafe fn drm_recvmsg(fd: RawFd, buf: &mut [u8]) -> std::io::Result<(usize, Option<OwnedFd>)> {
+    use hbb_common::libc;
+    let mut iov = libc::iovec {
+        iov_base: buf.as_mut_ptr() as *mut libc::c_void,
+        iov_len: buf.len(),
+    };
+    let mut cbuf = DrmCmsgBuf([0u8; DRM_CMSG_CAP]);
+    let mut msg: libc::msghdr = std::mem::zeroed();
+    msg.msg_iov = &mut iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cbuf.0.as_mut_ptr() as *mut libc::c_void;
+    msg.msg_controllen = cbuf.0.len() as _;
+    let n = libc::recvmsg(fd, &mut msg, libc::MSG_CMSG_CLOEXEC);
+    if n < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // Walk the cmsgs; keep the first SCM_RIGHTS fd, close any extras. Each parsed int is wrapped in an
+    // OwnedFd immediately so it is always closed on drop (no fd leak on any error path below).
+    let mut got: Option<OwnedFd> = None;
+    let mut cmsg = libc::CMSG_FIRSTHDR(&msg);
+    while !cmsg.is_null() {
+        if (*cmsg).cmsg_level == libc::SOL_SOCKET && (*cmsg).cmsg_type == libc::SCM_RIGHTS {
+            let data = libc::CMSG_DATA(cmsg);
+            let hdr = libc::CMSG_LEN(0) as usize;
+            let payload = ((*cmsg).cmsg_len as usize).saturating_sub(hdr);
+            let count = payload / std::mem::size_of::<libc::c_int>();
+            for i in 0..count {
+                let mut rawfd: libc::c_int = -1;
+                std::ptr::copy_nonoverlapping(
+                    data.add(i * std::mem::size_of::<libc::c_int>()),
+                    &mut rawfd as *mut libc::c_int as *mut u8,
+                    std::mem::size_of::<libc::c_int>(),
+                );
+                if rawfd >= 0 {
+                    let owned = OwnedFd::from_raw_fd(rawfd);
+                    if got.is_none() {
+                        got = Some(owned);
+                    } // else: surplus fd, dropped here -> closed
+                }
+            }
+        }
+        cmsg = libc::CMSG_NXTHDR(&msg, cmsg);
+    }
+    // A truncated control message means the kernel dropped fd(s) that did not fit: fail rather than
+    // proceed with a missing/partial fd (drop `got` so anything parsed is closed first).
+    if msg.msg_flags & libc::MSG_CTRUNC != 0 {
+        drop(got);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "drm: truncated SCM_RIGHTS control message (MSG_CTRUNC)",
+        ));
+    }
+    Ok((n as usize, got))
+}
+
+/// Write all of `buf` to `stream`, attaching `pass_fd` (if any) to the FIRST byte (the kernel binds
+/// SCM_RIGHTS ancillary to the first data byte of the `sendmsg` that carried it). Loops on
+/// `WouldBlock` via `writable()`; the fd is attached only until the first `sendmsg` sends >= 1 byte.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+async fn drm_write_all(
+    stream: &tokio::net::UnixStream,
+    mut buf: &[u8],
+    mut pass_fd: Option<RawFd>,
+) -> ResultType<()> {
+    while !buf.is_empty() {
+        stream.writable().await?;
+        let raw = stream.as_raw_fd();
+        let chunk = buf;
+        let fd_now = pass_fd;
+        match stream.try_io(tokio::io::Interest::WRITABLE, || unsafe {
+            drm_sendmsg(raw, chunk, fd_now)
+        }) {
+            Ok(0) => bail!("drm: socket write returned 0 (peer closed)"),
+            Ok(n) => {
+                pass_fd = None; // ancillary delivered with these bytes; do not re-send it
+                buf = &buf[n..];
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+
+/// Write one length-prefixed frame: a 4-byte big-endian length + payload, with `pass_fd` (if any)
+/// riding the prefix's first byte.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+async fn drm_send_frame(
+    stream: &tokio::net::UnixStream,
+    payload: &[u8],
+    pass_fd: Option<RawFd>,
+) -> ResultType<()> {
+    if payload.len() > u32::MAX as usize {
+        bail!("drm: frame too large ({} bytes)", payload.len());
+    }
+    let prefix = (payload.len() as u32).to_be_bytes();
+    // The fd rides the prefix (its first byte); the payload carries no ancillary.
+    drm_write_all(stream, &prefix, pass_fd).await?;
+    drm_write_all(stream, payload, None).await?;
+    Ok(())
+}
+
+/// Read exactly `buf.len()` bytes from `stream`. When `want_cmsg` is true, the FIRST read uses a
+/// control buffer to collect an SCM_RIGHTS fd (which the sender bound to the frame's first byte);
+/// subsequent reads within the same frame are plain. Returns the collected fd, if any.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+async fn drm_read_full(
+    stream: &tokio::net::UnixStream,
+    buf: &mut [u8],
+    want_cmsg: bool,
+) -> ResultType<Option<OwnedFd>> {
+    use hbb_common::libc;
+    let mut off = 0usize;
+    let mut got: Option<OwnedFd> = None;
+    while off < buf.len() {
+        stream.readable().await?;
+        let raw = stream.as_raw_fd();
+        // Only the first read of a frame carries the fd (bound to byte 0); after that, plain reads.
+        let use_cmsg = want_cmsg && got.is_none();
+        let n = {
+            let dst: &mut [u8] = &mut buf[off..];
+            match stream.try_io(tokio::io::Interest::READABLE, move || unsafe {
+                if use_cmsg {
+                    drm_recvmsg(raw, dst)
+                } else {
+                    let m = libc::read(raw, dst.as_mut_ptr() as *mut libc::c_void, dst.len());
+                    if m < 0 {
+                        Err(std::io::Error::last_os_error())
+                    } else {
+                        Ok((m as usize, None))
+                    }
+                }
+            }) {
+                Ok((0, _fd)) => bail!("drm: socket closed by peer"),
+                Ok((m, fd)) => {
+                    if let Some(f) = fd {
+                        if got.is_none() {
+                            got = Some(f);
+                        }
+                    }
+                    m
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(e) => return Err(e.into()),
+            }
+        };
+        off += n;
+    }
+    Ok(got)
+}
+
+#[cfg(all(target_os = "linux", feature = "drm"))]
+impl DrmConn {
+    /// Take ownership of an already-connected/accepted raw `_drm` stream.
+    pub fn new(stream: tokio::net::UnixStream) -> Self {
+        Self {
+            stream,
+            read_buf: Vec::new(),
+        }
+    }
+
+    /// Send one `Data` message (JSON, length-prefixed). When `fd` is `Some`, attach exactly one
+    /// SCM_RIGHTS cmsg carrying that fd on the SAME frame as the payload (a -1 in an SCM_RIGHTS cmsg
+    /// fails the whole call, so the cmsg is attached ONLY when a fd is present). `fd` is borrowed so
+    /// the caller keeps ownership and closes it after the send has dup'd it into the peer.
+    pub async fn send_msg(&mut self, data: &Data, fd: Option<BorrowedFd<'_>>) -> ResultType<()> {
+        let payload = serde_json::to_vec(data)?;
+        let pass_fd = fd.map(|f| f.as_raw_fd());
+        drm_send_frame(&self.stream, &payload, pass_fd).await
+    }
+
+    /// Receive one `Data` message plus any dma-buf fd delivered via SCM_RIGHTS. Reads the 4-byte
+    /// length prefix (with a `CMSG_SPACE(size_of::<c_int>())` control buffer that collects the fd bound
+    /// to the frame's first byte, rejecting `MSG_CTRUNC`), then the payload into the reusable
+    /// `read_buf`. Returns the decoded `Data` and an `OwnedFd` iff one arrived.
+    pub async fn recv_msg(&mut self) -> ResultType<(Data, Option<OwnedFd>)> {
+        let mut prefix = [0u8; 4];
+        let fd = drm_read_full(&self.stream, &mut prefix, true).await?;
+        let len = u32::from_be_bytes(prefix) as usize;
+        if len > MAX_DRM_JSON_BYTES {
+            // `fd` (if any) is closed on drop.
+            bail!("drm: message length {len} exceeds cap {MAX_DRM_JSON_BYTES}");
+        }
+        if self.read_buf.len() < len {
+            self.read_buf.resize(len, 0);
+        }
+        // Disjoint field borrows: &self.stream (read) + &mut self.read_buf (dest). No fd on the body.
+        drm_read_full(&self.stream, &mut self.read_buf[..len], false).await?;
+        let data: Data = serde_json::from_slice(&self.read_buf[..len])?;
+        Ok((data, fd))
+    }
+
+    /// Cancel-safe timeout wrapper around `recv_msg`, mirroring `ConnectionTmpl::next_timeout2`, so a
+    /// dropped consumer re-checks its `stop` flag between frames. `None` on timeout. The timeout gates
+    /// ONLY the wait for the first byte (`readable()` consumes nothing), so a fired timeout leaves the
+    /// stream at a clean frame boundary and never strands a partial frame or its fd.
+    pub async fn recv_msg_timeout2(
+        &mut self,
+        ms_timeout: u64,
+    ) -> Option<ResultType<(Data, Option<OwnedFd>)>> {
+        // Bind the readiness result to a `let` so the borrowed `readable()` future temporary is dropped
+        // at the `;` (releasing `&self.stream`) BEFORE `recv_msg()` takes `&mut self` in an arm.
+        let ready = timeout(ms_timeout, self.stream.readable()).await;
+        match ready {
+            Err(_) => None, // timed out at a frame boundary
+            Ok(Err(e)) => Some(Err(e.into())),
+            Ok(Ok(())) => Some(self.recv_msg().await),
+        }
+    }
+
+    /// Send a raw length-prefixed body (cursor pixels, CPU-fallback BGRA). Parity with
+    /// `ConnectionTmpl::send_raw`, over the same manual framing (never carries an fd).
+    pub async fn send_raw(&mut self, data: Bytes) -> ResultType<()> {
+        drm_send_frame(&self.stream, &data, None).await
+    }
+
+    /// Receive a raw length-prefixed body. Parity with `ConnectionTmpl::next_raw`. A raw body never
+    /// carries an fd; a stray fd (protocol desync) is collected by `drm_read_full` and dropped/closed.
+    pub async fn next_raw(&mut self) -> ResultType<bytes::BytesMut> {
+        let mut prefix = [0u8; 4];
+        if drm_read_full(&self.stream, &mut prefix, true).await?.is_some() {
+            log::warn!("drm: unexpected fd on a raw-body frame; dropping");
+        }
+        let len = u32::from_be_bytes(prefix) as usize;
+        if len > MAX_DRM_RAW_BYTES {
+            bail!("drm: raw body length {len} exceeds cap {MAX_DRM_RAW_BYTES}");
+        }
+        let mut out = bytes::BytesMut::new();
+        out.resize(len, 0);
+        drm_read_full(&self.stream, &mut out[..], false).await?;
+        Ok(out)
     }
 }
 

@@ -10,12 +10,13 @@
 // before opening. The DRM_DEVICE env is intentionally NOT consulted here.
 
 use super::drmtap_dl::{
-    self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_display, drmtap_frame_info,
-    DrmtapLib,
+    self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_display, drmtap_dmabuf_desc,
+    drmtap_frame_info, DrmtapLib,
 };
 use hbb_common::log;
 use std::ffi::CString;
 use std::io;
+use std::os::fd::{FromRawFd, OwnedFd};
 
 // Largest scanout we will copy; also bounds w*4*h against overflow. 16384 covers
 // 8K+ with headroom; anything larger is rejected as a bogus/hostile geometry.
@@ -212,6 +213,142 @@ impl DrmReader {
             }
             (self.lib.frame_release)(self.ctx, &mut frame);
             Ok((&self.buf, w, h))
+        }
+    }
+
+    /// True if the loaded libdrmtap exposes the split-capture export entry point
+    /// (`drmtap_grab_desc`, libdrmtap >= 0.4.9). When false the caller must use
+    /// the CPU-mapped `grab()` path (an older `.so`).
+    pub fn supports_grab_desc(&self) -> bool {
+        self.lib.grab_desc.is_some()
+    }
+
+    /// Zero-copy EXPORT grab for the split-capture path (root `--service`). Calls
+    /// `drmtap_grab_desc`, which fills a `drmtap_dmabuf_desc` (the scanout dma-buf
+    /// fd + the full plane layout + HDR metadata) WITHOUT mapping, detiling or
+    /// copying any pixels — so on this path the root process never loads
+    /// libEGL/libGLESv2 (the EGL convert now lives in the unprivileged `--server`).
+    ///
+    /// The scanout `dma_buf_fd` is dup'd into an `OwnedFd` BEFORE the frame is
+    /// released, so we keep an independently-owned reference to the buffer that
+    /// survives `drmtap_frame_release` (the dma-buf refcount keeps the memory
+    /// alive while the peer also holds a reference). The descriptor is validated
+    /// on METADATA ONLY (no pixel access on the export side): the fourcc gate
+    /// (kept from `grab()`), `MAX_DIM`, and `num_planes` in `1..=4`.
+    ///
+    /// Returns the owned fd + the validated descriptor with `dma_buf_fd` reset to
+    /// `-1` (the `OwnedFd` owns the fd now; the descriptor's local int must never
+    /// be closed or re-used). Errno mapping mirrors `grab()`: EAGAIN/EBUSY/EINTR
+    /// -> WouldBlock (retry); ENOTSUP -> a distinct `Unsupported` error (this
+    /// seat/driver produced pixels but no transferable dma-buf) so the caller
+    /// falls back to the mapped/PipeWire path instead of a per-frame rebuild loop;
+    /// any other errno -> hard error. Errors when `grab_desc` is unbound (old .so).
+    pub fn grab_desc(&mut self) -> io::Result<(OwnedFd, drmtap_dmabuf_desc)> {
+        let grab_desc = self.lib.grab_desc.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "libdrmtap too old: drmtap_grab_desc unavailable (need >= 0.4.9)",
+            )
+        })?;
+        // SAFETY: self.ctx is a valid context; desc/frame are zeroed before the
+        // call and the frame is released on every return path (after the dup).
+        unsafe {
+            let mut desc: drmtap_dmabuf_desc = std::mem::zeroed();
+            let mut frame: drmtap_frame_info = std::mem::zeroed();
+            let ret = grab_desc(self.ctx, &mut desc, &mut frame);
+            if ret < 0 {
+                let errno = -ret;
+                if errno == hbb_common::libc::EAGAIN
+                    || errno == hbb_common::libc::EBUSY
+                    || errno == hbb_common::libc::EINTR
+                {
+                    return Err(io::ErrorKind::WouldBlock.into());
+                }
+                if errno == hbb_common::libc::ENOTSUP {
+                    // Pixels exist but there is no transferable dma-buf on this
+                    // seat/driver: the split export can never work here. A distinct
+                    // Unsupported error so the caller degrades (CPU-mapped/PipeWire)
+                    // rather than tight-looping a rebuild.
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "drmtap_grab_desc: no transferable dma-buf (ENOTSUP)",
+                    ));
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("drmtap_grab_desc failed: errno {errno}"),
+                ));
+            }
+            // The canonical fd is `desc.dma_buf_fd` (what split_capture.c sends);
+            // `frame` also owns it and `frame_release` will close the library's
+            // copy. A negative fd here means no new scanout this grab -> retry.
+            let raw_fd = if desc.dma_buf_fd >= 0 {
+                desc.dma_buf_fd
+            } else {
+                frame.dma_buf_fd
+            };
+            if raw_fd < 0 {
+                (self.lib.frame_release)(self.ctx, &mut frame);
+                return Err(io::ErrorKind::WouldBlock.into());
+            }
+            // ---- METADATA-ONLY validation (no pixel access on the export side) ----
+            let w = desc.width;
+            let h = desc.height;
+            if w == 0 || h == 0 || w > MAX_DIM || h > MAX_DIM {
+                (self.lib.frame_release)(self.ctx, &mut frame);
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("DRM scanout geometry {w}x{h} out of range"),
+                ));
+            }
+            // fourcc gate (see grab()): reject a scanout the converter could not
+            // present as BGRA. 0/unknown is allowed here — an older .so may not set
+            // it, and the converter reads `frame.format` authoritatively per frame.
+            const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
+            const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
+            if desc.format != 0
+                && desc.format != DRM_FORMAT_XRGB8888
+                && desc.format != DRM_FORMAT_ARGB8888
+            {
+                log::warn!(
+                    "DRM scanout fourcc {:#010x} is not BGRA-compatible; falling back",
+                    desc.format
+                );
+                (self.lib.frame_release)(self.ctx, &mut frame);
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "unsupported DRM scanout format",
+                ));
+            }
+            // num_planes must index offsets/pitches (0 is treated as 1 per the ABI).
+            let planes = if desc.num_planes == 0 { 1 } else { desc.num_planes };
+            if planes > 4 {
+                (self.lib.frame_release)(self.ctx, &mut frame);
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("DRM scanout num_planes {} out of range (1..=4)", desc.num_planes),
+                ));
+            }
+            // dup the fd into an OwnedFd BEFORE releasing the frame: after release
+            // the library may recycle its handle, but our dup (an independent fd on
+            // the same open dma-buf) keeps the buffer alive for the peer.
+            let dup_fd = hbb_common::libc::dup(raw_fd);
+            if dup_fd < 0 {
+                let e = io::Error::last_os_error();
+                (self.lib.frame_release)(self.ctx, &mut frame);
+                return Err(e);
+            }
+            let owned = OwnedFd::from_raw_fd(dup_fd);
+            // Release now that the fd is safely dup'd (split_capture.c releases only
+            // after the send; we release after the dup, which is equivalent because
+            // the dup holds its own reference to the dma-buf).
+            (self.lib.frame_release)(self.ctx, &mut frame);
+            // Normalize num_planes and blank the descriptor's local fd int: the
+            // OwnedFd owns the fd, and the wire descriptor carries `has_fd` + the
+            // ancillary fd, never this integer.
+            desc.num_planes = planes;
+            desc.dma_buf_fd = -1;
+            Ok((owned, desc))
         }
     }
 

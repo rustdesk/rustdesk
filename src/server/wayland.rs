@@ -324,6 +324,19 @@ pub fn clear() {
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
+/// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
+/// that cannot be captured can fall through to PipeWire for THAT display. `ensure_inited` short-circuits
+/// to the DRM branch whenever DRM is globally available, so it never runs `check_init`; this helper
+/// drives the same async portal ScreenCast init directly (mirroring `ensure_inited`'s pattern). Needed
+/// because `is_available()` is a GLOBAL verdict — it stays true for the still-working DRM outputs — so
+/// without a per-display fallback a single failed/demoted DRM display would restart-loop the video
+/// service instead of degrading to PipeWire only for itself.
+#[cfg(feature = "drm")]
+#[tokio::main(flavor = "current_thread")]
+async fn ensure_pipewire_inited() -> ResultType<()> {
+    check_init().await
+}
+
 pub(super) fn get_capturer_for_display(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
@@ -331,10 +344,24 @@ pub(super) fn get_capturer_for_display(
         bail!("Do not call this function if not wayland");
     }
     // DRM/KMS capture path: build the capturer straight from the service `_drm` stream, bypassing
-    // the PipeWire CAP_DISPLAY_INFO machinery entirely.
+    // the PipeWire CAP_DISPLAY_INFO machinery entirely. `is_available()` is a GLOBAL verdict, so a
+    // per-display DRM failure (an ungrabbable/demoted CRTC, or — after the phase-2 split — a
+    // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
+    // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
+    // display; the other DRM outputs keep streaming over DRM.
     #[cfg(feature = "drm")]
     if super::drm_capturer::is_available() {
-        return super::drm_capturer::get_capturer_info(display_idx);
+        match super::drm_capturer::get_capturer_info(display_idx) {
+            Ok(info) => return Ok(info),
+            Err(e) => {
+                log::warn!(
+                    "drm capturer for display {} unavailable ({:#}); falling back to PipeWire",
+                    display_idx,
+                    e
+                );
+                ensure_pipewire_inited()?;
+            }
+        }
     }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.get(&display_idx) {

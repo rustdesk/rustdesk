@@ -334,11 +334,14 @@ def ffi_bindgen_function_refactor():
 
 # libdrmtap is fetched at build time by cloning the rustdesk-org fork at a pinned
 # ref — the same way rustdesk sources its other native build deps (vcpkg,
-# flutter_rust_bridge, ...), rather than carrying a git submodule. The ref can be
-# a branch or a tag; rustdesk-org/libdrmtap main tracks the current release.
-# Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for local testing or another fork.
+# flutter_rust_bridge, ...), rather than carrying a git submodule. The ref is an
+# EXACT release tag (vX.Y.Z), NOT a moving branch: the bundled runtime .so version must
+# match the `libdrmtap-sys = "=0.4.13"` crate pinned in libs/scrap/Cargo.toml (the dlopen
+# loader only checks ABI-major, so a minor skew between the two artifacts would go undetected).
+# Bump this tag and the crate pin together. Override the repo/ref via env (DRMTAP_REPO /
+# DRMTAP_REF) for local testing or another fork.
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
-LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'main')
+LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'v0.4.13')
 
 
 def _single_real_so(paths, where):
@@ -390,11 +393,23 @@ def append_drm_ldconfig_postinst():
     # The DRM package installs libdrmtap.so under a private dir; register it with the
     # dynamic linker so the in-process dlopen("libdrmtap.so.0") resolves. Only the DRM
     # package calls this, so the stock package's postinst stays byte-identical to upstream.
+    #
+    # This block is appended AFTER the stock postinst, which has already run
+    # `systemctl start rustdesk`. On a FRESH install that ordering is a trap: the root
+    # service's DRM pre-warm can dlopen("libdrmtap.so.0") BEFORE this ldconfig has
+    # populated the linker cache, the dlopen fails, and that failure is cached in the
+    # DRMTAP_LIB OnceLock for the life of the process — so DRM stays disabled until a
+    # manual restart. So immediately after ldconfig we `try-restart` the unit: it re-runs
+    # the pre-warm against the now-resolvable soname. `try-restart` is a no-op when the
+    # unit is not running, so it never spuriously starts the service.
     with open('tmpdeb/DEBIAN/postinst', 'a') as f:
         f.write(
             '\n'
             'if [ "$1" = configure ] && [ -d /usr/lib/rustdesk ]; then\n'
             '\tldconfig /usr/lib/rustdesk 2>/dev/null || ldconfig 2>/dev/null || true\n'
+            '\tif command -v systemctl >/dev/null 2>&1; then\n'
+            '\t\tsystemctl try-restart rustdesk 2>/dev/null || true\n'
+            '\tfi\n'
             'fi\n'
         )
 
