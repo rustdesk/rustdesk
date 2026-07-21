@@ -106,6 +106,8 @@ Review the patch for:
 - the custom client still skips the official update checker.
 - the memory watchdog remains launchd-gated, scheduled once daily at 06:00, and
   scoped to the user `--server` process;
+- the macOS user LaunchAgent keeps `--server` alive after both clean and
+  unsuccessful exits; stopping the service still unloads the LaunchAgent;
 
 Commit and push the candidate branch only after these checks pass:
 

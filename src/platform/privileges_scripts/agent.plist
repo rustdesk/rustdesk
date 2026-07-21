@@ -14,12 +14,7 @@
           <string>Aqua</string>
         </array>
         <key>KeepAlive</key>
-        <dict>
-            <key>SuccessfulExit</key>
-            <false />
-            <key>AfterInitialDemand</key>
-            <false />
-        </dict>
+        <true />
         <key>ThrottleInterval</key>
         <integer>1</integer>
         <key>RunAtLoad</key>

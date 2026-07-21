@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import plistlib
 from pathlib import Path
 
 
@@ -27,6 +28,9 @@ def main() -> None:
     input_service_rs = read("src/server/input_service.rs")
     server_rs = read("src/server.rs")
     memory_watchdog_rs = read("src/server/memory_watchdog.rs")
+    mac_agent_plist = plistlib.loads(
+        (ROOT / "src/platform/privileges_scripts/agent.plist").read_bytes()
+    )
     macos_rs = read("src/platform/macos.rs")
     macos_mm = read("src/platform/macos.mm")
     mac_install_script = read("src/platform/privileges_scripts/install.scpt")
@@ -90,6 +94,8 @@ def main() -> None:
     assert "UNATTENDED_WINDOW_END_HOUR: u32 = 7" in memory_watchdog_rs
     assert "Connection::alive_conns" not in memory_watchdog_rs
     assert "std::process::exit(RESTART_EXIT_CODE)" in memory_watchdog_rs
+    assert mac_agent_plist["RunAtLoad"] is True
+    assert mac_agent_plist["KeepAlive"] is True
 
     diagnostic_markers = (
         "macos-input-trace",
