@@ -2123,7 +2123,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // atomic load per frame; a genuinely idle stream tears down after MAX_STALLED and the consumer
     // reconnects to a fresh list anyway.
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
-    while let Some(msg) = frame_rx.recv().await {
+    while let Some(first) = frame_rx.recv().await {
         // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still
         // be the active-session uid. On a session change the outgoing --server no longer matches, so
         // we stop within one frame (~33ms) instead of streaming the new session's screen to it. Fail
@@ -2148,8 +2148,46 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 conn.send_msg(&Data::DrmDisplaysChanged(fresh), None).await?;
             }
         }
-        match msg {
-            DrmProducerMsg::Frame { mut desc, fd } => {
+        // Coalesce to latest-wins at the source (review 4.8). The `_drm` socket is a FIFO, so a
+        // consumer that drains slower than we produce (a 4K convert on a modest GPU) would fall
+        // seconds behind stale frames. Drain everything already queued without blocking and forward
+        // only the NEWEST frame; each replaced frame drops here, closing its OwnedFd (zero-copy path)
+        // and freeing its pixel buffer (CPU path). Cursor updates are latency-insensitive state
+        // (latest-wins by id downstream), so they are forwarded in order and never coalesced away.
+        let mut latest_frame: Option<DrmProducerMsg> = None;
+        let mut msg = Some(first);
+        while let Some(m) = msg.take() {
+            match m {
+                f @ (DrmProducerMsg::Frame { .. } | DrmProducerMsg::FrameCpu { .. }) => {
+                    latest_frame = Some(f);
+                }
+                DrmProducerMsg::Cursor {
+                    id,
+                    width,
+                    height,
+                    hotx,
+                    hoty,
+                    colors,
+                } => {
+                    conn.send_msg(
+                        &Data::DrmCursor {
+                            id,
+                            width,
+                            height,
+                            hotx,
+                            hoty,
+                        },
+                        None,
+                    )
+                    .await?;
+                    conn.send_raw(Bytes::from(colors)).await?;
+                }
+                DrmProducerMsg::Displays(_) => {}
+            }
+            msg = frame_rx.try_recv().ok();
+        }
+        match latest_frame {
+            Some(DrmProducerMsg::Frame { mut desc, fd }) => {
                 // The worker always supplies a real fd; the ledger decides whether to attach it.
                 let send_fd = fd.is_some() && ledger.should_send_fd(&desc);
                 desc.has_fd = send_fd;
@@ -2158,37 +2196,16 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 // `fd` (OwnedFd) is closed here whether or not it was attached (the cmsg dup'd it into
                 // the peer). Closing immediately bounds our fd usage to ~1 in flight per frame.
             }
-            DrmProducerMsg::FrameCpu {
+            Some(DrmProducerMsg::FrameCpu {
                 width,
                 height,
                 data,
-            } => {
+            }) => {
                 // CPU-mapped fallback: pixels cross the wire, exactly like the pre-split protocol.
                 conn.send_msg(&Data::DrmFrame { width, height }, None).await?;
                 conn.send_raw(data).await?;
             }
-            DrmProducerMsg::Cursor {
-                id,
-                width,
-                height,
-                hotx,
-                hoty,
-                colors,
-            } => {
-                conn.send_msg(
-                    &Data::DrmCursor {
-                        id,
-                        width,
-                        height,
-                        hotx,
-                        hoty,
-                    },
-                    None,
-                )
-                .await?;
-                conn.send_raw(Bytes::from(colors)).await?;
-            }
-            DrmProducerMsg::Displays(_) => {}
+            _ => {}
         }
     }
     Ok(())
