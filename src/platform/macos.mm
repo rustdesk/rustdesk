@@ -116,18 +116,15 @@ extern "C" bool MacCheckAdminAuthorization() {
     return Elevate(NULL, NULL);
 }
 
-extern "C" int32_t MacFrontmostApplicationPid() {
+static int32_t MacFrontmostApplicationPid() {
     @autoreleasepool {
         NSRunningApplication *application = [[NSWorkspace sharedWorkspace] frontmostApplication];
         return application == nil ? -1 : application.processIdentifier;
     }
 }
 
-extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOut) {
+static int32_t MacWindowOwnerPidAtPoint(double x, double y) {
     @autoreleasepool {
-        if (layerOut != NULL) {
-            *layerOut = -1;
-        }
         CGWindowListOption options = static_cast<CGWindowListOption>(
             kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements);
         CFArrayRef windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID);
@@ -163,11 +160,7 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
                 continue;
             }
 
-            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
             ownerPid = owner.intValue;
-            if (layerOut != NULL && layer != nil) {
-                *layerOut = layer.intValue;
-            }
             break;
         }
         CFRelease(windowList);
@@ -177,8 +170,7 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
 
 extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
     @autoreleasepool {
-        int32_t layer = -1;
-        int32_t targetPid = MacWindowOwnerPidAtPoint(x, y, &layer);
+        int32_t targetPid = MacWindowOwnerPidAtPoint(x, y);
         if (targetPid <= 0 || targetPid == MacFrontmostApplicationPid()) {
             return 0;
         }

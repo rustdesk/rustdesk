@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_VERSION: "1.81" # required for current macOS dependencies
+  RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
   CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
-  FLUTTER_VERSION: "3.24.5"
+  FLUTTER_VERSION: "3.22.2"
   FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
@@ -38,12 +38,44 @@ jobs:
       matrix:
         job:
           - {
-              target: aarch64-apple-darwin,
-              os: macos-14,
-              extra-build-args: "--hwcodec --unix-file-copy-paste --screencapturekit",
-              arch: aarch64,
-              flutter: "3.24.5",
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
+              flutter: "3.13.9",
+              ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
               bridge: "1.80.1",
+              date: "20231219"
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
+              flutter: "3.10.6",
+              ref: "f6509e3fd6917aa976bad2fc684182601ebf2434",
+              bridge: "1.80.1",
+              date: "20231219"
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
+              flutter: "3.10.6",
+              ref: "85ddfc0739f052cab0029c46b899b959ee94eeb8",
+              bridge: "1.80.1",
+              date: "20231119"
+            }
+          - {
+              target: x86_64-apple-darwin,
+              os: macos-13, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
+              extra-build-args: "",
+              arch: x86_64,
+              flutter: "3.13.9",
+              ref: "85ddfc0739f052cab0029c46b899b959ee94eeb8",
+              bridge: "1.80.1",
+              date: "20231119"
             }
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -56,6 +88,7 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
         with:
+          ref: ${{ matrix.job.ref }}
           submodules: recursive
 
       - name: Import the codesign cert
@@ -115,6 +148,7 @@ jobs:
       - name: Install flutter rust bridge deps
         shell: bash
         run: |
+          sed -i '' 's/3.1.0/2.17.0/g' flutter/pubspec.yaml;
           cargo install flutter_rust_bridge_codegen --version ${{ matrix.job.bridge }} --features "uuid" --locked
           # below works for mac to make buildable on 3.13.9
           # pushd flutter/lib; find . -name "*.dart" | xargs -I{} sed -i '' 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g' {}; popd;
@@ -154,37 +188,14 @@ jobs:
 
       - name: Build rustdesk
         run: |
-          MIN_MACOS_VERSION="12.3"
-          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
-          sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
-          sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
-          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           ./build.py --flutter ${{ matrix.job.extra-build-args }}
-
-      - name: Ad-hoc sign unsigned app
-        run: |
-          APP="./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
-          ENTITLEMENTS="$(mktemp)"
-          cp flutter/macos/Runner/Release.entitlements "$ENTITLEMENTS"
-          /usr/libexec/PlistBuddy -c 'Add :com.apple.security.cs.disable-library-validation bool true' "$ENTITLEMENTS" || \
-            /usr/libexec/PlistBuddy -c 'Set :com.apple.security.cs.disable-library-validation true' "$ENTITLEMENTS"
-          find "$APP/Contents/Frameworks" -type d -name '*.framework' -prune -print0 | while IFS= read -r -d '' framework; do
-            codesign --force --sign - --options runtime "$framework"
-          done
-          find "$APP/Contents/Frameworks" -type f -name '*.dylib' -print0 | while IFS= read -r -d '' dylib; do
-            codesign --force --sign - --options runtime "$dylib"
-          done
-          codesign --force --sign - --options runtime "$APP/Contents/MacOS/service"
-          codesign --force --sign - --options runtime --entitlements "$ENTITLEMENTS" "$APP"
-          codesign --verify --deep --strict --verbose=4 "$APP"
-          rm -f "$ENTITLEMENTS"
 
       - name: create unsigned dmg
         run: |
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
           sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
-          create-dmg --icon "RustDesk-Herbin.app" 200 190 --hide-extension "RustDesk-Herbin.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-herbin-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app
+          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
 
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null
@@ -196,25 +207,27 @@ jobs:
           # Unlock keychain
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          # start sign the RustDesk-Herbin.app and dmg
+          # start sign the rustdesk.app and dmg
           rm -rf *.dmg || true
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app -vvv
-          create-dmg --icon "RustDesk-Herbin.app" 200 190 --hide-extension "RustDesk-Herbin.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-herbin-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-herbin-${{ env.VERSION }}.dmg -vvv
-          # notarize the rustdesk-herbin-${{ env.VERSION }}.dmg
-          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-herbin-${{ env.VERSION }}.dmg
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app -vvv
+          create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
+          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
+          # notarize the rustdesk-${{ env.VERSION }}.dmg
+          rcodesign notary-submit --api-key-path ${{ github.workspace }}/rustdesk.json  --staple rustdesk-${{ env.VERSION }}.dmg
 
       - name: Rename rustdesk
         run: |
           for name in rustdesk*??.dmg; do
-              mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}.dmg"
+              mv "$name" "${name%%.dmg}-${{ matrix.job.arch }}-flutter${{ matrix.job.flutter }}-flutter${{ matrix.job.date }}.dmg"
           done
 
-      - name: Upload DMG package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Publish DMG package
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
-          name: rustdesk-herbin-${{ env.VERSION }}-${{ matrix.job.arch }}-dmg
-          path: rustdesk-herbin*-${{ matrix.job.arch }}*.dmg
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            rustdesk*-${{ matrix.job.arch }}*.dmg
 
 
   build-rustdesk-android:

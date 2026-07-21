@@ -1,0 +1,97 @@
+name: RDH Upstream Upgrade Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Official RustDesk tag; leave empty to use the latest stable release
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse-upgrade:
+    name: rehearse latest upstream merge
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM_REPOSITORY: rustdesk/rustdesk
+    steps:
+      - name: Checkout RDH branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Resolve target release
+        env:
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          CURRENT_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          TARGET_TAG="$REQUESTED_TAG"
+          if [ -z "$TARGET_TAG" ]; then
+            TARGET_TAG="$(gh api "repos/${UPSTREAM_REPOSITORY}/releases/latest" --jq .tag_name)"
+          fi
+          test -n "$CURRENT_VERSION"
+          test -n "$TARGET_TAG"
+          echo "CURRENT_VERSION=$CURRENT_VERSION" >> "$GITHUB_ENV"
+          echo "TARGET_TAG=$TARGET_TAG" >> "$GITHUB_ENV"
+
+      - name: Verify current RDH invariants
+        run: |
+          python3 tests/test_herbin_branding.py
+          git diff --check
+          git diff --cached --check
+
+      - name: Fetch official tag
+        if: env.TARGET_TAG != env.CURRENT_VERSION
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch --no-tags upstream "+refs/tags/${TARGET_TAG}:refs/tags/${TARGET_TAG}"
+          test "$(git rev-parse "refs/tags/${TARGET_TAG}")" = "$(gh api "repos/${UPSTREAM_REPOSITORY}/git/ref/tags/${TARGET_TAG}" --jq .object.sha)"
+
+      - name: Rehearse merge
+        if: env.TARGET_TAG != env.CURRENT_VERSION
+        run: |
+          set +e
+          git -c user.name=rdh-upgrade-check -c user.email=actions@users.noreply.github.com \
+            merge --no-commit --no-ff "$TARGET_TAG"
+          MERGE_STATUS=$?
+          set -e
+          if [ "$MERGE_STATUS" -ne 0 ]; then
+            {
+              echo "## RDH upstream upgrade needs manual conflict resolution"
+              echo
+              echo "- Current upstream baseline: \`${CURRENT_VERSION}\`"
+              echo "- Target upstream tag: \`${TARGET_TAG}\`"
+              echo "- Conflicting files:"
+              git diff --name-only --diff-filter=U | sed 's/^/  - `/' | sed 's/$/`/'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$MERGE_STATUS"
+          fi
+
+      - name: Verify merged candidate invariants
+        if: env.TARGET_TAG != env.CURRENT_VERSION
+        run: |
+          python3 tests/test_herbin_branding.py
+          git diff --check
+          git diff --cached --check
+
+      - name: Summarize result
+        run: |
+          {
+            echo "## RDH upstream upgrade check"
+            echo
+            echo "- Current upstream baseline: \`${CURRENT_VERSION}\`"
+            echo "- Latest/selected upstream tag: \`${TARGET_TAG}\`"
+            if [ "$TARGET_TAG" = "$CURRENT_VERSION" ]; then
+              echo "- Result: already current"
+            else
+              echo "- Result: merge rehearsal and RDH invariant checks passed"
+              echo "- Next step: follow \`docs/rdh-upgrade-runbook.md\`; this workflow does not push, install, or restart anything"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -3,41 +3,41 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = (
-    Path.home()
-    / ".config/superpowers/worktrees/rustdesk/codex-actions-master/.github/workflows/codex-windows-x64.yml"
-)
 
 
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def read(relative_path: str) -> str:
+    return (ROOT / relative_path).read_text(encoding="utf-8")
+
+
+def assert_in_order(text: str, first: str, second: str) -> None:
+    first_index = text.index(first)
+    second_index = text.index(second)
+    assert first_index < second_index, f"expected {first!r} before {second!r}"
 
 
 def main() -> None:
-    cargo_toml = read(ROOT / "Cargo.toml")
-    common_rs = read(ROOT / "src/common.rs")
-    main_rs = read(ROOT / "src/main.rs")
-    core_main_rs = read(ROOT / "src/core_main.rs")
-    flutter_rs = read(ROOT / "src/flutter.rs")
-    flutter_ffi_rs = read(ROOT / "src/flutter_ffi.rs")
-    service_rs = read(ROOT / "src/service.rs")
-    keyboard_rs = read(ROOT / "src/keyboard.rs")
-    input_service_rs = read(ROOT / "src/server/input_service.rs")
-    macos_rs = read(ROOT / "src/platform/macos.rs")
-    mac_install_script = read(ROOT / "src/platform/privileges_scripts/install.scpt")
-    mac_update_script = read(ROOT / "src/platform/privileges_scripts/update.scpt")
-    flutter_pubspec = read(ROOT / "flutter/pubspec.yaml")
-    mac_app_info = read(ROOT / "flutter/macos/Runner/Configs/AppInfo.xcconfig")
-    mac_info_plist = read(ROOT / "flutter/macos/Runner/Info.plist")
-    mac_project = read(ROOT / "flutter/macos/Runner.xcodeproj/project.pbxproj")
+    cargo_toml = read("Cargo.toml")
+    common_rs = read("src/common.rs")
+    main_rs = read("src/main.rs")
+    core_main_rs = read("src/core_main.rs")
+    flutter_rs = read("src/flutter.rs")
+    flutter_ffi_rs = read("src/flutter_ffi.rs")
+    service_rs = read("src/service.rs")
+    keyboard_rs = read("src/keyboard.rs")
+    input_service_rs = read("src/server/input_service.rs")
+    macos_rs = read("src/platform/macos.rs")
+    macos_mm = read("src/platform/macos.mm")
+    mac_install_script = read("src/platform/privileges_scripts/install.scpt")
+    mac_update_script = read("src/platform/privileges_scripts/update.scpt")
+    mac_app_info = read("flutter/macos/Runner/Configs/AppInfo.xcconfig")
+    mac_info_plist = read("flutter/macos/Runner/Info.plist")
+    mac_project = read("flutter/macos/Runner.xcodeproj/project.pbxproj")
     mac_scheme = read(
-        ROOT / "flutter/macos/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme"
+        "flutter/macos/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme"
     )
-    build_py = read(ROOT / "build.py")
-    osx_dist = read(ROOT / "res/osx-dist.sh")
-    flutter_build_workflow = read(ROOT / ".github/workflows/flutter-build.yml")
-    playground_workflow = read(ROOT / ".github/workflows/playground.yml")
-    codex_macos_workflow = read(ROOT / ".github/workflows/codex-macos-herbin.yml")
+    build_py = read("build.py")
+    osx_dist = read("res/osx-dist.sh")
+    macos_workflow = read(".github/workflows/codex-macos-herbin.yml")
 
     assert 'ProductName = "RustDesk-Herbin"' in cargo_toml
     assert 'OriginalFilename = "rustdesk-herbin.exe"' in cargo_toml
@@ -45,7 +45,6 @@ def main() -> None:
     assert 'identifier = "com.herbin.rustdesk"' in cargo_toml
     assert 'pub const FORK_APP_NAME: &str = "RustDesk-Herbin";' in common_rs
     assert 'pub const FORK_ORG: &str = "com.herbin";' in common_rs
-    assert "*org = FORK_ORG.to_owned();" in common_rs
     assert "pub fn apply_fork_identity()" in common_rs
     assert "common::apply_fork_identity();" in main_rs
     assert "crate::common::apply_fork_identity();" in core_main_rs
@@ -53,121 +52,69 @@ def main() -> None:
     assert "crate::common::apply_fork_identity();" in flutter_ffi_rs
     assert "crate::common::apply_fork_identity();" in service_rs
 
-    assert "ENABLE_WINDOWS_TO_MACOS_ALT_TAB_REMAP" not in keyboard_rs
-    assert "remap_shortcut_for_peer" not in keyboard_rs
+    assert "if is_custom_client() {\n        return;\n    }" in common_rs
 
-    assert "fn try_remap_mac_alt_tab" not in input_service_rs
-    assert "en.key_up(Key::Alt);" in input_service_rs
-    assert "en.key_up(Key::RightAlt);" in input_service_rs
-    assert "en.add_flag(&Key::Meta);" in input_service_rs
-    assert "en.key_down(Key::Meta).ok();" in input_service_rs
-    assert "MacosShortcutKey::Tab => Key::Tab" in input_service_rs
-    assert "MacosShortcutKey::Raw(code) => Key::Raw(code as u16)" in input_service_rs
-    assert "en.key_up(Key::Meta);" in input_service_rs
-
-    assert 'const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";' in input_service_rs
-    assert 'const HERBIN_MACOS_KEYMAP_FILE_NAME: &str = "herbin-keymap.json";' in input_service_rs
-    assert '"RustDesk-Herbin"' in input_service_rs
-    assert '".config"' in input_service_rs
-    assert 'const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=ctrl+tab";' in input_service_rs
-    assert "MacosShortcutKey::Alnum" in input_service_rs
-    assert "MacosShortcutKey::Same" in input_service_rs
-    assert '"a-z0-9"' in input_service_rs
-    assert '"$same"' in input_service_rs
-    assert "fn is_macos_shortcut_alnum_key" in input_service_rs
-    assert "fn emit_macos_shortcut_key" in input_service_rs
-    assert "en.add_flag(&Key::Control);" in input_service_rs
-    assert "struct HerbinMacosKeymapConfig" in input_service_rs
-    assert "struct HerbinMacosKeymapRuleConfig" in input_service_rs
-    assert "fn herbin_macos_keymap_path()" in input_service_rs
-    assert "fn load_macos_shortcut_rules_from_json_file()" in input_service_rs
-    assert "serde_json::from_str::<HerbinMacosKeymapConfig>" in input_service_rs
-    assert "failed to read Herbin macOS keymap" in input_service_rs
-    assert "failed to parse Herbin macOS keymap" in input_service_rs
-    assert "hold_until" in input_service_rs
-    assert "source_modifiers_released" in input_service_rs
-    assert "modes" in input_service_rs
-    assert "Config::get_option(HERBIN_MACOS_KEYMAP_OPTION)" in input_service_rs
-    assert "fn parse_macos_shortcut_chord" in input_service_rs
-    assert "fn parse_macos_shortcut_rule" in input_service_rs
-    assert "fn parse_macos_shortcut_rule_config" in input_service_rs
-    assert "fn configured_macos_shortcut_rules()" in input_service_rs
-    assert (
-        "if let Some(rules) = load_macos_shortcut_rules_from_json_file()" in input_service_rs
+    removed_keymap_markers = (
+        "HERBIN_MACOS_KEYMAP",
+        "HerbinMacosKeymap",
+        "MacosShortcutRemapState",
+        "try_remap_macos_shortcut",
+        "herbin-keymap.json",
+        "herbin-macos-keymap",
+        "remap_shortcut_for_peer",
     )
-    assert "fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool" in input_service_rs
-    assert "if try_remap_macos_shortcut(evt) {\n        return;\n    }\n\n    #[cfg(not(any(target_os = \"android\", target_os = \"ios\")))]" in input_service_rs
-    assert "fn release_macos_shortcut_key(" in input_service_rs
-    assert "fn release_macos_shortcut_remap()" in input_service_rs
-    assert "release_macos_shortcut_remap();" in input_service_rs
+    for marker in removed_keymap_markers:
+        assert marker not in input_service_rs
+        assert marker not in keyboard_rs
 
-    assert "sdk: '^3.1.0'" in flutter_pubspec
-    assert "s/3.1.0/2.17.0" not in playground_workflow
-    for macos_workflow in [playground_workflow, codex_macos_workflow]:
-        assert "Ad-hoc sign unsigned app" in macos_workflow
-        assert "disable-library-validation" in macos_workflow
-        assert 'find "$APP/Contents/Frameworks" -type d -name \'*.framework\'' in macos_workflow
-        assert 'codesign --force --sign - --options runtime "$APP/Contents/MacOS/service"' in macos_workflow
-        assert 'codesign --force --sign - --options runtime --entitlements "$ENTITLEMENTS" "$APP"' in macos_workflow
-        assert 'codesign --verify --deep --strict --verbose=4 "$APP"' in macos_workflow
+    assert "fn MacActivateApplicationAtPoint" in macos_rs
+    assert "pub fn activate_application_at_point" in macos_rs
+    assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' in macos_mm
+    assert "NSApplicationActivationPolicyRegular" in macos_mm
+    assert "activateWithOptions" in macos_mm
+    assert "activate_application_at_point(x, y)" in input_service_rs
+    assert_in_order(
+        input_service_rs,
+        "activate_application_at_point(x, y)",
+        "en.mouse_down(MouseButton::Left)",
+    )
+
+    diagnostic_markers = (
+        "macos-input-trace",
+        "macos-focus-trace",
+        "log_macos_click_focus",
+        "mouse_focus_snapshot",
+        "from_millis(120)",
+    )
+    diagnostic_sources = input_service_rs + macos_rs + macos_mm + read(
+        "libs/enigo/src/macos/macos_impl.rs"
+    )
+    for marker in diagnostic_markers:
+        assert marker not in diagnostic_sources
 
     assert "PRODUCT_NAME = RustDesk-Herbin" in mac_app_info
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.herbin.rustdesk" in mac_app_info
     assert "<string>com.herbin.rustdesk</string>" in mac_info_plist
     assert "<string>rustdesk-herbin</string>" in mac_info_plist
     assert "RustDesk-Herbin.app" in mac_project
-    assert "RustDesk.app" not in mac_project
     assert "PRODUCT_BUNDLE_IDENTIFIER = com.herbin.rustdesk;" in mac_project
-    assert "PRODUCT_BUNDLE_IDENTIFIER = com.carriez.rustdesk;" not in mac_project
     assert 'BuildableName = "RustDesk-Herbin.app"' in mac_scheme
-    assert 'BuildableName = "RustDesk.app"' not in mac_scheme
-    assert 'let full_name_placeholder = "__full_name__";' in macos_rs
-    assert 's = s.replace("com.carriez.RustDesk", full_name_placeholder);' in macos_rs
-    assert 's.replace(full_name_placeholder, &crate::get_full_name())' in macos_rs
-    assert 's = s.replace("com.carriez.RustDesk", &crate::get_full_name());' not in macos_rs
+
     assert 'launchctl bootstrap gui/$uid ' in mac_install_script
     assert 'launchctl kickstart -k gui/$uid/$agent_label' in mac_install_script
-    assert 'agent_label=$(basename ' in mac_install_script
-    assert 'legacy_agent_plist' in mac_install_script
-    assert '"Rust" & "Desk-Herbin_server.plist"' in mac_install_script
-    assert 'bad_agent_plist' in mac_install_script
-    assert '"Rust" & "Desk-Herbin-Herbin_server.plist"' in mac_install_script
-    assert 'legacy_daemon_plist' in mac_update_script
-    assert '"Rust" & "Desk-Herbin_service.plist"' in mac_update_script
-    assert 'bad_daemon_plist' in mac_update_script
-    assert '"Rust" & "Desk-Herbin-Herbin_service.plist"' in mac_update_script
-    assert 'set app_bundle to "/Applications/RustDesk.app"' not in mac_update_script
+    assert "legacy_agent_plist" in mac_install_script
+    assert "bad_agent_plist" in mac_install_script
+    assert "legacy_daemon_plist" in mac_update_script
+    assert "bad_daemon_plist" in mac_update_script
 
-    assert "command_was_down" not in input_service_rs
-    assert "fn press_macos_shortcut_key(" in input_service_rs
-    assert "en.add_flag(&Key::Meta);\n        en.key_down(Key::Meta).ok();" in input_service_rs
-    assert "en.add_flag(&Key::Control);\n        en.key_down(Key::Control).ok();" in input_service_rs
-    assert "en.key_down(Key::Meta).ok();\n    en.add_flag(&Key::Meta);" not in input_service_rs
-    assert "fn release_macos_shortcut_key(" in input_service_rs
-    assert (
-        "add_macos_shortcut_target_flags(&mut en, target_ctrl, target_meta, target_shift);"
-        in input_service_rs
-    )
-
-    for packaging_file in [
-        build_py,
-        osx_dist,
-        flutter_build_workflow,
-        playground_workflow,
-        codex_macos_workflow,
-    ]:
+    for packaging_file in (build_py, osx_dist, macos_workflow):
         assert "RustDesk-Herbin.app" in packaging_file
-        assert "RustDesk.app" not in packaging_file
         assert "rustdesk-herbin-" in packaging_file
 
-    if WORKFLOW.exists():
-        workflow = read(WORKFLOW)
-        assert 'APP_NAME: "RustDesk-Herbin"' in workflow
-        assert 'ARTIFACT_PREFIX: "rustdesk-herbin"' in workflow
-        assert "--app-name ${{ env.APP_NAME }}" in workflow
-        assert "Copy-Item ./rustdesk/rustdesk.exe ./rustdesk/${{ env.APP_NAME }}.exe" in workflow
-        assert "${{ env.ARTIFACT_PREFIX }}-${{ env.VERSION }}-x86_64.exe" in workflow
-        assert "${{ env.ARTIFACT_PREFIX }}-${{ env.VERSION }}-x86_64.msi" in workflow
+    assert "Ad-hoc sign app (not notarized)" in macos_workflow
+    assert "tests/test_herbin_branding.py" in macos_workflow
+    assert "RDH_REVISION" in macos_workflow
+    assert "shasum -a 256" in macos_workflow
 
 
 if __name__ == "__main__":

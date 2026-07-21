@@ -1,7 +1,15 @@
-name: Codex macOS Herbin Build
+name: RDH macOS Candidate Build
 
 on:
   workflow_dispatch:
+    inputs:
+      rdh_revision:
+        description: RDH revision for this upstream version
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
 
 env:
   FLUTTER_VERSION: "3.24.5"
@@ -9,7 +17,6 @@ env:
   MAC_RUST_VERSION: "1.81"
   VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  VERSION: "1.4.8"
 
 jobs:
   build-macos-herbin:
@@ -26,7 +33,24 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          fetch-depth: 0
           submodules: recursive
+
+      - name: Resolve candidate version
+        env:
+          RDH_REVISION: ${{ inputs.rdh_revision }}
+        run: |
+          UPSTREAM_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          test -n "$UPSTREAM_VERSION"
+          test -n "$RDH_REVISION"
+          echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> "$GITHUB_ENV"
+          echo "RDH_REVISION=$RDH_REVISION" >> "$GITHUB_ENV"
+          echo "VERSION=${UPSTREAM_VERSION}-rdh.${RDH_REVISION}" >> "$GITHUB_ENV"
+
+      - name: Verify RDH patch invariants
+        run: |
+          python3 tests/test_herbin_branding.py
+          git diff --check
 
       - name: Install build runtime
         run: |
@@ -102,7 +126,7 @@ jobs:
           test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleIdentifier)" = "com.herbin.rustdesk"
           test "$(defaults read "$PWD/$APP/Contents/Info" CFBundleName)" = "RustDesk-Herbin"
 
-      - name: Ad-hoc sign unsigned app
+      - name: Ad-hoc sign app (not notarized)
         run: |
           APP="./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
           ENTITLEMENTS="$(mktemp)"
@@ -120,7 +144,7 @@ jobs:
           codesign --verify --deep --strict --verbose=4 "$APP"
           rm -f "$ENTITLEMENTS"
 
-      - name: Create unsigned DMG
+      - name: Create ad-hoc DMG
         run: |
           CREATE_DMG="$(command -v create-dmg)"
           CREATE_DMG="$(readlink -f "$CREATE_DMG")"
@@ -133,8 +157,36 @@ jobs:
             "rustdesk-herbin-${VERSION}-aarch64.dmg" \
             "./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app"
 
-      - name: Upload unsigned DMG
+      - name: Create checksum and build metadata
+        run: |
+          DMG="rustdesk-herbin-${VERSION}-aarch64.dmg"
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          {
+            echo "artifact=$DMG"
+            echo "upstream_version=$UPSTREAM_VERSION"
+            echo "rdh_revision=$RDH_REVISION"
+            echo "source_commit=$GITHUB_SHA"
+            echo "signature=ad-hoc"
+            echo "notarized=false"
+          } > rdh-build-metadata.txt
+
+      - name: Upload ad-hoc candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: rustdesk-herbin-${{ env.VERSION }}-aarch64-dmg
-          path: rustdesk-herbin-${{ env.VERSION }}-aarch64.dmg
+          name: rustdesk-herbin-${{ env.VERSION }}-aarch64-adhoc
+          path: |
+            rustdesk-herbin-${{ env.VERSION }}-aarch64.dmg
+            rustdesk-herbin-${{ env.VERSION }}-aarch64.dmg.sha256
+            rdh-build-metadata.txt
+
+      - name: Summarize candidate
+        run: |
+          {
+            echo "## RustDesk-Herbin candidate"
+            echo
+            echo "- Upstream: \`${UPSTREAM_VERSION}\`"
+            echo "- RDH revision: \`${RDH_REVISION}\`"
+            echo "- Artifact: \`rustdesk-herbin-${VERSION}-aarch64.dmg\`"
+            echo "- Signature: ad-hoc (not notarized; Gatekeeper acceptance is not claimed)"
+            echo "- Source: \`${GITHUB_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -262,9 +262,6 @@ impl MouseControllable for Enigo {
 
     fn mouse_down(&mut self, button: MouseButton) -> crate::ResultType {
         let now = std::time::Instant::now();
-        let elapsed_since_last_click_ms = self
-            .last_click_time
-            .map(|last_click_time| last_click_time.elapsed().as_millis());
         if let Some(t) = self.last_click_time {
             if t.elapsed().as_millis() as u32 <= self.double_click_interval {
                 self.multiple_click += 1;
@@ -294,14 +291,6 @@ impl MouseControllable for Enigo {
             }
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
-        log::info!(
-            "[macos-input-trace] inject kind=down button={:?} x={} y={} click_count={} elapsed_since_last_click_ms={:?}",
-            button,
-            current_x,
-            current_y,
-            self.multiple_click,
-            elapsed_since_last_click_ms,
-        );
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
                 if self.multiple_click > 1 {
@@ -341,13 +330,6 @@ impl MouseControllable for Enigo {
             }
         };
         let dest = CGPoint::new(current_x as f64, current_y as f64);
-        log::info!(
-            "[macos-input-trace] inject kind=up button={:?} x={} y={} click_count={}",
-            button,
-            current_x,
-            current_y,
-            self.multiple_click,
-        );
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
                 if self.multiple_click > 1 {

@@ -69,8 +69,6 @@ extern "C" {
     fn CanUseNewApiForScreenCaptureCheck() -> BOOL;
     fn MacCheckAdminAuthorization() -> BOOL;
     fn MacActivateApplicationAtPoint(x: f64, y: f64) -> i32;
-    fn MacFrontmostApplicationPid() -> i32;
-    fn MacWindowOwnerPidAtPoint(x: f64, y: f64, layer: *mut i32) -> i32;
     fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
     fn MacGetModes(
         display: u32,
@@ -89,24 +87,6 @@ extern "C" {
 
 pub fn major_version() -> u32 {
     unsafe { majorVersion() }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct MouseFocusSnapshot {
-    pub frontmost_pid: i32,
-    pub target_pid: i32,
-    pub target_layer: i32,
-}
-
-pub fn mouse_focus_snapshot(x: i32, y: i32) -> MouseFocusSnapshot {
-    autoreleasepool(|| unsafe {
-        let mut target_layer = -1;
-        MouseFocusSnapshot {
-            frontmost_pid: MacFrontmostApplicationPid(),
-            target_pid: MacWindowOwnerPidAtPoint(x as f64, y as f64, &mut target_layer),
-            target_layer,
-        }
-    })
 }
 
 pub fn activate_application_at_point(x: i32, y: i32) -> i32 {

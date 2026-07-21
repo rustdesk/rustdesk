@@ -7,8 +7,6 @@ use crate::whiteboard;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-#[cfg(target_os = "macos")]
-use hbb_common::config::Config;
 use hbb_common::{
     get_time,
     message_proto::{pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate},
@@ -19,10 +17,6 @@ use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};
 #[cfg(target_os = "linux")]
 use scrap::wayland::pipewire::RDP_SESSION_INFO;
-#[cfg(target_os = "macos")]
-use serde::Deserialize;
-#[cfg(target_os = "macos")]
-use std::path::PathBuf;
 #[cfg(target_os = "linux")]
 use std::sync::mpsc;
 use std::{
@@ -51,8 +45,6 @@ impl super::service::Reset for StateCursor {
         *self = Default::default();
         crate::platform::reset_input_cache();
         fix_key_down_timeout(true);
-        #[cfg(target_os = "macos")]
-        release_macos_shortcut_remap();
     }
 }
 
@@ -508,30 +500,6 @@ static RECORD_CURSOR_POS_RUNNING: AtomicBool = AtomicBool::new(false);
 // We need to do some special handling for macOS when using the legacy mode.
 #[cfg(target_os = "macos")]
 static LAST_KEY_LEGACY_MODE: AtomicBool = AtomicBool::new(true);
-#[cfg(target_os = "macos")]
-const HERBIN_MACOS_KEYMAP_OPTION: &str = "herbin-macos-keymap";
-#[cfg(target_os = "macos")]
-const HERBIN_MACOS_KEYMAP_FILE_NAME: &str = "herbin-keymap.json";
-#[cfg(target_os = "macos")]
-const DEFAULT_HERBIN_MACOS_KEYMAP: &str = "alt+tab=ctrl+tab";
-#[cfg(target_os = "macos")]
-const MACOS_VK_TAB: u32 = 0x30;
-#[cfg(target_os = "macos")]
-const MACOS_VK_COMMAND: u32 = 0x37;
-#[cfg(target_os = "macos")]
-const MACOS_VK_RIGHT_COMMAND: u32 = 0x36;
-#[cfg(target_os = "macos")]
-const MACOS_VK_SHIFT: u32 = 0x38;
-#[cfg(target_os = "macos")]
-const MACOS_VK_RIGHT_SHIFT: u32 = 0x3C;
-#[cfg(target_os = "macos")]
-const MACOS_VK_OPTION: u32 = 0x3A;
-#[cfg(target_os = "macos")]
-const MACOS_VK_RIGHT_OPTION: u32 = 0x3D;
-#[cfg(target_os = "macos")]
-const MACOS_VK_CONTROL: u32 = 0x3B;
-#[cfg(target_os = "macos")]
-const MACOS_VK_RIGHT_CONTROL: u32 = 0x3E;
 // We use enigo to
 // 1. Simulate mouse events
 // 2. Simulate the legacy mode key events
@@ -546,112 +514,6 @@ fn enigo_ignore_flags() -> bool {
 fn set_last_legacy_mode(v: bool) {
     LAST_KEY_LEGACY_MODE.store(v, Ordering::SeqCst);
     ENIGO.lock().unwrap().set_ignore_flags(!v);
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum MacosShortcutKey {
-    Alt,
-    RAlt,
-    Shift,
-    RShift,
-    Control,
-    RControl,
-    Meta,
-    RWin,
-    Tab,
-    Alnum,
-    Same,
-    Raw(u32),
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Clone, Copy, Default)]
-struct MacosShortcutChord {
-    alt: bool,
-    ctrl: bool,
-    shift: bool,
-    meta: bool,
-    key: Option<MacosShortcutKey>,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Clone, Copy)]
-struct MacosShortcutRule {
-    from: MacosShortcutChord,
-    to: MacosShortcutChord,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Deserialize)]
-struct HerbinMacosKeymapConfig {
-    #[serde(default = "herbin_keymap_enabled_by_default")]
-    enabled: bool,
-    #[serde(default)]
-    rules: Vec<HerbinMacosKeymapRuleConfig>,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Deserialize)]
-struct HerbinMacosKeymapRuleConfig {
-    from: HerbinMacosShortcutEndpointConfig,
-    to: HerbinMacosShortcutEndpointConfig,
-    #[serde(default)]
-    modes: Vec<String>,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Deserialize)]
-struct HerbinMacosShortcutEndpointConfig {
-    key: String,
-    #[serde(default)]
-    modifiers: Vec<String>,
-    #[serde(default)]
-    hold_until: Option<String>,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Default)]
-struct MacosShortcutRemapState {
-    alt_down: bool,
-    ralt_down: bool,
-    shift_down: bool,
-    rshift_down: bool,
-    control_down: bool,
-    rcontrol_down: bool,
-    meta_down: bool,
-    rwin_down: bool,
-    source_key: Option<MacosShortcutKey>,
-    target_key: Option<MacosShortcutKey>,
-    target_key_down: bool,
-    target_ctrl_down: bool,
-    target_meta_down: bool,
-    target_shift: bool,
-}
-
-#[cfg(target_os = "macos")]
-impl MacosShortcutRemapState {
-    fn source_alt_down(&self) -> bool {
-        self.alt_down || self.ralt_down
-    }
-
-    fn source_shift_down(&self) -> bool {
-        self.shift_down || self.rshift_down
-    }
-
-    fn source_ctrl_or_meta_down(&self) -> bool {
-        self.control_down || self.rcontrol_down || self.meta_down || self.rwin_down
-    }
-
-    fn remap_active(&self) -> bool {
-        self.target_key_down || self.target_ctrl_down || self.target_meta_down
-    }
-}
-
-#[cfg(target_os = "macos")]
-lazy_static::lazy_static! {
-    static ref HERBIN_MACOS_SHORTCUT_REMAP_STATE: Arc<Mutex<MacosShortcutRemapState>> =
-        Default::default();
 }
 
 pub fn try_start_record_cursor_pos() -> Option<thread::JoinHandle<()>> {
@@ -1177,19 +1039,6 @@ pub fn handle_mouse_(
     simulate: bool,
     _show_cursor: bool,
 ) {
-    #[cfg(target_os = "macos")]
-    log::info!(
-        "[macos-input-trace] protocol conn={} type={} buttons={} x={} y={} modifiers={:?} simulate={} show_cursor={}",
-        conn,
-        evt.mask & MOUSE_TYPE_MASK,
-        evt.mask >> 3,
-        evt.x,
-        evt.y,
-        evt.modifiers,
-        simulate,
-        _show_cursor,
-    );
-
     if simulate {
         handle_mouse_simulation_(evt, conn);
     }
@@ -1205,21 +1054,6 @@ pub fn handle_mouse_(
             handle_mouse_show_cursor_(evt, conn, _username, _argb);
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-fn log_macos_click_focus(phase: &str, conn: i32, x: i32, y: i32) {
-    let snapshot = crate::platform::macos::mouse_focus_snapshot(x, y);
-    log::info!(
-        "[macos-focus-trace] phase={} conn={} x={} y={} frontmost_pid={} target_pid={} target_layer={}",
-        phase,
-        conn,
-        x,
-        y,
-        snapshot.frontmost_pid,
-        snapshot.target_pid,
-        snapshot.target_layer,
-    );
 }
 
 pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
@@ -1301,27 +1135,19 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         MOUSE_TYPE_DOWN => match buttons {
             MOUSE_BUTTON_LEFT => {
                 #[cfg(target_os = "macos")]
-                let click_position = crate::get_cursor_pos();
-                #[cfg(target_os = "macos")]
-                if let Some((x, y)) = click_position {
-                    log_macos_click_focus("before_down", conn, x, y);
+                if let Some((x, y)) = crate::get_cursor_pos() {
                     let activation_result =
                         crate::platform::macos::activate_application_at_point(x, y);
-                    if activation_result != 0 {
-                        log::info!(
-                            "[macos-focus-trace] phase=activation_requested conn={} x={} y={} result={}",
-                            conn,
+                    if activation_result < 0 {
+                        log::debug!(
+                            "Failed to activate the macOS application at ({}, {}), pid={}",
                             x,
                             y,
-                            activation_result,
+                            -activation_result,
                         );
                     }
                 }
                 allow_err!(en.mouse_down(MouseButton::Left));
-                #[cfg(target_os = "macos")]
-                if let Some((x, y)) = click_position {
-                    log_macos_click_focus("after_down", conn, x, y);
-                }
             }
             MOUSE_BUTTON_RIGHT => {
                 allow_err!(en.mouse_down(MouseButton::Right));
@@ -1340,14 +1166,6 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         MOUSE_TYPE_UP => match buttons {
             MOUSE_BUTTON_LEFT => {
                 en.mouse_up(MouseButton::Left);
-                #[cfg(target_os = "macos")]
-                if let Some((x, y)) = crate::get_cursor_pos() {
-                    log_macos_click_focus("after_up", conn, x, y);
-                    thread::spawn(move || {
-                        thread::sleep(Duration::from_millis(120));
-                        log_macos_click_focus("settled", conn, x, y);
-                    });
-                }
             }
             MOUSE_BUTTON_RIGHT => {
                 en.mouse_up(MouseButton::Right);
@@ -2152,652 +1970,12 @@ fn release_shift_for_char_input(en: &mut Enigo) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn parse_macos_shortcut_chord(raw: &str) -> Option<MacosShortcutChord> {
-    let mut chord = MacosShortcutChord::default();
-    for token in raw.split('+') {
-        match token.trim().to_ascii_lowercase().as_str() {
-            "alt" | "option" => chord.alt = true,
-            "ctrl" | "control" => chord.ctrl = true,
-            "shift" => chord.shift = true,
-            "cmd" | "command" | "meta" | "super" | "win" => chord.meta = true,
-            "a-z0-9" | "alnum" => {
-                if chord.key.is_some() {
-                    return None;
-                }
-                chord.key = Some(MacosShortcutKey::Alnum);
-            }
-            "$same" | "same" => {
-                if chord.key.is_some() {
-                    return None;
-                }
-                chord.key = Some(MacosShortcutKey::Same);
-            }
-            "tab" => {
-                if chord.key.is_some() {
-                    return None;
-                }
-                chord.key = Some(MacosShortcutKey::Tab);
-            }
-            _ => return None,
-        }
-    }
-    chord.key.map(|_| chord)
-}
-
-#[cfg(target_os = "macos")]
-fn parse_macos_shortcut_rule(raw: &str) -> Option<MacosShortcutRule> {
-    let mut parts = raw.split('=');
-    let from = parse_macos_shortcut_chord(parts.next()?.trim())?;
-    let to = parse_macos_shortcut_chord(parts.next()?.trim())?;
-    if parts.next().is_some() {
-        return None;
-    }
-    let rule = MacosShortcutRule { from, to };
-    if is_supported_macos_shortcut_rule(&rule) {
-        Some(rule)
-    } else {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn is_supported_macos_shortcut_rule(rule: &MacosShortcutRule) -> bool {
-    if !rule.from.alt || rule.from.ctrl || rule.from.meta || rule.to.alt {
-        return false;
-    }
-    match (rule.from.key, rule.to.key) {
-        (Some(MacosShortcutKey::Tab), Some(MacosShortcutKey::Tab)) => rule.to.ctrl != rule.to.meta,
-        (Some(MacosShortcutKey::Alnum), Some(MacosShortcutKey::Same)) => {
-            rule.to.ctrl && !rule.to.meta
-        }
-        _ => false,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn herbin_keymap_enabled_by_default() -> bool {
-    true
-}
-
-#[cfg(target_os = "macos")]
-fn herbin_macos_keymap_path() -> PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/Users/herbin"));
-    home.join(".config")
-        .join("RustDesk-Herbin")
-        .join(HERBIN_MACOS_KEYMAP_FILE_NAME)
-}
-
-#[cfg(target_os = "macos")]
-fn parse_macos_shortcut_endpoint_config(
-    config: &HerbinMacosShortcutEndpointConfig,
-) -> Option<MacosShortcutChord> {
-    let mut chord = MacosShortcutChord::default();
-    for modifier in &config.modifiers {
-        match modifier.trim().to_ascii_lowercase().as_str() {
-            "alt" | "option" => chord.alt = true,
-            "ctrl" | "control" => chord.ctrl = true,
-            "shift" => chord.shift = true,
-            "cmd" | "command" | "meta" | "super" | "win" => chord.meta = true,
-            _ => return None,
-        }
-    }
-    chord.key = match config.key.trim().to_ascii_lowercase().as_str() {
-        "tab" => Some(MacosShortcutKey::Tab),
-        "a-z0-9" | "alnum" => Some(MacosShortcutKey::Alnum),
-        "$same" | "same" => Some(MacosShortcutKey::Same),
-        _ => return None,
-    };
-    Some(chord)
-}
-
-#[cfg(target_os = "macos")]
-fn has_supported_macos_keymap_modes(modes: &[String]) -> bool {
-    modes.is_empty()
-        || modes.iter().any(|mode| {
-            matches!(
-                mode.trim().to_ascii_lowercase().as_str(),
-                "all" | "legacy" | "map" | "translate"
-            )
-        })
-}
-
-#[cfg(target_os = "macos")]
-fn has_supported_macos_keymap_hold_until(config: &HerbinMacosShortcutEndpointConfig) -> bool {
-    config
-        .hold_until
-        .as_deref()
-        .map(|hold_until| {
-            matches!(
-                hold_until.trim().to_ascii_lowercase().as_str(),
-                "source_modifiers_released"
-            )
-        })
-        .unwrap_or(true)
-}
-
-#[cfg(target_os = "macos")]
-fn parse_macos_shortcut_rule_config(
-    config: &HerbinMacosKeymapRuleConfig,
-) -> Option<MacosShortcutRule> {
-    if !has_supported_macos_keymap_modes(&config.modes)
-        || !has_supported_macos_keymap_hold_until(&config.to)
-    {
-        return None;
-    }
-    let rule = MacosShortcutRule {
-        from: parse_macos_shortcut_endpoint_config(&config.from)?,
-        to: parse_macos_shortcut_endpoint_config(&config.to)?,
-    };
-    if is_supported_macos_shortcut_rule(&rule) {
-        Some(rule)
-    } else {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn load_macos_shortcut_rules_from_json_file() -> Option<Vec<MacosShortcutRule>> {
-    let path = herbin_macos_keymap_path();
-    if !path.exists() {
-        return None;
-    }
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(raw) => raw,
-        Err(err) => {
-            log::warn!(
-                "failed to read Herbin macOS keymap {}: {}",
-                path.display(),
-                err
-            );
-            return None;
-        }
-    };
-    let config = match serde_json::from_str::<HerbinMacosKeymapConfig>(&raw) {
-        Ok(config) => config,
-        Err(err) => {
-            log::warn!(
-                "failed to parse Herbin macOS keymap {}: {}",
-                path.display(),
-                err
-            );
-            return None;
-        }
-    };
-    if !config.enabled {
-        return Some(Vec::new());
-    }
-    Some(
-        config
-            .rules
-            .iter()
-            .filter_map(parse_macos_shortcut_rule_config)
-            .collect(),
-    )
-}
-
-#[cfg(target_os = "macos")]
-fn configured_macos_shortcut_rules() -> Vec<MacosShortcutRule> {
-    if let Some(rules) = load_macos_shortcut_rules_from_json_file() {
-        return rules;
-    }
-    let configured = Config::get_option(HERBIN_MACOS_KEYMAP_OPTION);
-    let raw = configured.trim();
-    let raw_lower = raw.to_ascii_lowercase();
-    if matches!(raw_lower.as_str(), "off" | "none" | "disabled") {
-        return Vec::new();
-    }
-    let raw = if raw.is_empty() {
-        DEFAULT_HERBIN_MACOS_KEYMAP
-    } else {
-        raw
-    };
-    raw.split(|c| c == ';' || c == ',' || c == '\n')
-        .filter_map(|entry| parse_macos_shortcut_rule(entry.trim()))
-        .collect()
-}
-
-#[cfg(target_os = "macos")]
-fn choose_macos_shortcut_rule(
-    rules: &[MacosShortcutRule],
-    key: MacosShortcutKey,
-    has_shift: bool,
-) -> Option<MacosShortcutRule> {
-    rules
-        .iter()
-        .copied()
-        .find(|rule| rule.from.shift == has_shift && macos_shortcut_key_matches(rule.from.key, key))
-        .or_else(|| {
-            rules
-                .iter()
-                .copied()
-                .find(|rule| !rule.from.shift && macos_shortcut_key_matches(rule.from.key, key))
-        })
-}
-
-#[cfg(target_os = "macos")]
-fn macos_shortcut_key_matches(
-    rule_key: Option<MacosShortcutKey>,
-    event_key: MacosShortcutKey,
-) -> bool {
-    match rule_key {
-        Some(MacosShortcutKey::Alnum) => is_macos_shortcut_alnum_key(event_key),
-        Some(key) => key == event_key,
-        None => false,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn macos_event_has_modifier(evt: &KeyEvent, left: ControlKey, right: ControlKey) -> bool {
-    evt.modifiers
-        .iter()
-        .any(|modifier| modifier.value() == left.value() || modifier.value() == right.value())
-}
-
-#[cfg(target_os = "macos")]
-fn macos_event_has_ctrl_or_meta_modifier(evt: &KeyEvent) -> bool {
-    macos_event_has_modifier(evt, ControlKey::Control, ControlKey::RControl)
-        || macos_event_has_modifier(evt, ControlKey::Meta, ControlKey::RWin)
-}
-
-#[cfg(target_os = "macos")]
-fn macos_control_key_to_shortcut_key(value: i32) -> Option<MacosShortcutKey> {
-    if value == ControlKey::Alt.value() {
-        Some(MacosShortcutKey::Alt)
-    } else if value == ControlKey::RAlt.value() {
-        Some(MacosShortcutKey::RAlt)
-    } else if value == ControlKey::Shift.value() {
-        Some(MacosShortcutKey::Shift)
-    } else if value == ControlKey::RShift.value() {
-        Some(MacosShortcutKey::RShift)
-    } else if value == ControlKey::Control.value() {
-        Some(MacosShortcutKey::Control)
-    } else if value == ControlKey::RControl.value() {
-        Some(MacosShortcutKey::RControl)
-    } else if value == ControlKey::Meta.value() {
-        Some(MacosShortcutKey::Meta)
-    } else if value == ControlKey::RWin.value() {
-        Some(MacosShortcutKey::RWin)
-    } else if value == ControlKey::Tab.value() {
-        Some(MacosShortcutKey::Tab)
-    } else {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn macos_raw_keycode_to_shortcut_key(code: u32) -> Option<MacosShortcutKey> {
-    match code {
-        MACOS_VK_OPTION => Some(MacosShortcutKey::Alt),
-        MACOS_VK_RIGHT_OPTION => Some(MacosShortcutKey::RAlt),
-        MACOS_VK_SHIFT => Some(MacosShortcutKey::Shift),
-        MACOS_VK_RIGHT_SHIFT => Some(MacosShortcutKey::RShift),
-        MACOS_VK_CONTROL => Some(MacosShortcutKey::Control),
-        MACOS_VK_RIGHT_CONTROL => Some(MacosShortcutKey::RControl),
-        MACOS_VK_COMMAND => Some(MacosShortcutKey::Meta),
-        MACOS_VK_RIGHT_COMMAND => Some(MacosShortcutKey::RWin),
-        MACOS_VK_TAB => Some(MacosShortcutKey::Tab),
-        _ if is_macos_alnum_raw_keycode(code) => Some(MacosShortcutKey::Raw(code)),
-        _ => None,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn macos_event_shortcut_key(evt: &KeyEvent) -> Option<MacosShortcutKey> {
-    match evt.union {
-        Some(key_event::Union::ControlKey(ck)) => macos_control_key_to_shortcut_key(ck.value()),
-        Some(key_event::Union::Chr(code)) if is_legacy_mode(evt) => {
-            macos_legacy_chr_to_shortcut_key(code)
-        }
-        Some(key_event::Union::Chr(code)) => macos_raw_keycode_to_shortcut_key(code),
-        _ => None,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn macos_legacy_chr_to_shortcut_key(code: u32) -> Option<MacosShortcutKey> {
-    char::from_u32(code)
-        .and_then(|ch| macos_ascii_alnum_to_raw_keycode(ch.to_ascii_lowercase()))
-        .map(MacosShortcutKey::Raw)
-}
-
-#[cfg(target_os = "macos")]
-fn is_macos_shortcut_alnum_key(key: MacosShortcutKey) -> bool {
-    matches!(key, MacosShortcutKey::Raw(code) if is_macos_alnum_raw_keycode(code))
-}
-
-#[cfg(target_os = "macos")]
-fn is_macos_alnum_raw_keycode(code: u32) -> bool {
-    matches!(
-        code,
-        0x00 | 0x01
-            | 0x02
-            | 0x03
-            | 0x04
-            | 0x05
-            | 0x06
-            | 0x07
-            | 0x08
-            | 0x09
-            | 0x0B
-            | 0x0C
-            | 0x0D
-            | 0x0E
-            | 0x0F
-            | 0x10
-            | 0x11
-            | 0x12
-            | 0x13
-            | 0x14
-            | 0x15
-            | 0x16
-            | 0x17
-            | 0x19
-            | 0x1A
-            | 0x1C
-            | 0x1D
-            | 0x1F
-            | 0x20
-            | 0x22
-            | 0x23
-            | 0x25
-            | 0x26
-            | 0x28
-            | 0x2D
-            | 0x2E
-    )
-}
-
-#[cfg(target_os = "macos")]
-fn macos_ascii_alnum_to_raw_keycode(ch: char) -> Option<u32> {
-    match ch {
-        'a' => Some(0x00),
-        's' => Some(0x01),
-        'd' => Some(0x02),
-        'f' => Some(0x03),
-        'h' => Some(0x04),
-        'g' => Some(0x05),
-        'z' => Some(0x06),
-        'x' => Some(0x07),
-        'c' => Some(0x08),
-        'v' => Some(0x09),
-        'b' => Some(0x0B),
-        'q' => Some(0x0C),
-        'w' => Some(0x0D),
-        'e' => Some(0x0E),
-        'r' => Some(0x0F),
-        'y' => Some(0x10),
-        't' => Some(0x11),
-        '1' => Some(0x12),
-        '2' => Some(0x13),
-        '3' => Some(0x14),
-        '4' => Some(0x15),
-        '6' => Some(0x16),
-        '5' => Some(0x17),
-        '9' => Some(0x19),
-        '7' => Some(0x1A),
-        '8' => Some(0x1C),
-        '0' => Some(0x1D),
-        'o' => Some(0x1F),
-        'u' => Some(0x20),
-        'i' => Some(0x22),
-        'p' => Some(0x23),
-        'l' => Some(0x25),
-        'j' => Some(0x26),
-        'k' => Some(0x28),
-        'n' => Some(0x2D),
-        'm' => Some(0x2E),
-        _ => None,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn update_macos_shortcut_source_state(
-    state: &mut MacosShortcutRemapState,
-    key: MacosShortcutKey,
-    down: bool,
-) {
-    match key {
-        MacosShortcutKey::Alt => state.alt_down = down,
-        MacosShortcutKey::RAlt => state.ralt_down = down,
-        MacosShortcutKey::Shift => state.shift_down = down,
-        MacosShortcutKey::RShift => state.rshift_down = down,
-        MacosShortcutKey::Control => state.control_down = down,
-        MacosShortcutKey::RControl => state.rcontrol_down = down,
-        MacosShortcutKey::Meta => state.meta_down = down,
-        MacosShortcutKey::RWin => state.rwin_down = down,
-        MacosShortcutKey::Tab
-        | MacosShortcutKey::Alnum
-        | MacosShortcutKey::Same
-        | MacosShortcutKey::Raw(_) => {}
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn resolve_macos_shortcut_target_key(
-    target_key: MacosShortcutKey,
-    source_key: MacosShortcutKey,
-) -> Option<MacosShortcutKey> {
-    match target_key {
-        MacosShortcutKey::Same => Some(source_key),
-        MacosShortcutKey::Tab | MacosShortcutKey::Raw(_) => Some(target_key),
-        _ => None,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn emit_macos_shortcut_key(en: &mut Enigo, key: MacosShortcutKey, down: bool) {
-    let key = match key {
-        MacosShortcutKey::Tab => Key::Tab,
-        MacosShortcutKey::Raw(code) => Key::Raw(code as u16),
-        _ => return,
-    };
-    if down {
-        en.key_down(key).ok();
-    } else {
-        en.key_up(key);
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn add_macos_shortcut_target_flags(
-    en: &mut Enigo,
-    target_ctrl: bool,
-    target_meta: bool,
-    target_shift: bool,
-) {
-    if target_ctrl {
-        en.add_flag(&Key::Control);
-        en.key_down(Key::Control).ok();
-    }
-    if target_meta {
-        en.add_flag(&Key::Meta);
-        en.key_down(Key::Meta).ok();
-    }
-    if target_shift {
-        en.add_flag(&Key::Shift);
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn press_macos_shortcut_key(
-    target_key: MacosShortcutKey,
-    target_ctrl: bool,
-    target_meta: bool,
-    target_shift: bool,
-) {
-    set_last_legacy_mode(true);
-    let mut en = ENIGO.lock().unwrap();
-    en.reset_flag();
-    en.key_up(Key::Alt);
-    en.key_up(Key::RightAlt);
-    add_macos_shortcut_target_flags(&mut en, target_ctrl, target_meta, target_shift);
-    emit_macos_shortcut_key(&mut en, target_key, true);
-}
-
-#[cfg(target_os = "macos")]
-fn release_macos_shortcut_key(
-    target_key: MacosShortcutKey,
-    target_ctrl: bool,
-    target_meta: bool,
-    target_shift: bool,
-) {
-    set_last_legacy_mode(true);
-    let mut en = ENIGO.lock().unwrap();
-    en.reset_flag();
-    add_macos_shortcut_target_flags(&mut en, target_ctrl, target_meta, target_shift);
-    emit_macos_shortcut_key(&mut en, target_key, false);
-    en.reset_flag();
-}
-
-#[cfg(target_os = "macos")]
-fn release_macos_shortcut_remap() {
-    let (target_key, target_key_down, target_ctrl, target_meta, target_shift) = {
-        let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-        let target = (
-            state.target_key,
-            state.target_key_down,
-            state.target_ctrl_down,
-            state.target_meta_down,
-            state.target_shift,
-        );
-        *state = MacosShortcutRemapState::default();
-        target
-    };
-    record_pressed_key(KeysDown::EnigoKey(ControlKey::Alt.value() as u64), false);
-    record_pressed_key(KeysDown::EnigoKey(ControlKey::RAlt.value() as u64), false);
-    record_pressed_key(KeysDown::EnigoKey(ControlKey::Tab.value() as u64), false);
-    if target_key.is_none() && !target_ctrl && !target_meta {
-        return;
-    }
-
-    set_last_legacy_mode(true);
-    let mut en = ENIGO.lock().unwrap();
-    en.reset_flag();
-    add_macos_shortcut_target_flags(&mut en, target_ctrl, target_meta, target_shift);
-    if target_key_down {
-        if let Some(target_key) = target_key {
-            emit_macos_shortcut_key(&mut en, target_key, false);
-        }
-    }
-    en.reset_flag();
-    if target_ctrl {
-        en.key_up(Key::Control);
-    }
-    if target_meta {
-        en.key_up(Key::Meta);
-    }
-    en.key_up(Key::Alt);
-    en.key_up(Key::RightAlt);
-}
-
-#[cfg(target_os = "macos")]
-fn try_remap_macos_shortcut(evt: &KeyEvent) -> bool {
-    let key = match macos_event_shortcut_key(evt) {
-        Some(key) => key,
-        None => return false,
-    };
-    let rules = configured_macos_shortcut_rules();
-    let remap_is_active = {
-        let state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-        state.remap_active()
-    };
-    if rules.is_empty() && !remap_is_active {
-        return false;
-    }
-
-    match key {
-        MacosShortcutKey::Alt | MacosShortcutKey::RAlt => {
-            let should_release = {
-                let state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-                !evt.down && state.remap_active()
-            };
-            if should_release {
-                release_macos_shortcut_remap();
-                return true;
-            }
-
-            let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-            update_macos_shortcut_source_state(&mut state, key, evt.down);
-            false
-        }
-        MacosShortcutKey::Shift
-        | MacosShortcutKey::RShift
-        | MacosShortcutKey::Control
-        | MacosShortcutKey::RControl
-        | MacosShortcutKey::Meta
-        | MacosShortcutKey::RWin => {
-            let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-            update_macos_shortcut_source_state(&mut state, key, evt.down);
-            false
-        }
-        MacosShortcutKey::Tab | MacosShortcutKey::Raw(_) => {
-            if evt.down {
-                let (target_key, target_ctrl, target_meta, target_shift) = {
-                    let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-                    let has_alt = state.source_alt_down()
-                        || macos_event_has_modifier(evt, ControlKey::Alt, ControlKey::RAlt);
-                    let has_shift = state.source_shift_down()
-                        || macos_event_has_modifier(evt, ControlKey::Shift, ControlKey::RShift);
-                    let has_ctrl_or_meta = state.source_ctrl_or_meta_down()
-                        || macos_event_has_ctrl_or_meta_modifier(evt);
-                    let Some(rule) = choose_macos_shortcut_rule(&rules, key, has_shift) else {
-                        return false;
-                    };
-                    if !has_alt || has_ctrl_or_meta {
-                        return false;
-                    }
-                    let Some(to_key) = rule.to.key else {
-                        return false;
-                    };
-                    let Some(target_key) = resolve_macos_shortcut_target_key(to_key, key) else {
-                        return false;
-                    };
-                    let target_shift = has_shift || rule.to.shift;
-                    state.source_key = Some(key);
-                    state.target_key = Some(target_key);
-                    state.target_key_down = true;
-                    state.target_ctrl_down = rule.to.ctrl;
-                    state.target_meta_down = rule.to.meta;
-                    state.target_shift = target_shift;
-                    (target_key, rule.to.ctrl, rule.to.meta, target_shift)
-                };
-                press_macos_shortcut_key(target_key, target_ctrl, target_meta, target_shift);
-                true
-            } else {
-                let (target_key, target_ctrl, target_meta, target_shift) = {
-                    let mut state = HERBIN_MACOS_SHORTCUT_REMAP_STATE.lock().unwrap();
-                    if state.source_key != Some(key) || !state.remap_active() {
-                        return false;
-                    }
-                    let Some(target_key) = state.target_key else {
-                        return false;
-                    };
-                    state.target_key_down = false;
-                    (
-                        target_key,
-                        state.target_ctrl_down,
-                        state.target_meta_down,
-                        state.target_shift,
-                    )
-                };
-                release_macos_shortcut_key(target_key, target_ctrl, target_meta, target_shift);
-                true
-            }
-        }
-        MacosShortcutKey::Alnum | MacosShortcutKey::Same => false,
-    }
-}
-
 fn legacy_keyboard_mode(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut to_release: Vec<Key> = Vec::new();
 
     let mut en = ENIGO.lock().unwrap();
-
     sync_modifiers(&mut en, &evt, &mut to_release);
 
     let down = evt.down;
@@ -3073,11 +2251,6 @@ fn is_legacy_mode(evt: &KeyEvent) -> bool {
 
 pub fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
-        return;
-    }
-
-    #[cfg(target_os = "macos")]
-    if try_remap_macos_shortcut(evt) {
         return;
     }
 
