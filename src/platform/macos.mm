@@ -140,11 +140,6 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
         CFIndex windowCount = CFArrayGetCount(windowList);
         for (CFIndex index = 0; index < windowCount; ++index) {
             NSDictionary *window = (NSDictionary *)CFArrayGetValueAtIndex(windowList, index);
-            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
-            if (layer == nil || layer.intValue != 0) {
-                continue;
-            }
-
             NSNumber *alpha = [window objectForKey:(id)kCGWindowAlpha];
             if (alpha != nil && alpha.doubleValue <= 0.01) {
                 continue;
@@ -162,6 +157,13 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
             if (owner == nil) {
                 continue;
             }
+            NSRunningApplication *ownerApplication =
+                [NSRunningApplication runningApplicationWithProcessIdentifier:owner.intValue];
+            if ([ownerApplication.bundleIdentifier isEqualToString:@"com.apple.dock"]) {
+                continue;
+            }
+
+            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
             ownerPid = owner.intValue;
             if (layerOut != NULL && layer != nil) {
                 *layerOut = layer.intValue;
@@ -177,7 +179,7 @@ extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
     @autoreleasepool {
         int32_t layer = -1;
         int32_t targetPid = MacWindowOwnerPidAtPoint(x, y, &layer);
-        if (targetPid <= 0 || layer != 0 || targetPid == MacFrontmostApplicationPid()) {
+        if (targetPid <= 0 || targetPid == MacFrontmostApplicationPid()) {
             return 0;
         }
 
@@ -185,6 +187,9 @@ extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
             [NSRunningApplication runningApplicationWithProcessIdentifier:targetPid];
         if (application == nil || application.terminated) {
             return -1;
+        }
+        if (application.activationPolicy != NSApplicationActivationPolicyRegular) {
+            return 0;
         }
 
         BOOL activated = [application activateWithOptions:(NSApplicationActivationOptions)0];
