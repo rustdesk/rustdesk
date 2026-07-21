@@ -3510,3 +3510,196 @@ mod test {
         assert!(select_server_uid_for_user_main_ipc(&[501, 502], None, false).is_err());
     }
 }
+
+// Pure-userspace coverage for the bespoke `_drm` SCM_RIGHTS framing (review 6). The wire format is
+// hand-rolled (length prefix + an fd bound to the frame's first byte) because `Framed`/`BytesCodec`
+// cannot carry ancillary data, so it gets direct tests over a socketpair instead of only live runs.
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+mod drm_conn_tests {
+    use super::*;
+    use hbb_common::libc;
+    use hbb_common::tokio::{self, io::AsyncWriteExt};
+    use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    // A blocking pipe as a probe fd: (read end, write end). Both are CLOEXEC-agnostic OwnedFds.
+    fn pipe() -> (OwnedFd, OwnedFd) {
+        let mut fds = [0 as libc::c_int; 2];
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0, "pipe() failed");
+        unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) }
+    }
+
+    // Raw sendmsg carrying `fds` in a single SCM_RIGHTS cmsg, used to forge the surplus-fd / MSG_CTRUNC
+    // case the safe API cannot express (it sends at most one).
+    unsafe fn send_with_fds(sock: libc::c_int, data: &[u8], fds: &[libc::c_int]) -> isize {
+        let mut iov = libc::iovec {
+            iov_base: data.as_ptr() as *mut libc::c_void,
+            iov_len: data.len(),
+        };
+        let fdbytes = fds.len() * std::mem::size_of::<libc::c_int>();
+        let space = libc::CMSG_SPACE(fdbytes as u32) as usize;
+        let mut cbuf = vec![0u8; space];
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cbuf.as_mut_ptr() as *mut libc::c_void;
+        msg.msg_controllen = space as _;
+        let cmsg = libc::CMSG_FIRSTHDR(&msg);
+        (*cmsg).cmsg_level = libc::SOL_SOCKET;
+        (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+        (*cmsg).cmsg_len = libc::CMSG_LEN(fdbytes as u32) as _;
+        std::ptr::copy_nonoverlapping(fds.as_ptr() as *const u8, libc::CMSG_DATA(cmsg), fdbytes);
+        libc::sendmsg(sock, &msg, 0)
+    }
+
+    // A control message with no fd round-trips intact and reports no ancillary fd.
+    #[tokio::test]
+    async fn roundtrip_msg_no_fd() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut tx = DrmConn::new(a);
+        let mut rx = DrmConn::new(b);
+        tx.send_msg(&Data::DrmFrame { width: 1920, height: 1080 }, None)
+            .await
+            .unwrap();
+        let (data, fd) = rx.recv_msg().await.unwrap();
+        assert!(matches!(
+            data,
+            Data::DrmFrame {
+                width: 1920,
+                height: 1080
+            }
+        ));
+        assert!(fd.is_none(), "no fd was sent, none must be reported");
+    }
+
+    // An fd bound to a frame's first byte crosses via SCM_RIGHTS and refers to the SAME open file: a
+    // byte written into the original write end is readable through the received (dup'd) read end.
+    #[tokio::test]
+    async fn roundtrip_msg_with_fd_identity() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut tx = DrmConn::new(a);
+        let mut rx = DrmConn::new(b);
+        let (rd, wr) = pipe();
+        tx.send_msg(&Data::DrmFrame { width: 4, height: 4 }, Some(rd.as_fd()))
+            .await
+            .unwrap();
+        let (_data, fd) = rx.recv_msg().await.unwrap();
+        let recv_fd = fd.expect("an fd was attached, it must be received");
+        let sentinel = [0xABu8];
+        assert_eq!(
+            unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
+            1
+        );
+        let mut got = [0u8; 1];
+        assert_eq!(
+            unsafe { libc::read(recv_fd.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) },
+            1
+        );
+        assert_eq!(got[0], 0xAB, "received fd must be the same pipe");
+    }
+
+    // A raw length-prefixed body (cursor / CPU-fallback path) round-trips byte-for-byte.
+    #[tokio::test]
+    async fn roundtrip_raw_body() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut tx = DrmConn::new(a);
+        let mut rx = DrmConn::new(b);
+        let body = Bytes::from(vec![7u8; 5000]);
+        tx.send_raw(body.clone()).await.unwrap();
+        let got = rx.next_raw().await.unwrap();
+        assert_eq!(&got[..], &body[..]);
+    }
+
+    // A forged length prefix past the JSON cap is rejected at the prefix, before any body allocation.
+    #[tokio::test]
+    async fn rejects_oversized_length_prefix() {
+        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut rx = DrmConn::new(b);
+        let bogus = (MAX_DRM_JSON_BYTES as u32 + 1).to_be_bytes();
+        a.write_all(&bogus).await.unwrap();
+        let err = rx
+            .recv_msg()
+            .await
+            .err()
+            .expect("a length past the cap must be rejected");
+        assert!(
+            err.to_string().contains("exceeds cap"),
+            "unexpected error: {err}"
+        );
+    }
+
+    // A peer that packs more than one fd into a single SCM_RIGHTS cmsg (the safe API never does) must
+    // not smuggle extra fds into the consumer: drm_recvmsg keeps the FIRST and closes the rest. The
+    // frame otherwise decodes normally and the kept fd is the first one sent. (Two fds fit the control
+    // buffer thanks to cmsg alignment slack, so this exercises the surplus path, not truncation.)
+    #[tokio::test]
+    async fn surplus_fds_keep_only_the_first() {
+        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut rx = DrmConn::new(b);
+        let (rd, wr) = pipe();
+        let (rd2, _wr2) = pipe();
+        let payload = serde_json::to_vec(&Data::DrmFrame {
+            width: 8,
+            height: 8,
+        })
+        .unwrap();
+        let prefix = (payload.len() as u32).to_be_bytes();
+        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &[rd.as_raw_fd(), rd2.as_raw_fd()]) };
+        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
+        a.write_all(&payload).await.unwrap();
+        let (data, fd) = rx.recv_msg().await.unwrap();
+        assert!(matches!(
+            data,
+            Data::DrmFrame {
+                width: 8,
+                height: 8
+            }
+        ));
+        let kept = fd.expect("the first surplus fd must be kept");
+        let sentinel = [0x5Au8];
+        assert_eq!(
+            unsafe { libc::write(wr.as_raw_fd(), sentinel.as_ptr() as *const libc::c_void, 1) },
+            1
+        );
+        let mut got = [0u8; 1];
+        assert_eq!(
+            unsafe { libc::read(kept.as_raw_fd(), got.as_mut_ptr() as *mut libc::c_void, 1) },
+            1
+        );
+        assert_eq!(got[0], 0x5A, "the kept fd must be the FIRST one sent");
+    }
+
+    // Enough fds to overflow the receiver's control buffer and force truncation. drm_recvmsg reads
+    // into a DRM_CMSG_CAP (64-byte) control buffer, which holds up to 12 fds (CMSG_LEN(48)=64); 16 fds
+    // need CMSG_LEN(64)=80 > 64, so the kernel sets MSG_CTRUNC and recv_msg must fail rather than
+    // proceed with silently dropped fd(s).
+    #[tokio::test]
+    async fn rejects_truncated_control_message() {
+        let (a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut rx = DrmConn::new(b);
+        let (rd, _wr) = pipe();
+        let dups: Vec<OwnedFd> = (0..16).map(|_| rd.try_clone().unwrap()).collect();
+        let fds: Vec<libc::c_int> = dups.iter().map(|f| f.as_raw_fd()).collect();
+        let prefix = 0u32.to_be_bytes(); // the fds ride the prefix read; CTRUNC fires before any body
+        let n = unsafe { send_with_fds(a.as_raw_fd(), &prefix, &fds) };
+        assert!(n >= 0, "sendmsg failed: {}", std::io::Error::last_os_error());
+        let err = rx
+            .recv_msg()
+            .await
+            .err()
+            .expect("a truncated control message must be rejected");
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("truncat") || msg.contains("ctrunc"),
+            "unexpected error: {err}"
+        );
+    }
+
+    // SO_PEERCRED plumbing: over a socketpair both ends report the creating process euid, so the
+    // producer-auth path (connect_drm requires peer_uid == 0) reads a real uid rather than None.
+    #[test]
+    fn peer_uid_from_fd_reads_socket_peer() {
+        let (a, _b) = std::os::unix::net::UnixStream::pair().unwrap();
+        let euid = unsafe { libc::geteuid() };
+        assert_eq!(peer_uid_from_fd(a.as_raw_fd()), Some(euid));
+    }
+}
