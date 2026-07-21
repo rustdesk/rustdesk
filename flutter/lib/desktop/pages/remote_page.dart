@@ -89,6 +89,14 @@ class _RemotePageState extends State<RemotePage>
   Timer? _timer;
   String keyboardMode = "legacy";
   bool _isWindowBlur = false;
+  // Known macOS remote-input trade-offs (kept simple intentionally):
+  // 1. Dialogs rely on FocusNode loss plus middleBlocked, not mirrored dialog
+  //    state. Reproduce: activate remote input, open a dialog, then type.
+  // 2. Delayed fullscreen recovery can race a local-control focus change; no
+  //    owner state is added. Reproduce: focus the toolbar during a Space switch.
+  // 3. Input-source switching releases native input without updating this
+  //    page's cache. Reproduce: switch sources, then type before and after
+  //    clicking the remote image; the click reasserts input.
   // These latches compensate for out-of-order macOS focus events. Treat them
   // as coupled when changing a transition or _syncMacOSKeyboardGrab().
   AppLifecycleState? _macOSLifecycleState;
