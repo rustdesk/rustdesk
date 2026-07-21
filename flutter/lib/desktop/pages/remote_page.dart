@@ -336,6 +336,7 @@ class _RemotePageState extends State<RemotePage>
     final shouldFocus = lifecycleAllowsInput &&
         _isMacOSKeyboardContextActive &&
         !_macOSInputSuppressed &&
+        _blockableOverlayState.middleBlocked.isFalse &&
         _cursorOverImage.value &&
         !_macOSLocalFocusLost;
     final hasFocus = _rawKeyFocusNode.hasPrimaryFocus;
@@ -378,8 +379,9 @@ class _RemotePageState extends State<RemotePage>
         allowHiddenLifecycle &&
         stateGlobal.fullscreen.isTrue &&
         contextActive;
-    final canRestore =
-        contextActive && (_cursorOverImage.value || shouldInferPointerInside);
+    final canRestore = contextActive &&
+        _blockableOverlayState.middleBlocked.isFalse &&
+        (_cursorOverImage.value || shouldInferPointerInside);
     if (!_macOSFullScreenFocusRecovery.consume(generation)) return;
     if (!canRestore) {
       // Consuming recovery here requires a later pointer/window/tab event.
@@ -508,9 +510,12 @@ class _RemotePageState extends State<RemotePage>
     if (_ffi.inputModel.relativeMouseMode.value) {
       if (isMacOS) {
         // Native relative mode retains pointer capture and does not emit
-        // PointerEnter after window focus returns, so restore both latches.
-        _cursorOverImage.value = true;
-        _macOSLocalFocusLost = false;
+        // PointerEnter after window focus returns. Restore both latches unless
+        // a local overlay still owns input.
+        if (_blockableOverlayState.middleBlocked.isFalse) {
+          _cursorOverImage.value = true;
+          _macOSLocalFocusLost = false;
+        }
       } else {
         _rawKeyFocusNode.requestFocus();
       }
