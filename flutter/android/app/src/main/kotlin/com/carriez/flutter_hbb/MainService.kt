@@ -254,7 +254,9 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        FFI.startServer(configPath, "")
+        val homePath = applicationContext.getExternalFilesDir(null)?.absolutePath
+            ?: applicationContext.filesDir.absolutePath
+        FFI.startServer(configPath, homePath, "")
 
         createForegroundNotification()
     }

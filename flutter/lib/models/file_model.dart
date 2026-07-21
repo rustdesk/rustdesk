@@ -1809,7 +1809,7 @@ class PathUtil {
   }
 
   static bool validName(String name, bool isWindows) {
-    final unixFileNamePattern = RegExp(r'^[^/\0]+$');
+    final unixFileNamePattern = RegExp(r'^[^/\x00]+$');
     final windowsFileNamePattern = RegExp(r'^[^<>:"/\\|?*]+$');
     final reg = isWindows ? windowsFileNamePattern : unixFileNamePattern;
     return reg.hasMatch(name);
