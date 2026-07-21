@@ -1207,6 +1207,21 @@ pub fn handle_mouse_(
     }
 }
 
+#[cfg(target_os = "macos")]
+fn log_macos_click_focus(phase: &str, conn: i32, x: i32, y: i32) {
+    let snapshot = crate::platform::macos::mouse_focus_snapshot(x, y);
+    log::info!(
+        "[macos-focus-trace] phase={} conn={} x={} y={} frontmost_pid={} target_pid={} target_layer={}",
+        phase,
+        conn,
+        x,
+        y,
+        snapshot.frontmost_pid,
+        snapshot.target_pid,
+        snapshot.target_layer,
+    );
+}
+
 pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     if !active_mouse_(conn) {
         return;
@@ -1285,7 +1300,17 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         }
         MOUSE_TYPE_DOWN => match buttons {
             MOUSE_BUTTON_LEFT => {
+                #[cfg(target_os = "macos")]
+                let click_position = crate::get_cursor_pos();
+                #[cfg(target_os = "macos")]
+                if let Some((x, y)) = click_position {
+                    log_macos_click_focus("before_down", conn, x, y);
+                }
                 allow_err!(en.mouse_down(MouseButton::Left));
+                #[cfg(target_os = "macos")]
+                if let Some((x, y)) = click_position {
+                    log_macos_click_focus("after_down", conn, x, y);
+                }
             }
             MOUSE_BUTTON_RIGHT => {
                 allow_err!(en.mouse_down(MouseButton::Right));
@@ -1304,6 +1329,14 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         MOUSE_TYPE_UP => match buttons {
             MOUSE_BUTTON_LEFT => {
                 en.mouse_up(MouseButton::Left);
+                #[cfg(target_os = "macos")]
+                if let Some((x, y)) = crate::get_cursor_pos() {
+                    log_macos_click_focus("after_up", conn, x, y);
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(120));
+                        log_macos_click_focus("settled", conn, x, y);
+                    });
+                }
             }
             MOUSE_BUTTON_RIGHT => {
                 en.mouse_up(MouseButton::Right);

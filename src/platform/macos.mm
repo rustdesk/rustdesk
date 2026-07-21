@@ -116,6 +116,59 @@ extern "C" bool MacCheckAdminAuthorization() {
     return Elevate(NULL, NULL);
 }
 
+extern "C" int32_t MacFrontmostApplicationPid() {
+    @autoreleasepool {
+        NSRunningApplication *application = [[NSWorkspace sharedWorkspace] frontmostApplication];
+        return application == nil ? -1 : application.processIdentifier;
+    }
+}
+
+extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOut) {
+    @autoreleasepool {
+        if (layerOut != NULL) {
+            *layerOut = -1;
+        }
+        CGWindowListOption options = static_cast<CGWindowListOption>(
+            kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements);
+        CFArrayRef windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID);
+        if (windowList == NULL) {
+            return -1;
+        }
+
+        CGPoint point = CGPointMake(x, y);
+        int32_t ownerPid = -1;
+        CFIndex windowCount = CFArrayGetCount(windowList);
+        for (CFIndex index = 0; index < windowCount; ++index) {
+            NSDictionary *window = (NSDictionary *)CFArrayGetValueAtIndex(windowList, index);
+            NSNumber *alpha = [window objectForKey:(id)kCGWindowAlpha];
+            if (alpha != nil && alpha.doubleValue <= 0.01) {
+                continue;
+            }
+
+            NSDictionary *boundsDictionary = [window objectForKey:(id)kCGWindowBounds];
+            CGRect bounds = CGRectZero;
+            if (boundsDictionary == nil ||
+                !CGRectMakeWithDictionaryRepresentation((CFDictionaryRef)boundsDictionary, &bounds) ||
+                !CGRectContainsPoint(bounds, point)) {
+                continue;
+            }
+
+            NSNumber *owner = [window objectForKey:(id)kCGWindowOwnerPID];
+            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
+            if (owner == nil) {
+                continue;
+            }
+            ownerPid = owner.intValue;
+            if (layerOut != NULL && layer != nil) {
+                *layerOut = layer.intValue;
+            }
+            break;
+        }
+        CFRelease(windowList);
+        return ownerPid;
+    }
+}
+
 // https://gist.github.com/briankc/025415e25900750f402235dbf1b74e42
 extern "C" float BackingScaleFactor(uint32_t display) {
     NSArray<NSScreen *> *screens = [NSScreen screens];
