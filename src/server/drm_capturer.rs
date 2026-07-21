@@ -375,20 +375,37 @@ async fn recv_thread(
                 height,
                 hotx,
                 hoty,
-            } => match conn.next_raw().await {
-                Ok(raw) => set_drm_cursor(
-                    display,
-                    DrmCursorData {
-                        id,
-                        width: width as i32,
-                        height: height as i32,
-                        hotx,
-                        hoty,
-                        colors: raw.to_vec(),
-                    },
-                ),
-                Err(err) => break format!("cursor body: {err}"),
-            },
+            } => {
+                // get_cursor_data() hands `colors` straight to the client, which renders
+                // width*height*4 RGBA bytes. Require the body to carry at least that many so a short
+                // body cannot make the client read past the buffer. A hidden-cursor sentinel arrives
+                // as 0x0 with an empty body, for which `need` is 0 and this check is a no-op.
+                let need = (width as usize)
+                    .saturating_mul(height as usize)
+                    .saturating_mul(4);
+                match conn.next_raw().await {
+                    Ok(raw) => {
+                        if raw.len() < need {
+                            break format!(
+                                "cursor body {} bytes < {need} for {width}x{height}",
+                                raw.len()
+                            );
+                        }
+                        set_drm_cursor(
+                            display,
+                            DrmCursorData {
+                                id,
+                                width: width as i32,
+                                height: height as i32,
+                                hotx,
+                                hoty,
+                                colors: raw.to_vec(),
+                            },
+                        );
+                    }
+                    Err(err) => break format!("cursor body: {err}"),
+                }
+            }
             // Live hotplug: the service pushed a fresh display list after a connector-topology change.
             // Swap it into the sticky positive availability cache directly (no re-probe over `_drm`, so
             // this never trips the wayland::clear() re-probe restart loop). A subsequent
