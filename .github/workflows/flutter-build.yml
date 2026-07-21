@@ -1736,7 +1736,9 @@ jobs:
               # empty by the time build.py runs), so build.py picks up this prebuilt
               # .so via DRMTAP_PREBUILT_DIR instead of rebuilding from source.
               meson setup third_party/libdrmtap/build-pkg third_party/libdrmtap --buildtype=release
-              meson compile -C third_party/libdrmtap/build-pkg drmtap
+              # Explicit shared_library target: libdrmtap is `both_libraries` since 0.4.11, so the
+              # bare `drmtap` target is ambiguous (shared vs static). rustdesk dlopens the .so only.
+              meson compile -C third_party/libdrmtap/build-pkg drmtap:shared_library
               mkdir -p "$PWD/prebuilt-libdrmtap"
               find third_party/libdrmtap/build-pkg -maxdepth 1 -name 'libdrmtap.so.0.*' -type f \
                 -exec cp -a {} "$PWD/prebuilt-libdrmtap/" \;
