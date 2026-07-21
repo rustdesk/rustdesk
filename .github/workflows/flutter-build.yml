@@ -1702,11 +1702,13 @@ jobs:
               # exported so build.py reuses the exact same source. We clone + build
               # the .so here and hand it to build.py via DRMTAP_PREBUILT_DIR, because
               # a later build step in this container disturbs the working tree.
-              # DRMTAP_REF is an EXACT release tag (vX.Y.Z), NOT a branch: the bundled
-              # .so version must match the `libdrmtap-sys = "=0.4.13"` crate pin in
-              # libs/scrap/Cargo.toml (the loader only checks ABI-major). Bump both together.
+              # DRMTAP_REF is an EXACT release tag (vX.Y.Z), NOT a branch, and it is verified
+              # against the pinned immutable commit DRMTAP_SHA after clone (below). The drm backend
+              # has NO libdrmtap-sys Cargo dependency: rustdesk dlopens this .so at runtime
+              # (drmtap_dl.rs checks ABI-major). Keep DRMTAP_SHA in sync with the tag on every bump.
               export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
               export DRMTAP_REF="v0.4.13"
+              export DRMTAP_SHA="${DRMTAP_SHA:-c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a}"
               # Guard: refuse a loose/branch ref so a moving `main` can never silently
               # regress the pin. Only an EXACT vX.Y.Z tag is accepted (a strict anchored
               # match, so values like v0.4.13-ci or a branch that resolves under
@@ -1718,6 +1720,13 @@ jobs:
               rm -rf third_party/libdrmtap
               git clone --depth 1 --branch "$DRMTAP_REF" "$DRMTAP_REPO" third_party/libdrmtap
               test -f third_party/libdrmtap/meson.build || { echo "FATAL: libdrmtap source missing"; exit 1; }
+              # Pin the immutable commit, not only the tag name: `git clone --branch` follows a
+              # mutable tag, so a moved or compromised v0.4.13 could swap the root-loaded .so while
+              # the regex above still passes. Verify the cloned HEAD is exactly the pinned SHA.
+              got_sha="$(git -C third_party/libdrmtap rev-parse HEAD)"
+              if [ "$got_sha" != "$DRMTAP_SHA" ]; then
+                echo "FATAL: libdrmtap $DRMTAP_REF resolved to $got_sha, expected $DRMTAP_SHA (moved/compromised tag?)"; exit 1
+              fi
               # Build libdrmtap.so now, while the cloned source is definitely
               # present, and stash the real object OUTSIDE the source tree. A later
               # build step in this container disturbs that working tree (it ends up
