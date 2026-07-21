@@ -2753,9 +2753,14 @@ impl DrmConn {
     }
 
     /// Cancel-safe timeout wrapper around `recv_msg`, mirroring `ConnectionTmpl::next_timeout2`, so a
-    /// dropped consumer re-checks its `stop` flag between frames. `None` on timeout. The timeout gates
-    /// ONLY the wait for the first byte (`readable()` consumes nothing), so a fired timeout leaves the
-    /// stream at a clean frame boundary and never strands a partial frame or its fd.
+    /// dropped consumer re-checks its `stop` flag between frames. `None` when no frame started within
+    /// the window (a clean boundary: `readable()` consumes nothing, so re-polling is safe). Once a byte
+    /// is available the frame has started, so the SAME budget also bounds the body read: a peer that
+    /// sends one byte then stalls cannot pin this task forever (the `readable()` gate alone does not
+    /// cover the length prefix or payload). A body that overruns the budget is a hard error, not a
+    /// `None`, because the frame is partially consumed and cannot be safely resumed -- the caller tears
+    /// the stream down. `recv_msg` bodies are small length-prefixed JSON (<= MAX_DRM_JSON_BYTES), well
+    /// under any caller's budget over a local socket, so this never trips a healthy peer.
     pub async fn recv_msg_timeout2(
         &mut self,
         ms_timeout: u64,
@@ -2764,9 +2769,14 @@ impl DrmConn {
         // at the `;` (releasing `&self.stream`) BEFORE `recv_msg()` takes `&mut self` in an arm.
         let ready = timeout(ms_timeout, self.stream.readable()).await;
         match ready {
-            Err(_) => None, // timed out at a frame boundary
+            Err(_) => None, // no frame started: clean boundary, caller re-checks `stop`
             Ok(Err(e)) => Some(Err(e.into())),
-            Ok(Ok(())) => Some(self.recv_msg().await),
+            Ok(Ok(())) => match timeout(ms_timeout, self.recv_msg()).await {
+                Ok(res) => Some(res),
+                Err(_) => Some(Err(anyhow::anyhow!(
+                    "drm: frame body stalled past {ms_timeout}ms after first byte; closing"
+                ))),
+            },
         }
     }
 
