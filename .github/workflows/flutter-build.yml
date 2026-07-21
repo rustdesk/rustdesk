@@ -1712,35 +1712,34 @@ jobs:
               apt-get install -y ninja-build libdrm-dev libegl1-mesa-dev libgles2-mesa-dev python3-pip
               python3 -m pip install --upgrade pip
               python3 -m pip install 'meson>=0.57,<0.62'
-              # libdrmtap is sourced by cloning the rustdesk-org fork at a pinned
+              # libdrmtap is sourced by cloning the maintainer-owned rustdesk-org repo at a pinned
               # ref (it is no longer a git submodule). DRMTAP_REPO / DRMTAP_REF are
               # exported so build.py reuses the exact same source. We clone + build
               # the .so here and hand it to build.py via DRMTAP_PREBUILT_DIR, because
               # a later build step in this container disturbs the working tree.
-              # DRMTAP_REF is an EXACT release tag (vX.Y.Z), NOT a branch, and it is verified
-              # against the pinned immutable commit DRMTAP_SHA after clone (below). The drm backend
-              # has NO libdrmtap-sys Cargo dependency: rustdesk dlopens this .so at runtime
-              # (drmtap_dl.rs checks ABI-major). Keep DRMTAP_SHA in sync with the tag on every bump.
-              # Source-of-truth fork that publishes the pinned tag (rustdesk-org syncs from it; switch
-              # this once rustdesk-org carries v0.4.13).
-              export DRMTAP_REPO="https://github.com/fxd0h/libdrmtap"
-              export DRMTAP_REF="v0.4.13"
-              # Literal (not overridable by an inherited env var) so the tag/commit pair is immutable in CI.
+              # rustdesk-org has no release tag yet, so DRMTAP_REF tracks `main` and the exact commit
+              # is pinned by DRMTAP_SHA, verified after clone (below): a moving `main` fails the build
+              # instead of silently swapping the root-loaded .so. The drm backend has NO libdrmtap-sys
+              # Cargo dependency: rustdesk dlopens this .so at runtime (drmtap_dl.rs checks ABI-major).
+              # Keep DRMTAP_SHA in sync on every bump; switch DRMTAP_REF to an immutable vX.Y.Z tag if
+              # rustdesk-org later publishes one.
+              export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
+              export DRMTAP_REF="main"
+              # Literal (not overridable by an inherited env var) so the ref/commit pair is immutable in CI.
               export DRMTAP_SHA="c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a"
-              # Guard: refuse a loose/branch ref so a moving `main` can never silently
-              # regress the pin. Only an EXACT vX.Y.Z tag is accepted (a strict anchored
-              # match, so values like v0.4.13-ci or a branch that resolves under
-              # `git clone --branch` are rejected).
-              if ! printf '%s' "$DRMTAP_REF" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-                echo "FATAL: DRMTAP_REF must be a pinned vX.Y.Z tag, got '$DRMTAP_REF'"; exit 1
+              # Guard: accept only an exact vX.Y.Z tag OR the literal `main`, so a random/loose branch
+              # is still rejected; the DRMTAP_SHA check below is the real anchor (it fails the build if
+              # `main` -- or a tag -- resolves to anything other than the pinned immutable commit).
+              if ! printf '%s' "$DRMTAP_REF" | grep -qE '^(v[0-9]+\.[0-9]+\.[0-9]+|main)$'; then
+                echo "FATAL: DRMTAP_REF must be a pinned vX.Y.Z tag or main, got '$DRMTAP_REF'"; exit 1
               fi
               git config --global --add safe.directory '*' || true
               rm -rf third_party/libdrmtap
               git clone --depth 1 --branch "$DRMTAP_REF" "$DRMTAP_REPO" third_party/libdrmtap
               test -f third_party/libdrmtap/meson.build || { echo "FATAL: libdrmtap source missing"; exit 1; }
-              # Pin the immutable commit, not only the tag name: `git clone --branch` follows a
-              # mutable tag, so a moved or compromised v0.4.13 could swap the root-loaded .so while
-              # the regex above still passes. Verify the cloned HEAD is exactly the pinned SHA.
+              # Pin the immutable commit, not only the ref name: `git clone --branch` follows a mutable
+              # ref (a branch like `main` even more than a tag), so a moved or compromised ref could
+              # swap the root-loaded .so while the regex above still passes. Verify HEAD is the pinned SHA.
               got_sha="$(git -C third_party/libdrmtap rev-parse HEAD)"
               if [ "$got_sha" != "$DRMTAP_SHA" ]; then
                 echo "FATAL: libdrmtap $DRMTAP_REF resolved to $got_sha, expected $DRMTAP_SHA (moved/compromised tag?)"; exit 1
