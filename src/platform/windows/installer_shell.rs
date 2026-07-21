@@ -135,23 +135,36 @@ pub(super) fn path_for_cmd_environment(path: &Path) -> ResultType<&str> {
     Ok(value)
 }
 
+// Bootstrap assignments are parsed before DisableDelayedExpansion takes effect.
+// Escape carets first so `^!` preserves each literal exclamation mark.
 pub(super) fn path_for_cmd_assignment(path: &Path) -> ResultType<String> {
-    Ok(path_for_cmd_environment(path)?.replace('^', "^^"))
+    Ok(path_for_cmd_environment(path)?
+        .replace('^', "^^")
+        .replace('!', "^!"))
 }
 
 pub(super) fn trusted_install_environment() -> ResultType<String> {
     let system = get_system_executable("")?;
     let program_data = get_known_folder(&FOLDERID_ProgramData)?;
     let public = get_known_folder(&FOLDERID_Public)?;
+    trusted_install_environment_from_paths(&system, &program_data, &public)
+}
+
+pub(super) fn trusted_install_environment_from_paths(
+    system: &Path,
+    program_data: &Path,
+    public: &Path,
+) -> ResultType<String> {
     let windows = system
         .parent()
         .ok_or_else(|| anyhow!("System directory has no parent"))?;
     let cmd = system.join(CMD_RELATIVE_PATH);
-    let system = path_for_cmd_assignment(&system)?;
-    let windows = path_for_cmd_assignment(windows)?;
-    let cmd = path_for_cmd_assignment(&cmd)?;
-    let program_data = path_for_cmd_assignment(&program_data)?;
-    let public = path_for_cmd_assignment(&public)?;
+    // These paths are parsed once from the protected BAT, with delayed expansion disabled.
+    let system = path_for_cmd_environment(system)?;
+    let windows = path_for_cmd_environment(windows)?;
+    let cmd = path_for_cmd_environment(&cmd)?;
+    let program_data = path_for_cmd_environment(program_data)?;
+    let public = path_for_cmd_environment(public)?;
     Ok(format!(
         "set \"ComSpec={cmd}\" & set \"PATH={system}\" & \
          set \"SystemRoot={windows}\" & set \"WINDIR={windows}\" & \

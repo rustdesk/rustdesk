@@ -51,7 +51,8 @@ impl Drop for InstallCommandScript {
 
 fn prepare_install_commands(commands: &str) -> ResultType<String> {
     let commands = commands.replace("\r\n", "\n").replace('\n', "\r\n");
-    let chcp = path_for_cmd_assignment(&get_system_executable(CHCP_RELATIVE_PATH)?)?;
+    let chcp_path = get_system_executable(CHCP_RELATIVE_PATH)?;
+    let chcp = path_for_cmd_environment(&chcp_path)?;
     Ok(format!(
         "@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\n\
          \"{chcp}\" {UTF8_CODE_PAGE} > nul || exit /b \
@@ -111,13 +112,14 @@ pub(super) fn verified_install_bootstrap(
     let findstr = path_for_cmd_assignment(&findstr_path)?;
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
-         set \"Q={cmd}\" & set \"C=0\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
+         set \"Q={cmd}\" & set \"H={certutil}\" & set \"F={findstr}\" & \
+         set \"C=0\" & set \"E=0\" & setlocal EnableDelayedExpansion & \
          if exist \"!R!\" (set \"E={INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE}\") else (\
          set \"C=1\" & copy /Y \"!S!\" \"!R!\" > nul || \
          (set \"E={INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE}\") & \
-         if \"!E!\"==\"0\" (\"{certutil}\" -hashfile \"!R!\" SHA256 > \"!R!.hash\" || \
+         if \"!E!\"==\"0\" (\"!H!\" -hashfile \"!R!\" SHA256 > \"!R!.hash\" || \
          set \"E={INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE}\") & \
-         if \"!E!\"==\"0\" (\"{findstr}\" /R /I /X /C:\"{}\" \"!R!.hash\" > nul || \
+         if \"!E!\"==\"0\" (\"!F!\" /R /I /X /C:\"{}\" \"!R!.hash\" > nul || \
          set \"E={INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE}\") & \
          if \"!E!\"==\"0\" (\"!Q!\" /D /E:ON /V:OFF /C \"\"!R!\"\" & \
          set \"E=!errorlevel!\")) & \
@@ -168,11 +170,23 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::super::installer_shell::{
-        embedded_shortcut_commands, shortcut_bytes, WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS,
+        embedded_shortcut_commands, shortcut_bytes, trusted_install_environment_from_paths,
+        WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS,
     };
     use super::*;
     use ::windows::Win32::System::Threading;
     use std::os::windows::process::CommandExt;
+
+    #[test]
+    fn protected_batch_environment_preserves_carets() {
+        let environment = trusted_install_environment_from_paths(
+            Path::new(r"C:\Win^Root\System32"),
+            Path::new(r"C:\Program^Data"),
+            Path::new(r"C:\Users\Pub^lic"),
+        )
+        .expect("protected batch environment should be generated");
+        assert!(environment.contains(r#"set "PATH=C:\Win^Root\System32""#));
+    }
 
     #[test]
     fn native_install_handoff_verifies_before_execution() {
@@ -181,7 +195,7 @@ mod tests {
             uuid::Uuid::new_v4().simple()
         ));
         let runner_dir = std::env::temp_dir().join(format!(
-            "rustdesk_install_!&^@()runner_{}",
+            "rustdesk_install_!RUSTDESK_HANDOFF_EXPAND!&^@()runner_{}",
             uuid::Uuid::new_v4().simple()
         ));
         std::fs::create_dir(&runner_dir).expect("runner directory should be created");
@@ -262,7 +276,8 @@ mod tests {
         let mut command = std::process::Command::new(cmd);
         command
             .env("PROGRAMDATA", "rustdesk_untrusted")
-            .env("PUBLIC", "rustdesk_untrusted");
+            .env("PUBLIC", "rustdesk_untrusted")
+            .env("RUSTDESK_HANDOFF_EXPAND", "expanded");
         command.raw_arg(format!("/D /E:ON /V:ON /C {bootstrap}"));
         command
             .creation_flags(Threading::CREATE_NO_WINDOW.0)
