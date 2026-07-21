@@ -1305,6 +1305,17 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
                 #[cfg(target_os = "macos")]
                 if let Some((x, y)) = click_position {
                     log_macos_click_focus("before_down", conn, x, y);
+                    let activation_result =
+                        crate::platform::macos::activate_application_at_point(x, y);
+                    if activation_result != 0 {
+                        log::info!(
+                            "[macos-focus-trace] phase=activation_requested conn={} x={} y={} result={}",
+                            conn,
+                            x,
+                            y,
+                            activation_result,
+                        );
+                    }
                 }
                 allow_err!(en.mouse_down(MouseButton::Left));
                 #[cfg(target_os = "macos")]

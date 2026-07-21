@@ -68,6 +68,7 @@ extern "C" {
     fn IsCanScreenRecording(_: BOOL) -> BOOL;
     fn CanUseNewApiForScreenCaptureCheck() -> BOOL;
     fn MacCheckAdminAuthorization() -> BOOL;
+    fn MacActivateApplicationAtPoint(x: f64, y: f64) -> i32;
     fn MacFrontmostApplicationPid() -> i32;
     fn MacWindowOwnerPidAtPoint(x: f64, y: f64, layer: *mut i32) -> i32;
     fn MacGetModeNum(display: u32, numModes: *mut u32) -> BOOL;
@@ -106,6 +107,10 @@ pub fn mouse_focus_snapshot(x: i32, y: i32) -> MouseFocusSnapshot {
             target_layer,
         }
     })
+}
+
+pub fn activate_application_at_point(x: i32, y: i32) -> i32 {
+    autoreleasepool(|| unsafe { MacActivateApplicationAtPoint(x as f64, y as f64) })
 }
 
 pub fn is_process_trusted(prompt: bool) -> bool {

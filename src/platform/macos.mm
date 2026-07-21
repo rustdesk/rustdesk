@@ -140,6 +140,11 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
         CFIndex windowCount = CFArrayGetCount(windowList);
         for (CFIndex index = 0; index < windowCount; ++index) {
             NSDictionary *window = (NSDictionary *)CFArrayGetValueAtIndex(windowList, index);
+            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
+            if (layer == nil || layer.intValue != 0) {
+                continue;
+            }
+
             NSNumber *alpha = [window objectForKey:(id)kCGWindowAlpha];
             if (alpha != nil && alpha.doubleValue <= 0.01) {
                 continue;
@@ -154,7 +159,6 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
             }
 
             NSNumber *owner = [window objectForKey:(id)kCGWindowOwnerPID];
-            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
             if (owner == nil) {
                 continue;
             }
@@ -166,6 +170,25 @@ extern "C" int32_t MacWindowOwnerPidAtPoint(double x, double y, int32_t *layerOu
         }
         CFRelease(windowList);
         return ownerPid;
+    }
+}
+
+extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
+    @autoreleasepool {
+        int32_t layer = -1;
+        int32_t targetPid = MacWindowOwnerPidAtPoint(x, y, &layer);
+        if (targetPid <= 0 || layer != 0 || targetPid == MacFrontmostApplicationPid()) {
+            return 0;
+        }
+
+        NSRunningApplication *application =
+            [NSRunningApplication runningApplicationWithProcessIdentifier:targetPid];
+        if (application == nil || application.terminated) {
+            return -1;
+        }
+
+        BOOL activated = [application activateWithOptions:(NSApplicationActivationOptions)0];
+        return activated ? targetPid : -targetPid;
     }
 }
 
