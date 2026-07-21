@@ -1177,6 +1177,19 @@ pub fn handle_mouse_(
     simulate: bool,
     _show_cursor: bool,
 ) {
+    #[cfg(target_os = "macos")]
+    log::info!(
+        "[macos-input-trace] protocol conn={} type={} buttons={} x={} y={} modifiers={:?} simulate={} show_cursor={}",
+        conn,
+        evt.mask & MOUSE_TYPE_MASK,
+        evt.mask >> 3,
+        evt.x,
+        evt.y,
+        evt.modifiers,
+        simulate,
+        _show_cursor,
+    );
+
     if simulate {
         handle_mouse_simulation_(evt, conn);
     }
