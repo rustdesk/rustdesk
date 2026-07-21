@@ -4486,16 +4486,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libdrmtap-sys"
-version = "0.4.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6c52136bd2bf94bb1071f3926eff327148faddc704338f3fca473e1d1974723"
-dependencies = [
- "cc",
- "pkg-config",
-]
-
-[[package]]
 name = "libgit2-sys"
 version = "0.14.2+1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7620,7 +7610,6 @@ dependencies = [
  "hwcodec",
  "jni",
  "lazy_static",
- "libdrmtap-sys",
  "log",
  "ndk 0.7.0",
  "ndk-context",

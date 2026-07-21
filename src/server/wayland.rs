@@ -206,7 +206,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -248,6 +247,12 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                     lock.insert(idx, cap_display_info as u64);
                 }
+                // Mark PipeWire initialized only AFTER every per-display capturer was created and
+                // stored. Setting it earlier meant a partial failure above (a `Capturer::new` error
+                // propagated by `?`) returned Err with the flag already true, so the next check_init
+                // saw "initialized", skipped re-init, and left CAP_DISPLAY_INFO empty (no capture).
+                // This matters more now that the per-display DRM->PipeWire fallback funnels through here.
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }

@@ -11,11 +11,13 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "zbus"]
-# `drm` pulls in the exact-pinned `libdrmtap-sys` crate (see the Linux target table below). rustdesk
-# still dlopen's `libdrmtap.so.0` at runtime (`drmtap_dl.rs`) rather than link-time linking it, so the
-# graceful PipeWire fallback when the .so/EGL is absent is preserved; the crate is pinned purely so its
-# committed Cargo.lock checksum supply-chain-pins the vendored source that build.py bundles.
-drm = ["dep:libdrmtap-sys"]
+# `drm` is a pure runtime-dlopen backend: rustdesk loads `libdrmtap.so.0` at runtime (`drmtap_dl.rs`)
+# and NEVER link-time links it, so the graceful PipeWire fallback when the .so or EGL is absent is
+# preserved and the drm build pulls in no libdrm/seccomp/cap/EGL link-time deps. The .so is version
+# pinned by build.py's `DRMTAP_REF = v0.4.13` (an exact release tag, not `main`). We deliberately do
+# NOT depend on the `libdrmtap-sys` crate: its build.rs statically compiles the whole libdrmtap C tree
+# and a CAP_SYS_ADMIN helper and emits `-ldrm -lseccomp -lcap`, which would defeat the dlopen model.
+drm = []
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -63,16 +65,6 @@ gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
 zbus = { version = "3.15", optional = true }
-# libdrmtap ABI, pinned EXACTLY (the leading `=` blocks ^0.4.x semver drift). This is the ONLY
-# supply-chain pin for libdrmtap: the committed Cargo.lock `checksum` for this exact version pins the
-# bytes, so `cargo build --locked` refuses a tampered/republished 0.4.13. It must move in lockstep
-# with build.py's `DRMTAP_REF = v0.4.13` (the bundled runtime .so) — the loader only checks ABI-major.
-# NOTE for the integrator: after this edit the lockfile MUST be regenerated + committed with
-#   cargo update -p libdrmtap-sys --precise 0.4.13
-# so Cargo.lock gains the `[[package]] libdrmtap-sys 0.4.13 checksum=<sha256>` block (this stage does
-# not run cargo). `=0.4.13` alone is a version requirement, not a byte pin — the checksum is the pin.
-libdrmtap-sys = { version = "=0.4.13", optional = true }
-
 [dependencies.hwcodec]
 git = "https://github.com/rustdesk-org/hwcodec"
 optional = true

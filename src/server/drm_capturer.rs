@@ -249,24 +249,29 @@ async fn recv_thread(
             return;
         }
     };
-    if let Err(err) = conn.send_msg(&Data::DrmStart { display }, None).await {
+    // Open the unprivileged render-node convert context ONCE, on THIS thread, BEFORE the handshake; it
+    // is dropped on this same thread when the loop exits (its EGL state + import-once cache are
+    // thread-local). `None` means no usable render node (a locked-down seat, or an old `.so` without
+    // the split symbols): we then ask the service for the CPU-converted `DrmFrame` path via
+    // `need_cpu`, so a render-node-less seat still captures instead of the service streaming a dma-buf
+    // fd we cannot detile (which would lose the stream and force a PipeWire fallback nobody may be
+    // present to approve on an unattended seat).
+    let mut converter = RenderConverter::open_render();
+    let need_cpu = converter.is_none();
+    if need_cpu {
+        log::info!(
+            "drm: no render-node convert context (drmtap_open_render failed or old .so); \
+             requesting the CPU-converted frame path for this stream"
+        );
+    }
+    if let Err(err) = conn
+        .send_msg(&Data::DrmStart { display, need_cpu }, None)
+        .await
+    {
         let _ = tx.send(Err(err));
         return;
     }
     let _ = tx.send(Ok(displays));
-
-    // Open the unprivileged render-node convert context ONCE, on THIS thread; it is dropped on this
-    // same thread when the loop exits (its EGL state + import-once cache are thread-local). `None`
-    // means no usable render node (a locked-down seat, or an old `.so` without the split symbols): the
-    // CPU-fallback `DrmFrame` path still works, but a `DrmFrameDmabuf` we cannot convert ends the
-    // stream so the caller falls back (PipeWire per-display).
-    let mut converter = RenderConverter::open_render();
-    if converter.is_none() {
-        log::info!(
-            "drm: no render-node convert context (drmtap_open_render failed or old .so); \
-             only the CPU-fallback frame path will work on this stream"
-        );
-    }
 
     // Stream until stopped or the connection ends. Poll the header read with a short timeout (rather
     // than blocking indefinitely) so a dropped capturer re-checks `stop` and tears down promptly even
@@ -337,15 +342,33 @@ async fn recv_thread(
             }
             // CPU-fallback path (old `.so` / no transferable dma-buf): the producer packed BGRA and
             // sent it over the wire after the header. Store it as-is (BGRA); no convert needed.
-            Data::DrmFrame { width, height } => match conn.next_raw().await {
-                Ok(raw) => {
-                    let mut slot = shared.slot.lock().unwrap();
-                    slot.latest =
-                        Some((width as usize, height as usize, Pixfmt::BGRA, raw.to_vec()));
-                    shared.cv.notify_one();
+            Data::DrmFrame { width, height } => {
+                // Reject degenerate geometry before it reaches the slot: `frame()` hands this to
+                // PixelBuffer::new which derives the stride as `data.len() / height`, so height==0
+                // would divide by zero, and a zero width is meaningless. Require the body to hold at
+                // least width*height*4 BGRA bytes so a short body cannot misframe downstream.
+                if width == 0 || height == 0 {
+                    break format!("cpu frame: degenerate geometry {width}x{height}");
                 }
-                Err(err) => break format!("frame body: {err}"),
-            },
+                let need = (width as usize)
+                    .saturating_mul(height as usize)
+                    .saturating_mul(4);
+                match conn.next_raw().await {
+                    Ok(raw) => {
+                        if raw.len() < need {
+                            break format!(
+                                "cpu frame: body {} bytes < {need} for {width}x{height}",
+                                raw.len()
+                            );
+                        }
+                        let mut slot = shared.slot.lock().unwrap();
+                        slot.latest =
+                            Some((width as usize, height as usize, Pixfmt::BGRA, raw.to_vec()));
+                        shared.cv.notify_one();
+                    }
+                    Err(err) => break format!("frame body: {err}"),
+                }
+            }
             Data::DrmCursor {
                 id,
                 width,
