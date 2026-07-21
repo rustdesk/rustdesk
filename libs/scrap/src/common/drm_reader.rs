@@ -301,25 +301,13 @@ impl DrmReader {
                     format!("DRM scanout geometry {w}x{h} out of range"),
                 ));
             }
-            // fourcc gate (see grab()): reject a scanout the converter could not
-            // present as BGRA. 0/unknown is allowed here — an older .so may not set
-            // it, and the converter reads `frame.format` authoritatively per frame.
-            const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
-            const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
-            if desc.format != 0
-                && desc.format != DRM_FORMAT_XRGB8888
-                && desc.format != DRM_FORMAT_ARGB8888
-            {
-                log::warn!(
-                    "DRM scanout fourcc {:#010x} is not BGRA-compatible; falling back",
-                    desc.format
-                );
-                (self.lib.frame_release)(self.ctx, &mut frame);
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "unsupported DRM scanout format",
-                ));
-            }
+            // NO fourcc restriction on the export side. Unlike the CPU-mapped grab() (which returns a
+            // ready-to-encode BGRA buffer and so must reject a format it cannot present), grab_desc
+            // exports the RAW scanout dma-buf and the unprivileged converter (drmtap_convert_dmabuf)
+            // handles every format libdrmtap supports -- XRGB8888/ARGB8888, 10-bit XR30/AR30 (tone
+            // mapped), HDR and CCS-compressed -- down to linear RGBA, exactly as the old grab_mapped
+            // did internally. Gating on the raw fourcc here wrongly dropped a convertible scanout
+            // (e.g. XR30 = 0x30335258, a 10-bit primary that is common on modern Intel/AMD).
             // num_planes must index offsets/pitches (0 is treated as 1 per the ABI).
             let planes = if desc.num_planes == 0 { 1 } else { desc.num_planes };
             if planes > 4 {
