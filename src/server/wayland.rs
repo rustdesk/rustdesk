@@ -206,6 +206,7 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 super::display_service::check_update_displays(&all);
@@ -228,20 +229,14 @@ pub(super) async fn check_init() -> ResultType<()> {
                     num_cpus::get()
                 );
 
-                // Create every per-display capturer FIRST into owned temporary storage, so a failure
-                // partway does not publish a partial set. If `Capturer::new` errors, the `?` returns
-                // and the already-staged capturers drop cleanly (no leaked raw pointers, and
-                // CAP_DISPLAY_INFO stays empty so the next check_init retries instead of seeing a
-                // non-empty map and skipping re-init).
-                let mut staged = Vec::with_capacity(num);
+                // Create individual CapDisplayInfo for each display with its own capturer
                 for (idx, display) in all.into_iter().enumerate() {
-                    let capturer = Capturer::new(display)
-                        .with_context(|| format!("Failed to create capturer for display {}", idx))?;
-                    staged.push((idx, capturer));
-                }
-                // All capturers created: publish them atomically.
-                for (idx, capturer) in staged {
-                    let capturer = CapturerPtr(Box::into_raw(Box::new(capturer)));
+                    let capturer =
+                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
+                            format!("Failed to create capturer for display {}", idx)
+                        })?));
+                    let capturer = CapturerPtr(capturer);
+
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                         rects: rects.clone(),
                         displays: displays.clone(),
@@ -250,12 +245,9 @@ pub(super) async fn check_init() -> ResultType<()> {
                         current: idx,
                         capturer,
                     }));
+
                     lock.insert(idx, cap_display_info as u64);
                 }
-                // Mark PipeWire initialized only AFTER the full set was published, so a partial
-                // failure above leaves the flag false and the next check_init retries. This matters
-                // more now that the per-display DRM->PipeWire fallback funnels through here.
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }
@@ -372,20 +364,17 @@ pub(super) fn get_capturer_for_display(
         }
     }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    // DRM and PipeWire do NOT share a display-index space: DRM enumerates one entry per connector
-    // (0..N), while the portal/PipeWire ScreenCast commonly enumerates a SINGLE whole-desktop stream
-    // (index 0). So when a per-display DRM capture is demoted to PipeWire for a non-primary DRM index
-    // that PipeWire cannot serve, `cap_map.get(&display_idx)` is None. Bailing here returned an Err
-    // that ServiceTmpl::run retries every MAX_ERROR_TIMEOUT (1s) forever — the multi-monitor restart
-    // loop. Degrade to the whole-desktop stream (index 0) that PipeWire does provide instead: the
-    // user sees that monitor's content within the desktop stream rather than a 1s spin. Healthy DRM
-    // displays never reach here (they return above).
-    let addr = cap_map
-        .get(&display_idx)
-        .or_else(|| cap_map.get(&0))
-        .copied();
-    if let Some(addr) = addr {
-        let cap_display_info: *const CapDisplayInfo = addr as _;
+    // Serve ONLY the exact PipeWire entry for this index. Do NOT fall back to another index's
+    // `CapDisplayInfo`: `CapturerPtr` is a bare `*mut Capturer` cloned by raw-pointer copy, so aliasing
+    // one entry to two `display_idx` values would let two video-service threads call `frame()` on the
+    // same `Recorder` with no lock (data race / UB), and it would also mis-map input against the wrong
+    // rect. DRM and PipeWire do not share an index space (the portal often exposes one whole-desktop
+    // stream at index 0), so a demoted non-primary DRM index has no PipeWire entry here; that case is
+    // handled at the source by dropping the demoted display from the advertised list (see
+    // drm_capturer demotion) so the client re-enumerates against a consistent list, rather than being
+    // papered over with a shared/mismatched capturer.
+    if let Some(addr) = cap_map.get(&display_idx) {
+        let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
