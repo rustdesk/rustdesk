@@ -206,12 +206,6 @@ mod tests {
             "test.lnk",
             "test",
         );
-        assert!(shortcut_commands.contains("certutil"));
-        assert!(shortcut_commands.contains("-decode"));
-        assert!(!shortcut_commands.to_ascii_lowercase().contains("cscript"));
-        assert!(!shortcut_commands
-            .to_ascii_lowercase()
-            .contains("powershell"));
         let script = write_install_script(format!(
             "if \"%PROGRAMDATA%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
              if \"%PUBLIC%\"==\"rustdesk_untrusted\" exit /b 77\r\n\
@@ -222,19 +216,7 @@ mod tests {
         .expect("install script should be created");
         let bootstrap = verified_install_bootstrap(&script, &runner_dir)
             .expect("native verifier bootstrap should be generated");
-        let win7_hash_pattern = script
-            .expected_hash
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<Vec<_>>()
-            .join(" *");
-        assert!(bootstrap.contains(&format!("/R /I /X /C:\"{win7_hash_pattern}\"")));
-        let parameters =
-            verified_install_parameters(&script).expect("elevated parameters should be generated");
-        assert!(bootstrap.contains("certutil.exe"));
-        assert!(bootstrap.contains("findstr.exe"));
-        assert!(!bootstrap.to_ascii_lowercase().contains("powershell"));
-        assert!(parameters.encode_utf16().count() < WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS);
+        assert_native_handoff_structure(&script, &shortcut_commands, &bootstrap);
 
         let output = run_install_bootstrap_for_test(&bootstrap);
         assert!(
@@ -246,6 +228,32 @@ mod tests {
         std::fs::remove_file(&marker).expect("test marker should be removed");
         assert_replaced_install_script_is_rejected(&script, &runner_dir, &marker);
         std::fs::remove_dir(runner_dir).expect("runner directory should be empty");
+    }
+
+    fn assert_native_handoff_structure(
+        script: &InstallCommandScript,
+        shortcut_commands: &str,
+        bootstrap: &str,
+    ) {
+        assert!(shortcut_commands.contains("certutil"));
+        assert!(shortcut_commands.contains("-decode"));
+        assert!(!shortcut_commands.to_ascii_lowercase().contains("cscript"));
+        assert!(!shortcut_commands
+            .to_ascii_lowercase()
+            .contains("powershell"));
+        let win7_hash_pattern = script
+            .expected_hash
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(" *");
+        assert!(bootstrap.contains(&format!("/R /I /X /C:\"{win7_hash_pattern}\"")));
+        let parameters =
+            verified_install_parameters(script).expect("elevated parameters should be generated");
+        assert!(bootstrap.contains("certutil.exe"));
+        assert!(bootstrap.contains("findstr.exe"));
+        assert!(!bootstrap.to_ascii_lowercase().contains("powershell"));
+        assert!(parameters.encode_utf16().count() < WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS);
     }
 
     fn assert_replaced_install_script_is_rejected(
