@@ -226,6 +226,9 @@ async fn recv_thread(
     stop: Arc<AtomicBool>,
     tx: std::sync::mpsc::Sender<ResultType<Vec<DrmDisplayInfo>>>,
 ) {
+    // Unique tag for this stream's cursor entries so teardown only erases its own (see
+    // remove_drm_cursor); a rebuilt stream for the same display index gets a newer epoch.
+    let cursor_epoch = next_cursor_epoch();
     // Handshake: connect, receive the display list, request the display.
     let mut conn = match connect_drm(1000).await {
         Ok(c) => c,
@@ -393,6 +396,7 @@ async fn recv_thread(
                         }
                         set_drm_cursor(
                             display,
+                            cursor_epoch,
                             DrmCursorData {
                                 id,
                                 width: width as i32,
@@ -425,8 +429,8 @@ async fn recv_thread(
     // `IpcDrmCapturer::Drop` (which runs on the encoder thread).
     drop(converter);
     // Drop only THIS stream's cursor entry so a torn-down monitor does not erase the cursor state of
-    // other still-active streams.
-    remove_drm_cursor(display);
+    // other still-active streams, nor a replacement stream that already re-took this display index.
+    remove_drm_cursor(display, cursor_epoch);
     let mut slot = shared.slot.lock().unwrap();
     slot.ended = Some(format!("drm stream ended ({end_reason})"));
     shared.cv.notify_one();
@@ -448,14 +452,28 @@ pub struct DrmCursorData {
     pub colors: Vec<u8>,
 }
 
-static DRM_CURSOR: Mutex<BTreeMap<i32, DrmCursorData>> = Mutex::new(BTreeMap::new());
+static DRM_CURSOR: Mutex<BTreeMap<i32, (u64, DrmCursorData)>> = Mutex::new(BTreeMap::new());
+// Monotonic per-stream tag. A display index can be served by successive recv_threads (a rebuilt
+// stream reuses the index), so each cursor entry is stamped with the writing stream's epoch and a
+// torn-down stream drops its entry ONLY if the epoch still matches. Without this, a predecessor that
+// exits just after its replacement published a fresh cursor for the same index would erase it.
+static DRM_CURSOR_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
-fn set_drm_cursor(display: i32, c: DrmCursorData) {
-    DRM_CURSOR.lock().unwrap().insert(display, c);
+fn next_cursor_epoch() -> u64 {
+    DRM_CURSOR_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-fn remove_drm_cursor(display: i32) {
-    DRM_CURSOR.lock().unwrap().remove(&display);
+fn set_drm_cursor(display: i32, epoch: u64, c: DrmCursorData) {
+    DRM_CURSOR.lock().unwrap().insert(display, (epoch, c));
+}
+
+// Compare-and-remove: drop the entry only if THIS stream (epoch) still owns it. A replacement stream
+// for the same index holds a newer epoch, so a late-exiting predecessor leaves the fresh cursor intact.
+fn remove_drm_cursor(display: i32, epoch: u64) {
+    let mut map = DRM_CURSOR.lock().unwrap();
+    if map.get(&display).map(|(e, _)| *e) == Some(epoch) {
+        map.remove(&display);
+    }
 }
 
 // Pick the cursor to present: prefer the visible one (the pointer is over exactly one captured CRTC
@@ -464,8 +482,9 @@ fn remove_drm_cursor(display: i32) {
 fn pick_drm_cursor() -> Option<DrmCursorData> {
     let map = DRM_CURSOR.lock().unwrap();
     map.values()
+        .map(|(_, c)| c)
         .find(|c| c.id != scrap::drm_reader::HIDDEN_CURSOR_ID)
-        .or_else(|| map.values().next())
+        .or_else(|| map.values().map(|(_, c)| c).next())
         .cloned()
 }
 
@@ -497,12 +516,19 @@ enum ProbeState {
     // is_available): displays that appear after startup (a headless boot settling, a monitor
     // hotplug, or a --service restart) can then re-enable it without restarting the --server.
     Unavailable(Instant),
-    Available(Vec<DrmDisplayInfo>),
+    // Timestamped with the instant the list was probed. A positive verdict is sticky (DRM stays
+    // selected), but once it ages past POSITIVE_TTL is_available refreshes the list off the hot path
+    // so an idle hotplug does not leave a phantom display in enumeration. The timestamp lives in the
+    // variant so every site that publishes an Available list is forced to stamp it.
+    Available(Instant, Vec<DrmDisplayInfo>),
 }
 
 static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
 // How long a negative availability verdict is trusted before is_available re-probes.
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
+// How long a positive verdict is served before is_available kicks a background list refresh. The
+// verdict stays true across the refresh; only the cached display list is renewed.
+const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
 /// Query the service for the current DRM display list without starting a stream: connect, read the
 /// list the service sends on connect, then drop the connection (the service closes it when we do
@@ -547,7 +573,7 @@ pub(super) fn is_available() -> bool {
     // no displays at probe time can still enable DRM once displays appear (without a --server
     // restart). NEVER call the blocking probe while holding DRM_STATE: a cold or expired probe would
     // otherwise serialize every async caller for the whole query_displays() timeout (~4s).
-    {
+    let verdict = {
         let mut st = DRM_STATE.lock().unwrap();
         if let ProbeState::Unavailable(since) = &*st {
             if since.elapsed() >= NEGATIVE_TTL {
@@ -556,17 +582,28 @@ pub(super) fn is_available() -> bool {
             }
         }
         match &*st {
-            ProbeState::Available(_) => return true,
-            ProbeState::Unavailable(_) => return false,
-            ProbeState::Unknown => {} // fall through and probe with the lock released
+            // Sticky positive; refresh the list off the hot path if it has gone stale (see below).
+            ProbeState::Available(since, _) => Some((true, since.elapsed() >= POSITIVE_TTL)),
+            ProbeState::Unavailable(_) => Some((false, false)),
+            ProbeState::Unknown => None, // fall through and probe with the lock released
         }
+    };
+    if let Some((available, stale)) = verdict {
+        // A stale positive verdict re-probes on a background thread and returns the still-valid
+        // verdict immediately: never block the (often async) caller for the probe timeout, and never
+        // flip a live positive to false, which would bounce a capturing session to the portal. The
+        // refresh only replaces the list when the probe returns a non-empty set.
+        if stale {
+            refresh_available_async();
+        }
+        return available;
     }
     // Single-flight: exactly one caller probes at a time. While a probe is in flight, others return
     // the current cache-only verdict instead of stacking redundant `_drm` probes or blocking on the
     // mutex across the I/O. warm_availability normally seeds `Available` before clients connect, so
     // this cold path is rare.
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-        return matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(_));
+        return matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..));
     }
     let t = Instant::now();
     let result = query_displays();
@@ -578,7 +615,7 @@ pub(super) fn is_available() -> bool {
                 list.len(),
                 t.elapsed()
             );
-            *st = ProbeState::Available(list);
+            *st = ProbeState::Available(Instant::now(), list);
             true
         }
         Ok(_) => {
@@ -605,6 +642,34 @@ pub(super) fn is_available() -> bool {
     available
 }
 
+/// Refresh a stale positive verdict off the hot path: probe on a background thread and, on a non-empty
+/// result, renew the cached display list so enumeration stops advertising a display an idle hotplug
+/// removed. Single-flight via the same guard as the cold probe so a refresh never stacks with a probe
+/// or another refresh. It never demotes an `Available` verdict to `Unavailable` (a transient empty or
+/// failed probe must not disable a working DRM session), and it re-stamps the verdict on any completed
+/// probe so we re-probe at most once per POSITIVE_TTL even when the list is unchanged or the probe
+/// fails.
+fn refresh_available_async() {
+    if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    std::thread::spawn(|| {
+        let result = query_displays();
+        {
+            let mut st = DRM_STATE.lock().unwrap();
+            if let ProbeState::Available(since, list) = &mut *st {
+                *since = Instant::now();
+                if let Ok(fresh) = result {
+                    if !fresh.is_empty() {
+                        *list = fresh;
+                    }
+                }
+            }
+        }
+        DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+    });
+}
+
 /// Warm the availability cache at `--server` startup so the first client connection does not race a
 /// cold `_drm` probe. A cold probe blocks display enumeration, and if it has not settled when the
 /// peer info is built the display list goes out empty and the client shows "No displays" and
@@ -612,13 +677,13 @@ pub(super) fn is_available() -> bool {
 /// the positive result; a genuinely DRM-less host just falls through to the lazy `is_available()`.
 pub(super) fn warm_availability() {
     for _ in 0..10 {
-        if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(_)) {
+        if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..)) {
             return;
         }
         match query_displays() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
-                *DRM_STATE.lock().unwrap() = ProbeState::Available(list);
+                *DRM_STATE.lock().unwrap() = ProbeState::Available(Instant::now(), list);
                 return;
             }
             // Producer not ready yet (or no DRM): back off and retry; never cache a negative here.
@@ -632,7 +697,7 @@ pub(super) fn warm_availability() {
 /// (per-monitor position + scale). `None` until probed/available.
 pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     let list = match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(list) => list.clone(),
+        ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
     let multi = list.len() > 1;
@@ -665,7 +730,7 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// display whenever the primary is not connector 0.
 pub(super) fn get_primary_index() -> usize {
     let list = match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(list) => list.clone(),
+        ProbeState::Available(_, list) => list.clone(),
         _ => return 0,
     };
     let wl = scrap::wayland::display::get_displays();
@@ -754,11 +819,6 @@ fn normalize_connector(name: &str) -> String {
     }
 }
 
-/// Reset the probe cache so the next session re-probes (called on capture teardown).
-pub(super) fn clear() {
-    *DRM_STATE.lock().unwrap() = ProbeState::Unknown;
-}
-
 /// Swap the sticky positive availability cache to a freshly-enumerated display list, driven by a
 /// service-pushed `DrmDisplaysChanged` hotplug signal on a live stream. This is the off-hot-path cache
 /// refresh that keeps mid-session hotplug geometry fresh WITHOUT the blocking `_drm` re-probe that
@@ -768,9 +828,9 @@ pub(super) fn clear() {
 /// force DRM on; establishing availability stays the job of the probe path.
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
     let mut st = DRM_STATE.lock().unwrap();
-    if matches!(&*st, ProbeState::Available(_)) {
+    if matches!(&*st, ProbeState::Available(..)) {
         log::info!("drm: hotplug refresh -> {} display(s)", list.len());
-        *st = ProbeState::Available(list);
+        *st = ProbeState::Available(Instant::now(), list);
     }
 }
 
@@ -859,7 +919,7 @@ pub(super) fn get_capturer_info(
         .get(display_idx)
         .map(|di| (di.x, di.y))
         .unwrap_or((d.x, d.y));
-    *DRM_STATE.lock().unwrap() = ProbeState::Available(displays);
+    *DRM_STATE.lock().unwrap() = ProbeState::Available(Instant::now(), displays);
     Ok(super::video_service::CapturerInfo {
         origin,
         width: d.width as usize,
