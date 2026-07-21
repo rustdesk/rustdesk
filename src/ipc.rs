@@ -1566,8 +1566,17 @@ pub(crate) fn drm_ipc_path() -> String {
 /// must carry the scanout dma-buf fd as ancillary data, which the codec cannot do (see `DrmConn`).
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<DrmConn> {
+    use std::os::fd::AsRawFd;
     let path = drm_ipc_path();
     let stream = timeout(ms_timeout, tokio::net::UnixStream::connect(&path)).await??;
+    // The producer MUST be root. DRM/KMS scanout export is a root-service capability, and the DRM
+    // path outranks PipeWire (an available DRM stream suppresses the portal consent prompt), so a
+    // non-root peer that won a socket-path race must not be trusted to supply the display list,
+    // frames and an arbitrary dma-buf fd (review 4.1). The producer direction is authorized in
+    // handle_drm_conn; this closes the same gap on the consumer direction.
+    if peer_uid_from_fd(stream.as_raw_fd()) != Some(0) {
+        bail!("drm: _drm producer is not root; refusing to consume");
+    }
     Ok(DrmConn::new(stream))
 }
 
@@ -2031,6 +2040,14 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     }
     let _conn_guard = DrmConnGuard;
 
+    // Capture the peer uid now so the forward loop can RE-authorize every frame. The check above runs
+    // once at accept, but DRM/KMS capture is NOT session-scoped: `drm_capture_worker` grabs the
+    // physical scanout of a CRTC regardless of which session currently owns the display. So a stream
+    // authorized for one session must stop the moment the active session changes, or the outgoing
+    // user's --server keeps receiving the incoming user's screen (and the greeter in between) until
+    // the socket dies (review 3.3). `peer_uid` is the --server's fixed uid.
+    let peer_uid = stream.peer_uid();
+
     // Move the authorized `_drm` stream onto the bespoke SCM_RIGHTS framing (see `DrmConn`). ALL
     // further traffic — display list, `DrmStart`, frame descriptors + their ancillary fd, and the
     // cursor / CPU-fallback bodies — goes through `conn` so no `Framed` read buffer ever competes with
@@ -2107,6 +2124,18 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // reconnects to a fresh list anyway.
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     while let Some(msg) = frame_rx.recv().await {
+        // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still
+        // be the active-session uid. On a session change the outgoing --server no longer matches, so
+        // we stop within one frame (~33ms) instead of streaming the new session's screen to it. Fail
+        // closed if the peer uid cannot be determined.
+        match peer_uid {
+            Some(0) => {}
+            Some(uid) if Some(uid) == active_uid() => {}
+            _ => {
+                log::warn!("drm: _drm peer no longer matches the active session; closing");
+                break;
+            }
+        }
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
         // Keep the ledger's epoch at the live generation so a hotplug/modeset (which may recycle an
         // fb_id onto a new buffer) invalidates every cached buffer and forces a real fd on the next
