@@ -208,6 +208,15 @@ pub(crate) fn active_uid() -> Option<u32> {
     active_uid_strict()
 }
 
+/// The active session uid read ONLY from the service-loop cache, never from a fresh (blocking) seat0
+/// lookup. `None` on a cache miss. For hot, latency-sensitive, fail-closed re-auth on an async runtime
+/// thread (the `_drm` per-frame re-auth), where a blocking `loginctl` per frame would stall the stream.
+#[cfg(target_os = "linux")]
+#[inline]
+pub(crate) fn active_uid_cached() -> Option<u32> {
+    crate::platform::linux::get_active_userid_cached()
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
 pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {

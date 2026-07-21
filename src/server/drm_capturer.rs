@@ -464,7 +464,17 @@ fn next_cursor_epoch() -> u64 {
 }
 
 fn set_drm_cursor(display: i32, epoch: u64, c: DrmCursorData) {
-    DRM_CURSOR.lock().unwrap().insert(display, (epoch, c));
+    // Compare-and-set: a still-draining predecessor stream (older epoch) must not overwrite the entry a
+    // replacement stream (newer epoch) already published for the same display index -- otherwise it
+    // would re-stamp the slot with its old epoch and then delete it on teardown via remove_drm_cursor,
+    // erasing the fresh cursor. Only accept a write whose epoch is at least the stored one.
+    let mut map = DRM_CURSOR.lock().unwrap();
+    match map.get(&display) {
+        Some((stored, _)) if *stored > epoch => {}
+        _ => {
+            map.insert(display, (epoch, c));
+        }
+    }
 }
 
 // Compare-and-remove: drop the entry only if THIS stream (epoch) still owns it. A replacement stream
@@ -653,9 +663,21 @@ fn refresh_available_async() {
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
     }
-    std::thread::spawn(|| {
-        let result = query_displays();
-        {
+    // Release the single-flight guard via RAII so it clears on EVERY exit -- normal return, a panic in
+    // query_displays, or a poisoned DRM_STATE. Without this, one dropped release (e.g. the closure never
+    // runs because thread creation failed, or it unwinds) would leave the guard stuck true and freeze
+    // every future probe and refresh for the process lifetime.
+    struct ReleaseGuard;
+    impl Drop for ReleaseGuard {
+        fn drop(&mut self) {
+            DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+        }
+    }
+    let spawned = std::thread::Builder::new()
+        .name("drm-avail-refresh".into())
+        .spawn(|| {
+            let _release = ReleaseGuard;
+            let result = query_displays();
             let mut st = DRM_STATE.lock().unwrap();
             if let ProbeState::Available(since, list) = &mut *st {
                 *since = Instant::now();
@@ -665,9 +687,12 @@ fn refresh_available_async() {
                     }
                 }
             }
-        }
+        });
+    // Thread creation itself can fail (EAGAIN under thread/RLIMIT pressure); if so the closure never
+    // runs, so release the guard here instead of leaking it.
+    if spawned.is_err() {
         DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
-    });
+    }
 }
 
 /// Warm the availability cache at `--server` startup so the first client connection does not race a

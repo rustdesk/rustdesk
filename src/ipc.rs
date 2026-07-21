@@ -43,6 +43,8 @@ pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
 #[cfg(target_os = "macos")]
 use ipc_auth::authorize_user_server_process;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use ipc_auth::active_uid_cached;
 #[cfg(windows)]
 use ipc_auth::{
     authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
@@ -2124,17 +2126,22 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // reconnects to a fresh list anyway.
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
     while let Some(first) = frame_rx.recv().await {
-        // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still
-        // be the active-session uid. On a session change the outgoing --server no longer matches, so
-        // we stop within one frame (~33ms) instead of streaming the new session's screen to it. Fail
-        // closed if the peer uid cannot be determined.
-        match peer_uid {
-            Some(0) => {}
-            Some(uid) if Some(uid) == active_uid() => {}
-            _ => {
-                log::warn!("drm: _drm peer no longer matches the active session; closing");
-                break;
-            }
+        // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still be
+        // the active-session uid. Use the CACHE-ONLY active uid (never a blocking loginctl lookup): this
+        // runs on the single-threaded `_drm` runtime, so a per-frame seat0 subprocess -- which is
+        // exactly what a fresh lookup does during a session switch, when the cache is momentarily empty
+        // -- would stall every stream. A cache miss (`None`) means the active session is momentarily
+        // unknown (typically mid-switch), which we treat as fail-closed and stop. The stop latency is
+        // therefore bounded by the service loop's active-uid cache cadence (a few hundred ms), plus we
+        // stop as soon as the cache goes empty at the start of a switch.
+        let peer_ok = match peer_uid {
+            Some(0) => true,
+            Some(uid) => active_uid_cached() == Some(uid),
+            None => false,
+        };
+        if !peer_ok {
+            log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
+            break;
         }
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
         // Keep the ledger's epoch at the live generation so a hotplug/modeset (which may recycle an
@@ -2487,6 +2494,11 @@ pub struct DrmConn {
     /// Grow-once accumulation buffer for `recv_msg`/`next_raw` length-prefixed reads (preallocated
     /// model: it grows to the largest frame seen and is then reused, never per-frame reallocated).
     read_buf: Vec<u8>,
+    /// Set by `drm_read_full` once the current read has consumed at least one byte off the socket.
+    /// `recv_msg` clears it before reading, and `recv_msg_timeout2` reads it to tell a spurious
+    /// `readable()` wakeup with no frame yet (safe to re-poll -> `None`) from a peer that stalled
+    /// mid-frame after sending some bytes (unresumable -> hard error).
+    consumed: bool,
 }
 
 /// Cap on a JSON `Data` message read by `recv_msg` (headers/handshake are tiny; this only bounds a
@@ -2670,6 +2682,7 @@ async fn drm_read_full(
     stream: &tokio::net::UnixStream,
     buf: &mut [u8],
     want_cmsg: bool,
+    progress: &mut bool,
 ) -> ResultType<Option<OwnedFd>> {
     use hbb_common::libc;
     let mut off = 0usize;
@@ -2706,6 +2719,11 @@ async fn drm_read_full(
                 Err(e) => return Err(e.into()),
             }
         };
+        // Any byte off the socket commits us to this frame: a later cancellation (e.g. a recv_msg
+        // timeout) cannot be safely re-polled, since the consumed bytes are gone from the stream.
+        if n > 0 {
+            *progress = true;
+        }
         off += n;
     }
     Ok(got)
@@ -2718,6 +2736,7 @@ impl DrmConn {
         Self {
             stream,
             read_buf: Vec::new(),
+            consumed: false,
         }
     }
 
@@ -2736,8 +2755,12 @@ impl DrmConn {
     /// to the frame's first byte, rejecting `MSG_CTRUNC`), then the payload into the reusable
     /// `read_buf`. Returns the decoded `Data` and an `OwnedFd` iff one arrived.
     pub async fn recv_msg(&mut self) -> ResultType<(Data, Option<OwnedFd>)> {
+        // Clear the per-frame progress flag before the first read so recv_msg_timeout2 can tell a
+        // spurious readable() wakeup (nothing consumed) from a mid-frame stall (see its docs).
+        self.consumed = false;
         let mut prefix = [0u8; 4];
-        let fd = drm_read_full(&self.stream, &mut prefix, true).await?;
+        // Disjoint field borrows: &self.stream (read) + &mut self.consumed (progress). `prefix` is local.
+        let fd = drm_read_full(&self.stream, &mut prefix, true, &mut self.consumed).await?;
         let len = u32::from_be_bytes(prefix) as usize;
         if len > MAX_DRM_JSON_BYTES {
             // `fd` (if any) is closed on drop.
@@ -2746,21 +2769,24 @@ impl DrmConn {
         if self.read_buf.len() < len {
             self.read_buf.resize(len, 0);
         }
-        // Disjoint field borrows: &self.stream (read) + &mut self.read_buf (dest). No fd on the body.
-        drm_read_full(&self.stream, &mut self.read_buf[..len], false).await?;
+        // Disjoint field borrows: &self.stream (read) + &mut self.read_buf (dest) + &mut self.consumed.
+        // No fd on the body.
+        drm_read_full(&self.stream, &mut self.read_buf[..len], false, &mut self.consumed).await?;
         let data: Data = serde_json::from_slice(&self.read_buf[..len])?;
         Ok((data, fd))
     }
 
     /// Cancel-safe timeout wrapper around `recv_msg`, mirroring `ConnectionTmpl::next_timeout2`, so a
-    /// dropped consumer re-checks its `stop` flag between frames. `None` when no frame started within
-    /// the window (a clean boundary: `readable()` consumes nothing, so re-polling is safe). Once a byte
-    /// is available the frame has started, so the SAME budget also bounds the body read: a peer that
-    /// sends one byte then stalls cannot pin this task forever (the `readable()` gate alone does not
-    /// cover the length prefix or payload). A body that overruns the budget is a hard error, not a
-    /// `None`, because the frame is partially consumed and cannot be safely resumed -- the caller tears
-    /// the stream down. `recv_msg` bodies are small length-prefixed JSON (<= MAX_DRM_JSON_BYTES), well
-    /// under any caller's budget over a local socket, so this never trips a healthy peer.
+    /// dropped consumer re-checks its `stop` flag between frames. Returns `None` when no frame was in
+    /// progress at the deadline -- either no byte was ever readable, or `readable()` fired spuriously and
+    /// the first read found nothing -- because in that case nothing was consumed and re-polling is safe.
+    /// Once at least one byte has been consumed the frame is committed, so the SAME budget bounds the
+    /// rest of the read: a peer that sends part of a frame then stalls cannot pin this task forever (the
+    /// `readable()` gate alone does not cover the length prefix or payload). Such an overrun is a hard
+    /// error, NOT a `None`, because the consumed bytes are gone from the stream and the frame cannot be
+    /// resumed -- the caller tears the stream down. `recv_msg` bodies are small length-prefixed JSON
+    /// (<= MAX_DRM_JSON_BYTES), well under any caller's budget over a local socket, so this never trips
+    /// a healthy peer.
     pub async fn recv_msg_timeout2(
         &mut self,
         ms_timeout: u64,
@@ -2773,9 +2799,13 @@ impl DrmConn {
             Ok(Err(e)) => Some(Err(e.into())),
             Ok(Ok(())) => match timeout(ms_timeout, self.recv_msg()).await {
                 Ok(res) => Some(res),
-                Err(_) => Some(Err(anyhow::anyhow!(
+                // Deadline hit inside recv_msg. Distinguish a spurious readable() with nothing actually
+                // consumed (safe to re-poll -> None) from a genuine mid-frame stall after some bytes
+                // were read (unresumable -> hard error).
+                Err(_) if self.consumed => Some(Err(anyhow::anyhow!(
                     "drm: frame body stalled past {ms_timeout}ms after first byte; closing"
                 ))),
+                Err(_) => None,
             },
         }
     }
@@ -2789,8 +2819,13 @@ impl DrmConn {
     /// Receive a raw length-prefixed body. Parity with `ConnectionTmpl::next_raw`. A raw body never
     /// carries an fd; a stray fd (protocol desync) is collected by `drm_read_full` and dropped/closed.
     pub async fn next_raw(&mut self) -> ResultType<bytes::BytesMut> {
+        // next_raw is not called through recv_msg_timeout2, so its progress flag is unused; pass the
+        // field for signature parity (recv_msg clears it before its own reads).
         let mut prefix = [0u8; 4];
-        if drm_read_full(&self.stream, &mut prefix, true).await?.is_some() {
+        if drm_read_full(&self.stream, &mut prefix, true, &mut self.consumed)
+            .await?
+            .is_some()
+        {
             log::warn!("drm: unexpected fd on a raw-body frame; dropping");
         }
         let len = u32::from_be_bytes(prefix) as usize;
@@ -2799,7 +2834,7 @@ impl DrmConn {
         }
         let mut out = bytes::BytesMut::new();
         out.resize(len, 0);
-        drm_read_full(&self.stream, &mut out[..], false).await?;
+        drm_read_full(&self.stream, &mut out[..], false, &mut self.consumed).await?;
         Ok(out)
     }
 }
