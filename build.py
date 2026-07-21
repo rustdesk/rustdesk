@@ -400,8 +400,11 @@ def build_libdrmtap_so():
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         system2(f'meson setup {build_dir} {src} --buildtype=release')
-    # Build only the shared library target ('drmtap'), not the bundled helper binary.
-    system2(f'meson compile -C {build_dir} drmtap')
+    # Build only the shared library, not the bundled helper binary or the static archive. Since
+    # libdrmtap 0.4.11 the project is `both_libraries` (a version-scripted .so + a static .a), so the
+    # bare `drmtap` target is ambiguous ("drmtap:shared_library" vs "drmtap:static_library"); ask for
+    # the shared one explicitly (rustdesk dlopens the .so and never needs the archive).
+    system2(f'meson compile -C {build_dir} drmtap:shared_library')
     sos = glob.glob(os.path.join(build_dir, 'libdrmtap.so.0.*'))
     # keep the real object (libdrmtap.so.0.4.x), not the .so/.so.0 symlinks or meson's .p dir, and
     # require exactly one so a stale object from an earlier build is never silently picked.
