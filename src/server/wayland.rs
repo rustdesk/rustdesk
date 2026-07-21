@@ -372,8 +372,20 @@ pub(super) fn get_capturer_for_display(
         }
     }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
-    if let Some(addr) = cap_map.get(&display_idx) {
-        let cap_display_info: *const CapDisplayInfo = *addr as _;
+    // DRM and PipeWire do NOT share a display-index space: DRM enumerates one entry per connector
+    // (0..N), while the portal/PipeWire ScreenCast commonly enumerates a SINGLE whole-desktop stream
+    // (index 0). So when a per-display DRM capture is demoted to PipeWire for a non-primary DRM index
+    // that PipeWire cannot serve, `cap_map.get(&display_idx)` is None. Bailing here returned an Err
+    // that ServiceTmpl::run retries every MAX_ERROR_TIMEOUT (1s) forever — the multi-monitor restart
+    // loop. Degrade to the whole-desktop stream (index 0) that PipeWire does provide instead: the
+    // user sees that monitor's content within the desktop stream rather than a 1s spin. Healthy DRM
+    // displays never reach here (they return above).
+    let addr = cap_map
+        .get(&display_idx)
+        .or_else(|| cap_map.get(&0))
+        .copied();
+    if let Some(addr) = addr {
+        let cap_display_info: *const CapDisplayInfo = addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
