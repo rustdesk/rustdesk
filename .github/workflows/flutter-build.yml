@@ -1706,7 +1706,9 @@ jobs:
               # against the pinned immutable commit DRMTAP_SHA after clone (below). The drm backend
               # has NO libdrmtap-sys Cargo dependency: rustdesk dlopens this .so at runtime
               # (drmtap_dl.rs checks ABI-major). Keep DRMTAP_SHA in sync with the tag on every bump.
-              export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
+              # Source-of-truth fork that publishes the pinned tag (rustdesk-org syncs from it; switch
+              # this once rustdesk-org carries v0.4.13).
+              export DRMTAP_REPO="https://github.com/fxd0h/libdrmtap"
               export DRMTAP_REF="v0.4.13"
               export DRMTAP_SHA="${DRMTAP_SHA:-c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a}"
               # Guard: refuse a loose/branch ref so a moving `main` can never silently
