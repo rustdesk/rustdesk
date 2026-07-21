@@ -41,6 +41,8 @@ pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
+#[cfg(target_os = "macos")]
+use ipc_auth::authorize_user_server_process;
 #[cfg(windows)]
 use ipc_auth::{
     authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
@@ -472,6 +474,8 @@ pub enum Data {
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
+    #[cfg(target_os = "macos")]
+    HasNoActiveConns(Option<bool>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
     ControlPermissionsRemoteModify(Option<bool>),
@@ -1006,6 +1010,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
+        #[cfg(target_os = "macos")]
+        Data::HasNoActiveConns(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::HasNoActiveConns(Some(
+                        crate::updater::has_no_active_conns()
+                    )))
+                    .await
+            );
+        }
         #[cfg(all(
             feature = "flutter",
             not(any(target_os = "android", target_os = "ios"))
@@ -1340,14 +1354,21 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
     let path = Config::ipc_path_for_uid(uid, postfix);
-    connect_with_path(ms_timeout, &path).await
+    let conn = connect_with_path(ms_timeout, &path).await?;
+    #[cfg(target_os = "macos")]
+    if postfix.is_empty()
+        && !authorize_user_server_process(conn.peer_uid(), conn.peer_pid(), uid)
+    {
+        bail!("Rejected user IPC peer for uid {}", uid);
+    }
+    Ok(conn)
 }
 
 #[cfg(target_os = "linux")]
