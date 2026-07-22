@@ -1100,12 +1100,23 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         MOUSE_TYPE_MOVE => {
             // Switching back to absolute movement implicitly disables relative mouse mode.
             set_relative_mouse_active(conn, false);
-            en.mouse_move_to(evt.x, evt.y);
+            // On Wayland with uinput, the client sends coordinates in the layout it was
+            // told at session init. If the compositor has since moved a monitor, correct
+            // them onto the current layout. https://github.com/rustdesk/rustdesk/issues/15601
+            #[cfg(target_os = "linux")]
+            let (mx, my) = if wayland_use_uinput() {
+                super::display_service::remap_wayland_uinput_coord(evt.x, evt.y)
+            } else {
+                (evt.x, evt.y)
+            };
+            #[cfg(not(target_os = "linux"))]
+            let (mx, my) = (evt.x, evt.y);
+            en.mouse_move_to(mx, my);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
                 time: get_time(),
-                x: evt.x,
-                y: evt.y,
+                x: mx,
+                y: my,
             };
         }
         // MOUSE_TYPE_MOVE_RELATIVE: Relative mouse movement for gaming/3D applications.

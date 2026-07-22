@@ -158,9 +158,17 @@ pub(super) async fn check_init() -> ResultType<()> {
                     )
                     .await
                     {
-                        Ok(Ok(())) => super::display_service::set_wayland_uinput_rect((
-                            minx, maxx, miny, maxy,
-                        )),
+                        Ok(Ok(())) => {
+                            super::display_service::set_wayland_uinput_rect((
+                                minx, maxx, miny, maxy,
+                            ));
+                            // Snapshot the per-display layout the client's coordinates
+                            // will be based on, so the mouse path can correct them if
+                            // the compositor moves a monitor mid-session.
+                            super::display_service::set_wayland_layout_baseline(
+                                scrap::wayland::display::get_display_rects_for_uinput(),
+                            );
+                        }
                         Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
                         Err(err) => log::error!("Failed to update mouse resolution: {}", err),
                     }
