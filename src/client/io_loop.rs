@@ -196,6 +196,9 @@ impl<T: InvokeUiSession> Remote<T> {
                         tokio::time::sleep(KCP_CLOSE_REASON_FLUSH_DELAY).await;
                     }
                     self.handle_disconnected(round);
+                    // Close the WebRTC pc on this decline path too (no-op for TCP/WS); otherwise its
+                    // pc lingers in the global session cache until ICE decays on its own.
+                    peer.close_webrtc().await;
                     return;
                 }
                 self.handler.update_direct(Some(direct));
@@ -342,6 +345,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
+                // Close the WebRTC peer connection (if this session used it) so its pc is not left
+                // lingering in the global session cache after the session ends; dropping `peer`
+                // alone does not release it. No-op for TCP/WebSocket transports.
+                peer.close_webrtc().await;
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();

@@ -681,6 +681,17 @@ impl RendezvousMediator {
         Ok(())
     }
 
+    /// Build the WebRTC answerer for a punch-hole offer and return the SDP answer that rides in
+    /// the punch reply (PunchHoleSent / RelayResponse).
+    ///
+    /// This is awaited inline on the punch-reply critical path (also serializing the mediator's
+    /// message loop), which is acceptable only because everything awaited here is local-only —
+    /// pc construction + DTLS cert keygen + SDP answer, sub-millisecond in practice. Trickle ICE
+    /// makes that possible: the answer carries no candidates; STUN/TURN gathering runs afterward
+    /// and trickles via IceCandidate messages. Keep network I/O out of this path — actual
+    /// connection setup (wait_connected + create_tcp_connection) belongs in the detached task
+    /// below. On error the caller degrades to an empty answer and the punch proceeds without
+    /// WebRTC.
     async fn spawn_webrtc_answerer(
         &self,
         ph: &PunchHole,
@@ -691,9 +702,26 @@ impl RendezvousMediator {
     ) -> ResultType<String> {
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, force_relay, CONNECT_TIMEOUT).await?;
-        let answer = stream.get_local_endpoint().await?;
+        let answer = match stream.get_local_endpoint().await {
+            Ok(answer) => answer,
+            Err(e) => {
+                // Close the freshly-created pc so a failure here doesn't leak it in SESSIONS.
+                stream.close().await;
+                return Err(e);
+            }
+        };
         let session_key = stream.session_key().to_owned();
         let return_route = ph.socket_addr.clone();
+
+        // A duplicate PunchHole (the offerer re-sends the same request across punch attempts)
+        // resolves to the SESSIONS-cached stream. `take_local_ice_rx` yields the receiver
+        // exactly once per stream instance, so `None` here means an answerer was already
+        // spawned for this offer: return the (identical) cached answer without spawning a
+        // second connect task. Otherwise two `create_tcp_connection` tasks would detach and
+        // read the same data channel, interleaving the handshake and corrupting the session.
+        let Some(mut local_ice_rx) = stream.take_local_ice_rx() else {
+            return Ok(answer);
+        };
 
         let (remote_ice_tx, mut remote_ice_rx) = mpsc::unbounded_channel::<String>();
         WEBRTC_ICE_TXS
@@ -711,7 +739,7 @@ impl RendezvousMediator {
             }
         });
 
-        if let Some(mut local_ice_rx) = stream.take_local_ice_rx() {
+        {
             let sender = self.rz_sender.clone();
             let socket_addr = return_route.clone();
             let session_key_for_ice = session_key.clone();
@@ -724,7 +752,15 @@ impl RendezvousMediator {
                         candidate,
                         ..Default::default()
                     });
-                    let _ = sender.send(msg);
+                    let _ = sender.send(msg.clone());
+                    // The mediator channel to the rendezvous server is UDP in the default setup,
+                    // so a candidate can be lost in flight; re-send once after a short delay (the
+                    // peer's ICE agent dedups repeats, so the second copy is free).
+                    let sender = sender.clone();
+                    tokio::spawn(async move {
+                        sleep(0.4).await;
+                        let _ = sender.send(msg);
+                    });
                 }
             });
         }
@@ -738,8 +774,17 @@ impl RendezvousMediator {
                 .remove(&session_key_for_cleanup);
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
+                // Release the pc now rather than waiting for the ICE agent to time out into a
+                // terminal state (~30s); this also drops the SESSIONS entry promptly.
+                stream.close().await;
                 return;
             }
+            // create_tcp_connection takes ownership of the stream; keep a handle to close the pc
+            // once the session returns. It runs the whole session and returns Ok on normal end,
+            // Err on setup failure — either way the pc must be closed, else it lingers forever in
+            // SESSIONS (its state handler only fires on a terminal ICE state, which a cleanly
+            // closed session may never reach) leaking the pc, channels, and socket fds.
+            let stream_for_cleanup = stream.clone();
             if let Err(err) = crate::server::create_tcp_connection(
                 server,
                 Stream::WebRTC(stream),
@@ -751,6 +796,7 @@ impl RendezvousMediator {
             {
                 log::warn!("failed to create WebRTC server connection: {}", err);
             }
+            stream_for_cleanup.close().await;
         });
 
         Ok(answer)
@@ -765,19 +811,32 @@ impl RendezvousMediator {
             return Ok(());
         }
         let peer_addr_v6 = hbb_common::AddrMangle::decode(&ph.socket_addr_v6);
-        let relay = use_ws() || Config::is_proxy() || ph.force_relay;
+        let local_proxy = use_ws() || Config::is_proxy();
+        let relay = local_proxy || ph.force_relay;
         let mut socket_addr_v6 = Default::default();
         let meta = connection_meta(
             ph.control_permissions.clone().into_option(),
             ph.controlled_context.clone().into_option(),
         );
-        let webrtc_sdp_answer = if !ph.webrtc_sdp_offer.is_empty() {
-            self.spawn_webrtc_answerer(&ph, relay, server.clone(), peer_addr, meta.clone())
-                .await
-                .unwrap_or_else(|err| {
-                    log::warn!("failed to create WebRTC answer: {}", err);
-                    String::new()
-                })
+        let control_permissions = ph.control_permissions.clone().into_option();
+        // WebRTC opens its own ICE sockets, so it must never be used when local traffic is routed
+        // through SOCKS/WebSocket. force_relay is different: relay-only ICE is viable with TURN.
+        let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
+            && !local_proxy
+            && (!ph.force_relay || WebRTCStream::has_turn_server());
+        let webrtc_sdp_answer = if webrtc_viable {
+            self.spawn_webrtc_answerer(
+                &ph,
+                ph.force_relay,
+                server.clone(),
+                peer_addr,
+                meta.clone(),
+            )
+            .await
+            .unwrap_or_else(|err| {
+                log::warn!("failed to create WebRTC answer: {}", err);
+                String::new()
+            })
         } else {
             String::new()
         };

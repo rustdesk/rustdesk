@@ -2010,11 +2010,21 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
+    let (id, pk, _) = decode_id_pk_dtls(signed, key)?;
+    Ok((id, pk))
+}
+
+/// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity.
+pub fn decode_id_pk_dtls(
+    signed: &[u8],
+    key: &sign::PublicKey,
+) -> ResultType<(String, [u8; 32], String)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk))
+        Ok((res.id, pk, res.dtls_fingerprint))
     } else {
         bail!("Wrong their public length");
     }

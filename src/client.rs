@@ -30,7 +30,7 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
@@ -51,7 +51,7 @@ use hbb_common::{
         CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
     fs::JobType,
-    futures::future::{select_ok, FutureExt},
+    futures::future::{select_ok, BoxFuture, FutureExt},
     get_version_number, log,
     message_proto::{option_message::BoolOption, *},
     protobuf::{Message as _, MessageField},
@@ -185,6 +185,118 @@ pub fn get_key_state(key: enigo::Key) -> bool {
         return true;
     }
     ENIGO.lock().unwrap().get_key_state(key)
+}
+
+/// RAII guard for a WebRTC offerer that has not yet been adopted into a connection.
+///
+/// The offerer's `RTCPeerConnection` is created eagerly in `Client::start` and inserted into the
+/// global `SESSIONS` map; if it never receives a remote answer it stays in ICE state `New`
+/// forever, so its state-change handler never fires and it never self-removes. This guard closes
+/// the pc on drop, covering the paths that would otherwise leak it: early `?`/`bail!` returns in
+/// `_start_inner`, and `select_ok` cancelling the racing attempt that holds the offerer. Call
+/// [`OffererGuard::into_inner`] to disarm when the stream is adopted into a live connection.
+struct OffererGuard(Option<WebRTCStream>);
+
+impl OffererGuard {
+    fn new(stream: WebRTCStream) -> Self {
+        Self(Some(stream))
+    }
+
+    fn stream(&self) -> Option<&WebRTCStream> {
+        self.0.as_ref()
+    }
+
+    fn into_inner(mut self) -> Option<WebRTCStream> {
+        self.0.take()
+    }
+}
+
+impl Drop for OffererGuard {
+    fn drop(&mut self) {
+        if let Some(stream) = self.0.take() {
+            Client::spawn_close_webrtc(stream);
+        }
+    }
+}
+
+/// Race the WebRTC connect attempt against the other transport futures, preferring P2P.
+///
+/// A plain `select_ok` would almost always pick the relay: its TCP connect completes in one
+/// round trip while WebRTC needs candidate trickle + ICE checks + DTLS + SCTP. Instead:
+/// - a WebRTC success is committed immediately;
+/// - an `is_p2p` result from `others` (e.g. IPv6 direct) is committed immediately;
+/// - a relayed result inside the preference window is *held*, giving WebRTC until the window
+///   expires to connect and take priority, while unfinished `others` keep racing so a slower
+///   direct transport can still win; when the window ends (or WebRTC fails) the held connection
+///   is committed;
+/// - a failure on one side commits the survivor as soon as it succeeds; two failures compose
+///   into one error.
+///
+/// `others` must be non-empty (`select_ok` requires it).
+async fn race_transports_prefer_webrtc<'a, T: 'a>(
+    webrtc_fut: BoxFuture<'a, ResultType<T>>,
+    others: Vec<BoxFuture<'a, ResultType<T>>>,
+    window_ms: u64,
+    is_p2p: impl Fn(&T) -> bool,
+) -> ResultType<T> {
+    let mut webrtc_fut = Some(webrtc_fut);
+    let mut others_fut = Some(select_ok(others));
+    let mut held: Option<T> = None;
+    let mut webrtc_err: Option<hbb_common::anyhow::Error> = None;
+    let mut others_err: Option<hbb_common::anyhow::Error> = None;
+    let window = tokio::time::sleep(Duration::from_millis(window_ms));
+    tokio::pin!(window);
+    let mut window_over = false;
+    loop {
+        tokio::select! {
+            res = async { webrtc_fut.as_mut().unwrap().await }, if webrtc_fut.is_some() => {
+                webrtc_fut = None;
+                match res {
+                    // WebRTC connected: preferred outright; a held relay conn just drops.
+                    Ok(conn) => return Ok(conn),
+                    Err(e) => {
+                        if let Some(conn) = held.take() {
+                            return Ok(conn);
+                        }
+                        match others_err.take() {
+                            Some(oe) => bail!("WebRTC failed: {}; fallback failed: {}", e, oe),
+                            None if others_fut.is_none() => bail!("WebRTC failed: {}", e),
+                            None => webrtc_err = Some(e),
+                        }
+                    }
+                }
+            }
+            res = async { others_fut.as_mut().unwrap().await }, if others_fut.is_some() => {
+                others_fut = None;
+                match res {
+                    Ok((conn, unfinished)) => {
+                        if is_p2p(&conn) || window_over || webrtc_fut.is_none() {
+                            return Ok(conn);
+                        }
+                        // Hold the first relay, but keep polling unfinished alternatives: an IPv6
+                        // direct attempt may complete inside the same WebRTC preference window.
+                        if held.is_none() {
+                            held = Some(conn);
+                        }
+                        if !unfinished.is_empty() {
+                            others_fut = Some(select_ok(unfinished));
+                        }
+                    }
+                    Err(e) => match webrtc_err.take() {
+                        Some(we) => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
+                        None if webrtc_fut.is_none() => return Err(e),
+                        None => others_err = Some(e),
+                    },
+                }
+            }
+            _ = &mut window, if !window_over => {
+                window_over = true;
+                if let Some(conn) = held.take() {
+                    return Ok(conn);
+                }
+            }
+        }
+    }
 }
 
 impl Client {
@@ -338,14 +450,17 @@ impl Client {
         } else {
             None
         };
-        let webrtc_offerer =
+        let webrtc_offerer = if Self::should_create_webrtc_offerer(&interface) {
             match WebRTCStream::new("", interface.is_force_relay(), CONNECT_TIMEOUT).await {
                 Ok(stream) => Some(stream),
                 Err(err) => {
                     log::warn!("webrtc offerer setup failed: {}", err);
                     None
                 }
-            };
+            }
+        } else {
+            None
+        };
         let fut = Self::_start_inner(
             peer.to_owned(),
             key.to_owned(),
@@ -390,6 +505,70 @@ impl Client {
         !session_key.is_empty() && ice.session_key == session_key && !ice.candidate.is_empty()
     }
 
+    /// Tear down an abandoned WebRTC offerer off the connection hot path.
+    ///
+    /// The pc must be closed explicitly (a dropped handle leaves the `SESSIONS` clone alive),
+    /// but `close()` awaits internal ICE/DTLS shutdown and the result is pure cleanup with no
+    /// downstream dependency, so it must not block session establishment.
+    fn spawn_close_webrtc(webrtc: WebRTCStream) {
+        // Use the current runtime handle explicitly: this is also called from OffererGuard::drop,
+        // which can run during runtime teardown where a bare tokio::spawn would panic. If no
+        // runtime is available the pc cannot be closed here (it is released at process exit).
+        // Handle::spawn can also panic when the runtime is shutting down; catch that so Drop
+        // never panics (prefer a brief leak until process exit over aborting the process).
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                let spawn_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handle.spawn(async move {
+                        webrtc.close().await;
+                    });
+                }));
+                if spawn_result.is_err() {
+                    log::warn!("failed to spawn WebRTC close (runtime shutting down)");
+                }
+            }
+            Err(_) => {
+                log::warn!("no tokio runtime available to close WebRTC peer connection");
+            }
+        }
+    }
+
+    /// Whether to build a WebRTC offerer for this connection.
+    ///
+    /// Skips it when UDP punching is disabled or a SOCKS proxy/websocket transport is configured:
+    /// WebRTC's ICE binds its own UDP sockets and speaks STUN directly, which would bypass either
+    /// policy (and can leak the real IP through a proxy). Under force_relay the pc uses Relay-only
+    /// ICE, which gathers nothing and can never connect unless a TURN server is configured, so
+    /// skip building a guaranteed-dead pc + STUN/TURN gathering + answerer signaling in that case
+    /// too.
+    /// When force_relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
+    /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
+    /// RelayResponse path prefers it within the WebRTC preference window.
+    fn should_create_webrtc_offerer(interface: &impl Interface) -> bool {
+        if !crate::get_udp_punch_enabled() || use_ws() || Config::is_proxy() {
+            return false;
+        }
+        if interface.is_force_relay() && !WebRTCStream::has_turn_server() {
+            return false;
+        }
+        true
+    }
+
+    /// Max ICE candidates buffered during the punch window before the answer is applied.
+    /// Bounds memory if a misbehaving rendezvous floods candidates.
+    const MAX_PENDING_WEBRTC_ICE: usize = 64;
+
+    /// Prefer-P2P window: how long a WebRTC attempt outranks an already-established relay
+    /// result, and the floor for a punch-path WebRTC attempt whose race timeout is tuned for a
+    /// raw TCP SYN. Long enough for candidate trickle + ICE checks + DTLS on high-latency
+    /// links; short enough that UDP-blocked networks settle on relay without a noticeable wait.
+    const WEBRTC_PREFER_WINDOW_MS: u64 = 2500;
+
+    /// Delay before re-sending an ICE candidate over the rendezvous route once. The hop to the
+    /// peer can be UDP (the controlled side's mediator channel), so a candidate can be lost in
+    /// flight; the remote ICE agent dedups repeats, so the second copy is free.
+    const WEBRTC_ICE_RESEND_DELAY: Duration = Duration::from_millis(400);
+
     fn spawn_webrtc_ice_bridge(
         mut socket: Stream,
         mut local_ice_rx: Option<UnboundedReceiver<String>>,
@@ -399,6 +578,7 @@ impl Client {
     ) -> oneshot::Sender<()> {
         let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
         tokio::spawn(async move {
+            let mut pending_resend: Vec<(Instant, RendezvousMessage)> = Vec::new();
             loop {
                 match stop_rx.try_recv() {
                     Ok(_) | Err(tokio::sync::oneshot::error::TryRecvError::Closed) => break,
@@ -416,10 +596,20 @@ impl Client {
                                     candidate,
                                     ..Default::default()
                                 });
-                                if let Err(err) = socket.send(&msg).await {
-                                    log::warn!("failed to send WebRTC ICE candidate: {}", err);
-                                    return;
+                                // Bound the send so a stalled rendezvous socket cannot block the
+                                // bridge past its stop signal.
+                                match timeout(3000, socket.send(&msg)).await {
+                                    Ok(Ok(())) => {}
+                                    Ok(Err(err)) => {
+                                        log::warn!("failed to send WebRTC ICE candidate: {}", err);
+                                        return;
+                                    }
+                                    Err(_) => {
+                                        log::warn!("WebRTC ICE candidate send timed out");
+                                        return;
+                                    }
                                 }
+                                pending_resend.push((Instant::now(), msg));
                             }
                             Err(TryRecvError::Empty) => break,
                             Err(TryRecvError::Disconnected) => {
@@ -430,16 +620,53 @@ impl Client {
                     }
                 }
 
-                if let Some(msg_in) =
-                    crate::get_next_nonkeyexchange_msg(&mut socket, Some(100)).await
-                {
-                    if let Some(rendezvous_message::Union::IceCandidate(ice)) = msg_in.union {
-                        if Self::is_expected_webrtc_ice_candidate(&ice, &session_key) {
-                            if let Err(err) = webrtc.add_remote_ice_candidate(&ice.candidate).await
-                            {
-                                log::warn!("failed to add WebRTC ICE candidate: {}", err);
+                // Re-send each candidate once after a short delay: the rendezvous hop to the peer
+                // can be UDP, so the first copy may be lost; the remote ICE agent dedups repeats.
+                let mut i = 0;
+                while i < pending_resend.len() {
+                    if pending_resend[i].0.elapsed() >= Self::WEBRTC_ICE_RESEND_DELAY {
+                        let (_, msg) = pending_resend.swap_remove(i);
+                        match timeout(3000, socket.send(&msg)).await {
+                            Ok(Ok(())) => {}
+                            Ok(Err(err)) => {
+                                log::warn!("failed to re-send WebRTC ICE candidate: {}", err);
+                                return;
+                            }
+                            Err(_) => {
+                                log::warn!("WebRTC ICE candidate re-send timed out");
+                                return;
                             }
                         }
+                    } else {
+                        i += 1;
+                    }
+                }
+
+                // Read one incoming message, blocking up to the poll window. Distinguish a real
+                // timeout (keep looping to drain outbound candidates) from stream EOF/error: the
+                // rendezvous server closes the punch connection after the response, and an
+                // unrecognized-message server closes it on the first candidate we send. Without
+                // this, the collapsed None-on-EOF made the loop hot-spin a core until stop.
+                match timeout(100, socket.next()).await {
+                    Err(_) => {}
+                    Ok(None) => break,
+                    Ok(Some(Ok(bytes))) => {
+                        if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                            if let Some(rendezvous_message::Union::IceCandidate(ice)) = msg_in.union
+                            {
+                                if Self::is_expected_webrtc_ice_candidate(&ice, &session_key) {
+                                    if let Err(err) =
+                                        webrtc.add_remote_ice_candidate(&ice.candidate).await
+                                    {
+                                        log::warn!("failed to add WebRTC ICE candidate: {}", err);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(Some(Err(err))) => {
+                        log::debug!("WebRTC ICE bridge socket read ended: {}", err);
+                        break;
                     }
                 }
             }
@@ -456,7 +683,7 @@ impl Client {
         mut udp: (Option<Arc<UdpSocket>>, Option<Arc<Mutex<u16>>>),
         stop_udp_tx: Option<oneshot::Sender<()>>,
         mut ipv6: Option<(Arc<UdpSocket>, bytes::Bytes)>,
-        mut webrtc_offerer: Option<WebRTCStream>,
+        webrtc_offerer: Option<WebRTCStream>,
         mut rendezvous_server: String,
         servers: Vec<String>,
         contained: bool,
@@ -471,6 +698,10 @@ impl Client {
         (i32, String),
         bool,
     )> {
+        // Wrap the offerer so any early return below (?/bail) or cancellation of this future by
+        // the outer select_ok closes its pc instead of leaking it in SESSIONS. Disarmed via
+        // into_inner() once the stream is adopted into a connection attempt.
+        let mut webrtc_offerer = webrtc_offerer.map(OffererGuard::new);
         let mut start = Instant::now();
         let mut socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await;
         debug_assert!(!servers.contains(&rendezvous_server));
@@ -533,8 +764,10 @@ impl Client {
             .take()
             .map(|(socket, addr)| (Some(socket), Some(addr)))
             .unwrap_or((None, None));
-        let webrtc_sdp_offer = if let Some(webrtc) = webrtc_offerer.as_ref() {
-            match webrtc.get_local_endpoint().await {
+        let webrtc_sdp_offer = if let Some(stream) =
+            webrtc_offerer.as_ref().and_then(|g| g.stream())
+        {
+            match stream.get_local_endpoint().await {
                 Ok(endpoint) => endpoint,
                 Err(err) => {
                     log::warn!("failed to read local WebRTC offer: {}", err);
@@ -561,7 +794,8 @@ impl Client {
         });
         let webrtc_session_key = webrtc_offerer
             .as_ref()
-            .map(|webrtc| webrtc.session_key().to_owned())
+            .and_then(|guard| guard.stream())
+            .map(|stream| stream.session_key().to_owned())
             .unwrap_or_default();
         let mut webrtc_sdp_answer = String::new();
         let mut pending_webrtc_ice = Vec::<String>::new();
@@ -660,22 +894,34 @@ impl Client {
                         let mut webrtc_bridge_stop = None;
                         let mut webrtc_for_connect = None;
                         if !rr.webrtc_sdp_answer.is_empty() {
-                            if let Some(webrtc) = webrtc_offerer.take() {
-                                if let Err(err) =
-                                    webrtc.set_remote_endpoint(&rr.webrtc_sdp_answer).await
-                                {
-                                    log::warn!("failed to set WebRTC relay answer: {}", err);
-                                } else {
-                                    for candidate in pending_webrtc_ice.drain(..) {
-                                        if let Err(err) =
-                                            webrtc.add_remote_ice_candidate(&candidate).await
-                                        {
-                                            log::warn!(
-                                                "failed to add buffered WebRTC ICE candidate: {}",
-                                                err
-                                            );
+                            if let Some(guard) = webrtc_offerer.take() {
+                                // Run the awaited setup on the guard's borrowed stream so a
+                                // cancellation during these awaits still closes the pc via the
+                                // guard's drop; take ownership only at the synchronous handoff.
+                                let setup_ok = if let Some(webrtc) = guard.stream() {
+                                    if let Err(err) =
+                                        webrtc.set_remote_endpoint(&rr.webrtc_sdp_answer).await
+                                    {
+                                        log::warn!("failed to set WebRTC relay answer: {}", err);
+                                        false
+                                    } else {
+                                        for candidate in pending_webrtc_ice.drain(..) {
+                                            if let Err(err) =
+                                                webrtc.add_remote_ice_candidate(&candidate).await
+                                            {
+                                                log::warn!(
+                                                    "failed to add buffered WebRTC ICE candidate: {}",
+                                                    err
+                                                );
+                                            }
                                         }
+                                        true
                                     }
+                                } else {
+                                    false
+                                };
+                                if let Some(webrtc) = setup_ok.then(|| guard.into_inner()).flatten()
+                                {
                                     let session_key = webrtc.session_key().to_owned();
                                     let local_ice_rx = webrtc.take_local_ice_rx();
                                     webrtc_bridge_stop = Some(Self::spawn_webrtc_ice_bridge(
@@ -687,8 +933,16 @@ impl Client {
                                     ));
                                     webrtc_for_connect = Some(webrtc);
                                 }
+                                // If setup failed, `guard` drops here and closes the pc.
                             }
                         }
+                        // An offerer not adopted into the relay race (empty answer) is closed by
+                        // the guard's drop here.
+                        drop(webrtc_offerer.take());
+                        // Keep relay_server for a WebRTC secure-failure fallback: request_relay
+                        // coordinates a FRESH uuid via the rendezvous server, so it works even if
+                        // the raced create_relay already consumed the original uuid pairing.
+                        let relay_server_rr = rr.relay_server.clone();
                         let fut = Self::create_relay(
                             &peer,
                             rr.uuid,
@@ -704,38 +958,122 @@ impl Client {
                             }
                             .boxed(),
                         );
-                        if let Some(mut webrtc) = webrtc_for_connect {
-                            connect_futures.push(
-                                async move {
-                                    webrtc.wait_connected(CONNECT_TIMEOUT).await?;
-                                    Ok((Stream::WebRTC(webrtc), None, "WebRTC"))
-                                }
-                                .boxed(),
-                            );
-                        }
-                        // Run all connection attempts concurrently, return the first successful one
-                        let (conn, kcp, typ) = match select_ok(connect_futures).await {
-                            Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
-
-                            Err(e) => (Err(e), None, ""),
+                        // Keep the adopted offerer in a guard that stays armed across the race AND
+                        // secure_connection, so cancellation of this future by the outer race (or a
+                        // secure-handshake failure) closes the pc instead of leaking it. It is
+                        // disarmed only once WebRTC is confirmed the winning, secured transport.
+                        let mut webrtc_guard = None;
+                        let race_result = if let Some(webrtc) = webrtc_for_connect {
+                            webrtc_guard = Some(OffererGuard::new(webrtc.clone()));
+                            let mut raced = webrtc;
+                            let webrtc_fut = async move {
+                                raced.wait_connected(CONNECT_TIMEOUT).await?;
+                                Ok((Stream::WebRTC(raced), None, "WebRTC"))
+                            }
+                            .boxed();
+                            // The peer answered WebRTC: prefer P2P. The relay result is held for
+                            // the preference window so WebRTC can win even though a relay TCP
+                            // connect completes much faster than ICE + DTLS setup.
+                            race_transports_prefer_webrtc(
+                                webrtc_fut,
+                                connect_futures,
+                                Self::WEBRTC_PREFER_WINDOW_MS,
+                                |result| result.2 == "IPv6",
+                            )
+                            .await
+                        } else {
+                            // Run all connection attempts concurrently, take the first success.
+                            select_ok(connect_futures).await.map(|r| r.0)
                         };
                         if let Some(stop) = webrtc_bridge_stop {
                             let _ = stop.send(());
                         }
-                        let mut conn = conn?;
+                        // The ? / secure_connection failures below return early; webrtc_guard stays
+                        // in scope and closes the offerer on any such exit (loss, error, cancellation).
+                        let (mut conn, kcp, mut typ) = race_result?;
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
-                        let pk =
-                            Self::secure_connection(&peer, signed_id_pk, &key, &mut conn).await?;
+                        let pk = match Self::secure_connection(
+                            &peer,
+                            signed_id_pk.clone(),
+                            &key,
+                            &mut conn,
+                        )
+                        .await
+                        {
+                            Ok(pk) => pk,
+                            Err(e) if typ == "WebRTC" => {
+                                // WebRTC won the race but identity/DTLS binding failed. Fall back
+                                // to a freshly-coordinated relay (request_relay negotiates a new
+                                // uuid, immune to the raced create_relay having consumed the
+                                // original pairing) so a bad WebRTC handshake does not kill the
+                                // whole session when relay is available.
+                                log::warn!(
+                                    "WebRTC secure handshake failed ({}), falling back to relay",
+                                    e
+                                );
+                                drop(webrtc_guard.take());
+                                let mut relay_conn = Self::request_relay(
+                                    &peer,
+                                    relay_server_rr,
+                                    &rendezvous_server,
+                                    !signed_id_pk.is_empty(),
+                                    &key,
+                                    &token,
+                                    conn_type,
+                                )
+                                .await
+                                .map_err(|relay_e| {
+                                    anyhow!(
+                                        "WebRTC secure failed ({}); relay fallback also failed: {}",
+                                        e,
+                                        relay_e
+                                    )
+                                })?;
+                                let pk = Self::secure_connection(
+                                    &peer,
+                                    signed_id_pk,
+                                    &key,
+                                    &mut relay_conn,
+                                )
+                                .await?;
+                                conn = relay_conn;
+                                typ = if use_ws() { "WebSocket" } else { "Relay" };
+                                pk
+                            }
+                            Err(e) => return Err(e),
+                        };
+                        // Compute the direct/relayed flag (an await) BEFORE disarming the guard, so
+                        // a cancellation of this future during webrtc_relayed() still closes the pc
+                        // via the guard's drop. Matches connect()'s ordering.
+                        let direct = match typ {
+                            "IPv6" => true,
+                            // WebRTC through a TURN server is relayed traffic; report it as such.
+                            "WebRTC" => !conn.webrtc_relayed().await.unwrap_or(false),
+                            _ => false,
+                        };
+                        // Secured and WebRTC won: disarm so the returned conn keeps the pc alive.
+                        if typ == "WebRTC" {
+                            if let Some(guard) = webrtc_guard.take() {
+                                let _ = guard.into_inner();
+                            }
+                        }
                         return Ok((
-                            (conn, typ == "IPv6" || typ == "WebRTC", pk, kcp, typ),
+                            (conn, direct, pk, kcp, typ),
                             (feedback, rendezvous_server),
                             false,
                         ));
                     }
                     Some(rendezvous_message::Union::IceCandidate(ice)) => {
                         if Self::is_expected_webrtc_ice_candidate(&ice, &webrtc_session_key) {
-                            pending_webrtc_ice.push(ice.candidate);
+                            if pending_webrtc_ice.len() < Self::MAX_PENDING_WEBRTC_ICE {
+                                pending_webrtc_ice.push(ice.candidate);
+                            } else {
+                                log::warn!(
+                                    "dropping WebRTC ICE candidate: pending buffer full ({})",
+                                    Self::MAX_PENDING_WEBRTC_ICE
+                                );
+                            }
                         } else {
                             log::debug!(
                                 "dropping ICE candidate for unexpected WebRTC session key {}",
@@ -752,16 +1090,26 @@ impl Client {
         let mut webrtc_bridge_stop = None;
         let mut webrtc_for_connect = None;
         if !webrtc_sdp_answer.is_empty() {
-            if let Some(webrtc) = webrtc_offerer.take() {
-                if let Err(err) = webrtc.set_remote_endpoint(&webrtc_sdp_answer).await {
-                    log::warn!("failed to set WebRTC answer: {}", err);
-                    drop(socket);
-                } else {
-                    for candidate in pending_webrtc_ice.drain(..) {
-                        if let Err(err) = webrtc.add_remote_ice_candidate(&candidate).await {
-                            log::warn!("failed to add buffered WebRTC ICE candidate: {}", err);
+            if let Some(guard) = webrtc_offerer.take() {
+                // Run the awaited setup on the guard's borrowed stream so a cancellation during
+                // these awaits still closes the pc via the guard's drop; take ownership only at
+                // the synchronous handoff below.
+                let setup_ok = if let Some(webrtc) = guard.stream() {
+                    if let Err(err) = webrtc.set_remote_endpoint(&webrtc_sdp_answer).await {
+                        log::warn!("failed to set WebRTC answer: {}", err);
+                        false
+                    } else {
+                        for candidate in pending_webrtc_ice.drain(..) {
+                            if let Err(err) = webrtc.add_remote_ice_candidate(&candidate).await {
+                                log::warn!("failed to add buffered WebRTC ICE candidate: {}", err);
+                            }
                         }
+                        true
                     }
+                } else {
+                    false
+                };
+                if let Some(webrtc) = setup_ok.then(|| guard.into_inner()).flatten() {
                     let session_key = webrtc.session_key().to_owned();
                     let local_ice_rx = webrtc.take_local_ice_rx();
                     webrtc_bridge_stop = Some(Self::spawn_webrtc_ice_bridge(
@@ -772,6 +1120,9 @@ impl Client {
                         session_key,
                     ));
                     webrtc_for_connect = Some(webrtc);
+                } else {
+                    // setup failed (guard dropped -> pc closed) or no stream: release the socket.
+                    drop(socket);
                 }
             } else {
                 drop(socket);
@@ -779,7 +1130,18 @@ impl Client {
         } else {
             drop(socket);
         }
+        // An offerer never adopted into a connection attempt (e.g. the peer returned no WebRTC
+        // answer) is closed by the guard's drop here, so its pc does not linger in SESSIONS.
+        drop(webrtc_offerer.take());
         if peer_addr.port() == 0 {
+            // Bailing before connect(): an offerer already adopted into webrtc_for_connect was
+            // disarmed out of its guard, so close it (and stop its bridge) explicitly here.
+            if let Some(webrtc) = webrtc_for_connect.take() {
+                Self::spawn_close_webrtc(webrtc);
+            }
+            if let Some(stop) = webrtc_bridge_stop.take() {
+                let _ = stop.send(());
+            }
             bail!("Failed to connect via rendezvous server");
         }
         let time_used = start.elapsed().as_millis() as u64;
@@ -850,6 +1212,10 @@ impl Client {
         Option<KcpStream>,
         &'static str,
     )> {
+        // Guard the offerer for the whole of connect(): any early return — cancellation during the
+        // awaits below, the relay override, or a secure_connection failure — closes its pc via the
+        // guard's drop. Disarmed only once WebRTC is the confirmed winning, secured transport.
+        let mut webrtc_guard = webrtc_offerer.map(OffererGuard::new);
         let direct_failures = interface.get_lch().read().unwrap().direct_failures;
         let mut connect_timeout = 0;
         const MIN: u64 = 1000;
@@ -900,11 +1266,20 @@ impl Client {
         if let Some(udp_socket_v6) = udp_socket_v6 {
             connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
         }
-        if let Some(mut webrtc) = webrtc_offerer {
+        // Race a clone of the offerer; the guard retains its own clone so a losing/cancelled race
+        // still closes the pc (select_ok drops the future's clone without closing).
+        if let Some(stream) = webrtc_guard.as_ref().and_then(|g| g.stream()) {
+            let mut raced = stream.clone();
+            // The punch-tuned timeout can be as low as 1s — enough for a raw TCP SYN but not for
+            // candidate trickle + ICE checks + DTLS. Give WebRTC its own floor (prefer-P2P) so a
+            // viable P2P path is not abandoned before it can complete; TCP/UDP keep the tighter
+            // timeout, so a working direct connection still wins the race immediately, and the
+            // relay fallback below only waits the extra time when direct attempts all failed.
+            let webrtc_timeout = connect_timeout.max(Self::WEBRTC_PREFER_WINDOW_MS);
             connect_futures.push(
                 async move {
-                    webrtc.wait_connected(connect_timeout).await?;
-                    Ok((Stream::WebRTC(webrtc), None, "WebRTC"))
+                    raced.wait_connected(webrtc_timeout).await?;
+                    Ok((Stream::WebRTC(raced), None, "WebRTC"))
                 }
                 .boxed(),
             );
@@ -917,9 +1292,14 @@ impl Client {
         if let Some(stop) = webrtc_bridge_stop {
             let _ = stop.send(());
         }
+        // webrtc_guard stays armed across the relay override and secure_connection below; it is
+        // disarmed only at the successful return when WebRTC is the kept transport.
 
         let mut direct = !conn.is_err();
-        if interface.is_force_relay() || conn.is_err() {
+        // A WebRTC win under force_relay only happens when the pc was built with Relay-only ICE
+        // (TURN configured), which already honors the relay requirement — keep it instead of
+        // replacing it with the RustDesk relay.
+        if (interface.is_force_relay() && typ != "WebRTC") || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
                     peer_id,
@@ -948,15 +1328,71 @@ impl Client {
             start.elapsed(),
             punch_type
         );
-        let res = Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await;
+        let res = Self::secure_connection(peer_id, signed_id_pk.clone(), key, &mut conn).await;
         let pk: Option<Vec<u8>> = match res {
             Ok(pk) => pk,
+            Err(e) if typ == "WebRTC" && !relay_server.is_empty() => {
+                // WebRTC won the race but identity/DTLS binding failed; fall back to a freshly
+                // coordinated relay instead of failing the whole attempt. The guard is dropped
+                // first so the bad pc is closed promptly.
+                log::warn!("WebRTC secure handshake failed ({}), falling back to relay", e);
+                drop(webrtc_guard.take());
+                match Self::request_relay(
+                    peer_id,
+                    relay_server.to_owned(),
+                    rendezvous_server,
+                    !signed_id_pk.is_empty(),
+                    key,
+                    token,
+                    conn_type,
+                )
+                .await
+                {
+                    Ok(mut relay_conn) => {
+                        match Self::secure_connection(peer_id, signed_id_pk, key, &mut relay_conn)
+                            .await
+                        {
+                            Ok(pk) => {
+                                conn = relay_conn;
+                                typ = "Relay";
+                                direct = false;
+                                pk
+                            }
+                            Err(e) => {
+                                interface.update_direct(Some(false));
+                                bail!(e);
+                            }
+                        }
+                    }
+                    Err(relay_e) => {
+                        interface.update_direct(Some(direct));
+                        bail!(
+                            "WebRTC secure failed ({}); relay fallback also failed: {}",
+                            e,
+                            relay_e
+                        );
+                    }
+                }
+            }
             Err(e) => {
                 // this direct is mainly used by on_establish_connection_error, so we update it here before bail
                 interface.update_direct(Some(direct));
+                // webrtc_guard is still armed here, so a WebRTC winner whose secure handshake
+                // failed is closed by the guard's drop as we bail (no explicit close needed).
                 bail!(e);
             }
         };
+        if typ == "WebRTC" {
+            // WebRTC through a TURN server (force_relay, or a TURN pair winning under All
+            // policy) is relayed traffic; report the direct flag accordingly.
+            if conn.webrtc_relayed().await.unwrap_or(false) {
+                direct = false;
+            }
+            // Secured: disarm so the returned conn keeps the pc alive.
+            if let Some(guard) = webrtc_guard.take() {
+                let _ = guard.into_inner();
+            }
+        }
         log::debug!("{} punch secure_connection ok", punch_type);
         Ok((conn, direct, pk, kcp, typ))
     }
@@ -973,6 +1409,15 @@ impl Client {
         } else {
             key
         });
+        // A WebRTC channel is peer-authenticated only once its DTLS fingerprint is bound to the
+        // verified peer identity below. Once a trusted identity IS established, every binding
+        // failure fails closed: any peer able to answer WebRTC also signs its fingerprint, so a
+        // mismatch is concrete evidence of a rendezvous/relay MITM (not a legacy peer), and
+        // callers fall back to a fresh relay connection rather than proceeding on that channel.
+        // Without a trusted identity (absent, or unverifiable under our configured root) no
+        // binding is possible at all; WebRTC then proceeds like TCP's non-secure fallback —
+        // DTLS-encrypted but reported unsecured. TCP/UDP/relay keep their existing behavior.
+        let is_webrtc = conn.is_webrtc();
         let mut sign_pk = None;
         let mut option_pk = None;
         if !signed_id_pk.is_empty() {
@@ -991,6 +1436,17 @@ impl Client {
         let sign_pk = match sign_pk {
             Some(v) => v,
             None => {
+                // No trusted peer identity: either the deployment provides none (empty
+                // signed_id_pk, key-less) or the blob does not verify under our configured root
+                // (typical benign cause: self-hosted server with the client not configured with
+                // its key, so verification runs against the built-in RS_PUB_KEY). Either way no
+                // fingerprint binding is possible, which is the same cryptographic state as
+                // key-less: DTLS-encrypted to an unauthenticated peer. Proceed like TCP's
+                // non-secure fallback with is_secured() left false. Bailing here instead would
+                // only push the session onto a relay where the same blob fails verification
+                // again and the payload then runs in plaintext — strictly worse than
+                // unauthenticated DTLS, while an active attacker reaches the same warned,
+                // unauthenticated endpoint either way.
                 // send an empty message out in case server is setting up secure and waiting for first message
                 conn.send(&Message::new()).await?;
                 return Ok(option_pk);
@@ -1001,8 +1457,22 @@ impl Client {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
-                        if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
+                        if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk) {
                             if id == peer_id {
+                                // WebRTC only: bind the DTLS channel to the verified peer identity.
+                                // webrtc-rs already verified the peer certificate matches the remote
+                                // SDP fingerprint, so requiring the peer to have signed that same
+                                // fingerprint defeats a rendezvous/relay MITM that swaps SDPs. Fail
+                                // closed: an unreadable/empty/mismatched fingerprint aborts the
+                                // WebRTC connection rather than silently accepting it.
+                                if is_webrtc {
+                                    let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
+                                        || anyhow!("WebRTC DTLS fingerprint unavailable"),
+                                    )?;
+                                    if signed_fp.is_empty() || signed_fp != actual_fp {
+                                        bail!("WebRTC DTLS fingerprint not bound to peer identity (possible MITM)");
+                                    }
+                                }
                                 let (asymmetric_value, symmetric_value, key) =
                                     create_symmetric_key_msg(their_pk_b);
                                 let mut msg_out = Message::new();
@@ -1014,10 +1484,16 @@ impl Client {
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                                 conn.set_key(key);
                             } else {
+                                if is_webrtc {
+                                    bail!("WebRTC handshake id mismatch (possible MITM)");
+                                }
                                 log::error!("Handshake failed: sign failure");
                                 conn.send(&Message::new()).await?;
                             }
                         } else {
+                            if is_webrtc {
+                                bail!("WebRTC peer identity could not be verified (refusing unbound channel)");
+                            }
                             // fall back to non-secure connection in case pk mismatch
                             log::info!("pk mismatch, fall back to non-secure");
                             let mut msg_out = Message::new();
@@ -1025,10 +1501,16 @@ impl Client {
                             conn.send(&msg_out).await?;
                         }
                     } else {
+                        if is_webrtc {
+                            bail!("WebRTC handshake received an unexpected message type");
+                        }
                         log::error!("Handshake failed: invalid message type");
                         conn.send(&Message::new()).await?;
                     }
                 } else {
+                    if is_webrtc {
+                        bail!("WebRTC handshake received a malformed message");
+                    }
                     log::error!("Handshake failed: invalid message format");
                     conn.send(&Message::new()).await?;
                 }
@@ -4543,4 +5025,147 @@ async fn udp_nat_connect(
             anyhow!(err)
         })?;
     Ok((res.1, Some(res.0), typ))
+}
+
+#[cfg(test)]
+mod webrtc_race_tests {
+    use super::race_transports_prefer_webrtc;
+    use hbb_common::{
+        anyhow::anyhow,
+        futures::future::{BoxFuture, FutureExt},
+        tokio,
+        tokio::time::{sleep, Duration, Instant},
+        ResultType,
+    };
+
+    fn ok_after(ms: u64, tag: &'static str) -> BoxFuture<'static, ResultType<&'static str>> {
+        async move {
+            sleep(Duration::from_millis(ms)).await;
+            Ok(tag)
+        }
+        .boxed()
+    }
+
+    fn err_after(ms: u64, what: &'static str) -> BoxFuture<'static, ResultType<&'static str>> {
+        async move {
+            sleep(Duration::from_millis(ms)).await;
+            Err(anyhow!(what))
+        }
+        .boxed()
+    }
+
+    const NOT_P2P: fn(&&'static str) -> bool = |_| false;
+
+    #[tokio::test]
+    async fn webrtc_preferred_over_faster_relay_within_window() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(120, "webrtc"),
+            vec![ok_after(10, "relay")],
+            60_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "webrtc");
+    }
+
+    #[tokio::test]
+    async fn unfinished_ipv6_still_beats_held_relay() {
+        let start = Instant::now();
+        let got = race_transports_prefer_webrtc(
+            ok_after(60_000, "webrtc"),
+            vec![ok_after(10, "relay"), ok_after(100, "ipv6")],
+            1_000,
+            |t| *t == "ipv6",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "ipv6");
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn held_relay_committed_when_window_expires() {
+        let start = Instant::now();
+        let got = race_transports_prefer_webrtc(
+            ok_after(60_000, "webrtc"),
+            vec![ok_after(10, "relay")],
+            150,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "relay");
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn held_relay_committed_when_webrtc_fails() {
+        let start = Instant::now();
+        let got = race_transports_prefer_webrtc(
+            err_after(50, "webrtc dead"),
+            vec![ok_after(10, "relay")],
+            60_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "relay");
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn relay_committed_directly_after_webrtc_failed() {
+        let got = race_transports_prefer_webrtc(
+            err_after(5, "webrtc dead"),
+            vec![ok_after(100, "relay")],
+            60_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "relay");
+    }
+
+    #[tokio::test]
+    async fn webrtc_still_wins_past_window_when_relay_dead() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(300, "webrtc"),
+            vec![err_after(10, "relay dead")],
+            50,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "webrtc");
+    }
+
+    #[tokio::test]
+    async fn p2p_transport_committed_immediately() {
+        let start = Instant::now();
+        let got = race_transports_prefer_webrtc(
+            ok_after(60_000, "webrtc"),
+            vec![ok_after(10, "ipv6")],
+            60_000,
+            |t| *t == "ipv6",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "ipv6");
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn both_failing_compose_error() {
+        let err = race_transports_prefer_webrtc(
+            err_after(10, "webrtc dead"),
+            vec![err_after(20, "relay dead")],
+            1_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("webrtc dead") && err.contains("relay dead"), "{}", err);
+    }
 }
