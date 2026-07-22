@@ -138,6 +138,11 @@ static int32_t MacWindowOwnerPidAtPoint(double x, double y) {
         CFIndex windowCount = CFArrayGetCount(windowList);
         for (CFIndex index = 0; index < windowCount; ++index) {
             NSDictionary *window = (NSDictionary *)CFArrayGetValueAtIndex(windowList, index);
+            NSNumber *layer = [window objectForKey:(id)kCGWindowLayer];
+            if (layer == nil || layer.intValue != 0) {
+                continue;
+            }
+
             NSNumber *alpha = [window objectForKey:(id)kCGWindowAlpha];
             if (alpha != nil && alpha.doubleValue <= 0.01) {
                 continue;

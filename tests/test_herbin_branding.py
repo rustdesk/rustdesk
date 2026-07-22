@@ -76,6 +76,8 @@ def main() -> None:
     assert "fn MacActivateApplicationAtPoint" in macos_rs
     assert "pub fn activate_application_at_point" in macos_rs
     assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' in macos_mm
+    assert "kCGWindowLayer" in macos_mm
+    assert "layer.intValue != 0" in macos_mm
     assert "NSApplicationActivationPolicyRegular" in macos_mm
     assert "activateWithOptions" in macos_mm
     required_window_activation_markers = (
@@ -136,6 +138,12 @@ def main() -> None:
         "log_macos_click_focus",
         "mouse_focus_snapshot",
         "from_millis(120)",
+        "rdh-window-debug",
+        "MacDebugFrontmostApplicationPid",
+        "MacDebugWindowOwnerPidAtPoint",
+        "rdh-window-activation.log",
+        "settled_150ms",
+        "settled_600ms",
     )
     diagnostic_sources = input_service_rs + macos_rs + macos_mm + read(
         "libs/enigo/src/macos/macos_impl.rs"
