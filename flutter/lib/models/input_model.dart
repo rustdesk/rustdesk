@@ -1229,10 +1229,18 @@ class InputModel {
     if (isViewOnly || isViewCamera) return;
     var delta = Offset(dx, dy) * _trackpadSpeedInner;
     delta = _filterTrackpadDeltaAxis(delta);
-    var x = delta.dx.toInt();
-    var y = delta.dy.toInt();
-    if (x == 0 && y == 0) return;
+    // Keep the gesture alive even for sub-pixel movement, and accumulate the
+    // fractional remainder (reset on gesture start) so a slow scroll does not
+    // stall on deltas that truncate to zero.
     _trackpadTwoFingerLastMoveMs = _nowMs();
+    if (peerPlatform == kPeerPlatformLinux) {
+      delta *= _trackpadAdjustPeerLinux;
+    }
+    _trackpadScrollUnsent += delta;
+    final x = _trackpadScrollUnsent.dx.truncate();
+    final y = _trackpadScrollUnsent.dy.truncate();
+    _trackpadScrollUnsent -= Offset(x.toDouble(), y.toDouble());
+    if (x == 0 && y == 0) return;
     bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({
@@ -1355,7 +1363,10 @@ class InputModel {
       // screen, and does not drift — matching the behaviour the device's
       // synthesized 2-finger drag used to produce via handleMouse.
       final canvasPosition = _pointerPositionForRemoteCanvas(e);
-      handleMouse(_getMouseEvent(e, _kMouseEventMove), canvasPosition,
+      // A touch-kind hover is a pure move with no buttons; use the stateless
+      // move event so it cannot synthesize a release for another device's held
+      // button via _getMouseEvent's shared _lastButtons comparison.
+      handleMouse(getMouseEventMove(), canvasPosition,
           edgeScroll: useEdgeScroll);
       return;
     }
@@ -1654,8 +1665,12 @@ class InputModel {
     }
 
     // [FIX #15630] End of an Android trackpad 2-finger gesture: clear scroll mode.
+    // Require the learned trackpad device so an unrelated touchscreen up cannot
+    // terminate the active gesture.
     if (!isDesktop &&
         e.kind == ui.PointerDeviceKind.touch &&
+        _trackpadHoverDeviceId != null &&
+        e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
       return;
@@ -1684,7 +1699,12 @@ class InputModel {
     // the per-frame delta into a smooth scroll. Other touch moves (e.g. a real
     // touchscreen drag, or no active 2-finger gesture) are dropped here as before.
     if (!isDesktop && e.kind == ui.PointerDeviceKind.touch) {
-      if (_trackpadTwoFinger && (e.buttons & 0x1) != 0) {
+      // Only the learned trackpad device drives the 2-finger scroll, so a
+      // concurrent real touchscreen drag is not mistaken for scrolling.
+      if (_trackpadTwoFinger &&
+          _trackpadHoverDeviceId != null &&
+          e.device == _trackpadHoverDeviceId &&
+          (e.buttons & 0x1) != 0) {
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }
       return;
