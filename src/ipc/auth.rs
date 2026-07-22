@@ -656,6 +656,32 @@ pub(crate) fn authorize_service_scoped_ipc_connection(stream: &Connection, postf
     true
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn authorize_user_server_process(
+    peer_uid: Option<u32>,
+    peer_pid: Option<u32>,
+    expected_uid: u32,
+) -> bool {
+    if peer_uid != Some(expected_uid) {
+        return false;
+    }
+    let Some(peer_pid) = peer_pid else {
+        return false;
+    };
+    let Ok(peer_exe) = peer_exe_canonical_path_by_pid(peer_pid) else {
+        return false;
+    };
+    let expected_path = PathBuf::from(format!(
+        "/Applications/{}.app/Contents/MacOS/{}",
+        crate::get_app_name(),
+        crate::get_app_name()
+    ));
+    let Ok(expected_path) = fs::canonicalize(expected_path) else {
+        return false;
+    };
+    paths_refer_to_same_file(&peer_exe, &expected_path)
+}
+
 #[cfg(windows)]
 pub(crate) fn authorize_windows_main_ipc_connection(stream: &Connection, postfix: &str) -> bool {
     let (
