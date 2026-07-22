@@ -661,11 +661,8 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
-    // Confirm the uinput mouse device actually adopted the new range before the
-    // caller caches it: send_refresh() now waits for the service's ack, so a
-    // failed refresh surfaces as an error instead of a silently stale range.
-    // Runs on a blocking thread because ENIGO is a std Mutex and send_refresh
-    // blocks on IPC.
+    // Confirm the device adopted the new range before the caller caches it.
+    // spawn_blocking because ENIGO is a std Mutex and send_refresh blocks on IPC.
     tokio::task::spawn_blocking(move || {
         if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
             if let Some(mouse) = mouse
@@ -674,8 +671,9 @@ pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32)
             {
                 return mouse.send_refresh();
             }
-            log::error!("failed downcast uinput mouse");
+            bail!("failed to downcast custom mouse to UInputMouse");
         }
+        // No custom mouse: nothing to refresh.
         Ok(())
     })
     .await?

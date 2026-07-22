@@ -132,9 +132,8 @@ pub mod client {
         pub fn send_refresh(&mut self) -> ResultType<()> {
             self.rt
                 .block_on(self.conn.send(&Data::Mouse(DataMouse::Refresh)))?;
-            // Wait for the service to confirm it recreated the mouse device with
-            // the new range, so the caller can tell a failed refresh from a good
-            // one instead of caching a range the device never adopted.
+            // Wait for the service to confirm it recreated the device, so a
+            // failed refresh is distinguishable from a good one.
             match self.rt.block_on(self.conn.next_timeout(IPC_REQUEST_TIMEOUT)) {
                 Ok(Some(Data::Empty)) => Ok(()),
                 Ok(Some(resp)) => bail!("unexpected uinput mouse refresh response: {:?}", &resp),
@@ -872,16 +871,21 @@ pub mod service {
                                                 rng_y.0,
                                                 rng_y.1
                                             );
-                                            mouse = match mouce::UInputMouseManager::new(rng_x, rng_y) {
-                                                Ok(mouse) => mouse,
-                                                Err(e) => {
-                                                    log::error!("Failed to create mouse, {}", e);
-                                                    return;
+                                            match mouce::UInputMouseManager::new(rng_x, rng_y) {
+                                                Ok(m) => {
+                                                    mouse = m;
+                                                    // Ack: device adopted the new range.
+                                                    allow_err!(stream.send(&Data::Empty).await);
                                                 }
-                                            };
-                                            // Ack so the client's send_refresh() knows the
-                                            // device adopted the new range.
-                                            allow_err!(stream.send(&Data::Empty).await);
+                                                Err(e) => {
+                                                    // Keep the current device; withhold the ack
+                                                    // so the client times out and retries.
+                                                    log::error!(
+                                                        "Failed to recreate uinput mouse, keeping current: {}",
+                                                        e
+                                                    );
+                                                }
+                                            }
                                         } else {
                                             handle_mouse(&mut mouse, &data);
                                         }
