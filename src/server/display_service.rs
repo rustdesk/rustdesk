@@ -29,7 +29,10 @@ lazy_static::lazy_static! {
     // It should not be updated when displays changed.
     pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
-    #[cfg(target_os = "linux")]
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
     static ref WAYLAND_UINPUT_RECT: Mutex<WaylandUinputRect> = Default::default();
 }
 
@@ -87,10 +90,15 @@ fn refresh_wayland_uinput_rect_if_changed() {
         Ok(rt) => {
             // Bound the IPC wait, this runs on the display service loop and
             // `set_resolution()` has no timeout on the response read.
-            match rt.block_on(timeout(
-                3_000,
-                crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
-            )) {
+            // timeout must be built inside the runtime, or it panics
+            // "there is no reactor running". See clipboard_service.rs.
+            match rt.block_on(async {
+                timeout(
+                    3_000,
+                    crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                )
+                .await
+            }) {
                 // Record the rect only after a successful apply, so a transient
                 // failure is retried on the next check.
                 Ok(Ok(())) => WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect),
