@@ -226,9 +226,10 @@ impl Drop for OffererGuard {
 /// - a WebRTC success is committed immediately;
 /// - an `is_p2p` result from `others` (e.g. IPv6 direct) is committed immediately;
 /// - a relayed result inside the preference window is *held*, giving WebRTC until the window
-///   expires to connect and take priority, while unfinished `others` keep racing so a slower
-///   direct transport can still win; when the window ends (or WebRTC fails) the held connection
-///   is committed;
+///   expires to connect and take priority. The window starts when the first relay is ready, not
+///   when setup begins, so rendezvous latency cannot consume the preference budget. Unfinished
+///   `others` keep racing so a slower direct transport can still win; when the window ends (or
+///   WebRTC fails) the held connection is committed;
 /// - a failure on one side commits the survivor as soon as it succeeds; two failures compose
 ///   into one error.
 ///
@@ -246,10 +247,15 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
     let mut others_err: Option<hbb_common::anyhow::Error> = None;
     let window = tokio::time::sleep(Duration::from_millis(window_ms));
     tokio::pin!(window);
-    let mut window_over = false;
+    let mut window_started = false;
     loop {
         tokio::select! {
-            res = async { webrtc_fut.as_mut().unwrap().await }, if webrtc_fut.is_some() => {
+            res = async {
+                match webrtc_fut.as_mut() {
+                    Some(fut) => fut.await,
+                    None => std::future::pending().await,
+                }
+            }, if webrtc_fut.is_some() => {
                 webrtc_fut = None;
                 match res {
                     // WebRTC connected: preferred outright; a held relay conn just drops.
@@ -266,17 +272,26 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                     }
                 }
             }
-            res = async { others_fut.as_mut().unwrap().await }, if others_fut.is_some() => {
+            res = async {
+                match others_fut.as_mut() {
+                    Some(fut) => fut.await,
+                    None => std::future::pending().await,
+                }
+            }, if others_fut.is_some() => {
                 others_fut = None;
                 match res {
                     Ok((conn, unfinished)) => {
-                        if is_p2p(&conn) || window_over || webrtc_fut.is_none() {
+                        if is_p2p(&conn) || webrtc_fut.is_none() {
                             return Ok(conn);
                         }
                         // Hold the first relay, but keep polling unfinished alternatives: an IPv6
                         // direct attempt may complete inside the same WebRTC preference window.
                         if held.is_none() {
                             held = Some(conn);
+                            window.as_mut().reset(
+                                Instant::now() + Duration::from_millis(window_ms),
+                            );
+                            window_started = true;
                         }
                         if !unfinished.is_empty() {
                             others_fut = Some(select_ok(unfinished));
@@ -289,14 +304,22 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                     },
                 }
             }
-            _ = &mut window, if !window_over => {
-                window_over = true;
+            _ = &mut window, if window_started => {
                 if let Some(conn) = held.take() {
                     return Ok(conn);
                 }
+                window_started = false;
             }
         }
     }
+}
+
+fn request_can_carry_webrtc(udp_port: u16, force_relay: bool) -> bool {
+    // A normal TCP punch request must close its rendezvous socket before reusing that local
+    // address, while WebRTC trickle ICE retains the socket as its signaling bridge. Therefore a
+    // request with udp_port=0 must never carry WebRTC. UDP requests can carry it because their
+    // punch socket is separate; force-relay requests can too because they never enter TCP punching.
+    udp_port > 0 || force_relay
 }
 
 impl Client {
@@ -450,7 +473,13 @@ impl Client {
         } else {
             None
         };
-        let webrtc_offerer = if Self::should_create_webrtc_offerer(&interface) {
+        // Prepare WebRTC only for a possible UDP request, or for force-relay where TURN is the
+        // only WebRTC path. `_start_inner` applies the stricter wire invariant after the UDP NAT
+        // test: an actual request with udp_port=0 never includes the offer.
+        let may_prepare_webrtc = udp.0.is_some() || interface.is_force_relay();
+        let webrtc_offerer = if may_prepare_webrtc
+            && Self::should_create_webrtc_offerer(&interface)
+        {
             match WebRTCStream::new("", interface.is_force_relay(), CONNECT_TIMEOUT).await {
                 Ok(stream) => Some(stream),
                 Err(err) => {
@@ -461,6 +490,7 @@ impl Client {
         } else {
             None
         };
+        let has_webrtc_offerer = webrtc_offerer.is_some();
         let fut = Self::_start_inner(
             peer.to_owned(),
             key.to_owned(),
@@ -478,9 +508,12 @@ impl Client {
         if udp.0.is_none() {
             return fut.await;
         }
-        let mut connect_futures = Vec::new();
-        connect_futures.push(fut.boxed());
-        let fut = Self::_start_inner(
+        let preferred_fut = fut.boxed();
+        // This is deliberately a pure TCP punch request: its WebRTC argument must stay `None`.
+        // TCP punching closes the rendezvous socket before binding a new connection to the same
+        // local address; a WebRTC ICE bridge would retain that socket and break the port reuse.
+        // The preferred request above may carry WebRTC only because it owns a separate UDP socket.
+        let fallback_fut = Self::_start_inner(
             peer.to_owned(),
             key.to_owned(),
             token.to_owned(),
@@ -493,8 +526,18 @@ impl Client {
             rendezvous_server,
             servers,
             contained,
-        );
-        connect_futures.push(fut.boxed());
+        )
+        .boxed();
+        if has_webrtc_offerer {
+            return race_transports_prefer_webrtc(
+                preferred_fut,
+                vec![fallback_fut],
+                Self::WEBRTC_PREFER_WINDOW_MS,
+                |result| result.0 .1,
+            )
+            .await;
+        }
+        let connect_futures = vec![preferred_fut, fallback_fut];
         match select_ok(connect_futures).await {
             Ok(conn) => Ok((conn.0 .0, conn.0 .1, conn.0 .2)),
             Err(e) => Err(e),
@@ -543,7 +586,9 @@ impl Client {
     /// too.
     /// When force_relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
     /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
-    /// RelayResponse path prefers it within the WebRTC preference window.
+    /// RelayResponse path races it without a P2P preference delay. The caller additionally
+    /// requires either a usable UDP request or force_relay; a normal TCP punch request must never
+    /// carry a WebRTC offer because trickle ICE retains the socket TCP punching needs to reuse.
     fn should_create_webrtc_offerer(interface: &impl Interface) -> bool {
         if !crate::get_udp_punch_enabled() || use_ws() || Config::is_proxy() {
             return false;
@@ -764,20 +809,26 @@ impl Client {
             .take()
             .map(|(socket, addr)| (Some(socket), Some(addr)))
             .unwrap_or((None, None));
-        let webrtc_sdp_offer = if let Some(stream) =
-            webrtc_offerer.as_ref().and_then(|g| g.stream())
-        {
-            match stream.get_local_endpoint().await {
-                Ok(endpoint) => endpoint,
-                Err(err) => {
-                    log::warn!("failed to read local WebRTC offer: {}", err);
+        let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
+        let webrtc_sdp_offer =
+            if request_can_carry_webrtc(udp_nat_port, interface.is_force_relay()) {
+                if let Some(stream) = webrtc_offerer.as_ref().and_then(|g| g.stream()) {
+                    match stream.get_local_endpoint_trickle().await {
+                        Ok(endpoint) => endpoint,
+                        Err(err) => {
+                            log::warn!("failed to read local WebRTC offer: {}", err);
+                            String::new()
+                        }
+                    }
+                } else {
                     String::new()
                 }
-            }
-        } else {
-            String::new()
-        };
-        let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
+            } else {
+                // Hard protocol invariant: a normal request with udp_port=0 is a TCP punch
+                // request. It must not start WebRTC trickle on the rendezvous socket that TCP
+                // punching needs to close and reuse by local address.
+                String::new()
+            };
         let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
@@ -971,16 +1022,24 @@ impl Client {
                                 Ok((Stream::WebRTC(raced), None, "WebRTC"))
                             }
                             .boxed();
-                            // The peer answered WebRTC: prefer P2P. The relay result is held for
-                            // the preference window so WebRTC can win even though a relay TCP
-                            // connect completes much faster than ICE + DTLS setup.
-                            race_transports_prefer_webrtc(
-                                webrtc_fut,
-                                connect_futures,
-                                Self::WEBRTC_PREFER_WINDOW_MS,
-                                |result| result.2 == "IPv6",
-                            )
-                            .await
+                            if interface.is_force_relay() {
+                                // Relay-only WebRTC can use only TURN, so it has no P2P advantage
+                                // over the RustDesk relay. Take the first successful relay instead
+                                // of delaying an already-ready result for the preference window.
+                                connect_futures.push(webrtc_fut);
+                                select_ok(connect_futures).await.map(|r| r.0)
+                            } else {
+                                // The peer answered WebRTC: prefer P2P. The relay result is held
+                                // for the preference window so WebRTC can win even though a relay
+                                // TCP connect completes much faster than ICE + DTLS setup.
+                                race_transports_prefer_webrtc(
+                                    webrtc_fut,
+                                    connect_futures,
+                                    Self::WEBRTC_PREFER_WINDOW_MS,
+                                    |result| result.2 == "IPv6",
+                                )
+                                .await
+                            }
                         } else {
                             // Run all connection attempts concurrently, take the first success.
                             select_ok(connect_futures).await.map(|r| r.0)
@@ -5029,7 +5088,7 @@ async fn udp_nat_connect(
 
 #[cfg(test)]
 mod webrtc_race_tests {
-    use super::race_transports_prefer_webrtc;
+    use super::{race_transports_prefer_webrtc, request_can_carry_webrtc};
     use hbb_common::{
         anyhow::anyhow,
         futures::future::{BoxFuture, FutureExt},
@@ -5056,12 +5115,32 @@ mod webrtc_race_tests {
 
     const NOT_P2P: fn(&&'static str) -> bool = |_| false;
 
+    #[test]
+    fn tcp_punch_request_never_carries_webrtc() {
+        assert!(!request_can_carry_webrtc(0, false));
+        assert!(request_can_carry_webrtc(1, false));
+        assert!(request_can_carry_webrtc(0, true));
+    }
+
     #[tokio::test]
     async fn webrtc_preferred_over_faster_relay_within_window() {
         let got = race_transports_prefer_webrtc(
             ok_after(120, "webrtc"),
             vec![ok_after(10, "relay")],
             60_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "webrtc");
+    }
+
+    #[tokio::test]
+    async fn preference_window_starts_when_relay_is_ready() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(350, "webrtc"),
+            vec![ok_after(250, "relay")],
+            200,
             NOT_P2P,
         )
         .await
