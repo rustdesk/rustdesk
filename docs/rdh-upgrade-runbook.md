@@ -10,8 +10,9 @@ exist.
 RDH keeps only these deviations from upstream:
 
 1. `RustDesk-Herbin` branding, bundle ID, URL scheme, config, and launchd isolation.
-2. A macOS controlled-side workaround that activates the regular application under
-   the cursor immediately before a remote left-button-down event.
+2. A macOS controlled-side workaround that activates the regular application and,
+   when public Accessibility data is available, raises the exact window under the
+   cursor immediately before a remote left-button-down event.
 3. A dedicated ad-hoc-signed macOS CI build until Developer ID signing is available.
 4. A launchd-gated macOS `--server` memory watchdog that checks once daily at
    06:00 and restarts an over-limit server within the unattended window.
@@ -101,6 +102,11 @@ Review the patch for:
 - no `macos-input-trace`, `macos-focus-trace`, delayed click thread, or per-click
   info logging;
 - activation still occurs before `en.mouse_down(MouseButton::Left)`;
+- exact-window activation uses only public Accessibility APIs and validates the AX
+  window PID against the CoreGraphics owner PID;
+- the focused AX window is not raised again, and unsupported Accessibility paths
+  fall back to the existing application activation without title/bounds guessing;
+- `_AXUIElementGetWindow`, `CGSOrderWindow`, and SkyLight remain absent;
 - Dock and non-regular overlay applications remain excluded;
 - bundle ID and service namespace stay separate from official RustDesk;
 - the custom client still skips the official update checker.
@@ -154,6 +160,8 @@ Test from an official Windows controller and from iPhone/iPad mouse mode:
 
 - click between at least three applications and confirm menu-bar app name and window
   order change;
+- click between two windows of the same application and confirm the clicked window
+  becomes frontmost without changing the menu-bar application;
 - click Dock icons, menus, popovers, and desktop without unwanted activation;
 - drag, select text, right-click, scroll, and double-click;
 - test multiple displays and a fullscreen or separate-Space window;

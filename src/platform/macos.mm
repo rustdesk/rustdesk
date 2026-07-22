@@ -1,5 +1,6 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
+#import <ApplicationServices/ApplicationServices.h>
 #import <IOKit/hidsystem/IOHIDLib.h>
 #include <Security/Authorization.h>
 #include <Security/AuthorizationTags.h>
@@ -168,10 +169,92 @@ static int32_t MacWindowOwnerPidAtPoint(double x, double y) {
     }
 }
 
+static AXUIElementRef MacAccessibilityWindowAtPoint(double x, double y, pid_t expectedPid) {
+    AXUIElementRef systemWide = AXUIElementCreateSystemWide();
+    if (systemWide == NULL) {
+        return NULL;
+    }
+
+    AXUIElementRef hitElement = NULL;
+    AXError hitError = AXUIElementCopyElementAtPosition(systemWide, x, y, &hitElement);
+    CFRelease(systemWide);
+    if (hitError != kAXErrorSuccess || hitElement == NULL) {
+        if (hitElement != NULL) {
+            CFRelease(hitElement);
+        }
+        return NULL;
+    }
+
+    AXUIElementRef windowElement = NULL;
+    CFTypeRef roleValue = NULL;
+    AXError roleError = AXUIElementCopyAttributeValue(hitElement, kAXRoleAttribute, &roleValue);
+    if (roleError == kAXErrorSuccess && roleValue != NULL &&
+        CFGetTypeID(roleValue) == CFStringGetTypeID() &&
+        CFEqual(roleValue, kAXWindowRole)) {
+        windowElement = hitElement;
+        CFRetain(windowElement);
+    }
+    if (roleValue != NULL) {
+        CFRelease(roleValue);
+    }
+
+    if (windowElement == NULL) {
+        CFTypeRef windowValue = NULL;
+        AXError windowError =
+            AXUIElementCopyAttributeValue(hitElement, kAXWindowAttribute, &windowValue);
+        if (windowError == kAXErrorSuccess && windowValue != NULL &&
+            CFGetTypeID(windowValue) == AXUIElementGetTypeID()) {
+            windowElement = (AXUIElementRef)windowValue;
+        } else if (windowValue != NULL) {
+            CFRelease(windowValue);
+        }
+    }
+    CFRelease(hitElement);
+
+    if (windowElement == NULL) {
+        return NULL;
+    }
+
+    pid_t windowPid = -1;
+    if (AXUIElementGetPid(windowElement, &windowPid) != kAXErrorSuccess ||
+        windowPid != expectedPid) {
+        CFRelease(windowElement);
+        return NULL;
+    }
+    return windowElement;
+}
+
+static bool MacAccessibilityWindowNeedsRaise(AXUIElementRef targetWindow, pid_t ownerPid) {
+    if (targetWindow == NULL) {
+        return false;
+    }
+
+    AXUIElementRef applicationElement = AXUIElementCreateApplication(ownerPid);
+    if (applicationElement == NULL) {
+        return false;
+    }
+
+    CFTypeRef focusedWindowValue = NULL;
+    AXError focusedWindowError = AXUIElementCopyAttributeValue(
+        applicationElement, kAXFocusedWindowAttribute, &focusedWindowValue);
+    CFRelease(applicationElement);
+    if (focusedWindowError != kAXErrorSuccess || focusedWindowValue == NULL ||
+        CFGetTypeID(focusedWindowValue) != AXUIElementGetTypeID()) {
+        if (focusedWindowValue != NULL) {
+            CFRelease(focusedWindowValue);
+        }
+        return false;
+    }
+
+    bool needsRaise = !CFEqual(targetWindow, focusedWindowValue);
+    CFRelease(focusedWindowValue);
+    return needsRaise;
+}
+
 extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
     @autoreleasepool {
         int32_t targetPid = MacWindowOwnerPidAtPoint(x, y);
-        if (targetPid <= 0 || targetPid == MacFrontmostApplicationPid()) {
+        if (targetPid <= 0) {
             return 0;
         }
 
@@ -184,8 +267,30 @@ extern "C" int32_t MacActivateApplicationAtPoint(double x, double y) {
             return 0;
         }
 
-        BOOL activated = [application activateWithOptions:(NSApplicationActivationOptions)0];
-        return activated ? targetPid : -targetPid;
+        AXUIElementRef targetWindow =
+            MacAccessibilityWindowAtPoint(x, y, targetPid);
+        bool shouldRaiseWindow =
+            MacAccessibilityWindowNeedsRaise(targetWindow, targetPid);
+        int32_t frontmostPid = MacFrontmostApplicationPid();
+
+        bool activationSucceeded = true;
+        if (targetPid != frontmostPid) {
+            activationSucceeded =
+                [application activateWithOptions:(NSApplicationActivationOptions)0];
+        }
+
+        AXError raiseError = kAXErrorSuccess;
+        if (shouldRaiseWindow) {
+            raiseError = AXUIElementPerformAction(targetWindow, kAXRaiseAction);
+        }
+        if (targetWindow != NULL) {
+            CFRelease(targetWindow);
+        }
+
+        if (!activationSucceeded || raiseError != kAXErrorSuccess) {
+            return -targetPid;
+        }
+        return targetPid != frontmostPid || shouldRaiseWindow ? targetPid : 0;
     }
 }
 

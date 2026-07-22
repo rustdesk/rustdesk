@@ -78,6 +78,39 @@ def main() -> None:
     assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' in macos_mm
     assert "NSApplicationActivationPolicyRegular" in macos_mm
     assert "activateWithOptions" in macos_mm
+    required_window_activation_markers = (
+        "#import <ApplicationServices/ApplicationServices.h>",
+        "AXUIElementCopyElementAtPosition",
+        "kAXRoleAttribute",
+        "kAXWindowRole",
+        "kAXWindowAttribute",
+        "AXUIElementGetPid",
+        "kAXFocusedWindowAttribute",
+        "CFEqual",
+        "AXUIElementPerformAction",
+        "kAXRaiseAction",
+    )
+    for marker in required_window_activation_markers:
+        assert marker in macos_mm
+
+    private_window_api_markers = (
+        "_AXUIElementGetWindow",
+        "CGSOrderWindow",
+        "SkyLight",
+    )
+    for marker in private_window_api_markers:
+        assert marker not in macos_mm
+
+    assert_in_order(
+        macos_mm,
+        "AXUIElementCopyElementAtPosition",
+        "activateWithOptions",
+    )
+    assert_in_order(
+        macos_mm,
+        "activateWithOptions",
+        "AXUIElementPerformAction",
+    )
     assert "activate_application_at_point(x, y)" in input_service_rs
     assert_in_order(
         input_service_rs,
