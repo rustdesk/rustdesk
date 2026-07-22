@@ -150,7 +150,7 @@ pub(super) fn trusted_install_environment() -> ResultType<String> {
     trusted_install_environment_from_paths(&system, &program_data, &public)
 }
 
-pub(super) fn trusted_install_environment_from_paths(
+fn trusted_install_environment_from_paths(
     system: &Path,
     program_data: &Path,
     public: &Path,
@@ -288,10 +288,13 @@ mod tests {
     }
 
     #[test]
-    fn nested_cmd_values_escape_ampersands_and_carets() {
+    fn nested_commands_escape_while_protected_environment_preserves_carets() {
         assert_eq!(
             escape_nested_cmd_ampersands(r"C:\A&^ B\RustDesk.exe"),
             r"C:\A^&^^ B\RustDesk.exe"
         );
+        let path = Path::new(r"C:\Win^Root\System32");
+        let environment = trusted_install_environment_from_paths(path, path, path).unwrap();
+        assert!(environment.contains(r#"set "PATH=C:\Win^Root\System32""#));
     }
 }

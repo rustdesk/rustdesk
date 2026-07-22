@@ -23,17 +23,17 @@ const UTF8_CODE_PAGE: u32 = 65001;
 const INSTALL_HANDOFF_RUNNER_EXISTS_EXIT_CODE: u32 = 0x5253_0001;
 const INSTALL_HANDOFF_COPY_FAILURE_EXIT_CODE: u32 = 0x5253_0002;
 const INSTALL_HANDOFF_HASH_FAILURE_EXIT_CODE: u32 = 0x5253_0003;
-pub(super) const INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE: u32 = 0x5253_0004;
+const INSTALL_HANDOFF_HASH_MISMATCH_EXIT_CODE: u32 = 0x5253_0004;
 const BATCH_CODE_PAGE_FAILURE_EXIT_CODE: u32 = 0x5253_0005;
 const BATCH_OUTPUT_DIRECTORY_EXISTS_EXIT_CODE: u32 = 0x5253_0006;
 const BATCH_OUTPUT_DIRECTORY_CREATE_FAILURE_EXIT_CODE: u32 = 0x5253_0007;
 const SHA256_HASH_LENGTH: usize = 32;
 
-pub(super) type BatchHash = [u8; SHA256_HASH_LENGTH];
+type BatchHash = [u8; SHA256_HASH_LENGTH];
 
-pub(super) struct InstallCommandScript {
-    pub(super) path: PathBuf,
-    pub(super) expected_hash: BatchHash,
+struct InstallCommandScript {
+    path: PathBuf,
+    expected_hash: BatchHash,
 }
 
 impl Drop for InstallCommandScript {
@@ -65,7 +65,7 @@ fn prepare_install_commands(commands: &str) -> ResultType<String> {
     ))
 }
 
-pub(super) fn write_install_script(cmds: String) -> ResultType<InstallCommandScript> {
+fn write_install_script(cmds: String) -> ResultType<InstallCommandScript> {
     let directory = std::env::temp_dir();
     path_for_cmd_environment(&directory)?;
     let commands = prepare_install_commands(&cmds)?;
@@ -94,7 +94,7 @@ fn install_hash_pattern(hash: &BatchHash) -> String {
         .join(" *")
 }
 
-pub(super) fn verified_install_bootstrap(
+fn verified_install_bootstrap(
     script: &InstallCommandScript,
     runner_directory: &Path,
 ) -> ResultType<String> {
@@ -110,6 +110,10 @@ pub(super) fn verified_install_bootstrap(
     let cmd = path_for_cmd_assignment(&cmd_path)?;
     let certutil = path_for_cmd_assignment(&certutil_path)?;
     let findstr = path_for_cmd_assignment(&findstr_path)?;
+    // Short names preserve headroom under the Windows 7 ShellExecuteExW 2,048
+    // UTF-16-character parameter limit. Paths are stored with delayed expansion
+    // disabled, then expanded indirectly so literal `!` survives: S=source,
+    // R=runner, Q=cmd.exe, H=certutil.exe, F=findstr.exe, C=created flag, E=exit code.
     Ok(format!(
         "setlocal DisableDelayedExpansion & set \"S={source}\" & set \"R={runner}\" & \
          set \"Q={cmd}\" & set \"H={certutil}\" & set \"F={findstr}\" & \
@@ -129,7 +133,7 @@ pub(super) fn verified_install_bootstrap(
     ))
 }
 
-pub(super) fn verified_install_parameters(script: &InstallCommandScript) -> ResultType<String> {
+fn verified_install_parameters(script: &InstallCommandScript) -> ResultType<String> {
     let system_directory = get_system_executable("")?;
     Ok(format!(
         "/D /E:ON /V:ON /C {}",
@@ -171,23 +175,11 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::super::installer_shell::{
-        embedded_shortcut_commands, shortcut_bytes, trusted_install_environment_from_paths,
-        WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS,
+        embedded_shortcut_commands, shortcut_bytes, WIN7_SHELL_EXECUTE_MAX_PARAMETER_CHARS,
     };
     use super::*;
     use ::windows::Win32::System::Threading;
     use std::os::windows::process::CommandExt;
-
-    #[test]
-    fn protected_batch_environment_preserves_carets() {
-        let environment = trusted_install_environment_from_paths(
-            Path::new(r"C:\Win^Root\System32"),
-            Path::new(r"C:\Program^Data"),
-            Path::new(r"C:\Users\Pub^lic"),
-        )
-        .expect("protected batch environment should be generated");
-        assert!(environment.contains(r#"set "PATH=C:\Win^Root\System32""#));
-    }
 
     #[test]
     fn native_install_handoff_verifies_before_execution() {
