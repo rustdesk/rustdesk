@@ -702,7 +702,7 @@ impl RendezvousMediator {
     ) -> ResultType<String> {
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, force_relay, CONNECT_TIMEOUT).await?;
-        let answer = match stream.get_local_endpoint().await {
+        let answer = match stream.get_local_endpoint_trickle().await {
             Ok(answer) => answer,
             Err(e) => {
                 // Close the freshly-created pc so a failure here doesn't leak it in SESSIONS.
