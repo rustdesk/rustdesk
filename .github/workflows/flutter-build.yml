@@ -1676,14 +1676,118 @@ jobs:
                 mv "$name" /workspace/"${name%%.rpm}-suse.rpm"
             done
 
+            # --- opt-in unattended-wayland (DRM/KMS) variant: a separate deb ---
+            # Bundles libdrmtap.so (dlopen-ed in-process by the root service) so
+            # enabling consent-free capture is an explicit install choice (the package
+            # name states what it does). Built last so the drm relink can't leak into
+            # the stock deb/rpm above. x86_64 only (the unattended/kiosk/server use
+            # case); the package Conflicts/Replaces the stock rustdesk package.
+            if [[ "${{ matrix.job.arch }}" == "x86_64" ]]; then
+              # The drm variant below rebuilds target/release/liblibrustdesk.so with the
+              # drm feature and re-runs `flutter build linux`, which overwrites the stock
+              # cdylib inside flutter/build/linux/x64/release/bundle/. The archlinux
+              # `makepkg` step (a later, separate action) ships THAT bundle verbatim, so
+              # without care the official Arch package would carry the drm cdylib.
+              # Snapshot the stock bundle now and restore it after the drm build
+              # (unconditionally, below) so makepkg only ever sees the stock cdylib.
+              STOCK_BUNDLE=/workspace/flutter/build/linux/x64/release/bundle
+              rm -rf /workspace/.stock-bundle
+              cp -a "$STOCK_BUNDLE" /workspace/.stock-bundle
+              # Build the drm variant in a failure-tolerant subshell: a drm-only breakage
+              # (EOL ubuntu18.04 apt, pip, the libdrmtap fork clone, meson) must NOT abort
+              # the stock deb/rpm/arch publish steps that run after this container.
+              (
+              set -e
+              pushd /workspace
+              echo -e "start packaging unattended-wayland (DRM) deb"
+              # drm-only build deps (meson builds libdrmtap.so from the cloned source),
+              # installed here — not in the stock install list — so the default
+              # drm-off build stays identical to upstream. libdrmtap's meson.build
+              # needs meson >= 0.57 (fs.read) + `meson compile` (>= 0.54); the distro
+              # apt meson is far older on the 18.04 build container, so install it via
+              # pip (pinned < 0.62 for the container's python 3.6). The EGL/GLES dev
+              # packages must be the mesa-specific names (libegl1-mesa-dev /
+              # libgles2-mesa-dev): the newer libegl-dev / libgles-dev metapackages
+              # do not exist on the ubuntu18.04 build container.
+              apt-get install -y ninja-build libdrm-dev libegl1-mesa-dev libgles2-mesa-dev python3-pip
+              python3 -m pip install --upgrade pip
+              python3 -m pip install 'meson>=0.57,<0.62'
+              # libdrmtap is sourced by cloning the maintainer-owned rustdesk-org repo at a pinned
+              # ref (it is no longer a git submodule). DRMTAP_REPO / DRMTAP_REF are
+              # exported so build.py reuses the exact same source. We clone + build
+              # the .so here and hand it to build.py via DRMTAP_PREBUILT_DIR, because
+              # a later build step in this container disturbs the working tree.
+              # rustdesk-org has no release tag yet, so DRMTAP_REF tracks `main` and the exact commit
+              # is pinned by DRMTAP_SHA, verified after clone (below): a moving `main` fails the build
+              # instead of silently swapping the root-loaded .so. The drm backend has NO libdrmtap-sys
+              # Cargo dependency: rustdesk dlopens this .so at runtime (drmtap_dl.rs checks ABI-major).
+              # Keep DRMTAP_SHA in sync on every bump; switch DRMTAP_REF to an immutable vX.Y.Z tag if
+              # rustdesk-org later publishes one.
+              export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
+              export DRMTAP_REF="main"
+              # Literal (not overridable by an inherited env var) so the ref/commit pair is immutable in CI.
+              export DRMTAP_SHA="c9cf0938f3b10a3d4a9eeb9c6f97aaa1606c6b4a"
+              # Guard: accept only an exact vX.Y.Z tag OR the literal `main`, so a random/loose branch
+              # is still rejected; the DRMTAP_SHA check below is the real anchor (it fails the build if
+              # `main` -- or a tag -- resolves to anything other than the pinned immutable commit).
+              if ! printf '%s' "$DRMTAP_REF" | grep -qE '^(v[0-9]+\.[0-9]+\.[0-9]+|main)$'; then
+                echo "FATAL: DRMTAP_REF must be a pinned vX.Y.Z tag or main, got '$DRMTAP_REF'"; exit 1
+              fi
+              git config --global --add safe.directory '*' || true
+              rm -rf third_party/libdrmtap
+              git clone --depth 1 --branch "$DRMTAP_REF" "$DRMTAP_REPO" third_party/libdrmtap
+              test -f third_party/libdrmtap/meson.build || { echo "FATAL: libdrmtap source missing"; exit 1; }
+              # Pin the immutable commit, not only the ref name: `git clone --branch` follows a mutable
+              # ref (a branch like `main` even more than a tag), so a moved or compromised ref could
+              # swap the root-loaded .so while the regex above still passes. Verify HEAD is the pinned SHA.
+              got_sha="$(git -C third_party/libdrmtap rev-parse HEAD)"
+              if [ "$got_sha" != "$DRMTAP_SHA" ]; then
+                echo "FATAL: libdrmtap $DRMTAP_REF resolved to $got_sha, expected $DRMTAP_SHA (moved/compromised tag?)"; exit 1
+              fi
+              # Build libdrmtap.so now, while the cloned source is definitely
+              # present, and stash the real object OUTSIDE the source tree. A later
+              # build step in this container disturbs that working tree (it ends up
+              # empty by the time build.py runs), so build.py picks up this prebuilt
+              # .so via DRMTAP_PREBUILT_DIR instead of rebuilding from source.
+              meson setup third_party/libdrmtap/build-pkg third_party/libdrmtap --buildtype=release
+              # Explicit shared_library target: libdrmtap is `both_libraries` since 0.4.11, so the
+              # bare `drmtap` target is ambiguous (shared vs static). rustdesk dlopens the .so only.
+              meson compile -C third_party/libdrmtap/build-pkg drmtap:shared_library
+              mkdir -p "$PWD/prebuilt-libdrmtap"
+              find third_party/libdrmtap/build-pkg -maxdepth 1 -name 'libdrmtap.so.0.*' -type f \
+                -exec cp -a {} "$PWD/prebuilt-libdrmtap/" \;
+              export DRMTAP_PREBUILT_DIR="$PWD/prebuilt-libdrmtap"
+              [ -n "$(find "$DRMTAP_PREBUILT_DIR" -name 'libdrmtap.so.0.*' -type f)" ] \
+                || { echo "FATAL: prebuilt libdrmtap.so missing"; exit 1; }
+              ls -l "$DRMTAP_PREBUILT_DIR"
+              # The drm backend is pure runtime-dlopen (no libdrmtap-sys crate dependency),
+              # so the pin is the DRMTAP_REF tag verified above plus the prebuilt .so; there
+              # is nothing to assert in Cargo.lock for it.
+              cargo build --locked --lib $JOBS --features hwcodec,flutter,unix-file-copy-paste,drm --release
+              python3 ./build.py --flutter --drm --skip-cargo
+              for name in rustdesk-unattended-wayland*??.deb; do
+                mv "$name" "${name%%.deb}-${{ matrix.job.arch }}.deb"
+              done
+              popd
+              ) || echo "WARN: unattended-wayland (DRM) variant build failed; shipping stock release only"
+              # Restore the stock flutter bundle so the archlinux makepkg step ships the
+              # stock cdylib, whether the drm variant above succeeded OR failed.
+              rm -rf "$STOCK_BUNDLE"
+              mv /workspace/.stock-bundle "$STOCK_BUNDLE"
+            fi
+
       - name: Publish debian/rpm package
         if: env.UPLOAD_ARTIFACT == 'true'
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
           prerelease: true
           tag_name: ${{ env.TAG_NAME }}
+          # Stock debs only: `rustdesk-<version>-<arch>.deb` (version starts with a digit).
+          # `rustdesk-[0-9]*.deb` deliberately EXCLUDES `rustdesk-unattended-wayland-*.deb`,
+          # the opt-in consent-bypass variant, which stays an Actions artifact (uploaded by
+          # name in the step below) and must never land on the public release.
           files: |
-            rustdesk-*.deb
+            rustdesk-[0-9]*.deb
             rustdesk-*.rpm
 
       - name: Upload deb
@@ -1692,6 +1796,13 @@ jobs:
         with:
           name: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
           path: rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+
+      - name: Upload unattended-wayland deb
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: matrix.job.arch == 'x86_64' && env.UPLOAD_ARTIFACT == 'true'
+        with:
+          name: rustdesk-unattended-wayland-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
+          path: rustdesk-unattended-wayland-${{ env.VERSION }}-${{ matrix.job.arch }}.deb
 
       # only x86_64 for arch since we can not find newest arm64 docker image to build
       # old arch image does not make sense for arch since it is "arch" which always update to date

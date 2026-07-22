@@ -107,8 +107,38 @@ struct CapDisplayInfo {
     capturer: CapturerPtr,
 }
 
+/// Set the uinput absolute-pointer range to the whole logical desktop so the compositor maps
+/// injected coordinates 1:1 instead of stretching a single-monitor range across all outputs. The
+/// PipeWire path does this inline in `check_init`; the DRM path bypasses check_init so it must do it
+/// too, otherwise on a multi-monitor host the injected pointer lands on the wrong output — and the
+/// hardware cursor, which lives on whichever CRTC the pointer is over, never appears on the captured
+/// CRTC (the "cursor not visible" symptom). Reads the layout from the Wayland outputs, so it is
+/// independent of the capture backend. DRM-only: check_init keeps its own inline copy so the
+/// drm-off build stays byte-identical to upstream.
+#[cfg(feature = "drm")]
+async fn update_uinput_resolution() {
+    if crate::input_service::wayland_use_uinput() {
+        if let Some((minx, maxx, miny, maxy)) =
+            scrap::wayland::display::get_desktop_rect_for_uinput()
+        {
+            log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
+            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
+        } else {
+            log::warn!("Failed to get desktop rect for uinput");
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 pub(super) async fn ensure_inited() -> ResultType<()> {
+    // DRM/KMS capture (opt-in): the root service owns the reader and the capturer self-inits over
+    // IPC, so there is no PipeWire recorder to initialize here. But we still must set the uinput
+    // desktop rect (check_init does this on the PipeWire path, and the DRM path skips check_init).
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        update_uinput_resolution().await;
+        return Ok(());
+    }
     check_init().await
 }
 
@@ -116,6 +146,10 @@ pub(super) fn is_inited() -> Option<Message> {
     if is_x11() {
         None
     } else {
+        #[cfg(feature = "drm")]
+        if super::drm_capturer::is_available() {
+            return None;
+        }
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             let mut msg_out = Message::new();
             let res = MessageBox {
@@ -221,6 +255,12 @@ pub(super) async fn check_init() -> ResultType<()> {
 }
 
 pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        if let Some(displays) = super::drm_capturer::get_display_infos() {
+            return Ok(displays);
+        }
+    }
     check_init().await?;
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
@@ -235,6 +275,12 @@ pub(super) async fn get_displays() -> ResultType<Vec<DisplayInfo>> {
 }
 
 pub(super) fn get_primary() -> ResultType<usize> {
+    // DRM connector order is not the compositor's primary; resolve the real primary from the
+    // compositor layout (matched by normalized connector name) instead of hardcoding index 0.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        return Ok(super::drm_capturer::get_primary_index());
+    }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     if let Some(addr) = cap_map.values().next() {
         let cap_display_info: *const CapDisplayInfo = *addr as _;
@@ -251,6 +297,19 @@ pub fn clear() {
     if is_x11() {
         return;
     }
+    // The DRM path augments its geometry from the compositor's Wayland outputs (logical origin +
+    // scale), which scrap caches process-wide. The PipeWire path clears that cache on session close,
+    // but the DRM path opens no PipeWire session, so without this it would keep matching DRM outputs
+    // against STALE geometry after a monitor hotplug/rotation/scale change. Invalidate it on teardown
+    // so the next session re-reads fresh geometry (lazily, on the next enumeration) and self-heals.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        scrap::wayland::display::clear_wayland_displays_cache();
+    }
+    // NOTE: intentionally do NOT reset the DRM probe cache here. `clear()` runs on every capturer
+    // teardown (which happens on each video-service restart), and re-probing `_drm` from the async
+    // enumeration path blocks the executor long enough to trip "deadline has elapsed" and spiral
+    // into a restart loop. DRM availability is fixed at service start, so the cache stays valid.
     let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
     for (_, addr) in write_lock.iter() {
         let cap_display_info: *mut CapDisplayInfo = *addr as _;
@@ -265,18 +324,94 @@ pub fn clear() {
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
 }
 
+/// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
+/// that cannot be captured can fall through to PipeWire for THAT display. `ensure_inited` short-circuits
+/// to the DRM branch whenever DRM is globally available, so it never runs `check_init`; this helper
+/// drives the same async portal ScreenCast init directly (mirroring `ensure_inited`'s pattern). Needed
+/// because `is_available()` is a GLOBAL verdict — it stays true for the still-working DRM outputs — so
+/// without a per-display fallback a single failed/demoted DRM display would restart-loop the video
+/// service instead of degrading to PipeWire only for itself.
+#[cfg(feature = "drm")]
+#[tokio::main(flavor = "current_thread")]
+async fn ensure_pipewire_inited() -> ResultType<()> {
+    check_init().await
+}
+
 pub(super) fn get_capturer_for_display(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
+    // DRM/KMS capture path: build the capturer straight from the service `_drm` stream, bypassing
+    // the PipeWire CAP_DISPLAY_INFO machinery entirely. `is_available()` is a GLOBAL verdict, so a
+    // per-display DRM failure (an ungrabbable/demoted CRTC, or — after the phase-2 split — a
+    // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
+    // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
+    // display; the other DRM outputs keep streaming over DRM.
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available() {
+        match super::drm_capturer::get_capturer_info(display_idx) {
+            Ok(info) => return Ok(info),
+            Err(e) => {
+                log::warn!(
+                    "drm capturer for display {} unavailable ({:#}); falling back to PipeWire",
+                    display_idx,
+                    e
+                );
+                ensure_pipewire_inited()?;
+            }
+        }
+    }
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
+    // Serve ONLY the exact PipeWire entry for this index. Do NOT fall back to another index's
+    // `CapDisplayInfo`: `CapturerPtr` is a bare `*mut Capturer` cloned by raw-pointer copy, so aliasing
+    // one entry to two `display_idx` values would let two video-service threads call `frame()` on the
+    // same `Recorder` with no lock (data race / UB), and it would also mis-map input against the wrong
+    // rect. DRM and PipeWire do not share an index space (the portal often exposes one whole-desktop
+    // stream at index 0), so a demoted non-primary DRM index has no PipeWire entry here; that case is
+    // handled at the source by dropping the demoted display from the advertised list (see
+    // drm_capturer demotion) so the client re-enumerates against a consistent list, rather than being
+    // papered over with a shared/mismatched capturer.
     if let Some(addr) = cap_map.get(&display_idx) {
         let cap_display_info: *const CapDisplayInfo = *addr as _;
         unsafe {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
+            // review 4.5: reaching here with DRM active means get_capturer_info bailed (a demoted
+            // display) and we fell through to PipeWire. Serve this stream ONLY if its rect matches the
+            // geometry we advertised for this index. The portal typically exposes one whole-desktop
+            // stream, so on a multi-monitor host that rect is the FULL desktop while the advertised DRM
+            // geometry is a single connector -> serving it would stretch the frame and offset all
+            // input. Bail instead; get_display_infos advertised the display offline, so the client
+            // re-enumerates against a consistent list. A single-display host matches (whole-desktop ==
+            // that display) and is served normally. On a pure-PipeWire host is_available() is false and
+            // this guard is skipped, preserving upstream behavior exactly.
+            #[cfg(feature = "drm")]
+            if super::drm_capturer::is_available() {
+                if let Some(advertised) = super::drm_capturer::get_display_infos()
+                    .and_then(|l| l.get(display_idx).cloned())
+                {
+                    let consistent = advertised.x == rect.0 .0
+                        && advertised.y == rect.0 .1
+                        && advertised.width as usize == rect.1
+                        && advertised.height as usize == rect.2;
+                    if !consistent {
+                        bail!(
+                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
+                            display_idx,
+                            advertised.width,
+                            advertised.height,
+                            advertised.x,
+                            advertised.y,
+                            rect.1,
+                            rect.2,
+                            rect.0 .0,
+                            rect.0 .1
+                        );
+                    }
+                }
+            }
             Ok(super::video_service::CapturerInfo {
                 origin: rect.0,
                 width: rect.1,

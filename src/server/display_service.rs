@@ -201,6 +201,16 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
+            // On the DRM/KMS capture path the PipeWire enumeration (which is what feeds
+            // `SYNC_DISPLAYS` via `check_update_displays`) is bypassed, so populate the sync list
+            // from the DRM display list here. Without this the display service broadcasts an empty
+            // list that overwrites the login peer-info displays and the client shows "No displays".
+            #[cfg(feature = "drm")]
+            if super::drm_capturer::is_available() {
+                if let Some(displays) = super::drm_capturer::get_display_infos() {
+                    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+                }
+            }
             return get_displays_msg();
         }
     }
@@ -299,6 +309,23 @@ pub(super) fn get_sync_displays() -> Vec<DisplayInfo> {
 
 pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.get(idx).cloned()
+}
+
+// True when at least one advertised (synced) display is NOT served by the DRM/KMS capture path,
+// i.e. a mixed DRM + PipeWire session. The cursor service (platform::linux::get_cursor /
+// get_cursor_data) uses this to decide whether a hidden DRM hardware-cursor sentinel is
+// authoritative: in a pure-DRM session it is (the pointer is genuinely off every captured CRTC),
+// but in a mixed session the sentinel only means the pointer moved onto a PipeWire-served display,
+// whose cursor must come from the normal path instead of being hidden everywhere.
+//
+// When DRM capture is active the advertised list is enumerated from the DRM display list, so a DRM
+// list shorter than the synced list means at least one advertised display is served by PipeWire.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub fn has_non_drm_backed_display() -> bool {
+    match super::drm_capturer::get_display_infos() {
+        Some(drm) => drm.len() < SYNC_DISPLAYS.lock().unwrap().displays.len(),
+        None => false,
+    }
 }
 
 // Display to DisplayInfo

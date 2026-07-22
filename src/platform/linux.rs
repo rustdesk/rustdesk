@@ -361,6 +361,23 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
+    // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
+            // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
+            // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
+            // sentinel. Returning that sentinel here would hide the cursor globally, including on the
+            // PipeWire display where it is still visible, so only report a hidden DRM cursor when it
+            // is authoritative -- a pure-DRM session. A visible DRM cursor is always authoritative;
+            // otherwise fall through to the normal cursor path.
+            if id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                return Ok(Some(id));
+            }
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(d) = conn.try_borrow_mut() {
@@ -379,6 +396,29 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 }
 
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
+    // DRM/KMS capture: return the latest hardware-cursor snapshot from the `_drm` stream. Its id may
+    // have advanced past `hcursor` between get_cursor() and here, so return the latest rather than
+    // bailing (which would trigger a MouseCursorService backoff).
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(c) = crate::server::drm_capturer::drm_cursor() {
+            // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
+            // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
+            // by the normal path instead of being hidden everywhere.
+            if c.id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                let mut cd: CursorData = Default::default();
+                cd.id = c.id;
+                cd.width = c.width;
+                cd.height = c.height;
+                cd.hotx = c.hotx;
+                cd.hoty = c.hoty;
+                cd.colors = c.colors.into();
+                return Ok(cd);
+            }
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(ref mut d) = conn.try_borrow_mut() {
@@ -810,6 +850,15 @@ pub fn start_os_service() {
         allow_err!(crate::ipc::start(crate::POSTFIX_SERVICE));
     });
 
+    // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that streams
+    // scanout frames to the user `--server` over the `_drm` service-scoped channel. Runs here
+    // because this process is the root service that already holds CAP_SYS_ADMIN for the in-process
+    // (direct-mode) libdrmtap read.
+    #[cfg(feature = "drm")]
+    std::thread::spawn(|| {
+        crate::ipc::start_drm();
+    });
+
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let (mut display, mut xauth): (String, String) = ("".to_owned(), "".to_owned());
@@ -925,6 +974,15 @@ pub fn get_active_userid() -> String {
 /// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
 pub fn get_active_userid_fresh() -> String {
     get_values_of_seat0(&[1])[0].clone()
+}
+
+#[inline]
+/// The cached active uid as a number, or `None` when the cache is empty. Unlike `get_active_userid`
+/// this NEVER falls back to a blocking `loginctl` seat0 lookup, so it is safe to call on an async
+/// runtime thread and on a hot path (e.g. per-frame re-auth): a cache miss returns `None` for the
+/// caller to treat as "active session momentarily unknown" rather than stalling on a subprocess.
+pub fn get_active_userid_cached() -> Option<u32> {
+    get_active_user_id_name_from_cache().and_then(|(uid, _)| uid.parse::<u32>().ok())
 }
 
 fn get_cm() -> bool {
