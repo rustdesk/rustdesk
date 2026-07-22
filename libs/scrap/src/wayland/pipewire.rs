@@ -1033,14 +1033,24 @@ pub fn try_fix_logical_size(shared_displays: &mut Vec<crate::Display>) {
                         if capturable.physical_size.0 != wd.width as usize
                             || capturable.physical_size.1 != wd.height as usize
                         {
-                            // If "Full Workspace" is selected in the portal dialog,
-                            // the physical size reported by portal may not match the display info.
-                            debug!(
-                            "Physical size of capturable ({:?}) does not match display info: ({:?}) - ({:?}). Skipping logical size fix.",
-                            capturable.position,
-                            capturable.physical_size,
-                            (wd.width as usize, wd.height as usize)
-                        );
+                            // A full-workspace capture is a single stream spanning all outputs
+                            // with no per-output logical size, so scale stays 1.0 and input is
+                            // offset on fractionally scaled outputs (#15601).
+                            if capturable.physical_size.0 > wd.width as usize
+                                || capturable.physical_size.1 > wd.height as usize
+                            {
+                                warn!(
+                                    "Capturable {:?} spans multiple outputs; can't apply per-output scale, input will be offset on scaled outputs. Share individual screens or use integer scaling (#15601).",
+                                    capturable.position
+                                );
+                            } else {
+                                warn!(
+                                    "Physical size of capturable ({:?}) does not match display info: ({:?}) - ({:?}). Skipping logical size fix.",
+                                    capturable.position,
+                                    capturable.physical_size,
+                                    (wd.width as usize, wd.height as usize)
+                                );
+                            }
                             break;
                         }
 

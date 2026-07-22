@@ -346,7 +346,55 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             }
         })
         .collect::<Vec<DisplayInfo>>();
+    #[cfg(target_os = "linux")]
+    if !is_x11() {
+        warn_on_overlapping_display_rects(&displays);
+    }
     SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+}
+
+// Clients lay out and hit-test displays by (x, y, width / scale, height / scale).
+// If a fractionally scaled output's logical size was not detected (scale stays 1.0
+// with a physical size), neighboring rects overlap and input lands offset (#15601).
+// This cannot be validated client-side; warn here so host logs pinpoint it.
+#[cfg(target_os = "linux")]
+fn overlapping_display_rects(displays: &[DisplayInfo]) -> Vec<(usize, usize)> {
+    let effective = |d: &DisplayInfo| {
+        let s = if d.scale > 0.0 { d.scale } else { 1.0 };
+        (
+            d.x as f64,
+            d.y as f64,
+            d.width as f64 / s,
+            d.height as f64 / s,
+        )
+    };
+    let mut pairs = Vec::new();
+    for i in 0..displays.len() {
+        for j in (i + 1)..displays.len() {
+            let (ax, ay, aw, ah) = effective(&displays[i]);
+            let (bx, by, bw, bh) = effective(&displays[j]);
+            let overlap_x = (ax + aw).min(bx + bw) - ax.max(bx);
+            let overlap_y = (ay + ah).min(by + bh) - ay.max(by);
+            // Ignore sub-pixel contact from fractional rounding at shared edges.
+            if overlap_x > 1.0 && overlap_y > 1.0 {
+                pairs.push((i, j));
+            }
+        }
+    }
+    pairs
+}
+
+#[cfg(target_os = "linux")]
+fn warn_on_overlapping_display_rects(displays: &[DisplayInfo]) {
+    for (i, j) in overlapping_display_rects(displays) {
+        log::warn!(
+            "Advertised display rects overlap, clients will misplace input. \
+            Display {}: pos ({}, {}), size {}x{}, scale {}. Display {}: pos ({}, {}), size {}x{}, scale {}. \
+            A fractionally scaled output's logical size was probably not detected.",
+            i, displays[i].x, displays[i].y, displays[i].width, displays[i].height, displays[i].scale,
+            j, displays[j].x, displays[j].y, displays[j].width, displays[j].height, displays[j].scale,
+        );
+    }
 }
 
 pub fn is_inited_msg() -> Option<Message> {
@@ -485,4 +533,55 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
         }
     }
     Ok(displays)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    fn di(x: i32, y: i32, width: i32, height: i32, scale: f64) -> DisplayInfo {
+        DisplayInfo {
+            x,
+            y,
+            width,
+            height,
+            scale,
+            ..Default::default()
+        }
+    }
+
+    // Geometries measured on Plasma 6 / Fedora 44, kscreen-doctor A/B (#15601).
+    #[test]
+    fn overlap_detected_when_scaled_output_advertised_physical() {
+        // 2560x1440 output at 125% (logical 2048 wide) advertised physical with scale 1.0.
+        let displays = vec![di(0, 0, 2560, 1440, 1.0), di(2048, 0, 2560, 1440, 1.0)];
+        assert_eq!(overlapping_display_rects(&displays), vec![(0, 1)]);
+    }
+
+    #[test]
+    fn no_overlap_when_scale_advertised() {
+        let displays = vec![di(0, 0, 2560, 1440, 1.25), di(2048, 0, 2560, 1440, 1.0)];
+        assert!(overlapping_display_rects(&displays).is_empty());
+    }
+
+    #[test]
+    fn no_overlap_on_unscaled_layout() {
+        let displays = vec![di(0, 0, 2560, 1440, 1.0), di(2560, 0, 2560, 1440, 1.0)];
+        assert!(overlapping_display_rects(&displays).is_empty());
+    }
+
+    // Reporter's layout: 2880x1800 laptop panel at 155% plus a 1080p external at
+    // logical x 1859; physical advertisement overlaps ~1021 px.
+    #[test]
+    fn overlap_detected_for_reporter_layout() {
+        let displays = vec![di(0, 718, 2880, 1800, 1.0), di(1859, 0, 1920, 1080, 1.0)];
+        assert_eq!(overlapping_display_rects(&displays), vec![(0, 1)]);
+    }
+
+    #[test]
+    fn subpixel_contact_from_fractional_rounding_ignored() {
+        // 1.5 scale on 2559 px: logical 1706.0, neighbor at 1706 leaves <1 px contact.
+        let displays = vec![di(0, 0, 2559, 1440, 1.5), di(1706, 0, 2560, 1440, 1.0)];
+        assert!(overlapping_display_rects(&displays).is_empty());
+    }
 }
