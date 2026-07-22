@@ -2,6 +2,7 @@
 
 import requests
 import os
+import sys
 import time
 import argparse
 import logging
@@ -18,7 +19,11 @@ logging.basicConfig(
 BASE_URL = os.getenv("BASE_URL") or "http://localhost:5000"
 
 # The secret key for API authentication
-SECRET_KEY = os.getenv("SECRET_KEY") or "worldpeace2024"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    print("ERROR: SECRET_KEY environment variable is required for signing.", file=sys.stderr)
+    print("Set it via: export SECRET_KEY=<your-signing-key>", file=sys.stderr)
+    sys.exit(1)
 
 # The headers for API requests
 HEADERS = {"Authorization": f"Bearer {SECRET_KEY}"}
