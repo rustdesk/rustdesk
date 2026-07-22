@@ -9,6 +9,11 @@
       "host": false
     },
     {
+      "name": "svt-av1",
+      "host": false,
+      "platform": "!x86 & !arm32 & !uwp"
+    },
+    {
       "name": "cpu-features",
       "platform": "android"
     },

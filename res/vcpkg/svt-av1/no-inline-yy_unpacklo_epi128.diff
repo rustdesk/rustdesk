@@ -1,0 +1,19 @@
+diff --git a/Source/Lib/ASM_AVX2/synonyms_avx2.h b/Source/Lib/ASM_AVX2/synonyms_avx2.h
+index f615e2569..9a7667724 100644
+--- a/Source/Lib/ASM_AVX2/synonyms_avx2.h
++++ b/Source/Lib/ASM_AVX2/synonyms_avx2.h
+@@ -75,7 +75,13 @@ static INLINE __m256i yy_loadu2_128(const void *hi, const void *lo) {
+     return yy_set_m128i(mhi, mlo);
+ }
+ 
+-static INLINE __m256i yy_unpacklo_epi128(const __m256i in0, const __m256i in1) {
++#if defined(_MSC_VER) && _MSC_VER >= 1950
++#define MAYBE_INLINE NOINLINE
++#else
++#define MAYBE_INLINE INLINE
++#endif
++
++static MAYBE_INLINE __m256i yy_unpacklo_epi128(const __m256i in0, const __m256i in1) {
+     return _mm256_inserti128_si256(in0, _mm256_castsi256_si128(in1), 1);
+ }
+ 
