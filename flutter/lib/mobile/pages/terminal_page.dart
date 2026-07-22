@@ -181,6 +181,26 @@ class _TerminalPageState extends State<TerminalPage>
     }
   }
 
+  KeyEventResult _handleTerminalKeyEvent(FocusNode _, KeyEvent event) {
+    final hardwareKeyboard = HardwareKeyboard.instance;
+    final shouldPaste = shouldHandleTerminalPasteShortcut(
+      logicalKey: event.logicalKey,
+      isKeyDown: event is KeyDownEvent,
+      isKeyRepeat: event is KeyRepeatEvent,
+      controlPressed: hardwareKeyboard.isControlPressed,
+      metaPressed: hardwareKeyboard.isMetaPressed,
+      altPressed: hardwareKeyboard.isAltPressed,
+      shiftPressed: hardwareKeyboard.isShiftPressed,
+      modifierLockActive: _ctrlLocked || _altLocked,
+    );
+    if (!shouldPaste) return KeyEventResult.ignored;
+
+    // Only locked virtual modifiers need interception. Without a lock, keep
+    // xterm's default hardware paste behavior, including bracketed paste mode.
+    unawaited(_pasteClipboardText());
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -218,6 +238,7 @@ class _TerminalPageState extends State<TerminalPage>
                     //
                     // Android works fine without this workaround.
                     deleteDetection: isIOS,
+                    onKeyEvent: _handleTerminalKeyEvent,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;

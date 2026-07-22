@@ -27,4 +27,25 @@ void main() {
 
     expect(model.debugBufferedInputCount, 0);
   });
+
+  test('ignores terminal text input after the terminal model is disposed', () {
+    final model = TerminalModel(_FakeFFI());
+    var checkedCtrlLock = false;
+    var clearedCtrlLock = false;
+
+    model.isCtrlLocked = () {
+      checkedCtrlLock = true;
+      return true;
+    };
+    model.clearCtrlLock = () {
+      clearedCtrlLock = true;
+    };
+
+    model.dispose();
+    model.terminal.textInput('d');
+
+    expect(checkedCtrlLock, isFalse);
+    expect(clearedCtrlLock, isFalse);
+    expect(model.debugBufferedInputCount, 0);
+  });
 }

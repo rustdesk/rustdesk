@@ -61,6 +61,10 @@ class TerminalModel with ChangeNotifier {
   VoidCallback? onClosed;
 
   Future<void> _handleInput(String data) async {
+    // xterm can complete asynchronous input after the Flutter page has gone
+    // away. Stop before reading or clearing widget-owned modifier state.
+    if (_disposed) return;
+
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
     // - Peer Windows: '\r' works, '\n' is just a newline.
@@ -578,6 +582,14 @@ class TerminalModel with ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    terminal.onOutput = null;
+    terminal.onResize = null;
+    isCtrlLocked = null;
+    clearCtrlLock = null;
+    isAltLocked = null;
+    clearAltLock = null;
+    onResizeExternal = null;
+    onClosed = null;
     // Clear buffers to free memory
     _inputBuffer.clear();
     _pendingOutputChunks.clear();

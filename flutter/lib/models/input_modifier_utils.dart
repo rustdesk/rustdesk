@@ -115,6 +115,28 @@ String prepareTerminalInputPayload(
   return result;
 }
 
+/// Returns true when a hardware paste shortcut must bypass keyboard modifiers.
+///
+/// xterm already handles hardware Ctrl/Cmd+V correctly in the common case. Only
+/// intercept while a virtual Ctrl/Alt lock is active, because xterm can emit a
+/// one-character paste as normal text when bracketed paste mode is disabled.
+bool shouldHandleTerminalPasteShortcut({
+  required LogicalKeyboardKey logicalKey,
+  required bool isKeyDown,
+  required bool isKeyRepeat,
+  required bool controlPressed,
+  required bool metaPressed,
+  required bool altPressed,
+  required bool shiftPressed,
+  required bool modifierLockActive,
+}) {
+  if (!modifierLockActive) return false;
+  if (!isKeyDown && !isKeyRepeat) return false;
+  if (logicalKey != LogicalKeyboardKey.keyV) return false;
+  if (altPressed || shiftPressed) return false;
+  return controlPressed != metaPressed;
+}
+
 /// Returns true when collapsing Row3 should also clear hidden modifier state.
 bool shouldClearTerminalModifiersWhenRow3Collapses({
   required bool wasExpanded,
