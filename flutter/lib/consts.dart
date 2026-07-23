@@ -437,7 +437,6 @@ const kActionApplicationDetailsSettings =
 const kActionAccessibilitySettings = "android.settings.ACCESSIBILITY_SETTINGS";
 
 const kRecordAudio = "android.permission.RECORD_AUDIO";
-const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
 const kRequestIgnoreBatteryOptimizations =
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
@@ -449,6 +448,9 @@ class AndroidChannel {
   static final kGetStartOnBootOpt = "get_start_on_boot_opt";
   static final kSetStartOnBootOpt = "set_start_on_boot_opt";
   static final kSyncAppDirConfigPath = "sync_app_dir";
+  static final kPickImportFiles = "pick_import_files";
+  static final kImportFile = "import_file";
+  static final kExportFile = "export_file";
 }
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
@@ -8,6 +9,7 @@ import 'package:toggle_switch/toggle_switch.dart';
 
 import '../../common.dart';
 import '../../common/widgets/dialog.dart';
+import '../../consts.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage(
@@ -72,6 +74,76 @@ class _FileManagerPageState extends State<FileManagerPage> {
   FileDirectory get currentDir => currentFileController.directory.value;
   DirectoryOptions get currentOptions => currentFileController.options.value;
   final _uniqueKey = UniqueKey();
+
+  Future<void> _importFiles() async {
+    var imported = 0;
+    var failed = false;
+    final importController = currentFileController;
+    final importDirectory = currentDir.path;
+    final importIsWindows = currentOptions.isWindows;
+    try {
+      final selectedFiles = await gFFI.invokeMethodWithResult<List<dynamic>>(
+          AndroidChannel.kPickImportFiles);
+      if (selectedFiles == null || selectedFiles.isEmpty) return;
+
+      for (final selected in selectedFiles) {
+        final uri = (selected as Map<dynamic, dynamic>)['uri'] as String?;
+        final selectedName = selected['name'] as String?;
+        final name = selectedName?.replaceAll('\\', '/').split('/').last;
+        if (uri == null ||
+            name == null ||
+            !PathUtil.validName(name, importIsWindows)) {
+          failed = true;
+          continue;
+        }
+        final destination =
+          PathUtil.join(importDirectory, name, importIsWindows);
+        var overwrite = false;
+        if (await File(destination).exists()) {
+          final overwriteResult = await model.showFileConfirmDialog(
+              translate('Overwrite'), destination, false, false);
+          if (overwriteResult == false) break;
+          if (overwriteResult != true) continue;
+          overwrite = true;
+        }
+        try {
+          final success = await gFFI.invokeMethod(
+              AndroidChannel.kImportFile,
+              {'uri': uri, 'path': destination, 'overwrite': overwrite});
+          if (success == true) {
+            imported++;
+          } else {
+            failed = true;
+          }
+        } catch (e) {
+          failed = true;
+          debugPrint('Failed to import $name: $e');
+        }
+      }
+    } catch (e) {
+      failed = true;
+      debugPrint('Failed to select files for import: $e');
+    }
+    await importController.refresh();
+    if (failed) {
+      showToast(translate('Failed'));
+    } else if (imported > 0) {
+      showToast(translate('Successful'));
+    }
+  }
+
+  Future<void> _exportFile(Entry entry) async {
+    try {
+      final exported = await gFFI
+          .invokeMethod(AndroidChannel.kExportFile, {'path': entry.path});
+      if (exported == true) {
+        showToast(translate('Successful'));
+      }
+    } catch (e) {
+      debugPrint('Failed to export ${entry.name}: $e');
+      showToast(translate('Failed'));
+    }
+  }
 
   @override
   void initState() {
@@ -159,6 +231,19 @@ class _FileManagerPageState extends State<FileManagerPage> {
                       ),
                       value: "refresh",
                     ),
+                    if (isAndroid)
+                      PopupMenuItem(
+                        enabled: showLocal && currentDir.path.isNotEmpty,
+                        value: "import",
+                        child: Row(
+                          children: [
+                            Icon(Icons.add_to_drive,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text(translate("Add"))
+                          ],
+                        ),
+                      ),
                     PopupMenuItem(
                       enabled: currentDir.path != "/",
                       child: Row(
@@ -203,6 +288,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 onSelected: (v) {
                   if (v == "refresh") {
                     currentFileController.refresh();
+                  } else if (v == "import") {
+                    _importFiles();
                   } else if (v == "select") {
                     model.localController.selectedItems.clear();
                     model.remoteController.selectedItems.clear();
@@ -300,6 +387,15 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 setState(() {});
               },
               actions: [
+                if (isAndroid &&
+                    selectedItems?.isLocal == true &&
+                    selectedItems?.items.length == 1 &&
+                    selectedItems?.items.single.isFile == true)
+                  IconButton(
+                    tooltip: translate("Save as"),
+                    icon: Icon(Icons.save_alt),
+                    onPressed: () => _exportFile(selectedItems!.items.single),
+                  ),
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
                   onPressed: () => setState(() => showLocal = !showLocal),

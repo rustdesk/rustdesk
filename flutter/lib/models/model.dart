@@ -4036,6 +4036,11 @@ class FFI {
     return await platformFFI.invokeMethod(method, arguments);
   }
 
+  Future<T?> invokeMethodWithResult<T>(String method,
+      [dynamic arguments]) async {
+    return await platformFFI.invokeMethodWithResult<T>(method, arguments);
+  }
+
   // Terminal model management
   void registerTerminalModel(int terminalId, TerminalModel model) {
     debugPrint('[FFI] Registering terminal model for terminal $terminalId');

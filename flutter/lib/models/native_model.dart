@@ -3,7 +3,6 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:external_path/external_path.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -153,8 +152,10 @@ class PlatformFFI {
       _startListenEvent(_ffiBind); // global event
       try {
         if (isAndroid) {
-          // only support for android
-          _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+          // Android file transfer uses app-specific storage. User-selected
+          // files enter and leave this workspace through the system picker.
+          _homeDir = (await getExternalStorageDirectory())?.path ??
+              (await getApplicationSupportDirectory()).path;
         } else if (isIOS) {
           // The previous code was `_homeDir = (await getDownloadsDirectory())?.path ?? '';`,
           // which provided the `downloads` path in the sandbox.
@@ -280,6 +281,12 @@ class PlatformFFI {
   invokeMethod(String method, [dynamic arguments]) async {
     if (!isAndroid) return Future<bool>(() => false);
     return await _toAndroidChannel.invokeMethod(method, arguments);
+  }
+
+  Future<T?> invokeMethodWithResult<T>(String method,
+      [dynamic arguments]) async {
+    if (!isAndroid) return null;
+    return await _toAndroidChannel.invokeMethod<T>(method, arguments);
   }
 
   void syncAndroidServiceAppDirConfigPath() {
