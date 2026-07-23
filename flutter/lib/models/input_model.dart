@@ -361,6 +361,7 @@ class InputModel {
         if (type == 'down') {
           final model = _activeSideButtonModel;
           if (model != null &&
+              !model._blockMouseWhenUnfocused &&
               !(model.isViewOnly && !model.showMyCursor) &&
               model.keyboardPerm &&
               !model.isViewCamera) {
@@ -450,6 +451,8 @@ class InputModel {
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
   int _lastWheelTsUs = 0;
+  // A move dropped while unfocused; the next event re-syncs the cursor first.
+  bool _refocusSyncPending = false;
 
   // Wheel acceleration thresholds.
   static const int _wheelAccelFastThresholdUs = 40000; // 40ms
@@ -489,6 +492,16 @@ class InputModel {
   int get trackpadSpeed => _trackpadSpeed;
   bool get useEdgeScroll =>
       parent.target!.canvasModel.scrollStyle == ScrollStyle.scrolledge;
+
+  // https://github.com/rustdesk/rustdesk/discussions/13398
+  // `isFocused` is set by onWindowFocus/onWindowBlur (DesktopTab).
+  // Windows only: Linux focus events are unreliable under the rdev keyboard
+  // grab, and macOS already ignores mouse input to unfocused windows.
+  bool get _blockMouseWhenUnfocused =>
+      isWindows &&
+      stateGlobal.focusEventsSeen &&
+      stateGlobal.isFocused.isFalse &&
+      mainGetLocalBoolOptionSync(kOptionControlFocusedWindowOnly);
 
   /// Check if the connected server supports relative mouse mode.
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
@@ -1285,6 +1298,10 @@ class InputModel {
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
+    if (_blockMouseWhenUnfocused) {
+      _refocusSyncPending = true;
+      return;
+    }
     if (isViewOnly && !showMyCursor) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
 
@@ -1317,6 +1334,7 @@ class InputModel {
   void onPointerPanZoomStart(PointerPanZoomStartEvent e) {
     _lastScale = 1.0;
     _stopFling = true;
+    if (_blockMouseWhenUnfocused) return;
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform == kPeerPlatformAndroid) {
@@ -1326,6 +1344,13 @@ class InputModel {
 
   // https://docs.flutter.dev/release/breaking-changes/trackpad-gestures
   void onPointerPanZoomUpdate(PointerPanZoomUpdateEvent e) {
+    if (_blockMouseWhenUnfocused) {
+      // Track state while dropping so a refocus mid-gesture continues cleanly.
+      _lastScale = e.scale;
+      _trackpadLastDelta = Offset.zero;
+      _trackpadScrollUnsent = Offset.zero;
+      return;
+    }
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (peerPlatform != kPeerPlatformAndroid) {
@@ -1405,7 +1430,7 @@ class InputModel {
     }
 
     _flingTimer = Timer(Duration(milliseconds: delay), () {
-      if (_stopFling) {
+      if (_stopFling || _blockMouseWhenUnfocused) {
         _fling = false;
         return;
       }
@@ -1512,10 +1537,12 @@ class InputModel {
 
   void onPointDownImage(PointerDownEvent e) {
     debugPrint("onPointDownImage ${e.kind}");
+    // Reset drag coords even when dropped, so a resumed drag isn't stale.
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
     _remoteWindowCoords = [];
     _windowRect = null;
+    if (_blockMouseWhenUnfocused) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
 
@@ -1579,6 +1606,10 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
+    if (_blockMouseWhenUnfocused) {
+      _refocusSyncPending = true;
+      return;
+    }
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
     if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -1655,6 +1686,10 @@ class InputModel {
   /// scroll deltas that are independent of cursor position. Games and 3D applications
   /// handle scroll events the same way regardless of mouse mode.
   void onPointerSignalImage(PointerSignalEvent e) {
+    if (_blockMouseWhenUnfocused) {
+      _lastWheelTsUs = 0;
+      return;
+    }
     if (isViewOnly) return;
     if (isViewCamera) return;
     if (e is PointerScrollEvent) {
@@ -1697,25 +1732,38 @@ class InputModel {
       } else if (dy < 0) {
         dy = accel;
       }
+      if (_refocusSyncPending) {
+        _refocusSyncPending = false;
+        if (!_relativeMouse.enabled.value) {
+          handleMouse({'buttons': 0, 'type': _kMouseEventMove},
+              _pointerPositionForRemoteCanvas(e));
+        }
+      }
       bind.sessionSendMouse(
           sessionId: sessionId,
           msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
     }
   }
 
-  void refreshMousePos() => handleMouse({
+  void refreshMousePos() {
+    if (_blockMouseWhenUnfocused) return;
+    handleMouse({
+      'buttons': 0,
+      'type': _kMouseEventMove,
+    }, lastMousePos, edgeScroll: useEdgeScroll);
+  }
+
+  void tryMoveEdgeOnExit(Offset pos) {
+    if (_blockMouseWhenUnfocused) return;
+    handleMouse(
+      {
         'buttons': 0,
         'type': _kMouseEventMove,
-      }, lastMousePos, edgeScroll: useEdgeScroll);
-
-  void tryMoveEdgeOnExit(Offset pos) => handleMouse(
-        {
-          'buttons': 0,
-          'type': _kMouseEventMove,
-        },
-        pos,
-        onExit: true,
-      );
+      },
+      pos,
+      onExit: true,
+    );
+  }
 
   static double tryGetNearestRange(double v, double min, double max, double n) {
     if (v < min && v >= min - n) {
@@ -1890,6 +1938,13 @@ class InputModel {
     bool moveCanvas = true,
     bool edgeScroll = false,
   }) {
+    if (_refocusSyncPending && !_blockMouseWhenUnfocused) {
+      _refocusSyncPending = false;
+      if (evt['type'] != _kMouseEventMove && !_relativeMouse.enabled.value) {
+        handleMouse({'buttons': 0, 'type': _kMouseEventMove}, offset,
+            moveCanvas: moveCanvas);
+      }
+    }
     final evtToPeer = processEventToPeer(evt, offset,
         onExit: onExit, moveCanvas: moveCanvas, edgeScroll: edgeScroll);
     if (evtToPeer != null) {

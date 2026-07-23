@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Все мониторы"),
         ("#{} monitor", "Монитор {}"),
         ("conn-e2ee-unavailable-tip", "Не удалось проверить сквозное шифрование.\nУдаленное устройство, возможно, еще настраивается. Повторите попытку позже.\nЕсли это повторяется, сервер может быть ненадежным.\nВсе равно продолжить?"),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Semua monitor"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "Tidak dapat memverifikasi enkripsi ujung ke ujung.\nPerangkat jarak jauh mungkin masih disiapkan. Coba lagi nanti.\nJika ini terus terjadi, server mungkin tidak tepercaya.\nTetap lanjutkan?"),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }
