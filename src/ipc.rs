@@ -978,6 +978,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SwitchSidesRequest(id) => {
             let uuid = uuid::Uuid::new_v4();
             crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            crate::hbbs_http::sync::register_switch_grant(uuid.to_string());
             allow_err!(
                 stream
                     .send(&Data::SwitchSidesRequest(uuid.to_string()))
