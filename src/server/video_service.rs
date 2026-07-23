@@ -1033,15 +1033,25 @@ fn get_encoder_config(
             // Prefer svt-av1 for AV1 encoding, keep aom for i444 (svt-av1 is 4:2:0
             // only) and for resolutions svt-av1 cannot handle.
             #[cfg(target_pointer_width = "64")]
-            if scrap::svt_av1::SvtAv1Encoder::support(c.width as _, c.height as _)
-                && !Encoder::use_i444(&aom)
             {
-                return EncoderCfg::SVTAV1(scrap::svt_av1::SvtAv1EncoderConfig {
-                    width: c.width as _,
-                    height: c.height as _,
-                    quality,
-                    keyframe_interval,
-                });
+                let use_i444 = Encoder::use_i444(&aom);
+                if scrap::svt_av1::SvtAv1Encoder::support(c.width as _, c.height as _) && !use_i444
+                {
+                    return EncoderCfg::SVTAV1(scrap::svt_av1::SvtAv1EncoderConfig {
+                        width: c.width as _,
+                        height: c.height as _,
+                        quality,
+                        keyframe_interval,
+                    });
+                }
+                log::info!(
+                    "AV1 uses aom instead of svt-av1: {}",
+                    if use_i444 {
+                        "i444"
+                    } else {
+                        "unsupported resolution"
+                    }
+                );
             }
             aom
         }

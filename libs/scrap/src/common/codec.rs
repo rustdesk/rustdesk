@@ -146,17 +146,23 @@ impl Encoder {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config, i444)?),
             }),
-            EncoderCfg::AOM(_) => Ok(Encoder {
-                codec: Box::new(AomEncoder::new(config, i444)?),
-            }),
+            EncoderCfg::AOM(_) => {
+                log::info!("AV1 encoder: aom");
+                Ok(Encoder {
+                    codec: Box::new(AomEncoder::new(config, i444)?),
+                })
+            }
             #[cfg(target_pointer_width = "64")]
             EncoderCfg::SVTAV1(svt) => match SvtAv1Encoder::new(EncoderCfg::SVTAV1(svt), i444) {
-                Ok(codec) => Ok(Encoder {
-                    codec: Box::new(codec),
-                }),
+                Ok(codec) => {
+                    log::info!("AV1 encoder: svt-av1");
+                    Ok(Encoder {
+                        codec: Box::new(codec),
+                    })
+                }
                 Err(e) => {
                     // Same wire format, aom keeps the negotiated AV1 session alive.
-                    log::error!("new svt-av1 encoder failed: {e:?}, fallback to aom");
+                    log::error!("AV1 encoder: svt-av1 init failed ({e:?}), using aom");
                     let aom = EncoderCfg::AOM(AomEncoderConfig {
                         width: svt.width,
                         height: svt.height,
