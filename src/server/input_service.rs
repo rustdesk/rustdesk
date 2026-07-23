@@ -661,20 +661,22 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
-    std::thread::spawn(|| {
+    // Confirm the device adopted the new range before the caller caches it.
+    // spawn_blocking because ENIGO is a std Mutex and send_refresh blocks on IPC.
+    tokio::task::spawn_blocking(move || {
         if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
             if let Some(mouse) = mouse
                 .as_mut_any()
                 .downcast_mut::<super::uinput::client::UInputMouse>()
             {
-                allow_err!(mouse.send_refresh());
-            } else {
-                log::error!("failed downcast uinput mouse");
+                return mouse.send_refresh();
             }
+            bail!("failed to downcast custom mouse to UInputMouse");
         }
-    });
-
-    Ok(())
+        // No custom mouse: nothing to refresh.
+        Ok(())
+    })
+    .await?
 }
 
 #[cfg(target_os = "linux")]
@@ -1098,12 +1100,23 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         MOUSE_TYPE_MOVE => {
             // Switching back to absolute movement implicitly disables relative mouse mode.
             set_relative_mouse_active(conn, false);
-            en.mouse_move_to(evt.x, evt.y);
+            // On Wayland with uinput, the client sends coordinates in the layout it was
+            // told at session init. If the compositor has since moved a monitor, correct
+            // them onto the current layout. https://github.com/rustdesk/rustdesk/issues/15601
+            #[cfg(target_os = "linux")]
+            let (mx, my) = if wayland_use_uinput() {
+                super::display_service::remap_wayland_uinput_coord(evt.x, evt.y)
+            } else {
+                (evt.x, evt.y)
+            };
+            #[cfg(not(target_os = "linux"))]
+            let (mx, my) = (evt.x, evt.y);
+            en.mouse_move_to(mx, my);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
                 time: get_time(),
-                x: evt.x,
-                y: evt.y,
+                x: mx,
+                y: my,
             };
         }
         // MOUSE_TYPE_MOVE_RELATIVE: Relative mouse movement for gaming/3D applications.
