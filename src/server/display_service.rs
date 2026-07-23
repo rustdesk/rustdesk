@@ -25,9 +25,6 @@ struct ChangedResolution {
 lazy_static::lazy_static! {
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
     static ref CHANGED_RESOLUTIONS: Arc<RwLock<HashMap<String, ChangedResolution>>> = Default::default();
-    // Initial primary display index.
-    // It should not be updated when displays changed.
-    pub static ref PRIMARY_DISPLAY_IDX: usize = get_primary();
     static ref SYNC_DISPLAYS: Arc<Mutex<SyncDisplaysInfo>> = Default::default();
 }
 
@@ -41,22 +38,14 @@ struct SyncDisplaysInfo {
 }
 
 impl SyncDisplaysInfo {
-    fn check_changed(&mut self, displays: Vec<DisplayInfo>) {
-        if self.displays.len() != displays.len() {
-            self.displays = displays;
-            if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                self.is_synced = false;
-            }
+    fn check_changed(&mut self, displays: &[DisplayInfo]) {
+        if self.displays.as_slice() == displays {
             return;
         }
-        for (i, d) in displays.iter().enumerate() {
-            if d != &self.displays[i] {
-                self.displays = displays;
-                if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
-                    self.is_synced = false;
-                }
-                return;
-            }
+
+        self.displays = displays.to_vec();
+        if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
+            self.is_synced = false;
         }
     }
 
@@ -304,6 +293,11 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
+    let _ = update_sync_displays(all);
+}
+
+// Return the converted input snapshot while updating the shared display cache.
+pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
     // If there are multiple displays, we use the logical size for `uinput` by setting scale to d.scale().
     #[cfg(target_os = "linux")]
@@ -346,7 +340,8 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
             }
         })
         .collect::<Vec<DisplayInfo>>();
-    SYNC_DISPLAYS.lock().unwrap().check_changed(displays);
+    SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+    displays
 }
 
 pub fn is_inited_msg() -> Option<Message> {
@@ -357,34 +352,38 @@ pub fn is_inited_msg() -> Option<Message> {
     None
 }
 
-pub async fn update_get_sync_displays_on_login() -> ResultType<Vec<DisplayInfo>> {
+// Return the primary index with the refreshed list so login cannot mix display snapshots.
+pub async fn update_get_sync_displays_on_login() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
-            return super::wayland::get_displays().await;
+            let (displays, primary_display_idx) =
+                super::wayland::get_displays_and_primary().await?;
+            let primary_display_idx =
+                normalize_primary_display_idx(primary_display_idx, displays.len());
+            return Ok((displays, primary_display_idx));
         }
     }
     #[cfg(not(windows))]
     let displays = display_service::try_get_displays();
     #[cfg(windows)]
     let displays = display_service::try_get_displays_add_amyuni_headless();
-    check_update_displays(&displays?);
-    Ok(SYNC_DISPLAYS.lock().unwrap().displays.clone())
+    let displays = displays?;
+    let primary_display_idx = get_primary_2(&displays);
+    let sync_displays = update_sync_displays(&displays);
+    let primary_display_idx =
+        normalize_primary_display_idx(primary_display_idx, sync_displays.len());
+    Ok((sync_displays, primary_display_idx))
 }
 
 #[inline]
-pub fn get_primary() -> usize {
-    #[cfg(target_os = "linux")]
-    {
-        if !is_x11() {
-            return match super::wayland::get_primary() {
-                Ok(n) => n,
-                Err(_) => 0,
-            };
-        }
+fn normalize_primary_display_idx(primary_display_idx: usize, display_len: usize) -> usize {
+    // Zero is the protocol fallback when the list is empty or its primary index is stale.
+    if primary_display_idx < display_len {
+        primary_display_idx
+    } else {
+        0
     }
-
-    try_get_displays().map(|d| get_primary_2(&d)).unwrap_or(0)
 }
 
 #[inline]
@@ -485,4 +484,17 @@ pub fn try_get_displays_(add_amyuni_headless: bool) -> ResultType<Vec<Display>> 
         }
     }
     Ok(displays)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_primary_display_idx;
+
+    #[test]
+    fn normalize_primary_display_idx_bounds() {
+        assert_eq!(normalize_primary_display_idx(0, 0), 0);
+        assert_eq!(normalize_primary_display_idx(0, 2), 0);
+        assert_eq!(normalize_primary_display_idx(1, 2), 1);
+        assert_eq!(normalize_primary_display_idx(2, 2), 0);
+    }
 }
