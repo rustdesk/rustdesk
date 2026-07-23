@@ -82,7 +82,8 @@ protobuf {
 }
 
 android {
-    compileSdkVersion 34
+    namespace "com.carriez.flutter_hbb"
+    compileSdkVersion 35
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
 
@@ -91,6 +92,7 @@ android {
     }
 
     compileOptions {
+        coreLibraryDesugaringEnabled true
         targetCompatibility JavaVersion.VERSION_1_8
         sourceCompatibility JavaVersion.VERSION_1_8
     }
@@ -99,7 +101,7 @@ android {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.carriez.flutter_hbb"
         minSdkVersion 22
-        targetSdkVersion 33
+        targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
@@ -128,6 +130,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     implementation 'com.google.protobuf:protobuf-javalite:3.20.1'
     implementation "androidx.media:media:1.6.0"
     implementation 'com.github.getActivity:XXPermissions:18.5'
