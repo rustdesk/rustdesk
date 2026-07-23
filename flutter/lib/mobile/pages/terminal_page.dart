@@ -137,20 +137,6 @@ class _TerminalPageState extends State<TerminalPage>
     }
   }
 
-  /// Re-measure the key bar after this frame; its height changes when the
-  /// layout switches between one and two rows (e.g. on rotation, or when a
-  /// foldable is folded/unfolded), and the terminal padding must follow.
-  void _scheduleKeyboardHeightUpdate() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _keyboardKey.currentContext == null) return;
-      final renderBox =
-          _keyboardKey.currentContext!.findRenderObject() as RenderBox;
-      if (_keyboardHeight != renderBox.size.height) {
-        setState(() => _keyboardHeight = renderBox.size.height);
-      }
-    });
-  }
-
   EdgeInsets _calculatePadding(double heightPx) {
     if (_cellHeight == null) {
       return const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0);
@@ -324,27 +310,7 @@ class _TerminalPageState extends State<TerminalPage>
     );
   }
 
-  static const _keyRow1 = ['Esc', '/', '|', 'Home', '↑', 'End', 'PgUp'];
-  static const _keyRow2 = ['Tab', 'Ctrl+C', '~', '←', '↓', '→', 'PgDn'];
-
-  Widget _buildKeyRow(List<String> labels) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 2,
-      runSpacing: 2,
-      children: [for (final label in labels) _buildKeyButton(label)],
-    );
-  }
-
   Widget _buildFloatingKeyboard() {
-    // On wide screens (unfolded foldables, tablets, phones in landscape) all
-    // keys fit in a single row, so lay them out in one flowing row to halve
-    // the bar's height. Narrow (portrait phone) screens keep the original two
-    // fixed rows. The Wrap still breaks into a second row when the keys
-    // genuinely don't fit.
-    final isWideScreen =
-        MediaQuery.sizeOf(context).width >= kMobilePageConstraints.maxWidth;
-    _scheduleKeyboardHeightUpdate();
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),
       left: 0,
@@ -357,14 +323,44 @@ class _TerminalPageState extends State<TerminalPage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
-          children: isWideScreen
-              ? [
-                  _buildKeyRow([..._keyRow1, ..._keyRow2])
-                ]
-              : [
-                  _buildKeyRow(_keyRow1),
-                  _buildKeyRow(_keyRow2),
-                ],
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildKeyButton('Esc'),
+                const SizedBox(width: 2),
+                _buildKeyButton('/'),
+                const SizedBox(width: 2),
+                _buildKeyButton('|'),
+                const SizedBox(width: 2),
+                _buildKeyButton('Home'),
+                const SizedBox(width: 2),
+                _buildKeyButton('↑'),
+                const SizedBox(width: 2),
+                _buildKeyButton('End'),
+                const SizedBox(width: 2),
+                _buildKeyButton('PgUp'),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildKeyButton('Tab'),
+                const SizedBox(width: 2),
+                _buildKeyButton('Ctrl+C'),
+                const SizedBox(width: 2),
+                _buildKeyButton('~'),
+                const SizedBox(width: 2),
+                _buildKeyButton('←'),
+                const SizedBox(width: 2),
+                _buildKeyButton('↓'),
+                const SizedBox(width: 2),
+                _buildKeyButton('→'),
+                const SizedBox(width: 2),
+                _buildKeyButton('PgDn'),
+              ],
+            ),
+          ],
         ),
       ),
     );
