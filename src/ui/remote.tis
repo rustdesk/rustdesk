@@ -17,6 +17,7 @@ var audio_enabled = true; // server side
 var file_enabled = true; // server side
 var restart_enabled = true; // server side
 var recording_enabled = true; // server side
+var show_recording_button = handler.get_local_option("hide-recording-button") != "Y";
 var privacy_mode_enabled = true; // server side
 var scroll_body = $(body);
 var peer_platform = "";
