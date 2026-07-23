@@ -195,7 +195,13 @@ impl Frame<'_> {
     ) -> ResultType<EncodeInput<'a>> {
         match self {
             Frame::PixelBuffer(pixelbuffer) => {
+                let u_offset = yuvfmt.u;
                 convert_to_yuv(&pixelbuffer, yuvfmt, yuv, mid_data)?;
+                if crate::codec::Encoder::use_i400() {
+                    if u_offset < yuv.len() {
+                        yuv[u_offset..].fill(128);
+                    }
+                }
                 Ok(EncodeInput::YUV(yuv))
             }
             Frame::Texture(texture) => Ok(EncodeInput::Texture(*texture)),

@@ -769,6 +769,58 @@ Future<List<TRadioMenu<String>>> toolbarCodec(
   ];
 }
 
+Future<List<TRadioMenu<String>>> toolbarColorMode(
+    BuildContext context, String id, FFI ffi) async {
+  final sessionId = ffi.sessionId;
+  final pi = ffi.ffiModel.pi;
+  final codec_format = ffi.qualityMonitorModel.data.codecFormat;
+
+  var groupValue = await bind.sessionGetOption(
+          sessionId: sessionId, arg: kOptionColorMode) ??
+      '';
+  if (groupValue.isEmpty) {
+    final i444Val = await bind.sessionGetOption(
+            sessionId: sessionId, arg: kOptionI444) ??
+        '';
+    if (i444Val == 'Y') {
+      groupValue = kOptionI444;
+    } else {
+      groupValue = kOptionI420;
+    }
+  }
+
+  onChanged(String? value) async {
+    if (value == null) return;
+    await bind.sessionPeerOption(
+        sessionId: sessionId, name: kOptionColorMode, value: value);
+    bind.sessionChangePreferCodec(sessionId: sessionId);
+  }
+
+  final isI444Supported = versionCmp(pi.version, "1.2.4") >= 0 &&
+      (codec_format == "AV1" || codec_format == "VP9");
+
+  final isI400Supported =
+      await bind.sessionIsPeerI400Supported(sessionId: sessionId);
+
+  return [
+    TRadioMenu<String>(
+        child: Text(translate('Balanced (4:2:0)')),
+        value: kOptionI420,
+        groupValue: groupValue,
+        onChanged: onChanged),
+    TRadioMenu<String>(
+        child: Text(translate('True color (4:4:4)')),
+        value: kOptionI444,
+        groupValue: groupValue,
+        onChanged: isI444Supported ? onChanged : null),
+    TRadioMenu<String>(
+        child: Text(translate('Grayscale')),
+        value: kOptionI400,
+        groupValue: groupValue,
+        onChanged: isI400Supported ? onChanged : null),
+  ];
+}
+
 Future<List<TToggleMenu>> toolbarCursor(
     BuildContext context, String id, FFI ffi) async {
   List<TToggleMenu> v = [];
@@ -1010,22 +1062,7 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
         child: Text(translate('Use all my displays for the remote session'))));
   }
 
-  // 444
-  final codec_format = ffi.qualityMonitorModel.data.codecFormat;
-  if (versionCmp(pi.version, "1.2.4") >= 0 &&
-      (codec_format == "AV1" || codec_format == "VP9")) {
-    final option = 'i444';
-    final value =
-        bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
-    v.add(TToggleMenu(
-        value: value,
-        onChanged: (value) async {
-          if (value == null) return;
-          await bind.sessionToggleOption(sessionId: sessionId, value: option);
-          bind.sessionChangePreferCodec(sessionId: sessionId);
-        },
-        child: Text(translate('True color (4:4:4)'))));
-  }
+
 
   if (isDefaultConn && isMobile) {
     v.addAll(toolbarKeyboardToggles(ffi));

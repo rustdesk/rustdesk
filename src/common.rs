@@ -202,6 +202,8 @@ pub fn is_support_relative_mouse_mode_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VERSION_RELATIVE_MOUSE_MODE)
 }
 
+pub const MIN_VERSION_I400: &str = "1.5.0";
+
 // is server process, with "--server" args
 #[inline]
 pub fn is_server() -> bool {

@@ -418,6 +418,14 @@ impl Encoder {
         };
         prefer_i444 && i444_useable && !decodings.is_empty()
     }
+
+    pub fn use_i400() -> bool {
+        let decodings = PEER_DECODINGS.lock().unwrap().clone();
+        if decodings.is_empty() {
+            return false;
+        }
+        decodings.iter().all(|d| d.1.prefer_chroma == Chroma::I400.into())
+    }
 }
 
 impl Decoder {
@@ -838,10 +846,18 @@ impl Decoder {
         } else {
             PreferCodec::Auto
         };
-        let chroma = if options.get("i444") == Some(&"Y".to_string()) {
-            Chroma::I444
-        } else {
-            Chroma::I420
+        // "i444" option is kept for backward compatibility when upgrading from older versions.
+        let chroma = match options.get("color-mode").map(|s| s.as_str()) {
+            Some("i444") => Chroma::I444,
+            Some("i400") => Chroma::I400,
+            Some("i420") => Chroma::I420,
+            _ => {
+                if options.get("i444").map(|s| s.as_str()) == Some("Y") {
+                    Chroma::I444
+                } else {
+                    Chroma::I420
+                }
+            }
         };
         (codec, chroma)
     }
