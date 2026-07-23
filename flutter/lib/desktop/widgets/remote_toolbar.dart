@@ -2740,7 +2740,9 @@ class _RecordMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     var ffi = Provider.of<FfiModel>(context);
     var recordingModel = Provider.of<RecordingModel>(context);
-    final visible =
+    final hideRecordingButton =
+        bind.mainGetLocalOption(key: kOptionHideRecordingButton) == 'Y';
+    final visible = !hideRecordingButton &&
         (recordingModel.start || ffi.permissions['recording'] != false);
     if (!visible) return Offstage();
     return _IconMenuButton(

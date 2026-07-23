@@ -930,6 +930,10 @@ pub fn video_save_directory(root: bool) -> String {
         // Currently, only installed windows run as root
         #[cfg(windows)]
         {
+            let dir = Config::get_option(OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY);
+            if !dir.is_empty() {
+                return dir;
+            }
             let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
             let dir =
                 std::path::PathBuf::from(format!("{drive}\\ProgramData\\{appname}\\recording",));

@@ -20,6 +20,22 @@ use webm::mux::{self, Segment, Track, VideoTrack, Writer};
 
 const MIN_SECS: u64 = 1;
 
+// Use a Windows-safe filename on all platforms so recordings remain portable.
+// Control characters are also replaced because they can make filenames invalid
+// on Windows or invisible and difficult to handle on Linux and macOS.
+fn sanitize_filename_component(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| {
+            if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct RecorderContext {
     pub server: bool,
@@ -45,7 +61,7 @@ impl RecorderContext2 {
         }
         let file = if ctx.server { "incoming" } else { "outgoing" }.to_string()
             + "_"
-            + &ctx.id.clone()
+            + &sanitize_filename_component(&ctx.id)
             + &chrono::Local::now().format("_%Y%m%d%H%M%S%3f_").to_string()
             + &format!(
                 "{}{}_",
@@ -419,5 +435,26 @@ impl Drop for HwRecorder {
             state = RecordState::RemoveFile;
         }
         self.ctx.tx.as_ref().map(|tx| tx.send(state));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_filename_component;
+
+    #[test]
+    fn sanitize_recording_filename_component() {
+        assert_eq!(
+            sanitize_filename_component("192.168.1.2:21118"),
+            "192.168.1.2_21118"
+        );
+        assert_eq!(
+            sanitize_filename_component("[2001:db8::1]:21118"),
+            "[2001_db8__1]_21118"
+        );
+        assert_eq!(
+            sanitize_filename_component("peer/name\\with?bad\nchars"),
+            "peer_name_with_bad_chars"
+        );
     }
 }
