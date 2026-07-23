@@ -533,7 +533,12 @@ pub mod service {
     fn create_uinput_keyboard() -> ResultType<VirtualDevice> {
         // TODO: ensure keys here
         let mut keys = AttributeSet::<evdev::Key>::new();
-        for i in evdev::Key::KEY_ESC.code()..(evdev::Key::BTN_TRIGGER_HAPPY40.code() + 1) {
+        // X11/XKB only supports keycodes up to 255 (X11 keycode = evdev code + 8).
+        // Declaring codes beyond that yields an oversized keymap which makes some
+        // Wayland compositors (e.g. mutter) crash while recompiling the keymap.
+        // Codes above this range are gamepad/joystick buttons, not keyboard keys.
+        for i in evdev::Key::KEY_ESC.code()..=247 {
+
             let key = evdev::Key::new(i);
             if !format!("{:?}", &key).contains("unknown key") {
                 keys.insert(key);
