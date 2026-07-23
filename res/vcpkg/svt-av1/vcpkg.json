@@ -1,0 +1,19 @@
+{
+  "name": "svt-av1",
+  "version-semver": "4.2.0",
+  "port-version": 0,
+  "description": "Scalable Video Technology AV1 software video encoder library",
+  "homepage": "https://gitlab.com/AOMediaCodec/SVT-AV1",
+  "license": "BSD-3-Clause-Clear",
+  "supports": "!x86 & !arm32 & !uwp",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

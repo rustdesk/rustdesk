@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c0c9767..93ec320 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -192,7 +192,7 @@ set(PC_LIBS_PRIVATE)
+ set(PC_REQUIRES_PRIVATE)
+
+ #Clang support, required to build static with LTO
+-if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
++if(FALSE)
+     find_program(LLVM_LD_EXE llvm-ld)
+     find_program(LLVM_AR_EXE llvm-ar)
+     find_program(LLVM_RANLIB_EXE llvm-ranlib)

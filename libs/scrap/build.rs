@@ -4,19 +4,48 @@ use std::{
     println,
 };
 
+/// The static library name may differ from the package name.
+fn link_lib_name(package: &str) -> &str {
+    match package {
+        "svt-av1" => "SvtAv1Enc",
+        _ => package.trim_start_matches("lib"),
+    }
+}
+
 #[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
 fn link_pkg_config(name: &str) -> Vec<PathBuf> {
     // sometimes an override is needed
     let pc_name = match name {
         "libvpx" => "vpx",
+        "svt-av1" => "SvtAv1Enc",
         _ => name,
     };
-    let lib = pkg_config::probe_library(pc_name)
+    let mut pc = pkg_config::Config::new();
+    if name == "svt-av1" {
+        // svt_av1.rs requires the 4.x API (rtc, PredStructure, on-the-fly rate events)
+        pc.atleast_version("4.2");
+    }
+    let pkg_hint = match name {
+        "svt-av1" => "libsvt-av1-dev (needs svt-av1 >= 4.2)".to_owned(),
+        _ => format!("{pc_name}-dev"),
+    };
+    let lib = pc.probe(pc_name)
         .expect(format!(
             "unable to find '{pc_name}' development headers with pkg-config (feature linux-pkg-config is enabled).
-            try installing '{pc_name}-dev' from your system package manager.").as_str());
+            try installing '{pkg_hint}' from your system package manager.").as_str());
 
-    lib.include_paths
+    let mut include_paths = lib.include_paths;
+    // SvtAv1Enc.pc's Cflags is -I${includedir}/svt-av1, but svt_av1_ffi.h uses
+    // #include <svt-av1/...>, so the parent include root is needed too.
+    if name == "svt-av1" {
+        let parents: Vec<PathBuf> = include_paths
+            .iter()
+            .filter(|p| p.ends_with("svt-av1"))
+            .filter_map(|p| p.parent().map(|p| p.to_path_buf()))
+            .collect();
+        include_paths.extend(parents);
+    }
+    include_paths
 }
 #[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
 fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
@@ -61,10 +90,7 @@ fn link_vcpkg(mut path: PathBuf, name: &str) -> PathBuf {
         path.push("installed");
     }
     path.push(target);
-    println!(
-        "cargo:rustc-link-lib=static={}",
-        name.trim_start_matches("lib")
-    );
+    println!("cargo:rustc-link-lib=static={}", link_lib_name(name));
     println!(
         "cargo:rustc-link-search={}",
         path.join("lib").to_str().unwrap()
@@ -103,11 +129,13 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
         );
     }
     path.push(directories.pop().unwrap());
-    // Link the library.
-    println!(
-        "cargo:rustc-link-lib=static={}",
-        name.trim_start_matches("lib")
-    );
+    // Link the library. Homebrew's svt-av1 bottle only ships a dylib.
+    if name == "svt-av1" {
+        println!("cargo:rustc-link-lib={}", link_lib_name(name));
+        println!("cargo:warning=svt-av1 is linked dynamically from homebrew, the binary needs homebrew's svt-av1 at runtime and is not relocatable; set VCPKG_ROOT for a static build");
+    } else {
+        println!("cargo:rustc-link-lib=static={}", link_lib_name(name));
+    }
     // Add the library path.
     println!(
         "cargo:rustc-link-search={}",
@@ -120,8 +148,9 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
 }
 
 /// Find package. By default, it will try to find vcpkg first, then homebrew(currently only for Mac M1).
-/// If building for linux and feature "linux-pkg-config" is enabled, will try to use pkg-config
-/// unless check fails (e.g. NO_PKG_CONFIG_libyuv=1)
+/// If building on a linux host and feature "linux-pkg-config" is enabled, will try to use pkg-config
+/// unless check fails (e.g. NO_PKG_CONFIG_libyuv=1). Note the cfg! below sees the build host, not
+/// the target, so cross builds (e.g. linux -> android) must not enable linux-pkg-config.
 fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
@@ -170,9 +199,9 @@ fn gen_vcpkg_package(package: &str, ffi_header: &str, generated: &str, regex: &s
     let out_dir = Path::new(&out_dir);
 
     let ffi_header = src_dir.join("src").join("bindings").join(ffi_header);
-    println!("rerun-if-changed={}", ffi_header.display());
+    println!("cargo:rerun-if-changed={}", ffi_header.display());
     for dir in &includes {
-        println!("rerun-if-changed={}", dir.display());
+        println!("cargo:rerun-if-changed={}", dir.display());
     }
 
     let ffi_rs = out_dir.join(generated);
@@ -248,6 +277,18 @@ fn main() {
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
+    // Skipped on 32-bit targets: svt-av1 does not support them, the vcpkg
+    // manifest does not install it there and disable_av1() never uses AV1 on
+    // them anyway. Must stay in sync with the cfg gates in
+    // mod.rs/codec.rs/video_service.rs.
+    if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").as_deref() == Ok("64") {
+        gen_vcpkg_package(
+            "svt-av1",
+            "svt_av1_ffi.h",
+            "svt_av1_ffi.rs",
+            "^(svt_av1_|Svt|SVT_|Eb|EB_|PredStructure|PrivDataType).*",
+        );
+    }
     // ffmpeg();
 
     if target_os == "ios" {

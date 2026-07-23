@@ -1023,12 +1023,38 @@ fn get_encoder_config(
             },
             keyframe_interval,
         }),
-        CodecFormat::AV1 => EncoderCfg::AOM(AomEncoderConfig {
-            width: c.width as _,
-            height: c.height as _,
-            quality,
-            keyframe_interval,
-        }),
+        CodecFormat::AV1 => {
+            let aom = EncoderCfg::AOM(AomEncoderConfig {
+                width: c.width as _,
+                height: c.height as _,
+                quality,
+                keyframe_interval,
+            });
+            // Prefer svt-av1 for AV1 encoding, keep aom for i444 (svt-av1 is 4:2:0
+            // only) and for resolutions svt-av1 cannot handle.
+            #[cfg(target_pointer_width = "64")]
+            {
+                let use_i444 = Encoder::use_i444(&aom);
+                if scrap::svt_av1::SvtAv1Encoder::support(c.width as _, c.height as _) && !use_i444
+                {
+                    return EncoderCfg::SVTAV1(scrap::svt_av1::SvtAv1EncoderConfig {
+                        width: c.width as _,
+                        height: c.height as _,
+                        quality,
+                        keyframe_interval,
+                    });
+                }
+                log::info!(
+                    "AV1 uses aom instead of svt-av1: {}",
+                    if use_i444 {
+                        "i444"
+                    } else {
+                        "unsupported resolution"
+                    }
+                );
+            }
+            aom
+        }
         _ => EncoderCfg::VPX(VpxEncoderConfig {
             width: c.width as _,
             height: c.height as _,
@@ -1326,6 +1352,9 @@ fn check_qos(
 ) -> ResultType<()> {
     let mut video_qos = VIDEO_QOS.lock().unwrap();
     *spf = video_qos.spf();
+    // encoders whose rate control budgets per frame need the real pacing rate,
+    // implementations no-op when the value is unchanged
+    encoder.set_fps(video_qos.fps());
     if *ratio != video_qos.ratio() {
         *ratio = video_qos.ratio();
         if encoder.support_changing_quality() {

@@ -52,6 +52,8 @@ pub mod aom;
 #[cfg(not(any(target_os = "ios")))]
 pub mod camera;
 pub mod record;
+#[cfg(target_pointer_width = "64")]
+pub mod svt_av1;
 mod vpx;
 
 #[repr(usize)]

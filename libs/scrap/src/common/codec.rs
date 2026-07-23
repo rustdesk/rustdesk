@@ -9,6 +9,8 @@ use std::{
 use crate::hwcodec::*;
 #[cfg(feature = "mediacodec")]
 use crate::mediacodec::{MediaCodecDecoder, H264_DECODER_SUPPORT, H265_DECODER_SUPPORT};
+#[cfg(target_pointer_width = "64")]
+use crate::svt_av1::{SvtAv1Encoder, SvtAv1EncoderConfig};
 #[cfg(feature = "vram")]
 use crate::vram::*;
 use crate::{
@@ -51,6 +53,8 @@ pub const ENCODE_NEED_SWITCH: &'static str = "ENCODE_NEED_SWITCH";
 pub enum EncoderCfg {
     VPX(VpxEncoderConfig),
     AOM(AomEncoderConfig),
+    #[cfg(target_pointer_width = "64")]
+    SVTAV1(SvtAv1EncoderConfig),
     #[cfg(feature = "hwcodec")]
     HWRAM(HwRamEncoderConfig),
     #[cfg(feature = "vram")]
@@ -70,6 +74,11 @@ pub trait EncoderApi {
     fn input_texture(&self) -> bool;
 
     fn set_quality(&mut self, ratio: f32) -> ResultType<()>;
+
+    /// Inform the encoder of the current pacing rate. Only rate controls that
+    /// budget per frame from a configured frame rate need to override the
+    /// default no-op.
+    fn set_fps(&mut self, _fps: u32) {}
 
     fn bitrate(&self) -> u32;
 
@@ -137,9 +146,34 @@ impl Encoder {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config, i444)?),
             }),
-            EncoderCfg::AOM(_) => Ok(Encoder {
-                codec: Box::new(AomEncoder::new(config, i444)?),
-            }),
+            EncoderCfg::AOM(_) => {
+                log::info!("AV1 encoder: aom");
+                Ok(Encoder {
+                    codec: Box::new(AomEncoder::new(config, i444)?),
+                })
+            }
+            #[cfg(target_pointer_width = "64")]
+            EncoderCfg::SVTAV1(svt) => match SvtAv1Encoder::new(EncoderCfg::SVTAV1(svt), i444) {
+                Ok(codec) => {
+                    log::info!("AV1 encoder: svt-av1");
+                    Ok(Encoder {
+                        codec: Box::new(codec),
+                    })
+                }
+                Err(e) => {
+                    // Same wire format, aom keeps the negotiated AV1 session alive.
+                    log::error!("AV1 encoder: svt-av1 init failed ({e:?}), using aom");
+                    let aom = EncoderCfg::AOM(AomEncoderConfig {
+                        width: svt.width,
+                        height: svt.height,
+                        quality: svt.quality,
+                        keyframe_interval: svt.keyframe_interval,
+                    });
+                    Ok(Encoder {
+                        codec: Box::new(AomEncoder::new(aom, i444)?),
+                    })
+                }
+            },
 
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(_) => match HwRamEncoder::new(config, i444) {
@@ -269,7 +303,10 @@ impl Encoder {
         let preference = most_frequent.enum_value_or(PreferCodec::Auto);
 
         // auto: h265 > h264 > av1/vp9/vp8
-        let av1_test = Config::get_option(hbb_common::config::keys::OPTION_AV1_TEST) != "N";
+        let av1_test = {
+            let v = Config::get_option(hbb_common::config::keys::OPTION_AV1_TEST);
+            v != "N" && v != "SVT-N"
+        };
         let mut auto_codec = if av1_useable && av1_test {
             CodecFormat::AV1
         } else {
@@ -365,6 +402,8 @@ impl Encoder {
                 VpxVideoCodecId::VP9 => CodecFormat::VP9,
             },
             EncoderCfg::AOM(_) => CodecFormat::AV1,
+            #[cfg(target_pointer_width = "64")]
+            EncoderCfg::SVTAV1(_) => CodecFormat::AV1,
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(hw) => {
                 let name = hw.name.to_lowercase();
@@ -411,6 +450,10 @@ impl Encoder {
                 VpxVideoCodecId::VP9 => decodings.iter().all(|d| d.1.i444.vp9),
             },
             EncoderCfg::AOM(_) => decodings.iter().all(|d| d.1.i444.av1),
+            // Mirrors AOM so an i444 preference change still triggers the encoder
+            // rebuild, the rebuild then selects aom for the actual i444 encoding.
+            #[cfg(target_pointer_width = "64")]
+            EncoderCfg::SVTAV1(_) => decodings.iter().all(|d| d.1.i444.av1),
             #[cfg(feature = "hwcodec")]
             EncoderCfg::HWRAM(_) => false,
             #[cfg(feature = "vram")]
@@ -1042,7 +1085,15 @@ pub fn test_av1() {
     use hbb_common::rand::Rng;
     use std::{sync::Once, time::Duration};
 
-    if disable_av1() || !Config::get_option(OPTION_AV1_TEST).is_empty() {
+    // The verdict is tied to the encoder generation that produced it, so
+    // switching the AV1 encoder (aom <-> svt-av1) re-runs the test.
+    #[cfg(target_pointer_width = "64")]
+    const AV1_TEST_RESULT: (&str, &str) = ("SVT-Y", "SVT-N");
+    #[cfg(not(target_pointer_width = "64"))]
+    const AV1_TEST_RESULT: (&str, &str) = ("Y", "N");
+
+    let cached = Config::get_option(OPTION_AV1_TEST);
+    if disable_av1() || cached == AV1_TEST_RESULT.0 || cached == AV1_TEST_RESULT.1 {
         log::info!("skip test av1");
         return;
     }
@@ -1101,15 +1152,38 @@ pub fn test_av1() {
                     }
                     Ok(dst)
                 };
-            let Ok(mut av1) = AomEncoder::new(
-                EncoderCfg::AOM(AomEncoderConfig {
+            let aom = || {
+                AomEncoder::new(
+                    EncoderCfg::AOM(AomEncoderConfig {
+                        width,
+                        height,
+                        quality,
+                        keyframe_interval,
+                    }),
+                    i444,
+                )
+                .map(|e| Box::new(e) as Box<dyn EncoderApi>)
+            };
+            // Test the encoder actually used for AV1, svt-av1 on 64-bit targets, with
+            // the same fallback to aom as Encoder::new so an svt init failure
+            // does not brand a working aom as unusable. Note that i444 (true
+            // color) sessions and svt-unsupported resolutions still run aom,
+            // whose speed is then not covered by this gate.
+            #[cfg(target_pointer_width = "64")]
+            let av1 = crate::svt_av1::SvtAv1Encoder::new(
+                EncoderCfg::SVTAV1(crate::svt_av1::SvtAv1EncoderConfig {
                     width,
                     height,
                     quality,
                     keyframe_interval,
                 }),
                 i444,
-            ) else {
+            )
+            .map(|e| Box::new(e) as Box<dyn EncoderApi>)
+            .or_else(|_| aom());
+            #[cfg(not(target_pointer_width = "64"))]
+            let av1 = aom();
+            let Ok(mut av1) = av1 else {
                 return false;
             };
             let mut key_frame_time = Duration::ZERO;
@@ -1122,7 +1196,7 @@ pub fn test_av1() {
                 };
                 let start = Instant::now();
                 if av1
-                    .encode(pts.elapsed().as_millis() as _, &yuv, super::STRIDE_ALIGN)
+                    .encode_to_message(EncodeInput::YUV(&yuv), pts.elapsed().as_millis() as _)
                     .is_err()
                 {
                     log::debug!("av1 encode failed");
@@ -1150,7 +1224,12 @@ pub fn test_av1() {
             let v = f();
             Config::set_option(
                 OPTION_AV1_TEST.to_string(),
-                if v { "Y" } else { "N" }.to_string(),
+                if v {
+                    AV1_TEST_RESULT.0
+                } else {
+                    AV1_TEST_RESULT.1
+                }
+                .to_string(),
             );
         });
     });
