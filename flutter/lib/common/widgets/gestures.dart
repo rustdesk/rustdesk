@@ -37,6 +37,16 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate;
   GestureDragEndCallback? onThreeFingerVerticalDragEnd;
 
+  /// Optional getter for a pointer [PointerDownEvent.device] id whose pointers
+  /// this recognizer must ignore. On mobile, an Android trackpad (Xiaomi-style)
+  /// reports its 2-finger gesture as a synthesized left-button drag with
+  /// `kind=touch`, which is routed to scroll elsewhere in `InputModel`. Without
+  /// this filter the drag would also be replayed here as a one-finger pan,
+  /// moving the cursor / holding the left button on top of the scroll output.
+  /// Returns null on desktop or before any trackpad hover has been seen, in
+  /// which case no filtering is applied.
+  int? Function()? ignoredDeviceIdOf;
+
   var _currentState = GestureState.none;
   Timer? _debounceTimer;
 
@@ -190,6 +200,19 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         break;
     }
     _currentState = GestureState.none;
+  }
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    final ignored = ignoredDeviceIdOf?.call();
+    if (ignored != null && event.device == ignored) {
+      // Do not register the trackpad's synthesized drag with this recognizer.
+      // Returning without super lets the gesture arena drop the pointer here,
+      // while the Listener path (which does not compete in the arena) still
+      // receives every event and routes the gesture to scroll.
+      return;
+    }
+    super.addAllowedPointer(event);
   }
 }
 

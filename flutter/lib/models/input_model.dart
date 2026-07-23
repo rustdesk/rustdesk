@@ -456,7 +456,12 @@ class InputModel {
   // touchscreen drag — which must keep flowing through touch mode.
   int? _trackpadHoverDeviceId;
   bool _trackpadTwoFinger = false;
-  int _trackpadTwoFingerLastMoveMs = 0;
+
+  /// The trackpad's pointer [device] id, exposed only on mobile (the Android
+  /// trackpad routing is mobile-only) so the touch gesture recognizer can
+  /// ignore the device's synthesized 2-finger drag. Returns null on desktop,
+  /// where no such routing exists.
+  int? get trackpadHoverDeviceId => isDesktop ? null : _trackpadHoverDeviceId;
 
   var _lastScale = 1.0;
 
@@ -1232,7 +1237,6 @@ class InputModel {
     // Keep the gesture alive even for sub-pixel movement, and accumulate the
     // fractional remainder (reset on gesture start) so a slow scroll does not
     // stall on deltas that truncate to zero.
-    _trackpadTwoFingerLastMoveMs = _nowMs();
     if (peerPlatform == kPeerPlatformLinux) {
       delta *= _trackpadAdjustPeerLinux;
     }
@@ -1241,6 +1245,15 @@ class InputModel {
     final y = _trackpadScrollUnsent.dy.truncate();
     _trackpadScrollUnsent -= Offset(x.toDouble(), y.toDouble());
     if (x == 0 && y == 0) return;
+    // For an Android-controlled peer, the established trackpad-pan route sends
+    // touch pan events (onPointerPanZoomUpdate does the same) — an Android peer
+    // does not consume the `trackpad` mouse message. Mirror that branch so
+    // Xiaomi-style synthetic input scrolls an Android peer like a native trackpad.
+    if (peerPlatform == kPeerPlatformAndroid) {
+      handlePointerEvent(
+          'touch', kMouseEventTypePanUpdate, Offset(x.toDouble(), y.toDouble()));
+      return;
+    }
     bind.sessionSendMouse(
         sessionId: sessionId,
         msg: json.encode(modify({
@@ -1249,8 +1262,6 @@ class InputModel {
           'y': '$y',
         })));
   }
-
-  int _nowMs() => DateTime.now().millisecondsSinceEpoch;
 
   /// Update the pointer lock center position based on current window frame.
   Future<void> updatePointerLockCenter({Offset? localCenter}) {
@@ -1346,16 +1357,13 @@ class InputModel {
     if (e.kind == ui.PointerDeviceKind.touch ||
         e.kind == ui.PointerDeviceKind.trackpad) {
       _trackpadHoverDeviceId = e.device;
-      // During a 2-finger scroll gesture the device also emits hover frames; skip
-      // them so the cursor does not drift while scrolling. Auto-clear a stale flag
-      // if the last scroll move was long ago (a missed PointerUp would otherwise
-      // permanently suppress cursor movement).
+      // During a 2-finger scroll gesture the device also emits hover frames;
+      // skip them so the cursor does not drift while scrolling. The latch is
+      // cleared only by an explicit PointerUp (onPointUpImage); if that is ever
+      // missed, the next trackpad move relatches the gesture (onPointMoveImage),
+      // so a pause can never strand an active scroll.
       if (_trackpadTwoFinger) {
-        if (_nowMs() - _trackpadTwoFingerLastMoveMs > 250) {
-          _trackpadTwoFinger = false;
-        } else {
-          return;
-        }
+        return;
       }
       // Absolute positioning: map the (Android-driven) cursor position to remote
       // canvas coords, exactly like a real mouse hover. Unlike a relative
@@ -1614,8 +1622,12 @@ class InputModel {
         _trackpadHoverDeviceId != null &&
         e.device == _trackpadHoverDeviceId) {
       _trackpadTwoFinger = true;
-      _trackpadTwoFingerLastMoveMs = _nowMs();
       _trackpadScrollUnsent = Offset.zero;
+      // Mirror the Android-peer pan lifecycle (onPointerPanZoomStart) so a
+      // synthetic 2-finger gesture opens a touch pan on the controlled peer.
+      if (peerPlatform == kPeerPlatformAndroid) {
+        handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
+      }
       return;
     }
 
@@ -1673,6 +1685,10 @@ class InputModel {
         e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
+      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd).
+      if (peerPlatform == kPeerPlatformAndroid) {
+        handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
+      }
       return;
     }
 
@@ -1697,14 +1713,18 @@ class InputModel {
     // [FIX #15630] Android trackpad 2-finger motion: the device reports it as a
     // pressed touch-drag (kind=touch + left button) on the trackpad device. Convert
     // the per-frame delta into a smooth scroll. Other touch moves (e.g. a real
-    // touchscreen drag, or no active 2-finger gesture) are dropped here as before.
+    // touchscreen drag) are dropped here as before.
     if (!isDesktop && e.kind == ui.PointerDeviceKind.touch) {
       // Only the learned trackpad device drives the 2-finger scroll, so a
       // concurrent real touchscreen drag is not mistaken for scrolling.
-      if (_trackpadTwoFinger &&
-          _trackpadHoverDeviceId != null &&
+      if (_trackpadHoverDeviceId != null &&
           e.device == _trackpadHoverDeviceId &&
           (e.buttons & 0x1) != 0) {
+        // (Re)latch on every trackpad move: a pause can let an interleaved
+        // hover frame drop the latch (see onPointHoverImage), but the fingers
+        // are still down, so the next move must resume scrolling instead of
+        // being discarded.
+        _trackpadTwoFinger = true;
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }
       return;

@@ -576,6 +576,7 @@ class _RawTouchGestureDetectorRegionState
         instance.onOneFingerPanStart =
             (DragStartDetails d) => onOneFingerPanStart(context, d);
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onOneFingerPanUpdate = onOneFingerPanUpdate
           ..onOneFingerPanEnd = onOneFingerPanEnd
           ..onOneFingerPanCancel = onOneFingerPanCancel
