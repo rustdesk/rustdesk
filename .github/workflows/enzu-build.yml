@@ -1,0 +1,450 @@
+# ENZU custom-client build system.
+#
+# This workflow is 100% additive and ENZU-specific. It does NOT modify or reuse any
+# upstream RustDesk workflow, so future `git merge upstream/master` stays conflict-free
+# (upstream never touches a file named enzu-*).
+#
+# Scope (deliberately minimal):
+#   - Android arm64-v8a  (aarch64-linux-android)
+#   - Windows x64        (x86_64-pc-windows-msvc)
+# Nothing else is built. No releases are published — artifacts only.
+#
+# The application itself is built exactly as upstream builds it (same toolchain
+# versions, same scripts). Only the CI packaging/publishing layer differs.
+
+name: ENZU Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pinned to match upstream .github/workflows/flutter-build.yml + bridge.yml so the
+# produced binaries are identical to an upstream build of the same commit.
+env:
+  RUST_VERSION: "1.75"          # Android lib + bridge (upstream RUST_VERSION / SCITER_RUST_VERSION)
+  CARGO_NDK_VERSION: "3.1.2"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"     # app build (Android + Windows)
+  BRIDGE_FLUTTER_VERSION: "3.22.3"   # bridge codegen (upstream default bridge)
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  NDK_VERSION: "r28c"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"   # best-effort GH cache; vcpkg falls back to source build
+  VERSION: "1.4.9"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Verify the ENZU embedded configuration (single source of truth:
+  # src/enzu_config.rs) BEFORE any platform build. Fast, fails the whole run on
+  # a misconfiguration. Both platform jobs depend on this.
+  # ---------------------------------------------------------------------------
+  verify-config:
+    name: verify-enzu-config
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Provide ENZU build config from repo Variables (optional)
+        shell: bash
+        env:
+          ENZU_ID_SERVER: ${{ vars.ENZU_ID_SERVER }}
+          ENZU_RELAY_SERVER: ${{ vars.ENZU_RELAY_SERVER }}
+          ENZU_PUBLIC_KEY: ${{ vars.ENZU_PUBLIC_KEY }}
+        run: |
+          # Export only non-empty repo Variables so an unset Variable falls back to
+          # the built-in ENZU defaults; a *provided* invalid value fails the build.
+          for k in ENZU_ID_SERVER ENZU_RELAY_SERVER ENZU_PUBLIC_KEY; do
+            v="${!k}"; [ -n "$v" ] && echo "$k=$v" >> "$GITHUB_ENV" || true
+          done
+      - name: Verify ENZU embedded config
+        run: python3 scripts/verify_enzu_config.py
+
+  # ---------------------------------------------------------------------------
+  # Shared, platform-neutral prerequisite. Generates the flutter-rust-bridge
+  # files (Dart + Rust) that BOTH platform jobs need. This is NOT a platform
+  # build — it is the same neutral codegen step upstream runs as `generate-bridge`.
+  # Android and Windows both depend ONLY on this; neither depends on the other,
+  # nor on any Linux/macOS desktop platform build.
+  # ---------------------------------------------------------------------------
+  generate-bridge:
+    name: generate-bridge
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install prerequisites
+        run: |
+          sudo apt-get install ca-certificates -y
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang cmake curl gcc git g++ libclang-dev libgtk-3-dev \
+            llvm-dev nasm ninja-build pkg-config wget
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: "rustfmt"
+
+      - name: Rust cache (optional)
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        continue-on-error: true
+        with:
+          prefix-key: enzu-bridge-ubuntu-22.04
+
+      - name: Cache bridge codegen (optional)
+        id: cache-bridge
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+        continue-on-error: true
+        with:
+          path: /tmp/flutter_rust_bridge
+          key: enzu-bridge-${{ env.BRIDGE_FLUTTER_VERSION }}
+
+      - name: Install flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.BRIDGE_FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          cargo install cargo-expand --version ${{ env.CARGO_EXPAND_VERSION }} --locked
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          # Flutter 3.22.3: extended_text 14 needs a newer Dart, downgrade for resolution.
+          sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+          pushd flutter && flutter pub get && popd
+
+      - name: Run flutter rust bridge
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+
+      - name: Upload bridge artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: enzu-bridge-artifact
+          retention-days: 14
+          path: |
+            ./src/bridge_generated.rs
+            ./src/bridge_generated.io.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+
+  # ---------------------------------------------------------------------------
+  # Android arm64-v8a APK. Depends only on generate-bridge.
+  # ---------------------------------------------------------------------------
+  android-arm64:
+    name: android-arm64-v8a
+    needs: [verify-config, generate-bridge]
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+               clang cmake curl gcc-multilib git g++ g++-multilib \
+               libayatana-appindicator3-dev libasound2-dev libc6-dev \
+               libclang-dev libunwind-dev libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev libgtk-3-dev libpam0g-dev \
+               libpulse-dev libva-dev libxcb-randr0-dev libxcb-shape0-dev \
+               libxcb-xfixes0-dev libxdo-dev libxfixes-dev llvm-dev nasm \
+               ninja-build openjdk-17-jdk-headless pkg-config tree wget
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Provide ENZU build config from repo Variables (optional)
+        shell: bash
+        env:
+          ENZU_ID_SERVER: ${{ vars.ENZU_ID_SERVER }}
+          ENZU_RELAY_SERVER: ${{ vars.ENZU_RELAY_SERVER }}
+          ENZU_PUBLIC_KEY: ${{ vars.ENZU_PUBLIC_KEY }}
+        run: |
+          # Only non-empty repo Variables are exported; unset => built-in ENZU fallback.
+          for k in ENZU_ID_SERVER ENZU_RELAY_SERVER ENZU_PUBLIC_KEY; do
+            v="${!k}"; [ -n "$v" ] && echo "$k=$v" >> "$GITHUB_ENV" || true
+          done
+
+      - name: Install flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Gradle cache (optional)
+        uses: actions/cache@6f8efc29b200d32929f49075959781ed54ec270c # v3
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: enzu-gradle-${{ hashFiles('flutter/android/**/*.gradle', 'flutter/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            enzu-gradle-
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup vcpkg with GitHub Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies (arm64-v8a)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          if ! ./flutter/build_android_deps.sh arm64-v8a; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"; echo "======"; cat "$_1"; echo "======"; echo ""
+            done
+            exit 1
+          fi
+        shell: bash
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: enzu-bridge-artifact
+          path: ./
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: "rustfmt"
+
+      - name: Rust cache (optional)
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        continue-on-error: true
+        with:
+          prefix-key: enzu-rustdesk-lib-cache-android
+          key: aarch64-linux-android
+
+      - name: Build rustdesk lib (aarch64-linux-android)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --version ${{ env.CARGO_NDK_VERSION }} --locked
+          ./flutter/ndk_arm64.sh
+          mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so \
+             ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+
+      - name: Build rustdesk APK (arm64-v8a)
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+          # Increase Gradle JVM memory for CI builds
+          sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
+          # Use debug signing (release secrets not required for ENZU CI artifacts)
+          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
+          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so \
+             ./flutter/android/app/src/main/jniLibs/arm64-v8a/
+          cp ./target/aarch64-linux-android/release/liblibrustdesk.so \
+             ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+          pushd flutter
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             ../enzu-rustdesk-${{ env.VERSION }}-android-arm64.apk
+          popd
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: enzu-rustdesk-android-arm64-configured
+          retention-days: 14
+          path: ./enzu-rustdesk-${{ env.VERSION }}-android-arm64.apk
+
+  # ---------------------------------------------------------------------------
+  # Windows x64. Depends only on generate-bridge.
+  # ---------------------------------------------------------------------------
+  windows-x64:
+    name: windows-x64
+    needs: [verify-config, generate-bridge]
+    runs-on: windows-2022
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Provide ENZU build config from repo Variables (optional)
+        shell: bash
+        env:
+          ENZU_ID_SERVER: ${{ vars.ENZU_ID_SERVER }}
+          ENZU_RELAY_SERVER: ${{ vars.ENZU_RELAY_SERVER }}
+          ENZU_PUBLIC_KEY: ${{ vars.ENZU_PUBLIC_KEY }}
+        run: |
+          # Only non-empty repo Variables are exported; unset => built-in ENZU fallback.
+          for k in ENZU_ID_SERVER ENZU_RELAY_SERVER ENZU_PUBLIC_KEY; do
+            v="${!k}"; [ -n "$v" ] && echo "$k=$v" >> "$GITHUB_ENV" || true
+          done
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: enzu-bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+          cache: true
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]] && git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: "rustfmt"
+
+      - name: Rust cache (optional)
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        continue-on-error: true
+        with:
+          prefix-key: enzu-windows-2022
+
+      - name: Setup vcpkg with GitHub Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies (x64-windows-static)
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        shell: bash
+        run: |
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet x64-windows-static \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"; echo "======"; cat "$_1"; echo "======"; echo ""
+            done
+            exit 1
+          fi
+
+      - name: Build rustdesk
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          mv ./flutter/build/windows/x64/runner/Release ./rustdesk
+
+          # Virtual display driver (usbmmidd) — part of a complete portable build
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+
+          # Printer driver (best-effort; ignored on failure)
+          try {
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip -OutFile rustdesk_printer_driver_v4-1.4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4-1.4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4-1.4.zip -Algorithm SHA256
+            $checksum_adapter = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_adapter = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_adapter -eq $downloadsum_adapter.Hash) {
+                Expand-Archive rustdesk_printer_driver_v4-1.4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4-1.4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            }
+          } catch {
+              Write-Host "Ignore the printer driver error."
+          }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: enzu-rustdesk-windows-x64
+          retention-days: 14
+          path: rustdesk
