@@ -137,6 +137,10 @@ type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_
 type FnGrabDesc =
     unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 type FnOpenRender = unsafe extern "C" fn(*const c_char) -> *mut drmtap_ctx;
+// libdrmtap >= 0.4.15. Names the render node of the device a context is bound to,
+// so the exporter can tell the converter which GPU to bind to instead of leaving
+// it to auto-selection. Returns a ctx-owned string, or NULL if it has none.
+type FnRenderNode = unsafe extern "C" fn(*mut drmtap_ctx) -> *const c_char;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
@@ -159,6 +163,9 @@ pub struct DrmtapLib {
     pub grab_desc: Option<FnGrabDesc>,
     pub open_render: Option<FnOpenRender>,
     pub convert_dmabuf: Option<FnConvertDmabuf>,
+    // libdrmtap >= 0.4.15; `None` on an older .so, where the converter keeps
+    // relying on `open_render(NULL)` auto-selection exactly as before.
+    pub render_node: Option<FnRenderNode>,
     // Parsed (major, minor, patch) from `drmtap_version()`, for feature gating.
     pub version: (c_int, c_int, c_int),
 }
@@ -225,6 +232,8 @@ impl DrmtapLib {
             let open_render: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
             let convert_dmabuf: Option<FnConvertDmabuf> =
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
+            let render_node: Option<FnRenderNode> =
+                lib.get(b"drmtap_render_node").ok().map(|s| *s);
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -237,6 +246,7 @@ impl DrmtapLib {
                 grab_desc,
                 open_render,
                 convert_dmabuf,
+                render_node,
                 version: (major, minor, patch),
             })
         }

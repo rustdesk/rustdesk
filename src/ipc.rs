@@ -545,6 +545,15 @@ pub struct DrmDisplayInfo {
     pub width: u32,
     pub height: u32,
     pub active: bool,
+    /// Render node of the GPU that EXPORTS this display's scanout, so the
+    /// unprivileged converter binds to that device instead of auto-selecting one.
+    /// On a multi-GPU host auto-selection can land on a different GPU and the
+    /// cross-vendor import then fails on an incompatible tiling modifier. Empty
+    /// when the service cannot name it (a pre-0.4.15 libdrmtap, or a display-only
+    /// device with no render node), which keeps the previous auto-select
+    /// behaviour; `serde(default)` so an older peer's message still decodes.
+    #[serde(default)]
+    pub render_node: String,
 }
 
 /// Serializable metadata descriptor of a scanout dma-buf, shipped over `_drm` as the JSON payload of
@@ -1774,6 +1783,9 @@ static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic:
 /// device outputs regardless of the reader's target CRTC, so a capture reader can refresh the cache.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<DrmDisplayInfo> {
+    // Every display this reader enumerates belongs to the reader's device, so they
+    // all share its render node. Resolved once here rather than per display.
+    let render_node = reader.render_node().unwrap_or_default();
     reader
         .displays()
         .into_iter()
@@ -1796,6 +1808,7 @@ fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<Dr
             width: d.width,
             height: d.height,
             active: d.active,
+            render_node: render_node.clone(),
         })
         .collect()
 }
@@ -3727,6 +3740,36 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    // `render_node` was added to DrmDisplayInfo after the wire already existed, so a service
+    // and a server from different builds can disagree about it. `serde(default)` must keep an
+    // older peer's message decodable (empty node == "auto-select", the previous behaviour)
+    // rather than failing the whole DrmDisplayList and losing DRM capture.
+    #[test]
+    fn drm_display_info_decodes_without_render_node() {
+        let legacy = r#"{"name":"DP-1","crtc_id":386,"x":0,"y":0,
+                         "width":3840,"height":2160,"active":true}"#;
+        let info: DrmDisplayInfo =
+            serde_json::from_str(legacy).expect("a pre-render_node payload must still decode");
+        assert_eq!(info.name, "DP-1");
+        assert_eq!(info.crtc_id, 386);
+        assert!(info.render_node.is_empty(), "missing node means auto-select");
+
+        // And a current payload round-trips the node.
+        let current = DrmDisplayInfo {
+            name: "DP-1".to_owned(),
+            crtc_id: 386,
+            x: 0,
+            y: 0,
+            width: 3840,
+            height: 2160,
+            active: true,
+            render_node: "/dev/dri/renderD129".to_owned(),
+        };
+        let wire = serde_json::to_vec(&current).unwrap();
+        let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
+        assert_eq!(back, current);
+    }
 
     // A blocking pipe as a probe fd: (read end, write end). Both are CLOEXEC-agnostic OwnedFds.
     fn pipe() -> (OwnedFd, OwnedFd) {

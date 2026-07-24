@@ -51,7 +51,7 @@ pub struct DisplaySnapshot {
 /// Returns true only if `path` canonicalizes to a node directly under /dev/dri/.
 /// This is the realpath gate the libdrmtap helper applied but the in-process
 /// (direct) path does not, so the service must apply it itself.
-fn device_under_dev_dri(path: &str) -> bool {
+pub(super) fn device_under_dev_dri(path: &str) -> bool {
     match std::fs::canonicalize(path) {
         Ok(p) => p.parent().map_or(false, |d| d == std::path::Path::new("/dev/dri")),
         Err(_) => false,
@@ -221,6 +221,28 @@ impl DrmReader {
     /// the CPU-mapped `grab()` path (an older `.so`).
     pub fn supports_grab_desc(&self) -> bool {
         self.lib.grab_desc.is_some()
+    }
+
+    /// Render node (`/dev/dri/renderD*`) of the GPU this reader captures from, to
+    /// hand to the unprivileged converter so it binds to the device that EXPORTS
+    /// the scanout. On a multi-GPU host the converter's own auto-selection can
+    /// land on a different GPU, and importing a scanout across vendors can fail
+    /// on an incompatible tiling modifier. `None` on a pre-0.4.15 `.so` (the
+    /// symbol is absent) or on a display-only device with no render node; the
+    /// converter then auto-selects exactly as before.
+    pub fn render_node(&mut self) -> Option<String> {
+        let f = self.lib.render_node?;
+        // SAFETY: self.ctx is a valid context. The returned pointer is owned by
+        // the context and stays valid until it is closed, so copying out of it
+        // here (while &mut self is held) cannot outlive it.
+        let ptr = unsafe { f(self.ctx) };
+        if ptr.is_null() {
+            return None;
+        }
+        unsafe { std::ffi::CStr::from_ptr(ptr) }
+            .to_str()
+            .ok()
+            .map(|s| s.to_owned())
     }
 
     /// Zero-copy EXPORT grab for the split-capture path (root `--service`). Calls

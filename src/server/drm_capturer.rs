@@ -295,11 +295,22 @@ async fn recv_thread(
     // Skip opening the render-node converter entirely when this display previously failed to convert
     // (multi-GPU render-node mismatch): request the CPU path so the service does the conversion on the
     // exporting GPU. Otherwise open it normally and fall back to CPU only if no render node is usable.
+    // Bind the converter to the GPU that EXPORTS this display's scanout, which the service
+    // named in the display list. Auto-selection can land on a different GPU on a multi-GPU
+    // host, and importing a scanout across vendors can fail on an incompatible tiling
+    // modifier. Empty (an older service or a device with no render node) means auto-select,
+    // exactly as before. Every display of one device carries the same node, so a display
+    // index that does not resolve still gets the right answer from the first entry.
     let force_cpu = drm_prefer_cpu(display);
+    let render_node = displays
+        .get(display.max(0) as usize)
+        .or_else(|| displays.first())
+        .map(|d| d.render_node.clone())
+        .unwrap_or_default();
     let mut converter = if force_cpu {
         None
     } else {
-        RenderConverter::open_render()
+        RenderConverter::open_render(Some(render_node.as_str()))
     };
     let need_cpu = converter.is_none();
     if need_cpu {

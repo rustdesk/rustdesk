@@ -17,6 +17,7 @@
 use super::drmtap_dl::{self, drmtap_ctx, drmtap_dmabuf_desc, drmtap_frame_info, DrmtapLib};
 use super::Pixfmt;
 use hbb_common::log;
+use std::ffi::CString;
 use std::io;
 use std::os::fd::RawFd;
 
@@ -48,14 +49,16 @@ pub struct RenderConverter {
 }
 
 impl RenderConverter {
-    /// Open an unprivileged DRM render-node convert context (`drmtap_open_render(NULL)`
-    /// auto-selects a render node — it opens no KMS card, spawns no helper, and needs
-    /// no elevated capability). Returns `None` when libdrmtap is unavailable, the split
-    /// convert symbols are missing (a pre-0.4.9 `.so`), or no render node could be
-    /// opened (a locked-down seat with no `/dev/dri/renderD*` access) — the caller then
-    /// degrades to the CPU-mapped / PipeWire path. MUST be called on the thread that
-    /// will later `convert()` and drop it.
-    pub fn open_render() -> Option<RenderConverter> {
+    /// Open an unprivileged DRM render-node convert context. `node` is the render node
+    /// of the GPU that exports the scanout (from the service's display list); `None` or
+    /// an empty/invalid path falls back to libdrmtap auto-selection. It opens no KMS
+    /// card, spawns no helper, and needs no elevated capability. Returns `None` when
+    /// libdrmtap is unavailable, the split convert symbols are missing (a pre-0.4.9
+    /// `.so`), or no render node could be opened (a locked-down seat with no
+    /// `/dev/dri/renderD*` access) — the caller then degrades to the service-side CPU
+    /// convert / PipeWire path. MUST be called on the thread that will later `convert()`
+    /// and drop it.
+    pub fn open_render(node: Option<&str>) -> Option<RenderConverter> {
         let lib = drmtap_dl::get()?;
         // The converter needs BOTH split symbols; bail (so the caller degrades) if either
         // is absent, rather than open a ctx we could never convert with.
@@ -67,14 +70,45 @@ impl RenderConverter {
             );
             return None;
         }
-        // SAFETY: `open_render` is a resolved C entry point; NULL requests auto-selection
-        // of a render node.
-        let ctx = unsafe { open_render(std::ptr::null()) };
+        // The service names the render node of the GPU that EXPORTS the scanout, which
+        // is the only device guaranteed to understand its tiling modifier; auto-select
+        // (NULL) is the fallback when it cannot. Same /dev/dri gate the capture device
+        // gets: the path arrives over IPC, and while the peer is root, a converter that
+        // opens whatever path it is handed is a needless widening.
+        let node_cstr = match node.filter(|n| !n.is_empty()) {
+            None => None,
+            Some(n) => {
+                if !super::drm_reader::device_under_dev_dri(n) {
+                    log::warn!("drm: render node {n:?} is not under /dev/dri; auto-selecting");
+                    None
+                } else {
+                    match CString::new(n) {
+                        Ok(c) => Some(c),
+                        Err(_) => None, // interior NUL
+                    }
+                }
+            }
+        };
+        // SAFETY: `open_render` is a resolved C entry point; `node_cstr` outlives the
+        // call, and NULL requests auto-selection of a render node.
+        let ctx = unsafe {
+            open_render(node_cstr.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()))
+        };
         if ctx.is_null() {
-            log::info!("drmtap_open_render(NULL) failed; no usable DRM render node");
+            log::info!(
+                "drmtap_open_render({}) failed; no usable DRM render node",
+                node_cstr.as_ref().map_or("NULL".to_owned(), |c| format!("{c:?}"))
+            );
             return None;
         }
-        log::info!("drm: opened unprivileged render-node convert context");
+        match node_cstr {
+            Some(c) => log::info!(
+                "drm: opened unprivileged convert context on the exporting GPU ({c:?})"
+            ),
+            None => log::info!(
+                "drm: opened unprivileged render-node convert context (auto-selected)"
+            ),
+        }
         Some(RenderConverter { lib, ctx })
     }
 
