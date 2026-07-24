@@ -608,6 +608,8 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
         #[cfg(target_os = "macos")]
+        crate::window_targeting::initialize();
+        #[cfg(target_os = "macos")]
         memory_watchdog::start();
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
