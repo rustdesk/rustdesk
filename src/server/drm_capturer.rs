@@ -692,6 +692,20 @@ const DRM_PROBE_MAX_FAILURES: u32 = 5;
 // is_available() never calls query_displays() (up to ~4s of IPC) while holding DRM_STATE.
 static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Advanced by every publish of DRM_STATE. `refresh_available_async` samples it before its slow,
+/// UNLOCKED probe and discards its own result if this moved meanwhile, so an older probe can never
+/// overwrite a newer verdict (a hotplug push, say) -- which matters because an empty probe result
+/// drops to Unavailable and would otherwise disable DRM on a host whose monitor just came back.
+static DRM_STATE_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Publish an availability verdict. EVERY write to DRM_STATE goes through here so the generation
+/// stays truthful; writing the state directly would silently defeat the staleness check above.
+#[inline]
+fn publish_probe_state(st: &mut ProbeState, next: ProbeState) {
+    *st = next;
+    DRM_STATE_GEN.fetch_add(1, Ordering::Release);
+}
+
 /// RAII release for the single-flight probe guard. Whichever path acquires DRM_PROBE_IN_FLIGHT (the
 /// cold probe in is_available, or refresh_available_async) holds one of these so the guard clears on
 /// EVERY exit -- normal return, an early return, a panic in query_displays, or a poisoned DRM_STATE.
@@ -716,7 +730,7 @@ pub(super) fn is_available() -> bool {
         let mut st = DRM_STATE.lock().unwrap();
         if let ProbeState::Unavailable(since) = &*st {
             if since.elapsed() >= NEGATIVE_TTL {
-                *st = ProbeState::Unknown;
+                publish_probe_state(&mut st, ProbeState::Unknown);
                 DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
             }
         }
@@ -757,19 +771,19 @@ pub(super) fn is_available() -> bool {
                 list.len(),
                 t.elapsed()
             );
-            *st = ProbeState::Available(Instant::now(), list);
+            publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
             true
         }
         Ok(_) => {
             log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
-            *st = ProbeState::Unavailable(Instant::now());
+            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
             false
         }
         Err(err) => {
             let n = DRM_PROBE_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
             if n >= DRM_PROBE_MAX_FAILURES {
                 log::info!("drm: availability probe failed {n}x ({err}); disabling DRM");
-                *st = ProbeState::Unavailable(Instant::now());
+                publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
             } else {
                 // Stay Unknown so the next connection re-probes (cold-start race).
                 log::info!(
@@ -795,36 +809,34 @@ fn refresh_available_async() {
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
     }
-    // The detached thread releases the single-flight guard via the shared ProbeInFlightGuard so it
-    // clears on every exit -- normal return, a panic in query_displays, or a poisoned DRM_STATE. If
-    // thread creation itself fails the closure never runs, so that path releases the guard explicitly
-    // below. Either way a one-off failure cannot leave the guard stuck true and freeze future probes.
-    // Stamp of the verdict we are refreshing. query_displays() below runs UNLOCKED because it is
-    // slow, so a hotplug push (swap_available_displays) can publish a newer verdict while we probe.
-    // We compare this stamp before publishing so an older probe cannot overwrite it -- which matters
-    // now that an empty result drops to Unavailable: a probe that started while the monitors were
-    // gone would otherwise disable DRM on a host whose monitor has since come back. Every publish
-    // stamps a fresh Instant, so an unchanged stamp means nothing republished in between (this is
-    // why the check is a stamp comparison rather than a separate revision counter threaded through
-    // every publish site).
-    let sampled = match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(since, _) => *since,
-        _ => {
-            DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+    // Take the guard IMMEDIATELY, before anything that can unwind -- the DRM_STATE lock below can be
+    // poisoned. It releases the single-flight flag on every exit: a normal return, an unwind here, a
+    // panic inside query_displays, or a failed spawn (the closure it moved into is dropped with it).
+    // Otherwise one failure would leave the flag set and freeze every future probe.
+    let in_flight = ProbeInFlightGuard;
+    // Generation of the verdict we are refreshing. query_displays() below runs UNLOCKED because it is
+    // slow, so a hotplug push (swap_available_displays) can publish a newer verdict while we probe;
+    // we re-check the generation before publishing so an older probe cannot overwrite it. That
+    // matters now that an empty result drops to Unavailable: a probe that started while the monitors
+    // were gone would otherwise disable DRM on a host whose monitor has since come back. Read under
+    // the lock, together with the state, so the pair is consistent.
+    let sampled_gen = {
+        let st = DRM_STATE.lock().unwrap();
+        if !matches!(&*st, ProbeState::Available(..)) {
             return;
         }
+        DRM_STATE_GEN.load(Ordering::Acquire)
     };
     let spawned = std::thread::Builder::new()
         .name("drm-avail-refresh".into())
         .spawn(move || {
-            let _in_flight = ProbeInFlightGuard;
+            let _in_flight = in_flight;
             let result = query_displays();
             let mut st = DRM_STATE.lock().unwrap();
-            match &*st {
-                ProbeState::Available(since, _) if *since == sampled => {}
+            if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
                 // Someone republished while we probed (a hotplug push, or a cold probe). Their
                 // verdict is newer than ours; leave it alone.
-                _ => return,
+                return;
             }
             match result {
                 Ok(fresh) if fresh.is_empty() => {
@@ -834,11 +846,14 @@ fn refresh_available_async() {
                     // Unavailable exactly as swap_available_displays does; a later probe restores
                     // Available when a monitor comes back.
                     log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
-                    *st = ProbeState::Unavailable(Instant::now());
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
                 }
-                Ok(fresh) => *st = ProbeState::Available(Instant::now(), fresh),
+                Ok(fresh) => publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh)),
                 // A failed probe is not evidence that the displays are gone (a transient open or
-                // EACCES); keep the verdict, just restamp so we retry after the next TTL.
+                // EACCES); keep the verdict, just restamp so we retry after the next TTL. This
+                // touches only the TTL stamp, not the verdict, so it deliberately does NOT go
+                // through publish_probe_state: there is nothing for a concurrent probe to lose by
+                // publishing over it.
                 Err(_) => {
                     if let ProbeState::Available(since, _) = &mut *st {
                         *since = Instant::now();
@@ -846,11 +861,11 @@ fn refresh_available_async() {
                 }
             }
         });
-    // Thread creation itself can fail (EAGAIN under thread/RLIMIT pressure); if so the closure never
-    // runs, so release the guard here instead of leaking it.
-    if spawned.is_err() {
-        DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
-    }
+    // Thread creation can fail (EAGAIN under thread/RLIMIT pressure). Nothing to release here: the
+    // guard moved into the closure, which is dropped along with it, so the flag clears on that path
+    // too. Releasing it explicitly would be worse than redundant -- by then another refresh may have
+    // acquired the flag, and clearing it would let two probes run at once.
+    let _ = spawned;
 }
 
 /// Warm the availability cache at `--server` startup so the first client connection does not race a
@@ -866,7 +881,7 @@ pub(super) fn warm_availability() {
         match query_displays() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
-                *DRM_STATE.lock().unwrap() = ProbeState::Available(Instant::now(), list);
+                publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
                 return;
             }
             // Producer not ready yet (or no DRM): back off and retry; never cache a negative here.
@@ -1018,10 +1033,10 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
             // so consumers stop reporting them and can fall back. The probe path re-establishes
             // Available if a monitor comes back.
             log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-            *st = ProbeState::Unavailable(Instant::now());
+            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
         } else {
             log::info!("drm: hotplug refresh -> {} display(s)", list.len());
-            *st = ProbeState::Available(Instant::now(), list);
+            publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
     }
 }
@@ -1111,7 +1126,7 @@ pub(super) fn get_capturer_info(
         .get(display_idx)
         .map(|di| (di.x, di.y))
         .unwrap_or((d.x, d.y));
-    *DRM_STATE.lock().unwrap() = ProbeState::Available(Instant::now(), displays);
+    publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), displays));
     Ok(super::video_service::CapturerInfo {
         origin,
         width: d.width as usize,
