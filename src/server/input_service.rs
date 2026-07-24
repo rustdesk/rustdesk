@@ -1136,16 +1136,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             MOUSE_BUTTON_LEFT => {
                 #[cfg(target_os = "macos")]
                 if let Some((x, y)) = crate::get_cursor_pos() {
-                    let activation_result =
-                        crate::platform::macos::activate_application_at_point(x, y);
-                    if activation_result < 0 {
-                        log::debug!(
-                            "Failed to activate the macOS application at ({}, {}), pid={}",
-                            x,
-                            y,
-                            -activation_result,
-                        );
-                    }
+                    crate::window_targeting::preprocess_remote_left_click(x, y);
                 }
                 allow_err!(en.mouse_down(MouseButton::Left));
             }

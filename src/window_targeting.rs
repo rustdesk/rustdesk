@@ -14,11 +14,17 @@ use lazy_static::lazy_static;
 pub(crate) use rules::{DecisionStep, EffectiveConfig, WindowCandidate, WindowDecision};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
 };
+
+const COLLECTOR_ERROR_KEY: &str = "collector";
+const EXECUTOR_ERROR_KEY: &str = "executor";
+const ERROR_RATE_LIMIT: Duration = Duration::from_secs(60);
 
 #[derive(Clone, Debug, Eq, PartialEq, serde_derive::Serialize)]
 pub struct WindowTargetingStatus {
@@ -36,6 +42,19 @@ pub struct WindowTargetingValidation {
     pub rule_count: usize,
     pub hash: String,
     pub diagnostics: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreprocessOutcome {
+    pub mode: WindowTargetingMode,
+    pub generation: u64,
+    pub hash: String,
+    pub action: WindowTargetAction,
+    pub rule_id: String,
+    pub candidate: Option<WindowCandidate>,
+    pub activation: Option<crate::platform::macos::MacWindowActivationOutcome>,
+    pub error: Option<String>,
+    pub elapsed_micros: u128,
 }
 
 #[derive(Clone)]
@@ -121,6 +140,8 @@ impl RuntimeState {
 
 lazy_static! {
     static ref RUNTIME: RuntimeState = RuntimeState::new_builtin();
+    static ref ERROR_LOG_TIMES: Mutex<HashMap<&'static str, Instant>> =
+        Mutex::new(HashMap::with_capacity(2));
 }
 
 pub(crate) fn config_path() -> Result<PathBuf, ConfigError> {
@@ -214,6 +235,211 @@ pub(crate) fn validate_from_disk() -> Result<WindowTargetingValidation, ConfigEr
 #[allow(dead_code)]
 pub(crate) fn reload_from_disk() -> Result<WindowTargetingStatus, ConfigError> {
     RUNTIME.reload_from_path(&config_path()?)
+}
+
+fn preprocess_with<C, E>(
+    active: &ActiveGeneration,
+    x: i32,
+    y: i32,
+    collect: C,
+    execute: E,
+) -> PreprocessOutcome
+where
+    C: FnOnce(
+        i32,
+        i32,
+    )
+        -> Result<Vec<WindowCandidate>, crate::platform::macos::MacWindowCollectionError>,
+    E: FnOnce(i32, i32, i32) -> crate::platform::macos::MacWindowActivationOutcome,
+{
+    let started = Instant::now();
+    if active.effective.mode == WindowTargetingMode::Passthrough {
+        let elapsed_micros = started.elapsed().as_micros();
+        return PreprocessOutcome {
+            mode: active.effective.mode,
+            generation: active.generation,
+            hash: active.hash.clone(),
+            action: WindowTargetAction::ForwardOnly,
+            rule_id: "mode.passthrough".to_owned(),
+            candidate: None,
+            activation: None,
+            error: None,
+            elapsed_micros,
+        };
+    }
+
+    let candidates = match collect(x, y) {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            let error = format!("collect window candidates at ({x}, {y}): {error}");
+            let elapsed_micros = started.elapsed().as_micros();
+            return PreprocessOutcome {
+                mode: active.effective.mode,
+                generation: active.generation,
+                hash: active.hash.clone(),
+                action: WindowTargetAction::ForwardOnly,
+                rule_id: "error.collector".to_owned(),
+                candidate: None,
+                activation: None,
+                error: Some(error),
+                elapsed_micros,
+            };
+        }
+    };
+
+    let decision = rules::decide(&active.effective, &candidates);
+    let candidate = decision
+        .candidate_index
+        .and_then(|index| candidates.into_iter().nth(index));
+    let activation = match (decision.action, candidate.as_ref()) {
+        (WindowTargetAction::Activate, Some(candidate)) => Some(execute(x, y, candidate.pid)),
+        _ => None,
+    };
+    let error = match (candidate.as_ref(), activation.as_ref()) {
+        (Some(candidate), Some(activation)) if activation.result < 0 => {
+            Some(format!("activation failed for pid={}", candidate.pid))
+        }
+        _ => None,
+    };
+    let elapsed_micros = started.elapsed().as_micros();
+
+    PreprocessOutcome {
+        mode: active.effective.mode,
+        generation: active.generation,
+        hash: active.hash.clone(),
+        action: decision.action,
+        rule_id: decision.rule_id,
+        candidate,
+        activation,
+        error,
+        elapsed_micros,
+    }
+}
+
+pub(crate) fn preprocess_remote_left_click(x: i32, y: i32) -> PreprocessOutcome {
+    let active = snapshot();
+    let outcome = preprocess_with(
+        &active,
+        x,
+        y,
+        crate::platform::macos::collect_window_candidates_at_point,
+        crate::platform::macos::activate_window_candidate_at_point,
+    );
+
+    if let Some(error) = outcome.error.as_deref() {
+        let key = if outcome.rule_id == "error.collector" {
+            Some(COLLECTOR_ERROR_KEY)
+        } else if outcome
+            .activation
+            .as_ref()
+            .map_or(false, |activation| activation.result < 0)
+        {
+            Some(EXECUTOR_ERROR_KEY)
+        } else {
+            None
+        };
+        if let Some(key) = key {
+            log_rate_limited_error(key, error);
+        }
+    }
+
+    if active.effective.diagnostics {
+        log::debug!("{}", format_diagnostic_line(&outcome));
+    }
+
+    outcome
+}
+
+fn format_diagnostic_line(outcome: &PreprocessOutcome) -> String {
+    let (
+        pid,
+        bundle_id,
+        process_name,
+        layer,
+        activation_policy,
+        covers_display,
+        ax_role,
+        ax_subrole,
+    ) = match outcome.candidate.as_ref() {
+        Some(candidate) => (
+            candidate.pid.to_string(),
+            candidate.bundle_id.as_str(),
+            candidate.process_name.as_str(),
+            candidate.layer.to_string(),
+            activation_policy_name(candidate.activation_policy),
+            candidate.covers_display.to_string(),
+            candidate.ax_role.as_deref().unwrap_or("-"),
+            candidate.ax_subrole.as_deref().unwrap_or("-"),
+        ),
+        None => (
+            "-".to_owned(),
+            "-",
+            "-",
+            "-".to_owned(),
+            "-",
+            "-".to_owned(),
+            "-",
+            "-",
+        ),
+    };
+    let (activation_result, application_activation_attempted, window_raise_attempted) =
+        match outcome.activation.as_ref() {
+            Some(activation) => (
+                activation.result.to_string(),
+                activation.application_activation_attempted.to_string(),
+                activation.window_raise_attempted.to_string(),
+            ),
+            None => ("-".to_owned(), "-".to_owned(), "-".to_owned()),
+        };
+
+    format!(
+        "macOS window targeting decision: mode={} generation={} hash={} pid={} bundle_id={} \
+         process_name={} layer={} activation_policy={} covers_display={} ax_role={} ax_subrole={} \
+         rule_id={} action={} activation_result={} application_activation_attempted={} \
+         window_raise_attempted={} elapsed_micros={}",
+        mode_name(outcome.mode),
+        outcome.generation,
+        outcome.hash,
+        pid,
+        bundle_id,
+        process_name,
+        layer,
+        activation_policy,
+        covers_display,
+        ax_role,
+        ax_subrole,
+        outcome.rule_id,
+        action_name(outcome.action),
+        activation_result,
+        application_activation_attempted,
+        window_raise_attempted,
+        outcome.elapsed_micros,
+    )
+}
+
+fn record_error_emission(
+    emissions: &mut HashMap<&'static str, Instant>,
+    key: &'static str,
+    now: Instant,
+) -> bool {
+    if key != COLLECTOR_ERROR_KEY && key != EXECUTOR_ERROR_KEY {
+        return false;
+    }
+    if emissions.get(key).map_or(false, |previous| {
+        now.duration_since(*previous) < ERROR_RATE_LIMIT
+    }) {
+        return false;
+    }
+    emissions.insert(key, now);
+    true
+}
+
+fn log_rate_limited_error(key: &'static str, error: &str) {
+    let should_emit =
+        record_error_emission(&mut ERROR_LOG_TIMES.lock().unwrap(), key, Instant::now());
+    if should_emit {
+        log::error!("macOS window targeting {key} error: {error}");
+    }
 }
 
 fn build_generation(
@@ -369,6 +595,36 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn activation_outcome(result: i32) -> crate::platform::macos::MacWindowActivationOutcome {
+        crate::platform::macos::MacWindowActivationOutcome {
+            result,
+            application_activation_attempted: result != 0,
+            window_raise_attempted: false,
+        }
+    }
+
+    fn candidate(
+        pid: i32,
+        bundle_id: &str,
+        process_name: &str,
+        layer: i32,
+        policy: ActivationPolicy,
+        ax_role: Option<&str>,
+    ) -> WindowCandidate {
+        WindowCandidate {
+            pid,
+            window_id: pid as u32,
+            bundle_id: bundle_id.to_owned(),
+            process_name: process_name.to_owned(),
+            layer,
+            alpha: 1.0,
+            activation_policy: policy,
+            covers_display: false,
+            ax_role: ax_role.map(str::to_owned),
+            ax_subrole: None,
+        }
+    }
+
     fn test_path(name: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
             "rdh-window-targeting-{}-{}",
@@ -378,6 +634,198 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root.join("window-targeting.toml")
+    }
+
+    #[test]
+    fn passthrough_calls_neither_collector_nor_executor() {
+        let active = ActiveGeneration::for_test(WindowTargetingMode::Passthrough);
+        let collected = std::cell::Cell::new(false);
+        let executed = std::cell::Cell::new(false);
+        let outcome = preprocess_with(
+            &active,
+            10,
+            20,
+            |_, _| {
+                collected.set(true);
+                Ok(Vec::new())
+            },
+            |_, _, _| {
+                executed.set(true);
+                activation_outcome(0)
+            },
+        );
+        assert!(!collected.get());
+        assert!(!executed.get());
+        assert_eq!(outcome.mode, WindowTargetingMode::Passthrough);
+    }
+
+    #[test]
+    fn forward_only_never_calls_executor() {
+        let active = ActiveGeneration::builtin_for_test();
+        let executed = std::cell::Cell::new(false);
+        let outcome = preprocess_with(
+            &active,
+            1215,
+            978,
+            |_, _| {
+                Ok(vec![candidate(
+                    64334,
+                    "com.apple.dock.helper",
+                    "DockHelper",
+                    101,
+                    ActivationPolicy::Accessory,
+                    Some("AXMenuItem"),
+                )])
+            },
+            |_, _, _| {
+                executed.set(true);
+                activation_outcome(0)
+            },
+        );
+        assert_eq!(outcome.action, WindowTargetAction::ForwardOnly);
+        assert!(!executed.get());
+    }
+
+    #[test]
+    fn activate_calls_executor_with_selected_pid_once() {
+        let active = ActiveGeneration::builtin_for_test();
+        let collections = std::cell::Cell::new(0);
+        let calls = std::cell::RefCell::new(Vec::new());
+        let outcome = preprocess_with(
+            &active,
+            500,
+            500,
+            |_, _| {
+                collections.set(collections.get() + 1);
+                Ok(vec![candidate(
+                    80988,
+                    "com.openai.chat",
+                    "ChatGPT",
+                    0,
+                    ActivationPolicy::Regular,
+                    Some("AXWindow"),
+                )])
+            },
+            |x, y, pid| {
+                calls.borrow_mut().push((x, y, pid));
+                activation_outcome(pid)
+            },
+        );
+        assert_eq!(collections.get(), 1);
+        assert_eq!(calls.borrow().as_slice(), &[(500, 500, 80988)]);
+        assert_eq!(outcome.action, WindowTargetAction::Activate);
+    }
+
+    #[test]
+    fn collector_failure_forwards_raw_click_without_executor() {
+        let active = ActiveGeneration::builtin_for_test();
+        let executed = std::cell::Cell::new(false);
+        let outcome = preprocess_with(
+            &active,
+            500,
+            500,
+            |_, _| Err(crate::platform::macos::MacWindowCollectionError),
+            |_, _, _| {
+                executed.set(true);
+                activation_outcome(0)
+            },
+        );
+        assert_eq!(outcome.action, WindowTargetAction::ForwardOnly);
+        assert_eq!(outcome.rule_id, "error.collector");
+        assert!(outcome.error.is_some());
+        assert!(!executed.get());
+    }
+
+    #[test]
+    fn diagnostics_use_only_allowlisted_candidate_fields() {
+        let active = ActiveGeneration::builtin_for_test();
+        let outcome = preprocess_with(
+            &active,
+            500,
+            500,
+            |_, _| {
+                Ok(vec![candidate(
+                    80988,
+                    "com.openai.chat",
+                    "ChatGPT",
+                    0,
+                    ActivationPolicy::Regular,
+                    Some("AXWindow"),
+                )])
+            },
+            |_, _, pid| activation_outcome(pid),
+        );
+        let line = format_diagnostic_line(&outcome);
+        assert!(line.contains("bundle_id=com.openai.chat"));
+        assert!(line.contains("pid=80988"));
+        assert!(line.contains("rule_id="));
+        assert!(!line.contains("title="));
+        assert!(!line.contains("peer="));
+    }
+
+    #[test]
+    fn failed_activation_retains_executor_error_without_retry() {
+        let active = ActiveGeneration::builtin_for_test();
+        let calls = std::cell::Cell::new(0);
+        let outcome = preprocess_with(
+            &active,
+            500,
+            500,
+            |_, _| {
+                Ok(vec![candidate(
+                    80988,
+                    "com.openai.chat",
+                    "ChatGPT",
+                    0,
+                    ActivationPolicy::Regular,
+                    Some("AXWindow"),
+                )])
+            },
+            |_, _, _| {
+                calls.set(calls.get() + 1);
+                activation_outcome(-80988)
+            },
+        );
+        assert_eq!(calls.get(), 1);
+        assert_eq!(
+            outcome.error.as_deref(),
+            Some("activation failed for pid=80988")
+        );
+        assert_eq!(outcome.activation, Some(activation_outcome(-80988)));
+    }
+
+    #[test]
+    fn error_rate_limit_has_only_fixed_keys_and_reopens_after_sixty_seconds() {
+        let start = std::time::Instant::now();
+        let mut emissions = std::collections::HashMap::new();
+
+        assert!(record_error_emission(
+            &mut emissions,
+            COLLECTOR_ERROR_KEY,
+            start
+        ));
+        assert!(!record_error_emission(
+            &mut emissions,
+            COLLECTOR_ERROR_KEY,
+            start + std::time::Duration::from_secs(59)
+        ));
+        assert!(record_error_emission(
+            &mut emissions,
+            EXECUTOR_ERROR_KEY,
+            start
+        ));
+        assert!(!record_error_emission(
+            &mut emissions,
+            "unknown",
+            start + std::time::Duration::from_secs(60)
+        ));
+        assert_eq!(emissions.len(), 2);
+        assert!(record_error_emission(
+            &mut emissions,
+            COLLECTOR_ERROR_KEY,
+            start + std::time::Duration::from_secs(60)
+        ));
+        assert_eq!(emissions.len(), 2);
     }
 
     #[test]

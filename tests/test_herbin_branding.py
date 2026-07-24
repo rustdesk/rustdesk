@@ -107,6 +107,15 @@ def main() -> None:
     for marker in private_window_api_markers:
         assert marker not in macos_mm
 
+    assert "preprocess_remote_left_click(x, y)" in input_service_rs
+    assert_in_order(
+        input_service_rs,
+        "preprocess_remote_left_click(x, y)",
+        "en.mouse_down(MouseButton::Left)",
+    )
+    assert 'diagnostics = false' in read("src/window_targeting/config.rs")
+    assert "window title" not in read("src/window_targeting.rs").lower()
+
     assert_in_order(
         macos_mm,
         "AXUIElementCopyElementAtPosition",
