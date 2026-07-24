@@ -271,7 +271,7 @@ where
     let candidates = match collect(x, y) {
         Ok(candidates) => candidates,
         Err(error) => {
-            let error = format!("collect window candidates at ({x}, {y}): {error}");
+            let error = format!("collect window candidates: {error}");
             let elapsed_micros = started.elapsed().as_micros();
             return PreprocessOutcome {
                 mode: active.effective.mode,
@@ -438,8 +438,12 @@ fn log_rate_limited_error(key: &'static str, error: &str) {
     let should_emit =
         record_error_emission(&mut ERROR_LOG_TIMES.lock().unwrap(), key, Instant::now());
     if should_emit {
-        log::error!("macOS window targeting {key} error: {error}");
+        log::error!("{}", format_error_log_line(key, error));
     }
+}
+
+fn format_error_log_line(key: &'static str, error: &str) -> String {
+    format!("macOS window targeting {key} error: {error}")
 }
 
 fn build_generation(
@@ -734,6 +738,54 @@ mod tests {
         assert_eq!(outcome.rule_id, "error.collector");
         assert!(outcome.error.is_some());
         assert!(!executed.get());
+    }
+
+    #[test]
+    fn collector_failure_payloads_do_not_expose_click_coordinates() {
+        const X: i32 = 987_654_321;
+        const Y: i32 = 123_456_789;
+        let active = ActiveGeneration::builtin_for_test();
+        let outcome = preprocess_with(
+            &active,
+            X,
+            Y,
+            |_, _| Err(crate::platform::macos::MacWindowCollectionError),
+            |_, _, _| panic!("collector failure must not invoke the executor"),
+        );
+        assert_eq!(outcome.action, WindowTargetAction::ForwardOnly);
+        assert_eq!(outcome.rule_id, "error.collector");
+
+        let error = outcome.error.as_deref().unwrap();
+        let diagnostic = format_diagnostic_line(&outcome);
+        let error_log = format_error_log_line(COLLECTOR_ERROR_KEY, error);
+        for payload in [error, diagnostic.as_str(), error_log.as_str()] {
+            for coordinate_value in [X.to_string(), Y.to_string()] {
+                assert!(
+                    !payload.contains(&coordinate_value),
+                    "coordinate value leaked in payload: {payload}"
+                );
+            }
+            for token in payload.split_whitespace() {
+                for separator in ['=', ':'] {
+                    if let Some((label, _)) = token.split_once(separator) {
+                        let label = label
+                            .trim_matches(|character: char| !character.is_ascii_alphanumeric())
+                            .to_ascii_lowercase();
+                        assert!(
+                            !matches!(
+                                label.as_str(),
+                                "x" | "y"
+                                    | "point"
+                                    | "coordinate"
+                                    | "coordinates"
+                                    | "cursorposition"
+                            ),
+                            "coordinate field label leaked in payload: {payload}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
