@@ -8,3 +8,5 @@ pub(crate) use config::{
     ActivationPolicy, CompiledRule, ConfigError, RuleMatcher, ValidatedUserConfig,
     WindowTargetAction, WindowTargetingMode,
 };
+#[allow(unused_imports)]
+pub(crate) use rules::{DecisionStep, EffectiveConfig, WindowCandidate, WindowDecision};

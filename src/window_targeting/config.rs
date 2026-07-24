@@ -1,6 +1,8 @@
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt};
 
+use super::rules::WindowCandidate;
+
 #[allow(dead_code)]
 pub const DEFAULT_TEMPLATE: &str = r#"# RustDesk-Herbin macOS window targeting
 version = 1
@@ -49,6 +51,46 @@ pub struct RuleMatcher {
 }
 
 impl RuleMatcher {
+    pub(crate) fn matches(&self, candidate: &WindowCandidate) -> bool {
+        (self.bundle_ids.is_empty()
+            || self
+                .bundle_ids
+                .iter()
+                .any(|bundle_id| bundle_id == &candidate.bundle_id))
+            && (self.bundle_id_prefixes.is_empty()
+                || self
+                    .bundle_id_prefixes
+                    .iter()
+                    .any(|bundle_id_prefix| candidate.bundle_id.starts_with(bundle_id_prefix)))
+            && (self.process_names.is_empty()
+                || self
+                    .process_names
+                    .iter()
+                    .any(|process_name| process_name == &candidate.process_name))
+            && (self.layers.is_empty() || self.layers.contains(&candidate.layer))
+            && self
+                .layer_min
+                .map_or(true, |layer_min| candidate.layer >= layer_min)
+            && self
+                .layer_max
+                .map_or(true, |layer_max| candidate.layer <= layer_max)
+            && (self.ax_roles.is_empty()
+                || candidate.ax_role.as_ref().map_or(false, |ax_role| {
+                    self.ax_roles.iter().any(|role| role == ax_role)
+                }))
+            && (self.ax_subroles.is_empty()
+                || candidate.ax_subrole.as_ref().map_or(false, |ax_subrole| {
+                    self.ax_subroles.iter().any(|subrole| subrole == ax_subrole)
+                }))
+            && (self.activation_policies.is_empty()
+                || self
+                    .activation_policies
+                    .contains(&candidate.activation_policy))
+            && self.covers_display.map_or(true, |covers_display| {
+                candidate.covers_display == covers_display
+            })
+    }
+
     fn is_empty(&self) -> bool {
         self.bundle_ids.is_empty()
             && self.bundle_id_prefixes.is_empty()
