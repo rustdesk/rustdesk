@@ -799,14 +799,32 @@ fn refresh_available_async() {
     // clears on every exit -- normal return, a panic in query_displays, or a poisoned DRM_STATE. If
     // thread creation itself fails the closure never runs, so that path releases the guard explicitly
     // below. Either way a one-off failure cannot leave the guard stuck true and freeze future probes.
+    // Stamp of the verdict we are refreshing. query_displays() below runs UNLOCKED because it is
+    // slow, so a hotplug push (swap_available_displays) can publish a newer verdict while we probe.
+    // We compare this stamp before publishing so an older probe cannot overwrite it -- which matters
+    // now that an empty result drops to Unavailable: a probe that started while the monitors were
+    // gone would otherwise disable DRM on a host whose monitor has since come back. Every publish
+    // stamps a fresh Instant, so an unchanged stamp means nothing republished in between (this is
+    // why the check is a stamp comparison rather than a separate revision counter threaded through
+    // every publish site).
+    let sampled = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(since, _) => *since,
+        _ => {
+            DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+            return;
+        }
+    };
     let spawned = std::thread::Builder::new()
         .name("drm-avail-refresh".into())
-        .spawn(|| {
+        .spawn(move || {
             let _in_flight = ProbeInFlightGuard;
             let result = query_displays();
             let mut st = DRM_STATE.lock().unwrap();
-            if !matches!(&*st, ProbeState::Available(..)) {
-                return;
+            match &*st {
+                ProbeState::Available(since, _) if *since == sampled => {}
+                // Someone republished while we probed (a hotplug push, or a cold probe). Their
+                // verdict is newer than ours; leave it alone.
+                _ => return,
             }
             match result {
                 Ok(fresh) if fresh.is_empty() => {
