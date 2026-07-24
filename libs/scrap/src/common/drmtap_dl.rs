@@ -55,6 +55,19 @@ pub struct drmtap_display {
     pub active: c_int,
 }
 
+// A capturable DRM device from `drmtap_list_devices` (libdrmtap >= 0.4.15).
+// Mirrors `drmtap_device` in include/drmtap.h EXACTLY (field order + widths);
+// its layout is FROZEN there for the same reason as drmtap_dmabuf_desc (written
+// into caller-owned storage). `path`/`render_node`/`driver` are NUL-terminated.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct drmtap_device {
+    pub path: [c_char; 64],
+    pub render_node: [c_char; 64],
+    pub driver: [c_char; 32],
+    pub display_count: u32,
+}
+
 #[repr(C)]
 pub struct drmtap_frame_info {
     pub data: *mut c_void,
@@ -127,6 +140,10 @@ type FnVersion = unsafe extern "C" fn() -> c_int;
 type FnOpen = unsafe extern "C" fn(*const drmtap_config) -> *mut drmtap_ctx;
 type FnClose = unsafe extern "C" fn(*mut drmtap_ctx);
 type FnListDisplays = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_display, c_int) -> c_int;
+// libdrmtap >= 0.4.15. Enumerates every DRM device with KMS resources, so a
+// multi-GPU host can open one context per device instead of only advertising the
+// first card's displays. Bound as an Option; `None` on an older .so.
+type FnListDevices = unsafe extern "C" fn(*mut drmtap_device, c_int) -> c_int;
 type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info) -> c_int;
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
@@ -152,6 +169,9 @@ pub struct DrmtapLib {
     pub open: FnOpen,
     pub close: FnClose,
     pub list_displays: FnListDisplays,
+    // libdrmtap >= 0.4.15; `None` on an older .so (the service then enumerates a
+    // single auto-detected device, exactly as before).
+    pub list_devices: Option<FnListDevices>,
     pub grab_mapped: FnGrabMapped,
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
@@ -220,6 +240,8 @@ impl DrmtapLib {
             let open: FnOpen = *lib.get(b"drmtap_open").ok()?;
             let close: FnClose = *lib.get(b"drmtap_close").ok()?;
             let list_displays: FnListDisplays = *lib.get(b"drmtap_list_displays").ok()?;
+            let list_devices: Option<FnListDevices> =
+                lib.get(b"drmtap_list_devices").ok().map(|s| *s);
             let grab_mapped: FnGrabMapped = *lib.get(b"drmtap_grab_mapped").ok()?;
             let frame_release: FnFrameRelease = *lib.get(b"drmtap_frame_release").ok()?;
             let get_cursor: FnGetCursor = *lib.get(b"drmtap_get_cursor").ok()?;
@@ -239,6 +261,7 @@ impl DrmtapLib {
                 open,
                 close,
                 list_displays,
+                list_devices,
                 grab_mapped,
                 frame_release,
                 get_cursor,

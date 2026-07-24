@@ -10,8 +10,8 @@
 // before opening. The DRM_DEVICE env is intentionally NOT consulted here.
 
 use super::drmtap_dl::{
-    self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_display, drmtap_dmabuf_desc,
-    drmtap_frame_info, DrmtapLib,
+    self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_device, drmtap_display,
+    drmtap_dmabuf_desc, drmtap_frame_info, DrmtapLib,
 };
 use hbb_common::log;
 use std::ffi::CString;
@@ -46,6 +46,62 @@ pub struct DisplaySnapshot {
     pub width: u32,
     pub height: u32,
     pub active: bool,
+}
+
+/// One capturable DRM device, from `list_devices`. On a multi-GPU host each card
+/// is a separate device; the caller opens one `DrmReader` per `path` to reach the
+/// displays every card drives.
+pub struct DrmDevice {
+    /// KMS card node, e.g. `/dev/dri/card1`.
+    pub path: String,
+    /// Render node of this device, or empty if it has none.
+    pub render_node: String,
+    /// CRTCs actively scanning out on this device.
+    pub display_count: u32,
+}
+
+/// Copy a fixed C char array into a `String`, stopping at the first NUL WITHIN
+/// the array so a field libdrmtap failed to terminate cannot read past it (lossy
+/// on non-UTF-8, which a /dev path never is).
+fn cstr_field(buf: &[std::os::raw::c_char]) -> String {
+    // c_char and u8 share size/alignment; reinterpret the exact-length slice.
+    let bytes: &[u8] =
+        unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len()) };
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    String::from_utf8_lossy(&bytes[..end]).into_owned()
+}
+
+/// Enumerate every DRM device with KMS resources (libdrmtap >= 0.4.15). Returns
+/// `None` when libdrmtap is unavailable or the `.so` predates the symbol, so the
+/// caller can fall back to a single auto-detected device. An empty `Vec` means
+/// the library is new enough but found nothing.
+pub fn list_devices() -> Option<Vec<DrmDevice>> {
+    let lib = drmtap_dl::get()?;
+    let f = lib.list_devices?;
+    // A handful of GPUs at most; the array is small and stack-friendly.
+    const MAX: usize = 16;
+    let mut raw: [drmtap_device; MAX] = unsafe { std::mem::zeroed() };
+    // SAFETY: `raw` is MAX valid, zeroed drmtap_device slots; the call fills up to
+    // MAX and returns the count (negative on error).
+    let n = unsafe { f(raw.as_mut_ptr(), MAX as std::os::raw::c_int) };
+    if n < 0 {
+        // An enumeration FAILURE, not "found nothing" -> None, so the caller keeps
+        // its single-device auto-detect fallback rather than treating this as an
+        // authoritative empty device list.
+        log::warn!("drmtap_list_devices failed ({n}); using single-device auto-detect");
+        return None;
+    }
+    let n = (n as usize).min(MAX);
+    Some(
+        raw[..n]
+            .iter()
+            .map(|d| DrmDevice {
+                path: cstr_field(&d.path),
+                render_node: cstr_field(&d.render_node),
+                display_count: d.display_count,
+            })
+            .collect(),
+    )
 }
 
 /// Returns true only if `path` canonicalizes to a node directly under /dev/dri/.

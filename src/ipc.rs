@@ -554,6 +554,15 @@ pub struct DrmDisplayInfo {
     /// behaviour; `serde(default)` so an older peer's message still decodes.
     #[serde(default)]
     pub render_node: String,
+    /// KMS card node (`/dev/dri/card*`) that drives this display, so `DrmStart`
+    /// reopens the RIGHT device on a multi-GPU host. A single context enumerates
+    /// only one card, so displays on the other cards need this to be captured at
+    /// all; crtc_ids are card-local, so the index alone is ambiguous across cards.
+    /// Empty when the service enumerated a single auto-detected device (the old
+    /// behaviour, and the capture then reopens with auto-detect); `serde(default)`
+    /// for wire-compat with an older peer.
+    #[serde(default)]
+    pub device: String,
 }
 
 /// Serializable metadata descriptor of a scanout dma-buf, shipped over `_drm` as the JSON payload of
@@ -1782,7 +1791,10 @@ static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic:
 /// Snapshot a reader's enumerated displays as the IPC `DrmDisplayInfo` form. `displays()` lists all
 /// device outputs regardless of the reader's target CRTC, so a capture reader can refresh the cache.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<DrmDisplayInfo> {
+fn drm_displays_from_reader(
+    reader: &mut scrap::drm_reader::DrmReader,
+    device: &str,
+) -> Vec<DrmDisplayInfo> {
     // Every display this reader enumerates belongs to the reader's device, so they
     // all share its render node. Resolved once here rather than per display.
     let render_node = reader.render_node().unwrap_or_default();
@@ -1809,8 +1821,123 @@ fn drm_displays_from_reader(reader: &mut scrap::drm_reader::DrmReader) -> Vec<Dr
             height: d.height,
             active: d.active,
             render_node: render_node.clone(),
+            device: device.to_owned(),
         })
         .collect()
+}
+
+/// Enumerate the active displays of EVERY DRM device, so a multi-GPU host advertises
+/// the monitors on all cards, not just the first one a single context settles on. Each
+/// display carries its own `device` (card node) and `render_node`, so `DrmStart` reopens
+/// the right card and the converter binds the right GPU. Falls back to a single
+/// auto-detected device when libdrmtap cannot enumerate (a pre-0.4.15 `.so`) or found
+/// nothing to open -- in which case `device` is left empty and capture reopens with
+/// auto-detect, exactly the previous behaviour.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_enumerate_all_displays() -> Vec<DrmDisplayInfo> {
+    if let Some(devices) = scrap::drm_reader::list_devices() {
+        if devices.len() > 1 {
+            log::info!(
+                "drm: {} DRM devices: {}",
+                devices.len(),
+                devices
+                    .iter()
+                    .map(|d| format!(
+                        "{} ({}, render {})",
+                        d.path,
+                        d.display_count,
+                        if d.render_node.is_empty() { "none" } else { &d.render_node }
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        let mut all = Vec::new();
+        for dev in devices {
+            // Skip a card with no active CRTC (a compute/offload GPU, or one whose
+            // monitors are all off): opening it and enumerating would add nothing.
+            if dev.display_count == 0 {
+                continue;
+            }
+            if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
+                all.append(&mut drm_displays_from_reader(&mut r, &dev.path));
+            }
+        }
+        if !all.is_empty() {
+            return all;
+        }
+        // list_devices worked but nothing opened/enumerated (e.g. no rights on any
+        // card): fall through to the single auto-detected device rather than return
+        // an empty list that would read as "no displays".
+    }
+    match scrap::drm_reader::DrmReader::open(None, 0) {
+        Some(mut r) => drm_displays_from_reader(&mut r, ""),
+        None => Vec::new(),
+    }
+}
+
+/// True once DRM_DISPLAY_CACHE has been populated at least once, so an EMPTY cache can be told apart
+/// from an unwarmed one: a warmed-but-empty cache (all monitors off) is served directly, while an
+/// unwarmed cache triggers a synchronous enumeration.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static DRM_CACHE_WARMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION): enumerate every card, diff
+/// against the cache, and on a real change swap it and bump the generation so live consumers get the
+/// push. Runs OFF the caller's thread and SINGLE-FLIGHT -- at most one enumeration at a time, and a
+/// request arriving during one coalesces into exactly one follow-up. Enumerating reopens every card,
+/// so it must never sit on a connection's first-frame path, and a reconnect / uevent storm must not
+/// spawn unbounded threads (the reason this is not a bare `thread::spawn` per call). Because every
+/// refresh path funnels through here, the cache has one writer and the pre-0.4.15 hotplug diff/bump
+/// race between the udev thread and a per-connection refresh cannot happen.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn schedule_drm_cache_refresh() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static RUNNING: AtomicBool = AtomicBool::new(false);
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    // Announce a refresh is wanted before trying to run, so an active worker is guaranteed to see it.
+    PENDING.store(true, Ordering::Release);
+    if RUNNING.swap(true, Ordering::AcqRel) {
+        return; // a worker is already active; it will observe PENDING and refresh again
+    }
+    std::thread::spawn(|| loop {
+        PENDING.store(false, Ordering::Release);
+        // Panic-safety: enumeration must not be able to leave RUNNING stuck true (which would wedge
+        // every future refresh). Catch a panic here and the cache lock is recovered from poison
+        // below, so the RUNNING/PENDING bookkeeping always runs.
+        let fresh = std::panic::catch_unwind(drm_enumerate_all_displays).unwrap_or_else(|_| {
+            log::error!("drm: display enumeration panicked; treating as no displays");
+            Vec::new()
+        });
+        let changed = {
+            let mut cache = match DRM_DISPLAY_CACHE.lock() {
+                Ok(g) => g,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if *cache != fresh {
+                *cache = fresh;
+                true
+            } else {
+                false
+            }
+        };
+        DRM_CACHE_WARMED.store(true, Ordering::Release);
+        if changed {
+            DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
+            log::info!("drm: display cache refreshed (topology changed)");
+        }
+        // Exit only if no request arrived during this enumeration. The re-check after releasing
+        // RUNNING closes the lost-wakeup window (a request that set PENDING just before the release).
+        if !PENDING.load(Ordering::Acquire) {
+            RUNNING.store(false, Ordering::Release);
+            if !PENDING.load(Ordering::Acquire) {
+                break;
+            }
+            if RUNNING.swap(true, Ordering::AcqRel) {
+                break; // another caller re-acquired the slot; it will handle the pending refresh
+            }
+        }
+    });
 }
 
 /// True if a kernel uevent datagram is a DRM-subsystem topology change (a connector hotplug/modeset).
@@ -1843,7 +1970,6 @@ fn uevent_is_drm_change(msg: &[u8]) -> bool {
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_udev_listener() {
     use hbb_common::libc;
-    use std::sync::atomic::Ordering;
 
     let sock = unsafe {
         libc::socket(
@@ -1919,24 +2045,12 @@ fn drm_udev_listener() {
         if !uevent_is_drm_change(&buf[..n as usize]) {
             continue;
         }
-        // Re-enumerate and diff. Only a real change swaps the cache + bumps the generation, so a
-        // uevent that does not alter the captured topology stays silent (no consumer churn).
-        if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
-            let fresh = drm_displays_from_reader(&mut r);
-            let changed = {
-                let mut cache = DRM_DISPLAY_CACHE.lock().unwrap();
-                if *cache != fresh {
-                    *cache = fresh;
-                    true
-                } else {
-                    false
-                }
-            };
-            if changed {
-                DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
-                log::info!("drm: connector topology changed (udev); display cache refreshed");
-            }
-        }
+        // Request a refresh through the single cache writer, which re-enumerates every card, diffs,
+        // and bumps the generation on a real change (an empty result -- the last monitor unplugged --
+        // is a legitimate change and is published). Routing through it (rather than enumerating
+        // inline here) coalesces uevent storms and keeps one writer, so a per-connection refresh
+        // racing this thread cannot cause a hotplug to be diffed away without a generation bump.
+        schedule_drm_cache_refresh();
     }
 }
 
@@ -1947,10 +2061,12 @@ fn drm_udev_listener() {
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_prewarm() {
     let t = std::time::Instant::now();
+    // Populate the cache (every card) through the single writer, which sets DRM_CACHE_WARMED, then
+    // warm the first framebuffer export on one auto-detected reader (the priming cost is per-process,
+    // not per-card). A connection arriving before the async populate finishes self-enumerates.
+    schedule_drm_cache_refresh();
     match scrap::drm_reader::DrmReader::open(None, 0) {
         Some(mut r) => {
-            let displays = drm_displays_from_reader(&mut r);
-            let n = displays.len();
             // Warm the first framebuffer export. On the split path, grab_desc() exports a dma-buf fd
             // WITHOUT loading libEGL/libGLESv2 into the root service (the convert now runs in the
             // unprivileged --server); only an old .so (no grab_desc) still force-maps via grab().
@@ -1961,10 +2077,9 @@ fn drm_prewarm() {
             } else {
                 let _ = r.grab();
             }
-            *DRM_DISPLAY_CACHE.lock().unwrap() = displays;
-            log::info!("drm: pre-warm ok ({n} displays) in {:?}", t.elapsed());
+            log::info!("drm: pre-warm framebuffer primed in {:?}", t.elapsed());
         }
-        None => log::info!("drm: pre-warm skipped (reader unavailable)"),
+        None => log::info!("drm: pre-warm skipped (no reader; cache refresh requested)"),
     }
 }
 
@@ -2102,7 +2217,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
     // task -> worker: the chosen CRTC + whether the consumer needs the CPU path, sent once after the
     // client's DrmStart.
-    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(u32, bool)>();
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
@@ -2142,20 +2257,23 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // `open(crtc=0)`, whose "auto-select the first/primary CRTC" sentinel would
     // silently stream the WRONG monitor at a mismatched geometry and flap the
     // capturer. Closing lets the consumer fall back (PipeWire) for that display.
-    let target_crtc = usize::try_from(display_idx)
+    // Resolve BOTH the CRTC and the card that owns it: crtc_ids are card-local, so on a multi-GPU
+    // host the index must also select the device to reopen (`device` empty == the single
+    // auto-detected device, i.e. the pre-multi-device behaviour).
+    let selected = usize::try_from(display_idx)
         .ok()
-        .and_then(|i| displays.get(i))
-        .map(|d| d.crtc_id)
-        .unwrap_or(0);
+        .and_then(|i| displays.get(i));
+    let target_crtc = selected.map(|d| d.crtc_id).unwrap_or(0);
+    let target_device = selected.map(|d| d.device.clone()).unwrap_or_default();
     if target_crtc == 0 {
         log::warn!(
             "drm: client selected display {display_idx} with no bound CRTC; closing _drm (client falls back)"
         );
         return Ok(());
     }
-    // Hand the CRTC + the consumer's CPU-path request to the worker; an error means it already gave up
-    // (reader vanished).
-    if crtc_tx.send((target_crtc, need_cpu)).is_err() {
+    // Hand the device + CRTC + the consumer's CPU-path request to the worker; an error means it
+    // already gave up (reader vanished).
+    if crtc_tx.send((target_device, target_crtc, need_cpu)).is_err() {
         return Ok(());
     }
 
@@ -2353,7 +2471,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
-    crtc_rx: std::sync::mpsc::Receiver<(u32, bool)>,
+    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
@@ -2369,20 +2487,16 @@ fn drm_capture_worker(
 
     let t_conn = std::time::Instant::now();
 
-    // Send the display list. Prefer the pre-warmed cache (skips a per-connection enumeration open);
-    // fall back to a throwaway enumeration reader if the pre-warm has not populated it yet.
-    let displays = {
-        let cached = DRM_DISPLAY_CACHE.lock().unwrap().clone();
-        if !cached.is_empty() {
-            cached
-        } else {
-            let mut enum_reader = match scrap::drm_reader::DrmReader::open(None, 0) {
-                Some(r) => r,
-                None => return,
-            };
-            drm_displays_from_reader(&mut enum_reader)
-        }
+    // Send the display list. Serve the cache once it has been warmed at least once -- INCLUDING when
+    // it is empty (all monitors off), which is a real state, not "not ready". Only an unwarmed cache
+    // (a connection racing the pre-warm) triggers a synchronous per-connection enumeration.
+    let displays = if DRM_CACHE_WARMED.load(Ordering::Acquire) {
+        DRM_DISPLAY_CACHE.lock().unwrap().clone()
+    } else {
+        drm_enumerate_all_displays()
     };
+    // Send even an empty list: the consumer treats "0 displays" as Unavailable and falls back
+    // promptly (zhou's empty-topology finding), rather than waiting out repeated probe failures.
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()
@@ -2390,26 +2504,39 @@ fn drm_capture_worker(
         return;
     }
 
-    // Wait for the task to relay the client's chosen CRTC + CPU-path request (Err => the task gave up
-    // / disconnected).
-    let (target_crtc, need_cpu) = match crtc_rx.recv() {
+    // Wait for the task to relay the client's chosen device + CRTC + CPU-path request (Err => the
+    // task gave up / disconnected). An empty device means the single auto-detected card.
+    let (target_device, target_crtc, need_cpu) = match crtc_rx.recv() {
         Ok(c) => c,
         Err(_) => return,
     };
+    let device_arg = if target_device.is_empty() {
+        None
+    } else {
+        Some(target_device.as_str())
+    };
     let t_open = std::time::Instant::now();
-    let mut reader = match scrap::drm_reader::DrmReader::open(None, target_crtc) {
+    let mut reader = match scrap::drm_reader::DrmReader::open(device_arg, target_crtc) {
         Some(r) => r,
         None => {
-            log::warn!("drm: failed to open crtc {target_crtc}; closing _drm connection");
+            log::warn!(
+                "drm: failed to open crtc {target_crtc} on {}; closing _drm connection",
+                if target_device.is_empty() { "auto" } else { &target_device }
+            );
             // The cached display list handed out a CRTC that no longer opens (a hotplug/modeset
-            // likely invalidated it). Drop the cache so the next connection re-enumerates from the
-            // live device instead of serving the same stale, unopenable CRTC on every reconnect.
-            DRM_DISPLAY_CACHE.lock().unwrap().clear();
+            // likely invalidated it). Mark the cache unwarmed so the next connection re-enumerates
+            // synchronously from the live device instead of serving the same stale, unopenable CRTC
+            // on every reconnect; also kick an async refresh so the cache converges even without a
+            // new connection.
+            DRM_CACHE_WARMED.store(false, Ordering::Release);
+            schedule_drm_cache_refresh();
             return;
         }
     };
-    // Refresh the cache from the live device so the next consumer's handshake uses fresh geometry.
-    *DRM_DISPLAY_CACHE.lock().unwrap() = drm_displays_from_reader(&mut reader);
+    // Refresh the cache for the NEXT consumer's handshake, off this connection's first-frame path
+    // and single-flight (see schedule_drm_cache_refresh) so a reconnect storm cannot spawn unbounded
+    // enumeration threads.
+    schedule_drm_cache_refresh();
     log::debug!(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",
         t_open.elapsed()
@@ -3754,8 +3881,9 @@ mod drm_conn_tests {
         assert_eq!(info.name, "DP-1");
         assert_eq!(info.crtc_id, 386);
         assert!(info.render_node.is_empty(), "missing node means auto-select");
+        assert!(info.device.is_empty(), "missing device means auto-detect");
 
-        // And a current payload round-trips the node.
+        // And a current payload round-trips the node + device.
         let current = DrmDisplayInfo {
             name: "DP-1".to_owned(),
             crtc_id: 386,
@@ -3765,6 +3893,7 @@ mod drm_conn_tests {
             height: 2160,
             active: true,
             render_node: "/dev/dri/renderD129".to_owned(),
+            device: "/dev/dri/card2".to_owned(),
         };
         let wire = serde_json::to_vec(&current).unwrap();
         let back: DrmDisplayInfo = serde_json::from_slice(&wire).unwrap();
