@@ -161,6 +161,15 @@ fn built_in_rules() -> Vec<CompiledRule> {
             },
         ),
         CompiledRule::new(
+            "builtin.dock-transparent-cover",
+            WindowTargetAction::Skip,
+            RuleMatcher {
+                bundle_id_prefixes: vec!["com.apple.dock".to_owned()],
+                covers_display: Some(true),
+                ..RuleMatcher::default()
+            },
+        ),
+        CompiledRule::new(
             "builtin.dock-ui",
             WindowTargetAction::ForwardOnly,
             RuleMatcher {
@@ -232,6 +241,50 @@ mod tests {
         assert_eq!(decision.action, WindowTargetAction::ForwardOnly);
         assert_eq!(decision.candidate_index, Some(0));
         assert_eq!(decision.rule_id, "builtin.interactive-transient");
+    }
+
+    #[test]
+    fn dock_transparent_cover_skips_to_regular_window() {
+        let config = compile_effective(None);
+        let candidates = vec![
+            candidate(
+                64334,
+                "com.apple.dock",
+                20,
+                ActivationPolicy::Accessory,
+                None,
+                true,
+            ),
+            candidate(
+                80988,
+                "com.openai.chat",
+                0,
+                ActivationPolicy::Regular,
+                Some("AXWindow"),
+                false,
+            ),
+        ];
+        let decision = decide(&config, &candidates);
+        assert_eq!(
+            (
+                decision.action,
+                decision.candidate_index,
+                decision.rule_id.as_str(),
+            ),
+            (
+                WindowTargetAction::Activate,
+                Some(1),
+                "default.regular-layer-zero",
+            )
+        );
+        assert_eq!(
+            decision.trace,
+            vec![DecisionStep {
+                candidate_index: 0,
+                rule_id: "builtin.dock-transparent-cover".to_owned(),
+                action: WindowTargetAction::Skip,
+            }]
+        );
     }
 
     #[test]
