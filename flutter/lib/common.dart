@@ -3656,6 +3656,25 @@ ColorFilter? svgColor(Color? color) {
   }
 }
 
+/// Try to decode clipboard text as ServerConfig.
+/// Returns the decoded config if valid (has idServer), otherwise null.
+ServerConfig? tryDecodeClipboardServerConfig(String? text) {
+  if (text == null || text.trim().isEmpty) return null;
+  try {
+    final sc = ServerConfig.decode(text.trim());
+    if (sc.idServer.isNotEmpty) {
+      // Clear relayServer on iOS and Web as the field is hidden in settings UI.
+      if (isIOS || isWeb) {
+        sc.relayServer = '';
+      }
+      return sc;
+    }
+  } catch (e) {
+    // Not a valid server config
+  }
+  return null;
+}
+
 // ignore: must_be_immutable
 class ComboBox extends StatelessWidget {
   late final List<String> keys;

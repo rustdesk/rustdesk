@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/clipboard_server_config.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/web/settings_page.dart';
@@ -43,6 +44,12 @@ class HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     initPages();
+    
+    // Check clipboard for server config on startup
+    checkAndShowClipboardServerConfig(
+      isMounted: () => mounted,
+      setState: setState,
+    );
   }
 
   void initPages() {
