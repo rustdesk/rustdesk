@@ -456,7 +456,16 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub fn has_non_drm_backed_display() -> bool {
     match super::drm_capturer::get_display_infos() {
-        Some(drm) => drm.len() < SYNC_DISPLAYS.lock().unwrap().displays.len(),
+        // A display served by PipeWire is either ABSENT from the DRM list (a shorter list, e.g. a
+        // pure-portal display) or PRESENT-BUT-DEMOTED (kept in place at the same index and marked
+        // offline so the index space stays aligned -- see get_display_infos). The length check alone
+        // misses the demotion case (same length), so a display that is not online-DRM (`!online`) is
+        // treated as non-DRM-backed too. This is what gates the hidden-cursor sentinel: it stays
+        // authoritative only in a pure-DRM session.
+        Some(drm) => {
+            drm.len() < SYNC_DISPLAYS.lock().unwrap().displays.len()
+                || drm.iter().any(|d| !d.online)
+        }
         None => false,
     }
 }

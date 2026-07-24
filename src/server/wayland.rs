@@ -116,7 +116,7 @@ struct CapDisplayInfo {
 /// independent of the capture backend. DRM-only: check_init keeps its own inline copy so the
 /// drm-off build stays byte-identical to upstream.
 #[cfg(feature = "drm")]
-async fn update_uinput_resolution() {
+pub(super) async fn update_uinput_resolution() {
     if crate::input_service::wayland_use_uinput() {
         if let Some((minx, maxx, miny, maxy)) =
             scrap::wayland::display::get_desktop_rect_for_uinput()

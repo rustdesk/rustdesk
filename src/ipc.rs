@@ -2152,7 +2152,24 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // atomic load per frame; a genuinely idle stream tears down after MAX_STALLED and the consumer
     // reconnects to a fresh list anyway.
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
-    while let Some(first) = frame_rx.recv().await {
+    // Flow control (review P1-2): allow at most DRM_FRAME_CREDIT frames in flight on the socket. The
+    // consumer acks each converted frame (send_frame_ack) and the producer only sends while it has
+    // credit, so a slow convert bounds the socket FIFO to a couple of frames instead of accumulating
+    // seconds of stale descriptors (a permanently-behind desktop). The bounded frame_rx backpressures
+    // the capture worker while we wait for an ack. Cursors and topology updates are not credit-gated.
+    const DRM_FRAME_CREDIT: i32 = 2;
+    let mut credit: i32 = DRM_FRAME_CREDIT;
+    loop {
+        // Replenish credit from any acks the consumer has finished; if none is left, wait for one.
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        if credit <= 0 {
+            conn.wait_readable().await?;
+            continue;
+        }
+        let first = match frame_rx.recv().await {
+            Some(f) => f,
+            None => break,
+        };
         // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still be
         // the active-session uid. Use the CACHE-ONLY active uid (never a blocking loginctl lookup): this
         // runs on the single-threaded `_drm` runtime, so a per-frame seat0 subprocess -- which is
@@ -2174,9 +2191,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         if gen != seen_gen {
             seen_gen = gen;
             let fresh = DRM_DISPLAY_CACHE.lock().unwrap().clone();
-            if !fresh.is_empty() {
-                conn.send_msg(&Data::DrmDisplaysChanged(fresh), None).await?;
-            }
+            // Send even an EMPTY list: when the last active CRTC disappears (all monitors
+            // unplugged) the consumer must learn the topology is now empty, otherwise it keeps
+            // advertising the removed displays indefinitely.
+            conn.send_msg(&Data::DrmDisplaysChanged(fresh), None).await?;
         }
         // Coalesce to latest-wins at the source (review 4.8). The `_drm` socket is a FIFO, so a
         // consumer that drains slower than we produce (a 4K convert on a modest GPU) would fall
@@ -2223,6 +2241,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 desc.has_fd = send_fd;
                 let borrowed = if send_fd { fd.as_ref().map(|f| f.as_fd()) } else { None };
                 conn.send_msg(&Data::DrmFrameDmabuf(desc), borrowed).await?;
+                credit -= 1; // one frame in flight until the consumer acks it
                 // `fd` (OwnedFd) is closed here whether or not it was attached (the cmsg dup'd it into
                 // the peer). Closing immediately bounds our fd usage to ~1 in flight per frame.
             }
@@ -2234,6 +2253,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 // CPU-mapped fallback: pixels cross the wire, exactly like the pre-split protocol.
                 conn.send_msg(&Data::DrmFrame { width, height }, None).await?;
                 conn.send_raw(data).await?;
+                credit -= 1; // one frame in flight until the consumer acks it
             }
             _ => {}
         }
@@ -2771,6 +2791,49 @@ impl DrmConn {
         let payload = serde_json::to_vec(data)?;
         let pass_fd = fd.map(|f| f.as_raw_fd());
         drm_send_frame(&self.stream, &payload, pass_fd).await
+    }
+
+    /// Consumer -> producer: one-byte frame ack ("I finished converting one frame"), on the reverse
+    /// direction (unused for messages after the handshake). It replenishes the producer's send credit
+    /// so only a bounded number of frames are ever in flight on the socket. Without it, the producer
+    /// keeps writing descriptors into the socket FIFO faster than a slow convert drains them, and the
+    /// consumer processes an ever-growing backlog of stale frames (a permanently-behind desktop).
+    /// Uses `&self.stream` directly, so it never conflicts with a concurrent `send_msg`/`recv_msg`.
+    pub async fn send_frame_ack(&self) -> ResultType<()> {
+        loop {
+            self.stream.writable().await?;
+            match self.stream.try_write(&[1u8]) {
+                Ok(n) if n > 0 => return Ok(()),
+                // A non-empty write returning 0 means the write half is shut down (the producer is
+                // gone); surface it instead of "succeeding" without ever delivering the ack byte,
+                // which would silently starve the producer of a send credit.
+                Ok(_) => bail!("drm: _drm frame-ack write returned 0 (peer closed)"),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    /// Producer: non-blockingly drain the frame-ack bytes the consumer has written, adding one send
+    /// credit per byte (capped at `max`). A read of 0 means the consumer closed. Cheap when idle
+    /// (a single `try_read` that returns WouldBlock).
+    pub fn drain_frame_acks(&self, credit: &mut i32, max: i32) -> ResultType<()> {
+        let mut buf = [0u8; 64];
+        loop {
+            match self.stream.try_read(&mut buf) {
+                Ok(0) => bail!("drm: _drm frame-ack peer closed"),
+                Ok(n) => *credit = (*credit + n as i32).min(max),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    /// Producer: await until the socket is readable (a frame ack arrived, or the peer errored/closed).
+    /// Cancel-safe (readiness only, consumes no bytes), so it is safe in a `select!`.
+    pub async fn wait_readable(&self) -> ResultType<()> {
+        self.stream.readable().await?;
+        Ok(())
     }
 
     /// Receive one `Data` message plus any dma-buf fd delivered via SCM_RIGHTS. Reads the 4-byte

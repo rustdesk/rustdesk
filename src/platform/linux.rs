@@ -897,7 +897,34 @@ pub fn start_os_service() {
             ) {
                 stop_subprocess();
                 force_stop_server();
-                start_server(None, &mut server);
+                // Run the login-screen --server as the active seat0 session user (the greeter
+                // account) rather than root, so the DRM capture GPU/EGL convert never loads the
+                // vendor GPU userspace in a privileged process. is_login_wayland() matches a GDM or
+                // SDDM Wayland greeter (is_gdm_user covers both), and desktop.uid is that greeter's
+                // uid, so this drops to whichever greeter owns seat0. A greeter is_gdm_user does not
+                // recognize (e.g. LightDM) never reaches this branch -- it takes the unprivileged
+                // else-branch below already. A genuine root graphical session (username=="root")
+                // has no lower uid to drop to, so it stays root. Gated on the drm feature so the
+                // non-drm build stays byte-identical to upstream.
+                #[cfg(feature = "drm")]
+                let run_as_greeter = desktop.username != "root" && !desktop.uid.is_empty();
+                #[cfg(not(feature = "drm"))]
+                let run_as_greeter = false;
+                if run_as_greeter {
+                    start_server(Some(&desktop), &mut server);
+                    // If dropping to the greeter uid did not produce a running server (spawn/exec
+                    // failure), fall back to a root --server so the login screen stays remotable
+                    // instead of looping on a failing greeter spawn. This pays the GPU-in-root
+                    // tradeoff only on that failure path, never in the normal greeter case.
+                    if server.is_none() {
+                        log::warn!(
+                            "greeter --server did not start; falling back to a root --server"
+                        );
+                        start_server(None, &mut server);
+                    }
+                } else {
+                    start_server(None, &mut server);
+                }
             }
         } else if desktop.username != "" {
             // try kill subprocess "--server"

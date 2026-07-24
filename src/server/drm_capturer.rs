@@ -98,6 +98,39 @@ static DRM_DISPLAY_REBUILDS: Mutex<BTreeMap<i32, (Instant, u32)>> = Mutex::new(B
 const RAPID_REBUILD_WINDOW: Duration = Duration::from_secs(3);
 const RAPID_REBUILD_MAX: u32 = 6;
 
+// Displays whose consumer-side dma-buf convert failed (the common multi-GPU cause: the auto-selected
+// render node is not the GPU that exported the scanout, so cross-device import fails permanently).
+// Set on a convert failure; the next connection then requests the CPU-converted path so the service
+// converts on the exporting GPU, instead of the stream flapping until it demotes to PipeWire. One bit
+// per display index. Set-only within a process run (the mismatch is a stable property of the host).
+static DRM_PREFER_CPU: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn drm_prefer_cpu(display: i32) -> bool {
+    (0..64).contains(&display)
+        && DRM_PREFER_CPU.load(Ordering::Relaxed) & (1u64 << display) != 0
+}
+fn drm_set_prefer_cpu(display: i32) {
+    if (0..64).contains(&display) {
+        DRM_PREFER_CPU.fetch_or(1u64 << display, Ordering::Relaxed);
+    }
+}
+// A connector-topology change (hotplug/modeset) can renumber the display indices, so a prefer-cpu bit
+// learned for an old index may now refer to a different physical display (or none). Clear the whole
+// mask on DrmDisplaysChanged and re-learn on the next convert failure, rather than force the CPU path
+// onto a reindexed display. Costs at most one convert-failure retry per affected display after a rare
+// topology change.
+fn drm_clear_prefer_cpu() {
+    DRM_PREFER_CPU.store(0, Ordering::Relaxed);
+}
+
+// Coalesce the uinput-range refresh that every DrmDisplaysChanged triggers. A multi-monitor hotplug
+// delivers that message once PER captured display (one recv_thread each), but the uinput desktop rect
+// is global and idempotent, so one refresh serves the whole burst. UINPUT_REFRESH_GEN records the
+// newest topology; UINPUT_REFRESH_BUSY lets only the first handler spawn a worker, which then keeps
+// refreshing until it has served the latest generation. Net: one worker thread per burst, and the
+// final layout always wins (no lost update from an out-of-order per-display thread).
+static UINPUT_REFRESH_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 impl IpcDrmCapturer {
     /// Connect to the service `_drm` channel, complete the handshake (receive the display list, then
     /// request `display`), and start streaming on a background thread. Returns the capturer plus the
@@ -259,12 +292,24 @@ async fn recv_thread(
     // `need_cpu`, so a render-node-less seat still captures instead of the service streaming a dma-buf
     // fd we cannot detile (which would lose the stream and force a PipeWire fallback nobody may be
     // present to approve on an unattended seat).
-    let mut converter = RenderConverter::open_render();
+    // Skip opening the render-node converter entirely when this display previously failed to convert
+    // (multi-GPU render-node mismatch): request the CPU path so the service does the conversion on the
+    // exporting GPU. Otherwise open it normally and fall back to CPU only if no render node is usable.
+    let force_cpu = drm_prefer_cpu(display);
+    let mut converter = if force_cpu {
+        None
+    } else {
+        RenderConverter::open_render()
+    };
     let need_cpu = converter.is_none();
     if need_cpu {
         log::info!(
-            "drm: no render-node convert context (drmtap_open_render failed or old .so); \
-             requesting the CPU-converted frame path for this stream"
+            "drm: requesting the CPU-converted frame path for display {display} ({})",
+            if force_cpu {
+                "a prior consumer convert failed, e.g. multi-GPU render-node mismatch"
+            } else {
+                "no render-node convert context: drmtap_open_render failed or old .so"
+            }
         );
     }
     if let Err(err) = conn
@@ -338,10 +383,23 @@ async fn recv_thread(
                     // Transient convert contention: skip this frame (latest-wins keeps the newest),
                     // do not tear the stream down.
                     Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
-                    Err(err) => break format!("convert: {err}"),
+                    Err(err) => {
+                        // The consumer render node could not import this buffer. A common multi-GPU
+                        // cause: the auto-selected renderD* is not the GPU that exported the scanout,
+                        // so cross-device import fails permanently. Prefer the CPU path on reconnect
+                        // (service converts on the exporting GPU) instead of flapping to PipeWire.
+                        drm_set_prefer_cpu(display);
+                        break format!("convert: {err}");
+                    }
                 }
                 // `recv_fd` (the OwnedFd, if any) is dropped/closed at the end of this iteration, AFTER
                 // convert has imported it (the EGLImage import holds its own reference to the buffer).
+                // Ack this frame so the producer releases one send credit and forwards the next: we
+                // have consumed it (converted, or skipped on transient contention -- ready either way).
+                // This bounds the socket to a couple of in-flight frames instead of a stale backlog.
+                if let Err(err) = conn.send_frame_ack().await {
+                    break format!("frame ack: {err}");
+                }
             }
             // CPU-fallback path (old `.so` / no transferable dma-buf): the producer packed BGRA and
             // sent it over the wire after the header. Store it as-is (BGRA); no convert needed.
@@ -370,6 +428,10 @@ async fn recv_thread(
                         shared.cv.notify_one();
                     }
                     Err(err) => break format!("frame body: {err}"),
+                }
+                // Ack this CPU frame too (flow control; see the dma-buf arm above).
+                if let Err(err) = conn.send_frame_ack().await {
+                    break format!("frame ack: {err}");
                 }
             }
             Data::DrmCursor {
@@ -415,8 +477,55 @@ async fn recv_thread(
             // this never trips the wayland::clear() re-probe restart loop). A subsequent
             // get_display_infos()/get_primary_index() then reports the fresh geometry.
             Data::DrmDisplaysChanged(list) => {
-                if !list.is_empty() {
-                    swap_available_displays(list);
+                // Forward the fresh list INCLUDING an empty one (last monitor unplugged): the
+                // availability cache must transition out of Available rather than keep advertising
+                // the removed displays. See swap_available_displays.
+                swap_available_displays(list);
+                // The topology changed: a prefer-cpu bit learned for an old display index may now
+                // point at a different physical display, so clear the mask and re-learn.
+                drm_clear_prefer_cpu();
+                // The raw DRM list is not the whole story: the Wayland LOGICAL geometry cache and
+                // the uinput absolute range are both set once at init, so after a hotplug/modeset the
+                // augmented geometry and injected-coordinate range are stale. Invalidate the cache so
+                // the next augmentation re-reads fresh geometry, and reapply the uinput mouse range
+                // for the new desktop layout.
+                scrap::wayland::display::clear_wayland_displays_cache();
+                // Reapply the uinput range OFF this recv loop, coalesced across the per-display
+                // recv_threads (see UINPUT_REFRESH_*). Awaiting update_uinput_resolution inline would
+                // stall frame reception for the whole hotplug (it does a Wayland geometry roundtrip),
+                // and this recv_thread is a current-thread runtime -- so the worker builds its own.
+                // Bump the generation, then let only the first caller spawn the single worker; it
+                // refreshes until it has served the newest generation, so a multi-monitor hotplug
+                // runs ONE thread and the final layout wins. Not ordered against frame delivery.
+                UINPUT_REFRESH_GEN.fetch_add(1, Ordering::AcqRel);
+                if !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
+                    std::thread::spawn(|| {
+                        let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                        else {
+                            UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
+                            return;
+                        };
+                        let mut served = 0u64;
+                        loop {
+                            let g = UINPUT_REFRESH_GEN.load(Ordering::Acquire);
+                            if g != served {
+                                served = g;
+                                rt.block_on(super::wayland::update_uinput_resolution());
+                                continue;
+                            }
+                            // Caught up: release, then re-check for a request that raced in after our
+                            // load but before the release, taking the worker role back if so.
+                            UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
+                            if UINPUT_REFRESH_GEN.load(Ordering::Acquire) == served {
+                                break;
+                            }
+                            if UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
+                                break; // another handler already started a fresh worker
+                            }
+                        }
+                    });
                 }
             }
             _ => {} // ignore any unexpected control message
@@ -862,8 +971,17 @@ fn normalize_connector(name: &str) -> String {
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
     let mut st = DRM_STATE.lock().unwrap();
     if matches!(&*st, ProbeState::Available(..)) {
-        log::info!("drm: hotplug refresh -> {} display(s)", list.len());
-        *st = ProbeState::Available(Instant::now(), list);
+        if list.is_empty() {
+            // The last active CRTC disappeared (all monitors unplugged). Do NOT keep an
+            // Available-but-empty verdict advertising displays that are gone; drop to Unavailable
+            // so consumers stop reporting them and can fall back. The probe path re-establishes
+            // Available if a monitor comes back.
+            log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
+            *st = ProbeState::Unavailable(Instant::now());
+        } else {
+            log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+            *st = ProbeState::Available(Instant::now(), list);
+        }
     }
 }
 
