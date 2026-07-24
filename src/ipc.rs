@@ -2159,16 +2159,32 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // the capture worker while we wait for an ack. Cursors and topology updates are not credit-gated.
     const DRM_FRAME_CREDIT: i32 = 2;
     let mut credit: i32 = DRM_FRAME_CREDIT;
+    // The newest frame produced while credit was exhausted. Holding it here (latest-wins, exactly
+    // like the coalescing below) is what keeps the gate on FRAMES only: cursor and topology updates
+    // are still received and forwarded meanwhile. Gating the whole loop instead would freeze the
+    // remote cursor and delay hotplug for as long as a slow convert withholds its ack.
+    let mut held_frame: Option<DrmProducerMsg> = None;
     loop {
-        // Replenish credit from any acks the consumer has finished; if none is left, wait for one.
+        // Replenish credit from any acks the consumer has finished. Also detects a closed peer.
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
-        if credit <= 0 {
-            conn.wait_readable().await?;
-            continue;
-        }
-        let first = match frame_rx.recv().await {
-            Some(f) => f,
-            None => break,
+        // Wait for the next producer message. While a frame is held back we watch the socket too,
+        // so an arriving ack wakes us promptly instead of only when the next frame shows up; that
+        // wake yields no message and simply falls through to the send decision below. Both arms are
+        // cancel-safe (`mpsc::Receiver::recv`, and `wait_readable` is readiness-only).
+        let first: Option<DrmProducerMsg> = if held_frame.is_some() {
+            tokio::select! {
+                biased;
+                r = conn.wait_readable() => { r?; None }
+                m = frame_rx.recv() => match m {
+                    Some(m) => Some(m),
+                    None => break,
+                },
+            }
+        } else {
+            match frame_rx.recv().await {
+                Some(f) => Some(f),
+                None => break,
+            }
         };
         // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still be
         // the active-session uid. Use the CACHE-ONLY active uid (never a blocking loginctl lookup): this
@@ -2202,8 +2218,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         // only the NEWEST frame; each replaced frame drops here, closing its OwnedFd (zero-copy path)
         // and freeing its pixel buffer (CPU path). Cursor updates are latency-insensitive state
         // (latest-wins by id downstream), so they are forwarded in order and never coalesced away.
-        let mut latest_frame: Option<DrmProducerMsg> = None;
-        let mut msg = Some(first);
+        // Start from any frame held back for credit, so a newer one supersedes it (latest-wins).
+        let mut latest_frame: Option<DrmProducerMsg> = held_frame.take();
+        let mut msg = first;
         while let Some(m) = msg.take() {
             match m {
                 f @ (DrmProducerMsg::Frame { .. } | DrmProducerMsg::FrameCpu { .. }) => {
@@ -2233,6 +2250,15 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 DrmProducerMsg::Displays(_) => {}
             }
             msg = frame_rx.try_recv().ok();
+        }
+        // Count any ack that landed while we were waiting, so the frame below is not held for an
+        // extra round trip.
+        conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        if credit <= 0 {
+            // No credit: keep the newest frame back rather than queueing it behind the consumer.
+            // Cursors and the topology push above already went out.
+            held_frame = latest_frame;
+            continue;
         }
         match latest_frame {
             Some(DrmProducerMsg::Frame { mut desc, fd }) => {
