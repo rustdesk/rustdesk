@@ -690,6 +690,15 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if should_handle_window_targeting_cli(&args, cfg!(target_os = "macos")) {
+            #[cfg(target_os = "macos")]
+            {
+                let exit_code = crate::window_targeting::run_cli(&args[1..]);
+                if exit_code != 0 {
+                    std::process::exit(exit_code);
+                }
+            }
+            return None;
         } else if args[0] == "--check-hwcodec-config" {
             #[cfg(feature = "hwcodec")]
             crate::ipc::hwcodec_process();
@@ -911,6 +920,11 @@ fn is_root() -> bool {
 
 #[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
+    is_user_main_ipc_scope_cli_command_for_platform(args, cfg!(target_os = "macos"))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn is_user_main_ipc_scope_cli_command_for_platform(args: &[String], is_macos: bool) -> bool {
     matches!(
         args.first().map(String::as_str),
         Some("--password")
@@ -921,7 +935,11 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--option")
             | Some("--assign")
             | Some("--deploy")
-    )
+    ) || should_handle_window_targeting_cli(args, is_macos)
+}
+
+fn should_handle_window_targeting_cli(args: &[String], is_macos: bool) -> bool {
+    is_macos && matches!(args.first().map(String::as_str), Some("--window-targeting"))
 }
 
 #[inline]
@@ -982,6 +1000,23 @@ mod tests {
         ] {
             assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
         }
+    }
+
+    #[test]
+    fn window_targeting_cli_falls_through_outside_macos() {
+        let command = args(&["--window-targeting", "status"]);
+        assert!(should_handle_window_targeting_cli(&command, true));
+        assert!(!should_handle_window_targeting_cli(&command, false));
+        assert!(is_user_main_ipc_scope_cli_command_for_platform(
+            &command, true
+        ));
+        assert!(!is_user_main_ipc_scope_cli_command_for_platform(
+            &command, false
+        ));
+        assert!(!should_handle_window_targeting_cli(
+            &args(&["--connect"]),
+            true
+        ));
     }
 }
 

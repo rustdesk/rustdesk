@@ -335,6 +335,10 @@ pub enum Data {
     OnlineStatus(Option<(i64, bool)>),
     Config((String, Option<String>)),
     Options(Option<HashMap<String, String>>),
+    #[cfg(target_os = "macos")]
+    WindowTargetingRequest(crate::window_targeting::WindowTargetingRequest),
+    #[cfg(target_os = "macos")]
+    WindowTargetingResponse(crate::window_targeting::WindowTargetingResponse),
     NatType(Option<i32>),
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
@@ -715,6 +719,11 @@ impl Drop for CheckIfRestart {
 
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
+        #[cfg(target_os = "macos")]
+        Data::WindowTargetingRequest(request) => {
+            let response = crate::window_targeting::handle_ipc_request(request);
+            allow_err!(stream.send(&Data::WindowTargetingResponse(response)).await);
+        }
         Data::SystemInfo(_) => {
             let info = format!(
                 "log_path: {}, config: {}, username: {}",
@@ -1495,6 +1504,26 @@ where
 #[tokio::main(flavor = "current_thread")]
 pub async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::main(flavor = "current_thread")]
+pub(crate) async fn request_window_targeting(
+    request: crate::window_targeting::WindowTargetingRequest,
+) -> ResultType<crate::window_targeting::WindowTargetingResponse> {
+    const TIMEOUT_MS: u64 = 1_000;
+
+    let mut connection = connect(TIMEOUT_MS, "").await?;
+    connection
+        .send(&Data::WindowTargetingRequest(request))
+        .await?;
+    match connection.next_timeout(TIMEOUT_MS).await? {
+        Some(Data::WindowTargetingResponse(response)) => Ok(response),
+        Some(_) => {
+            bail!("unexpected window-targeting IPC response type; expected WindowTargetingResponse")
+        }
+        None => bail!("window-targeting IPC closed before returning a response"),
+    }
 }
 
 async fn get_config_async(name: &str, ms_timeout: u64) -> ResultType<Option<String>> {

@@ -44,6 +44,34 @@ pub struct WindowTargetingValidation {
     pub diagnostics: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub enum WindowTargetingRequest {
+    Status,
+    Reload,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub struct WindowTargetingResponse {
+    pub ok: bool,
+    pub lines: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CliOperation {
+    Status,
+    Validate,
+    Reload,
+}
+
+fn parse_cli_operation(args: &[String]) -> Result<CliOperation, String> {
+    match args {
+        [operation] if operation == "status" => Ok(CliOperation::Status),
+        [operation] if operation == "validate" => Ok(CliOperation::Validate),
+        [operation] if operation == "reload" => Ok(CliOperation::Reload),
+        _ => Err("usage: --window-targeting status|validate|reload".to_owned()),
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PreprocessOutcome {
     pub mode: WindowTargetingMode,
@@ -235,6 +263,131 @@ pub(crate) fn validate_from_disk() -> Result<WindowTargetingValidation, ConfigEr
 #[allow(dead_code)]
 pub(crate) fn reload_from_disk() -> Result<WindowTargetingStatus, ConfigError> {
     RUNTIME.reload_from_path(&config_path()?)
+}
+
+pub(crate) fn handle_ipc_request(request: WindowTargetingRequest) -> WindowTargetingResponse {
+    handle_ipc_request_with(request, status, reload_from_disk)
+}
+
+fn handle_ipc_request_with<S, R>(
+    request: WindowTargetingRequest,
+    current_status: S,
+    reload: R,
+) -> WindowTargetingResponse
+where
+    S: Fn() -> WindowTargetingStatus,
+    R: FnOnce() -> Result<WindowTargetingStatus, ConfigError>,
+{
+    match request {
+        WindowTargetingRequest::Status => WindowTargetingResponse {
+            ok: true,
+            lines: vec![format_status_line("OK", &current_status(), false)],
+        },
+        WindowTargetingRequest::Reload => match reload() {
+            Ok(status) => WindowTargetingResponse {
+                ok: true,
+                lines: vec![format_status_line("OK", &status, false)],
+            },
+            Err(error) => WindowTargetingResponse {
+                ok: false,
+                lines: vec![
+                    format_reload_error(&error.to_string()),
+                    format_status_line("ACTIVE", &current_status(), true),
+                ],
+            },
+        },
+    }
+}
+
+fn format_status_line(prefix: &str, status: &WindowTargetingStatus, unchanged: bool) -> String {
+    let unchanged = if unchanged { " unchanged=true" } else { "" };
+    format!(
+        "{prefix} mode={} rules={} generation={} hash={} diagnostics={} source={}{}",
+        mode_name(status.mode),
+        status.rule_count,
+        status.generation,
+        status.hash,
+        status.diagnostics,
+        status.source,
+        unchanged
+    )
+}
+
+fn format_reload_error(error: &str) -> String {
+    let mut escaped = String::with_capacity(error.len());
+    for character in error.chars() {
+        match character {
+            '\r' | '\n' => escaped.push(' '),
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            _ => escaped.push(character),
+        }
+    }
+    format!("ERROR reason=\"{escaped}\"")
+}
+
+fn format_validation_line(validation: &WindowTargetingValidation) -> String {
+    format!(
+        "OK mode={} rules={} hash={} diagnostics={}",
+        mode_name(validation.mode),
+        validation.rule_count,
+        validation.hash,
+        validation.diagnostics
+    )
+}
+
+pub(crate) fn run_cli(args: &[String]) -> i32 {
+    run_cli_with(
+        args,
+        validate_from_disk,
+        crate::ipc::request_window_targeting,
+    )
+}
+
+fn run_cli_with<V, I>(args: &[String], validate: V, send_request: I) -> i32
+where
+    V: FnOnce() -> Result<WindowTargetingValidation, ConfigError>,
+    I: FnOnce(WindowTargetingRequest) -> hbb_common::ResultType<WindowTargetingResponse>,
+{
+    let operation = match parse_cli_operation(args) {
+        Ok(operation) => operation,
+        Err(error) => {
+            println!("{}", format_reload_error(&error));
+            return 1;
+        }
+    };
+
+    match operation {
+        CliOperation::Validate => match validate() {
+            Ok(validation) => {
+                println!("{}", format_validation_line(&validation));
+                0
+            }
+            Err(error) => {
+                println!("{}", format_reload_error(&error.to_string()));
+                1
+            }
+        },
+        CliOperation::Status | CliOperation::Reload => {
+            let request = if operation == CliOperation::Status {
+                WindowTargetingRequest::Status
+            } else {
+                WindowTargetingRequest::Reload
+            };
+            match send_request(request) {
+                Ok(response) => {
+                    for line in response.lines {
+                        println!("{line}");
+                    }
+                    i32::from(!response.ok)
+                }
+                Err(error) => {
+                    println!("{}", format_reload_error(&error.to_string()));
+                    1
+                }
+            }
+        }
+    }
 }
 
 fn preprocess_with<C, E>(
@@ -598,6 +751,159 @@ fn activation_policy_name(policy: ActivationPolicy) -> &'static str {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn parses_window_targeting_cli_operations() {
+        assert_eq!(
+            parse_cli_operation(&["status".to_owned()]).unwrap(),
+            CliOperation::Status
+        );
+        assert_eq!(
+            parse_cli_operation(&["validate".to_owned()]).unwrap(),
+            CliOperation::Validate
+        );
+        assert_eq!(
+            parse_cli_operation(&["reload".to_owned()]).unwrap(),
+            CliOperation::Reload
+        );
+        assert!(parse_cli_operation(&[]).is_err());
+        assert!(parse_cli_operation(&["watch".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn status_ipc_request_does_not_reload_or_mutate_state() {
+        let state = RuntimeState::new_builtin();
+        let before = state.status();
+        let response = handle_ipc_request_with(
+            WindowTargetingRequest::Status,
+            || state.status(),
+            || panic!("status must not call reload"),
+        );
+
+        assert!(response.ok);
+        assert_eq!(response.lines.len(), 1);
+        assert_eq!(state.status(), before);
+    }
+
+    #[test]
+    fn failed_ipc_reload_preserves_generation_and_hash() {
+        let path = test_path("invalid-ipc-reload");
+        fs::write(&path, "version = 1\nmode = \"broken\"\n").unwrap();
+        let state = RuntimeState::new_builtin();
+        let before = state.status();
+
+        let response = handle_ipc_request_with(
+            WindowTargetingRequest::Reload,
+            || state.status(),
+            || state.reload_from_path(&path),
+        );
+        let after = state.status();
+
+        assert!(!response.ok);
+        assert_eq!(response.lines.len(), 2);
+        assert!(response.lines[0].starts_with("ERROR reason=\""));
+        assert!(!response.lines[0].contains(['\r', '\n']));
+        assert_eq!(after.generation, before.generation);
+        assert_eq!(after.hash, before.hash);
+        assert!(response.lines[1].contains(&format!(
+            "generation={} hash={} ",
+            before.generation, before.hash
+        )));
+        assert!(response.lines[1].ends_with(" unchanged=true"));
+    }
+
+    #[test]
+    fn reload_errors_are_quoted_and_single_line() {
+        assert_eq!(
+            format_reload_error("bad\\path \"quoted\"\r\nnext"),
+            "ERROR reason=\"bad\\\\path \\\"quoted\\\"  next\""
+        );
+    }
+
+    #[test]
+    fn validation_cli_is_local_and_formats_the_exact_ok_line() {
+        let validation = WindowTargetingValidation {
+            mode: WindowTargetingMode::Rules,
+            rule_count: 3,
+            hash: "a".repeat(64),
+            diagnostics: false,
+        };
+        assert_eq!(
+            format_validation_line(&validation),
+            format!(
+                "OK mode=rules rules=3 hash={} diagnostics=false",
+                "a".repeat(64)
+            )
+        );
+
+        let exit_code = run_cli_with(
+            &["validate".to_owned()],
+            || Ok(validation),
+            |_| -> hbb_common::ResultType<WindowTargetingResponse> {
+                panic!("validate must not use IPC")
+            },
+        );
+        assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn cli_exit_code_tracks_ipc_response_and_rejects_invalid_operations() {
+        let validate = || -> Result<WindowTargetingValidation, ConfigError> {
+            panic!("status and reload must not validate locally")
+        };
+        let status_exit = run_cli_with(&["status".to_owned()], validate, |request| {
+            assert_eq!(request, WindowTargetingRequest::Status);
+            Ok(WindowTargetingResponse {
+                ok: true,
+                lines: vec!["OK status".to_owned()],
+            })
+        });
+        assert_eq!(status_exit, 0);
+
+        let reload_exit = run_cli_with(
+            &["reload".to_owned()],
+            || -> Result<WindowTargetingValidation, ConfigError> {
+                panic!("reload must not validate locally")
+            },
+            |request| {
+                assert_eq!(request, WindowTargetingRequest::Reload);
+                Ok(WindowTargetingResponse {
+                    ok: false,
+                    lines: vec!["ERROR reload".to_owned()],
+                })
+            },
+        );
+        assert_eq!(reload_exit, 1);
+
+        let validation_error_exit = run_cli_with(
+            &["validate".to_owned()],
+            || Err(ConfigError::new("invalid config".to_owned())),
+            |_| -> hbb_common::ResultType<WindowTargetingResponse> {
+                panic!("validate must not use IPC")
+            },
+        );
+        assert_eq!(validation_error_exit, 1);
+
+        let ipc_error_exit = run_cli_with(
+            &["status".to_owned()],
+            || -> Result<WindowTargetingValidation, ConfigError> {
+                panic!("status must not validate locally")
+            },
+            |_| Err(hbb_common::anyhow::anyhow!("IPC unavailable")),
+        );
+        assert_eq!(ipc_error_exit, 1);
+
+        let invalid_exit = run_cli_with(
+            &["watch".to_owned()],
+            || -> Result<WindowTargetingValidation, ConfigError> {
+                panic!("invalid operation must not validate")
+            },
+            |_| -> hbb_common::ResultType<WindowTargetingResponse> {
+                panic!("invalid operation must not use IPC")
+            },
+        );
+        assert_eq!(invalid_exit, 1);
+    }
 
     fn activation_outcome(result: i32) -> crate::platform::macos::MacWindowActivationOutcome {
         crate::platform::macos::MacWindowActivationOutcome {
