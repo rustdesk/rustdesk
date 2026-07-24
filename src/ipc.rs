@@ -2093,7 +2093,12 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
-    std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop));
+    // Set while the task is holding a frame it has no send credit for. The worker then skips the
+    // scanout grab, which the task would only discard, instead of burning CPU (and a PRIME export
+    // on the dma-buf path) inside the privileged service for a consumer that is behind.
+    let frames_gated = Arc::new(AtomicBool::new(false));
+    let worker_gate = frames_gated.clone();
+    std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate));
 
     // Handshake: the worker sends the display list (from the pre-warmed cache, or a throwaway
     // enumeration open if the cache is empty). A closed channel (no Displays) means the reader was
@@ -2155,8 +2160,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // Flow control (review P1-2): allow at most DRM_FRAME_CREDIT frames in flight on the socket. The
     // consumer acks each converted frame (send_frame_ack) and the producer only sends while it has
     // credit, so a slow convert bounds the socket FIFO to a couple of frames instead of accumulating
-    // seconds of stale descriptors (a permanently-behind desktop). The bounded frame_rx backpressures
-    // the capture worker while we wait for an ack. Cursors and topology updates are not credit-gated.
+    // seconds of stale descriptors (a permanently-behind desktop). Backpressure on the capture
+    // worker comes from `frames_gated` (we keep draining the channel for cursors, so a full channel
+    // no longer stalls it). Cursors and topology updates are not credit-gated.
     const DRM_FRAME_CREDIT: i32 = 2;
     let mut credit: i32 = DRM_FRAME_CREDIT;
     // The newest frame produced while credit was exhausted. Holding it here (latest-wins, exactly
@@ -2167,18 +2173,31 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     loop {
         // Replenish credit from any acks the consumer has finished. Also detects a closed peer.
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        // Pause the worker's grab only while we are ALREADY holding an unsendable frame. Gating on
+        // "no credit" alone would deadlock: with nothing held we block in `frame_rx.recv()` below,
+        // which cannot observe an ack, so a gated worker would stop feeding us entirely. Holding a
+        // frame is exactly the state in which we also wait on the socket, so acks still wake us.
+        frames_gated.store(held_frame.is_some() && credit <= 0, Ordering::Relaxed);
         // Wait for the next producer message. While a frame is held back we watch the socket too,
         // so an arriving ack wakes us promptly instead of only when the next frame shows up; that
         // wake yields no message and simply falls through to the send decision below. Both arms are
         // cancel-safe (`mpsc::Receiver::recv`, and `wait_readable` is readiness-only).
         let first: Option<DrmProducerMsg> = if held_frame.is_some() {
-            tokio::select! {
-                biased;
-                r = conn.wait_readable() => { r?; None }
-                m = frame_rx.recv() => match m {
-                    Some(m) => Some(m),
-                    None => break,
-                },
+            if credit > 0 {
+                // The drain above already replenished us and we are holding a sendable frame:
+                // never block here. Waiting would park a frame we are allowed to send right now
+                // until the worker happens to produce another one -- and if capture then returns
+                // WouldBlock it would sit there until the stall teardown.
+                frame_rx.try_recv().ok()
+            } else {
+                tokio::select! {
+                    biased;
+                    r = conn.wait_readable() => { r?; None }
+                    m = frame_rx.recv() => match m {
+                        Some(m) => Some(m),
+                        None => break,
+                    },
+                }
             }
         } else {
             match frame_rx.recv().await {
@@ -2220,7 +2239,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         // (latest-wins by id downstream), so they are forwarded in order and never coalesced away.
         // Start from any frame held back for credit, so a newer one supersedes it (latest-wins).
         let mut latest_frame: Option<DrmProducerMsg> = held_frame.take();
-        let mut msg = first;
+        // When we woke on an ack rather than on a message, `first` is None; seed from the channel
+        // anyway so anything queued meanwhile still supersedes the held frame and a queued cursor
+        // still goes out this iteration instead of waiting for the next producer message.
+        let mut msg = first.or_else(|| frame_rx.try_recv().ok());
         while let Some(m) = msg.take() {
             match m {
                 f @ (DrmProducerMsg::Frame { .. } | DrmProducerMsg::FrameCpu { .. }) => {
@@ -2295,6 +2317,7 @@ fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
     crtc_rx: std::sync::mpsc::Receiver<(u32, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -2373,8 +2396,16 @@ fn drm_capture_worker(
         // Grab one frame in the current mode, producing an OWNED message (no borrow of `reader`
         // outlives this, so `reader.cursor()` below is free to run). The dma-buf path ships only the
         // descriptor + fd; the CPU path copies the packed BGRA once (Bytes::copy_from_slice).
-        let grabbed: std::io::Result<DrmProducerMsg> = if use_dmabuf {
-            match reader.grab_desc() {
+        let grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
+        {
+            // The task is holding a frame it has no credit to send, so anything grabbed now would
+            // only be discarded. Skip the scanout work -- and, on the dma-buf path, a PRIME export
+            // -- rather than spend it in this privileged process for a consumer that is behind. The
+            // cursor poll below still runs so the remote pointer stays live, and `stalled` is
+            // deliberately left untouched: the device is healthy, we are idle by design.
+            None
+        } else if use_dmabuf {
+            Some(match reader.grab_desc() {
                 Ok((fd, d)) => Ok(DrmProducerMsg::Frame {
                     desc: DmabufDesc {
                         buffer_id: (d.fb_id as u64) | ((conn_epoch as u64) << 32),
@@ -2393,19 +2424,21 @@ fn drm_capture_worker(
                     fd: Some(fd),
                 }),
                 Err(err) => Err(err),
-            }
+            })
         } else {
-            match reader.grab() {
+            Some(match reader.grab() {
                 Ok((buf, w, h)) => Ok(DrmProducerMsg::FrameCpu {
                     width: w as u32,
                     height: h as u32,
                     data: Bytes::copy_from_slice(buf),
                 }),
                 Err(err) => Err(err),
-            }
+            })
         };
         match grabbed {
-            Ok(msg) => {
+            // Gated: no frame work this tick, fall through to the cursor poll below.
+            None => {}
+            Some(Ok(msg)) => {
                 stalled = 0;
                 if !logged_first {
                     logged_first = true;
@@ -2419,7 +2452,7 @@ fn drm_capture_worker(
                     break;
                 }
             }
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+            Some(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
                 stalled += 1;
                 if stalled > MAX_STALLED {
                     log::info!("drm: capture stalled (no frame); closing _drm connection");
@@ -2428,7 +2461,7 @@ fn drm_capture_worker(
                 std::thread::sleep(FRAME_INTERVAL);
                 continue;
             }
-            Err(err) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
+            Some(Err(err)) if use_dmabuf && err.kind() == std::io::ErrorKind::Unsupported => {
                 // The split export cannot work on this seat/driver (ENOTSUP). Switch this connection
                 // to the CPU-mapped fallback (pixels over the wire) instead of tearing down or
                 // rebuild-looping; the reader is already open and usable via grab().
@@ -2439,7 +2472,7 @@ fn drm_capture_worker(
                 logged_first = false;
                 continue;
             }
-            Err(err) => {
+            Some(Err(err)) => {
                 log::warn!("drm: capture error: {err}; closing _drm connection");
                 break;
             }
