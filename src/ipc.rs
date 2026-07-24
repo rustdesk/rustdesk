@@ -2165,6 +2165,8 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // no longer stalls it). Cursors and topology updates are not credit-gated.
     const DRM_FRAME_CREDIT: i32 = 2;
     let mut credit: i32 = DRM_FRAME_CREDIT;
+    // When we last held send credit; drives the no-credit deadline below.
+    let mut credit_since = std::time::Instant::now();
     // The newest frame produced while credit was exhausted. Holding it here (latest-wins, exactly
     // like the coalescing below) is what keeps the gate on FRAMES only: cursor and topology updates
     // are still received and forwarded meanwhile. Gating the whole loop instead would freeze the
@@ -2173,6 +2175,19 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     loop {
         // Replenish credit from any acks the consumer has finished. Also detects a closed peer.
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
+        // Bound how long we may sit with no send credit. While gated the worker does not grab, so it
+        // cannot advance its own MAX_STALLED watchdog: a consumer that stops acking without closing
+        // the socket would otherwise hold this connection, its worker thread and the privileged DRM
+        // context open indefinitely. The deadline is measured from the last time we HAD credit, not
+        // from the last wake-up -- cursor traffic keeps flowing while gated and must not keep
+        // renewing it.
+        const CREDIT_STALL: std::time::Duration = std::time::Duration::from_secs(5);
+        if credit > 0 {
+            credit_since = std::time::Instant::now();
+        } else if credit_since.elapsed() > CREDIT_STALL {
+            log::info!("drm: consumer has not acked for {CREDIT_STALL:?}; closing _drm connection");
+            break;
+        }
         // Pause the worker's grab exactly while we cannot send. Note this must NOT also require that
         // a frame is already held: those grabs are not wasted, they keep the held frame fresh
         // (latest-wins below), so gating on "held" would pin whatever frame happened to be in hand
@@ -2190,13 +2205,11 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             // message and falls through to the send decision below. Both arms are cancel-safe
             // (`mpsc::Receiver::recv`, and `wait_readable` is readiness-only).
             //
-            // Bounded, because while we are gated the worker is not grabbing and so cannot advance
-            // its own MAX_STALLED watchdog: a consumer that stops acking without closing the socket
-            // would otherwise hold this connection -- and the privileged DRM context behind it --
-            // open indefinitely.
-            const CREDIT_STALL: std::time::Duration = std::time::Duration::from_secs(5);
+            // Capped so we wake to re-evaluate the no-credit deadline above even when nothing at
+            // all arrives; the deadline itself is enforced there, not here.
+            const CREDIT_POLL: std::time::Duration = std::time::Duration::from_secs(1);
             // Ok(None) = woke on an ack; Ok(Some(None)) = worker gone; Ok(Some(Some(m))) = message.
-            let waited = tokio::time::timeout(CREDIT_STALL, async {
+            let waited = tokio::time::timeout(CREDIT_POLL, async {
                 tokio::select! {
                     biased;
                     r = conn.wait_readable() => r.map(|_| None),
@@ -2205,12 +2218,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             })
             .await;
             match waited {
-                Err(_) => {
-                    log::info!(
-                        "drm: consumer stopped acking for {CREDIT_STALL:?}; closing _drm connection"
-                    );
-                    break;
-                }
+                Err(_) => None,
                 Ok(Err(err)) => return Err(err),
                 Ok(Ok(None)) => None,
                 Ok(Ok(Some(None))) => break,
