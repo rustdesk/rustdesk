@@ -1726,7 +1726,8 @@ jobs:
               export DRMTAP_REPO="https://github.com/rustdesk-org/libdrmtap"
               export DRMTAP_REF="main"
               # Literal (not overridable by an inherited env var) so the ref/commit pair is immutable in CI.
-              export DRMTAP_SHA="816766dedaba3140c613712ce97aa2614e8899e7"
+              # libdrmtap v0.4.15.
+              export DRMTAP_SHA="cbc5e6af5b353b6bc351072a27a5351d82ba66e3"
               # Guard: accept only an exact vX.Y.Z tag OR the literal `main`, so a random/loose branch
               # is still rejected; the DRMTAP_SHA check below is the real anchor (it fails the build if
               # `main` -- or a tag -- resolves to anything other than the pinned immutable commit).

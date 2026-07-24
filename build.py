@@ -349,8 +349,8 @@ LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'main')
 # The immutable commit the ref must resolve to. `git clone --branch` follows a mutable ref (a branch
 # even more than a tag), so verifying this after clone catches a moved/compromised ref swapping the
 # .so. Keep in sync with LIBDRMTAP_REF on every bump (override via DRMTAP_SHA together with DRMTAP_REF
-# for a local fork). This commit is libdrmtap v0.4.14.
-LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', '816766dedaba3140c613712ce97aa2614e8899e7')
+# for a local fork). This commit is libdrmtap v0.4.15.
+LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'cbc5e6af5b353b6bc351072a27a5351d82ba66e3')
 
 
 def _single_real_so(paths, where):
