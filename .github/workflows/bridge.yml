@@ -25,12 +25,12 @@ jobs:
               flutter-version: "3.22.3",
               artifact-name: "bridge-artifact",
             }
-          # Dedicated bridge for the Windows arm64 build (Flutter 3.44); runs in parallel.
+          # Dedicated bridge for Windows arm64 and macOS (Flutter 3.44); runs in parallel.
           - {
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-22.04,
               extra-build-args: "",
-              flutter-version: "3.44.0",
+              flutter-version: "3.44.8",
               artifact-name: "bridge-artifact-flutter-3.44",
             }
     steps:
@@ -92,8 +92,8 @@ jobs:
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
             sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
           else
-            # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the
-            # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.
+            # Flutter 3.44 bridge for Windows arm64 and macOS: match those builds' source/pubspec
+            # state so generated *.freezed.dart compiles against the same Flutter/freezed version.
             bash .github/patches/apply_flutter_3.44_source_patches.sh
           fi
           pushd flutter && flutter pub get && popd
