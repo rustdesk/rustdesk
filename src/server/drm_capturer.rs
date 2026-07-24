@@ -500,12 +500,21 @@ async fn recv_thread(
                 UINPUT_REFRESH_GEN.fetch_add(1, Ordering::AcqRel);
                 if !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
                     std::thread::spawn(|| {
-                        let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                        let rt = match tokio::runtime::Builder::new_current_thread()
                             .enable_all()
                             .build()
-                        else {
-                            UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
-                            return;
+                        {
+                            Ok(rt) => rt,
+                            Err(err) => {
+                                // Release the slot so a later topology change can retry, and say
+                                // why: silently skipping would leave the uinput range stale for
+                                // the new layout with nothing in the log to explain it.
+                                log::warn!(
+                                    "drm: uinput refresh worker could not build a runtime: {err}"
+                                );
+                                UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
+                                return;
+                            }
                         };
                         let mut served = 0u64;
                         loop {
