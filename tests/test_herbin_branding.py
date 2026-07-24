@@ -73,11 +73,15 @@ def main() -> None:
         assert marker not in input_service_rs
         assert marker not in keyboard_rs
 
-    assert "fn MacActivateApplicationAtPoint" in macos_rs
-    assert "pub fn activate_application_at_point" in macos_rs
-    assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' in macos_mm
-    assert "kCGWindowLayer" in macos_mm
-    assert "layer.intValue != 0" in macos_mm
+    assert "fn MacCollectWindowCandidatesAtPoint" in macos_rs
+    assert "fn MacActivateWindowCandidateAtPoint" in macos_rs
+    assert "pub fn collect_window_candidates_at_point" in macos_rs
+    assert "pub fn activate_window_candidate_at_point" in macos_rs
+    assert "MacCollectWindowCandidatesAtPoint" in macos_mm
+    assert "MacActivateWindowCandidateAtPoint" in macos_mm
+    assert "layer.intValue != 0" not in macos_mm
+    assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' not in macos_mm
+    assert "MAX_MAC_WINDOW_CANDIDATES" in macos_rs
     assert "NSApplicationActivationPolicyRegular" in macos_mm
     assert "activateWithOptions" in macos_mm
     required_window_activation_markers = (
@@ -113,13 +117,6 @@ def main() -> None:
         "activateWithOptions",
         "AXUIElementPerformAction",
     )
-    assert "activate_application_at_point(x, y)" in input_service_rs
-    assert_in_order(
-        input_service_rs,
-        "activate_application_at_point(x, y)",
-        "en.mouse_down(MouseButton::Left)",
-    )
-
     assert 'mod memory_watchdog;' in server_rs
     assert 'memory_watchdog::start();' in server_rs
     assert '"rdh-memory-restart-threshold-mib"' in memory_watchdog_rs
