@@ -23,11 +23,15 @@ def main() -> None:
     core_main_rs = read("src/core_main.rs")
     flutter_rs = read("src/flutter.rs")
     flutter_ffi_rs = read("src/flutter_ffi.rs")
+    lib_rs = read("src/lib.rs")
     service_rs = read("src/service.rs")
     keyboard_rs = read("src/keyboard.rs")
     input_service_rs = read("src/server/input_service.rs")
     server_rs = read("src/server.rs")
     memory_watchdog_rs = read("src/server/memory_watchdog.rs")
+    window_targeting_rs = read("src/window_targeting.rs")
+    window_targeting_config_rs = read("src/window_targeting/config.rs")
+    window_targeting_rules_rs = read("src/window_targeting/rules.rs")
     mac_agent_plist = plistlib.loads(
         (ROOT / "src/platform/privileges_scripts/agent.plist").read_bytes()
     )
@@ -73,12 +77,22 @@ def main() -> None:
         assert marker not in input_service_rs
         assert marker not in keyboard_rs
 
+    assert (
+        '#[cfg(target_os = "macos")]\npub(crate) mod window_targeting;' in lib_rs
+    )
+    for operation in ("status", "validate", "reload"):
+        assert f'[operation] if operation == "{operation}"' in window_targeting_rs
+    assert "Passthrough" in window_targeting_config_rs
+    assert '"mode.passthrough"' in window_targeting_rs
+
     assert "fn MacCollectWindowCandidatesAtPoint" in macos_rs
     assert "fn MacActivateWindowCandidateAtPoint" in macos_rs
     assert "pub fn collect_window_candidates_at_point" in macos_rs
     assert "pub fn activate_window_candidate_at_point" in macos_rs
     assert "MacCollectWindowCandidatesAtPoint" in macos_mm
     assert "MacActivateWindowCandidateAtPoint" in macos_mm
+    assert "const MAX_MAC_WINDOW_CANDIDATES: usize = 64;" in macos_rs
+    assert "static constexpr size_t MAX_MAC_WINDOW_CANDIDATES = 64;" in macos_mm
     assert "layer.intValue != 0" not in macos_mm
     assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' not in macos_mm
     assert "MAX_MAC_WINDOW_CANDIDATES" in macos_rs
@@ -104,8 +118,16 @@ def main() -> None:
         "CGSOrderWindow",
         "SkyLight",
     )
+    mac_window_sources = macos_rs + macos_mm
     for marker in private_window_api_markers:
-        assert marker not in macos_mm
+        assert marker not in mac_window_sources
+
+    for rule_id in (
+        "builtin.dock-ui",
+        "builtin.interactive-transient",
+        "builtin.notification-center-overlay",
+    ):
+        assert rule_id in window_targeting_rules_rs
 
     assert "preprocess_remote_left_click(x, y)" in input_service_rs
     assert_in_order(
@@ -113,8 +135,27 @@ def main() -> None:
         "preprocess_remote_left_click(x, y)",
         "en.mouse_down(MouseButton::Left)",
     )
-    assert 'diagnostics = false' in read("src/window_targeting/config.rs")
-    assert "window title" not in read("src/window_targeting.rs").lower()
+    assert (
+        "\n                allow_err!(en.mouse_down(MouseButton::Left));\n"
+        "            }\n"
+        "            MOUSE_BUTTON_RIGHT =>"
+    ) in input_service_rs
+    assert input_service_rs.count("en.mouse_down(MouseButton::Left)") == 1
+    assert "diagnostics = false" in window_targeting_config_rs
+    assert "window title" not in window_targeting_rs.lower()
+
+    assert "\nnotify" not in cargo_toml.lower()
+    file_watcher_markers = (
+        "notify::",
+        "watcher",
+        "file_watcher",
+        "watch_config",
+    )
+    window_targeting_sources = (
+        window_targeting_rs + window_targeting_config_rs + window_targeting_rules_rs
+    ).lower()
+    for marker in file_watcher_markers:
+        assert marker not in window_targeting_sources
 
     assert_in_order(
         macos_mm,

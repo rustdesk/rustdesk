@@ -10,12 +10,23 @@ exist.
 RDH keeps only these deviations from upstream:
 
 1. `RustDesk-Herbin` branding, bundle ID, URL scheme, config, and launchd isolation.
-2. A macOS controlled-side workaround that activates the regular application and,
-   when public Accessibility data is available, raises the exact window under the
-   cursor immediately before a remote left-button-down event.
+2. A configurable macOS controlled-side click preprocessor. Ordered rules choose
+   `skip`, `forward_only`, or `activate`; only `activate` may order the selected
+   regular application or its public-Accessibility window before the original
+   remote left-button-down event.
 3. A dedicated ad-hoc-signed macOS CI build until Developer ID signing is available.
 4. A launchd-gated macOS `--server` memory watchdog that checks once daily at
    06:00 and restarts an over-limit server within the unattended window.
+
+Dock and interactive transient UI, including non-zero-layer menus and popovers,
+must not be blanket-filtered. Passive Notification Center overlay recognition
+remains an explicit built-in `skip` rule. `mode = "passthrough"` is the A/B
+baseline for upstream mouse behavior and performs no targeting lookup.
+
+The supported management operations are `--window-targeting status`,
+`--window-targeting validate`, and `--window-targeting reload`. Future upstream
+merges must preserve unconditional delivery of the original mouse-down after
+preprocessing and must not add file watching or private window APIs.
 
 Custom keyboard mapping and high-volume mouse diagnostics must remain absent.
 
@@ -76,8 +87,8 @@ git -C "$WORKTREE" merge --no-ff "$TARGET_TAG"
 ```
 
 Resolve conflicts by preserving current upstream behavior first, then reapplying
-the three-item patch contract. Never recover an entire conflicted input or keyboard
-file from the old RDH branch.
+the patch contract above. Never recover an entire conflicted input or keyboard file
+from the old RDH branch.
 
 For each conflict, compare all three versions:
 
@@ -101,13 +112,20 @@ Review the patch for:
 - no `herbin-keymap`, shortcut-remap, or old handoff implementation;
 - no `macos-input-trace`, `macos-focus-trace`, delayed click thread, or per-click
   info logging;
-- activation still occurs before `en.mouse_down(MouseButton::Left)`;
-- exact-window activation uses only public Accessibility APIs and validates the AX
-  window PID against the CoreGraphics owner PID;
-- the focused AX window is not raised again, and unsupported Accessibility paths
-  fall back to the existing application activation without title/bounds guessing;
+- `skip`, `forward_only`, and `activate` remain the only targeting decisions, and
+  `mode = "passthrough"` bypasses candidate collection and execution;
+- targeting preprocessing still occurs before `en.mouse_down(MouseButton::Left)`,
+  while the original mouse-down remains unconditional;
+- candidate collection remains bounded and does not blanket-filter non-zero layers
+  or Dock-owned windows;
+- built-in rules still distinguish Dock UI, interactive transient UI, and the
+  passive Notification Center overlay;
+- only `activate` uses public Accessibility/AppKit ordering APIs, validates the AX
+  window PID against the selected CoreGraphics owner PID, and avoids re-raising an
+  already focused AX window;
 - `_AXUIElementGetWindow`, `CGSOrderWindow`, and SkyLight remain absent;
-- Dock and non-regular overlay applications remain excluded;
+- file watching remains absent; configuration changes occur only through explicit
+  `status`, `validate`, and `reload` management operations;
 - bundle ID and service namespace stay separate from official RustDesk;
 - the custom client still skips the official update checker.
 - the memory watchdog remains launchd-gated, scheduled once daily at 06:00, and
@@ -162,7 +180,19 @@ Test from an official Windows controller and from iPhone/iPad mouse mode:
   order change;
 - click between two windows of the same application and confirm the clicked window
   becomes frontmost without changing the menu-bar application;
-- click Dock icons, menus, popovers, and desktop without unwanted activation;
+- open a Finder menu and select an item; the menu must remain interactive without
+  pre-activating the window below it;
+- open a Finder toolbar popover and interact with it without dismissing it through
+  unwanted pre-activation;
+- open a Dock contextual menu and select an item without activating an application
+  underneath the menu before the click;
+- expose the passive Notification Center overlay and confirm its built-in `skip`
+  rule reaches and activates the intended regular window below it;
+- use `--window-targeting validate`, switch to `mode = "passthrough"`, reload, and
+  repeat the click matrix as the upstream mouse-behavior baseline;
+- restore `mode = "rules"`, validate and reload again, then repeat the same matrix
+  and compare it with the passthrough A/B baseline;
+- click Dock icons, other popovers, and desktop without unwanted activation;
 - drag, select text, right-click, scroll, and double-click;
 - test multiple displays and a fullscreen or separate-Space window;
 - repeat with AltTab and DockDoor running;
