@@ -805,11 +805,25 @@ fn refresh_available_async() {
             let _in_flight = ProbeInFlightGuard;
             let result = query_displays();
             let mut st = DRM_STATE.lock().unwrap();
-            if let ProbeState::Available(since, list) = &mut *st {
-                *since = Instant::now();
-                if let Ok(fresh) = result {
-                    if !fresh.is_empty() {
-                        *list = fresh;
+            if !matches!(&*st, ProbeState::Available(..)) {
+                return;
+            }
+            match result {
+                Ok(fresh) if fresh.is_empty() => {
+                    // No active CRTC left: every monitor is gone. Keeping the previous list here is
+                    // what leaves enumeration advertising removed displays indefinitely on an idle
+                    // host, where there is no live stream to deliver the hotplug push. Drop to
+                    // Unavailable exactly as swap_available_displays does; a later probe restores
+                    // Available when a monitor comes back.
+                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
+                    *st = ProbeState::Unavailable(Instant::now());
+                }
+                Ok(fresh) => *st = ProbeState::Available(Instant::now(), fresh),
+                // A failed probe is not evidence that the displays are gone (a transient open or
+                // EACCES); keep the verdict, just restamp so we retry after the next TTL.
+                Err(_) => {
+                    if let ProbeState::Available(since, _) = &mut *st {
+                        *since = Instant::now();
                     }
                 }
             }
