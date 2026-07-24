@@ -6,12 +6,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LEFT_MOUSE_DOWN = "allow_err!(en.mouse_down(MouseButton::Left));"
-LEFT_CLICK_PREPROCESSOR = "preprocess_remote_left_click(x, y)"
-WATCHER_NAME_FRAGMENTS = ("watch", "notify")
-SOURCE_TOKEN = re.compile(
-    r'(?P<raw>r#".*?"#)|(?P<string>"(?:\\.|[^"\\])*")|'
-    r"(?P<line>//[^\n]*)|(?P<block>/\*.*?\*/)",
-    re.DOTALL,
+WATCHER_NAME_FRAGMENTS = ("watch", "notify", "fsevent")
+CANONICAL_LEFT_MOUSE_ARM = """
+MOUSE_BUTTON_LEFT => {
+    #[cfg(target_os = "macos")]
+    if let Some((x, y)) = crate::get_cursor_pos() {
+        crate::window_targeting::preprocess_remote_left_click(x, y);
+    }
+    allow_err!(en.mouse_down(MouseButton::Left));
+}
+"""
+COLLECTOR_EARLY_EXCLUSION = re.compile(
+    r"\bif\s*\((?P<condition>(?:[^()]|\([^()]*\))*)\)\s*"
+    r"(?:\{\s*)?(?:continue\s*;|break\s*;|return\b[^;]*;)"
+)
+RAW_STRING_START = re.compile(r'(?:br|r)(?P<hashes>#{0,})"')
+CHARACTER_LITERAL = re.compile(
+    r"'(?:\\(?:x[\dA-Fa-f]{2}|u\{[\dA-Fa-f_]+\}|.)|[^\\'\n])'"
 )
 
 
@@ -26,14 +37,62 @@ def assert_in_order(text: str, first: str, second: str) -> None:
 
 
 def sanitized_source(source: str, *, remove_strings: bool = False) -> str:
-    """Blank comments and optionally strings while preserving offsets/newlines."""
-    def replacement(match: re.Match) -> str:
-        is_string = match.lastgroup in ("raw", "string")
-        if is_string and not remove_strings:
-            return match.group(0)
-        return "".join("\n" if char == "\n" else " " for char in match.group(0))
+    """Blank active-source comments/literals while preserving offsets/newlines."""
+    output = list(source)
+    cursor = 0
+    while cursor < len(source):
+        end = None
+        blank = True
+        if source.startswith("//", cursor):
+            end = source.find("\n", cursor + 2)
+            end = len(source) if end == -1 else end
+        elif source.startswith("/*", cursor):
+            depth = 1
+            end = cursor + 2
+            while end < len(source) and depth:
+                if source.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif source.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+        else:
+            raw = RAW_STRING_START.match(source, cursor)
+            if raw and (
+                cursor == 0 or not re.match(r"[\w]", source[cursor - 1])
+            ):
+                terminator = '"' + raw.group("hashes")
+                closing = source.find(terminator, raw.end())
+                end = len(source) if closing == -1 else closing + len(terminator)
+                blank = remove_strings
+            elif source[cursor] == '"':
+                end = cursor + 1
+                while end < len(source):
+                    if source[end] == "\\":
+                        end += 2
+                    elif source[end] == '"':
+                        end += 1
+                        break
+                    else:
+                        end += 1
+                blank = remove_strings
+            else:
+                character = CHARACTER_LITERAL.match(source, cursor)
+                if character:
+                    end = character.end()
+                    blank = remove_strings
 
-    return SOURCE_TOKEN.sub(replacement, source)
+        if end is None:
+            cursor += 1
+            continue
+        if blank:
+            output[cursor:end] = [
+                "\n" if char == "\n" else " " for char in output[cursor:end]
+            ]
+        cursor = end
+    return "".join(output)
 
 
 def matching_delimiter(
@@ -76,7 +135,6 @@ def assert_window_targeting_module_registered(lib_rs: str) -> None:
 
 
 def assert_left_mouse_down_contract(input_service_rs: str) -> None:
-    structure = sanitized_source(input_service_rs, remove_strings=True)
     down_code, down_structure = braced_body(
         input_service_rs, "MOUSE_TYPE_DOWN => match buttons"
     )
@@ -89,22 +147,10 @@ def assert_left_mouse_down_contract(input_service_rs: str) -> None:
 
     arm_open = down_structure.find("{", left_arm.start())
     arm_close = matching_delimiter(down_structure, arm_open, "{", "}")
-    arm_code = down_code[arm_open + 1 : arm_close]
-    arm_structure = down_structure[arm_open + 1 : arm_close]
-
-    assert structure.count(LEFT_MOUSE_DOWN) == 1
-    assert arm_structure.count(LEFT_MOUSE_DOWN) == 1
-    assert arm_structure.count(LEFT_CLICK_PREPROCESSOR) == 1
-    preprocessor_index = arm_structure.index(LEFT_CLICK_PREPROCESSOR)
-    mouse_down_index = arm_structure.index(LEFT_MOUSE_DOWN)
-    assert preprocessor_index < mouse_down_index
-    prefix = arm_structure[:mouse_down_index]
-    assert prefix.count("{") == prefix.count("}")
-
-    line_start = arm_code.rfind("\n", 0, mouse_down_index) + 1
-    line_end = arm_code.find("\n", mouse_down_index)
-    line_end = len(arm_code) if line_end == -1 else line_end
-    assert arm_code[line_start:line_end].strip() == LEFT_MOUSE_DOWN
+    assert sanitized_source(input_service_rs, remove_strings=True).count(LEFT_MOUSE_DOWN) == 1
+    active_arm = down_code[left_arm.start() : arm_close + 1]
+    actual_arm = re.sub(r"\s+", "", sanitized_source(active_arm))
+    assert actual_arm == re.sub(r"\s+", "", CANONICAL_LEFT_MOUSE_ARM)
 
 
 def default_template_fields(document: str) -> dict[str, object]:
@@ -143,41 +189,27 @@ def assert_default_window_targeting_config(config_rs: str) -> None:
     )
 
 
-def if_statements(structure: str):
-    for match in re.finditer(r"\bif\s*\(", structure):
-        open_parenthesis = structure.find("(", match.start())
-        close_parenthesis = matching_delimiter(
-            structure, open_parenthesis, "(", ")"
-        )
-        cursor = close_parenthesis + 1
-        while cursor < len(structure) and structure[cursor].isspace():
-            cursor += 1
-        if cursor < len(structure) and structure[cursor] == "{":
-            body_end = matching_delimiter(structure, cursor, "{", "}")
-            body = structure[cursor + 1 : body_end]
-        else:
-            body_end = structure.find(";", cursor)
-            assert body_end != -1, "if statement has no body"
-            body = structure[cursor : body_end + 1]
-        yield structure[open_parenthesis + 1 : close_parenthesis], body
-
-
 def assert_candidate_collector_has_no_blanket_filters(macos_mm: str) -> None:
-    collector, collector_structure = braced_body(
-        macos_mm, 'extern "C" int32_t MacCollectWindowCandidatesAtPoint'
-    )
-    string_literals = re.findall(r'@?"((?:\\.|[^"\\])*)"', collector)
+    active_macos_mm = sanitized_source(macos_mm)
+    string_literals = re.findall(r'@?"((?:\\.|[^"\\])*)"', active_macos_mm)
     assert all("dock" not in literal.lower() for literal in string_literals)
 
-    for condition, body in if_statements(collector_structure):
-        layer_condition = re.search(r"\blayer\b", condition, re.IGNORECASE)
-        early_exclusion = re.search(r"\b(?:continue|break|return)\b", body)
-        assert not (layer_condition and early_exclusion)
+    _, collector_structure = braced_body(
+        macos_mm, 'extern "C" int32_t MacCollectWindowCandidatesAtPoint'
+    )
+    for exclusion in COLLECTOR_EARLY_EXCLUSION.finditer(collector_structure):
+        condition = exclusion.group("condition")
+        assert not re.search(r"\blayer\b|kCGWindowLayer", condition, re.IGNORECASE)
 
 
 def dependency_names(cargo_toml: str) -> set[str]:
     names: set[str] = set()
     active_dependency_section = False
+    dependency_table = re.compile(
+        r"^(?:target\.(?:'[^']+'|\"[^\"]+\")\.)?"
+        r"(?:dependencies|dev-dependencies|build-dependencies)"
+        r"(?:\.([\w-]+))?$", re.IGNORECASE
+    )
 
     for raw_line in cargo_toml.splitlines():
         line = raw_line.strip()
@@ -186,22 +218,16 @@ def dependency_names(cargo_toml: str) -> set[str]:
         section = re.fullmatch(r"\[(.+)\]", line)
         if section:
             section_name = section.group(1).strip().lower()
-            active_dependency_section = any(
-                section_name == dependency_section
-                or section_name.endswith(f".{dependency_section}")
-                for dependency_section in (
-                    "dependencies",
-                    "dev-dependencies",
-                    "build-dependencies",
-                )
-            )
+            dependency_section = dependency_table.fullmatch(section_name)
+            table_dependency = dependency_section.group(1) if dependency_section else None
+            if table_dependency:
+                names.add(table_dependency)
+            active_dependency_section = bool(dependency_section and not table_dependency)
             continue
         if not active_dependency_section:
             continue
 
-        dependency = re.match(
-            r'(?:"([^"]+)"|([A-Za-z0-9_-]+))\s*=', line
-        )
+        dependency = re.match(r'(?:"([^"]+)"|([\w-]+))\s*=', line)
         if dependency is None:
             continue
         names.add(dependency.group(1) or dependency.group(2))
@@ -232,6 +258,25 @@ def assert_no_watcher_markers(*targeting_sources: str) -> None:
             ), f"file watcher marker is forbidden: {identifier}"
 
 
+def assert_source_sanitizer_contract() -> None:
+    fixture = r'''
+fn fixture() {
+    let normal = "/* normal string } */";
+    let raw = r###"// raw string }"###;
+    let rust_char = '{'; if (objc_value == '}') { active(); }
+    // line comment }
+    /* outer block /* nested block } */ still a comment { */
+}
+'''
+    comment_free = sanitized_source(fixture)
+    for literal in ('"/* normal string } */"', 'r###"// raw string }"###'):
+        assert literal in comment_free
+    assert "line comment" not in comment_free
+    structure = sanitized_source(fixture, remove_strings=True)
+    assert structure.count("{") == structure.count("}") == 2
+    braced_body(fixture, "fn fixture")
+
+
 def replace_first(source: str, old: str, new: str) -> str:
     assert old in source, f"missing mutation target: {old!r}"
     return source.replace(old, new, 1)
@@ -245,25 +290,11 @@ def assert_rejected(check, *arguments) -> None:
     raise AssertionError(f"{check.__name__} accepted a forbidden mutation")
 
 
-def rejected_mutation(check, source: str, old: str, new: str, *extra) -> str:
-    mutation = replace_first(source, old, new)
-    assert_rejected(check, mutation, *extra)
-    return mutation
-
-
-def old_left_mouse_down_check_accepts(source: str) -> bool:
-    suffix = (
-        "\n                allow_err!(en.mouse_down(MouseButton::Left));\n"
-        "            }\n"
-        "            MOUSE_BUTTON_RIGHT =>"
-    )
-    return (
-        LEFT_CLICK_PREPROCESSOR in source
-        and source.index(LEFT_CLICK_PREPROCESSOR)
-        < source.index("en.mouse_down(MouseButton::Left)")
-        and suffix in source
-        and source.count("en.mouse_down(MouseButton::Left)") == 1
-    )
+def assert_replacements_rejected(
+    check, source: str, old: str, replacements: tuple[str, ...], *extra
+) -> None:
+    for replacement in replacements:
+        assert_rejected(check, replace_first(source, old, replacement), *extra)
 
 
 def run_contract_mutation_regressions(
@@ -276,69 +307,93 @@ def run_contract_mutation_regressions(
     macos_mm: str,
 ) -> None:
     down_left_arm = (
-        "MOUSE_TYPE_DOWN => match buttons {\n"
-        "            MOUSE_BUTTON_LEFT => {"
+        "MOUSE_TYPE_DOWN => match buttons {\n            MOUSE_BUTTON_LEFT => {"
     )
-    for replacement in ("=> if false {", "if false => {"):
-        mutation = rejected_mutation(
-            assert_left_mouse_down_contract,
-            input_service_rs,
-            down_left_arm,
-            down_left_arm.replace("=> {", replacement),
-        )
-        assert old_left_mouse_down_check_accepts(mutation)
+    assert_replacements_rejected(
+        assert_left_mouse_down_contract, input_service_rs, down_left_arm,
+        tuple(
+            down_left_arm.replace("=> {", replacement)
+            for replacement in ("=> if false {", "if false => {")
+        ),
+    )
+    assert_replacements_rejected(
+        assert_left_mouse_down_contract, input_service_rs, LEFT_MOUSE_DOWN,
+        tuple(
+            prefix + LEFT_MOUSE_DOWN
+            for prefix in ("#[cfg(any())]\n                ", "return;\n                ")
+        ),
+    )
 
     registration = '#[cfg(target_os = "macos")]\npub(crate) mod window_targeting;'
-    commented_registration = rejected_mutation(
+    assert_replacements_rejected(
         assert_window_targeting_module_registered,
         lib_rs,
         registration,
-        f"/* {registration} */",
+        (
+            f"/* {registration} */",
+            f"/* outer /* nested */\n{registration}\n*/",
+        ),
     )
-    assert registration in commented_registration
-
-    diagnostics_true = rejected_mutation(
-        assert_default_window_targeting_config,
-        window_targeting_config_rs,
+    assert_replacements_rejected(
+        assert_default_window_targeting_config, window_targeting_config_rs,
         "diagnostics = false",
-        "diagnostics = true",
+        ("diagnostics = true",),
     )
-    assert "diagnostics = false" in diagnostics_true
 
     record_marker = "MacWindowCandidateRecord *record = &records[recordCount];"
-    for filter_mutation in (
+    collector_filters = (
         "if (layer != nil && layer.intValue) { continue; }",
+        "if ([window objectForKey:(id)kCGWindowLayer].intValue) { continue; }",
         'if ([ownerApplication.bundleIdentifier hasPrefix:@"com.apple.dock"]) '
         "{ continue; }",
-    ):
-        mutated_collector = rejected_mutation(
-            assert_candidate_collector_has_no_blanket_filters,
-            macos_mm,
-            record_marker,
-            f"{filter_mutation}\n            {record_marker}",
-        )
-        assert "layer.intValue != 0" not in mutated_collector
-        assert 'bundleIdentifier isEqualToString:@"com.apple.dock"' not in (
-            mutated_collector
-        )
-
-    watcher_dependency = rejected_mutation(
-        assert_no_watcher_dependencies,
-        cargo_toml,
-        "[dependencies]\n",
-        '[dependencies]\nwatchexec = "4"\n',
     )
-    assert "\nnotify" not in watcher_dependency.lower()
-    watcher_api = (
-        window_targeting_rs
-        + "\nfn watch_config() { notify::recommended_watcher(); }\n"
+    assert_replacements_rejected(
+        assert_candidate_collector_has_no_blanket_filters,
+        macos_mm,
+        record_marker,
+        tuple(
+            f"{filter_mutation}\n            {record_marker}"
+            for filter_mutation in collector_filters
+        ),
+    )
+
+    dock_helper = (
+        'static bool MacWindowIsDock(NSRunningApplication *app) {\n'
+        ' return [app.bundleIdentifier isEqualToString:@"com.apple.dock"]; }\n'
+    )
+    helper_mutation = replace_first(
+        macos_mm, 'extern "C" int32_t MacCollectWindowCandidatesAtPoint',
+        dock_helper + 'extern "C" int32_t MacCollectWindowCandidatesAtPoint',
+    )
+    helper_mutation = replace_first(
+        helper_mutation, record_marker,
+        "if (MacWindowIsDock(ownerApplication)) { continue; }\n"
+        f"            {record_marker}",
     )
     assert_rejected(
-        assert_no_watcher_markers,
-        watcher_api,
-        window_targeting_config_rs,
-        window_targeting_rules_rs,
+        assert_candidate_collector_has_no_blanket_filters, helper_mutation
     )
+
+    assert_replacements_rejected(
+        assert_no_watcher_dependencies, cargo_toml, "[dependencies]\n",
+        (
+            '[dependencies]\nwatchexec = "4"\n',
+            '[dependencies.watchexec]\nversion = "4"\n\n[dependencies]\n',
+            "[target.'cfg(target_os = \"macos\")'.dependencies.fsevent]\n"
+            'version = "2"\n\n[dependencies]\n',
+        ),
+    )
+
+    for watcher_api in (
+        "fn watch_config() { notify::recommended_watcher(); }",
+        "fn reload() { fsevent::listen(); }",
+    ):
+        assert_rejected(
+            assert_no_watcher_markers,
+            window_targeting_rs + "\n" + watcher_api,
+            window_targeting_config_rs,
+            window_targeting_rules_rs,
+        )
 
 
 def main() -> None:
@@ -374,6 +429,7 @@ def main() -> None:
     osx_dist = read("res/osx-dist.sh")
     macos_workflow = read(".github/workflows/codex-macos-herbin.yml")
 
+    assert_source_sanitizer_contract()
     run_contract_mutation_regressions(
         cargo_toml,
         lib_rs,
