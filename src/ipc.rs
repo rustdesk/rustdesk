@@ -2173,31 +2173,48 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     loop {
         // Replenish credit from any acks the consumer has finished. Also detects a closed peer.
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
-        // Pause the worker's grab only while we are ALREADY holding an unsendable frame. Gating on
-        // "no credit" alone would deadlock: with nothing held we block in `frame_rx.recv()` below,
-        // which cannot observe an ack, so a gated worker would stop feeding us entirely. Holding a
-        // frame is exactly the state in which we also wait on the socket, so acks still wake us.
-        frames_gated.store(held_frame.is_some() && credit <= 0, Ordering::Relaxed);
-        // Wait for the next producer message. While a frame is held back we watch the socket too,
-        // so an arriving ack wakes us promptly instead of only when the next frame shows up; that
-        // wake yields no message and simply falls through to the send decision below. Both arms are
-        // cancel-safe (`mpsc::Receiver::recv`, and `wait_readable` is readiness-only).
-        let first: Option<DrmProducerMsg> = if held_frame.is_some() {
-            if credit > 0 {
-                // The drain above already replenished us and we are holding a sendable frame:
-                // never block here. Waiting would park a frame we are allowed to send right now
-                // until the worker happens to produce another one -- and if capture then returns
-                // WouldBlock it would sit there until the stall teardown.
-                frame_rx.try_recv().ok()
-            } else {
+        // Pause the worker's grab exactly while we cannot send. Note this must NOT also require that
+        // a frame is already held: those grabs are not wasted, they keep the held frame fresh
+        // (latest-wins below), so gating on "held" would pin whatever frame happened to be in hand
+        // when credit ran out and ship it stale once the ack lands. Gating on credit alone is safe
+        // because the wait below watches the socket whenever credit is out, held frame or not, so an
+        // ack always wakes us.
+        frames_gated.store(credit <= 0, Ordering::Relaxed);
+        let first: Option<DrmProducerMsg> = if held_frame.is_some() && credit > 0 {
+            // We are holding a frame we are allowed to send: never block. Waiting would park it
+            // until the worker happens to produce another message, and if capture then returned
+            // WouldBlock it would sit there until the stall teardown.
+            frame_rx.try_recv().ok()
+        } else if credit <= 0 {
+            // No credit: wait for an ack or for another producer message. An ack wake yields no
+            // message and falls through to the send decision below. Both arms are cancel-safe
+            // (`mpsc::Receiver::recv`, and `wait_readable` is readiness-only).
+            //
+            // Bounded, because while we are gated the worker is not grabbing and so cannot advance
+            // its own MAX_STALLED watchdog: a consumer that stops acking without closing the socket
+            // would otherwise hold this connection -- and the privileged DRM context behind it --
+            // open indefinitely.
+            const CREDIT_STALL: std::time::Duration = std::time::Duration::from_secs(5);
+            // Ok(None) = woke on an ack; Ok(Some(None)) = worker gone; Ok(Some(Some(m))) = message.
+            let waited = tokio::time::timeout(CREDIT_STALL, async {
                 tokio::select! {
                     biased;
-                    r = conn.wait_readable() => { r?; None }
-                    m = frame_rx.recv() => match m {
-                        Some(m) => Some(m),
-                        None => break,
-                    },
+                    r = conn.wait_readable() => r.map(|_| None),
+                    m = frame_rx.recv() => Ok(Some(m)),
                 }
+            })
+            .await;
+            match waited {
+                Err(_) => {
+                    log::info!(
+                        "drm: consumer stopped acking for {CREDIT_STALL:?}; closing _drm connection"
+                    );
+                    break;
+                }
+                Ok(Err(err)) => return Err(err),
+                Ok(Ok(None)) => None,
+                Ok(Ok(Some(None))) => break,
+                Ok(Ok(Some(Some(m)))) => Some(m),
             }
         } else {
             match frame_rx.recv().await {
@@ -2398,11 +2415,13 @@ fn drm_capture_worker(
         // descriptor + fd; the CPU path copies the packed BGRA once (Bytes::copy_from_slice).
         let grabbed: Option<std::io::Result<DrmProducerMsg>> = if frames_gated.load(Ordering::Relaxed)
         {
-            // The task is holding a frame it has no credit to send, so anything grabbed now would
-            // only be discarded. Skip the scanout work -- and, on the dma-buf path, a PRIME export
-            // -- rather than spend it in this privileged process for a consumer that is behind. The
-            // cursor poll below still runs so the remote pointer stays live, and `stalled` is
-            // deliberately left untouched: the device is healthy, we are idle by design.
+            // The task has no send credit, so a frame grabbed now could not go out and would only
+            // be superseded before it could. Skip the scanout work -- and, on the dma-buf path, a
+            // PRIME export -- rather than spend it in this privileged process for a consumer that
+            // is behind; the task resumes us the moment an ack lands, so what it then sends is a
+            // fresh grab rather than a stale one. The cursor poll below still runs so the remote
+            // pointer stays live, and `stalled` is left untouched because the device is healthy --
+            // the task bounds this state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
         } else if use_dmabuf {
             Some(match reader.grab_desc() {
