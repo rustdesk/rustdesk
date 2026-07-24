@@ -1,4 +1,6 @@
 mod keyboard;
+#[cfg(target_os = "macos")]
+pub(crate) mod window_targeting;
 /// cbindgen:ignore
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
