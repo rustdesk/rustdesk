@@ -186,6 +186,26 @@ pub fn parse_user_config(text: &str) -> Result<ValidatedUserConfig, ConfigError>
         if !ids.insert(rule.id.clone()) {
             return Err(ConfigError::new(format!("duplicate rule id: {}", rule.id)));
         }
+        if matcher
+            .bundle_ids
+            .iter()
+            .any(|bundle_id| bundle_id.trim().is_empty())
+        {
+            return Err(ConfigError::new(format!(
+                "rule {}: bundle_ids contains an empty or whitespace-only value",
+                rule.id
+            )));
+        }
+        if matcher
+            .bundle_id_prefixes
+            .iter()
+            .any(|bundle_id_prefix| bundle_id_prefix.trim().is_empty())
+        {
+            return Err(ConfigError::new(format!(
+                "rule {}: bundle_id_prefixes contains an empty or whitespace-only value",
+                rule.id
+            )));
+        }
         if matcher.is_empty() {
             return Err(ConfigError::new(format!(
                 "rule {} requires at least one matcher",
@@ -199,6 +219,14 @@ pub fn parse_user_config(text: &str) -> Result<ValidatedUserConfig, ConfigError>
                 "rule {}: layers cannot be combined with layer_min or layer_max",
                 rule.id
             )));
+        }
+        if let (Some(layer_min), Some(layer_max)) = (matcher.layer_min, matcher.layer_max) {
+            if layer_min > layer_max {
+                return Err(ConfigError::new(format!(
+                    "rule {}: layer_min cannot exceed layer_max",
+                    rule.id
+                )));
+            }
         }
         if rule.action == WindowTargetAction::Skip
             && (!matcher.has_bundle_matcher() || !matcher.has_structural_matcher())
@@ -294,6 +322,36 @@ layer_min = 1
     }
 
     #[test]
+    fn rejects_blank_bundle_id_in_skip_rule() {
+        let text = r#"
+version = 1
+mode = "rules"
+[[rules]]
+id = "blank_bundle"
+action = "skip"
+bundle_ids = ["   "]
+layer_min = 1
+"#;
+        let error = parse_user_config(text).unwrap_err().to_string();
+        assert!(error.contains("rule blank_bundle: bundle_ids"));
+    }
+
+    #[test]
+    fn rejects_blank_bundle_id_prefix_in_skip_rule() {
+        let text = r#"
+version = 1
+mode = "rules"
+[[rules]]
+id = "blank_prefix"
+action = "skip"
+bundle_id_prefixes = [""]
+layer_min = 1
+"#;
+        let error = parse_user_config(text).unwrap_err().to_string();
+        assert!(error.contains("rule blank_prefix: bundle_id_prefixes"));
+    }
+
+    #[test]
     fn rejects_exact_and_range_layers_together() {
         let text = r#"
 version = 1
@@ -308,5 +366,22 @@ layer_min = 1
             .unwrap_err()
             .to_string()
             .contains("layers cannot be combined"));
+    }
+
+    #[test]
+    fn rejects_contradictory_layer_bounds() {
+        let text = r#"
+version = 1
+mode = "rules"
+[[rules]]
+id = "bounds"
+action = "forward_only"
+layer_min = 3
+layer_max = 1
+"#;
+        assert!(parse_user_config(text)
+            .unwrap_err()
+            .to_string()
+            .contains("layer_min cannot exceed layer_max"));
     }
 }
