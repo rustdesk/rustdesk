@@ -19,6 +19,18 @@ class StateGlobal {
   final svcStatus = SvcStatus.notReady.obs;
   final RxInt videoConnCount = 0.obs;
   final RxBool isFocused = false.obs;
+  // Latched by the first focus/blur event; the gate fails open until then.
+  bool focusEventsSeen = false;
+
+  void updateFocus(bool focused) {
+    focusEventsSeen = true;
+    isFocused.value = focused;
+  }
+
+  void invalidateFocus() {
+    focusEventsSeen = false;
+  }
+
   // for mobile and web
   bool isInMainPage = true;
   bool isWebVisible = true;

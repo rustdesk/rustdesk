@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Kaikki näytöt"),
         ("#{} monitor", "Näyttö {}"),
         ("conn-e2ee-unavailable-tip", "Päästä päähän -salausta ei voitu vahvistaa.\nEtälaite voi olla vielä määritettävänä. Yritä myöhemmin uudelleen.\nJos tämä jatkuu, palvelin ei ehkä ole luotettava.\nJatketaanko silti?"),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

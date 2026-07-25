@@ -765,5 +765,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Ĉiuj monitoroj"),
         ("#{} monitor", "Monitoro {}"),
         ("conn-e2ee-unavailable-tip", "Ne eblis kontroli la fin-al-finan ĉifradon.\nLa fora aparato eble ankoraŭ estas agordata. Provu denove poste.\nSe tio daŭre okazas, la servilo eble estas nefidinda.\nĈu daŭrigi tamen?"),
+        ("control-remote-when-focus", ""),
     ].iter().cloned().collect();
 }

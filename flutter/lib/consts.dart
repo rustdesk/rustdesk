@@ -143,6 +143,12 @@ const String kOptionPrivacyMode = "privacy_mode";
 const String kOptionTouchMode = "touch-mode";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
+// Opt-in (default off, via the `allow-` prefix; see option2bool): when enabled,
+// a remote session window only forwards mouse input while it is the focused OS
+// window, so a mouse passing over an unfocused multi-session window won't
+// control that remote.
+const String kOptionControlFocusedWindowOnly =
+    "allow-only-control-focused-window";
 const String kOptionCodecPreference = "codec-preference";
 const String kOptionRemoteMenubarDragLeft = "remote-menubar-drag-left";
 const String kOptionRemoteMenubarDragRight = "remote-menubar-drag-right";
