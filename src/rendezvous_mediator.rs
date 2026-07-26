@@ -38,7 +38,6 @@ use crate::{
 };
 
 type Message = RendezvousMessage;
-type RendezvousSender = mpsc::UnboundedSender<Message>;
 
 fn connection_meta(
     control_permissions: Option<ControlPermissions>,
@@ -112,7 +111,6 @@ pub struct RendezvousMediator {
     host: String,
     host_prefix: String,
     keep_alive: i32,
-    rz_sender: RendezvousSender,
 }
 
 impl RendezvousMediator {
@@ -224,13 +222,11 @@ impl RendezvousMediator {
         let host = check_port(&host, RENDEZVOUS_PORT);
         log::info!("start udp: {host}");
         let (mut socket, mut addr) = new_udp_for(&host, CONNECT_TIMEOUT).await?;
-        let (rz_sender, mut rz_out_rx) = mpsc::unbounded_channel::<Message>();
         let mut rz = Self {
             addr: addr.clone(),
             host: host.clone(),
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: crate::DEFAULT_KEEP_ALIVE,
-            rz_sender,
         };
 
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
@@ -289,9 +285,6 @@ impl RendezvousMediator {
                             bail!("Socket receive none. Maybe socks5 server is down.");
                         },
                     }
-                },
-                Some(msg_out) = rz_out_rx.recv() => {
-                    Sink::Framed(&mut socket, &addr).send(&msg_out).await?;
                 },
                 _ = timer.tick() => {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
@@ -451,13 +444,11 @@ impl RendezvousMediator {
         let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
         let key = crate::get_key(true).await;
         crate::secure_tcp(&mut conn, &key).await?;
-        let (rz_sender, mut rz_out_rx) = mpsc::unbounded_channel::<Message>();
         let mut rz = Self {
             addr: conn.local_addr().into_target_addr()?,
             host: host.clone(),
             host_prefix: Self::get_host_prefix(&host),
             keep_alive: crate::DEFAULT_KEEP_ALIVE,
-            rz_sender,
         };
         let mut timer = crate::rustdesk_interval(interval(crate::TIMER_OUT));
         let mut last_register_sent: Option<Instant> = None;
@@ -484,9 +475,6 @@ impl RendezvousMediator {
                     }
                     let msg = Message::parse_from_bytes(&bytes)?;
                     rz.handle_resp(msg.union, Sink::Stream(&mut conn), &server, &mut update_latency).await?
-                }
-                Some(msg_out) = rz_out_rx.recv() => {
-                    Sink::Stream(&mut conn).send(&msg_out).await?;
                 }
                 _ = timer.tick() => {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
@@ -684,8 +672,9 @@ impl RendezvousMediator {
     /// Build the WebRTC answerer for a punch-hole offer and return the SDP answer that rides in
     /// the punch reply (PunchHoleSent / RelayResponse).
     ///
-    /// This is awaited inline on the punch-reply critical path (also serializing the mediator's
-    /// message loop), which is acceptable only because everything awaited here is local-only —
+    /// This is awaited inline on the punch-reply critical path (handle_punch_hole runs as its own
+    /// spawned task, so only this reply is delayed), acceptable only because everything awaited
+    /// here is local-only —
     /// pc construction + DTLS cert keygen + SDP answer, sub-millisecond in practice. Trickle ICE
     /// makes that possible: the answer carries no candidates; STUN/TURN gathering runs afterward
     /// and trickles via IceCandidate messages. Keep network I/O out of this path — actual
@@ -740,10 +729,18 @@ impl RendezvousMediator {
         });
 
         {
-            let sender = self.rz_sender.clone();
+            let host = self.host.clone();
             let socket_addr = return_route.clone();
             let session_key_for_ice = session_key.clone();
             tokio::spawn(async move {
+                // Candidates ride a dedicated TCP connection to the rendezvous server, like
+                // the answer, NOT the mediator channel: that channel is UDP in the default
+                // setup, and target deployments front hbbs with websocket/TCP only, where
+                // its UDP port is unreachable. The server keeps candidate-carrying TCP
+                // connections open, so one lazily-opened connection serves the whole
+                // trickle, and TCP reliability replaces the old 400ms duplicate re-send
+                // (the controller keeps its own re-send for the server->peer UDP downlink).
+                let mut conn = None;
                 while let Some(candidate) = local_ice_rx.recv().await {
                     let mut msg = Message::new();
                     msg.set_ice_candidate(IceCandidate {
@@ -752,15 +749,34 @@ impl RendezvousMediator {
                         candidate,
                         ..Default::default()
                     });
-                    let _ = sender.send(msg.clone());
-                    // The mediator channel to the rendezvous server is UDP in the default setup,
-                    // so a candidate can be lost in flight; re-send once after a short delay (the
-                    // peer's ICE agent dedups repeats, so the second copy is free).
-                    let sender = sender.clone();
-                    tokio::spawn(async move {
-                        sleep(0.4).await;
-                        let _ = sender.send(msg);
-                    });
+                    // One reconnect attempt per candidate: the first send after an hbbs
+                    // restart or an idle-killed connection fails on the stale stream.
+                    for _ in 0..2 {
+                        if conn.is_none() {
+                            match connect_tcp(&*host, CONNECT_TIMEOUT).await {
+                                Ok(s) => conn = Some(s),
+                                Err(err) => {
+                                    log::warn!(
+                                        "failed to connect for WebRTC ICE candidate: {}",
+                                        err
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                        if let Some(s) = conn.as_mut() {
+                            match s.send(&msg).await {
+                                Ok(()) => break,
+                                Err(err) => {
+                                    log::debug!(
+                                        "WebRTC ICE candidate send failed, reconnecting: {}",
+                                        err
+                                    );
+                                    conn = None;
+                                }
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -818,11 +834,13 @@ impl RendezvousMediator {
             ph.control_permissions.clone().into_option(),
             ph.controlled_context.clone().into_option(),
         );
-        let control_permissions = ph.control_permissions.clone().into_option();
-        // WebRTC opens its own ICE sockets, so it must never be used when local traffic is routed
-        // through SOCKS/WebSocket. force_relay is different: relay-only ICE is viable with TURN.
+        // WebRTC opens its own ICE sockets, so it must not run under a SOCKS proxy: candidates
+        // and STUN bypass the proxy and leak the real IP. WebSocket mode does NOT disable it —
+        // ws only tunnels the signaling/relay legs to the server, classic punching stays forced
+        // to relay (`relay` above), and the answer rides the RelayResponse, leaving ICE as the
+        // only P2P path there. force_relay is different: relay-only ICE is viable with TURN.
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
-            && !local_proxy
+            && !Config::is_proxy()
             && (!ph.force_relay || WebRTCStream::has_turn_server());
         let webrtc_sdp_answer = if webrtc_viable {
             self.spawn_webrtc_answerer(
@@ -882,6 +900,23 @@ impl RendezvousMediator {
             peer_addr.set_port(ph.udp_port as u16);
             self.punch_udp_hole(peer_addr, server, msg_punch, meta)
                 .await?;
+            return Ok(());
+        }
+        if !ph.webrtc_sdp_offer.is_empty() {
+            // WebRTC-only request (udp_port <= 0): return the answer over a short-lived TCP
+            // connection to the rendezvous server, like create_relay does. It must NOT ride
+            // the mediator channel: that channel is UDP in the default setup, and the answer
+            // is the largest message of the punch exchange — a single lost or fragmented
+            // datagram costs a whole 3s retry round; hbbs also applies UDP-punch semantics
+            // (source-address observation / is_udp) to PunchHoleSent received over UDP,
+            // which this request never asked for.
+            // No TCP punch connection is created or accepted; the controller retains its
+            // request socket for trickled ICE signaling. IPv6, when present, was started
+            // above and its address is carried in this same response.
+            let mut msg_out = Message::new();
+            msg_out.set_punch_hole_sent(msg_punch);
+            let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            socket.send(&msg_out).await?;
             return Ok(());
         }
         log::debug!("Punch tcp hole to {:?}", peer_addr);
