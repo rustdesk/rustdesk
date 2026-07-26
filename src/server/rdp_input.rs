@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod client {
-    use hbb_common::platform::linux::is_kde;
+    use hbb_common::platform::linux::{DISPLAY_DESKTOP_KDE, XDG_CURRENT_DESKTOP};
 
     use super::*;
 
@@ -308,11 +308,11 @@ pub mod client {
             .any(|name| name.eq_ignore_ascii_case("niri"))
     }
 
-    fn should_scale_pointer_coordinates() -> bool {
-        is_kde()
-            || std::env::var("XDG_CURRENT_DESKTOP")
-                .map(|desktop| desktop_is_niri(&desktop))
-                .unwrap_or(false)
+    lazy_static::lazy_static! {
+        static ref SHOULD_SCALE_POINTER_COORDINATES: bool =
+            std::env::var(XDG_CURRENT_DESKTOP)
+                .map(|desktop| desktop == DISPLAY_DESKTOP_KDE || desktop_is_niri(&desktop))
+                .unwrap_or(false);
     }
 
     pub struct RdpInputMouse {
@@ -340,7 +340,7 @@ pub mod client {
             // For Ubuntu 24.04(Gnome 46), (x,y) is restricted from (0,0) to (400,300), but the actual range in screen is:
             // Logic coordinate from (0,0) to (200x150).
             // Or physical coordinate from (0,0) to (400,300).
-            let scale = if should_scale_pointer_coordinates() {
+            let scale = if *SHOULD_SCALE_POINTER_COORDINATES {
                 if resolution.0 == 0 || stream.get_size().0 == 0 {
                     Some(1.0f64)
                 } else {
