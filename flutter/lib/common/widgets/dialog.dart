@@ -352,6 +352,9 @@ void changeIdWhiteList({Function()? callback}) async {
                 msg = "";
                 isInProgress = true;
               });
+              debugPrint(
+                '[id-whitelist] raw=${controller.text.replaceAll(' ', '␠').replaceAll('\n', r'\n')}',
+              );
               newIdWhiteListField = controller.text.trim();
               var newIdWhiteList = "";
               if (newIdWhiteListField.isEmpty) {
@@ -362,9 +365,10 @@ void changeIdWhiteList({Function()? callback}) async {
                     .split(RegExp(r"[\s,;\n]+"))
                     .where((e) => e.isNotEmpty)
                     .toList();
+                debugPrint('[id-whitelist] ids=$ids');
                 // test id, wildcards '*' and '?' are allowed;
-                // '@' '.' ':' occur in cross-server IDs like "123456789@server:port"
-                final idMatch = RegExp(r"^[a-zA-Z0-9_*?@.:-]+$");
+                // '@' '.' ':' '/' '[' ']' occur in cross-server IDs and WebSocket URIs
+                final idMatch = RegExp(r"^[a-zA-Z0-9_*?@.:/\[\]-]+$");
                 for (final id in ids) {
                   if (!idMatch.hasMatch(id)) {
                     msg = "${translate("Invalid ID")} $id";
@@ -379,6 +383,7 @@ void changeIdWhiteList({Function()? callback}) async {
               if (newIdWhiteList.trim().isEmpty) {
                 newIdWhiteList = defaultOptionWhitelist;
               }
+              debugPrint('[id-whitelist] normalized=$newIdWhiteList');
               await bind.mainSetOption(
                   key: kOptionIdWhitelist, value: newIdWhiteList);
               callback?.call();
