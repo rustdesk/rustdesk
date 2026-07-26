@@ -219,6 +219,18 @@ impl DrmtapLib {
             let (lib, name) = LIB_NAMES
                 .iter()
                 .find_map(|n| Library::new(n).ok().map(|l| (l, *n)))?;
+            // Resolve what we ACTUALLY opened, for the absolute candidate only. That name is a soname
+            // symlink, so a second file declaring the same soname beside the packaged one (an upgrade
+            // leftover, a hand-built .so) can end up being the one it points at, and then the path we
+            // asked for tells the reader nothing about which library is loaded. ONLY for an absolute
+            // name: `dlopen` does not search the process CWD for a bare soname (it uses DT_RUNPATH,
+            // LD_LIBRARY_PATH, the ld.so cache, the default dirs), while `canonicalize` resolves a
+            // relative name against the CWD, so canonicalizing a fallback could name a same-named file
+            // the loader never touched. For those we keep logging the plain name.
+            let real = std::path::Path::new(name)
+                .is_absolute()
+                .then(|| std::fs::canonicalize(name).ok())
+                .flatten();
             // every symbol is required; a missing one means an incompatible .so,
             // so bail to None and let the caller fall back to PipeWire.
             let version: FnVersion = *lib.get(b"drmtap_version").ok()?;
@@ -236,7 +248,12 @@ impl DrmtapLib {
                 );
                 return None;
             }
-            log::info!("libdrmtap loaded: {name} (v{major}.{minor}.{patch})");
+            match real.as_ref().map(|p| p.display().to_string()) {
+                Some(p) if p != name => {
+                    log::info!("libdrmtap loaded: {name} -> {p} (v{major}.{minor}.{patch})")
+                }
+                _ => log::info!("libdrmtap loaded: {name} (v{major}.{minor}.{patch})"),
+            }
             let open: FnOpen = *lib.get(b"drmtap_open").ok()?;
             let close: FnClose = *lib.get(b"drmtap_close").ok()?;
             let list_displays: FnListDisplays = *lib.get(b"drmtap_list_displays").ok()?;
@@ -256,6 +273,28 @@ impl DrmtapLib {
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
+            // A library can REPORT a version whose symbols it does not actually have, and that is not
+            // hypothetical: the multi-GPU accessors landed after an earlier build had already stamped
+            // itself 0.4.15, so a stale copy of that build keeps claiming 0.4.15 while lacking them.
+            // From in here that is indistinguishable from a repointed soname symlink, and it degrades
+            // SILENTLY (the service stops naming the exporting GPU, so the converter is left guessing).
+            // Say it out loud and name the file we really loaded, because the version alone lies.
+            if (minor, patch) >= (4, 15) && (render_node.is_none() || list_devices.is_none()) {
+                log::warn!(
+                    "libdrmtap at {} reports v{major}.{minor}.{patch} but is missing {}: it is a stale \
+                     or pre-release build. Look for another libdrmtap.so.0* beside it (an upgrade \
+                     leftover or a hand-built copy); if that directory is in the linker search path, \
+                     ldconfig points the soname at whichever one it prefers. Multi-GPU display \
+                     enumeration and exporting-GPU selection stay disabled.",
+                    real.as_ref()
+                        .map_or_else(|| name.to_owned(), |p| p.display().to_string()),
+                    match (render_node.is_none(), list_devices.is_none()) {
+                        (true, true) => "drmtap_render_node and drmtap_list_devices",
+                        (true, false) => "drmtap_render_node",
+                        _ => "drmtap_list_devices",
+                    }
+                );
+            }
             Some(DrmtapLib {
                 _lib: lib,
                 open,

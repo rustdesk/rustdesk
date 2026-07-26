@@ -85,14 +85,15 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
 - **Separate opt-in package.** A `--drm` build ships as a distinctly named
   `rustdesk-unattended-wayland` package (Conflicts/Replaces `rustdesk`), so
   enabling consent-free capture is an explicit install choice.
-- **Bundled library, no capabilities.** The package installs `libdrmtap.so.0`
-  under `/usr/lib/rustdesk/` and registers that directory with the dynamic
-  linker so the in-process `dlopen("libdrmtap.so.0")` resolves:
-
-  ```bash
-  # /etc/ld.so.conf.d/rustdesk-unattended-wayland.conf contains /usr/lib/rustdesk
-  ldconfig
-  ```
+- **Bundled library, no capabilities.** The package installs the versioned
+  `libdrmtap.so.0.<minor>.<patch>` plus a `libdrmtap.so.0` soname symlink under
+  `/usr/lib/rustdesk/`, and the in-process `dlopen` names that absolute path
+  (`/usr/lib/rustdesk/libdrmtap.so.0`). The package deliberately does **not**
+  register the directory with the dynamic linker: no
+  `/etc/ld.so.conf.d/` drop-in and no `ldconfig` trigger are shipped, so a
+  private library cannot shadow a system one for unrelated binaries
+  (Debian Policy 10.2). The bare-soname lookups remain only as a fallback for a
+  development build reached through `LD_LIBRARY_PATH`.
 
   There is no `setcap`, no `rustdesk-capture` group, and no privileged binary:
   the capture runs inside the root `--service`, which already holds the
@@ -111,9 +112,11 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
 ## Auditing
 
 ```bash
-# the bundled capture library — no capabilities are set on it
-ls -l /usr/lib/rustdesk/libdrmtap.so.0
-cat /etc/ld.so.conf.d/rustdesk-unattended-wayland.conf   # expect: /usr/lib/rustdesk
+# the bundled capture library and its soname symlink — no capabilities are set on either
+ls -l /usr/lib/rustdesk/libdrmtap.so.0*
+# it must be exactly one real object plus the symlink: a second file with the same soname
+# left beside it can become the one the symlink resolves to
+ls /etc/ld.so.conf.d/ | grep -i rustdesk               # expect: no output (none is shipped)
 # confirm no privileged helper is present (there should be none)
 getcap -r /usr/lib/rustdesk 2>/dev/null                  # expect: no output
 ```

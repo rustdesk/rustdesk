@@ -316,8 +316,9 @@ async fn recv_thread(
     // Bind the converter to the GPU that EXPORTS this display's scanout, which the service
     // named in the display list. Auto-selection can land on a different GPU on a multi-GPU
     // host, and importing a scanout across vendors can fail on an incompatible tiling
-    // modifier. Empty (an older service or a device with no render node) means auto-select,
-    // exactly as before. Every display of one device carries the same node, so a display
+    // modifier. Empty means the service could not name it (an older service, or a device with no
+    // render node of its own): auto-select then, but only where there is nothing to pick wrong, per
+    // the ambiguity check below. Every display of one device carries the same node, so a display
     // index that does not resolve still gets the right answer from the first entry.
     let render_node = displays
         .get(display.max(0) as usize)
