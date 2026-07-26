@@ -140,7 +140,7 @@ class MainActivity : FlutterActivity() {
             thread {
                 try {
                     FileInputStream(source).use { input ->
-                        contentResolver.openOutputStream(destination, "w")?.use { output ->
+                        contentResolver.openOutputStream(destination, "wt")?.use { output ->
                             input.copyTo(output)
                         } ?: throw IllegalStateException("Unable to open the selected destination")
                     }
