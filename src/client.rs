@@ -302,12 +302,10 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
     }
 }
 
-fn request_can_carry_webrtc(udp_port: u16, force_relay: bool) -> bool {
-    // A normal TCP punch request must close its rendezvous socket before reusing that local
-    // address, while WebRTC trickle ICE retains the socket as its signaling bridge. Therefore a
-    // request with udp_port=0 must never carry WebRTC. UDP requests can carry it because their
-    // punch socket is separate; force-relay requests can too because they never enter TCP punching.
-    udp_port > 0 || force_relay
+fn request_allows_tcp_punch(webrtc_sdp_offer: &str) -> bool {
+    // WebRTC trickle ICE retains the rendezvous socket as its signaling bridge. Only a request
+    // without an offer may close that socket and reuse its local address for TCP punching.
+    webrtc_sdp_offer.is_empty()
 }
 
 impl Client {
@@ -456,18 +454,17 @@ impl Client {
         } else {
             (None, None)
         };
-        let ipv6 = if crate::get_ipv6_punch_enabled() {
+        // Under force-relay a direct IPv6 path is not allowed, so don't bind the v6 socket;
+        // the controlled side likewise skips v6 when relaying.
+        let ipv6 = if crate::get_ipv6_punch_enabled() && !interface.is_force_relay() {
             crate::get_ipv6_socket().await
         } else {
             None
         };
-        // Prepare WebRTC only for a possible UDP request, or for force-relay where TURN is the
-        // only WebRTC path. `_start_inner` applies the stricter wire invariant after the UDP NAT
-        // test: an actual request with udp_port=0 never includes the offer.
-        let may_prepare_webrtc = udp.0.is_some() || interface.is_force_relay();
-        let webrtc_offerer = if may_prepare_webrtc
-            && Self::should_create_webrtc_offerer(&interface)
-        {
+        // WebRTC uses its own ICE sockets and does not depend on the legacy UDP punch socket.
+        // When this request carries an offer, `_start_inner` keeps its rendezvous socket solely
+        // for trickle signaling; a separate offer-less request owns any TCP punch attempt.
+        let webrtc_offerer = if Self::should_create_webrtc_offerer(&interface) {
             match WebRTCStream::new("", interface.is_force_relay(), CONNECT_TIMEOUT).await {
                 Ok(stream) => Some(stream),
                 Err(err) => {
@@ -493,14 +490,14 @@ impl Client {
             servers.clone(),
             contained,
         );
-        if udp.0.is_none() {
+        if interface.is_force_relay() || (udp.0.is_none() && !has_webrtc_offerer) {
             return fut.await;
         }
         let preferred_fut = fut.boxed();
         // This is deliberately a pure TCP punch request: its WebRTC argument must stay `None`.
         // TCP punching closes the rendezvous socket before binding a new connection to the same
         // local address; a WebRTC ICE bridge would retain that socket and break the port reuse.
-        // The preferred request above may carry WebRTC only because it owns a separate UDP socket.
+        // The preferred request retains its own socket for WebRTC signaling.
         let fallback_fut = Self::_start_inner(
             peer.to_owned(),
             key.to_owned(),
@@ -566,19 +563,23 @@ impl Client {
 
     /// Whether to build a WebRTC offerer for this connection.
     ///
-    /// Skips it when UDP punching is disabled or a SOCKS proxy/websocket transport is configured:
-    /// WebRTC's ICE binds its own UDP sockets and speaks STUN directly, which would bypass either
-    /// policy (and can leak the real IP through a proxy). Under force_relay the pc uses Relay-only
-    /// ICE, which gathers nothing and can never connect unless a TURN server is configured, so
-    /// skip building a guaranteed-dead pc + STUN/TURN gathering + answerer signaling in that case
-    /// too.
+    /// Skips it when a SOCKS proxy is configured: WebRTC's ICE binds its own UDP sockets and
+    /// speaks STUN directly, which would bypass the proxy policy and can leak the real IP.
+    /// WebSocket mode does NOT skip it: ws only tunnels the signaling/relay legs to the server
+    /// (and `connect_tcp` is ws-aware for them), while ICE remains the only viable P2P path in
+    /// ws deployments where classic punching is forced to relay. Independent of the udp-punch
+    /// option too — the offer rides any request, and a server or peer without WebRTC support
+    /// drops the field, so the race simply proceeds without it.
+    /// Under force_relay the pc uses Relay-only ICE, which gathers nothing and can never connect
+    /// unless a TURN server is configured, so skip building a guaranteed-dead pc + STUN/TURN
+    /// gathering + answerer signaling in that case too.
     /// When force_relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
     /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
-    /// RelayResponse path races it without a P2P preference delay. The caller additionally
-    /// requires either a usable UDP request or force_relay; a normal TCP punch request must never
-    /// carry a WebRTC offer because trickle ICE retains the socket TCP punching needs to reuse.
+    /// RelayResponse path races it without a P2P preference delay. Any request carrying an offer
+    /// keeps its rendezvous socket for trickle signaling and never reuses it for TCP punching; a
+    /// separate offer-less request provides the TCP fallback when force-relay is not requested.
     fn should_create_webrtc_offerer(interface: &impl Interface) -> bool {
-        if !crate::get_udp_punch_enabled() || use_ws() || Config::is_proxy() {
+        if Config::is_proxy() {
             return false;
         }
         if interface.is_force_relay() && !WebRTCStream::has_turn_server() {
@@ -799,25 +800,25 @@ impl Client {
             .unwrap_or((None, None));
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
         let webrtc_sdp_offer =
-            if request_can_carry_webrtc(udp_nat_port, interface.is_force_relay()) {
-                if let Some(stream) = webrtc_offerer.as_ref().and_then(|g| g.stream()) {
-                    match stream.get_local_endpoint_trickle().await {
-                        Ok(endpoint) => endpoint,
-                        Err(err) => {
-                            log::warn!("failed to read local WebRTC offer: {}", err);
-                            String::new()
-                        }
+            if let Some(stream) = webrtc_offerer.as_ref().and_then(|g| g.stream()) {
+                match stream.get_local_endpoint_trickle().await {
+                    Ok(endpoint) => endpoint,
+                    Err(err) => {
+                        log::warn!("failed to read local WebRTC offer: {}", err);
+                        String::new()
                     }
-                } else {
-                    String::new()
                 }
             } else {
-                // Hard protocol invariant: a normal request with udp_port=0 is a TCP punch
-                // request. It must not start WebRTC trickle on the rendezvous socket that TCP
-                // punching needs to close and reuse by local address.
                 String::new()
             };
-        let punch_type = if udp_nat_port > 0 { "UDP" } else { "TCP" };
+        let allow_tcp_punch = request_allows_tcp_punch(&webrtc_sdp_offer);
+        let punch_type = if udp_nat_port > 0 {
+            "UDP"
+        } else if allow_tcp_punch {
+            "TCP"
+        } else {
+            "WebRTC"
+        };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
             token: token.to_owned(),
@@ -893,7 +894,7 @@ impl Client {
                             feedback = ph.feedback;
                             webrtc_sdp_answer = ph.webrtc_sdp_answer;
                             let s = udp.0.take();
-                            if ph.is_udp && s.is_some() {
+                            if udp_nat_port > 0 && ph.is_udp && s.is_some() {
                                 if let Some(s) = s {
                                     allow_err!(s.connect(peer_addr).await);
                                     udp.0 = Some(s);
@@ -1224,6 +1225,7 @@ impl Client {
                 ipv6.0,
                 webrtc_for_connect,
                 webrtc_bridge_stop,
+                allow_tcp_punch,
                 punch_type,
             )
             .await?,
@@ -1252,6 +1254,7 @@ impl Client {
         udp_socket_v6: Option<Arc<UdpSocket>>,
         webrtc_offerer: Option<WebRTCStream>,
         webrtc_bridge_stop: Option<oneshot::Sender<()>>,
+        allow_tcp_punch: bool,
         punch_type: &str,
     ) -> ResultType<(
         Stream,
@@ -1300,14 +1303,16 @@ impl Client {
         let start = std::time::Instant::now();
 
         let mut connect_futures = Vec::new();
-        let fut = connect_tcp_local(peer, Some(local_addr), connect_timeout);
-        connect_futures.push(
-            async move {
-                let conn = fut.await?;
-                Ok((conn, None, "TCP"))
-            }
-            .boxed(),
-        );
+        if allow_tcp_punch {
+            let fut = connect_tcp_local(peer, Some(local_addr), connect_timeout);
+            connect_futures.push(
+                async move {
+                    let conn = fut.await?;
+                    Ok((conn, None, "TCP"))
+                }
+                .boxed(),
+            );
+        }
         if let Some(udp_socket_nat) = udp_socket_nat {
             connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
         }
@@ -1333,8 +1338,13 @@ impl Client {
             );
         }
         // Run all connection attempts concurrently, return the first successful one
-        let (mut conn, kcp, mut typ) = match select_ok(connect_futures).await {
-            Ok(conn) => (Ok(conn.0 .0), conn.0 .1, conn.0 .2),
+        let direct_result = if connect_futures.is_empty() {
+            Err(anyhow!("No direct transport available"))
+        } else {
+            select_ok(connect_futures).await.map(|conn| conn.0)
+        };
+        let (mut conn, kcp, mut typ) = match direct_result {
+            Ok(conn) => (Ok(conn.0), conn.1, conn.2),
             Err(e) => (Err(e), None, ""),
         };
         if let Some(stop) = webrtc_bridge_stop {
@@ -5025,13 +5035,10 @@ async fn test_udp_uat(
     udp_port: Arc<Mutex<u16>>,
     mut stop_udp_rx: oneshot::Receiver<()>,
 ) -> ResultType<()> {
-    let (tx, mut rx) = oneshot::channel::<_>();
-    tokio::spawn(async {
-        if let Ok(v) = crate::test_nat_ipv4().await {
-            tx.send(v).ok();
-        }
-    });
-
+    // The punch port must come only from the rendezvous server's TestNatResponse, which
+    // observes THIS socket's public mapping. A STUN probe binds a different socket and reports
+    // a different NAT mapping, so racing it here could advertise a port the peer can never
+    // reach (and, on symmetric NAT, silently poison the whole UDP punch).
     let start = Instant::now();
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -5057,11 +5064,6 @@ async fn test_udp_uat(
 
     loop {
         tokio::select! {
-            Ok((addr, server)) = &mut rx => {
-                *udp_port.lock().unwrap() = addr.port();
-                log::debug!("UDP NAT test received response from {}: {}", addr, server);
-                break;
-            }
             _ = &mut stop_udp_rx => {
                 log::debug!("UDP NAT test received stop signal after {} packets", packets_sent);
                 break;
@@ -5144,7 +5146,7 @@ async fn udp_nat_connect(
 
 #[cfg(test)]
 mod webrtc_race_tests {
-    use super::{race_transports_prefer_webrtc, request_can_carry_webrtc};
+    use super::{race_transports_prefer_webrtc, request_allows_tcp_punch};
     use hbb_common::{
         anyhow::anyhow,
         futures::future::{BoxFuture, FutureExt},
@@ -5172,10 +5174,9 @@ mod webrtc_race_tests {
     const NOT_P2P: fn(&&'static str) -> bool = |_| false;
 
     #[test]
-    fn tcp_punch_request_never_carries_webrtc() {
-        assert!(!request_can_carry_webrtc(0, false));
-        assert!(request_can_carry_webrtc(1, false));
-        assert!(request_can_carry_webrtc(0, true));
+    fn webrtc_request_never_reuses_its_signaling_socket_for_tcp_punch() {
+        assert!(request_allows_tcp_punch(""));
+        assert!(!request_allows_tcp_punch("webrtc://offer"));
     }
 
     #[tokio::test]
