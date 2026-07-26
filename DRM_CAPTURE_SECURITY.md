@@ -75,6 +75,18 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
   reading but cannot write it. The **CPU fallback path** instead carries plain
   packed-BGRA bytes over the same authorized socket (no fd passing, no shared
   memory).
+- **When the CPU fallback is chosen.** The split path is the default; the
+  consumer asks the service for the CPU-converted frame in three cases: the
+  `.so` predates the split (no `drmtap_open_render` / `drmtap_convert_dmabuf`),
+  no render node can be opened for this seat, or a previous convert on this
+  display already failed. A fourth case is a **multi-GPU safety fallback**: if
+  the service could not name the render node of the GPU that exports the scanout
+  (an older `libdrmtap` without `drmtap_render_node`) and the host has more than
+  one render node, the consumer refuses to guess one, because importing a scanout
+  on a device that did not export it can succeed and return corrupted pixels
+  rather than fail. The conversion then happens in the service, on the device it
+  already has open, so it is correct by construction. Hosts with a single render
+  node have nothing to pick wrong and keep the DMA-BUF fast path.
 
 ## Deployment
 
