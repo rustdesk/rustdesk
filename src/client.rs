@@ -1401,6 +1401,10 @@ impl AudioHandler {
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
+        if !is_supported_audio_channel_count(f.channels) {
+            log::error!("Unsupported audio channel count: {}", f.channels);
+            return;
+        }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
@@ -1537,6 +1541,23 @@ impl AudioHandler {
         stream.play()?;
         self.audio_stream = Some(Box::new(stream));
         Ok(())
+    }
+}
+
+fn is_supported_audio_channel_count(channels: u32) -> bool {
+    (1..=2).contains(&channels)
+}
+
+#[cfg(test)]
+mod audio_format_tests {
+    use super::is_supported_audio_channel_count;
+
+    #[test]
+    fn only_mono_and_stereo_are_supported() {
+        assert!(is_supported_audio_channel_count(1));
+        assert!(is_supported_audio_channel_count(2));
+        assert!(!is_supported_audio_channel_count(0));
+        assert!(!is_supported_audio_channel_count(u32::MAX));
     }
 }
 
