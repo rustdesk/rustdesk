@@ -122,6 +122,24 @@ fn drm_clear_prefer_cpu() {
     DRM_PREFER_CPU.store(0, Ordering::Relaxed);
 }
 
+// How many render nodes this host exposes. Only used to tell "there is nothing to pick wrong" (one
+// node) from "auto-selection is a guess" (several), so a single readdir per stream start is enough
+// and it is deliberately not cached: a GPU can be bound or unbound while the service runs. On an
+// unreadable /dev/dri we report 0 and keep the previous auto-select behavior, because a seat that
+// cannot even list /dev/dri will fail to open a render node anyway and land on the CPU path.
+fn render_node_count() -> usize {
+    std::fs::read_dir("/dev/dri").map_or(0, |entries| {
+        entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .map_or(false, |n| n.starts_with("renderD"))
+            })
+            .count()
+    })
+}
+
 // Coalesce the uinput-range refresh that every DrmDisplaysChanged triggers. A multi-monitor hotplug
 // delivers that message once PER captured display (one recv_thread each), but the uinput desktop rect
 // is global and idempotent, so one refresh serves the whole burst. UINPUT_REFRESH_GEN records the
@@ -301,12 +319,22 @@ async fn recv_thread(
     // modifier. Empty (an older service or a device with no render node) means auto-select,
     // exactly as before. Every display of one device carries the same node, so a display
     // index that does not resolve still gets the right answer from the first entry.
-    let force_cpu = drm_prefer_cpu(display);
     let render_node = displays
         .get(display.max(0) as usize)
         .or_else(|| displays.first())
         .map(|d| d.render_node.clone())
         .unwrap_or_default();
+    // An unnamed exporter on a host that HAS more than one render node is not safe to auto-select.
+    // The failure is silent: on a single-SoC multi-device host (a Jetson exports the scanout from
+    // nvidia-drm while the first render node belongs to tegra) importing the other device's scanout
+    // SUCCEEDS and yields corrupted pixels, so there is no convert error for the prefer-cpu bit above
+    // to learn from - the stream just looks broken. The node is empty when the service ran against a
+    // libdrmtap without `drmtap_render_node` (we dlopen by soname, so the runtime .so can be older
+    // than the one this was built against). Ask for the CPU path instead: the service converts on the
+    // device it already has open, which is correct by construction. Single-render-node hosts (the
+    // common case) keep the dma-buf fast path untouched.
+    let ambiguous_gpu = render_node.is_empty() && render_node_count() > 1;
+    let force_cpu = drm_prefer_cpu(display) || ambiguous_gpu;
     let mut converter = if force_cpu {
         None
     } else {
@@ -316,7 +344,10 @@ async fn recv_thread(
     if need_cpu {
         log::info!(
             "drm: requesting the CPU-converted frame path for display {display} ({})",
-            if force_cpu {
+            if ambiguous_gpu {
+                "the service did not name the exporting GPU and this host has several render nodes; \
+                 auto-selecting one can import the scanout on the wrong device and silently corrupt it"
+            } else if force_cpu {
                 "a prior consumer convert failed, e.g. multi-GPU render-node mismatch"
             } else {
                 "no render-node convert context: drmtap_open_render failed or old .so"
