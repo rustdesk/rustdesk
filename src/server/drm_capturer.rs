@@ -132,9 +132,13 @@ fn render_node_count() -> usize {
         entries
             .filter_map(|e| e.ok())
             .filter(|e| {
+                // `renderD` plus a numeric minor, so a stray `renderD.backup` or `renderDfoo` cannot
+                // inflate the count and push a genuinely single-GPU host onto the CPU path.
                 e.file_name()
                     .to_str()
-                    .map_or(false, |n| n.starts_with("renderD"))
+                    .and_then(|n| n.strip_prefix("renderD"))
+                    .and_then(|minor| minor.parse::<u32>().ok())
+                    .is_some()
             })
             .count()
     })

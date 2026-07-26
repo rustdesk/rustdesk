@@ -114,8 +114,10 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
 ```bash
 # the bundled capture library and its soname symlink — no capabilities are set on either
 ls -l /usr/lib/rustdesk/libdrmtap.so.0*
-# it must be exactly one real object plus the symlink: a second file with the same soname
-# left beside it can become the one the symlink resolves to
+# the dlopen names the symlink by absolute path, so what matters is where the symlink points:
+readlink /usr/lib/rustdesk/libdrmtap.so.0   # expect: the versioned object shipped by the package
+# and there should be no other object left beside it (a leftover is not loaded on its own, but it
+# is what a stray ldconfig over this directory would repoint the symlink to)
 ls /etc/ld.so.conf.d/ | grep -i rustdesk               # expect: no output (none is shipped)
 # confirm no privileged helper is present (there should be none)
 getcap -r /usr/lib/rustdesk 2>/dev/null                  # expect: no output

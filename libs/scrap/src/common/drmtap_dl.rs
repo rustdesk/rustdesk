@@ -248,12 +248,6 @@ impl DrmtapLib {
                 );
                 return None;
             }
-            match real.as_ref().map(|p| p.display().to_string()) {
-                Some(p) if p != name => {
-                    log::info!("libdrmtap loaded: {name} -> {p} (v{major}.{minor}.{patch})")
-                }
-                _ => log::info!("libdrmtap loaded: {name} (v{major}.{minor}.{patch})"),
-            }
             let open: FnOpen = *lib.get(b"drmtap_open").ok()?;
             let close: FnClose = *lib.get(b"drmtap_close").ok()?;
             let list_displays: FnListDisplays = *lib.get(b"drmtap_list_displays").ok()?;
@@ -273,26 +267,43 @@ impl DrmtapLib {
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
+            // Log the load only now that every required symbol resolved: this function still returns
+            // None on a missing one, and announcing success first would print "libdrmtap loaded"
+            // followed by "libdrmtap not available" for the same library.
+            let loaded_from = real
+                .as_ref()
+                .map_or_else(|| name.to_owned(), |p| p.display().to_string());
+            if loaded_from == name {
+                log::info!("libdrmtap loaded: {name} (v{major}.{minor}.{patch})");
+            } else {
+                log::info!("libdrmtap loaded: {name} -> {loaded_from} (v{major}.{minor}.{patch})");
+            }
             // A library can REPORT a version whose symbols it does not actually have, and that is not
             // hypothetical: the multi-GPU accessors landed after an earlier build had already stamped
             // itself 0.4.15, so a stale copy of that build keeps claiming 0.4.15 while lacking them.
-            // From in here that is indistinguishable from a repointed soname symlink, and it degrades
-            // SILENTLY (the service stops naming the exporting GPU, so the converter is left guessing).
-            // Say it out loud and name the file we really loaded, because the version alone lies.
-            if (minor, patch) >= (4, 15) && (render_node.is_none() || list_devices.is_none()) {
+            // It degrades SILENTLY (the service stops naming the exporting GPU, so the converter is
+            // left guessing), so say it out loud and name the file, because the version alone lies.
+            let (no_node, no_devices) = (render_node.is_none(), list_devices.is_none());
+            if (minor, patch) >= (4, 15) && (no_node || no_devices) {
+                let missing = if no_node && no_devices {
+                    "drmtap_render_node and drmtap_list_devices"
+                } else if no_node {
+                    "drmtap_render_node"
+                } else {
+                    "drmtap_list_devices"
+                };
+                // Name only the capability each absent symbol actually costs.
+                let effect = if no_node && no_devices {
+                    "Multi-GPU display enumeration and exporting-GPU selection stay disabled."
+                } else if no_node {
+                    "Exporting-GPU selection stays disabled."
+                } else {
+                    "Multi-GPU display enumeration stays disabled."
+                };
                 log::warn!(
-                    "libdrmtap at {} reports v{major}.{minor}.{patch} but is missing {}: it is a stale \
-                     or pre-release build. Look for another libdrmtap.so.0* beside it (an upgrade \
-                     leftover or a hand-built copy); if that directory is in the linker search path, \
-                     ldconfig points the soname at whichever one it prefers. Multi-GPU display \
-                     enumeration and exporting-GPU selection stay disabled.",
-                    real.as_ref()
-                        .map_or_else(|| name.to_owned(), |p| p.display().to_string()),
-                    match (render_node.is_none(), list_devices.is_none()) {
-                        (true, true) => "drmtap_render_node and drmtap_list_devices",
-                        (true, false) => "drmtap_render_node",
-                        _ => "drmtap_list_devices",
-                    }
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     {missing}: it is a stale or pre-release build. Check what the soname symlink \
+                     points at and remove any leftover libdrmtap.so.0* beside it. {effect}"
                 );
             }
             Some(DrmtapLib {
