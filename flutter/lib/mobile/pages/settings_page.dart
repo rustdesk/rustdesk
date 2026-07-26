@@ -1015,7 +1015,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   ),
                   leading: Icon(Icons.fingerprint)),
             SettingsTile(
-                onPressed: (context) => onCopyFingerprint(_myId),
+                onPressed: (context) => onCopyId(_myId),
                 title: Text(translate("ID")),
                 value: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
