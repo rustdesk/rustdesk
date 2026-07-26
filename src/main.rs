@@ -19,6 +19,7 @@ fn main() {
 #[cfg(not(any(
     target_os = "android",
     target_os = "ios",
+    target_env = "ohos",
     feature = "flutter"
 )))]
 fn main() {
