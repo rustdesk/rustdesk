@@ -755,9 +755,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.71.1"
+version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
 dependencies = [
  "bitflags 2.9.1",
  "cexpr",
@@ -4304,11 +4304,11 @@ dependencies = [
 [[package]]
 name = "kcp-sys"
 version = "0.1.0"
-source = "git+https://github.com/rustdesk-org/kcp-sys#32a6c09fc6223f54aea83981a6aa8995931d29be"
+source = "git+https://github.com/rustdesk-org/kcp-sys?branch=rustdesk-patches#acd13bad5248c7ea0f4c0595a627c308af210fb1"
 dependencies = [
  "anyhow",
  "auto_impl",
- "bindgen 0.71.1",
+ "bindgen 0.72.1",
  "bitflags 2.9.1",
  "bytes",
  "cc",
