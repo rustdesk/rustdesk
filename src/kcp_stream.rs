@@ -20,6 +20,22 @@ pub struct KcpStream {
 }
 
 impl KcpStream {
+    // Engage KCP's built-in congestion control (nc=0) unless disabled by option: pure turbo
+    // (nc=1) keeps blasting a full 1024-segment window through loss, which on constrained
+    // links amplifies brief loss into a spiral users experience as stalls or drops. This is
+    // sender-side only, so no wire negotiation is needed and either peer may run either
+    // profile. Requires kcp-sys from the `rustdesk-patches` branch, which wires the config
+    // factory into connection setup (on older revs the factory was stored but never consulted).
+    fn apply_kcp_config(endpoint: &mut KcpEndpoint) {
+        if crate::get_kcp_cc_enabled() {
+            endpoint.set_kcp_config_factory(Box::new(|conv| {
+                let mut config = kcp_sys::ffi_safe::KcpConfig::new_turbo(conv);
+                config.nc = Some(0);
+                config
+            }));
+        }
+    }
+
     fn create_framed(stream: stream::KcpStream, local_addr: Option<SocketAddr>) -> Stream {
         Stream::Tcp(FramedStream(
             tokio_util::codec::Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
@@ -35,6 +51,7 @@ impl KcpStream {
         init_packet: Option<BytesMut>,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
+        Self::apply_kcp_config(&mut endpoint);
         endpoint.run().await;
 
         let (input, output) = (
@@ -70,6 +87,7 @@ impl KcpStream {
         timeout: std::time::Duration,
     ) -> ResultType<(Self, Stream)> {
         let mut endpoint = KcpEndpoint::new();
+        Self::apply_kcp_config(&mut endpoint);
         endpoint.run().await;
 
         let (input, output) = (
@@ -104,6 +122,13 @@ impl KcpStream {
         let udp = udp_socket.clone();
         tokio::spawn(async move {
             let mut buf = vec![0; 1500];
+            // A connected UDP socket surfaces ICMP port-unreachable as an error on
+            // send/recv (WSAECONNRESET 10054 on Windows, ECONNREFUSED on Linux). For UDP
+            // these are advisory: a stray ICMP from a NAT rebind glitch or a momentary
+            // peer hiccup does not mean the path is dead, and KCP retransmits through it.
+            // Treat socket errors as packet loss instead of tearing the session down;
+            // a truly dead link is reaped by the KCP pong timeout / app-level timeouts.
+            // The short sleep prevents a persistently failing socket from busy-spinning.
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
@@ -112,8 +137,8 @@ impl KcpStream {
                     }
                     Some(data) = output.recv() => {
                         if let Err(e) = udp.send(&data.inner()).await {
-                            log::debug!("KCP send error: {:?}", e);
-                            break;
+                            log::debug!("KCP send error (treated as loss): {:?}", e);
+                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                         }
                     }
                     result = udp.recv_from(&mut buf) => {
@@ -127,8 +152,8 @@ impl KcpStream {
                                     .await.ok();
                             }
                             Err(e) => {
-                                log::debug!("KCP recv_from error: {:?}", e);
-                                break;
+                                log::debug!("KCP recv_from error (treated as loss): {:?}", e);
+                                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                             }
                         }
                     }

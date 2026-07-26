@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
@@ -2442,16 +2442,27 @@ pub fn is_udp_disabled() -> bool {
     Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
+pub const OPTION_ENABLE_KCP_CC: &str = "enable-kcp-congestion-control";
+
+// Default ON ("enable-" option2bool semantics); set "N" to fall back to the pure
+// turbo profile (nc=1, no congestion window).
+#[inline]
+pub fn get_kcp_cc_enabled() -> bool {
+    config::option2bool(
+        OPTION_ENABLE_KCP_CC,
+        &Config::get_option(OPTION_ENABLE_KCP_CC),
+    )
+}
+
 // this crate https://github.com/yoshd/stun-client supports nat type
 async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
+        .await?
+        .find(|x| x.is_ipv6())
     else {
         bail!(
             "Failed to resolve STUN ipv6 server address: {}",
@@ -2468,14 +2479,13 @@ async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
 }
 
 async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u8; 4], 0));
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
+        .await?
+        .find(|x| x.is_ipv4())
     else {
         bail!(
             "Failed to resolve STUN ipv4 server address: {}",
@@ -2487,7 +2497,7 @@ async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
     Ok(if addr.ip().is_ipv4() {
         (addr, stun_server.to_owned())
     } else {
-        bail!("STUN server returned non-IPv6 address: {}", addr)
+        bail!("STUN server returned non-IPv4 address: {}", addr)
     })
 }
 
@@ -2526,10 +2536,9 @@ pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    let addr = STUNS_V6[0]
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    let addr = tokio::net::lookup_host(STUNS_V6[0])
+        .await?
+        .find(|x| x.is_ipv6())
         .ok_or_else(|| {
             anyhow!(
                 "Failed to resolve STUN ipv6 server address: {}",
@@ -2660,7 +2669,14 @@ pub async fn punch_udp(
                 }
             }
             res = socket.recv(&mut data) => match res {
-                Err(e) => bail!("UDP punch failed, {packets_sent} packets sent: {e}"),
+                Err(e) => {
+                    // While the hole is still forming, ICMP unreachable from the peer's NAT
+                    // is expected and surfaces as ConnectionReset/Refused on a connected
+                    // socket (notably 10054 on Windows). Treat it as loss and keep punching;
+                    // MAX_TIME above still bounds the whole attempt.
+                    log::debug!("UDP punch recv error (treated as loss): {e}");
+                    hbb_common::sleep(0.01).await;
+                }
                 Ok(n) => {
                     // log::debug!("UDP punch succeeded after sending {} packets after {:?}", packets_sent, tm.elapsed());
                     if listen {
