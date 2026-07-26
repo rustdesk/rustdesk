@@ -302,6 +302,19 @@ pub mod client {
         }
     }
 
+    fn desktop_is_niri(desktop: &str) -> bool {
+        desktop
+            .split(':')
+            .any(|name| name.eq_ignore_ascii_case("niri"))
+    }
+
+    fn should_scale_pointer_coordinates() -> bool {
+        is_kde()
+            || std::env::var("XDG_CURRENT_DESKTOP")
+                .map(|desktop| desktop_is_niri(&desktop))
+                .unwrap_or(false)
+    }
+
     pub struct RdpInputMouse {
         conn: Arc<SyncConnection>,
         session: Path<'static>,
@@ -327,7 +340,7 @@ pub mod client {
             // For Ubuntu 24.04(Gnome 46), (x,y) is restricted from (0,0) to (400,300), but the actual range in screen is:
             // Logic coordinate from (0,0) to (200x150).
             // Or physical coordinate from (0,0) to (400,300).
-            let scale = if is_kde() {
+            let scale = if should_scale_pointer_coordinates() {
                 if resolution.0 == 0 || stream.get_size().0 == 0 {
                     Some(1.0f64)
                 } else {
@@ -345,6 +358,19 @@ pub mod client {
                 scale,
                 position: (pos.0 as f64, pos.1 as f64),
             })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::desktop_is_niri;
+
+        #[test]
+        fn detects_niri_in_desktop_list() {
+            assert!(desktop_is_niri("niri"));
+            assert!(desktop_is_niri("NIRI"));
+            assert!(desktop_is_niri("GNOME:niri"));
+            assert!(!desktop_is_niri("GNOME"));
         }
     }
 
