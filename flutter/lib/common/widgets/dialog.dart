@@ -362,11 +362,11 @@ void changeIdWhiteList({Function()? callback}) async {
                     .split(RegExp(r"[\s,;\n]+"))
                     .where((e) => e.isNotEmpty)
                     .toList();
-                // test id, wildcards '*' and '?' are allowed;
-                // '@' '.' ':' '/' '[' ']' occur in cross-server IDs and WebSocket URIs
-                final idMatch = RegExp(r"^[a-zA-Z0-9_*?@.:/\[\]-]+$");
+                // Separators are handled above; allow all other Unicode characters.
                 for (final id in ids) {
-                  if (!idMatch.hasMatch(id)) {
+                  final hasControlCharacters = id.runes.any(
+                      (char) => char <= 0x1f || (char >= 0x7f && char <= 0x9f));
+                  if (hasControlCharacters) {
                     msg = "${translate("Invalid ID")} $id";
                     setState(() {
                       isInProgress = false;
