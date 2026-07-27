@@ -3,7 +3,7 @@ use std::{
     ffi::c_void,
     ptr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, OnceLock,
     },
 };
@@ -191,11 +191,38 @@ struct CallbackContext {
     queue: Arc<Mutex<PcmQueue>>,
 }
 
-// A failed Release cannot prove that native code has stopped using userData.
-// Keep only those exceptional contexts alive to avoid a use-after-free.
-fn quarantined_callback_contexts() -> &'static Mutex<Vec<Box<CallbackContext>>> {
-    static CONTEXTS: OnceLock<Mutex<Vec<Box<CallbackContext>>>> = OnceLock::new();
-    CONTEXTS.get_or_init(|| Mutex::new(Vec::new()))
+fn callback_contexts() -> &'static Mutex<HashMap<usize, Arc<CallbackContext>>> {
+    static CONTEXTS: OnceLock<Mutex<HashMap<usize, Arc<CallbackContext>>>> = OnceLock::new();
+    CONTEXTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn register_callback_context(queue: Arc<Mutex<PcmQueue>>) -> usize {
+    static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+    let context = Arc::new(CallbackContext {
+        active: AtomicBool::new(true),
+        queue,
+    });
+    loop {
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        if id == 0 {
+            continue;
+        }
+        let mut contexts = callback_contexts().lock().unwrap();
+        if let std::collections::hash_map::Entry::Vacant(entry) = contexts.entry(id) {
+            entry.insert(context);
+            return id;
+        }
+    }
+}
+
+fn get_callback_context(id: usize) -> Option<Arc<CallbackContext>> {
+    callback_contexts().lock().unwrap().get(&id).cloned()
+}
+
+fn unregister_callback_context(id: usize) {
+    if id != 0 {
+        callback_contexts().lock().unwrap().remove(&id);
+    }
 }
 
 unsafe extern "C" fn write_pcm(
@@ -211,7 +238,9 @@ unsafe extern "C" fn write_pcm(
     if byte_len % std::mem::size_of::<f32>() != 0 {
         return AUDIO_DATA_CALLBACK_RESULT_INVALID;
     }
-    let context = unsafe { &*(user_data as *const CallbackContext) };
+    let Some(context) = get_callback_context(user_data as usize) else {
+        return AUDIO_DATA_CALLBACK_RESULT_INVALID;
+    };
     if !context.active.load(Ordering::Acquire) {
         return AUDIO_DATA_CALLBACK_RESULT_INVALID;
     }
@@ -238,12 +267,8 @@ pub struct OhosAudioOutput {
     session_id: String,
     queue: Arc<Mutex<PcmQueue>>,
     renderer: *mut OH_AudioRenderer,
-    callback_context: *mut CallbackContext,
+    callback_context_id: usize,
 }
-
-// The renderer handle is only accessed by the audio worker thread. The OHAudio
-// callback receives only the separately owned callback context.
-unsafe impl Send for OhosAudioOutput {}
 
 impl OhosAudioOutput {
     pub fn new(session_id: String) -> Self {
@@ -253,7 +278,7 @@ impl OhosAudioOutput {
                 48_000 * 2 * PCM_BUFFER_SECONDS,
             ))),
             renderer: ptr::null_mut(),
-            callback_context: ptr::null_mut(),
+            callback_context_id: 0,
         }
     }
 
@@ -319,19 +344,16 @@ impl OhosAudioOutput {
             return self.fail("Unable to configure OHAudio renderer usage");
         }
 
-        let callback_context = Box::into_raw(Box::new(CallbackContext {
-            active: AtomicBool::new(true),
-            queue: self.queue.clone(),
-        }));
+        let callback_context_id = register_callback_context(self.queue.clone());
         let callback_result = unsafe {
             OH_AudioStreamBuilder_SetRendererWriteDataCallback(
                 builder,
                 Some(write_pcm),
-                callback_context.cast::<c_void>(),
+                callback_context_id as *mut c_void,
             )
         };
         if callback_result != AUDIOSTREAM_SUCCESS {
-            Self::drop_callback_context(callback_context);
+            unregister_callback_context(callback_context_id);
             unsafe {
                 OH_AudioStreamBuilder_Destroy(builder);
             }
@@ -343,24 +365,24 @@ impl OhosAudioOutput {
             OH_AudioStreamBuilder_Destroy(builder);
         }
         if renderer_result != AUDIOSTREAM_SUCCESS || renderer.is_null() {
-            if renderer.is_null() {
-                Self::drop_callback_context(callback_context);
-            } else {
-                Self::deactivate_callback_context(callback_context);
-                let release_result = Self::release_native_renderer(renderer);
-                Self::finish_callback_context(callback_context, release_result);
+            Self::deactivate_callback_context(callback_context_id);
+            self.queue.lock().unwrap().clear();
+            if !renderer.is_null() {
+                Self::release_native_renderer(renderer);
             }
+            unregister_callback_context(callback_context_id);
             return self.fail("Unable to create OHAudio renderer");
         }
         let start_result = unsafe { OH_AudioRenderer_Start(renderer) };
         if start_result != AUDIOSTREAM_SUCCESS {
-            Self::deactivate_callback_context(callback_context);
-            let release_result = Self::release_native_renderer(renderer);
-            Self::finish_callback_context(callback_context, release_result);
+            Self::deactivate_callback_context(callback_context_id);
+            self.queue.lock().unwrap().clear();
+            Self::release_native_renderer(renderer);
+            unregister_callback_context(callback_context_id);
             return self.fail("Unable to start OHAudio renderer");
         }
         self.renderer = renderer;
-        self.callback_context = callback_context;
+        self.callback_context_id = callback_context_id;
         mark_active(&self.session_id);
         Ok(())
     }
@@ -379,43 +401,9 @@ impl OhosAudioOutput {
         Err(error)
     }
 
-    fn deactivate_callback_context(callback_context: *mut CallbackContext) {
-        if callback_context.is_null() {
-            return;
-        }
-        unsafe {
-            (*callback_context).active.store(false, Ordering::Release);
-        }
-    }
-
-    fn drop_callback_context(callback_context: *mut CallbackContext) {
-        if callback_context.is_null() {
-            return;
-        }
-        Self::deactivate_callback_context(callback_context);
-        unsafe {
-            drop(Box::from_raw(callback_context));
-        }
-    }
-
-    fn finish_callback_context(callback_context: *mut CallbackContext, release_result: i32) {
-        if callback_context.is_null() {
-            return;
-        }
-        if release_result == AUDIOSTREAM_SUCCESS {
-            Self::drop_callback_context(callback_context);
-        } else {
-            log::error!(
-                "OH_AudioRenderer_Release failed: {}; retaining callback context",
-                release_result
-            );
-            Self::deactivate_callback_context(callback_context);
-            unsafe {
-                quarantined_callback_contexts()
-                    .lock()
-                    .unwrap()
-                    .push(Box::from_raw(callback_context));
-            }
+    fn deactivate_callback_context(callback_context_id: usize) {
+        if let Some(context) = get_callback_context(callback_context_id) {
+            context.active.store(false, Ordering::Release);
         }
     }
 
@@ -431,21 +419,21 @@ impl OhosAudioOutput {
         if flush_result != AUDIOSTREAM_SUCCESS {
             log::warn!("OH_AudioRenderer_Flush failed: {}", flush_result);
         }
-        unsafe { OH_AudioRenderer_Release(renderer) }
+        let release_result = unsafe { OH_AudioRenderer_Release(renderer) };
+        if release_result != AUDIOSTREAM_SUCCESS {
+            log::error!("OH_AudioRenderer_Release failed: {}", release_result);
+        }
+        release_result
     }
 
     fn release_renderer(&mut self) {
-        let was_active = !self.renderer.is_null() || !self.callback_context.is_null();
-        let callback_context = std::mem::replace(&mut self.callback_context, ptr::null_mut());
-        Self::deactivate_callback_context(callback_context);
+        let was_active = !self.renderer.is_null() || self.callback_context_id != 0;
+        let callback_context_id = std::mem::take(&mut self.callback_context_id);
+        Self::deactivate_callback_context(callback_context_id);
         self.queue.lock().unwrap().clear();
         let renderer = std::mem::replace(&mut self.renderer, ptr::null_mut());
-        if renderer.is_null() {
-            Self::drop_callback_context(callback_context);
-        } else {
-            let release_result = Self::release_native_renderer(renderer);
-            Self::finish_callback_context(callback_context, release_result);
-        }
+        Self::release_native_renderer(renderer);
+        unregister_callback_context(callback_context_id);
         if was_active {
             mark_inactive(&self.session_id);
         }
