@@ -981,7 +981,7 @@ pub fn video_save_directory(root: bool) -> String {
     if let Some(dir) = trim_video_save_directory(&dir) {
         return dir.to_owned();
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
         let mut path = home.to_owned();
         path.push_str(format!("/{appname}/ScreenRecord").as_str());

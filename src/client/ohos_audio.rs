@@ -288,7 +288,7 @@ impl OhosAudioOutput {
             mark_error(&self.session_id, message.clone());
             return Err(message);
         }
-        self.release_renderer();
+        self.release_renderer()?;
         let capacity = (sample_rate as usize)
             .saturating_mul(channels as usize)
             .saturating_mul(PCM_BUFFER_SECONDS);
@@ -393,8 +393,10 @@ impl OhosAudioOutput {
     }
 
     pub fn fail(&mut self, message: &str) -> Result<(), String> {
-        self.release_renderer();
-        let error = message.to_string();
+        let error = match self.release_renderer() {
+            Ok(()) => message.to_string(),
+            Err(release_error) => format!("{}; {}", message, release_error),
+        };
         mark_error(&self.session_id, error.clone());
         Err(error)
     }
@@ -414,14 +416,17 @@ impl OhosAudioOutput {
         Self::deactivate_callback_context(callback_context_id);
         self.queue.lock().unwrap().clear();
         let release_result = Self::release_native_renderer(renderer);
-        unregister_callback_context(callback_context_id);
         if release_result != AUDIOSTREAM_SUCCESS {
             let error = format!(
                 "{}; OH_AudioRenderer_Release failed: {}",
                 message, release_result
             );
-            return self.fail(&error);
+            self.renderer = renderer;
+            self.callback_context_id = callback_context_id;
+            mark_error(&self.session_id, error.clone());
+            return Err(error);
         }
+        unregister_callback_context(callback_context_id);
         self.fail(message)
     }
 
@@ -444,30 +449,31 @@ impl OhosAudioOutput {
         release_result
     }
 
-    fn release_renderer(&mut self) {
+    fn release_renderer(&mut self) -> Result<(), String> {
         let was_active = !self.renderer.is_null() || self.callback_context_id != 0;
+        if !was_active {
+            return Ok(());
+        }
         let callback_context_id = self.callback_context_id;
         Self::deactivate_callback_context(callback_context_id);
         self.queue.lock().unwrap().clear();
         let release_result = Self::release_native_renderer(self.renderer);
         if release_result != AUDIOSTREAM_SUCCESS {
-            mark_error(
-                &self.session_id,
-                format!("OH_AudioRenderer_Release failed: {}", release_result),
-            );
+            let error = format!("OH_AudioRenderer_Release failed: {}", release_result);
+            mark_error(&self.session_id, error.clone());
+            return Err(error);
         }
         self.renderer = ptr::null_mut();
         unregister_callback_context(callback_context_id);
         self.callback_context_id = 0;
-        if was_active && release_result == AUDIOSTREAM_SUCCESS {
-            mark_inactive(&self.session_id);
-        }
+        mark_inactive(&self.session_id);
+        Ok(())
     }
 }
 
 impl Drop for OhosAudioOutput {
     fn drop(&mut self) {
-        self.release_renderer();
+        let _ = self.release_renderer();
         clear_status(&self.session_id);
     }
 }

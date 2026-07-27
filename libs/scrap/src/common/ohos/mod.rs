@@ -3,8 +3,9 @@ use super::{Pixfmt, TraitPixelBuffer};
 pub mod avcodec;
 pub mod direct_render;
 pub use direct_render::{
-    lookup_direct_render_target, register_direct_render_target_lookup, DirectRenderTarget,
-    DirectRenderTargetLookup,
+    lookup_direct_render_target, register_direct_render_target_lookup, register_render_context,
+    register_render_stats_callback, DirectRenderTarget, DirectRenderTargetLookup,
+    RenderStatsCallback,
 };
 pub struct PixelBuffer<'a> {
     data: &'a [u8],

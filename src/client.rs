@@ -1596,6 +1596,8 @@ pub struct VideoHandler {
     _display: usize, // useful for debug
     #[cfg(target_env = "ohos")]
     peer_id: String,
+    #[cfg(target_env = "ohos")]
+    core_session_id: String,
     fail_counter: usize,
     first_frame: bool,
     #[cfg(target_env = "ohos")]
@@ -1603,8 +1605,19 @@ pub struct VideoHandler {
 }
 
 #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
-fn direct_render_target(peer_id: &str, display: usize) -> scrap::ohos::DirectRenderTarget {
-    scrap::ohos::lookup_direct_render_target(peer_id, display).unwrap_or_default()
+fn direct_render_target(
+    peer_id: &str,
+    core_session_id: &str,
+    display: usize,
+    format: CodecFormat,
+) -> scrap::ohos::DirectRenderTarget {
+    let target = scrap::ohos::lookup_direct_render_target(peer_id, display).unwrap_or_default();
+    if matches!(format, CodecFormat::H264 | CodecFormat::H265) {
+        if let Some(surface_id) = target.surface_id {
+            scrap::ohos::register_render_context(surface_id, core_session_id.to_owned(), display);
+        }
+    }
+    target
 }
 
 impl VideoHandler {
@@ -1623,6 +1636,7 @@ impl VideoHandler {
         format: CodecFormat,
         _display: usize,
         #[cfg(target_env = "ohos")] peer_id: &str,
+        #[cfg(target_env = "ohos")] core_session_id: &str,
     ) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
@@ -1636,7 +1650,7 @@ impl VideoHandler {
             decoder: {
                 #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
                 {
-                    let target = direct_render_target(peer_id, _display);
+                    let target = direct_render_target(peer_id, core_session_id, _display, format);
                     Decoder::new_with_render_target(format, luid, target)
                 }
                 #[cfg(all(target_env = "ohos", not(target_arch = "aarch64")))]
@@ -1655,6 +1669,8 @@ impl VideoHandler {
             _display,
             #[cfg(target_env = "ohos")]
             peer_id: peer_id.to_owned(),
+            #[cfg(target_env = "ohos")]
+            core_session_id: core_session_id.to_owned(),
             fail_counter: 0,
             first_frame: true,
             #[cfg(target_env = "ohos")]
@@ -1752,7 +1768,12 @@ impl VideoHandler {
         self.decoder = {
             #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
             {
-                let target = direct_render_target(&self.peer_id, self._display);
+                let target = direct_render_target(
+                    &self.peer_id,
+                    &self.core_session_id,
+                    self._display,
+                    format,
+                );
                 Decoder::new_with_render_target(format, luid, target)
             }
             #[cfg(all(target_env = "ohos", not(target_arch = "aarch64")))]
@@ -3036,6 +3057,8 @@ pub fn start_video_thread<F, T>(
                                 display,
                                 #[cfg(target_env = "ohos")]
                                 id.as_str(),
+                                #[cfg(target_env = "ohos")]
+                                session.core_session_id.as_str(),
                             );
                             if record_state && record_permission {
                                 handler.record_screen(true, id, display, is_view_camera);
@@ -3069,12 +3092,6 @@ pub fn start_video_thread<F, T>(
                                         start.elapsed(),
                                         &mut count,
                                         &mut duration,
-                                    );
-                                    #[cfg(target_env = "ohos")]
-                                    crate::platform::ohos::notify_frame_rendered(
-                                        session.core_session_id.clone(),
-                                        display,
-                                        handler.last_decode_latency_ms(),
                                     );
                                 }
                                 Err(e) => {

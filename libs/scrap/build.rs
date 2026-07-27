@@ -4,7 +4,7 @@ use std::{
     println,
 };
 
-#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "linux-pkg-config"))]
+#[cfg(feature = "linux-pkg-config")]
 fn link_pkg_config(name: &str) -> Vec<PathBuf> {
     // sometimes an override is needed
     let pc_name = match name {
@@ -18,7 +18,7 @@ fn link_pkg_config(name: &str) -> Vec<PathBuf> {
 
     lib.include_paths
 }
-#[cfg(not(all(target_os = "linux", not(target_env = "ohos"), feature = "linux-pkg-config")))]
+#[cfg(not(feature = "linux-pkg-config"))]
 fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
@@ -125,7 +125,11 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
 fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
-    if cfg!(all(target_os = "linux", not(target_env = "ohos"), feature = "linux-pkg-config"))
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    if target_os == "linux"
+        && target_env != "ohos"
+        && cfg!(feature = "linux-pkg-config")
         && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1")
     {
         link_pkg_config(name)

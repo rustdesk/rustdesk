@@ -104,6 +104,7 @@ pub(crate) fn finish_session(session_id: &SessionID) {
 
 pub fn register_render_stats_callback(callback: RenderStatsCallback) {
     *RENDER_STATS_CALLBACK.lock().unwrap() = Some(callback);
+    scrap::ohos::register_render_stats_callback(notify_frame_rendered);
 }
 
 pub(crate) fn notify_frame_rendered(session: String, display: usize, latency: Option<u64>) {

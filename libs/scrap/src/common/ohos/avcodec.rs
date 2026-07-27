@@ -309,10 +309,12 @@ struct SurfaceCallbackState {
     input_callback_count: AtomicU32,
     output_callback_count: AtomicU32,
     render_count: AtomicU32,
+    session_id: Option<String>,
+    display: usize,
 }
 
-impl Default for SurfaceCallbackState {
-    fn default() -> Self {
+impl SurfaceCallbackState {
+    fn new(session_id: Option<String>, display: usize) -> Self {
         Self {
             queues: Mutex::new(SurfaceQueues {
                 input_buffers: VecDeque::new(),
@@ -328,6 +330,8 @@ impl Default for SurfaceCallbackState {
             input_callback_count: AtomicU32::new(0),
             output_callback_count: AtomicU32::new(0),
             render_count: AtomicU32::new(0),
+            session_id,
+            display,
         }
     }
 }
@@ -454,8 +458,6 @@ fn record_surface_output_latency(
     let pending_inputs = input_pts_at.len();
     drop(input_pts_at);
     let submit_to_worker = trace.submitted_at.elapsed();
-    *state.last_decode_latency_ms.lock().unwrap() = Some(submit_to_worker.as_millis() as u64);
-
     Some(SurfaceOutputTrace {
         pts: attr.pts,
         input_wait: trace.input_wait,
@@ -493,7 +495,7 @@ fn surface_output_worker(codec: usize, state: Arc<SurfaceCallbackState>) {
             record_surface_output_latency(&state, &item, &attr, output_queue_depth)
         });
 
-        let render_number = state.render_count.fetch_add(1, Ordering::Relaxed);
+        let render_number = state.render_count.load(Ordering::Relaxed) + 1;
         let trace_sample = output_trace.as_ref().is_some_and(|_| {
             (state.trace_sequence.fetch_add(1, Ordering::Relaxed) + 1)
                 % SURFACE_TRACE_SAMPLE_INTERVAL
@@ -503,12 +505,11 @@ fn surface_output_worker(codec: usize, state: Arc<SurfaceCallbackState>) {
         if render_number < 3 {
             hilog_info(&format!(
                 "OHOS surface render begin number={} index={}",
-                render_number + 1,
-                item.index
+                render_number, item.index
             ));
         }
         let result = unsafe { OH_VideoDecoder_RenderOutputBuffer(codec, item.index) };
-        if let (Some(trace), Some(render_started_at)) = (output_trace, render_started_at) {
+        if let (Some(trace), Some(render_started_at)) = (output_trace.as_ref(), render_started_at) {
             hilog_info(&format!(
                 "OHOS surface trace pts={} input_wait_ms={} submit_to_worker_ms={} output_queue_wait_ms={} output_queue_depth={} pending_inputs={} render_call_ms={} render_result={}",
                 trace.pts,
@@ -522,11 +523,20 @@ fn surface_output_worker(codec: usize, state: Arc<SurfaceCallbackState>) {
             ));
         }
         if result == AV_ERR_OK {
-            if render_number < 3 {
+            let rendered = state.render_count.fetch_add(1, Ordering::Release) + 1;
+            let latency = output_trace
+                .as_ref()
+                .map(|trace| trace.submit_to_worker.as_millis() as u64);
+            *state.last_decode_latency_ms.lock().unwrap() = latency;
+            super::direct_render::notify_frame_rendered(
+                state.session_id.as_deref(),
+                state.display,
+                latency,
+            );
+            if rendered <= 3 {
                 hilog_info(&format!(
                     "OHOS surface render complete number={} index={}",
-                    render_number + 1,
-                    item.index
+                    rendered, item.index
                 ));
             }
         } else {
@@ -576,6 +586,7 @@ pub struct OhosVideoDecoder {
     last_pts: i64,
     input_pts_at: HashMap<i64, Instant>,
     last_decode_latency_ms: Option<u64>,
+    last_observed_render_count: u32,
     frames: Vec<OhosImage>,
 }
 
@@ -619,7 +630,7 @@ impl OhosVideoDecoder {
         height: usize,
         surface_id: Option<u64>,
     ) -> ResultType<Self> {
-        Self::new_with_surface(h264_mime(), width, height, surface_id)
+        Self::new_with_surface(h264_mime(), width, height, surface_id, None, 0)
     }
 
     pub fn new_h265_with_surface(
@@ -627,7 +638,7 @@ impl OhosVideoDecoder {
         height: usize,
         surface_id: Option<u64>,
     ) -> ResultType<Self> {
-        Self::new_with_surface(h265_mime(), width, height, surface_id)
+        Self::new_with_surface(h265_mime(), width, height, surface_id, None, 0)
     }
 
     fn new_with_surface(
@@ -635,15 +646,21 @@ impl OhosVideoDecoder {
         width: usize,
         height: usize,
         surface_id: Option<u64>,
+        session_id: Option<String>,
+        display: usize,
     ) -> ResultType<Self> {
         *LAST_DECODER_INIT_ERROR.lock().unwrap() = String::new();
+        let width_i32 = i32::try_from(width)
+            .map_err(|_| anyhow!("OHOS decoder width is out of range: {}", width))?;
+        let height_i32 = i32::try_from(height)
+            .map_err(|_| anyhow!("OHOS decoder height is out of range: {}", height))?;
         let mime_name = unsafe { CStr::from_ptr(mime).to_string_lossy().into_owned() };
         hilog_info(&format!(
             "OHOS decoder init mime={} width={} height={} surface_id={:?}",
             mime_name, width, height, surface_id
         ));
         // Capability size checks are diagnostics only; some decoders underreport support.
-        unsafe { log_video_size_support(mime, width, height) };
+        unsafe { log_video_size_support(mime, width_i32, height_i32) };
         let codec = unsafe { create_decoder(mime) };
         if codec.is_null() {
             *LAST_DECODER_INIT_ERROR.lock().unwrap() =
@@ -666,7 +683,7 @@ impl OhosVideoDecoder {
             None => ptr::null_mut(),
         };
         let callback_state = if !window.is_null() {
-            Some(Arc::new(SurfaceCallbackState::default()))
+            Some(Arc::new(SurfaceCallbackState::new(session_id, display)))
         } else {
             None
         };
@@ -686,8 +703,8 @@ impl OhosVideoDecoder {
         let mut low_latency_key_available = false;
         let mut low_latency_requested = false;
         unsafe {
-            OH_AVFormat_SetIntValue(format, OH_MD_KEY_WIDTH, width as i32);
-            OH_AVFormat_SetIntValue(format, OH_MD_KEY_HEIGHT, height as i32);
+            OH_AVFormat_SetIntValue(format, OH_MD_KEY_WIDTH, width_i32);
+            OH_AVFormat_SetIntValue(format, OH_MD_KEY_HEIGHT, height_i32);
             OH_AVFormat_SetIntValue(format, OH_MD_KEY_PIXEL_FORMAT, AV_PIXEL_FORMAT_NV12);
             if window.is_null() {
                 OH_AVFormat_SetIntValue(format, OH_MD_KEY_ENABLE_SYNC_MODE, 1);
@@ -831,6 +848,7 @@ impl OhosVideoDecoder {
             last_pts: -1,
             input_pts_at: HashMap::new(),
             last_decode_latency_ms: None,
+            last_observed_render_count: 0,
             frames: Vec::new(),
         })
     }
@@ -964,6 +982,16 @@ impl OhosVideoDecoder {
         } else {
             self.last_decode_latency_ms
         }
+    }
+
+    fn take_surface_rendered_frame(&mut self) -> bool {
+        let Some(state) = self.callback_state.as_ref() else {
+            return false;
+        };
+        let current = state.render_count.load(Ordering::Acquire);
+        let rendered = current != self.last_observed_render_count;
+        self.last_observed_render_count = current;
+        rendered
     }
 
     fn wait_for_input_buffer(&self, timeout: Duration) -> ResultType<BufferItem> {
@@ -1107,13 +1135,29 @@ pub fn new_h26x_decoder(
     target: DirectRenderTarget,
 ) -> ResultType<OhosVideoDecoder> {
     let (width, height) = target.decode_size.unwrap_or((64, 64));
+    let render_context = target
+        .surface_id
+        .and_then(super::direct_render::take_render_context);
+    let (session_id, display) = render_context
+        .map(|context| (Some(context.session_id), context.display))
+        .unwrap_or((None, 0));
     match format {
-        CodecFormat::H264 => {
-            OhosVideoDecoder::new_h264_with_surface(width, height, target.surface_id)
-        }
-        CodecFormat::H265 => {
-            OhosVideoDecoder::new_h265_with_surface(width, height, target.surface_id)
-        }
+        CodecFormat::H264 => OhosVideoDecoder::new_with_surface(
+            h264_mime(),
+            width,
+            height,
+            target.surface_id,
+            session_id,
+            display,
+        ),
+        CodecFormat::H265 => OhosVideoDecoder::new_with_surface(
+            h265_mime(),
+            width,
+            height,
+            target.surface_id,
+            session_id,
+            display,
+        ),
         _ => bail!("unsupported OHOS H26x decoder format: {format:?}"),
     }
 }
@@ -1129,7 +1173,7 @@ pub fn handle_h26x_video_frames(
         for frame in frames.frames.iter() {
             decoder.submit_to_surface_with_key(&frame.data, frame.key)?;
         }
-        return Ok(!frames.frames.is_empty());
+        return Ok(decoder.take_surface_rendered_frame());
     }
     let mut last_frame = OhosImage::empty();
     for frame in frames.frames.iter() {
@@ -1204,13 +1248,11 @@ unsafe fn has_decoder_capability(mime: *const c_char) -> bool {
     !OH_AVCodec_GetCapability(mime, false).is_null()
 }
 
-unsafe fn log_video_size_support(mime: *const c_char, width: usize, height: usize) {
+unsafe fn log_video_size_support(mime: *const c_char, width: i32, height: i32) {
     let capability = OH_AVCodec_GetCapability(mime, false);
     if capability.is_null() {
         return;
     }
-    let width = width as i32;
-    let height = height as i32;
     let size_supported = OH_AVCapability_IsVideoSizeSupported(capability, width, height);
     let mut width_range = OH_AVRange::default();
     let mut height_range = OH_AVRange::default();
@@ -1394,33 +1436,52 @@ fn output_format(codec: *mut OH_AVCodec, buffer: *mut OH_AVBuffer) -> ResultType
 fn output_format_from_avformat(format: *mut OH_AVFormat) -> ResultType<FormatInfo> {
     let mut info = FormatInfo::default();
     unsafe {
-        info.width = get_format_i32(format, OH_MD_KEY_VIDEO_PIC_WIDTH)
-            .or_else(|| get_format_i32(format, OH_MD_KEY_WIDTH))
-            .unwrap_or_default() as usize;
-        info.height = get_format_i32(format, OH_MD_KEY_VIDEO_PIC_HEIGHT)
-            .or_else(|| get_format_i32(format, OH_MD_KEY_HEIGHT))
-            .unwrap_or_default() as usize;
+        info.width = checked_format_dimension(
+            "width",
+            get_format_i32(format, OH_MD_KEY_VIDEO_PIC_WIDTH)
+                .or_else(|| get_format_i32(format, OH_MD_KEY_WIDTH)),
+        )?;
+        info.height = checked_format_dimension(
+            "height",
+            get_format_i32(format, OH_MD_KEY_VIDEO_PIC_HEIGHT)
+                .or_else(|| get_format_i32(format, OH_MD_KEY_HEIGHT)),
+        )?;
         info.pixel_format =
             get_format_i32(format, OH_MD_KEY_PIXEL_FORMAT).unwrap_or(AV_PIXEL_FORMAT_YUVI420);
-        info.stride = get_format_i32(format, OH_MD_KEY_VIDEO_STRIDE)
-            .or_else(|| get_format_i32(format, OH_MD_KEY_WIDTH))
-            .unwrap_or_default() as usize;
-        info.slice_height = get_format_i32(format, OH_MD_KEY_VIDEO_SLICE_HEIGHT)
-            .or_else(|| get_format_i32(format, OH_MD_KEY_HEIGHT))
-            .unwrap_or_default() as usize;
+        info.stride = checked_format_layout_value(
+            "stride",
+            get_format_i32(format, OH_MD_KEY_VIDEO_STRIDE)
+                .or_else(|| get_format_i32(format, OH_MD_KEY_WIDTH)),
+        )?;
+        info.slice_height = checked_format_layout_value(
+            "slice height",
+            get_format_i32(format, OH_MD_KEY_VIDEO_SLICE_HEIGHT)
+                .or_else(|| get_format_i32(format, OH_MD_KEY_HEIGHT)),
+        )?;
         info.range_flag = get_format_i32(format, OH_MD_KEY_RANGE_FLAG);
         info.color_primaries = get_format_i32(format, OH_MD_KEY_COLOR_PRIMARIES);
         info.transfer_characteristics = get_format_i32(format, OH_MD_KEY_TRANSFER_CHARACTERISTICS);
         info.matrix_coefficients = get_format_i32(format, OH_MD_KEY_MATRIX_COEFFICIENTS);
     }
-    if info.width == 0 || info.height == 0 {
-        bail!(
-            "OHOS decoder returned invalid output size {}x{}",
-            info.width,
-            info.height
-        )
-    }
     Ok(info)
+}
+
+fn checked_format_dimension(label: &str, value: Option<i32>) -> ResultType<usize> {
+    let value = value.unwrap_or_default();
+    if value <= 0 {
+        bail!("OHOS decoder returned invalid output {} {}", label, value)
+    }
+    usize::try_from(value)
+        .map_err(|_| anyhow!("OHOS decoder output {} is out of range: {}", label, value).into())
+}
+
+fn checked_format_layout_value(label: &str, value: Option<i32>) -> ResultType<usize> {
+    let value = value.unwrap_or_default();
+    if value < 0 {
+        bail!("OHOS decoder returned invalid output {} {}", label, value)
+    }
+    usize::try_from(value)
+        .map_err(|_| anyhow!("OHOS decoder output {} is out of range: {}", label, value).into())
 }
 
 fn get_format_i32(format: *mut OH_AVFormat, key: *const c_char) -> Option<i32> {
@@ -1454,26 +1515,28 @@ fn checked_input_addr(buffer: *mut OH_AVBuffer, data_len: usize) -> ResultType<(
 }
 
 fn copy_output_image(buffer: *mut OH_AVBuffer, format: FormatInfo) -> ResultType<OhosImage> {
+    let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
+    if capacity < 0 {
+        bail!("failed to query OHOS decoder output buffer capacity")
+    }
+    let capacity = usize::try_from(capacity)
+        .map_err(|_| anyhow!("OHOS decoder output capacity is out of range"))?;
     let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
     if !addr.is_null() {
-        let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
-        if capacity < 0 {
-            bail!("failed to query OHOS decoder output buffer capacity")
-        }
         let required = linear_buffer_required_size(format)?;
-        if required > capacity as usize {
+        if required > capacity {
             bail!(
                 "OHOS decoder output buffer too small: {} < {}",
                 capacity,
                 required
             )
         }
-        return copy_from_linear_buffer(addr, format);
+        return copy_from_linear_buffer(addr, capacity, format);
     }
 
     let native_buffer = unsafe { OH_AVBuffer_GetNativeBuffer(buffer) };
     if !native_buffer.is_null() {
-        let image = copy_from_native_buffer(native_buffer, format);
+        let image = copy_from_native_buffer(native_buffer, capacity, format);
         unsafe {
             let _ = OH_NativeBuffer_Unreference(native_buffer);
         }
@@ -1541,6 +1604,7 @@ fn checked_plane_end(
 
 fn copy_from_native_buffer(
     buffer: *mut OH_NativeBuffer,
+    capacity: usize,
     format: FormatInfo,
 ) -> ResultType<OhosImage> {
     let mut vir_addr: *mut c_void = ptr::null_mut();
@@ -1549,22 +1613,47 @@ fn copy_from_native_buffer(
         unsafe { OH_NativeBuffer_MapPlanes(buffer, &mut vir_addr, &mut planes) },
         "MapPlanes",
     )?;
-    let res = copy_from_planes(vir_addr.cast::<u8>(), &planes, format);
-    unsafe {
-        let _ = OH_NativeBuffer_Unmap(buffer);
+    let result = if vir_addr.is_null() {
+        Err(anyhow!("OHOS NativeBuffer MapPlanes returned a null address").into())
+    } else if planes.plane_count as usize > planes.planes.len() {
+        Err(anyhow!(
+            "OHOS NativeBuffer returned invalid plane count {}",
+            planes.plane_count
+        )
+        .into())
+    } else {
+        copy_from_planes(vir_addr.cast::<u8>(), capacity, &planes, format)
+    };
+    let unmap_result = ensure_ok(unsafe { OH_NativeBuffer_Unmap(buffer) }, "Unmap");
+    match (result, unmap_result) {
+        (Ok(image), Ok(())) => Ok(image),
+        (Err(err), Ok(())) => Err(err),
+        (Ok(_), Err(err)) => Err(err),
+        (Err(err), Err(unmap_err)) => {
+            hilog_warn(&format!(
+                "OHOS NativeBuffer unmap failed after copy error: {unmap_err}"
+            ));
+            Err(err)
+        }
     }
-    res
 }
 
 fn copy_from_planes(
     base: *mut u8,
+    capacity: usize,
     planes: &OH_NativeBuffer_Planes,
     format: FormatInfo,
 ) -> ResultType<OhosImage> {
     match format.pixel_format {
-        AV_PIXEL_FORMAT_YUVI420 => copy_i420_planes(base, planes, format.width, format.height),
-        AV_PIXEL_FORMAT_NV12 => copy_nv12_planes(base, planes, format.width, format.height, false),
-        AV_PIXEL_FORMAT_NV21 => copy_nv12_planes(base, planes, format.width, format.height, true),
+        AV_PIXEL_FORMAT_YUVI420 => {
+            copy_i420_planes(base, capacity, planes, format.width, format.height)
+        }
+        AV_PIXEL_FORMAT_NV12 => {
+            copy_nv12_planes(base, capacity, planes, format.width, format.height, false)
+        }
+        AV_PIXEL_FORMAT_NV21 => {
+            copy_nv12_planes(base, capacity, planes, format.width, format.height, true)
+        }
         _ => bail!(
             "unsupported OHOS native buffer pixel format {}",
             format.pixel_format
@@ -1572,11 +1661,15 @@ fn copy_from_planes(
     }
 }
 
-fn copy_from_linear_buffer(addr: *mut u8, format: FormatInfo) -> ResultType<OhosImage> {
+fn copy_from_linear_buffer(
+    addr: *mut u8,
+    capacity: usize,
+    format: FormatInfo,
+) -> ResultType<OhosImage> {
     match format.pixel_format {
-        AV_PIXEL_FORMAT_YUVI420 => copy_i420_linear(addr, format),
-        AV_PIXEL_FORMAT_NV12 => copy_nv12_linear(addr, format, false),
-        AV_PIXEL_FORMAT_NV21 => copy_nv12_linear(addr, format, true),
+        AV_PIXEL_FORMAT_YUVI420 => copy_i420_linear(addr, capacity, format),
+        AV_PIXEL_FORMAT_NV12 => copy_nv12_linear(addr, capacity, format, false),
+        AV_PIXEL_FORMAT_NV21 => copy_nv12_linear(addr, capacity, format, true),
         _ => bail!(
             "unsupported OHOS linear buffer pixel format {}",
             format.pixel_format
@@ -1584,22 +1677,51 @@ fn copy_from_linear_buffer(addr: *mut u8, format: FormatInfo) -> ResultType<Ohos
     }
 }
 
-fn make_i420_image(width: usize, height: usize, y_stride: usize, uv_stride: usize) -> OhosImage {
-    let y_len = y_stride * height;
+fn make_i420_image(
+    width: usize,
+    height: usize,
+    y_stride: usize,
+    uv_stride: usize,
+) -> ResultType<OhosImage> {
+    let uv_width = width.div_ceil(2);
+    if y_stride < width || uv_stride < uv_width {
+        bail!(
+            "OHOS decoder destination stride is too small: y={} uv={} width={}",
+            y_stride,
+            uv_stride,
+            width
+        )
+    }
+    let y_len = y_stride
+        .checked_mul(height)
+        .ok_or_else(|| anyhow!("OHOS decoder destination Y plane size overflow"))?;
     let uv_height = height.div_ceil(2);
-    let uv_len = uv_stride * uv_height;
-    let raw = vec![0u8; y_len + uv_len * 2];
-    OhosImage {
-        raw,
+    let uv_len = uv_stride
+        .checked_mul(uv_height)
+        .ok_or_else(|| anyhow!("OHOS decoder destination UV plane size overflow"))?;
+    let v_offset = y_len
+        .checked_add(uv_len)
+        .ok_or_else(|| anyhow!("OHOS decoder destination V plane offset overflow"))?;
+    let total_len = uv_len
+        .checked_mul(2)
+        .and_then(|value| y_len.checked_add(value))
+        .ok_or_else(|| anyhow!("OHOS decoder destination image size overflow"))?;
+    let y_stride_i32 = i32::try_from(y_stride)
+        .map_err(|_| anyhow!("OHOS decoder destination Y stride is out of range"))?;
+    let uv_stride_i32 = i32::try_from(uv_stride)
+        .map_err(|_| anyhow!("OHOS decoder destination UV stride is out of range"))?;
+    Ok(OhosImage {
+        raw: vec![0u8; total_len],
         width,
         height,
-        stride: [y_stride as i32, uv_stride as i32, uv_stride as i32],
-        offsets: [0, y_len, y_len + uv_len],
-    }
+        stride: [y_stride_i32, uv_stride_i32, uv_stride_i32],
+        offsets: [0, y_len, v_offset],
+    })
 }
 
 fn copy_i420_planes(
     base: *mut u8,
+    capacity: usize,
     planes: &OH_NativeBuffer_Planes,
     width: usize,
     height: usize,
@@ -1607,51 +1729,65 @@ fn copy_i420_planes(
     if planes.plane_count < 3 {
         bail!("OHOS I420 output has only {} planes", planes.plane_count)
     }
-    let y_stride = planes.planes[0].row_stride as usize;
-    let uv_stride = planes.planes[1].row_stride as usize;
+    let y_stride = checked_u32_layout("Y row stride", planes.planes[0].row_stride)?;
+    let uv_stride = checked_u32_layout("U row stride", planes.planes[1].row_stride)?;
     let mut image = make_i420_image(
         width,
         height,
         y_stride.max(width),
         uv_stride.max(width.div_ceil(2)),
-    );
+    )?;
+    let y_dst_offset = image.offsets[0];
+    let y_dst_stride = image.stride[0] as usize;
     copy_plane(
         base,
-        planes.planes[0].offset as usize,
-        planes.planes[0].row_stride as usize,
-        image.raw.as_mut_ptr(),
-        image.offsets[0],
-        image.stride[0] as usize,
+        capacity,
+        checked_u64_layout("Y plane offset", planes.planes[0].offset)?,
+        y_stride,
+        checked_u32_layout("Y column stride", planes.planes[0].column_stride)?,
+        &mut image.raw,
+        y_dst_offset,
+        y_dst_stride,
         width,
         height,
-    );
+    )?;
     let uv_width = width.div_ceil(2);
     let uv_height = height.div_ceil(2);
+    let u_dst_offset = image.offsets[1];
+    let u_dst_stride = image.stride[1] as usize;
     copy_plane(
         base,
-        planes.planes[1].offset as usize,
-        planes.planes[1].row_stride as usize,
-        image.raw.as_mut_ptr(),
-        image.offsets[1],
-        image.stride[1] as usize,
+        capacity,
+        checked_u64_layout("U plane offset", planes.planes[1].offset)?,
+        uv_stride,
+        checked_u32_layout("U column stride", planes.planes[1].column_stride)?,
+        &mut image.raw,
+        u_dst_offset,
+        u_dst_stride,
         uv_width,
         uv_height,
-    );
+    )?;
+    let v_stride = checked_u32_layout("V row stride", planes.planes[2].row_stride)?;
+    let v_dst_offset = image.offsets[2];
+    let v_dst_stride = image.stride[2] as usize;
     copy_plane(
         base,
-        planes.planes[2].offset as usize,
-        planes.planes[2].row_stride as usize,
-        image.raw.as_mut_ptr(),
-        image.offsets[2],
-        image.stride[2] as usize,
+        capacity,
+        checked_u64_layout("V plane offset", planes.planes[2].offset)?,
+        v_stride,
+        checked_u32_layout("V column stride", planes.planes[2].column_stride)?,
+        &mut image.raw,
+        v_dst_offset,
+        v_dst_stride,
         uv_width,
         uv_height,
-    );
+    )?;
     Ok(image)
 }
 
 fn copy_nv12_planes(
     base: *mut u8,
+    capacity: usize,
     planes: &OH_NativeBuffer_Planes,
     width: usize,
     height: usize,
@@ -1663,27 +1799,53 @@ fn copy_nv12_planes(
             planes.plane_count
         )
     }
-    let y_stride = planes.planes[0].row_stride as usize;
+    let y_stride = checked_u32_layout("Y row stride", planes.planes[0].row_stride)?;
     let uv_stride = width.div_ceil(2);
-    let mut image = make_i420_image(width, height, y_stride.max(width), uv_stride);
+    let mut image = make_i420_image(width, height, y_stride.max(width), uv_stride)?;
+    let y_dst_offset = image.offsets[0];
+    let y_dst_stride = image.stride[0] as usize;
     copy_plane(
         base,
-        planes.planes[0].offset as usize,
-        planes.planes[0].row_stride as usize,
-        image.raw.as_mut_ptr(),
-        image.offsets[0],
-        image.stride[0] as usize,
+        capacity,
+        checked_u64_layout("Y plane offset", planes.planes[0].offset)?,
+        y_stride,
+        checked_u32_layout("Y column stride", planes.planes[0].column_stride)?,
+        &mut image.raw,
+        y_dst_offset,
+        y_dst_stride,
         width,
         height,
-    );
+    )?;
     let uv_width = width.div_ceil(2);
     let uv_height = height.div_ceil(2);
     let plane = planes.planes[1];
+    let plane_offset = checked_u64_layout("UV plane offset", plane.offset)?;
+    let plane_stride = checked_u32_layout("UV row stride", plane.row_stride)?;
+    let column_stride = checked_u32_layout("UV column stride", plane.column_stride)?;
+    if column_stride < 2 {
+        bail!(
+            "OHOS decoder UV column stride is too small: {}",
+            column_stride
+        )
+    }
+    let source_end = checked_strided_plane_end(
+        plane_offset,
+        plane_stride,
+        column_stride,
+        uv_width,
+        uv_height,
+        2,
+    )?;
+    if source_end > capacity {
+        bail!(
+            "OHOS UV plane exceeds mapped buffer: {} > {}",
+            source_end,
+            capacity
+        )
+    }
     for row in 0..uv_height {
         for col in 0..uv_width {
-            let offset = plane.offset as usize
-                + row * plane.row_stride as usize
-                + col * plane.column_stride as usize;
+            let offset = plane_offset + row * plane_stride + col * column_stride;
             unsafe {
                 let first = *base.add(offset);
                 let second = *base.add(offset + 1);
@@ -1692,80 +1854,110 @@ fn copy_nv12_planes(
                 } else {
                     (first, second)
                 };
-                *image
-                    .raw
-                    .as_mut_ptr()
-                    .add(image.offsets[1] + row * image.stride[1] as usize + col) = u;
-                *image
-                    .raw
-                    .as_mut_ptr()
-                    .add(image.offsets[2] + row * image.stride[2] as usize + col) = v;
+                image.raw[image.offsets[1] + row * image.stride[1] as usize + col] = u;
+                image.raw[image.offsets[2] + row * image.stride[2] as usize + col] = v;
             }
         }
     }
     Ok(image)
 }
 
-fn copy_i420_linear(addr: *mut u8, format: FormatInfo) -> ResultType<OhosImage> {
+fn copy_i420_linear(addr: *mut u8, capacity: usize, format: FormatInfo) -> ResultType<OhosImage> {
     let y_stride = format.stride.max(format.width);
     let slice_height = format.slice_height.max(format.height);
     let uv_stride = y_stride.div_ceil(2);
-    let mut image = make_i420_image(format.width, format.height, y_stride, uv_stride);
+    let mut image = make_i420_image(format.width, format.height, y_stride, uv_stride)?;
+    let y_dst_offset = image.offsets[0];
+    let y_dst_stride = image.stride[0] as usize;
     copy_plane(
         addr,
+        capacity,
         0,
         y_stride,
-        image.raw.as_mut_ptr(),
-        image.offsets[0],
-        image.stride[0] as usize,
+        1,
+        &mut image.raw,
+        y_dst_offset,
+        y_dst_stride,
         format.width,
         format.height,
-    );
+    )?;
     let uv_width = format.width.div_ceil(2);
     let uv_height = format.height.div_ceil(2);
-    let u_offset = y_stride * slice_height;
-    let v_offset = u_offset + uv_stride * slice_height.div_ceil(2);
+    let u_offset = y_stride
+        .checked_mul(slice_height)
+        .ok_or_else(|| anyhow!("OHOS decoder U plane offset overflow"))?;
+    let v_offset = uv_stride
+        .checked_mul(slice_height.div_ceil(2))
+        .and_then(|value| u_offset.checked_add(value))
+        .ok_or_else(|| anyhow!("OHOS decoder V plane offset overflow"))?;
+    let u_dst_offset = image.offsets[1];
+    let u_dst_stride = image.stride[1] as usize;
     copy_plane(
         addr,
+        capacity,
         u_offset,
         uv_stride,
-        image.raw.as_mut_ptr(),
-        image.offsets[1],
-        image.stride[1] as usize,
+        1,
+        &mut image.raw,
+        u_dst_offset,
+        u_dst_stride,
         uv_width,
         uv_height,
-    );
+    )?;
+    let v_dst_offset = image.offsets[2];
+    let v_dst_stride = image.stride[2] as usize;
     copy_plane(
         addr,
+        capacity,
         v_offset,
         uv_stride,
-        image.raw.as_mut_ptr(),
-        image.offsets[2],
-        image.stride[2] as usize,
+        1,
+        &mut image.raw,
+        v_dst_offset,
+        v_dst_stride,
         uv_width,
         uv_height,
-    );
+    )?;
     Ok(image)
 }
 
-fn copy_nv12_linear(addr: *mut u8, format: FormatInfo, swap_uv: bool) -> ResultType<OhosImage> {
+fn copy_nv12_linear(
+    addr: *mut u8,
+    capacity: usize,
+    format: FormatInfo,
+    swap_uv: bool,
+) -> ResultType<OhosImage> {
     let y_stride = format.stride.max(format.width);
     let slice_height = format.slice_height.max(format.height);
     let uv_stride = format.width.div_ceil(2);
-    let mut image = make_i420_image(format.width, format.height, y_stride, uv_stride);
+    let mut image = make_i420_image(format.width, format.height, y_stride, uv_stride)?;
+    let y_dst_offset = image.offsets[0];
+    let y_dst_stride = image.stride[0] as usize;
     copy_plane(
         addr,
+        capacity,
         0,
         y_stride,
-        image.raw.as_mut_ptr(),
-        image.offsets[0],
-        image.stride[0] as usize,
+        1,
+        &mut image.raw,
+        y_dst_offset,
+        y_dst_stride,
         format.width,
         format.height,
-    );
-    let uv_offset = y_stride * slice_height;
+    )?;
+    let uv_offset = y_stride
+        .checked_mul(slice_height)
+        .ok_or_else(|| anyhow!("OHOS decoder UV plane offset overflow"))?;
     let uv_width = format.width.div_ceil(2);
     let uv_height = format.height.div_ceil(2);
+    let source_end = checked_strided_plane_end(uv_offset, y_stride, 2, uv_width, uv_height, 2)?;
+    if source_end > capacity {
+        bail!(
+            "OHOS linear UV plane exceeds buffer: {} > {}",
+            source_end,
+            capacity
+        )
+    }
     for row in 0..uv_height {
         for col in 0..uv_width {
             let offset = uv_offset + row * y_stride + col * 2;
@@ -1777,37 +1969,105 @@ fn copy_nv12_linear(addr: *mut u8, format: FormatInfo, swap_uv: bool) -> ResultT
                 } else {
                     (first, second)
                 };
-                *image
-                    .raw
-                    .as_mut_ptr()
-                    .add(image.offsets[1] + row * image.stride[1] as usize + col) = u;
-                *image
-                    .raw
-                    .as_mut_ptr()
-                    .add(image.offsets[2] + row * image.stride[2] as usize + col) = v;
+                image.raw[image.offsets[1] + row * image.stride[1] as usize + col] = u;
+                image.raw[image.offsets[2] + row * image.stride[2] as usize + col] = v;
             }
         }
     }
     Ok(image)
 }
 
+fn checked_u64_layout(label: &str, value: u64) -> ResultType<usize> {
+    usize::try_from(value)
+        .map_err(|_| anyhow!("OHOS decoder {} is out of range: {}", label, value).into())
+}
+
+fn checked_u32_layout(label: &str, value: u32) -> ResultType<usize> {
+    let value = usize::try_from(value)
+        .map_err(|_| anyhow!("OHOS decoder {} is out of range: {}", label, value))?;
+    if value == 0 {
+        bail!("OHOS decoder {} must be positive", label)
+    }
+    Ok(value)
+}
+
+fn checked_strided_plane_end(
+    offset: usize,
+    row_stride: usize,
+    column_stride: usize,
+    width: usize,
+    height: usize,
+    sample_size: usize,
+) -> ResultType<usize> {
+    if width == 0 || height == 0 {
+        return Ok(offset);
+    }
+    let row_width = (width - 1)
+        .checked_mul(column_stride)
+        .and_then(|value| value.checked_add(sample_size))
+        .ok_or_else(|| anyhow!("OHOS decoder plane row size overflow"))?;
+    if row_stride < row_width {
+        bail!(
+            "OHOS decoder plane row stride is too small: {} < {}",
+            row_stride,
+            row_width
+        )
+    }
+    (height - 1)
+        .checked_mul(row_stride)
+        .and_then(|value| offset.checked_add(value))
+        .and_then(|value| value.checked_add(row_width))
+        .ok_or_else(|| anyhow!("OHOS decoder plane end overflow").into())
+}
+
 fn copy_plane(
     src_base: *mut u8,
+    src_capacity: usize,
     src_offset: usize,
     src_stride: usize,
-    dst_base: *mut u8,
+    src_column_stride: usize,
+    dst: &mut [u8],
     dst_offset: usize,
     dst_stride: usize,
     width: usize,
     height: usize,
-) {
+) -> ResultType<()> {
+    if src_base.is_null() {
+        bail!("OHOS decoder plane base address is null")
+    }
+    let src_end =
+        checked_strided_plane_end(src_offset, src_stride, src_column_stride, width, height, 1)?;
+    if src_end > src_capacity {
+        bail!(
+            "OHOS decoder plane exceeds source buffer: {} > {}",
+            src_end,
+            src_capacity
+        )
+    }
+    let dst_end = checked_plane_end(dst_offset, dst_stride, width, height)?;
+    if dst_end > dst.len() {
+        bail!(
+            "OHOS decoder plane exceeds destination buffer: {} > {}",
+            dst_end,
+            dst.len()
+        )
+    }
     for row in 0..height {
-        unsafe {
-            ptr::copy_nonoverlapping(
-                src_base.add(src_offset + row * src_stride),
-                dst_base.add(dst_offset + row * dst_stride),
-                width,
-            );
+        let src_row = src_offset + row * src_stride;
+        let dst_row = dst_offset + row * dst_stride;
+        if src_column_stride == 1 {
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    src_base.add(src_row),
+                    dst.as_mut_ptr().add(dst_row),
+                    width,
+                );
+            }
+        } else {
+            for col in 0..width {
+                dst[dst_row + col] = unsafe { *src_base.add(src_row + col * src_column_stride) };
+            }
         }
     }
+    Ok(())
 }

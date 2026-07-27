@@ -1,4 +1,8 @@
 mod keyboard;
+#[cfg(all(target_env = "ohos", not(feature = "flutter")))]
+compile_error!(
+    "OpenHarmony controller builds require the `flutter` feature as the existing RustDesk session compatibility layer; this does not build or embed the Flutter UI."
+);
 #[cfg(target_env = "ohos")]
 extern crate rdev_ohos as rdev;
 /// cbindgen:ignore

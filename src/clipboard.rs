@@ -794,7 +794,7 @@ mod proto {
     }
 }
 
-#[cfg(all(test, not(target_os = "android")))]
+#[cfg(all(test, not(any(target_os = "android", target_env = "ohos"))))]
 mod rgba_tests {
     use super::valid_rgba_dimensions;
 

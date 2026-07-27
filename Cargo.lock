@@ -6940,7 +6940,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/FrankHan052176/rdev?branch=ohos/exclude-linux-backend-on-ohos#2e91a16879b7426cb169ad7becfc8dae1d6bc3a5"
+source = "git+https://github.com/FrankHan052176/rdev?branch=ohos/exclude-linux-backend-on-ohos#f15c2046cf9ed8e7cfd8ceb7379e4559274b732d"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
