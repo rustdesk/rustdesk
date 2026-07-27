@@ -4,6 +4,7 @@ use hbb_common::message_proto::{Chroma, EncodedVideoFrames, SupportedDecoding};
 use hbb_common::{anyhow::anyhow, bail, ResultType};
 use std::{
     collections::{HashMap, VecDeque},
+    convert::TryFrom,
     ffi::{c_char, c_void},
     ffi::{CStr, CString},
     ptr,
@@ -448,10 +449,12 @@ fn record_surface_output_latency(
     attr: &OH_AVCodecBufferAttr,
     output_queue_depth: usize,
 ) -> Option<SurfaceOutputTrace> {
-    let trace = state.input_pts_at.lock().unwrap().remove(&attr.pts)?;
+    let mut input_pts_at = state.input_pts_at.lock().unwrap();
+    let trace = input_pts_at.remove(&attr.pts)?;
+    let pending_inputs = input_pts_at.len();
+    drop(input_pts_at);
     let submit_to_worker = trace.submitted_at.elapsed();
     *state.last_decode_latency_ms.lock().unwrap() = Some(submit_to_worker.as_millis() as u64);
-    let pending_inputs = state.input_pts_at.lock().unwrap().len();
 
     Some(SurfaceOutputTrace {
         pts: attr.pts,
@@ -875,24 +878,13 @@ impl OhosVideoDecoder {
         if buffer.is_null() {
             bail!("OHOS decoder input buffer is null")
         }
-        let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
-        if capacity >= 0 && capacity < data.len() as i32 {
-            bail!(
-                "OHOS decoder input buffer too small: {} < {}",
-                capacity,
-                data.len()
-            )
-        }
-        let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
-        if addr.is_null() {
-            bail!("OHOS decoder input buffer addr is null")
-        }
+        let (addr, data_size) = checked_input_addr(buffer, data.len())?;
         unsafe {
             ptr::copy_nonoverlapping(data.as_ptr(), addr, data.len());
         }
         let attr = OH_AVCodecBufferAttr {
             pts: self.next_pts(),
-            size: data.len() as i32,
+            size: data_size,
             offset: 0,
             flags: if key {
                 AVCODEC_BUFFER_FLAGS_SYNC_FRAME
@@ -1005,24 +997,13 @@ impl OhosVideoDecoder {
         key: bool,
         input_wait: Duration,
     ) -> ResultType<()> {
-        let capacity = unsafe { OH_AVBuffer_GetCapacity(item.buffer) };
-        if capacity >= 0 && capacity < data.len() as i32 {
-            bail!(
-                "OHOS decoder input buffer too small: {} < {}",
-                capacity,
-                data.len()
-            )
-        }
-        let addr = unsafe { OH_AVBuffer_GetAddr(item.buffer) };
-        if addr.is_null() {
-            bail!("OHOS decoder input buffer addr is null")
-        }
+        let (addr, data_size) = checked_input_addr(item.buffer, data.len())?;
         unsafe {
             ptr::copy_nonoverlapping(data.as_ptr(), addr, data.len());
         }
         let attr = OH_AVCodecBufferAttr {
             pts: self.next_pts(),
-            size: data.len() as i32,
+            size: data_size,
             offset: 0,
             flags: if key {
                 AVCODEC_BUFFER_FLAGS_SYNC_FRAME
@@ -1451,9 +1432,42 @@ fn get_format_i32(format: *mut OH_AVFormat, key: *const c_char) -> Option<i32> {
     ok.then_some(out)
 }
 
+fn checked_input_addr(buffer: *mut OH_AVBuffer, data_len: usize) -> ResultType<(*mut u8, i32)> {
+    let data_size = i32::try_from(data_len)
+        .map_err(|_| anyhow!("OHOS decoder input is too large: {} bytes", data_len))?;
+    let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
+    if capacity < 0 {
+        bail!("failed to query OHOS decoder input buffer capacity")
+    }
+    if capacity < data_size {
+        bail!(
+            "OHOS decoder input buffer too small: {} < {}",
+            capacity,
+            data_len
+        )
+    }
+    let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
+    if addr.is_null() {
+        bail!("OHOS decoder input buffer addr is null")
+    }
+    Ok((addr, data_size))
+}
+
 fn copy_output_image(buffer: *mut OH_AVBuffer, format: FormatInfo) -> ResultType<OhosImage> {
     let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
     if !addr.is_null() {
+        let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
+        if capacity < 0 {
+            bail!("failed to query OHOS decoder output buffer capacity")
+        }
+        let required = linear_buffer_required_size(format)?;
+        if required > capacity as usize {
+            bail!(
+                "OHOS decoder output buffer too small: {} < {}",
+                capacity,
+                required
+            )
+        }
         return copy_from_linear_buffer(addr, format);
     }
 
@@ -1467,6 +1481,62 @@ fn copy_output_image(buffer: *mut OH_AVBuffer, format: FormatInfo) -> ResultType
     }
 
     bail!("OHOS decoder output has neither linear addr nor native buffer")
+}
+
+fn linear_buffer_required_size(format: FormatInfo) -> ResultType<usize> {
+    let y_stride = format.stride.max(format.width);
+    let slice_height = format.slice_height.max(format.height);
+    let y_end = checked_plane_end(0, y_stride, format.width, format.height)?;
+    let y_storage = y_stride
+        .checked_mul(slice_height)
+        .ok_or_else(|| anyhow!("OHOS decoder Y plane size overflow"))?;
+    let uv_width = format.width.div_ceil(2);
+    let uv_height = format.height.div_ceil(2);
+
+    match format.pixel_format {
+        AV_PIXEL_FORMAT_YUVI420 => {
+            let uv_stride = y_stride.div_ceil(2);
+            let uv_storage_height = slice_height.div_ceil(2);
+            let uv_storage = uv_stride
+                .checked_mul(uv_storage_height)
+                .ok_or_else(|| anyhow!("OHOS decoder UV plane size overflow"))?;
+            let u_end = checked_plane_end(y_storage, uv_stride, uv_width, uv_height)?;
+            let v_offset = y_storage
+                .checked_add(uv_storage)
+                .ok_or_else(|| anyhow!("OHOS decoder V plane offset overflow"))?;
+            let v_end = checked_plane_end(v_offset, uv_stride, uv_width, uv_height)?;
+            Ok(y_end.max(u_end).max(v_end))
+        }
+        AV_PIXEL_FORMAT_NV12 | AV_PIXEL_FORMAT_NV21 => {
+            let uv_row_width = uv_width
+                .checked_mul(2)
+                .ok_or_else(|| anyhow!("OHOS decoder UV row size overflow"))?;
+            let uv_end = checked_plane_end(y_storage, y_stride, uv_row_width, uv_height)?;
+            Ok(y_end.max(uv_end))
+        }
+        _ => bail!(
+            "unsupported OHOS linear buffer pixel format {}",
+            format.pixel_format
+        ),
+    }
+}
+
+fn checked_plane_end(
+    offset: usize,
+    stride: usize,
+    width: usize,
+    height: usize,
+) -> ResultType<usize> {
+    if height == 0 {
+        return Ok(offset);
+    }
+    let last_row = (height - 1)
+        .checked_mul(stride)
+        .ok_or_else(|| anyhow!("OHOS decoder plane row offset overflow"))?;
+    offset
+        .checked_add(last_row)
+        .and_then(|value| value.checked_add(width))
+        .ok_or_else(|| anyhow!("OHOS decoder plane end overflow").into())
 }
 
 fn copy_from_native_buffer(

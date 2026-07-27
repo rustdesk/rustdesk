@@ -104,6 +104,8 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
+#[cfg(target_env = "ohos")]
+const MAX_OHOS_DECODE_WARMUP_FRAMES: usize = 30;
 
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
@@ -1596,6 +1598,8 @@ pub struct VideoHandler {
     peer_id: String,
     fail_counter: usize,
     first_frame: bool,
+    #[cfg(target_env = "ohos")]
+    decode_warmup_frames: usize,
 }
 
 #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
@@ -1653,6 +1657,8 @@ impl VideoHandler {
             peer_id: peer_id.to_owned(),
             fail_counter: 0,
             first_frame: true,
+            #[cfg(target_env = "ohos")]
+            decode_warmup_frames: 0,
         }
     }
 
@@ -1677,29 +1683,39 @@ impl VideoHandler {
                     pixelbuffer,
                     chroma,
                 );
-                if res.as_ref().is_ok_and(|x| *x) {
+                let decoded = res.as_ref().is_ok_and(|x| *x);
+                if decoded {
                     self.fail_counter = 0;
+                    self.first_frame = false;
+                    #[cfg(target_env = "ohos")]
+                    {
+                        self.decode_warmup_frames = 0;
+                    }
                 } else {
-                    if self.fail_counter < usize::MAX {
-                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
-                            #[cfg(target_env = "ohos")]
-                            if matches!(format, CodecFormat::H264 | CodecFormat::H265)
-                                && res.as_ref().is_ok_and(|x| !*x)
-                            {
+                    #[cfg(target_env = "ohos")]
+                    let waiting_for_output = self.first_frame
+                        && matches!(format, CodecFormat::H264 | CodecFormat::H265)
+                        && res.as_ref().is_ok_and(|x| !*x)
+                        && self.decode_warmup_frames < MAX_OHOS_DECODE_WARMUP_FRAMES;
+                    #[cfg(not(target_env = "ohos"))]
+                    let waiting_for_output = false;
+
+                    if waiting_for_output {
+                        #[cfg(target_env = "ohos")]
+                        {
+                            self.decode_warmup_frames += 1;
+                            if self.decode_warmup_frames == 1 {
                                 log::warn!(
-                                    "decoder produced no output for the first frame yet; waiting for more input"
+                                    "decoder needs more input before producing the first frame"
                                 );
-                            } else {
-                                log::error!("decode first frame failed");
-                                self.fail_counter = MAX_DECODE_FAIL_COUNTER;
                             }
-                            #[cfg(not(target_env = "ohos"))]
-                            {
-                                log::error!("decode first frame failed");
-                                self.fail_counter = MAX_DECODE_FAIL_COUNTER;
-                            }
+                        }
+                    } else if self.fail_counter < usize::MAX {
+                        if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
+                            log::error!("decode first frame failed");
+                            self.fail_counter = MAX_DECODE_FAIL_COUNTER;
                         } else {
-                            self.fail_counter += 1;
+                            self.fail_counter = self.fail_counter.saturating_add(1);
                         }
                         log::error!(
                             "Failed to handle video frame, fail counter: {}",
@@ -1707,7 +1723,6 @@ impl VideoHandler {
                         );
                     }
                 }
-                self.first_frame = false;
                 if self.record {
                     self.recorder.lock().unwrap().as_mut().map(|r| {
                         let (w, h) = if *pixelbuffer {
@@ -1751,6 +1766,10 @@ impl VideoHandler {
         };
         self.fail_counter = 0;
         self.first_frame = true;
+        #[cfg(target_env = "ohos")]
+        {
+            self.decode_warmup_frames = 0;
+        }
     }
 
     #[cfg(target_env = "ohos")]
