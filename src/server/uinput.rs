@@ -130,7 +130,16 @@ pub mod client {
         }
 
         pub fn send_refresh(&mut self) -> ResultType<()> {
-            self.send(Data::Mouse(DataMouse::Refresh))
+            self.rt
+                .block_on(self.conn.send(&Data::Mouse(DataMouse::Refresh)))?;
+            // Wait for the service to confirm it recreated the device, so a
+            // failed refresh is distinguishable from a good one.
+            match self.rt.block_on(self.conn.next_timeout(IPC_REQUEST_TIMEOUT)) {
+                Ok(Some(Data::Empty)) => Ok(()),
+                Ok(Some(resp)) => bail!("unexpected uinput mouse refresh response: {:?}", &resp),
+                Ok(None) => bail!("uinput mouse refresh failed, connection closed"),
+                Err(e) => bail!("uinput mouse refresh timeout {}, {}", IPC_REQUEST_TIMEOUT, e),
+            }
         }
     }
 
@@ -851,9 +860,10 @@ pub mod service {
                                 match data {
                                     Data::Mouse(data) => {
                                         if let DataMouse::Refresh = data {
-                                            let resolution = RESOLUTION.lock().unwrap();
-                                            let rng_x = resolution.0.clone();
-                                            let rng_y = resolution.1.clone();
+                                            let (rng_x, rng_y) = {
+                                                let resolution = RESOLUTION.lock().unwrap();
+                                                (resolution.0.clone(), resolution.1.clone())
+                                            };
                                             log::info!(
                                                 "Refresh uinput mouce with rng_x: ({}, {}), rng_y: ({}, {})",
                                                 rng_x.0,
@@ -861,11 +871,19 @@ pub mod service {
                                                 rng_y.0,
                                                 rng_y.1
                                             );
-                                            mouse = match mouce::UInputMouseManager::new(rng_x, rng_y) {
-                                                Ok(mouse) => mouse,
+                                            match mouce::UInputMouseManager::new(rng_x, rng_y) {
+                                                Ok(m) => {
+                                                    mouse = m;
+                                                    // Ack: device adopted the new range.
+                                                    allow_err!(stream.send(&Data::Empty).await);
+                                                }
                                                 Err(e) => {
-                                                    log::error!("Failed to create mouse, {}", e);
-                                                    return;
+                                                    // Keep the current device; withhold the ack
+                                                    // so the client times out and retries.
+                                                    log::error!(
+                                                        "Failed to recreate uinput mouse, keeping current: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         } else {

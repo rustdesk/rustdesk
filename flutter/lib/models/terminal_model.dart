@@ -7,6 +7,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:xterm/xterm.dart';
 
+import 'input_modifier_utils.dart';
 import 'model.dart';
 import 'platform_model.dart';
 
@@ -22,7 +23,25 @@ class TerminalModel with ChangeNotifier {
 
   bool _disposed = false;
 
+  /// Callback to check whether Ctrl modifier lock is currently active.
+  /// When active, keyboard input is mapped to control codes (e.g. 'b' → \x02).
+  bool Function()? isCtrlLocked;
+
+  /// Callback to clear Ctrl lock after a key is pressed (one-shot mode).
+  void Function()? clearCtrlLock;
+
+  /// Callback to check whether Alt modifier lock is currently active.
+  bool Function()? isAltLocked;
+
+  /// Callback to clear Alt lock after a key is pressed (one-shot mode).
+  void Function()? clearAltLock;
+
   final _inputBuffer = <String>[];
+
+  /// Exposes buffered input only for lifecycle regression tests.
+  @visibleForTesting
+  int get debugBufferedInputCount => _inputBuffer.length;
+
   // Buffer for output data received before terminal view has valid dimensions.
   // This prevents NaN errors when writing to terminal before layout is complete.
   final _pendingOutputChunks = <String>[];
@@ -42,6 +61,10 @@ class TerminalModel with ChangeNotifier {
   VoidCallback? onClosed;
 
   Future<void> _handleInput(String data) async {
+    // xterm can complete asynchronous input after the Flutter page has gone
+    // away. Stop before reading or clearing widget-owned modifier state.
+    if (_disposed) return;
+
     // Soft keyboards (notably iOS) emit '\n' when Enter is pressed, while a
     // real keyboard's Enter sends '\r'. Some Android keyboards also emit '\n'.
     // - Peer Windows: '\r' works, '\n' is just a newline.
@@ -49,13 +72,44 @@ class TerminalModel with ChangeNotifier {
     //   (readline, prompt_toolkit, vim, TUI frameworks) expect '\r'.
     // - Peer macOS: same as Linux, raw-mode apps expect '\r'
     //   (https://github.com/rustdesk/rustdesk/issues/14907).
-    // So on mobile / web-mobile, always normalize a lone '\n' to '\r'.
-    // We deliberately do not touch multi-character payloads (e.g. pasted text)
-    // so embedded newlines in pasted content are preserved.
-    final isMobileOrWebMobile = (isMobile || (isWeb && !isWebDesktop));
-    if (isMobileOrWebMobile && data == '\n') {
-      data = '\r';
+    // So on mobile / web-mobile, normalize the original lone '\n' to '\r'
+    // before modifier mappings. This keeps Ctrl+J mapped to LF instead of
+    // having the generated control code rewritten to CR afterward.
+    // Multi-character keyboard payloads, such as terminal escape sequences,
+    // remain unchanged. Paste input follows a separate preprocessing path.
+    final ctrlLocked = isCtrlLocked?.call() ?? false;
+    final altLocked = isAltLocked?.call() ?? false;
+    final modifiersActive = ctrlLocked || altLocked;
+    // Use the same predicate for transformation and consumption. Control keys
+    // and escape sequences must not silently consume a pending one-shot lock.
+    final shouldConsumeModifiers =
+        modifiersActive && shouldApplyTerminalInputModifiers(data);
+    data = prepareTerminalInputPayload(
+      data,
+      // IME soft-keyboard paste prompts currently arrive from xterm as normal
+      // text input with no paste-origin metadata. Keep them on the keyboard path;
+      // clipboard-content heuristics can misclassify ordinary typing.
+      source: TerminalInputSource.keyboard,
+      isMobileOrWebMobile: isMobile || (isWeb && !isWebDesktop),
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: ctrlLocked,
+      altLocked: altLocked,
+    );
+    if (shouldConsumeModifiers) {
+      if (ctrlLocked) clearCtrlLock?.call();
+      if (altLocked) clearAltLock?.call();
     }
+    return _sendInputPayload(data);
+  }
+
+  /// Sends an already prepared payload without applying keyboard semantics.
+  /// Both normal input and paste use this transport path after their source-
+  /// specific preprocessing has completed.
+  Future<void> _sendInputPayload(String data) async {
+    // Clipboard reads and native sends may complete after the terminal page has
+    // closed. Never send or re-buffer input once this model is disposed.
+    if (_disposed) return;
+
     if (_terminalOpened) {
       // Send user input to remote terminal
       try {
@@ -174,6 +228,18 @@ class TerminalModel with ChangeNotifier {
 
   Future<void> sendVirtualKey(String data) async {
     return _handleInput(data);
+  }
+
+  Future<void> pasteText(String data) async {
+    final payload = prepareTerminalInputPayload(
+      data,
+      source: TerminalInputSource.paste,
+      isMobileOrWebMobile: false,
+      bracketedPasteMode: terminal.bracketedPasteMode,
+      ctrlLocked: false,
+      altLocked: false,
+    );
+    return _sendInputPayload(payload);
   }
 
   Future<void> closeTerminal() async {
@@ -516,6 +582,14 @@ class TerminalModel with ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    terminal.onOutput = null;
+    terminal.onResize = null;
+    isCtrlLocked = null;
+    clearCtrlLock = null;
+    isAltLocked = null;
+    clearAltLock = null;
+    onResizeExternal = null;
+    onClosed = null;
     // Clear buffers to free memory
     _inputBuffer.clear();
     _pendingOutputChunks.clear();

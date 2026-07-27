@@ -332,7 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Połączenie przez bramkę"),
         ("Secure Connection", "Połączenie szyfrowane"),
         ("Insecure Connection", "Połączenie nieszyfrowane"),
-        ("Continue", ""),
+        ("Continue", "Kontynuuj"),
         ("Scale original", "Skalowanie oryginalne"),
         ("Scale adaptive", "Dopasuj do wyświetlacza"),
         ("General", "Ogólne"),

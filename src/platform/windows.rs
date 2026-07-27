@@ -2278,6 +2278,10 @@ fn get_shortcut_icon_location(install_dir: &str, exe: &str) -> String {
 }
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
+    if !crate::common::is_valid_untrusted_peer_id(id) {
+        bail!("Invalid peer id for shortcut");
+    }
+
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     // https://github.com/rustdesk/rustdesk/issues/13735
     // Replace ':' with '_' for filename since ':' is not allowed in Windows filenames

@@ -127,6 +127,13 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
+    // The portable wrapper injects `--install` when its name ends with `install.exe`,
+    // including `no-install.exe`. Drop the argument instead of exiting so disabled
+    // clients can continue running as portable applications.
+    if config::is_disable_installation() {
+        args.retain(|arg| arg != "--install");
+        flutter_args.retain(|arg| arg != "--install");
+    }
     if args.len() > 0 {
         if args[0] == "--version" {
             println!("{}", crate::VERSION);
@@ -660,7 +667,8 @@ pub fn core_main() -> Option<Vec<String>> {
                         None
                     }
                 };
-                let new_id = get_value("--id");
+                // An empty --id (e.g. an unset var) would deploy a blank id; the Android flow guards this too (#15146).
+                let new_id = get_value("--id").filter(|s| !s.is_empty());
                 match crate::ui_interface::deploy_device(token, new_id) {
                     crate::ui_interface::DeployResult::Ok => {
                         println!("Device deployed.");

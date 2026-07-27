@@ -509,7 +509,9 @@ impl Connection {
                 tx_video: Some(tx_video),
             },
             require_2fa: crate::auth_2fa::get_2fa(None),
-            display_idx: *display_service::PRIMARY_DISPLAY_IDX,
+            // Defer display enumeration until login succeeds. Monitor login replaces this
+            // with the primary index returned with the refreshed display snapshot.
+            display_idx: 0,
             stream,
             server,
             hash,
@@ -1923,13 +1925,15 @@ impl Connection {
                 Err(err) => {
                     res.set_error(format!("{}", err));
                 }
-                Ok(displays) => {
+                Ok((displays, primary_display_idx)) => {
                     // For compatibility with old versions, we need to send the displays to the peer.
                     // But the displays may be updated later, before creating the video capturer.
                     #[cfg(target_os = "macos")]
                     {
                         self.retina.set_displays(&displays);
                     }
+                    // A separate primary lookup here could race with display hot-plug.
+                    self.display_idx = primary_display_idx;
                     pi.displays = displays;
                     pi.current_display = self.display_idx as _;
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2038,8 +2042,8 @@ impl Connection {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let _h = try_start_record_cursor_pos();
                 self.auto_disconnect_timer = Self::get_auto_disconenct_timer();
-                s.try_add_primay_video_service();
-                s.add_connection(self.inner.clone(), &noperms);
+                s.try_add_monitor_service(self.display_idx);
+                s.add_monitor_connection(self.inner.clone(), &noperms, self.display_idx);
             }
         }
     }
@@ -2842,7 +2846,6 @@ impl Connection {
             #[cfg(feature = "flutter")]
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {
-                self.handle_login_request_without_validation(&lr).await;
                 // Switching sides authorizes without a password, so it must not bypass the
                 // whitelist, which can be a locked policy pushed by the server.
                 if !self.check_id_whitelist().await {
@@ -2856,6 +2859,15 @@ impl Connection {
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
                     if let Some((_instant, uuid_old)) = uuid_old {
                         if uuid == uuid_old {
+                            if lr.union.is_some() {
+                                log::warn!(
+                                    "Rejected switch sides response for non-remote-desktop session; closing connection"
+                                );
+                                self.send_login_error("Connection not allowed").await;
+                                return false;
+                            }
+                            self.reset_session_scope_for_login();
+                            self.handle_login_request_without_validation(&lr).await;
                             self.from_switch = true;
                             self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::SwitchSides);
                             if !self.send_logon_response_and_keep_alive().await {
@@ -4182,7 +4194,9 @@ impl Connection {
         let display_idx = s.display as usize;
         if self.display_idx != display_idx {
             if let Some(server) = self.server.upgrade() {
-                self.switch_display_to(display_idx, server.clone());
+                if !self.switch_display_to(display_idx, server.clone()) {
+                    return;
+                }
 
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 if !self.view_camera && s.width != 0 && s.height != 0 {
@@ -4209,6 +4223,13 @@ impl Connection {
         }
     }
 
+    fn video_source_count(video_source: VideoSource) -> usize {
+        match video_source {
+            VideoSource::Monitor => display_service::get_sync_displays().len(),
+            VideoSource::Camera => camera::Cameras::get_sync_cameras().len(),
+        }
+    }
+
     fn video_source(&self) -> VideoSource {
         if self.view_camera {
             VideoSource::Camera
@@ -4217,18 +4238,28 @@ impl Connection {
         }
     }
 
-    fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) {
+    fn switch_display_to(&mut self, display_idx: usize, server: Arc<RwLock<Server>>) -> bool {
+        let source_count = Self::video_source_count(self.video_source());
+        if display_idx >= source_count {
+            // Do not remap an explicit switch: its resolution belongs to the requested source.
+            log::warn!(
+                "Ignore switch to invalid {:?} index {}, available source count: {}",
+                self.video_source(),
+                display_idx,
+                source_count
+            );
+            return false;
+        }
+
         let new_service_name = video_service::get_service_name(self.video_source(), display_idx);
         let old_service_name =
             video_service::get_service_name(self.video_source(), self.display_idx);
         let mut lock = server.write().unwrap();
-        if display_idx != *display_service::PRIMARY_DISPLAY_IDX {
-            if !lock.contains(&new_service_name) {
-                lock.add_service(Box::new(video_service::new(
-                    self.video_source(),
-                    display_idx,
-                )));
-            }
+        if !lock.contains(&new_service_name) {
+            lock.add_service(Box::new(video_service::new(
+                self.video_source(),
+                display_idx,
+            )));
         }
         // For versions greater than 1.2.4, a `CaptureDisplays` message will be sent immediately.
         // Unnecessary capturers will be removed then.
@@ -4237,6 +4268,7 @@ impl Connection {
         }
         lock.subscribe(&new_service_name, self.inner.clone(), true);
         self.display_idx = display_idx;
+        true
     }
 
     #[cfg(windows)]
@@ -4263,26 +4295,61 @@ impl Connection {
 
     async fn capture_displays(&mut self, add: &[usize], sub: &[usize], set: &[usize]) {
         let video_source = self.video_source();
-        if let Some(sever) = self.server.upgrade() {
-            let mut lock = sever.write().unwrap();
-            for display in add.iter() {
+        let source_count = Self::video_source_count(video_source);
+        // Only add/set can create services; sub only narrows existing subscriptions.
+        let valid_add = add
+            .iter()
+            .copied()
+            .filter(|display| *display < source_count)
+            .collect::<Vec<_>>();
+        let valid_sub = sub
+            .iter()
+            .copied()
+            .filter(|display| *display < source_count)
+            .collect::<Vec<_>>();
+        let valid_set = set
+            .iter()
+            .copied()
+            .filter(|display| *display < source_count)
+            .collect::<Vec<_>>();
+        let invalid_count =
+            add.len() + sub.len() + set.len() - valid_add.len() - valid_sub.len() - valid_set.len();
+        if invalid_count != 0 {
+            log::warn!(
+                "Ignore {} invalid {:?} indices, available source count: {}",
+                invalid_count,
+                video_source,
+                source_count
+            );
+        }
+        // Passing an invalid sub request as an empty exclude list would unsubscribe all services.
+        if (!add.is_empty() && valid_add.is_empty())
+            || (add.is_empty() && !sub.is_empty() && valid_sub.is_empty())
+            || (add.is_empty() && sub.is_empty() && !set.is_empty() && valid_set.is_empty())
+        {
+            return;
+        }
+
+        if let Some(server) = self.server.upgrade() {
+            let mut lock = server.write().unwrap();
+            for display in valid_add.iter() {
                 let service_name = video_service::get_service_name(video_source, *display);
                 if !lock.contains(&service_name) {
                     lock.add_service(Box::new(video_service::new(video_source, *display)));
                 }
             }
-            for display in set.iter() {
+            for display in valid_set.iter() {
                 let service_name = video_service::get_service_name(video_source, *display);
                 if !lock.contains(&service_name) {
                     lock.add_service(Box::new(video_service::new(video_source, *display)));
                 }
             }
             if !add.is_empty() {
-                lock.capture_displays(self.inner.clone(), video_source, add, true, false);
+                lock.capture_displays(self.inner.clone(), video_source, &valid_add, true, false);
             } else if !sub.is_empty() {
-                lock.capture_displays(self.inner.clone(), video_source, sub, false, true);
+                lock.capture_displays(self.inner.clone(), video_source, &valid_sub, false, true);
             } else {
-                lock.capture_displays(self.inner.clone(), video_source, set, true, true);
+                lock.capture_displays(self.inner.clone(), video_source, &valid_set, true, true);
             }
             self.multi_ui_session = lock.get_subbed_displays_count(self.inner.id()) > 1;
             if self.follow_remote_window {
@@ -5696,6 +5763,7 @@ impl Connection {
             Some(misc::Union::ChangeDisplayResolution(_)) => "misc.change_display_resolution",
             Some(misc::Union::MessageQuery(_)) => "misc.message_query",
             Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
+            Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",
             Some(_) => "misc.other",
             None => "misc.empty",
         }
@@ -6947,6 +7015,10 @@ mod test {
                         misc_msg(|m| m.set_capture_displays(CaptureDisplays::new())),
                         Some("misc.capture_displays"),
                     ),
+                    (
+                        misc_msg(|m| m.set_switch_sides_request(SwitchSidesRequest::new())),
+                        Some("misc.switch_sides_request"),
+                    ),
                     (msg(|m| m.set_clipboard(Clipboard::new())), None),
                     (
                         msg(|m| m.set_multi_clipboards(MultiClipboards::new())),
@@ -6990,6 +7062,10 @@ mod test {
                     (
                         misc_msg(|m| m.set_toggle_privacy_mode(TogglePrivacyMode::new())),
                         Some("misc.toggle_privacy_mode"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_switch_sides_request(SwitchSidesRequest::new())),
+                        Some("misc.switch_sides_request"),
                     ),
                     (misc_msg(|m| m.set_chat_message(ChatMessage::new())), None),
                     (msg(|m| m.set_clipboard(Clipboard::new())), None),
@@ -7076,6 +7152,10 @@ mod test {
                         msg(|m| m.set_terminal_action(TerminalAction::new())),
                         Some("terminal_action"),
                     ),
+                    (
+                        misc_msg(|m| m.set_switch_sides_request(SwitchSidesRequest::new())),
+                        Some("misc.switch_sides_request"),
+                    ),
                 ],
             ),
             (
@@ -7086,6 +7166,10 @@ mod test {
                         None,
                     ),
                     (msg(|m| m.set_terminal_action(TerminalAction::new())), None),
+                    (
+                        misc_msg(|m| m.set_switch_sides_request(SwitchSidesRequest::new())),
+                        None,
+                    ),
                 ],
             ),
             (
@@ -7104,6 +7188,10 @@ mod test {
                     (
                         msg(|m| m.set_screenshot_request(ScreenshotRequest::new())),
                         Some("screenshot_request"),
+                    ),
+                    (
+                        misc_msg(|m| m.set_switch_sides_request(SwitchSidesRequest::new())),
+                        Some("misc.switch_sides_request"),
                     ),
                     (misc_msg(|m| m.set_refresh_video(true)), None),
                     (misc_msg(|m| m.set_refresh_video_display(0)), None),
