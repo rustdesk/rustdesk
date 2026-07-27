@@ -764,5 +764,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "모든 모니터"),
         ("#{} monitor", "#{} 모니터"),
         ("conn-e2ee-unavailable-tip", "종단 간 암호화를 확인할 수 없습니다.\n원격 장치가 여전히 설정 중일 수 있습니다. 나중에 다시 시도해 보세요.\n이런 일이 계속 발생하면 서버가 신뢰할 수 없을 수도 있습니다.\n어쨌든 계속하시겠습니까?"),
+        ("ID whitelisting", "ID 화이트리스트"),
+        ("Use ID whitelisting", "ID 화이트리스트 사용"),
+        ("id_whitelist_tip", "화이트리스트에 있는 ID만 나에게 액세스할 수 있음"),
+        ("id_whitelist_wildcard_tip", "와일드카드를 지원합니다: '*'는 임의 개수의 문자와, '?'는 정확히 한 문자와 일치합니다"),
+        ("Invalid ID", "유효하지 않은 ID입니다"),
+        ("Your ID is blocked by the peer", "귀하의 ID가 상대방에 의해 차단되었습니다"),
+        ("Your ip is blocked by the peer", "귀하의 IP가 상대방에 의해 차단되었습니다"),
+        ("id_whitelist_caveat_tip", "ID는 연결하는 클라이언트가 보고합니다. 화이트리스트는 노출을 줄이는 것으로 비밀번호나 2FA를 대체하지 않습니다"),
+        ("whitelist_cidr_tip", "CIDR 표기를 지원합니다. 예: 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

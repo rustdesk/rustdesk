@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Všechny monitory"),
         ("#{} monitor", "Monitor č. {}"),
         ("conn-e2ee-unavailable-tip", "Nepodařilo se ověřit koncové šifrování.\nVzdálené zařízení se možná stále nastavuje. Zkuste to znovu později.\nPokud se to bude opakovat, server nemusí být důvěryhodný.\nPřesto pokračovat?"),
+        ("ID whitelisting", "Povolování pouze z daných ID"),
+        ("Use ID whitelisting", "Použít bílou listinu ID"),
+        ("id_whitelist_tip", "Přístup je umožněn pouze z ID, nacházejících se na seznamu povolených"),
+        ("id_whitelist_wildcard_tip", "Jsou podporovány zástupné znaky: '*' odpovídá libovolnému počtu znaků, '?' právě jednomu znaku"),
+        ("Invalid ID", "Neplatné ID"),
+        ("Your ID is blocked by the peer", "Vaše ID je protistranou blokováno"),
+        ("Your ip is blocked by the peer", "Vaše IP adresa je protistranou blokována"),
+        ("id_whitelist_caveat_tip", "ID je hlášeno připojujícím se klientem. Tento seznam snižuje vystavení a nenahrazuje heslo ani 2FA"),
+        ("whitelist_cidr_tip", "Je podporován zápis CIDR, například 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

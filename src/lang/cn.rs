@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "所有显示器"),
         ("#{} monitor", "{}号显示器"),
         ("conn-e2ee-unavailable-tip", "无法验证端到端加密。\n远程设备可能仍在准备中，请稍后重试。\n如果此问题持续出现，服务器可能不受信任。\n仍要继续吗？"),
+        ("ID whitelisting", "ID 白名单"),
+        ("Use ID whitelisting", "只允许白名单上的 ID 访问"),
+        ("id_whitelist_tip", "只有白名单里的 ID 才能访问本机"),
+        ("id_whitelist_wildcard_tip", "支持通配符：'*' 匹配任意数量的字符，'?' 匹配单个字符"),
+        ("Invalid ID", "无效 ID"),
+        ("Your ID is blocked by the peer", "你的 ID 已被对方阻止"),
+        ("Your ip is blocked by the peer", "你的 IP 已被对方阻止"),
+        ("id_whitelist_caveat_tip", "ID 由对端客户端上报，白名单用于减少暴露面，不能替代密码或 2FA"),
+        ("whitelist_cidr_tip", "支持 CIDR 写法，例如 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

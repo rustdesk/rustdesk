@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Toate monitoarele"),
         ("#{} monitor", "Monitor {}"),
         ("conn-e2ee-unavailable-tip", "Criptarea end-to-end nu a putut fi verificată.\nDispozitivul la distanță poate fi încă în curs de configurare. Încercați din nou mai târziu.\nDacă acest lucru continuă, serverul poate să nu fie de încredere.\nContinuați oricum?"),
+        ("ID whitelisting", "Listă de ID-uri autorizate"),
+        ("Use ID whitelisting", "Folosește lista de ID-uri autorizate"),
+        ("id_whitelist_tip", "Doar ID-urile autorizate pot accesa acest dispozitiv"),
+        ("id_whitelist_wildcard_tip", "Sunt acceptate metacaractere: '*' corespunde oricărui număr de caractere, '?' exact unui caracter"),
+        ("Invalid ID", "ID nevalid"),
+        ("Your ID is blocked by the peer", "ID-ul tău este blocat de dispozitivul de la distanță"),
+        ("Your ip is blocked by the peer", "Adresa ta IP este blocată de dispozitivul de la distanță"),
+        ("id_whitelist_caveat_tip", "ID-ul este raportat de clientul care se conectează. Lista albă reduce expunerea și nu înlocuiește parola sau 2FA"),
+        ("whitelist_cidr_tip", "Notația CIDR este acceptată, de exemplu 192.168.1.0/24"),
     ].iter().cloned().collect();
 }
