@@ -1,0 +1,2 @@
+[patch.crates-io]
+libsodium-sys = { git = "https://github.com/FrankHan052176/sodiumoxide", branch = "master" }
