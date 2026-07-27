@@ -365,21 +365,19 @@ impl OhosAudioOutput {
             OH_AudioStreamBuilder_Destroy(builder);
         }
         if renderer_result != AUDIOSTREAM_SUCCESS || renderer.is_null() {
-            Self::deactivate_callback_context(callback_context_id);
-            self.queue.lock().unwrap().clear();
-            if !renderer.is_null() {
-                Self::release_native_renderer(renderer);
-            }
-            unregister_callback_context(callback_context_id);
-            return self.fail("Unable to create OHAudio renderer");
+            return self.abort_setup(
+                renderer,
+                callback_context_id,
+                "Unable to create OHAudio renderer",
+            );
         }
         let start_result = unsafe { OH_AudioRenderer_Start(renderer) };
         if start_result != AUDIOSTREAM_SUCCESS {
-            Self::deactivate_callback_context(callback_context_id);
-            self.queue.lock().unwrap().clear();
-            Self::release_native_renderer(renderer);
-            unregister_callback_context(callback_context_id);
-            return self.fail("Unable to start OHAudio renderer");
+            return self.abort_setup(
+                renderer,
+                callback_context_id,
+                "Unable to start OHAudio renderer",
+            );
         }
         self.renderer = renderer;
         self.callback_context_id = callback_context_id;
@@ -407,6 +405,26 @@ impl OhosAudioOutput {
         }
     }
 
+    fn abort_setup(
+        &mut self,
+        renderer: *mut OH_AudioRenderer,
+        callback_context_id: usize,
+        message: &str,
+    ) -> Result<(), String> {
+        Self::deactivate_callback_context(callback_context_id);
+        self.queue.lock().unwrap().clear();
+        let release_result = Self::release_native_renderer(renderer);
+        unregister_callback_context(callback_context_id);
+        if release_result != AUDIOSTREAM_SUCCESS {
+            let error = format!(
+                "{}; OH_AudioRenderer_Release failed: {}",
+                message, release_result
+            );
+            return self.fail(&error);
+        }
+        self.fail(message)
+    }
+
     fn release_native_renderer(renderer: *mut OH_AudioRenderer) -> i32 {
         if renderer.is_null() {
             return AUDIOSTREAM_SUCCESS;
@@ -428,13 +446,20 @@ impl OhosAudioOutput {
 
     fn release_renderer(&mut self) {
         let was_active = !self.renderer.is_null() || self.callback_context_id != 0;
-        let callback_context_id = std::mem::take(&mut self.callback_context_id);
+        let callback_context_id = self.callback_context_id;
         Self::deactivate_callback_context(callback_context_id);
         self.queue.lock().unwrap().clear();
-        let renderer = std::mem::replace(&mut self.renderer, ptr::null_mut());
-        Self::release_native_renderer(renderer);
+        let release_result = Self::release_native_renderer(self.renderer);
+        if release_result != AUDIOSTREAM_SUCCESS {
+            mark_error(
+                &self.session_id,
+                format!("OH_AudioRenderer_Release failed: {}", release_result),
+            );
+        }
+        self.renderer = ptr::null_mut();
         unregister_callback_context(callback_context_id);
-        if was_active {
+        self.callback_context_id = 0;
+        if was_active && release_result == AUDIOSTREAM_SUCCESS {
             mark_inactive(&self.session_id);
         }
     }
