@@ -3314,6 +3314,18 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     }
 
     let app_exe_name = &format!("{}.exe", &app_name);
+    // NOTE: The pids below are matched by command line, which can silently come
+    // back empty even while the processes are running:
+    // - a 32-bit build cannot read the command line of a 64-bit process, so it
+    //   shells out to `wmic` instead (#11638), and `wmic` is no longer installed
+    //   by default since Windows 11 24H2;
+    // - a non-elevated process cannot read the command line of an elevated one.
+    // The `taskkill` in the commands below matches by image name and is not
+    // affected, but `*_sessions` are then empty, so `_restore_session_guard`
+    // silently restores nothing and the update leaves the user without a tray
+    // icon and main window until the app is launched again. Reading the command
+    // line through `NtQueryInformationProcess` instead would fix the queries for
+    // every caller.
     let main_window_pids =
         crate::platform::get_pids_of_process_with_args::<_, &str>(&app_exe_name, &[]);
     let main_window_sessions = main_window_pids
