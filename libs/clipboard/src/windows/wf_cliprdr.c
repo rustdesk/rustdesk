@@ -49,6 +49,8 @@
 #define WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS 255u
 /* Bound the peer-provided UTF-8 scan separately from the converted Windows name. */
 #define WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES (WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS * 4u)
+/* File clipboard redirection always advertises the descriptor and contents formats. */
+#define WF_CLIPRDR_FILE_FORMAT_COUNT 2u
 
 /* Validates the remote descriptor array size after cItems has been read safely. */
 static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
@@ -1574,13 +1576,39 @@ static BOOL cliprdr_GetUpdatedClipboardFormats(wfClipboard *clipboard, PUINT lpu
 	return TRUE;
 }
 
+/*
+ * A local CF_HDROP is represented by exactly two virtual-file formats.
+ * FileGroupDescriptorW describes every copied file, while FileContents retrieves
+ * each file by index, so CountClipboardFormats() is unrelated to this list's size.
+ *
+ * Keep population capacity-checked: the old code allocated CountClipboardFormats()
+ * entries but always wrote these two. A clipboard containing only CF_HDROP returned
+ * one entry and caused an out-of-bounds write to the second CLIPRDR_FORMAT.
+ */
+UINT32 wf_cliprdr_populate_file_formats(CLIPRDR_FORMAT *formats, UINT32 capacity)
+{
+	if (!formats || capacity < WF_CLIPRDR_FILE_FORMAT_COUNT)
+		return 0;
+
+	formats[0].formatId = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
+	formats[0].formatName = NULL;
+	formats[1].formatId = RegisterClipboardFormat(CFSTR_FILECONTENTS);
+	formats[1].formatName = NULL;
+
+	if (!formats[0].formatId || !formats[1].formatId)
+	{
+		ZeroMemory(formats, WF_CLIPRDR_FILE_FORMAT_COUNT * sizeof(CLIPRDR_FORMAT));
+		return 0;
+	}
+
+	return WF_CLIPRDR_FILE_FORMAT_COUNT;
+}
+
 static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 {
 	UINT rc;
-	int count = 0;
 	UINT32 index;
 	UINT32 numFormats = 0;
-	UINT32 formatId = 0;
 	char formatName[1024];
 	CLIPRDR_FORMAT *formats = NULL;
 	CLIPRDR_FORMAT_LIST formatList = {0};
@@ -1598,18 +1626,14 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 	/* Ignore if other app is holding clipboard */
 	if (try_open_clipboard(clipboard->hwnd))
 	{
-		// If current process is running as service with SYSTEM user.
-		// Clipboard api works fine for text, but copying files works no good.
-		// GetLastError() returns various error codes
-		count = CountClipboardFormats();
-		if (count == 0)
+		if (!IsClipboardFormatAvailable(CF_HDROP))
 		{
-			CloseClipboard();
-			return CHANNEL_RC_NULL_DATA;
+			if (!CloseClipboard())
+				return ERROR_INTERNAL_ERROR;
+			return ERROR_SUCCESS;
 		}
 
-		numFormats = (UINT32)count;
-		formats = (CLIPRDR_FORMAT *)calloc(numFormats, sizeof(CLIPRDR_FORMAT));
+		formats = (CLIPRDR_FORMAT *)calloc(WF_CLIPRDR_FILE_FORMAT_COUNT, sizeof(CLIPRDR_FORMAT));
 
 		if (!formats)
 		{
@@ -1617,13 +1641,13 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 			return CHANNEL_RC_NO_MEMORY;
 		}
 
-		index = 0;
-		// IsClipboardFormatAvailable(CF_HDROP) is checked above
-		UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
-		UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
-		formats[index++].formatId = fsid;
-		formats[index++].formatId = fcid;
-		numFormats = index;
+		numFormats = wf_cliprdr_populate_file_formats(formats, WF_CLIPRDR_FILE_FORMAT_COUNT);
+		if (numFormats == 0)
+		{
+			CloseClipboard();
+			free(formats);
+			return ERROR_INTERNAL_ERROR;
+		}
 
 		if (!CloseClipboard())
 		{
