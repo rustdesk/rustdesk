@@ -4,13 +4,7 @@ use hbb_common::{
     message_proto::{Clipboard, ClipboardFormat, MultiClipboards},
     ResultType,
 };
-use std::{
-    collections::HashSet,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Mutex,
-    },
-};
+use std::{collections::HashSet, sync::Mutex};
 
 pub type SessionEventCallback = fn(SessionID, EventToUI);
 pub type RenderStatsCallback = fn(String, usize, Option<u64>);
@@ -21,39 +15,50 @@ lazy_static::lazy_static! {
     static ref RENDER_STATS_CALLBACK: Mutex<Option<RenderStatsCallback>> = Default::default();
     static ref STARTED_SESSIONS: Mutex<HashSet<SessionID>> = Default::default();
     static ref CLIPBOARDS_HOST: Mutex<Option<MultiClipboards>> = Default::default();
-    static ref CLIPBOARDS_CLIENT: Mutex<Option<MultiClipboards>> = Default::default();
+    static ref CLIENT_CLIPBOARD: Mutex<ClientClipboardState> = Default::default();
 }
 
-static CLIENT_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+struct ClientClipboardState {
+    enabled: bool,
+    clipboards: Option<MultiClipboards>,
+}
+
+impl Default for ClientClipboardState {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            clipboards: None,
+        }
+    }
+}
 
 pub fn set_client_clipboard_enabled(enabled: bool) {
-    CLIENT_CLIPBOARD_ENABLED.store(enabled, Ordering::Relaxed);
+    let mut state = CLIENT_CLIPBOARD.lock().unwrap();
+    state.enabled = enabled;
     if !enabled {
-        CLIPBOARDS_CLIENT.lock().unwrap().take();
+        state.clipboards.take();
     }
 }
 
 pub fn update_client_text_clipboard(content: String) -> bool {
-    if !CLIENT_CLIPBOARD_ENABLED.load(Ordering::Relaxed) {
+    let mut state = CLIENT_CLIPBOARD.lock().unwrap();
+    if !state.enabled {
         return false;
     }
-    update_clipboards(
-        true,
-        MultiClipboards {
-            clipboards: vec![Clipboard {
-                content: content.into_bytes().into(),
-                format: ClipboardFormat::Text.into(),
-                ..Default::default()
-            }],
+    state.clipboards = Some(MultiClipboards {
+        clipboards: vec![Clipboard {
+            content: content.into_bytes().into(),
+            format: ClipboardFormat::Text.into(),
             ..Default::default()
-        },
-    );
+        }],
+        ..Default::default()
+    });
     true
 }
 
 pub fn update_clipboards(client: bool, clipboards: MultiClipboards) {
     if client {
-        *CLIPBOARDS_CLIENT.lock().unwrap() = Some(clipboards);
+        CLIENT_CLIPBOARD.lock().unwrap().clipboards = Some(clipboards);
     } else {
         *CLIPBOARDS_HOST.lock().unwrap() = Some(clipboards);
     }
@@ -61,9 +66,9 @@ pub fn update_clipboards(client: bool, clipboards: MultiClipboards) {
 
 pub(crate) fn get_clipboards(client: bool) -> Option<MultiClipboards> {
     if client {
-        CLIPBOARDS_CLIENT.lock().ok()?.take()
+        CLIENT_CLIPBOARD.lock().unwrap().clipboards.take()
     } else {
-        CLIPBOARDS_HOST.lock().ok()?.take()
+        CLIPBOARDS_HOST.lock().unwrap().take()
     }
 }
 
@@ -72,9 +77,12 @@ pub fn register_session_event_callback(callback: SessionEventCallback) {
 }
 
 pub fn session_start_with_polling_events(session_id: &SessionID, id: &str) -> ResultType<()> {
-    let already_started = !STARTED_SESSIONS.lock().unwrap().insert(*session_id);
+    let inserted = STARTED_SESSIONS.lock().unwrap().insert(*session_id);
+    let already_started = !inserted;
     if let Err(err) = crate::flutter::session_start_(session_id, id, already_started) {
-        STARTED_SESSIONS.lock().unwrap().remove(session_id);
+        if inserted {
+            STARTED_SESSIONS.lock().unwrap().remove(session_id);
+        }
         return Err(err);
     }
     Ok(())
