@@ -2846,11 +2846,6 @@ impl Connection {
             #[cfg(feature = "flutter")]
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if let Some(lr) = _s.lr.clone().take() {
-                // Switching sides authorizes without a password, so it must not bypass the
-                // whitelist, which can be a locked policy pushed by the server.
-                if !self.check_id_whitelist().await {
-                    return false;
-                }
                 SWITCH_SIDES_UUID
                     .lock()
                     .unwrap()
@@ -2868,6 +2863,11 @@ impl Connection {
                             }
                             self.reset_session_scope_for_login();
                             self.handle_login_request_without_validation(&lr).await;
+                            // Switching sides authorizes without a password, so it must not bypass
+                            // the whitelist, which can be a locked policy pushed by the server.
+                            if !self.check_id_whitelist().await {
+                                return false;
+                            }
                             self.from_switch = true;
                             self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::SwitchSides);
                             if !self.send_logon_response_and_keep_alive().await {
