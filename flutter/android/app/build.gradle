@@ -83,7 +83,7 @@ protobuf {
 
 android {
     namespace "com.carriez.flutter_hbb"
-    compileSdkVersion 35
+    compileSdkVersion 36
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
 
@@ -101,7 +101,7 @@ android {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.carriez.flutter_hbb"
         minSdkVersion 22
-        targetSdkVersion 35
+        targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }

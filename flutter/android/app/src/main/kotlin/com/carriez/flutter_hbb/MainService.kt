@@ -358,6 +358,12 @@ class MainService : Service() {
                 releaseMediaProjection()
                 val projection =
                     mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
+                if (projection == null) {
+                    _isReady = false
+                    setMediaProjectionForegroundService(false)
+                    checkMediaPermission()
+                    return@let
+                }
                 projection.registerCallback(mediaProjectionCallback, Handler(Looper.getMainLooper()))
                 mediaProjection = projection
                 _isReady = true
