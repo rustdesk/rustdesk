@@ -52,12 +52,16 @@ pub(super) fn start_listening() -> ResultType<()> {
                                 if hostname == "localhost" {
                                     hostname = "unknown".to_owned();
                                 }
+                                #[cfg(not(target_env = "ohos"))]
+                                let username = crate::platform::get_active_username();
+                                #[cfg(target_env = "ohos")]
+                                let username = crate::username();
                                 let peer = PeerDiscovery {
                                     cmd: "pong".to_owned(),
                                     mac: get_mac(&self_addr),
                                     id,
                                     hostname,
-                                    username: crate::platform::get_active_username(),
+                                    username,
                                     platform: whoami::platform().to_string(),
                                     ..Default::default()
                                 };

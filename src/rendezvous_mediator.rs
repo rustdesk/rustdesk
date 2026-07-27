@@ -136,15 +136,17 @@ impl RendezvousMediator {
         });
         #[cfg(target_os = "android")]
         let start_lan_listening = true;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         let start_lan_listening = crate::platform::is_installed();
+        #[cfg(target_env = "ohos")]
+        let start_lan_listening = false;
         if start_lan_listening {
             std::thread::spawn(move || {
                 allow_err!(super::lan::start_listening());
             });
         }
         // It is ok to run xdesktop manager when the headless function is not allowed.
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if crate::is_server() {
             crate::platform::linux_desktop_manager::start_xdesktop();
         }

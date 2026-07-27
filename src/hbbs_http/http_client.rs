@@ -20,14 +20,17 @@ macro_rules! configure_http_client {
 
         match $tls_type {
             TlsType::Plain => {}
+            #[cfg(not(target_env = "ohos"))]
             TlsType::NativeTls => {
                 builder = builder.use_native_tls();
                 if $danger_accept_invalid_cert {
                     builder = builder.danger_accept_invalid_certs(true);
                 }
             }
+            #[cfg(target_env = "ohos")]
+            TlsType::NativeTls => unreachable!("NativeTls is unavailable on OpenHarmony"),
             TlsType::Rustls => {
-                #[cfg(any(target_os = "android", target_os = "ios"))]
+                #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
                 match hbb_common::verifier::client_config($danger_accept_invalid_cert) {
                     Ok(client_config) => {
                         builder = builder.use_preconfigured_tls(client_config);
@@ -36,7 +39,7 @@ macro_rules! configure_http_client {
                         hbb_common::log::error!("Failed to get client config: {}", e);
                     }
                 }
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 {
                     builder = builder.use_rustls_tls();
                     if $danger_accept_invalid_cert {
@@ -195,6 +198,7 @@ fn create_http_client_with_url_(
                         original_danger_accept_invalid_cert,
                     );
                 }
+                #[cfg(not(target_env = "ohos"))]
                 (TlsType::Rustls, false, Some(_)) => {
                     log::warn!(
                         "Failed to connect to server {} with rustls-tls: {:?}, trying native-tls",
@@ -210,6 +214,7 @@ fn create_http_client_with_url_(
                         original_danger_accept_invalid_cert,
                     );
                 }
+                #[cfg(not(target_env = "ohos"))]
                 (TlsType::NativeTls, _, None) => {
                     log::warn!(
                         "Failed to connect to server {} with native-tls: {:?}, trying accept invalid cert",
@@ -334,6 +339,7 @@ async fn create_http_client_async_with_url_(
                 )
                 .await;
             }
+            #[cfg(not(target_env = "ohos"))]
             (TlsType::Rustls, false, Some(_)) => {
                 log::warn!(
                     "Failed to connect to server {} with rustls-tls: {:?}, trying native-tls",
@@ -350,6 +356,7 @@ async fn create_http_client_async_with_url_(
                 )
                 .await;
             }
+            #[cfg(not(target_env = "ohos"))]
             (TlsType::NativeTls, _, None) => {
                 log::warn!(
                     "Failed to connect to server {} with native-tls: {:?}, trying accept invalid cert",

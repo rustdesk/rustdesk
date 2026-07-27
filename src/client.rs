@@ -1,8 +1,8 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::clipboard_listener;
 use async_trait::async_trait;
 use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use clipboard_master::CallbackResult;
 #[cfg(not(target_os = "linux"))]
 use cpal::{
@@ -21,10 +21,12 @@ use std::{
     ops::Deref,
     str::FromStr,
     sync::{
-        mpsc::{self, RecvTimeoutError},
+        mpsc,
         Arc, Mutex, RwLock,
     },
 };
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+use std::sync::mpsc::RecvTimeoutError;
 use uuid::Uuid;
 
 use crate::{
@@ -40,7 +42,7 @@ use crate::{
 use crate::{clipboard::check_clipboard_files, clipboard_file::unix_file_clip};
 pub use file_trait::FileManager;
 #[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::UnboundedSender;
 use hbb_common::{
     allow_err,
@@ -81,10 +83,10 @@ use scrap::{
 
 #[cfg(not(target_os = "ios"))]
 use crate::clipboard::CLIPBOARD_INTERVAL;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{check_clipboard, ClipboardSide};
 #[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
@@ -92,6 +94,8 @@ pub use super::lang::*;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
+#[cfg(target_env = "ohos")]
+pub mod ohos_audio;
 pub mod screenshot;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
@@ -100,8 +104,10 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
+#[cfg(target_env = "ohos")]
+const MAX_OHOS_DECODE_WARMUP_FRAMES: usize = 30;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
 pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session not ready";
 pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
@@ -120,12 +126,12 @@ pub const REQUIRE_2FA: &'static str = "2FA Required";
 pub const LOGIN_MSG_NO_PASSWORD_ACCESS: &str = "No Password Access";
 pub const LOGIN_MSG_OFFLINE: &str = "Offline";
 pub const LOGIN_SCREEN_WAYLAND: &str = "Wayland login screen is not supported";
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const SCRAP_UBUNTU_HIGHER_REQUIRED: &str = "ubuntu-21-04-required";
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const SCRAP_OTHER_VERSION_OR_X11_REQUIRED: &str =
     "wayland-requires-higher-linux-version";
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const SCRAP_XDP_PORTAL_UNAVAILABLE: &str =
     "xdp-portal-unavailable";
 pub const SCRAP_X11_REQUIRED: &str = "x11 expected";
@@ -135,11 +141,11 @@ pub const SCRAP_X11_REF_URL: &str = "https://rustdesk.com/docs/en/manual/linux/#
 pub const AUDIO_BUFFER_MS: usize = 3000;
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub(crate) struct ClientClipboardContext;
 
 #[cfg(not(feature = "flutter"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub(crate) struct ClientClipboardContext {
     pub cfg: SessionPermissionConfig,
     pub tx: UnboundedSender<Data>,
@@ -164,7 +170,7 @@ lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
 }
@@ -176,7 +182,7 @@ lazy_static::lazy_static! {
 
 const PUBLIC_SERVER: &str = "public";
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
     use enigo::KeyboardControllable;
     #[cfg(target_os = "macos")]
@@ -947,7 +953,7 @@ impl Client {
         if crate::flutter::sessions::has_connected_sessions_running(ConnType::DEFAULT_CONN) {
             return;
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         clipboard_listener::unsubscribe(Self::CLIENT_CLIPBOARD_NAME);
         CLIPBOARD_STATE.lock().unwrap().running = false;
         #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
@@ -966,7 +972,7 @@ impl Client {
     // After all sessions are end, the loop exists.
     //
     // If clipboard update is detected, the text will be sent to all sessions by `send_clipboard_msg`.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn try_start_clipboard(
         _client_clip_ctx: Option<ClientClipboardContext>,
     ) -> Option<UnboundedReceiver<()>> {
@@ -1025,7 +1031,7 @@ impl Client {
         Some(rx_started)
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     fn try_start_clipboard(_p: Option<()>) -> Option<UnboundedReceiver<()>> {
         let mut clipboard_lock = CLIPBOARD_STATE.lock().unwrap();
         if clipboard_lock.running {
@@ -1071,14 +1077,14 @@ impl ClipboardState {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct ClientClipboardHandler {
     ctx: Option<crate::clipboard::ClipboardContext>,
     #[cfg(not(feature = "flutter"))]
     client_clip_ctx: Option<ClientClipboardContext>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl ClientClipboardHandler {
     fn is_text_required(&self) -> bool {
         #[cfg(feature = "flutter")]
@@ -1182,7 +1188,9 @@ impl ClientClipboardHandler {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
-    #[cfg(target_os = "linux")]
+    #[cfg(target_env = "ohos")]
+    audio_output: Option<ohos_audio::OhosAudioOutput>,
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     simple: Option<psimple::Simple>,
     #[cfg(not(target_os = "linux"))]
     audio_buffer: AudioBuffer,
@@ -1319,7 +1327,20 @@ impl AudioBuffer {
 }
 
 impl AudioHandler {
-    #[cfg(target_os = "linux")]
+    #[cfg(target_env = "ohos")]
+    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
+        let output = self
+            .audio_output
+            .as_mut()
+            .with_context(|| "Missing OHAudio output for remote session")?;
+        output
+            .configure(format0.sample_rate, format0.channels as u16)
+            .map_err(|err| anyhow!(err))?;
+        self.sample_rate = (format0.sample_rate, format0.sample_rate);
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
         use pulse::sample::{Format, Spec};
@@ -1425,7 +1446,7 @@ impl AudioHandler {
         if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
             return;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if self.simple.is_none() {
             log::debug!("PulseAudio simple binding does not exists");
             return;
@@ -1458,11 +1479,15 @@ impl AudioHandler {
                     }
                     self.audio_buffer.append_pcm(&buffer);
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     let data_u8 =
                         unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
                     self.simple.as_mut().map(|x| x.write(data_u8));
+                }
+                #[cfg(target_env = "ohos")]
+                if let Some(output) = self.audio_output.as_ref() {
+                    output.enqueue(&buffer[0..n]);
                 }
             }
         });
@@ -1569,8 +1594,17 @@ pub struct VideoHandler {
     recorder: Arc<Mutex<Option<Recorder>>>,
     record: bool,
     _display: usize, // useful for debug
+    #[cfg(target_env = "ohos")]
+    peer_id: String,
     fail_counter: usize,
     first_frame: bool,
+    #[cfg(target_env = "ohos")]
+    decode_warmup_frames: usize,
+}
+
+#[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
+fn direct_render_target(peer_id: &str, display: usize) -> scrap::ohos::DirectRenderTarget {
+    scrap::ohos::lookup_direct_render_target(peer_id, display).unwrap_or_default()
 }
 
 impl VideoHandler {
@@ -1585,7 +1619,11 @@ impl VideoHandler {
     }
 
     /// Create a new video handler.
-    pub fn new(format: CodecFormat, _display: usize) -> Self {
+    pub fn new(
+        format: CodecFormat,
+        _display: usize,
+        #[cfg(target_env = "ohos")] peer_id: &str,
+    ) -> Self {
         let luid = Self::get_adapter_luid();
         log::info!("new video handler for display #{_display}, format: {format:?}, luid: {luid:?}");
         let rgba_format =
@@ -1595,14 +1633,32 @@ impl VideoHandler {
                 ImageFormat::ARGB
             };
         VideoHandler {
-            decoder: Decoder::new(format, luid),
+            decoder: {
+                #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
+                {
+                    let target = direct_render_target(peer_id, _display);
+                    Decoder::new_with_render_target(format, luid, target)
+                }
+                #[cfg(all(target_env = "ohos", not(target_arch = "aarch64")))]
+                {
+                    Decoder::new_with_render_target(format, luid, Default::default())
+                }
+                #[cfg(not(target_env = "ohos"))]
+                {
+                    Decoder::new(format, luid)
+                }
+            },
             rgb: ImageRgb::new(rgba_format, crate::get_dst_align_rgba()),
             texture: Default::default(),
             recorder: Default::default(),
             record: false,
             _display,
+            #[cfg(target_env = "ohos")]
+            peer_id: peer_id.to_owned(),
             fail_counter: 0,
             first_frame: true,
+            #[cfg(target_env = "ohos")]
+            decode_warmup_frames: 0,
         }
     }
 
@@ -1627,15 +1683,39 @@ impl VideoHandler {
                     pixelbuffer,
                     chroma,
                 );
-                if res.as_ref().is_ok_and(|x| *x) {
+                let decoded = res.as_ref().is_ok_and(|x| *x);
+                if decoded {
                     self.fail_counter = 0;
+                    self.first_frame = false;
+                    #[cfg(target_env = "ohos")]
+                    {
+                        self.decode_warmup_frames = 0;
+                    }
                 } else {
-                    if self.fail_counter < usize::MAX {
+                    #[cfg(target_env = "ohos")]
+                    let waiting_for_output = self.first_frame
+                        && matches!(format, CodecFormat::H264 | CodecFormat::H265)
+                        && res.as_ref().is_ok_and(|x| !*x)
+                        && self.decode_warmup_frames < MAX_OHOS_DECODE_WARMUP_FRAMES;
+                    #[cfg(not(target_env = "ohos"))]
+                    let waiting_for_output = false;
+
+                    if waiting_for_output {
+                        #[cfg(target_env = "ohos")]
+                        {
+                            self.decode_warmup_frames += 1;
+                            if self.decode_warmup_frames == 1 {
+                                log::warn!(
+                                    "decoder needs more input before producing the first frame"
+                                );
+                            }
+                        }
+                    } else if self.fail_counter < usize::MAX {
                         if self.first_frame && self.fail_counter < MAX_DECODE_FAIL_COUNTER {
                             log::error!("decode first frame failed");
                             self.fail_counter = MAX_DECODE_FAIL_COUNTER;
                         } else {
-                            self.fail_counter += 1;
+                            self.fail_counter = self.fail_counter.saturating_add(1);
                         }
                         log::error!(
                             "Failed to handle video frame, fail counter: {}",
@@ -1643,7 +1723,6 @@ impl VideoHandler {
                         );
                     }
                 }
-                self.first_frame = false;
                 if self.record {
                     self.recorder.lock().unwrap().as_mut().map(|r| {
                         let (w, h) = if *pixelbuffer {
@@ -1670,9 +1749,32 @@ impl VideoHandler {
         self.rgb.set_align(crate::get_dst_align_rgba());
         let luid = Self::get_adapter_luid();
         let format = format.unwrap_or(self.decoder.format());
-        self.decoder = Decoder::new(format, luid);
+        self.decoder = {
+            #[cfg(all(target_env = "ohos", target_arch = "aarch64"))]
+            {
+                let target = direct_render_target(&self.peer_id, self._display);
+                Decoder::new_with_render_target(format, luid, target)
+            }
+            #[cfg(all(target_env = "ohos", not(target_arch = "aarch64")))]
+            {
+                Decoder::new_with_render_target(format, luid, Default::default())
+            }
+            #[cfg(not(target_env = "ohos"))]
+            {
+                Decoder::new(format, luid)
+            }
+        };
         self.fail_counter = 0;
         self.first_frame = true;
+        #[cfg(target_env = "ohos")]
+        {
+            self.decode_warmup_frames = 0;
+        }
+    }
+
+    #[cfg(target_env = "ohos")]
+    pub fn last_decode_latency_ms(&self) -> Option<u64> {
+        self.decoder.last_decode_latency_ms()
     }
 
     /// Start or stop screen record.
@@ -1774,7 +1876,7 @@ pub struct LoginConfigHandler {
     pub received: bool,
     switch_uuid: Option<String>,
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     switch_back_allowed: bool,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
@@ -1893,7 +1995,7 @@ impl LoginConfigHandler {
         self.direct = None;
         self.received = false;
         #[cfg(feature = "flutter")]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         {
             self.switch_back_allowed = false;
         }
@@ -1911,13 +2013,13 @@ impl LoginConfigHandler {
     }
 
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn allow_switch_back_once(&mut self) {
         self.switch_back_allowed = true;
     }
 
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn consume_switch_back_permission(&mut self) -> bool {
         if self.switch_back_allowed {
             self.switch_back_allowed = false;
@@ -2671,9 +2773,9 @@ impl LoginConfigHandler {
         os_password: String,
         password: Vec<u8>,
     ) -> Message {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         let my_id = Config::get_id_or(crate::DEVICE_ID.lock().unwrap().clone());
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         let my_id = Config::get_id();
         let (my_id, pure_id) = if let Some((id, _, _)) = self.other_server.as_ref() {
             let server = Config::get_rendezvous_server();
@@ -2926,10 +3028,15 @@ pub fn start_video_thread<F, T>(
                         let start = std::time::Instant::now();
                         let format = CodecFormat::from(&vf);
                         if video_handler.is_none() {
-                            let mut handler = VideoHandler::new(format, display);
                             let record_state = session.lc.read().unwrap().record_state;
                             let record_permission = session.lc.read().unwrap().record_permission;
                             let id = session.lc.read().unwrap().id.clone();
+                            let mut handler = VideoHandler::new(
+                                format,
+                                display,
+                                #[cfg(target_env = "ohos")]
+                                id.as_str(),
+                            );
                             if record_state && record_permission {
                                 handler.record_screen(true, id, display, is_view_camera);
                             }
@@ -2962,6 +3069,12 @@ pub fn start_video_thread<F, T>(
                                         start.elapsed(),
                                         &mut count,
                                         &mut duration,
+                                    );
+                                    #[cfg(target_env = "ohos")]
+                                    crate::platform::ohos::notify_frame_rendered(
+                                        session.core_session_id.clone(),
+                                        display,
+                                        handler.last_decode_latency_ms(),
                                     );
                                 }
                                 Err(e) => {
@@ -3027,10 +3140,40 @@ pub fn start_video_thread<F, T>(
 
 /// Start an audio thread
 /// Return a audio [`MediaSender`]
+#[cfg(not(target_env = "ohos"))]
 pub fn start_audio_thread() -> MediaSender {
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {
         let mut audio_handler = AudioHandler::default();
+        loop {
+            if let Ok(data) = audio_receiver.recv() {
+                match data {
+                    MediaData::AudioFrame(af) => {
+                        audio_handler.handle_frame(*af);
+                    }
+                    MediaData::AudioFormat(f) => {
+                        log::debug!("recved audio format, sample rate={}", f.sample_rate);
+                        audio_handler.handle_format(f);
+                    }
+                    _ => {}
+                }
+            } else {
+                break;
+            }
+        }
+        log::info!("Audio decoder loop exits");
+    });
+    audio_sender
+}
+
+#[cfg(target_env = "ohos")]
+pub(crate) fn start_audio_thread_for_session(session_id: String) -> MediaSender {
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
+    std::thread::spawn(move || {
+        let mut audio_handler = AudioHandler {
+            audio_output: Some(ohos_audio::OhosAudioOutput::new(session_id)),
+            ..Default::default()
+        };
         loop {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
@@ -3087,7 +3230,10 @@ fn fps_calculate(
 fn get_hwcodec_config() {
     // for sciter and unilink
     #[cfg(feature = "hwcodec")]
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     {
         use std::sync::Once;
         static ONCE: Once = Once::new();
@@ -3455,7 +3601,7 @@ pub fn handle_login_error(
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
     let Ok(mut conn) = crate::ipc::connect(1000, "").await else {
         return false;
@@ -3505,7 +3651,7 @@ pub async fn handle_hash(
 
     // switch_uuid
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let uuid = lc.write().unwrap().switch_uuid.take();
         if let Some(uuid) = uuid {
