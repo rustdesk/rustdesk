@@ -3162,6 +3162,52 @@ impl Drop for WakeLock {
     }
 }
 
+// `check_process("--tray", ..)` can miss an already running tray process: it
+// cannot read the command line of an elevated process from a non-elevated one,
+// and wmic (used by 32-bit builds, #11638) is gone from newer Windows 11. Each
+// missed check spawns one more tray icon, and `connection.rs` checks once per
+// incoming connection, so the icons kept piling up (#6692, #15689). Hold a named
+// mutex as the authoritative single instance guard instead.
+//
+// Returns `false` if another tray process is already running in this session.
+pub fn try_lock_tray_single_instance() -> bool {
+    use winapi::um::{
+        errhandlingapi::{GetLastError, SetLastError},
+        synchapi::CreateMutexW,
+    };
+    // `Local\` is the per session namespace, so the name is scoped to this
+    // session already and cannot be squatted by another user.
+    let name = wide_string(&format!("Local\\{}_tray", crate::get_app_name()));
+    unsafe {
+        // A successful `CreateMutexW` doesn't clear the last error, clear it to
+        // reliably detect `ERROR_ALREADY_EXISTS`.
+        SetLastError(0);
+        // The handle is deliberately kept open for the lifetime of the process.
+        let handle = CreateMutexW(null_mut(), FALSE, name.as_ptr());
+        let last_error = GetLastError();
+        if !handle.is_null() {
+            if last_error == ERROR_ALREADY_EXISTS {
+                CloseHandle(handle);
+                return false;
+            }
+            return true;
+        }
+        if last_error == ERROR_ACCESS_DENIED {
+            // The mutex exists but belongs to a tray process we may not touch,
+            // i.e. one spawned by the elevated installer. Defer to it instead of
+            // adding a second icon.
+            return false;
+        }
+        // Unexpected: show the tray icon anyway, a duplicated icon is better
+        // than never showing the tray icon at all.
+        log::warn!(
+            "Failed to create the tray single instance mutex: {}",
+            io::Error::from_raw_os_error(last_error as _)
+        );
+        true
+    }
+}
+
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
