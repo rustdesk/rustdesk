@@ -6817,12 +6817,12 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
     let (mut pi, mut ti) = (0, 0);
     let mut star: Option<(usize, usize)> = None;
     while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
+        if pi < p.len() && p[pi] == '*' {
             star = Some((pi + 1, ti));
             pi += 1;
+        } else if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
         } else if let Some((sp, st)) = star {
             pi = sp;
             ti = st + 1;
@@ -6854,8 +6854,10 @@ mod test {
         // '*' matches any sequence.
         assert!(wildcard_match("*", "123456789"));
         assert!(wildcard_match("*", ""));
+        assert!(wildcard_match("*", "*abc"));
         assert!(wildcard_match("123*", "123456789"));
         assert!(wildcard_match("123*", "123"));
+        assert!(wildcard_match("12*", "12*9"));
         assert!(!wildcard_match("123*", "124456789"));
         assert!(wildcard_match("*789", "123456789"));
         assert!(wildcard_match("1*9", "123456789"));
