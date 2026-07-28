@@ -664,8 +664,22 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // the generic `start()` accept loop where service-scoped channels are checked. Same policy as
     // `_service`: peer must be root or the active session uid, with a `/proc/pid/exe` identity
     // match. Without this any local process could connect and receive the screen contents.
-    if !authorize_service_scoped_ipc_connection(&stream, "_drm") {
-        log::warn!("drm: rejected unauthorized connection to _drm");
+    //
+    // Run it on the blocking pool. Authorization reads the peer credentials and the ACTIVE session
+    // uid, and on a cache miss the latter falls through to a synchronous `loginctl` fork
+    // (`get_active_userid`). Because the socket is 0666, any local uid can make us do that, and
+    // unlike `_service` this runtime is shared by EVERY live capture stream, so a stall here
+    // hitches frames for all of them rather than just delaying one config sync.
+    let (stream, authorized) = tokio::task::spawn_blocking(move || {
+        let ok = authorize_service_scoped_ipc_connection(&stream, "_drm");
+        (stream, ok)
+    })
+    .await?;
+    if !authorized {
+        // Deliberately no log here: `log_rejected_service_connection` inside the call above already
+        // reports the rejection with the peer and active uid, and rate-limits it to one line per 5 s
+        // precisely because these sockets are world-connectable. A second, unthrottled warn would
+        // hand anyone who can connect an unbounded log-write primitive.
         return Ok(());
     }
 
@@ -731,15 +745,24 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     };
     conn.send_msg(&Data::DrmDisplayList(displays.clone()), None).await?;
 
-    // Wait for the client to choose a display before streaming. `recv_msg_timeout2` gates only the
-    // wait for the first byte, so a timeout leaves the stream at a clean frame boundary.
-    let (display_idx, need_cpu) = loop {
-        match conn.recv_msg_timeout2(10_000).await {
-            Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => break (display, need_cpu),
-            Some(Ok((_, _fd))) => continue, // ignore unexpected messages; drop any stray fd
-            Some(Err(e)) => return Err(e),
-            None => return Ok(()), // timed out: client never chose a display
+    // Wait for the client to choose a display before streaming. ONE receive, and anything that is
+    // not `DrmStart` closes the connection: the consumer answers the display list with `DrmStart`
+    // and nothing else, so there is no legitimate message to skip past. This used to be a loop that
+    // ignored unexpected messages, which restarted the budget on every one of them, so a peer
+    // trickling junk just inside the timeout held a worker thread and one of the MAX_DRM_CONNS
+    // slots indefinitely, and MAX_DRM_CONNS such peers denied DRM capture entirely. The bound is
+    // absolute now (twice the argument in the worst case: `recv_msg_timeout2` applies it to the
+    // wait for the first byte and again to the body), and a timeout leaves the stream at a clean
+    // frame boundary.
+    let (display_idx, need_cpu) = match conn.recv_msg_timeout2(10_000).await {
+        Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => (display, need_cpu),
+        Some(Ok((_, _fd))) => {
+            // Any stray fd is dropped (closed) with `_fd`.
+            log::info!("drm: peer sent something other than DrmStart in the handshake; closing");
+            return Ok(());
         }
+        Some(Err(e)) => return Err(e),
+        None => return Ok(()), // timed out: client never chose a display
     };
     // Resolve the chosen display's CRTC. `displays` here is already filtered to
     // CRTC-bound outputs (see drm_displays_from_reader), so a valid selection
