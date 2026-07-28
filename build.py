@@ -333,23 +333,18 @@ def ffi_bindgen_function_refactor():
         'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
 
 
-# libdrmtap is fetched at build time by cloning the rustdesk-org fork at a pinned
-# ref — the same way rustdesk sources its other native build deps (vcpkg,
+# libdrmtap is fetched at build time from the rustdesk-org fork at a pinned
+# commit — the same way rustdesk sources its other native build deps (vcpkg,
 # flutter_rust_bridge, ...), rather than carrying a git submodule. It is the ONLY
 # pin for the drm backend: rustdesk dlopens this .so at runtime and does not depend on
 # the libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
-# libdrm/seccomp/cap). Override the repo/ref via env (DRMTAP_REPO / DRMTAP_REF) for
-# local testing or another fork.
-# Point at the maintainer-owned rustdesk-org repo. It has no release tag yet, so track its `main`
-# branch and pin the exact commit via LIBDRMTAP_SHA below: the post-clone sha check makes this
-# fail-closed, so `main` moving off the pinned commit fails the build instead of silently shipping a
-# different .so. If rustdesk-org later publishes an immutable vX.Y.Z tag, set DRMTAP_REF to it.
+# libdrm/seccomp/cap). Override the repo via env (DRMTAP_REPO) for local testing
+# or another fork.
+# The commit is fetched directly by sha, so no branch or tag name takes part in the build: see
+# build_libdrmtap_so(). This is the SINGLE source of truth for the pin, deliberately not duplicated in
+# any workflow, so a bump is one edit here (plus the informational version comment in
+# libs/scrap/Cargo.toml). This commit is libdrmtap v0.4.15.
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
-LIBDRMTAP_REF = os.environ.get('DRMTAP_REF', 'main')
-# The immutable commit the ref must resolve to. `git clone --branch` follows a mutable ref (a branch
-# even more than a tag), so verifying this after clone catches a moved/compromised ref swapping the
-# .so. Keep in sync with LIBDRMTAP_REF on every bump (override via DRMTAP_SHA together with DRMTAP_REF
-# for a local fork). This commit is libdrmtap v0.4.15.
 LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'cbc5e6af5b353b6bc351072a27a5351d82ba66e3')
 
 
@@ -365,7 +360,7 @@ def _single_real_so(paths, where):
 
 
 def build_libdrmtap_so():
-    # Build libdrmtap.so from the rustdesk-org fork cloned at LIBDRMTAP_REF. The
+    # Build libdrmtap.so from the rustdesk-org fork, fetched at the pinned LIBDRMTAP_SHA. The
     # pivot dlopen-s this .so in-process in the root service (which already holds
     # CAP_SYS_ADMIN) — no setcap helper, no privileged child. Only the shared
     # library target is built (the source also carries a helper binary we do not
@@ -379,26 +374,34 @@ def build_libdrmtap_so():
         # (rather than silently falling back to a source build) if it holds no single real .so.
         prebuilt = glob.glob(os.path.join(prebuilt_dir, 'libdrmtap.so.0.*'))
         return _single_real_so(prebuilt, f'DRMTAP_PREBUILT_DIR={prebuilt_dir}')
-    # Clone the pinned source if it is not already present (a shallow clone at the
-    # ref). third_party/libdrmtap is not a submodule anymore; it is git-ignored.
+    # Fetch the pinned source if it is not already present. third_party/libdrmtap is not a submodule
+    # anymore; it is git-ignored. The commit is fetched BY SHA rather than by cloning a branch:
+    # `clone --depth 1 --branch main` only ever fetches the tip, so the moment upstream pushes to
+    # `main` the pinned commit is not in the shallow clone at all and the build fails on an unreachable
+    # object. Fetching the sha needs no branch name, so it keeps working across every upstream push and
+    # is immune to a ref being moved or repointed.
     src = os.path.join(repo_root, 'third_party', 'libdrmtap')
     if not os.path.exists(os.path.join(src, 'meson.build')):
         if os.path.isdir(src):
             shutil.rmtree(src)
-        os.makedirs(os.path.dirname(src), exist_ok=True)
-        system2(f'git clone --depth 1 --branch {LIBDRMTAP_REF} {LIBDRMTAP_REPO} {src}')
-    # Verify the immutable-commit pin whenever the source is a GIT checkout — a fresh clone OR a
-    # reused/stale/mismatched one left by an earlier or failed clone: reject and remove it (the next
-    # run re-clones cleanly). A NON-git tree placed here on purpose (a developer building unreleased
-    # local libdrmtap source) has no tag to verify and is used as-is.
+        os.makedirs(src, exist_ok=True)
+        system2(f'git -C {src} init -q')
+        system2(f'git -C {src} remote add origin {LIBDRMTAP_REPO}')
+        system2(f'git -C {src} fetch --depth 1 origin {LIBDRMTAP_SHA}')
+        system2(f'git -C {src} checkout -q FETCH_HEAD')
+    # Verify the pin whenever the source is a GIT checkout. A fetch by sha cannot resolve to anything
+    # else, so this now guards the OTHER case: a reused checkout left by an earlier build at a
+    # different pin, which is what a bump leaves behind. Reject and remove it so the next run re-fetches
+    # cleanly. A NON-git tree placed here on purpose (a developer building unreleased local libdrmtap
+    # source) has nothing to verify and is used as-is.
     if os.path.isdir(os.path.join(src, '.git')):
         got_sha = subprocess.check_output(
             ['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
         if got_sha != LIBDRMTAP_SHA:
             shutil.rmtree(src, ignore_errors=True)
             raise Exception(
-                f'libdrmtap {LIBDRMTAP_REF} at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
-                f'(moved/compromised tag or stale checkout; removed, re-run to re-clone)')
+                f'libdrmtap at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
+                f'(stale checkout from a different pin; removed, re-run to re-fetch)')
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         system2(f'meson setup {build_dir} {src} --buildtype=release')
