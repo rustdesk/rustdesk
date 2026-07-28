@@ -968,6 +968,40 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
+    // Android is scoped-storage only, so every peer supplied path has to stay inside the
+    // app workspace. This is the filesystem boundary, keep it enforced here even though
+    // `Connection` rejects out-of-workspace requests earlier as well.
+    #[cfg(target_os = "android")]
+    {
+        // (path, job id, file num) of the peer supplied path this message acts on.
+        let checked: Option<(&str, i32, i32)> = match &fs {
+            ipc::FS::ReadEmptyDirs { dir, .. } | ipc::FS::ReadDir { dir, .. } => {
+                Some((dir.as_str(), -1, -1))
+            }
+            ipc::FS::RemoveDir { path, id, .. } | ipc::FS::CreateDir { path, id } => {
+                Some((path.as_str(), *id, 0))
+            }
+            ipc::FS::Rename { path, id, .. } => Some((path.as_str(), *id, 0)),
+            ipc::FS::RemoveFile { path, id, file_num } => Some((path.as_str(), *id, *file_num)),
+            ipc::FS::ReadAllFiles { path, id, .. } => Some((path.as_str(), *id, -1)),
+            ipc::FS::NewWrite {
+                path, id, file_num, ..
+            }
+            | ipc::FS::ReadFile {
+                path, id, file_num, ..
+            } => Some((path.as_str(), *id, *file_num)),
+            _ => None,
+        };
+        if let Some((path, id, file_num)) = checked {
+            if !crate::common::is_peer_path_allowed(path) {
+                log::warn!("Reject file operation outside the app workspace: {}", path);
+                if id >= 0 {
+                    send_raw(fs::new_error(id, "Permission denied", file_num), tx);
+                }
+                return;
+            }
+        }
+    }
     match fs {
         ipc::FS::ReadEmptyDirs {
             dir,

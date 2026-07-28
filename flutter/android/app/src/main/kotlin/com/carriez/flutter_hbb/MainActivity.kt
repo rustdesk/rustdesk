@@ -116,13 +116,15 @@ class MainActivity : FlutterActivity() {
                     uris.add(clipData.getItemAt(index).uri)
                 }
             }
-            val files = uris.map { uri ->
-                mapOf(
-                    "uri" to uri.toString(),
-                    "name" to (displayName(uri) ?: uri.lastPathSegment.orEmpty())
-                )
+            thread {
+                val files = uris.map { uri ->
+                    mapOf(
+                        "uri" to uri.toString(),
+                        "name" to (displayName(uri) ?: uri.lastPathSegment.orEmpty())
+                    )
+                }
+                runOnUiThread { channelResult?.success(files) }
             }
-            channelResult?.success(files)
             return
         }
         if (requestCode == REQ_EXPORT_FILE) {
