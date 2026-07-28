@@ -106,13 +106,31 @@ fn connector_key_of(display: i32) -> Option<String> {
 // failing one: after DRM_GRAB_MAX_FAILURES consecutive zero-frame sessions for a given display,
 // get_capturer_info() refuses it so the video service falls back to PipeWire for THAT display; any
 // session that produces a frame clears that display's entry.
-static DRM_DISPLAY_FAILURES: Mutex<BTreeMap<String, (u32, Instant)>> = Mutex::new(BTreeMap::new());
+// Value: (consecutive zero-frame sessions, when that count last moved, how many times this display
+// has been demoted). The third field survives a cooldown expiry on purpose; see `demote_cooldown`.
+static DRM_DISPLAY_FAILURES: Mutex<BTreeMap<String, (u32, Instant, u32)>> =
+    Mutex::new(BTreeMap::new());
 const DRM_GRAB_MAX_FAILURES: u32 = 4;
 // A demotion is recoverable: after this cooldown the display retries DRM, so a monitor that failed
 // for a transient reason is not stuck on PipeWire for the life of the process. It no longer has to
 // undo hotplug damage: the map is keyed by connector identity, so a renumbering cannot move a verdict
 // onto a different monitor in the first place.
 const DEMOTE_COOLDOWN: Duration = Duration::from_secs(30);
+// Cap on the doubling below: 30 s << 4 = 8 minutes between retries.
+const DEMOTE_BACKOFF_MAX_SHIFT: u32 = 4;
+
+/// How long a display stays on PipeWire after its `demotes`-th demotion, doubling each time up to
+/// `DEMOTE_BACKOFF_MAX_SHIFT`. Pure, so the schedule is unit-testable.
+///
+/// A flat cooldown has no terminal state for a display that can never be grabbed: it is demoted,
+/// waits 30 s, is advertised online again, fails its four sessions in a few seconds and is demoted
+/// again, which is PeerInfo churn on a ~35 s cycle for as long as the process lives. Doubling turns
+/// that into a handful of retries and then near-silence, while keeping the property that made the
+/// cooldown recoverable in the first place, because the count is dropped entirely the moment the
+/// display delivers a frame (see `frame()`), not decayed by time.
+fn demote_cooldown(demotes: u32) -> Duration {
+    DEMOTE_COOLDOWN * (1u32 << demotes.saturating_sub(1).min(DEMOTE_BACKOFF_MAX_SHIFT))
+}
 
 // Rapid-rebuild guard (defense-in-depth against a capturer flap). The zero-frame streak above does
 // not catch a display that keeps delivering a first frame and then failing downstream (e.g. a
@@ -295,17 +313,31 @@ impl TraitCapturer for IpcDrmCapturer {
                     // falls back to PipeWire for it (other displays are unaffected).
                     // No identity means the handshake list did not describe this index, so there is
                     // nothing safe to attribute the failure to; skip rather than blame a neighbour.
-                    let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-                    let e = map
-                        .entry(self.connector.clone().unwrap_or_default())
-                        .or_insert((0, Instant::now()));
-                    e.0 += 1;
-                    e.1 = Instant::now();
-                    if e.0 >= DRM_GRAB_MAX_FAILURES {
-                        log::warn!(
-                            "drm: display {} produced no frame in {} sessions; falling back to PipeWire for it",
-                            self.display,
-                            e.0
+                    // Recording it under the empty key would do exactly that, because an index that
+                    // cannot be resolved reads back as the same empty key in get_capturer_info: one
+                    // unidentifiable display would demote the next one.
+                    if let Some(key) = self.connector.clone() {
+                        let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
+                        let e = map.entry(key).or_insert((0, Instant::now(), 0));
+                        e.0 += 1;
+                        e.1 = Instant::now();
+                        // Count the demote cycle exactly once, as the streak crosses the threshold.
+                        if e.0 == DRM_GRAB_MAX_FAILURES {
+                            e.2 += 1;
+                            log::warn!(
+                                "drm: display {} produced no frame in {} sessions; using PipeWire for it, \
+                                 retrying DRM in {:?} (demotion {})",
+                                self.display,
+                                e.0,
+                                demote_cooldown(e.2),
+                                e.2
+                            );
+                        }
+                    } else {
+                        log::debug!(
+                            "drm: display {} produced no frame but has no connector identity; \
+                             not counting it against any display",
+                            self.display
                         );
                     }
                 }
@@ -815,6 +847,17 @@ async fn query_displays_async() -> ResultType<Vec<DrmDisplayInfo>> {
 // still settling to `Unavailable` on a genuinely DRM-less host.
 static DRM_PROBE_FAILURES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 const DRM_PROBE_MAX_FAILURES: u32 = 5;
+// Same idea for the BACKGROUND refresh of a positive verdict. One failed refresh is not evidence
+// that the displays are gone (a transient open, an EACCES), which is why it keeps the verdict; but
+// an unbroken run of them is evidence that nothing is serving `_drm` any more. If the root
+// `--service` dies while this `--server` lives, every refresh fails forever, the cached verdict
+// keeps enumeration advertising a DRM list nothing can stream, and every display restart-loops.
+// After this many consecutive failures the verdict drops back to `Unknown`, NOT to `Unavailable`:
+// we have no evidence about the hardware, only about the producer, so the next enumeration re-probes
+// (and settles to Unavailable itself if DRM really is gone). Refreshes are at most one per
+// POSITIVE_TTL, so three of them is a dead producer, not a hiccup.
+static DRM_REFRESH_FAILURES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+const DRM_REFRESH_MAX_FAILURES: u32 = 3;
 // Single-flight guard: exactly one caller runs the blocking availability probe at a time, so
 // is_available() never calls query_displays() (up to ~4s of IPC) while holding DRM_STATE.
 static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -898,6 +941,11 @@ pub(super) fn is_available() -> bool {
                 list.len(),
                 t.elapsed()
             );
+            // Reset the budget: it is meant to absorb a RUN of failures, and without this it is
+            // spent once per process. A negative verdict expires back to Unknown (see the
+            // NEGATIVE_TTL branch above), so the next cold probe would inherit an already exhausted
+            // counter and demote on its first failure, however long ago the earlier ones were.
+            DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
             true
         }
@@ -928,10 +976,11 @@ pub(super) fn is_available() -> bool {
 /// Refresh a stale positive verdict off the hot path: probe on a background thread and, on a non-empty
 /// result, renew the cached display list so enumeration stops advertising a display an idle hotplug
 /// removed. Single-flight via the same guard as the cold probe so a refresh never stacks with a probe
-/// or another refresh. It never demotes an `Available` verdict to `Unavailable` (a transient empty or
-/// failed probe must not disable a working DRM session), and it re-stamps the verdict on any completed
-/// probe so we re-probe at most once per POSITIVE_TTL even when the list is unchanged or the probe
-/// fails.
+/// or another refresh. A single failed probe never demotes the verdict (a transient failure must not
+/// disable a working DRM session); it re-stamps instead, so we re-probe at most once per POSITIVE_TTL
+/// even when the list is unchanged or the probe fails. `DRM_REFRESH_MAX_FAILURES` consecutive ones do
+/// give the verdict up, to `Unknown`, because by then the evidence is about the producer being gone
+/// rather than about one probe.
 fn refresh_available_async() {
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
@@ -973,16 +1022,32 @@ fn refresh_available_async() {
                     // Unavailable exactly as swap_available_displays does; a later probe restores
                     // Available when a monitor comes back.
                     log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
+                    DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
                     publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
                 }
-                Ok(fresh) => publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh)),
+                Ok(fresh) => {
+                    DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh))
+                }
                 // A failed probe is not evidence that the displays are gone (a transient open or
-                // EACCES); keep the verdict, just restamp so we retry after the next TTL. This
-                // touches only the TTL stamp, not the verdict, so it deliberately does NOT go
+                // EACCES); keep the verdict, just restamp so we retry after the next TTL. That
+                // restamp touches only the TTL, not the verdict, so it deliberately does NOT go
                 // through publish_probe_state: there is nothing for a concurrent probe to lose by
-                // publishing over it.
-                Err(_) => {
-                    if let ProbeState::Available(since, _) = &mut *st {
+                // publishing over it. But a RUN of failures says the producer is gone, and holding
+                // a positive verdict then is what leaves enumeration advertising a DRM list nothing
+                // can serve, with every display restart-looping; after DRM_REFRESH_MAX_FAILURES
+                // give the verdict up (to Unknown, which does go through publish_probe_state) and
+                // let the next enumeration decide from scratch.
+                Err(err) => {
+                    let n = DRM_REFRESH_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
+                    if n >= DRM_REFRESH_MAX_FAILURES {
+                        log::info!(
+                            "drm: availability refresh failed {n}x ({err}); the producer looks gone, \
+                             dropping the cached verdict so the next enumeration re-probes"
+                        );
+                        DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
+                        publish_probe_state(&mut st, ProbeState::Unknown);
+                    } else if let ProbeState::Available(since, _) = &mut *st {
                         *since = Instant::now();
                     }
                 }
@@ -1042,8 +1107,8 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
                 Some(d) => connector_key(d),
                 None => continue,
             };
-            if let Some((count, since)) = failures.get(&key).copied() {
-                if count >= DRM_GRAB_MAX_FAILURES && since.elapsed() < DEMOTE_COOLDOWN {
+            if let Some((count, since, demotes)) = failures.get(&key).copied() {
+                if count >= DRM_GRAB_MAX_FAILURES && since.elapsed() < demote_cooldown(demotes) {
                     info.online = false;
                 }
             }
@@ -1202,13 +1267,15 @@ pub(super) fn get_capturer_info(
     // the video service uses PipeWire for it instead of rebuilding onto DRM forever. Per-display, not
     // a global DRM disable.
     {
-        // Refuse a demoted display UNLESS its demotion has aged past DEMOTE_COOLDOWN, in which case
-        // drop it so the display retries DRM (recoverable, and releases a stale index-pinned verdict).
+        // Refuse a demoted display UNLESS its demotion has aged past the cooldown for its demote
+        // count, in which case clear the failure streak so the display retries DRM (recoverable).
+        // The demote count itself is KEPT, so a display that fails again waits twice as long; only a
+        // delivered frame erases it (frame() removes the entry outright).
         let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-        if let Some((count, since)) = map.get(&key).copied() {
+        if let Some((count, since, demotes)) = map.get(&key).copied() {
             if count >= DRM_GRAB_MAX_FAILURES {
-                if since.elapsed() >= DEMOTE_COOLDOWN {
-                    map.remove(&key);
+                if since.elapsed() >= demote_cooldown(demotes) {
+                    map.insert(key.clone(), (0, Instant::now(), demotes));
                 } else {
                     return Err(anyhow!(
                         "drm capture for display {display_idx} repeatedly produced no frame; using PipeWire"
@@ -1240,10 +1307,15 @@ pub(super) fn get_capturer_info(
             log::warn!(
                 "drm: display {display_idx} rebuilt {count} times within {RAPID_REBUILD_WINDOW:?}; flapping, falling back to PipeWire"
             );
-            DRM_DISPLAY_FAILURES
-                .lock()
-                .unwrap()
-                .insert(key.clone(), (DRM_GRAB_MAX_FAILURES, Instant::now()));
+            // Demote through the same gate, and count the cycle so a display that flaps again waits
+            // longer (the entry may already carry demotions from the zero-frame path).
+            {
+                let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
+                let e = map.entry(key.clone()).or_insert((0, Instant::now(), 0));
+                e.0 = DRM_GRAB_MAX_FAILURES;
+                e.1 = Instant::now();
+                e.2 += 1;
+            }
             return Err(anyhow!(
                 "drm capture for display {display_idx} is flapping; using PipeWire"
             ));
@@ -1349,5 +1421,30 @@ mod drm_capturer_tests {
         let mut c = capturer_with(None);
         put_frame(&c, 800, 600);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+    }
+
+    #[test]
+    fn demote_cooldown_doubles_per_cycle_and_caps() {
+        // First demotion keeps the historical 30 s, so a transient failure still recovers quickly.
+        assert_eq!(demote_cooldown(1), DEMOTE_COOLDOWN);
+        assert_eq!(demote_cooldown(2), DEMOTE_COOLDOWN * 2);
+        assert_eq!(demote_cooldown(3), DEMOTE_COOLDOWN * 4);
+        let cap = DEMOTE_COOLDOWN * (1 << DEMOTE_BACKOFF_MAX_SHIFT);
+        assert_eq!(demote_cooldown(1 + DEMOTE_BACKOFF_MAX_SHIFT), cap);
+        // Never grows past the cap, and never overflows the shift however many cycles are recorded.
+        assert_eq!(demote_cooldown(50), cap);
+        assert_eq!(demote_cooldown(u32::MAX), cap);
+        // A zero (no demotion recorded yet) must not underflow into the cap.
+        assert_eq!(demote_cooldown(0), DEMOTE_COOLDOWN);
+    }
+
+    // The reported symptom: a display that can never be grabbed churned PeerInfo about every 35 s
+    // forever (30 s cooldown plus the ~5 s it takes to burn four sessions). After a few cycles the
+    // retry interval must be minutes, not seconds.
+    #[test]
+    fn a_permanently_ungrabbable_display_stops_churning() {
+        let burn = Duration::from_secs(5); // four failed sessions
+        assert!(demote_cooldown(1) + burn < Duration::from_secs(40));
+        assert!(demote_cooldown(5) + burn > Duration::from_secs(8 * 60));
     }
 }
