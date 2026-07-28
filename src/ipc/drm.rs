@@ -1780,6 +1780,61 @@ mod drm_conn_tests {
         assert!(!drm_peer_authorized(None, None));
     }
 
+    // The accept-time authorization has two halves. `drm_peer_authorized_matrix` above covers the uid
+    // half; this covers the other one, the /proc/<pid>/exe identity match, which is what stops a
+    // DIFFERENT program running as the right uid from being handed the screen. It needs no second
+    // build of rustdesk: any process whose executable differs from ours is a valid negative, so the
+    // test spawns one.
+    #[test]
+    fn accept_time_exe_match_accepts_only_our_own_executable() {
+        // Our own pid must match: same /proc/<pid>/exe by construction.
+        let me = std::process::id();
+        assert!(
+            super::ipc_auth::ensure_peer_executable_matches_current_by_pid_opt(Some(me), "_drm").is_ok(),
+            "the test process must match its own executable"
+        );
+
+        // A real, live process running a DIFFERENT executable must not.
+        let mut other = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .expect("/bin/sleep should be spawnable in the test environment");
+        // Wait for the exec to actually happen before looking. `spawn` returns once the child
+        // exists, and until it finishes exec'ing, /proc/<pid>/exe still points at OUR binary, so
+        // reading it too early sees a match and the assertion below passes for the wrong reason.
+        // Synchronize on an INDEPENDENT observation (the link changing) rather than on the check
+        // being tested. A real peer has necessarily exec'd and connected before it is authorized,
+        // so this window exists only in the test.
+        let ours = std::fs::read_link(format!("/proc/{me}/exe")).ok();
+        let peer_link = format!("/proc/{}/exe", other.id());
+        let mut exec_done = false;
+        for _ in 0..200 {
+            match std::fs::read_link(&peer_link) {
+                Ok(p) if Some(&p) != ours.as_ref() => {
+                    exec_done = true;
+                    break;
+                }
+                _ => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+        let res = if exec_done {
+            super::ipc_auth::ensure_peer_executable_matches_current_by_pid_opt(Some(other.id()), "_drm")
+        } else {
+            Err(anyhow::anyhow!("child never exec'd; nothing was tested"))
+        };
+        let _ = other.kill();
+        let _ = other.wait();
+        assert!(exec_done, "the spawned child never exec'd, so the negative case was not exercised");
+        assert!(
+            res.is_err(),
+            "a peer running another executable must be rejected, got {res:?}"
+        );
+
+        // No pid at all is a rejection, not a pass: the check fails closed when it cannot identify
+        // the peer, which is the case that matters if the kernel ever stops answering SO_PEERCRED.
+        assert!(super::ipc_auth::ensure_peer_executable_matches_current_by_pid_opt(None, "_drm").is_err());
+    }
+
     // _drm admission bound: admit strictly below MAX_DRM_CONNS, reject at and above it.
     // `prev_count` is the live count taken before this connection (what fetch_add returns).
     #[test]
