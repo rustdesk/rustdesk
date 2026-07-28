@@ -44,8 +44,25 @@ struct FrameSlot {
     // assuming BGRA; the CPU-fallback path stores BGRA. The row stride is recoverable from
     // `pixels.len() / height` (the convert output may carry a padded stride).
     latest: Option<(usize, usize, Pixfmt, Vec<u8>)>,
+    // A frame buffer no longer in use, handed back for the receive path to fill again: by `frame()`
+    // when it swaps in a new frame, and by the receive path itself when it supersedes one that was
+    // never consumed. A scanout is megabytes (33 MB at 4K), so allocating one per frame and freeing
+    // it a moment later is the kind of churn a 30 fps loop should not be doing. One slot is enough:
+    // at most one buffer is idle at a time, since the pipeline holds exactly two (the one being
+    // filled and the one published) plus the one `frame()` is lending to the encoder.
+    free: Option<Vec<u8>>,
     // Set once the stream ends so `frame()` returns a hard error (triggers a capturer rebuild).
     ended: Option<String>,
+}
+
+impl FrameSlot {
+    /// Publish `buf` as the newest frame, recycling whatever it supersedes.
+    fn publish(&mut self, w: usize, h: usize, fmt: Pixfmt, buf: Vec<u8>) {
+        if let Some((.., old)) = self.latest.take() {
+            self.free = Some(old);
+        }
+        self.latest = Some((w, h, fmt, buf));
+    }
 }
 
 struct Shared {
@@ -202,6 +219,7 @@ impl IpcDrmCapturer {
         let shared = Arc::new(Shared {
             slot: Mutex::new(FrameSlot {
                 latest: None,
+                free: None,
                 ended: None,
             }),
             cv: Condvar::new(),
@@ -289,7 +307,11 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 }
-                self.cur = buf;
+                // Hand the buffer this one replaces back to the receive path instead of freeing it.
+                // The encoder is done with it: `frame()` takes `&mut self`, so the borrow it lent
+                // out last time has ended.
+                let previous = std::mem::replace(&mut self.cur, buf);
+                self.shared.slot.lock().unwrap().free = Some(previous);
                 self.cur_w = w;
                 self.cur_h = h;
                 self.cur_fmt = fmt;
@@ -516,8 +538,15 @@ async fn recv_thread(
                 };
                 match conv.convert(&mut ddesc, received_fd) {
                     Ok((data, w, h, fmt)) => {
+                        // The convert output is borrowed from the render context and is only valid
+                        // until the next convert, so it must be copied out. Copy into a recycled
+                        // buffer, and outside the slot lock, so a multi-megabyte memcpy never holds
+                        // the encoder off the slot.
+                        let mut buf = shared.slot.lock().unwrap().free.take().unwrap_or_default();
+                        buf.clear();
+                        buf.extend_from_slice(data);
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.latest = Some((w as usize, h as usize, fmt, data.to_vec()));
+                        slot.publish(w as usize, h as usize, fmt, buf);
                         shared.cv.notify_one();
                     }
                     // Transient convert contention: skip this frame (latest-wins keeps the newest),
@@ -554,17 +583,19 @@ async fn recv_thread(
                 let need = (width as usize)
                     .saturating_mul(height as usize)
                     .saturating_mul(4);
-                match conn.next_raw().await {
-                    Ok(raw) => {
-                        if raw.len() < need {
+                // Read the body straight into a recycled frame buffer and publish that same buffer:
+                // the pixels are copied once, by the kernel, on their way out of the socket.
+                let mut buf = shared.slot.lock().unwrap().free.take().unwrap_or_default();
+                match conn.next_raw_into(&mut buf).await {
+                    Ok(()) => {
+                        if buf.len() < need {
                             break format!(
                                 "cpu frame: body {} bytes < {need} for {width}x{height}",
-                                raw.len()
+                                buf.len()
                             );
                         }
                         let mut slot = shared.slot.lock().unwrap();
-                        slot.latest =
-                            Some((width as usize, height as usize, Pixfmt::BGRA, raw.to_vec()));
+                        slot.publish(width as usize, height as usize, Pixfmt::BGRA, buf);
                         shared.cv.notify_one();
                     }
                     Err(err) => break format!("frame body: {err}"),
@@ -588,8 +619,11 @@ async fn recv_thread(
                 let need = (width as usize)
                     .saturating_mul(height as usize)
                     .saturating_mul(4);
-                match conn.next_raw().await {
-                    Ok(raw) => {
+                // A cursor is tiny and changes rarely, so this one keeps its own buffer (the frame
+                // recycler is for scanout-sized bodies) and hands it straight to the cursor cache.
+                let mut raw = Vec::new();
+                match conn.next_raw_into(&mut raw).await {
+                    Ok(()) => {
                         if raw.len() < need {
                             break format!(
                                 "cursor body {} bytes < {need} for {width}x{height}",
@@ -605,7 +639,7 @@ async fn recv_thread(
                                 height: height as i32,
                                 hotx,
                                 hoty,
-                                colors: raw.to_vec(),
+                                colors: raw,
                             },
                         );
                     }
@@ -1416,6 +1450,7 @@ mod drm_capturer_tests {
             shared: Arc::new(Shared {
                 slot: Mutex::new(FrameSlot {
                     latest: None,
+                    free: None,
                     ended: None,
                 }),
                 cv: Condvar::new(),
@@ -1432,9 +1467,14 @@ mod drm_capturer_tests {
         }
     }
 
+    // Publishes exactly the way the receive path does, so the recycling is exercised too: take a
+    // free buffer if one is on offer, fill it, publish it.
     fn put_frame(c: &IpcDrmCapturer, w: usize, h: usize) {
+        let mut buf = c.shared.slot.lock().unwrap().free.take().unwrap_or_default();
+        buf.clear();
+        buf.resize(w * h * 4, 0);
         let mut slot = c.shared.slot.lock().unwrap();
-        slot.latest = Some((w, h, Pixfmt::BGRA, vec![0u8; w * h * 4]));
+        slot.publish(w, h, Pixfmt::BGRA, buf);
     }
 
     #[test]
@@ -1511,6 +1551,47 @@ mod drm_capturer_tests {
             logical_size: Some((w, h)),
             refresh_rate: 60,
         }
+    }
+
+    // A scanout is megabytes, so the buffers must circulate rather than be allocated per frame:
+    // whatever a new frame displaces goes back on offer, both when the encoder consumes one and
+    // when a frame is superseded before anyone reads it.
+    #[test]
+    fn frame_buffers_circulate_instead_of_being_reallocated() {
+        let mut c = capturer_with(Some((64, 32)));
+        put_frame(&c, 64, 32);
+        // Superseded before anyone consumed it: its buffer must come back on offer.
+        put_frame(&c, 64, 32);
+        let recycled = c
+            .shared
+            .slot
+            .lock()
+            .unwrap()
+            .free
+            .as_ref()
+            .map(|b| b.as_ptr());
+        assert!(
+            recycled.is_some(),
+            "a superseded frame must be handed back, not dropped"
+        );
+        // ...and the next frame must be filled into exactly that allocation.
+        put_frame(&c, 64, 32);
+        assert_eq!(
+            c.shared
+                .slot
+                .lock()
+                .unwrap()
+                .latest
+                .as_ref()
+                .map(|(.., b)| b.as_ptr()),
+            recycled,
+            "the receive path must refill the recycled buffer rather than allocate"
+        );
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+        assert!(
+            c.shared.slot.lock().unwrap().free.is_some(),
+            "the buffer the encoder finished with must be handed back to the receive path"
+        );
     }
 
     #[test]

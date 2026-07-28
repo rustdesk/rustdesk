@@ -1204,8 +1204,10 @@ pub struct DrmConn {
     /// The raw stream. Obtained from `connect_drm` (client) or the accepted `_drm` listener stream
     /// (service). All framing is done by hand on this fd; there is no `Framed` codec.
     stream: tokio::net::UnixStream,
-    /// Grow-once accumulation buffer for `recv_msg`/`next_raw` length-prefixed reads (preallocated
-    /// model: it grows to the largest frame seen and is then reused, never per-frame reallocated).
+    /// Grow-once accumulation buffer for `recv_msg` length-prefixed reads (preallocated model: it
+    /// grows to the largest message seen and is then reused, never per-message reallocated). Raw
+    /// bodies do not use it: `next_raw_into` reads into a buffer the caller owns, so a whole frame
+    /// can be recycled between the receive path and the slot it is published to.
     read_buf: Vec<u8>,
     /// Set by `drm_read_full` once the current read has consumed at least one byte off the socket.
     /// `recv_msg` clears it before reading, and `recv_msg_timeout2` reads it to tell a spurious
@@ -1562,9 +1564,11 @@ impl DrmConn {
         drm_send_frame(&self.stream, &data, None).await
     }
 
-    /// Receive a raw length-prefixed body. Parity with `ConnectionTmpl::next_raw`. A raw body never
-    /// carries an fd; a stray fd (protocol desync) is collected by `drm_read_full` and dropped/closed.
-    pub async fn next_raw(&mut self) -> ResultType<bytes::BytesMut> {
+    /// Receive a raw length-prefixed body INTO `out`, replacing its contents. Parity with
+    /// `ConnectionTmpl::next_raw`, except that the caller owns the buffer so it can be recycled
+    /// across frames. A raw body never carries an fd; a stray fd (protocol desync) is collected by
+    /// `drm_read_full` and dropped/closed.
+    pub async fn next_raw_into(&mut self, out: &mut Vec<u8>) -> ResultType<()> {
         // next_raw is not called through recv_msg_timeout2, so its progress flag is unused; pass the
         // field for signature parity (recv_msg clears it before its own reads).
         let mut prefix = [0u8; 4];
@@ -1578,10 +1582,14 @@ impl DrmConn {
         if len > MAX_DRM_RAW_BYTES {
             bail!("drm: raw body length {len} exceeds cap {MAX_DRM_RAW_BYTES}");
         }
-        let mut out = bytes::BytesMut::new();
+        // Read straight into the caller's buffer, reusing its allocation. A CPU-fallback frame is a
+        // whole packed-BGRA scanout, so allocating and zeroing a fresh one here and handing back a
+        // copy of it was two full-frame passes per frame, ~250 MB/s of pure overhead at 4K30 on top
+        // of the copy that actually moves the pixels. `resize` does nothing at all once the caller
+        // has been through one frame of the same size, which is the steady state.
         out.resize(len, 0);
         drm_read_full(&self.stream, &mut out[..], false, &mut self.consumed).await?;
-        Ok(out)
+        Ok(())
     }
 }
 
@@ -1711,8 +1719,15 @@ mod drm_conn_tests {
         let mut rx = DrmConn::new(b);
         let body = Bytes::from(vec![7u8; 5000]);
         tx.send_raw(body.clone()).await.unwrap();
-        let got = rx.next_raw().await.unwrap();
+        let mut got = Vec::new();
+        rx.next_raw_into(&mut got).await.unwrap();
         assert_eq!(&got[..], &body[..]);
+        // The buffer is reused across bodies, including a SHORTER one: a stale tail from the
+        // previous frame must not survive into it.
+        let short = Bytes::from(vec![9u8; 10]);
+        tx.send_raw(short.clone()).await.unwrap();
+        rx.next_raw_into(&mut got).await.unwrap();
+        assert_eq!(&got[..], &short[..]);
     }
 
     // A forged length prefix past the JSON cap is rejected at the prefix, before any body allocation.
