@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Kaikki näytöt"),
         ("#{} monitor", "Näyttö {}"),
         ("conn-e2ee-unavailable-tip", "Päästä päähän -salausta ei voitu vahvistaa.\nEtälaite voi olla vielä määritettävänä. Yritä myöhemmin uudelleen.\nJos tämä jatkuu, palvelin ei ehkä ole luotettava.\nJatketaanko silti?"),
+        ("ID whitelisting", "ID sallintalista"),
+        ("Use ID whitelisting", "Käytä ID sallintalistaa"),
+        ("id_whitelist_tip", "Vain sallitut ID:t voivat muodostaa yhteyden"),
+        ("id_whitelist_wildcard_tip", "Jokerimerkit ovat tuettuja: '*' vastaa mitä tahansa määrää merkkejä, '?' täsmälleen yhtä merkkiä"),
+        ("Invalid ID", "Virheellinen ID"),
+        ("Your ID is blocked by the peer", "Vastapuoli on estänyt ID:si"),
+        ("Your ip is blocked by the peer", "Vastapuoli on estänyt IP-osoitteesi"),
+        ("id_whitelist_caveat_tip", "ID on yhdistävän asiakkaan ilmoittama. Sallintalista pienentää altistusta eikä korvaa salasanaa tai 2FA:ta"),
+        ("whitelist_cidr_tip", "CIDR-merkintä on tuettu, esimerkiksi 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

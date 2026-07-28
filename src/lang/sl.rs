@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Vsi zasloni"),
         ("#{} monitor", "Zaslon {}"),
         ("conn-e2ee-unavailable-tip", "Šifriranja od konca do konca ni bilo mogoče preveriti.\nOddaljena naprava se morda še nastavlja. Poskusite znova pozneje.\nČe se to še naprej dogaja, strežnik morda ni zaupanja vreden.\nVseeno nadaljevati?"),
+        ("ID whitelisting", "Seznam dovoljenih ID-jev"),
+        ("Use ID whitelisting", "Omogoči seznam dovoljenih ID-jev"),
+        ("id_whitelist_tip", "Dostop je možen samo z dovoljenih ID-jev"),
+        ("id_whitelist_wildcard_tip", "Podprti so nadomestni znaki: '*' ustreza poljubnemu številu znakov, '?' natanko enemu znaku"),
+        ("Invalid ID", "Neveljaven ID"),
+        ("Your ID is blocked by the peer", "Vaš ID je blokirala oddaljena naprava"),
+        ("Your ip is blocked by the peer", "Vaš IP je blokirala oddaljena naprava"),
+        ("id_whitelist_caveat_tip", "ID sporoči odjemalec, ki se povezuje. Seznam zmanjšuje izpostavljenost in ne nadomešča gesla ali 2FA"),
+        ("whitelist_cidr_tip", "Podprt je zapis CIDR, na primer 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

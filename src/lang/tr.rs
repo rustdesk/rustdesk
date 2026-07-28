@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Tüm monitörler"),
         ("#{} monitor", "Monitör {}"),
         ("conn-e2ee-unavailable-tip", "Uçtan uca şifreleme doğrulanamadı.\nUzak cihaz hâlâ kuruluyor olabilir. Daha sonra tekrar deneyin.\nBu sorun devam ederse sunucu güvenilir olmayabilir.\nYine de devam edilsin mi?"),
+        ("ID whitelisting", "İzinli ID listesi"),
+        ("Use ID whitelisting", "İzinli ID listesini kullan"),
+        ("id_whitelist_tip", "Bu masaüstüne yalnızca izinli ID'ler bağlanabilir"),
+        ("id_whitelist_wildcard_tip", "Joker karakterler desteklenir: '*' herhangi bir sayıda karakterle, '?' tam olarak bir karakterle eşleşir"),
+        ("Invalid ID", "Geçersiz ID"),
+        ("Your ID is blocked by the peer", "ID'niz karşı taraf tarafından engellendi"),
+        ("Your ip is blocked by the peer", "IP adresiniz karşı taraf tarafından engellendi"),
+        ("id_whitelist_caveat_tip", "ID, bağlanan istemci tarafından bildirilir. Bu liste maruziyeti azaltır; parolanın veya 2FA'nın yerini tutmaz"),
+        ("whitelist_cidr_tip", "CIDR gösterimi desteklenir, örneğin 192.168.1.0/24"),
     ].iter().cloned().collect();
 }
