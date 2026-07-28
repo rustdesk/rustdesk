@@ -155,6 +155,8 @@ BOOL wf_cliprdr_file_descriptor_name_valid(const WCHAR *name)
 	if (!name || name[0] == L'\\' || name[0] == L'/')
 		return FALSE;
 
+	/* FILEDESCRIPTORW::cFileName is WCHAR[MAX_PATH]; reject names without a
+	 * terminator within that fixed field. */
 	for (i = 0; i < MAX_PATH; i++)
 	{
 		WCHAR value = name[i];
