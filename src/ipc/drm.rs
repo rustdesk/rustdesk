@@ -106,7 +106,7 @@ pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<DrmConn> {
     // The producer MUST be root. DRM/KMS scanout export is a root-service capability, and the DRM
     // path outranks PipeWire (an available DRM stream suppresses the portal consent prompt), so a
     // non-root peer that won a socket-path race must not be trusted to supply the display list,
-    // frames and an arbitrary dma-buf fd (review 4.1). The producer direction is authorized in
+    // frames and an arbitrary dma-buf fd. The producer direction is authorized in
     // handle_drm_conn; this closes the same gap on the consumer direction.
     if peer_uid_from_fd(stream.as_raw_fd()) != Some(0) {
         bail!("drm: _drm producer is not root; refusing to consume");
@@ -119,7 +119,7 @@ pub(crate) async fn connect_drm(ms_timeout: u64) -> ResultType<DrmConn> {
 /// drm-off build needs no hbb_common change. The socket is 0666 (world-connectable) so the
 /// unprivileged `--server` can reach it; every accepted peer is still authorized in
 /// `handle_drm_conn` (root or the active session uid + exe identity), so connectable != authorized.
-async fn new_drm_listener() -> ResultType<Incoming> {
+fn new_drm_listener() -> ResultType<Incoming> {
     let path = drm_ipc_path();
     // Ensure the shared service dir exists at its hardened (0711) mode. Passing the `_service`
     // postfix reuses hbb_common's expected mode for that directory; it only creates/chmods the
@@ -144,10 +144,8 @@ enum DrmProducerMsg {
     /// Enumerated displays, sent once before any frame so the task can answer the handshake.
     Displays(Vec<DrmDisplayInfo>),
     /// A captured frame (split/zero-copy path): the serializable dma-buf descriptor plus the (owned)
-    /// scanout fd to hand to the peer via SCM_RIGHTS. The worker always produces a real `fd` here; the
-    /// async task's `ExportLedger` decides whether to actually attach it (`desc.has_fd`) or elide it as
-    /// an import-once cache hit. The `OwnedFd` is closed once the send has dup'd it into the peer (or
-    /// immediately, when elided).
+    /// scanout fd to hand to the peer via SCM_RIGHTS. The `OwnedFd` is closed once the send has dup'd
+    /// it into the peer.
     Frame {
         desc: DmabufDesc,
         fd: Option<OwnedFd>,
@@ -179,85 +177,6 @@ struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
 impl Drop for DrmStopGuard {
     fn drop(&mut self) {
         self.0.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-/// Producer-side fd-elision ledger (root `--service`, one per `_drm` connection). Decides, per
-/// exported frame, whether the scanout dma-buf fd must ride an SCM_RIGHTS cmsg (`has_fd = true`) or
-/// can be elided as an import-once cache hit (`has_fd = false`) because the peer's converter already
-/// imported that `fb_id`. Keyed by `fb_id -> (modifier, dims)`; a change in any of those (a resize,
-/// a modifier/tiling change, or a recycled fb_id that also changed geometry) forces a real fd, and a
-/// modeset/hotplug that invalidates the CRTC ends the connection (so a reconnect starts with a fresh,
-/// empty ledger — matching the peer's fresh, empty converter cache).
-///
-/// SAFETY / CORRECTNESS: eliding relies solely on `(fb_id, modifier, dims)` uniquely identifying a
-/// buffer, but the kernel can recycle an `fb_id` onto a *different* buffer with identical geometry
-/// and modifier; eliding then would serve a stale EGLImage. libdrmtap's own import cache keys on
-/// `fb_id + dma-buf inode` and can re-import ONLY when it is handed a real fd. Because always sending
-/// the fd is cheap (the converter still imports once per `fb_id` and closes the surplus fd) and is
-/// strictly safe, `DRM_FD_ELISION` defaults to `false` for v1 (always send). The ledger's `epoch`
-/// tracks `DRM_DISPLAY_GENERATION` (bumped by the udev listener on a connector-topology change), so a
-/// hotplug/modeset invalidates every cached buffer and forces a real fd; but the ledger still cannot
-/// see the dma-buf inode, so a recycled fb_id within the SAME generation (identical geometry +
-/// modifier) would elide onto a stale EGLImage. Enabling elision needs that inode case validated
-/// first.
-const DRM_FD_ELISION: bool = false;
-
-struct SeenBuf {
-    modifier: u64,
-    dims: (u32, u32),
-    epoch: u64,
-}
-
-struct ExportLedger {
-    seen: HashMap<u32, SeenBuf>,
-    order: std::collections::VecDeque<u32>, // insertion order, for evict-oldest
-    epoch: u64,
-}
-
-impl ExportLedger {
-    // Grow-once, hard-capped (preallocated model): a hostile/buggy peer or a fb_id churn cannot grow
-    // this unbounded; oldest keys are evicted so a real fd is simply re-sent for them later.
-    const MAX_LEDGER: usize = 32;
-
-    fn new() -> Self {
-        Self {
-            seen: HashMap::new(),
-            order: std::collections::VecDeque::new(),
-            epoch: 0,
-        }
-    }
-
-    /// Returns true if this frame's fd must be attached (new/changed/recycled buffer, caching
-    /// disabled, or elision off), false if the converter already holds `fb_id` imported.
-    fn should_send_fd(&mut self, desc: &DmabufDesc) -> bool {
-        // fb_id == 0 disables caching for that frame; elision-off always sends.
-        if !DRM_FD_ELISION || desc.fb_id == 0 {
-            return true;
-        }
-        let ident = SeenBuf {
-            modifier: desc.modifier,
-            dims: (desc.width, desc.height),
-            epoch: self.epoch,
-        };
-        if let Some(prev) = self.seen.get(&desc.fb_id) {
-            if prev.modifier == ident.modifier
-                && prev.dims == ident.dims
-                && prev.epoch == ident.epoch
-            {
-                return false; // import-once cache hit: elide the fd
-            }
-        } else {
-            // New key: record insertion order and evict the oldest if at capacity.
-            if self.order.len() >= Self::MAX_LEDGER {
-                if let Some(old) = self.order.pop_front() {
-                    self.seen.remove(&old);
-                }
-            }
-            self.order.push_back(desc.fb_id);
-        }
-        self.seen.insert(desc.fb_id, ident);
-        true
     }
 }
 
@@ -589,7 +508,7 @@ fn drm_prewarm() {
 /// thread while the workers capture in parallel.
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_drm() {
-    match new_drm_listener().await {
+    match new_drm_listener() {
         Ok(mut incoming) => {
             // Warm libdrmtap/EGL + enumeration off-thread so the first consumer does not pay that
             // one-time cost on its critical path.
@@ -644,7 +563,7 @@ fn drm_conn_admitted(prev_count: usize) -> bool {
     prev_count < MAX_DRM_CONNS
 }
 
-/// Whether a `_drm` peer may keep receiving frames (review 3.3): root (uid 0) always, any other peer
+/// Whether a `_drm` peer may keep receiving frames: root (uid 0) always, any other peer
 /// only while it still matches the active-session uid, and an unknown peer never (fail closed). Pure,
 /// so the per-frame re-authorization decision is unit-testable without a live logind session.
 fn drm_peer_authorized(peer_uid: Option<u32>, active_uid: Option<u32>) -> bool {
@@ -707,7 +626,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // physical scanout of a CRTC regardless of which session currently owns the display. So a stream
     // authorized for one session must stop the moment the active session changes, or the outgoing
     // user's --server keeps receiving the incoming user's screen (and the greeter in between) until
-    // the socket dies (review 3.3). `peer_uid` is the --server's fixed uid.
+    // the socket dies. `peer_uid` is the --server's fixed uid.
     let peer_uid = stream.peer_uid();
 
     // Move the authorized `_drm` stream onto the bespoke SCM_RIGHTS framing (see `DrmConn`). ALL
@@ -792,17 +711,14 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     }
 
     // Forward frames + cursor updates until the worker ends or the client disconnects (a wire send
-    // error on a dropped client propagates out and tears the worker down via the guard). The
-    // per-connection `ExportLedger` decides, for the zero-copy path, whether each frame's fd must ride
-    // an SCM_RIGHTS cmsg or can be elided as an import-once cache hit.
-    let mut ledger = ExportLedger::new();
+    // error on a dropped client propagates out and tears the worker down via the guard).
     // Live hotplug: the udev listener bumps DRM_DISPLAY_GENERATION when the connector topology changes.
     // Seed from the value current at handshake (the list already sent reflects it) and, whenever it
     // moves, push the fresh list to this consumer. Piggybacked on the frame cadence so it costs only one
     // atomic load per frame; a genuinely idle stream tears down after MAX_STALLED and the consumer
     // reconnects to a fresh list anyway.
     let mut seen_gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
-    // Flow control (review P1-2): allow at most DRM_FRAME_CREDIT frames in flight on the socket. The
+    // Flow control: allow at most DRM_FRAME_CREDIT frames in flight on the socket. The
     // consumer acks each converted frame (send_frame_ack) and the producer only sends while it has
     // credit, so a slow convert bounds the socket FIFO to a couple of frames instead of accumulating
     // seconds of stale descriptors (a permanently-behind desktop). Backpressure on the capture
@@ -875,7 +791,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 None => break,
             }
         };
-        // Re-authorize per frame (review 3.3): root (0) is always allowed; any other peer must still be
+        // Re-authorize per frame: root (0) is always allowed; any other peer must still be
         // the active-session uid. Use the CACHE-ONLY active uid (never a blocking loginctl lookup): this
         // runs on the single-threaded `_drm` runtime, so a per-frame seat0 subprocess -- which is
         // exactly what a fresh lookup does during a session switch, when the cache is momentarily empty
@@ -889,10 +805,6 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             break;
         }
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
-        // Keep the ledger's epoch at the live generation so a hotplug/modeset (which may recycle an
-        // fb_id onto a new buffer) invalidates every cached buffer and forces a real fd on the next
-        // frame. Cheap (one field write) and only observable when DRM_FD_ELISION is enabled.
-        ledger.epoch = gen;
         if gen != seen_gen {
             seen_gen = gen;
             let fresh = DRM_DISPLAY_CACHE.lock().unwrap().clone();
@@ -901,7 +813,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             // advertising the removed displays indefinitely.
             conn.send_msg(&Data::DrmDisplaysChanged(fresh), None).await?;
         }
-        // Coalesce to latest-wins at the source (review 4.8). The `_drm` socket is a FIFO, so a
+        // Coalesce to latest-wins at the source. The `_drm` socket is a FIFO, so a
         // consumer that drains slower than we produce (a 4K convert on a modest GPU) would fall
         // seconds behind stale frames. Drain everything already queued without blocking and forward
         // only the NEWEST frame; each replaced frame drops here, closing its OwnedFd (zero-copy path)
@@ -954,8 +866,14 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         }
         match latest_frame {
             Some(DrmProducerMsg::Frame { mut desc, fd }) => {
-                // The worker always supplies a real fd; the ledger decides whether to attach it.
-                let send_fd = fd.is_some() && ledger.should_send_fd(&desc);
+                // Every exported frame carries its fd. Eliding it on an fb_id the converter has
+                // already imported looks free, but the kernel can recycle an fb_id onto a different
+                // buffer with identical geometry and modifier, and this side cannot see the dma-buf
+                // inode that would tell the difference, so an elision can serve a stale EGLImage.
+                // Sending it is cheap: the converter imports once per buffer and closes the surplus
+                // fd. libdrmtap's own import cache keys on fb_id AND inode, and can only re-import
+                // when it is handed a real fd.
+                let send_fd = fd.is_some();
                 desc.has_fd = send_fd;
                 let borrowed = if send_fd { fd.as_ref().map(|f| f.as_fd()) } else { None };
                 conn.send_msg(&Data::DrmFrameDmabuf(desc), borrowed).await?;
@@ -1009,7 +927,7 @@ fn drm_capture_worker(
         drm_enumerate_all_displays()
     };
     // Send even an empty list: the consumer treats "0 displays" as Unavailable and falls back
-    // promptly (zhou's empty-topology finding), rather than waiting out repeated probe failures.
+    // promptly, rather than waiting out repeated probe failures.
     if frame_tx
         .blocking_send(DrmProducerMsg::Displays(displays))
         .is_err()
@@ -1102,7 +1020,7 @@ fn drm_capture_worker(
                         pitches: d.pitches,
                         hdr_eotf: d.hdr_eotf,
                         hdr_max_nits: d.hdr_max_nits,
-                        has_fd: true, // the async task's ExportLedger may downgrade this
+                        has_fd: true, // every exported frame carries its fd; see the send below
                     },
                     fd: Some(fd),
                 }),
@@ -1200,7 +1118,7 @@ fn drm_capture_worker(
 /// SCM_RIGHTS cmsg bound to the frame's first (prefix) byte, so reading the prefix with a control
 /// buffer reliably collects it (`MSG_CTRUNC` is rejected). Reads use exact-length loops so they never
 /// cross a frame boundary and thus never discard a following frame's ancillary fd.
-pub struct DrmConn {
+pub(crate) struct DrmConn {
     /// The raw stream. Obtained from `connect_drm` (client) or the accepted `_drm` listener stream
     /// (service). All framing is done by hand on this fd; there is no `Framed` codec.
     stream: tokio::net::UnixStream,
@@ -1593,7 +1511,7 @@ impl DrmConn {
     }
 }
 
-// Pure-userspace coverage for the bespoke `_drm` SCM_RIGHTS framing (review 6). The wire format is
+// Pure-userspace coverage for the bespoke `_drm` SCM_RIGHTS framing. The wire format is
 // hand-rolled (length prefix + an fd bound to the frame's first byte) because `Framed`/`BytesCodec`
 // cannot carry ancillary data, so it gets direct tests over a socketpair instead of only live runs.
 #[cfg(test)]
@@ -1824,7 +1742,7 @@ mod drm_conn_tests {
         assert_eq!(peer_uid_from_fd(a.as_raw_fd()), Some(euid));
     }
 
-    // Per-frame _drm re-auth decision (review 3.3): root always passes; a non-root peer passes only
+    // Per-frame _drm re-auth decision: root always passes; a non-root peer passes only
     // while it still equals the active-session uid; an unknown peer or active session fails closed.
     #[test]
     fn drm_peer_authorized_matrix() {
@@ -1842,7 +1760,7 @@ mod drm_conn_tests {
         assert!(!drm_peer_authorized(None, None));
     }
 
-    // _drm admission bound (review 6): admit strictly below MAX_DRM_CONNS, reject at and above it.
+    // _drm admission bound: admit strictly below MAX_DRM_CONNS, reject at and above it.
     // `prev_count` is the live count taken before this connection (what fetch_add returns).
     #[test]
     fn drm_conn_admission_bound() {

@@ -10,7 +10,8 @@
 // import-once EGLImage cache it holds are THREAD-LOCAL inside libdrmtap: the
 // context MUST be created, used (`convert`), and closed (`drop`) on the SAME
 // thread (the consumer's `recv_thread`). Dropping it off-thread would strand the
-// cached EGLImages — the exact leak class behind the 0.4.8 OOM regression. The raw
+// cached EGLImages, which leaks a GPU context per capture session until the process is out of
+// memory. The raw
 // ctx pointer makes `RenderConverter` !Send/!Sync, which enforces that at the type
 // level.
 
@@ -54,7 +55,7 @@ impl RenderConverter {
     /// an empty/invalid path falls back to libdrmtap auto-selection. It opens no KMS
     /// card, spawns no helper, and needs no elevated capability. Returns `None` when
     /// libdrmtap is unavailable or too old to carry the split convert symbols (the
-    /// loader refuses a pre-0.4.9 `.so` outright), or when no render node could be
+    /// loader refuses anything below 0.4.10 outright), or when no render node could be
     /// opened (a locked-down seat with no `/dev/dri/renderD*` access) — the caller
     /// then degrades to the service-side CPU convert / PipeWire path. MUST be called
     /// on the thread that will later `convert()` and drop it.

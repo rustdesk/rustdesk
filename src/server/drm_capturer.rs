@@ -22,7 +22,7 @@
 // thread-local, so both convert and close must run on the same thread.
 
 use crate::ipc::{connect_drm, Data, DrmDisplayInfo};
-use hbb_common::{anyhow::anyhow, log, message_proto::DisplayInfo, tokio, ResultType};
+use hbb_common::{anyhow::anyhow, bail, log, message_proto::DisplayInfo, tokio, ResultType};
 use scrap::drm_render::RenderConverter;
 use scrap::drmtap_dl::drmtap_dmabuf_desc;
 use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
@@ -239,7 +239,7 @@ impl IpcDrmCapturer {
                 // with no owning capturer (our Drop never runs — the capturer was never built), so
                 // signal it to stop before giving up.
                 stop.store(true, Ordering::SeqCst);
-                return Err(anyhow!("drm capture handshake timed out"));
+                bail!("drm capture handshake timed out");
             }
         };
         Ok((
@@ -420,10 +420,10 @@ async fn recv_thread(
         .get(display.max(0) as usize)
         .map(|d| (d.device.clone(), d.crtc_id));
     let our_key = displays.get(display.max(0) as usize).map(connector_key);
-    // Open the unprivileged render-node convert context ONCE, on THIS thread, BEFORE the handshake; it
-    // is dropped on this same thread when the loop exits (its EGL state + import-once cache are
-    // thread-local). `None` means no usable render node (a locked-down seat, or an old `.so` without
-    // the split symbols): we then ask the service for the CPU-converted `DrmFrame` path via
+    // Open the unprivileged render-node convert context ONCE, on THIS thread, before we answer the
+    // display list with DrmStart; it is dropped on this same thread when the loop exits (its EGL
+    // state + import-once cache are thread-local). `None` means no usable render node (a locked-down
+    // seat with no /dev/dri/renderD* access): we then ask the service for the CPU-converted `DrmFrame` path via
     // `need_cpu`, so a render-node-less seat still captures instead of the service streaming a dma-buf
     // fd we cannot detile (which would lose the stream and force a PipeWire fallback nobody may be
     // present to approve on an unattended seat).
@@ -448,7 +448,7 @@ async fn recv_thread(
     // SUCCEEDS and yields corrupted pixels, so there is no convert error for the prefer-cpu bit above
     // to learn from - the stream just looks broken. The node is empty when the service ran against a
     // libdrmtap without `drmtap_render_node` (we dlopen by soname, so the runtime .so can be older
-    // than the one this was built against, anywhere in 0.4.9..0.4.14 -- below that it does not load
+    // than the one this was built against, anywhere in 0.4.10..0.4.14 -- below that it does not load
     // at all). Ask for the CPU path instead: the service converts on the
     // device it already has open, which is correct by construction. Single-render-node hosts (the
     // common case) keep the dma-buf fast path untouched.
@@ -530,7 +530,10 @@ async fn recv_thread(
                     format: desc.format,
                     modifier: desc.modifier,
                     fb_id: desc.fb_id,
-                    num_planes: desc.num_planes,
+                    // Clamped although the producer already normalizes it and must be root: this
+                    // value indexes offsets/pitches inside libdrmtap, and the wire is the one place
+                    // it arrives from another process.
+                    num_planes: desc.num_planes.clamp(1, 4),
                     offsets: desc.offsets,
                     pitches: desc.pitches,
                     hdr_eotf: desc.hdr_eotf,
@@ -797,27 +800,32 @@ fn remove_drm_cursor(display: i32, epoch: u64) {
     }
 }
 
-// Pick the cursor to present: prefer the visible one (the pointer is over exactly one captured CRTC
-// at a time), else fall back to any (hidden) entry so the client still gets the hidden sentinel when
-// the pointer is off every captured monitor. `None` only when no stream is active.
-fn pick_drm_cursor() -> Option<DrmCursorData> {
+// Which cursor to present: prefer the visible one (the pointer is over exactly one captured CRTC at
+// a time), else fall back to any (hidden) entry so the client still gets the hidden sentinel when the
+// pointer is off every captured monitor. Returns what `f` extracts from it, so a caller that only
+// wants the id does not pay for a clone of the pixels. `None` only when no stream is active.
+fn with_drm_cursor<T>(f: impl Fn(&DrmCursorData) -> T) -> Option<T> {
     let map = DRM_CURSOR.lock().unwrap();
     map.values()
         .map(|(_, c)| c)
         .find(|c| c.id != scrap::drm_reader::HIDDEN_CURSOR_ID)
         .or_else(|| map.values().map(|(_, c)| c).next())
-        .cloned()
+        .map(f)
 }
 
 /// The id of the current DRM hardware cursor (None if no stream). The cursor service polls this to
-/// detect shape changes (a change triggers a `get_cursor_data` fetch).
+/// detect shape changes (a change triggers a `get_cursor_data` fetch), so it runs at frame cadence
+/// and deliberately reads the id WITHOUT copying the pixels: a 256x256 cursor is 256 KiB, and
+/// cloning that 30 times a second to look at 8 bytes of it is pure waste.
 pub fn drm_cursor_id() -> Option<u64> {
-    pick_drm_cursor().map(|c| c.id)
+    with_drm_cursor(|c| c.id)
 }
 
-/// The current DRM hardware-cursor snapshot (RGBA), or None.
+/// The current DRM hardware-cursor snapshot (RGBA), or None. The pixels are premultiplied ARGB and
+/// are passed through as-is, which is exactly what the XFixes path does (`platform/linux.rs`
+/// `get_cursor_data`), so the client sees one cursor format whichever backend produced it.
 pub fn drm_cursor() -> Option<DrmCursorData> {
-    pick_drm_cursor()
+    with_drm_cursor(|c| c.clone())
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,6 +1108,12 @@ fn refresh_available_async() {
 /// retries (the "connects on the Nth try" symptom). Probes with a short retry budget and only caches
 /// the positive result; a genuinely DRM-less host just falls through to the lazy `is_available()`.
 pub(super) fn warm_availability() {
+    // Nothing on X11 can consume a DRM stream, and probing makes the ROOT service open DRM readers,
+    // so an X11 host running a drm build would pay that at every startup for a path it can never
+    // take. The lazy probe behind is_available is reached only from the Wayland paths already.
+    if crate::platform::linux::is_x11() {
+        return;
+    }
     for _ in 0..10 {
         if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..)) {
             return;
@@ -1126,7 +1140,7 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     };
     let multi = list.len() > 1;
     let mut infos = augment_with_wayland_geometry(&list);
-    // review 4.5: on a multi-monitor host a display demoted to PipeWire has no geometry-consistent
+    // On a multi-monitor host a display demoted to PipeWire has no geometry-consistent
     // per-connector stream to fall through to -- the portal exposes a single whole-desktop stream, so
     // serving it for one connector would stretch the frame and offset all input. Advertise such a
     // display OFFLINE while keeping its list position, so the index space stays aligned with
@@ -1369,9 +1383,9 @@ pub(super) fn get_capturer_info(
                 if since.elapsed() >= demote_cooldown(demotes) {
                     map.insert(key.clone(), (0, Instant::now(), demotes));
                 } else {
-                    return Err(anyhow!(
+                    bail!(
                         "drm capture for display {display_idx} repeatedly produced no frame; using PipeWire"
-                    ));
+                    );
                 }
             }
         }
@@ -1408,9 +1422,7 @@ pub(super) fn get_capturer_info(
                 e.1 = Instant::now();
                 e.2 += 1;
             }
-            return Err(anyhow!(
-                "drm capture for display {display_idx} is flapping; using PipeWire"
-            ));
+            bail!("drm capture for display {display_idx} is flapping; using PipeWire");
         }
     }
     let ndisplay = displays.len();

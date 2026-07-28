@@ -13,7 +13,9 @@ mod ipc_drm;
 // `crate::ipc::DrmDisplayInfo`) keep working, and so the `Data` variants can name the two
 // payload types.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-pub use ipc_drm::{start_drm, DmabufDesc, DrmConn, DrmDisplayInfo};
+pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::DrmConn;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::connect_drm;
 

@@ -170,8 +170,9 @@ impl DrmReader {
     /// the internal buffer. Returns (width, height). The returned slice is valid
     /// until the next grab. A non-32bpp scanout, an oversized/degenerate
     /// geometry, or a stride < w*4 is rejected with a hard error so the caller
-    /// falls back to PipeWire (see the codex format finding). Errno failures map
-    /// to WouldBlock (retry) or a hard error (tear down) as in the old path.
+    /// falls back to PipeWire rather than encoding whatever the bytes happen to
+    /// mean. Errno failures map to WouldBlock (retry) or a hard error (tear
+    /// down) as in the old path.
     pub fn grab(&mut self) -> io::Result<(&[u8], usize, usize)> {
         // SAFETY: self.ctx is a valid context; frame is zeroed before the call
         // and released on every path.

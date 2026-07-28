@@ -31,7 +31,7 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
   library or one of its runtime deps is missing the load fails cleanly and the
   caller falls back to the PipeWire/portal path.
 - The loader also **refuses a library that cannot do the split**: one reporting
-  below 0.4.9, and one reporting a newer version without actually exporting
+  below 0.4.10, and one reporting a newer version without actually exporting
   `drmtap_grab_desc` / `drmtap_open_render` / `drmtap_convert_dmabuf` (a stale or
   pre-release build). The only way to capture with such a library is the
   in-process convert, which in the root service means loading the vendor GL stack
@@ -41,9 +41,21 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
   the seat or the consumer.
 - The reader restricts the device it opens to a realpath under `/dev/dri/`
   (`drm_reader.rs`); RustDesk always runs libdrmtap in direct in-process mode
-  (`helper_path` is `NULL`), so no privileged child process is ever spawned and
-  none is built, shipped, or installed. There is no `drmtap-helper` binary, no
-  `setcap`, no capability-bearing file, and no capture group in this deployment.
+  (`helper_path` is `NULL`). **No `drmtap-helper` binary is built, shipped, or
+  installed by this package**: there is no `setcap`, no capability-bearing file,
+  and no capture group in this deployment. Being precise about what that does
+  and does not guarantee: an empty `helper_path` is not by itself a "helper
+  disabled" switch in the C. `find_helper` (`privilege_helper.c`) searches six
+  hardcoded paths, one of which is `/usr/lib/rustdesk/drmtap-helper`, the
+  directory this package installs into, and `fork`/`exec`s the first executable
+  it finds if the direct export ever returns `EACCES`/`EPERM`. Here that path is
+  unreachable for two independent reasons: the root service holds
+  `CAP_SYS_ADMIN` so the direct export succeeds, and the package builds only the
+  shared library, so no helper exists at any of those paths. They are all
+  root-writable-only, so a helper appearing there would not be an escalation
+  either, but the honest statement is "a privileged child is spawned only if a
+  helper binary exists at one of those fixed root-owned paths, and this package
+  never installs one", not "never".
 - The `_drm` socket lives beside the hardened `_service` socket
   (`/tmp/<app>-service/ipc_drm`). It is `0666` so the unprivileged `--server`
   can connect, but every accepted peer is authorized in `handle_drm_conn`

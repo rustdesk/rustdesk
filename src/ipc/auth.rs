@@ -211,7 +211,9 @@ pub(crate) fn active_uid() -> Option<u32> {
 /// The active session uid read ONLY from the service-loop cache, never from a fresh (blocking) seat0
 /// lookup. `None` on a cache miss. For hot, latency-sensitive, fail-closed re-auth on an async runtime
 /// thread (the `_drm` per-frame re-auth), where a blocking `loginctl` per frame would stall the stream.
-#[cfg(target_os = "linux")]
+// Gated with the feature, not just the OS: the `_drm` per-frame re-auth is its only caller, so a
+// drm-off Linux build would carry it as dead code and warn about it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
 #[inline]
 pub(crate) fn active_uid_cached() -> Option<u32> {
     crate::platform::linux::get_active_userid_cached()

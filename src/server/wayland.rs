@@ -426,8 +426,8 @@ pub(super) fn get_capturer_for_display(
         unsafe {
             let cap_display_info = &*cap_display_info;
             let rect = cap_display_info.rects[cap_display_info.current];
-            // review 4.5: reaching here with DRM active means get_capturer_info bailed (a demoted
-            // display) and we fell through to PipeWire. Serve this stream ONLY if its rect matches the
+            // Reaching here with DRM active means get_capturer_info bailed (a demoted display) and
+            // we fell through to PipeWire. Serve this stream ONLY if its rect matches the
             // geometry we advertised for this index. The portal typically exposes one whole-desktop
             // stream, so on a multi-monitor host that rect is the FULL desktop while the advertised DRM
             // geometry is a single connector -> serving it would stretch the frame and offset all

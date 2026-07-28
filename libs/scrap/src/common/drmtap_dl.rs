@@ -148,7 +148,7 @@ type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
-// Split-capture entry points (libdrmtap >= 0.4.9). REQUIRED (see below).
+// Split-capture entry points (libdrmtap >= 0.4.10). REQUIRED (see below).
 // `grab_desc` runs on the privileged export side; `open_render`/`convert_dmabuf`
 // on the unprivileged converter side.
 type FnGrabDesc =
@@ -176,7 +176,7 @@ pub struct DrmtapLib {
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
-    // Split-capture symbols (libdrmtap >= 0.4.9). Not optional: a library that
+    // Split-capture symbols (libdrmtap >= 0.4.10). Not optional: a library that
     // cannot do the split is refused at load time (see `abi_accepted`), so these
     // are plain pointers and the type system carries the guarantee that no
     // caller can silently take an in-process-convert path instead.
@@ -209,20 +209,20 @@ const DRMTAP_ABI_MAJOR: c_int = 0;
 // major alone bounds nothing: every release it has ever made reports major 0,
 // and comparing only that accepts a library from before the split existed.
 //
-// 0.4.9 is where `drmtap_grab_desc` / `drmtap_open_render` /
-// `drmtap_convert_dmabuf` landed, i.e. the oldest library that can serve the
-// architecture this code implements: the privileged process exports the scanout
-// dma-buf and NEVER converts, so it never loads libEGL/libGLESv2. An older .so
-// has none of those entry points, and the only way to capture with it is the
-// in-process convert, in the ROOT service. That is precisely the property the
-// split exists to remove, so treat such a library as unusable and fall back to
-// PipeWire/portal rather than quietly pulling the vendor GL stack into the
+// 0.4.10 is the oldest release with the WHOLE split API: `drmtap_open_render`
+// and `drmtap_convert_dmabuf` arrived in 0.4.9, `drmtap_grab_desc` in 0.4.10.
+// That is the oldest library that can serve the architecture this code
+// implements, where the privileged process exports the scanout dma-buf and NEVER
+// converts, so it never loads libEGL/libGLESv2. Below it the only way to capture
+// is the in-process convert, in the ROOT service, which is precisely the
+// property the split exists to remove: treat such a library as unusable and fall
+// back to PipeWire/portal rather than quietly pull the vendor GL stack into the
 // privileged process because a stale file happened to be on the load path.
 //
 // The mirrored `#[repr(C)]` layouts above are unchanged across 0.4.9..0.4.15
 // (verified field by field against include/drmtap.h at both ends), so the floor
 // costs no compatibility that was real.
-const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 9);
+const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 10);
 
 /// Whether a library reporting `major.minor.patch` may be loaded. Pure, so the
 /// version rule is unit-testable without an .so to dlopen: the major must match
@@ -420,8 +420,10 @@ mod tests {
     fn abi_gate_rejects_a_library_from_before_the_split() {
         // The releases that predate drmtap_grab_desc. Accepting any of these means the
         // privileged service has no export-only path and converts in-process, which is
-        // the whole thing the split was built to prevent.
-        for (minor, patch) in [(3, 3), (4, 0), (4, 8)] {
+        // the whole thing the split was built to prevent. 0.4.9 is in the list on
+        // purpose: it introduced the convert half of the split but not the export half,
+        // so it cannot serve the privileged side either.
+        for (minor, patch) in [(3, 3), (4, 0), (4, 8), (4, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
                 "v0.{minor}.{patch} predates the split-capture API and must be refused"
