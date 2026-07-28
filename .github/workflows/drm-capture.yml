@@ -94,9 +94,13 @@ jobs:
       # The whole rustdesk-crate test set with the feature ON, not just the `_drm` ones by name: a name
       # filter would skip the sibling asserts that also matter in this configuration, notably the one
       # bounding `size_of::<Data>()`, which the new DmabufDesc variant grows.
+      # The two skips are the same ones the stock CI applies: both need a real display server and fail
+      # on a headless runner regardless of this feature.
       - name: Run rustdesk crate tests with the drm feature
         shell: bash
-        run: cargo test --locked --target x86_64-unknown-linux-gnu -p rustdesk --features drm
+        run: |
+          cargo test --locked --target x86_64-unknown-linux-gnu -p rustdesk --features drm \
+            --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state
 
   libdrmtap:
     name: libdrmtap pin, build and .so contract

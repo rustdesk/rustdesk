@@ -26,7 +26,7 @@ use hbb_common::{anyhow::anyhow, log, message_proto::DisplayInfo, tokio, ResultT
 use scrap::drm_render::RenderConverter;
 use scrap::drmtap_dl::drmtap_dmabuf_desc;
 use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -60,6 +60,9 @@ pub struct IpcDrmCapturer {
     // when a new frame is taken from the slot.
     // The requested display index this capturer streams, for per-display failure tracking.
     display: i32,
+    // What that index MEANT when the stream started. Per-display memory is keyed by this, not by the
+    // index, so a hotplug that renumbers the list cannot make one monitor inherit another's verdict.
+    connector: Option<String>,
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -73,18 +76,38 @@ pub struct IpcDrmCapturer {
     got_frame: bool,
 }
 
-// Consecutive DRM capture sessions, keyed BY requested display index, that ended without ever
+/// Stable identity of a display: the card it lives on plus its connector name. A list index is NOT an
+/// identity - `drm_enumerate_all_displays` concatenates per-card lists, so plugging or unplugging a
+/// monitor renumbers every display after it, and a verdict learned about one monitor would silently
+/// start applying to another. Everything remembered ABOUT a display is keyed by this instead.
+fn connector_key(d: &DrmDisplayInfo) -> String {
+    format!("{}:{}", d.device, d.name)
+}
+
+/// Resolve a list index to that identity against the currently advertised topology. `None` when no
+/// list is available or the index is out of range; callers then simply do not consult the per-display
+/// memory, which costs one retry rather than applying someone else's verdict.
+/// Takes DRM_STATE, so never call it while holding one of the maps below.
+fn connector_key_of(display: i32) -> Option<String> {
+    match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => list.get(display.max(0) as usize).map(connector_key),
+        _ => None,
+    }
+}
+
+// Consecutive DRM capture sessions, keyed by CONNECTOR IDENTITY, that ended without ever
 // producing a frame. A display whose scanout can never be grabbed (e.g. an unsupported format on its
 // CRTC) enumerates fine but never streams, so the video service would keep rebuilding it onto DRM.
 // Tracking this per display — not globally — stops a working monitor from masking a permanently
 // failing one: after DRM_GRAB_MAX_FAILURES consecutive zero-frame sessions for a given display,
 // get_capturer_info() refuses it so the video service falls back to PipeWire for THAT display; any
 // session that produces a frame clears that display's entry.
-static DRM_DISPLAY_FAILURES: Mutex<BTreeMap<i32, (u32, Instant)>> = Mutex::new(BTreeMap::new());
+static DRM_DISPLAY_FAILURES: Mutex<BTreeMap<String, (u32, Instant)>> = Mutex::new(BTreeMap::new());
 const DRM_GRAB_MAX_FAILURES: u32 = 4;
-// A demotion is recoverable: after this cooldown the display retries DRM. The map is keyed by display
-// index (stable within a session); the cooldown also releases a demotion that a hotplug/modeset may
-// have pinned to an index a different monitor later occupies, so a stale verdict cannot stick forever.
+// A demotion is recoverable: after this cooldown the display retries DRM, so a monitor that failed
+// for a transient reason is not stuck on PipeWire for the life of the process. It no longer has to
+// undo hotplug damage: the map is keyed by connector identity, so a renumbering cannot move a verdict
+// onto a different monitor in the first place.
 const DEMOTE_COOLDOWN: Duration = Duration::from_secs(30);
 
 // Rapid-rebuild guard (defense-in-depth against a capturer flap). The zero-frame streak above does
@@ -101,25 +124,20 @@ const RAPID_REBUILD_MAX: u32 = 6;
 // Displays whose consumer-side dma-buf convert failed (the common multi-GPU cause: the auto-selected
 // render node is not the GPU that exported the scanout, so cross-device import fails permanently).
 // Set on a convert failure; the next connection then requests the CPU-converted path so the service
-// converts on the exporting GPU, instead of the stream flapping until it demotes to PipeWire. One bit
-// per display index. Set-only within a process run (the mismatch is a stable property of the host).
-static DRM_PREFER_CPU: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-fn drm_prefer_cpu(display: i32) -> bool {
-    (0..64).contains(&display)
-        && DRM_PREFER_CPU.load(Ordering::Relaxed) & (1u64 << display) != 0
+// converts on the exporting GPU, instead of the stream flapping until it demotes to PipeWire.
+// Keyed by connector identity and set-only within a process run: which GPU exports a given monitor is
+// a stable property of the host, so the verdict should follow that monitor rather than its position in
+// a list. There is deliberately no bulk clear on hotplug any more: that existed only because the old
+// bitmask was indexed by list position, so a renumbering could point a bit at the wrong display.
+static DRM_PREFER_CPU: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+fn drm_prefer_cpu(key: &Option<String>) -> bool {
+    key.as_ref()
+        .is_some_and(|k| DRM_PREFER_CPU.lock().unwrap().contains(k))
 }
-fn drm_set_prefer_cpu(display: i32) {
-    if (0..64).contains(&display) {
-        DRM_PREFER_CPU.fetch_or(1u64 << display, Ordering::Relaxed);
+fn drm_set_prefer_cpu(key: &Option<String>) {
+    if let Some(k) = key {
+        DRM_PREFER_CPU.lock().unwrap().insert(k.clone());
     }
-}
-// A connector-topology change (hotplug/modeset) can renumber the display indices, so a prefer-cpu bit
-// learned for an old index may now refer to a different physical display (or none). Clear the whole
-// mask on DrmDisplaysChanged and re-learn on the next convert failure, rather than force the CPU path
-// onto a reindexed display. Costs at most one convert-failure retry per affected display after a rare
-// topology change.
-fn drm_clear_prefer_cpu() {
-    DRM_PREFER_CPU.store(0, Ordering::Relaxed);
 }
 
 // How many render nodes this host exposes. Only used to tell "there is nothing to pick wrong" (one
@@ -189,6 +207,7 @@ impl IpcDrmCapturer {
                 shared,
                 stop,
                 display,
+                connector: displays.get(display.max(0) as usize).map(connector_key),
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
@@ -235,7 +254,9 @@ impl TraitCapturer for IpcDrmCapturer {
                     // First frame of this session: DRM capture works for this display, clear its
                     // failure streak.
                     self.got_frame = true;
-                    DRM_DISPLAY_FAILURES.lock().unwrap().remove(&self.display);
+                    if let Some(key) = &self.connector {
+                        DRM_DISPLAY_FAILURES.lock().unwrap().remove(key);
+                    }
                 }
             } else {
                 let err = slot
@@ -247,8 +268,12 @@ impl TraitCapturer for IpcDrmCapturer {
                     // row fail this way for the same display, its scanout is effectively ungrababble;
                     // count it so get_capturer_info() will refuse that display and the video service
                     // falls back to PipeWire for it (other displays are unaffected).
+                    // No identity means the handshake list did not describe this index, so there is
+                    // nothing safe to attribute the failure to; skip rather than blame a neighbour.
                     let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-                    let e = map.entry(self.display).or_insert((0, Instant::now()));
+                    let e = map
+                        .entry(self.connector.clone().unwrap_or_default())
+                        .or_insert((0, Instant::now()));
                     e.0 += 1;
                     e.1 = Instant::now();
                     if e.0 >= DRM_GRAB_MAX_FAILURES {
@@ -307,6 +332,15 @@ async fn recv_thread(
             return;
         }
     };
+    // The service binds this stream to (device, crtc_id) at DrmStart, which survives a topology change.
+    // Everything on this side is addressed by LIST INDEX, which does not: drm_enumerate_all_displays
+    // concatenates per-card lists, so plugging or unplugging a monitor renumbers them. Record what this
+    // stream was actually bound to, so a renumbering can be detected on the next hotplug instead of the
+    // client being shown, and having its clicks mapped to, whichever monitor now occupies this index.
+    let bound_to = displays
+        .get(display.max(0) as usize)
+        .map(|d| (d.device.clone(), d.crtc_id));
+    let our_key = displays.get(display.max(0) as usize).map(connector_key);
     // Open the unprivileged render-node convert context ONCE, on THIS thread, BEFORE the handshake; it
     // is dropped on this same thread when the loop exits (its EGL state + import-once cache are
     // thread-local). `None` means no usable render node (a locked-down seat, or an old `.so` without
@@ -339,7 +373,7 @@ async fn recv_thread(
     // device it already has open, which is correct by construction. Single-render-node hosts (the
     // common case) keep the dma-buf fast path untouched.
     let ambiguous_gpu = render_node.is_empty() && render_node_count() > 1;
-    let force_cpu = drm_prefer_cpu(display) || ambiguous_gpu;
+    let force_cpu = drm_prefer_cpu(&our_key) || ambiguous_gpu;
     let mut converter = if force_cpu {
         None
     } else {
@@ -435,7 +469,7 @@ async fn recv_thread(
                         // cause: the auto-selected renderD* is not the GPU that exported the scanout,
                         // so cross-device import fails permanently. Prefer the CPU path on reconnect
                         // (service converts on the exporting GPU) instead of flapping to PipeWire.
-                        drm_set_prefer_cpu(display);
+                        drm_set_prefer_cpu(&our_key);
                         break format!("convert: {err}");
                     }
                 }
@@ -524,13 +558,32 @@ async fn recv_thread(
             // this never trips the wayland::clear() re-probe restart loop). A subsequent
             // get_display_infos()/get_primary_index() then reports the fresh geometry.
             Data::DrmDisplaysChanged(list) => {
+                // Did this stream's index just come to mean a different monitor? Compare against what
+                // the service actually bound us to. If it moved, keeping the stream alive would send
+                // monitor A's pixels under monitor B's advertised geometry, and route injected input
+                // by B's rect, until something else happened to fail. End it instead: the video
+                // service rebuilds against the fresh list, which is the same path a resolution change
+                // already takes. Checked BEFORE the list is swapped in, so the comparison is against
+                // the topology this stream was started on.
+                let now_at_our_index = list
+                    .get(display.max(0) as usize)
+                    .map(|d| (d.device.clone(), d.crtc_id));
+                if bound_to.is_some() && now_at_our_index != bound_to {
+                    swap_available_displays(list);
+                    scrap::wayland::display::clear_wayland_displays_cache();
+                    break match (&bound_to, &now_at_our_index) {
+                        (Some((_, was)), Some((_, now))) => format!(
+                            "hotplug renumbered display {display}: it was crtc {was}, now crtc {now}"
+                        ),
+                        _ => format!("hotplug removed display {display} from the list"),
+                    };
+                }
                 // Forward the fresh list INCLUDING an empty one (last monitor unplugged): the
                 // availability cache must transition out of Available rather than keep advertising
                 // the removed displays. See swap_available_displays.
                 swap_available_displays(list);
-                // The topology changed: a prefer-cpu bit learned for an old display index may now
-                // point at a different physical display, so clear the mask and re-learn.
-                drm_clear_prefer_cpu();
+                // Nothing to invalidate on a topology change any more: the prefer-cpu verdict is
+                // keyed by connector identity, so it follows its monitor instead of its position.
                 // The raw DRM list is not the whole story: the Wayland LOGICAL geometry cache and
                 // the uinput absolute range are both set once at init, so after a hotplug/modeset the
                 // augmented geometry and injected-coordinate range are stale. Invalidate the cache so
@@ -958,7 +1011,11 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     if multi {
         let failures = DRM_DISPLAY_FAILURES.lock().unwrap();
         for (idx, info) in infos.iter_mut().enumerate() {
-            if let Some((count, since)) = failures.get(&(idx as i32)).copied() {
+            let key = match list.get(idx) {
+                Some(d) => connector_key(d),
+                None => continue,
+            };
+            if let Some((count, since)) = failures.get(&key).copied() {
                 if count >= DRM_GRAB_MAX_FAILURES && since.elapsed() < DEMOTE_COOLDOWN {
                     info.online = false;
                 }
@@ -1110,6 +1167,10 @@ fn display_info_from_drm(d: &DrmDisplayInfo) -> DisplayInfo {
 pub(super) fn get_capturer_info(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
+    // Identity of the display being asked for, resolved ONCE and before any of the per-display maps
+    // are locked: connector_key_of takes DRM_STATE, and nesting that inside a map lock would be the
+    // one lock order this file does not otherwise have.
+    let key = connector_key_of(display_idx as i32).unwrap_or_default();
     // Refuse a display already demoted (repeated zero-frame sessions, or a detected flap below), so
     // the video service uses PipeWire for it instead of rebuilding onto DRM forever. Per-display, not
     // a global DRM disable.
@@ -1117,10 +1178,10 @@ pub(super) fn get_capturer_info(
         // Refuse a demoted display UNLESS its demotion has aged past DEMOTE_COOLDOWN, in which case
         // drop it so the display retries DRM (recoverable, and releases a stale index-pinned verdict).
         let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-        if let Some((count, since)) = map.get(&(display_idx as i32)).copied() {
+        if let Some((count, since)) = map.get(&key).copied() {
             if count >= DRM_GRAB_MAX_FAILURES {
                 if since.elapsed() >= DEMOTE_COOLDOWN {
-                    map.remove(&(display_idx as i32));
+                    map.remove(&key);
                 } else {
                     return Err(anyhow!(
                         "drm capture for display {display_idx} repeatedly produced no frame; using PipeWire"
@@ -1155,7 +1216,7 @@ pub(super) fn get_capturer_info(
             DRM_DISPLAY_FAILURES
                 .lock()
                 .unwrap()
-                .insert(display_idx as i32, (DRM_GRAB_MAX_FAILURES, Instant::now()));
+                .insert(key.clone(), (DRM_GRAB_MAX_FAILURES, Instant::now()));
             return Err(anyhow!(
                 "drm capture for display {display_idx} is flapping; using PipeWire"
             ));
