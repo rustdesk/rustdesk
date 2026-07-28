@@ -309,12 +309,16 @@ pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
 }
 
+// Fire-and-forget by design: the switch flow must not block on this POST,
+// and there is no retry — the peer connects within seconds, so a late
+// retry would land after its punch request was already rejected. If the
+// switch fails, the user triggers it again, which registers a fresh grant.
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn register_switch_grant(switch_uuid: String) {
     tokio::spawn(async move {
         let api_server = crate::ui_interface::get_api_server();
-        if api_server.is_empty() {
+        if api_server.is_empty() || crate::is_public(&api_server) {
             return;
         }
         use hbb_common::sodiumoxide::crypto::{hash::sha256, sign};
@@ -322,7 +326,7 @@ pub fn register_switch_grant(switch_uuid: String) {
         let id = Config::get_id();
         let kp = Config::get_key_pair();
         let Some(sk) = sign::SecretKey::from_slice(&kp.0) else {
-            log::warn!("Failed to register switch grant: no device key");
+            log::error!("Failed to register switch grant: no device key");
             return;
         };
         let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code), &sk);
@@ -334,7 +338,7 @@ pub fn register_switch_grant(switch_uuid: String) {
         .to_string();
         let url = format!("{}/api/switch-grant", api_server);
         if let Err(e) = crate::post_request(url, body, "").await {
-            log::warn!("Failed to register switch grant: {}", e);
+            log::error!("Failed to register switch grant: {}", e);
         }
     });
 }
