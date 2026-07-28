@@ -26,7 +26,7 @@ use hbb_common::{anyhow::anyhow, bail, log, message_proto::DisplayInfo, tokio, R
 use scrap::drm_render::RenderConverter;
 use scrap::drmtap_dl::drmtap_dmabuf_desc;
 use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -116,25 +116,74 @@ fn connector_key_of(display: i32) -> Option<String> {
     }
 }
 
-// Consecutive DRM capture sessions, keyed by CONNECTOR IDENTITY, that ended without ever
-// producing a frame. A display whose scanout can never be grabbed (e.g. an unsupported format on its
-// CRTC) enumerates fine but never streams, so the video service would keep rebuilding it onto DRM.
-// Tracking this per display — not globally — stops a working monitor from masking a permanently
-// failing one: after DRM_GRAB_MAX_FAILURES consecutive zero-frame sessions for a given display,
-// get_capturer_info() refuses it so the video service falls back to PipeWire for THAT display; any
-// session that produces a frame clears that display's entry.
-// Value: (consecutive zero-frame sessions, when that count last moved, how many times this display
-// has been demoted). The third field survives a cooldown expiry on purpose; see `demote_cooldown`.
-static DRM_DISPLAY_FAILURES: Mutex<BTreeMap<String, (u32, Instant, u32)>> =
-    Mutex::new(BTreeMap::new());
+/// Everything this consumer has learned about ONE display, keyed by connector identity
+/// (`connector_key` = `device:name`) rather than by its position in the display list. Position is not
+/// identity: a hotplug renumbers the list, and a verdict pinned to an index then describes whichever
+/// monitor moved into that slot.
+///
+/// The three verdicts live together because they are three answers to one question, "can this display
+/// be captured over DRM right now", and they feed each other: the rebuild cadence and the zero-frame
+/// streak both end in the same demotion, and the convert verdict is what keeps a multi-GPU display
+/// off the dma-buf path so it never gets there. An entry is dropped entirely the moment the display
+/// delivers a frame, which is the single reset for all of it.
+#[derive(Clone, Copy)]
+struct DisplayHealth {
+    /// Consecutive capture sessions that ended without ever producing a frame. A display whose
+    /// scanout can never be grabbed (an unsupported format on its CRTC, say) enumerates fine but
+    /// never streams, so the video service would rebuild it onto DRM forever. Per display, not
+    /// global, so a working monitor cannot mask a permanently failing one.
+    zero_frame_streak: u32,
+    /// When `zero_frame_streak` last moved, i.e. when the current demotion started.
+    since: Instant,
+    /// How many times this display has been demoted. Survives a cooldown expiry on purpose; see
+    /// `demote_cooldown`.
+    demotes: u32,
+    /// When the capturer for this display was last built, and how many builds have happened inside
+    /// `RAPID_REBUILD_WINDOW` of each other. Defense in depth against a flap the zero-frame streak
+    /// cannot see: a display that delivers a first frame and then fails downstream every cycle (a
+    /// frame the encoder rejects) clears the streak each session and would rebuild about once a
+    /// second forever. A capturer that streams longer than the window resets the count, so a healthy
+    /// display never accumulates.
+    last_build: Option<Instant>,
+    rapid_builds: u32,
+    /// The consumer-side dma-buf convert failed for this display. The common cause is multi-GPU: the
+    /// render node we bound to is not the GPU that exported the scanout, so the cross-device import
+    /// fails permanently. The next connection then asks the service for the CPU-converted path, so
+    /// the convert happens on the exporting GPU instead of the stream flapping until it demotes to
+    /// PipeWire. Which GPU exports a given monitor is a stable property of the host, so this follows
+    /// the monitor for the process run.
+    prefer_cpu: bool,
+}
+
+impl DisplayHealth {
+    fn new() -> Self {
+        Self {
+            zero_frame_streak: 0,
+            since: Instant::now(),
+            demotes: 0,
+            last_build: None,
+            rapid_builds: 0,
+            prefer_cpu: false,
+        }
+    }
+
+    /// Whether the display is currently demoted to PipeWire: enough consecutive zero-frame sessions
+    /// (or a detected flap), and the cooldown for its demote count has not expired yet.
+    fn demoted(&self) -> bool {
+        self.zero_frame_streak >= DRM_GRAB_MAX_FAILURES
+            && self.since.elapsed() < demote_cooldown(self.demotes)
+    }
+}
+
+static DRM_DISPLAY_HEALTH: Mutex<BTreeMap<String, DisplayHealth>> = Mutex::new(BTreeMap::new());
 const DRM_GRAB_MAX_FAILURES: u32 = 4;
 // A demotion is recoverable: after this cooldown the display retries DRM, so a monitor that failed
-// for a transient reason is not stuck on PipeWire for the life of the process. It no longer has to
-// undo hotplug damage: the map is keyed by connector identity, so a renumbering cannot move a verdict
-// onto a different monitor in the first place.
+// for a transient reason is not stuck on PipeWire for the life of the process.
 const DEMOTE_COOLDOWN: Duration = Duration::from_secs(30);
 // Cap on the doubling below: 30 s << 4 = 8 minutes between retries.
 const DEMOTE_BACKOFF_MAX_SHIFT: u32 = 4;
+const RAPID_REBUILD_WINDOW: Duration = Duration::from_secs(3);
+const RAPID_REBUILD_MAX: u32 = 6;
 
 /// How long a display stays on PipeWire after its `demotes`-th demotion, doubling each time up to
 /// `DEMOTE_BACKOFF_MAX_SHIFT`. Pure, so the schedule is unit-testable.
@@ -143,39 +192,30 @@ const DEMOTE_BACKOFF_MAX_SHIFT: u32 = 4;
 /// waits 30 s, is advertised online again, fails its four sessions in a few seconds and is demoted
 /// again, which is PeerInfo churn on a ~35 s cycle for as long as the process lives. Doubling turns
 /// that into a handful of retries and then near-silence, while keeping the property that made the
-/// cooldown recoverable in the first place, because the count is dropped entirely the moment the
+/// cooldown recoverable in the first place, because the entry is dropped entirely the moment the
 /// display delivers a frame (see `frame()`), not decayed by time.
 fn demote_cooldown(demotes: u32) -> Duration {
     DEMOTE_COOLDOWN * (1u32 << demotes.saturating_sub(1).min(DEMOTE_BACKOFF_MAX_SHIFT))
 }
 
-// Rapid-rebuild guard (defense-in-depth against a capturer flap). The zero-frame streak above does
-// not catch a display that keeps delivering a first frame and then failing downstream (e.g. a
-// frame the encoder rejects), because got_frame clears the streak each session — so such a display
-// would rebuild ~once per second forever. Track per-display rebuild cadence: after
-// RAPID_REBUILD_MAX rebuilds all within RAPID_REBUILD_WINDOW of each other, demote it to PipeWire
-// via the same failure gate. A capturer that streams longer than the window resets the count, so a
-// healthy display is never demoted.
-static DRM_DISPLAY_REBUILDS: Mutex<BTreeMap<i32, (Instant, u32)>> = Mutex::new(BTreeMap::new());
-const RAPID_REBUILD_WINDOW: Duration = Duration::from_secs(3);
-const RAPID_REBUILD_MAX: u32 = 6;
-
-// Displays whose consumer-side dma-buf convert failed (the common multi-GPU cause: the auto-selected
-// render node is not the GPU that exported the scanout, so cross-device import fails permanently).
-// Set on a convert failure; the next connection then requests the CPU-converted path so the service
-// converts on the exporting GPU, instead of the stream flapping until it demotes to PipeWire.
-// Keyed by connector identity and set-only within a process run: which GPU exports a given monitor is
-// a stable property of the host, so the verdict should follow that monitor rather than its position in
-// a list. There is deliberately no bulk clear on hotplug any more: that existed only because the old
-// bitmask was indexed by list position, so a renumbering could point a bit at the wrong display.
-static DRM_PREFER_CPU: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 fn drm_prefer_cpu(key: &Option<String>) -> bool {
-    key.as_ref()
-        .is_some_and(|k| DRM_PREFER_CPU.lock().unwrap().contains(k))
+    key.as_ref().is_some_and(|k| {
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get(k)
+            .is_some_and(|h| h.prefer_cpu)
+    })
 }
+
 fn drm_set_prefer_cpu(key: &Option<String>) {
     if let Some(k) = key {
-        DRM_PREFER_CPU.lock().unwrap().insert(k.clone());
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .entry(k.clone())
+            .or_insert_with(DisplayHealth::new)
+            .prefer_cpu = true;
     }
 }
 
@@ -320,7 +360,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     // failure streak.
                     self.got_frame = true;
                     if let Some(key) = &self.connector {
-                        DRM_DISPLAY_FAILURES.lock().unwrap().remove(key);
+                        DRM_DISPLAY_HEALTH.lock().unwrap().remove(key);
                     }
                 }
             } else {
@@ -339,20 +379,20 @@ impl TraitCapturer for IpcDrmCapturer {
                     // cannot be resolved reads back as the same empty key in get_capturer_info: one
                     // unidentifiable display would demote the next one.
                     if let Some(key) = self.connector.clone() {
-                        let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-                        let e = map.entry(key).or_insert((0, Instant::now(), 0));
-                        e.0 += 1;
-                        e.1 = Instant::now();
+                        let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
+                        let h = map.entry(key).or_insert_with(DisplayHealth::new);
+                        h.zero_frame_streak += 1;
+                        h.since = Instant::now();
                         // Count the demote cycle exactly once, as the streak crosses the threshold.
-                        if e.0 == DRM_GRAB_MAX_FAILURES {
-                            e.2 += 1;
+                        if h.zero_frame_streak == DRM_GRAB_MAX_FAILURES {
+                            h.demotes += 1;
                             log::warn!(
                                 "drm: display {} produced no frame in {} sessions; using PipeWire for it, \
                                  retrying DRM in {:?} (demotion {})",
                                 self.display,
-                                e.0,
-                                demote_cooldown(e.2),
-                                e.2
+                                h.zero_frame_streak,
+                                demote_cooldown(h.demotes),
+                                h.demotes
                             );
                         }
                     } else {
@@ -1149,16 +1189,14 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     // host is left online: there the whole-desktop stream IS that display, so the PipeWire fallback is
     // geometry-consistent and get_capturer_for_display serves it.
     if multi {
-        let failures = DRM_DISPLAY_FAILURES.lock().unwrap();
+        let health = DRM_DISPLAY_HEALTH.lock().unwrap();
         for (idx, info) in infos.iter_mut().enumerate() {
             let key = match list.get(idx) {
                 Some(d) => connector_key(d),
                 None => continue,
             };
-            if let Some((count, since, demotes)) = failures.get(&key).copied() {
-                if count >= DRM_GRAB_MAX_FAILURES && since.elapsed() < demote_cooldown(demotes) {
-                    info.online = false;
-                }
+            if health.get(&key).is_some_and(|h| h.demoted()) {
+                info.online = false;
             }
         }
     }
@@ -1376,17 +1414,17 @@ pub(super) fn get_capturer_info(
         // Refuse a demoted display UNLESS its demotion has aged past the cooldown for its demote
         // count, in which case clear the failure streak so the display retries DRM (recoverable).
         // The demote count itself is KEPT, so a display that fails again waits twice as long; only a
-        // delivered frame erases it (frame() removes the entry outright).
-        let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-        if let Some((count, since, demotes)) = map.get(&key).copied() {
-            if count >= DRM_GRAB_MAX_FAILURES {
-                if since.elapsed() >= demote_cooldown(demotes) {
-                    map.insert(key.clone(), (0, Instant::now(), demotes));
-                } else {
+        // delivered frame erases it (frame() drops the entry outright).
+        let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
+        if let Some(h) = map.get_mut(&key) {
+            if h.zero_frame_streak >= DRM_GRAB_MAX_FAILURES {
+                if h.demoted() {
                     bail!(
                         "drm capture for display {display_idx} repeatedly produced no frame; using PipeWire"
                     );
                 }
+                h.zero_frame_streak = 0;
+                h.since = Instant::now();
             }
         }
     }
@@ -1403,25 +1441,23 @@ pub(super) fn get_capturer_info(
     // the (RAPID_REBUILD_MAX + 1)-th build inside the window.
     {
         let now = Instant::now();
-        let mut rebuilds = DRM_DISPLAY_REBUILDS.lock().unwrap();
-        let count = match rebuilds.get(&(display_idx as i32)) {
-            Some((last, c)) if now.duration_since(*last) < RAPID_REBUILD_WINDOW => c + 1,
+        let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
+        let h = map.entry(key.clone()).or_insert_with(DisplayHealth::new);
+        h.rapid_builds = match h.last_build {
+            Some(last) if now.duration_since(last) < RAPID_REBUILD_WINDOW => h.rapid_builds + 1,
             _ => 0,
         };
-        rebuilds.insert(display_idx as i32, (now, count));
-        if count >= RAPID_REBUILD_MAX {
+        h.last_build = Some(now);
+        if h.rapid_builds >= RAPID_REBUILD_MAX {
             log::warn!(
-                "drm: display {display_idx} rebuilt {count} times within {RAPID_REBUILD_WINDOW:?}; flapping, falling back to PipeWire"
+                "drm: display {display_idx} rebuilt {} times within {RAPID_REBUILD_WINDOW:?}; flapping, falling back to PipeWire",
+                h.rapid_builds
             );
             // Demote through the same gate, and count the cycle so a display that flaps again waits
             // longer (the entry may already carry demotions from the zero-frame path).
-            {
-                let mut map = DRM_DISPLAY_FAILURES.lock().unwrap();
-                let e = map.entry(key.clone()).or_insert((0, Instant::now(), 0));
-                e.0 = DRM_GRAB_MAX_FAILURES;
-                e.1 = Instant::now();
-                e.2 += 1;
-            }
+            h.zero_frame_streak = DRM_GRAB_MAX_FAILURES;
+            h.since = now;
+            h.demotes += 1;
             bail!("drm capture for display {display_idx} is flapping; using PipeWire");
         }
     }
@@ -1665,6 +1701,23 @@ mod drm_capturer_tests {
             wl_display("Unknown-2", 1920, 0, 1920, 1080),
         ];
         assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1), None]);
+    }
+
+    #[test]
+    fn health_reports_demoted_only_while_the_cooldown_runs() {
+        let mut h = DisplayHealth::new();
+        assert!(!h.demoted(), "a fresh display is not demoted");
+        h.zero_frame_streak = DRM_GRAB_MAX_FAILURES - 1;
+        assert!(!h.demoted(), "one session short of the threshold is not demoted");
+        h.zero_frame_streak = DRM_GRAB_MAX_FAILURES;
+        h.demotes = 1;
+        assert!(h.demoted(), "at the threshold, inside the cooldown");
+        // Age it past the cooldown for its demote count: the display retries DRM.
+        h.since = Instant::now() - demote_cooldown(h.demotes) - Duration::from_secs(1);
+        assert!(!h.demoted(), "past the cooldown the display must be retried");
+        // ...but at a higher demote count the same age is still inside the (doubled) cooldown.
+        h.demotes = 4;
+        assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
     }
 
     #[test]
