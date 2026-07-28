@@ -1,4 +1,7 @@
-use super::{BLOCK_SIZE, FILE_NAME_CODE_UNITS, FILE_NAME_FIELD_SIZE, LDAP_EPOCH_DELTA};
+use super::{
+    filetype::validate_file_name, BLOCK_SIZE, FILE_NAME_CODE_UNITS, FILE_NAME_FIELD_SIZE,
+    LDAP_EPOCH_DELTA,
+};
 use crate::{
     platform::unix::{
         FLAGS_FD_ATTRIBUTES, FLAGS_FD_LAST_WRITE, FLAGS_FD_PROGRESSUI, FLAGS_FD_SIZE,
@@ -61,6 +64,7 @@ impl LocalFile {
             });
         }
         let descriptor_name = descriptor_path.to_string_lossy().into_owned();
+        validate_file_name(&descriptor_name)?;
         if descriptor_name.encode_utf16().count() > MAX_FILE_NAME_CODE_UNITS {
             return Err(CliprdrError::InvalidRequest {
                 description: format!(
@@ -116,7 +120,8 @@ impl LocalFile {
         })
     }
 
-    fn put_descriptor_name(&self, buf: &mut BytesMut) {
+    fn put_descriptor_name(&self, buf: &mut BytesMut) -> Result<(), CliprdrError> {
+        validate_file_name(&self.descriptor_name)?;
         let wstr: WString<utf16string::LE> = WString::from(&self.descriptor_name);
         let name = wstr.as_bytes();
         log::trace!(
@@ -127,9 +132,10 @@ impl LocalFile {
         buf.put(name);
         buf.put_u16_le(0);
         buf.put_bytes(0, FILE_NAME_FIELD_SIZE - name.len() - UTF16_CODE_UNIT_SIZE);
+        Ok(())
     }
 
-    pub fn as_bin(&self) -> Vec<u8> {
+    pub fn as_bin(&self) -> Result<Vec<u8>, CliprdrError> {
         let mut buf = BytesMut::with_capacity(FILE_DESCRIPTOR_SIZE);
         let read_only_flag = if self.read_only { 0x1 } else { 0 };
         let hidden_flag = if self.hidden { 0x2 } else { 0 };
@@ -183,9 +189,9 @@ impl LocalFile {
         // file size (low)
         buf.put_u32_le(size_low);
         // Put the null-terminated name and padding into the fixed-size field.
-        self.put_descriptor_name(&mut buf);
+        self.put_descriptor_name(&mut buf)?;
 
-        buf.to_vec()
+        Ok(buf.to_vec())
     }
 
     #[inline]
@@ -377,7 +383,7 @@ mod file_list_test {
         let mut pdu = BytesMut::with_capacity(4 + 592 * tree.len());
         pdu.put_u32_le(tree.len() as u32);
         for file in tree {
-            pdu.put(file.as_bin().as_slice());
+            pdu.put(file.as_bin()?.as_slice());
         }
 
         let parsed = FileDescription::parse_file_descriptors(pdu.to_vec(), 0)?;
@@ -413,6 +419,19 @@ mod file_list_test {
     fn rejects_file_outside_relative_root() {
         let result = LocalFile::try_open(Path::new("/relative/root"), Path::new("/other/file"));
         assert!(matches!(result, Err(CliprdrError::InvalidRequest { .. })));
+
+        let result = LocalFile::try_open(
+            Path::new("relative/root"),
+            Path::new("relative/root/../outside"),
+        );
+        assert!(matches!(result, Err(CliprdrError::InvalidRequest { .. })));
+
+        let mut file = generate_tree("root").remove(0);
+        file.descriptor_name = "../outside".to_string();
+        assert!(matches!(
+            file.as_bin(),
+            Err(CliprdrError::InvalidRequest { .. })
+        ));
     }
 
     #[test]
@@ -425,7 +444,7 @@ mod file_list_test {
         let invalid_name = validate(&"a".repeat(MAX_FILE_NAME_CODE_UNITS + 1));
         let mut valid_file = generate_tree("").remove(0);
         valid_file.descriptor_name = valid_name;
-        let valid_descriptor = valid_file.as_bin();
+        let valid_descriptor = valid_file.as_bin()?;
 
         assert_eq!(valid_descriptor.len(), FILE_DESCRIPTOR_SIZE);
         assert!(valid_descriptor.ends_with(&[0_u8; UTF16_CODE_UNIT_SIZE]));

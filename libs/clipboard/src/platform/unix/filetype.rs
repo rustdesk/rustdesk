@@ -50,7 +50,7 @@ pub struct FileDescription {
     pub perm: u16,
 }
 
-fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
+pub(super) fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
     if matches!(name.as_bytes(), [letter, b':', b'/', ..] if letter.is_ascii_alphabetic())
         || name
             .split('/')
