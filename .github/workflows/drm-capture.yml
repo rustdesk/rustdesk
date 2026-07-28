@@ -1,5 +1,11 @@
 name: DRM capture (opt-in drm feature)
 
+# Least-privilege GITHUB_TOKEN. Every job here only checks out, builds and tests; the artifact
+# up/download used by the deb job authenticates with the runtime token, not this one. Declared at
+# the workflow level so the reusable bridge workflow called below inherits the same bound.
+permissions:
+  contents: read
+
 # Everything CI-side about the opt-in `drm` backend lives here, so the stock CI and release workflows
 # stay byte-identical to a build with the feature off. Nothing in this file runs unless a drm-related
 # path changes (or someone dispatches it by hand), so a PR that does not touch the backend pays nothing.
