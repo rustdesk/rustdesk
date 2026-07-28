@@ -1638,6 +1638,7 @@ mod desktop {
         ENV_KEY_XAUTHORITY,
     ];
     const X11_ENV_KEYS: [&str; 2] = [ENV_KEY_DISPLAY, ENV_KEY_XAUTHORITY];
+    const XWAYLAND_X11_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
@@ -1653,6 +1654,8 @@ mod desktop {
         pub wl_display: String,
         // Session whose required Xwayland-path environment has been discovered.
         xwayland_env_session: Option<String>,
+        // Throttle optional X11 discovery when DISPLAY is not available yet.
+        xwayland_x11_retry_at: Option<Instant>,
     }
 
     impl Desktop {
@@ -1698,9 +1701,41 @@ mod desktop {
             }
         }
 
+        fn has_cached_xwayland_envs_at(&self, now: Instant) -> bool {
+            if self.xwayland_env_session.as_deref() != Some(self.sid.as_str())
+                || !self.has_required_session_envs()
+            {
+                return false;
+            }
+
+            if !self.is_wayland() || !self.display.is_empty() {
+                return true;
+            }
+
+            match self.xwayland_x11_retry_at {
+                Some(retry_at) => now < retry_at,
+                None => false,
+            }
+        }
+
         fn has_cached_xwayland_envs(&self) -> bool {
-            self.xwayland_env_session.as_deref() == Some(self.sid.as_str())
-                && self.has_required_session_envs()
+            self.has_cached_xwayland_envs_at(Instant::now())
+        }
+
+        fn cache_xwayland_envs(&mut self, now: Instant) {
+            self.xwayland_env_session = Some(self.sid.clone());
+            self.xwayland_x11_retry_at = if self.is_wayland() && self.display.is_empty() {
+                Some(now + XWAYLAND_X11_RETRY_INTERVAL)
+            } else {
+                None
+            };
+        }
+
+        fn prepare_xwayland_env_refresh(&mut self) {
+            self.xwayland_env_session = None;
+            self.xwayland_x11_retry_at = None;
+            self.display.clear();
+            self.xauth.clear();
         }
 
         fn set_session_id(&mut self, sid: String) {
@@ -1710,6 +1745,7 @@ mod desktop {
                 self.wl_display.clear();
                 self.dbus.clear();
                 self.xwayland_env_session = None;
+                self.xwayland_x11_retry_at = None;
             }
             self.sid = sid;
         }
@@ -1717,6 +1753,7 @@ mod desktop {
         fn get_display_xauth_wayland(&mut self) {
             // Re-run the optional X11 lookup if Xwayland is started again later.
             self.xwayland_env_session = None;
+            self.xwayland_x11_retry_at = None;
             for _ in 1..=10 {
                 // Prefer Wayland-related variables first when multiple portal processes match.
                 let mut envs = get_envs(&self.uid, XDG_DESKTOP_PORTAL, &WAYLAND_ENV_KEYS);
@@ -1743,11 +1780,9 @@ mod desktop {
                 return;
             }
 
-            self.xwayland_env_session = None;
             // A session change clears every value in set_session_id(). Within the same
             // session, keep the required Wayland values while refreshing optional X11 ones.
-            self.display.clear();
-            self.xauth.clear();
+            self.prepare_xwayland_env_refresh();
 
             let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
             let fallback_proc = format!(
@@ -1768,8 +1803,9 @@ mod desktop {
                 self.fill_missing_session_envs(&fallback_envs);
 
                 if self.has_required_session_envs() {
-                    // Optional X11 values must not keep rootless Xwayland sessions retrying.
-                    self.xwayland_env_session = Some(self.sid.clone());
+                    // Optional X11 values must not block rootless Xwayland sessions. If
+                    // DISPLAY is late, retry one native scan after a short cooldown.
+                    self.cache_xwayland_envs(Instant::now());
                     return;
                 }
                 sleep_millis(300);
@@ -2094,6 +2130,7 @@ mod desktop {
             let mut d = Desktop {
                 sid: "2".to_owned(),
                 protocol: DISPLAY_SERVER_WAYLAND.to_owned(),
+                display: ":0".to_owned(),
                 wl_display: "wayland-0".to_owned(),
                 dbus: "unix:path=/run/user/1000/bus".to_owned(),
                 xwayland_env_session: Some("2".to_owned()),
@@ -2106,6 +2143,51 @@ mod desktop {
         }
 
         #[test]
+        fn xwayland_env_cache_retries_late_display_after_cooldown() {
+            let now = Instant::now();
+            let retry_at = now + XWAYLAND_X11_RETRY_INTERVAL;
+            let mut d = Desktop {
+                sid: "2".to_owned(),
+                protocol: DISPLAY_SERVER_WAYLAND.to_owned(),
+                wl_display: "wayland-0".to_owned(),
+                dbus: "unix:path=/run/user/1000/bus".to_owned(),
+                ..Default::default()
+            };
+
+            d.cache_xwayland_envs(now);
+            assert_eq!(d.xwayland_x11_retry_at, Some(retry_at));
+            assert!(d.has_cached_xwayland_envs_at(now));
+            assert!(!d.has_cached_xwayland_envs_at(retry_at));
+
+            d.display = ":0".to_owned();
+            d.cache_xwayland_envs(retry_at);
+            assert!(d.xwayland_x11_retry_at.is_none());
+            assert!(d.has_cached_xwayland_envs_at(retry_at + XWAYLAND_X11_RETRY_INTERVAL));
+        }
+
+        #[test]
+        fn same_session_xwayland_refresh_preserves_wayland_envs() {
+            let mut d = Desktop {
+                sid: "2".to_owned(),
+                display: ":0".to_owned(),
+                xauth: "/tmp/xauth".to_owned(),
+                wl_display: "wayland-0".to_owned(),
+                dbus: "unix:path=/run/user/1000/bus".to_owned(),
+                xwayland_env_session: Some("2".to_owned()),
+                xwayland_x11_retry_at: Some(Instant::now()),
+                ..Default::default()
+            };
+
+            d.prepare_xwayland_env_refresh();
+            assert!(d.display.is_empty());
+            assert!(d.xauth.is_empty());
+            assert_eq!(d.wl_display, "wayland-0");
+            assert_eq!(d.dbus, "unix:path=/run/user/1000/bus");
+            assert!(d.xwayland_env_session.is_none());
+            assert!(d.xwayland_x11_retry_at.is_none());
+        }
+
+        #[test]
         fn session_change_clears_discovered_envs() {
             let mut d = Desktop {
                 sid: "2".to_owned(),
@@ -2114,6 +2196,7 @@ mod desktop {
                 wl_display: "wayland-0".to_owned(),
                 dbus: "unix:path=/run/user/1000/bus".to_owned(),
                 xwayland_env_session: Some("2".to_owned()),
+                xwayland_x11_retry_at: Some(Instant::now()),
                 ..Default::default()
             };
 
@@ -2123,6 +2206,7 @@ mod desktop {
             assert_eq!(d.wl_display, "wayland-0");
             assert_eq!(d.dbus, "unix:path=/run/user/1000/bus");
             assert_eq!(d.xwayland_env_session.as_deref(), Some("2"));
+            assert!(d.xwayland_x11_retry_at.is_some());
 
             d.set_session_id("3".to_owned());
             assert!(d.display.is_empty());
@@ -2130,6 +2214,7 @@ mod desktop {
             assert!(d.wl_display.is_empty());
             assert!(d.dbus.is_empty());
             assert!(d.xwayland_env_session.is_none());
+            assert!(d.xwayland_x11_retry_at.is_none());
         }
     }
 }
