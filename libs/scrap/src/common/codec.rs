@@ -701,6 +701,17 @@ impl Decoder {
     }
 
     #[cfg(target_env = "ohos")]
+    pub fn is_surface_mode(&self) -> bool {
+        self.h264_ohos
+            .as_ref()
+            .is_some_and(OhosVideoDecoder::is_surface_mode)
+            || self
+                .h265_ohos
+                .as_ref()
+                .is_some_and(OhosVideoDecoder::is_surface_mode)
+    }
+
+    #[cfg(target_env = "ohos")]
     pub fn last_decode_latency_ms(&self) -> Option<u64> {
         self.h264_ohos
             .as_ref()

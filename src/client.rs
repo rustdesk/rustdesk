@@ -104,8 +104,6 @@ pub const SEC30: Duration = Duration::from_secs(30);
 const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
-#[cfg(target_env = "ohos")]
-const MAX_OHOS_DECODE_WARMUP_FRAMES: usize = 30;
 
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
@@ -1709,17 +1707,22 @@ impl VideoHandler {
                     }
                 } else {
                     #[cfg(target_env = "ohos")]
-                    let waiting_for_output = self.first_frame
+                    // Surface rendering completes asynchronously. `Ok(false)` means that no new
+                    // output callback was observed during this input submission, not that decode
+                    // failed.
+                    let surface_output_pending = self.decoder.is_surface_mode()
                         && matches!(format, CodecFormat::H264 | CodecFormat::H265)
-                        && res.as_ref().is_ok_and(|x| !*x)
-                        && self.decode_warmup_frames < MAX_OHOS_DECODE_WARMUP_FRAMES;
+                        && res.as_ref().is_ok_and(|x| !*x);
                     #[cfg(not(target_env = "ohos"))]
-                    let waiting_for_output = false;
+                    let surface_output_pending = false;
 
-                    if waiting_for_output {
+                    if surface_output_pending {
                         #[cfg(target_env = "ohos")]
                         {
-                            self.decode_warmup_frames += 1;
+                            if self.first_frame {
+                                self.decode_warmup_frames =
+                                    self.decode_warmup_frames.saturating_add(1);
+                            }
                             if self.decode_warmup_frames == 1 {
                                 log::warn!(
                                     "decoder needs more input before producing the first frame"
