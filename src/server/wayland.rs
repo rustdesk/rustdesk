@@ -137,6 +137,9 @@ pub(super) async fn check_init() -> ResultType<()> {
     if !is_x11() {
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             if crate::input_service::wayland_use_uinput() {
+                // The cached layout may predate compositor changes made while no session
+                // was active, https://github.com/rustdesk/rustdesk/issues/15601
+                scrap::wayland::display::clear_wayland_displays_cache();
                 if let Some((minx, maxx, miny, maxy)) =
                     scrap::wayland::display::get_desktop_rect_for_uinput()
                 {
@@ -147,9 +150,28 @@ pub(super) async fn check_init() -> ResultType<()> {
                         miny,
                         maxy
                     );
-                    allow_err!(
-                        input_service::update_mouse_resolution(minx, maxx, miny, maxy).await
-                    );
+                    // Bound the IPC wait like the periodic refresh does, so a hung
+                    // response can't stall session init.
+                    match timeout(
+                        3_000,
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            super::display_service::set_wayland_uinput_rect((
+                                minx, maxx, miny, maxy,
+                            ));
+                            // Snapshot the per-display layout the client's coordinates
+                            // will be based on, so the mouse path can correct them if
+                            // the compositor moves a monitor mid-session.
+                            super::display_service::set_wayland_layout_baseline(
+                                scrap::wayland::display::get_display_rects_for_uinput(),
+                            );
+                        }
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+                    }
                 } else {
                     log::warn!("Failed to get desktop rect for uinput");
                 }

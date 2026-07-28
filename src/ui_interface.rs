@@ -911,6 +911,29 @@ pub fn get_langs() -> String {
     json!(x).to_string()
 }
 
+// Preserve relative paths for existing configurations and only remove accidental
+// surrounding whitespace. Config values are not shell-expanded (for example, `~`).
+fn trim_video_save_directory(value: &str) -> Option<&str> {
+    let value = value.trim();
+    if !value.is_empty() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+// A Windows service typically runs with System32 as its working directory, so
+// require an absolute path to avoid resolving recordings there unexpectedly.
+#[cfg(any(windows, test))]
+fn validate_windows_service_video_save_directory(value: &str) -> Option<&str> {
+    let value = trim_video_save_directory(value)?;
+    if std::path::Path::new(value).is_absolute() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 #[inline]
 pub fn video_save_directory(root: bool) -> String {
     let appname = crate::get_app_name();
@@ -930,6 +953,15 @@ pub fn video_save_directory(root: bool) -> String {
         // Currently, only installed windows run as root
         #[cfg(windows)]
         {
+            let dir = Config::get_option(OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY);
+            if let Some(dir) = validate_windows_service_video_save_directory(&dir) {
+                return dir.to_owned();
+            }
+            if !dir.trim().is_empty() {
+                log::warn!(
+                    "Ignoring {OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY}: path must be absolute"
+                );
+            }
             let drive = std::env::var("SystemDrive").unwrap_or("C:".to_owned());
             let dir =
                 std::path::PathBuf::from(format!("{drive}\\ProgramData\\{appname}\\recording",));
@@ -941,8 +973,8 @@ pub fn video_save_directory(root: bool) -> String {
     let dir = LocalConfig::get_option_from_file(OPTION_VIDEO_SAVE_DIRECTORY);
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let dir = LocalConfig::get_option(OPTION_VIDEO_SAVE_DIRECTORY);
-    if !dir.is_empty() {
-        return dir;
+    if let Some(dir) = trim_video_save_directory(&dir) {
+        return dir.to_owned();
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     if let Ok(home) = config::APP_HOME_DIR.read() {
@@ -1704,4 +1736,42 @@ pub fn is_remote_modify_enabled_by_control_permissions() -> Option<bool> {
     *IS_REMOTE_MODIFY_ENABLED_BY_CONTROL_PERMISSIONS
         .lock()
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{trim_video_save_directory, validate_windows_service_video_save_directory};
+
+    #[test]
+    fn trim_configured_video_save_directory() {
+        assert_eq!(
+            trim_video_save_directory("  relative/recordings  "),
+            Some("relative/recordings")
+        );
+        assert_eq!(trim_video_save_directory("  "), None);
+    }
+
+    #[test]
+    fn validate_service_video_save_directory() {
+        let absolute = if cfg!(windows) {
+            r"C:\recordings"
+        } else {
+            "/recordings"
+        };
+        let padded = format!("  {absolute}  ");
+
+        assert_eq!(
+            validate_windows_service_video_save_directory(&padded),
+            Some(absolute)
+        );
+        assert_eq!(
+            validate_windows_service_video_save_directory("recordings"),
+            None
+        );
+        assert_eq!(
+            validate_windows_service_video_save_directory(&format!("\"{absolute}\"")),
+            None
+        );
+        assert_eq!(validate_windows_service_video_save_directory("  "), None);
+    }
 }

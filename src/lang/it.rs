@@ -765,5 +765,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("All monitors", "Tutti gli schermi"),
         ("#{} monitor", "Schermo {}"),
         ("conn-e2ee-unavailable-tip", "Impossibile verificare la crittografia end-to-end.\nIl dispositivo remoto potrebbe essere ancora in configurazione. Riprova più tardi.\nSe il problema persiste, il server potrebbe non essere attendibile.\nVuoi continuare?"),
+        ("ID whitelisting", "ID autorizzati"),
+        ("Use ID whitelisting", "Usa elenco ID autorizzati"),
+        ("id_whitelist_tip", "Possono connettersi a questo desktop solo gli ID autorizzati"),
+        ("id_whitelist_wildcard_tip", "Sono supportati i caratteri jolly: '*' corrisponde a un numero qualsiasi di caratteri, '?' a un solo carattere"),
+        ("Invalid ID", "ID non valido"),
+        ("Your ID is blocked by the peer", "Il tuo ID è bloccato dal dispositivo remoto"),
+        ("Your ip is blocked by the peer", "Il tuo IP è bloccato dal dispositivo remoto"),
+        ("id_whitelist_caveat_tip", "L'ID è dichiarato dal client che si connette. Questo elenco riduce l'esposizione e non sostituisce la password o la 2FA"),
+        ("whitelist_cidr_tip", "È supportata la notazione CIDR, ad esempio 192.168.1.0/24"),
     ].iter().cloned().collect();
 }

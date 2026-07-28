@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/models/input_modifier_utils.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:flutter_hbb/mobile/terminal_keyboard_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../../desktop/pages/terminal_connection_manager.dart';
@@ -42,6 +45,11 @@ class _TerminalPageState extends State<TerminalPage>
   final GlobalKey _keyboardKey = GlobalKey();
   double _keyboardHeight = 0;
   late bool _showTerminalExtraKeys;
+  // Ctrl lock state for virtual keyboard: active key presses are mapped to control codes
+  bool _ctrlLocked = false;
+  bool _altLocked = false;
+  // Row3 expand/collapse state for compact keyboard layout
+  bool _row3Expanded = false;
   // For iOS edge swipe gesture
   double _swipeStartX = 0;
   double _swipeCurrentX = 0;
@@ -94,6 +102,18 @@ class _TerminalPageState extends State<TerminalPage>
     // terminal extra keys bar is unnecessary and disabled.
     _showTerminalExtraKeys = !isWebDesktop &&
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    _terminalModel.isCtrlLocked = () => _ctrlLocked;
+    _terminalModel.clearCtrlLock = () {
+      if (_ctrlLocked) setState(() => _ctrlLocked = false);
+    };
+    _terminalModel.isAltLocked = () => _altLocked;
+    _terminalModel.clearAltLock = () {
+      if (_altLocked) setState(() => _altLocked = false);
+    };
+    // Load Row3 expand/collapse state from persistent storage. The raw option
+    // read keeps Row3 collapsed when no value has been saved yet.
+    _row3Expanded =
+        bind.mainGetLocalOption(key: kOptionShowTerminalCtrlKeys) == 'Y';
     // Initialize terminal connection
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ffi.dialogManager
@@ -148,6 +168,39 @@ class _TerminalPageState extends State<TerminalPage>
     return EdgeInsets.only(left: 5.0, right: 5.0, top: topBottom, bottom: topBottom + _sysKeyboardHeight + _keyboardHeight);
   }
 
+  /// Pastes clipboard text through TerminalModel so keyboard-only modifiers and
+  /// mobile Enter normalization never alter clipboard data.
+  Future<void> _pasteClipboardText() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || !mounted) return;
+
+    await _terminalModel.pasteText(text);
+    if (mounted) {
+      _terminalModel.terminalController.clearSelection();
+    }
+  }
+
+  KeyEventResult _handleTerminalKeyEvent(FocusNode _, KeyEvent event) {
+    final hardwareKeyboard = HardwareKeyboard.instance;
+    final shouldPaste = shouldHandleTerminalPasteShortcut(
+      logicalKey: event.logicalKey,
+      isKeyDown: event is KeyDownEvent,
+      isKeyRepeat: event is KeyRepeatEvent,
+      controlPressed: hardwareKeyboard.isControlPressed,
+      metaPressed: hardwareKeyboard.isMetaPressed,
+      altPressed: hardwareKeyboard.isAltPressed,
+      shiftPressed: hardwareKeyboard.isShiftPressed,
+      modifierLockActive: _ctrlLocked || _altLocked,
+    );
+    if (!shouldPaste) return KeyEventResult.ignored;
+
+    // Only locked virtual modifiers need interception. Without a lock, keep
+    // xterm's default hardware paste behavior, including bracketed paste mode.
+    unawaited(_pasteClipboardText());
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -185,6 +238,7 @@ class _TerminalPageState extends State<TerminalPage>
                     //
                     // Android works fine without this workaround.
                     deleteDetection: isIOS,
+                    onKeyEvent: _handleTerminalKeyEvent,
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;
@@ -193,11 +247,7 @@ class _TerminalPageState extends State<TerminalPage>
                         _terminalModel.terminalController.clearSelection();
                         await Clipboard.setData(ClipboardData(text: text));
                       } else {
-                        final data = await Clipboard.getData('text/plain');
-                        final text = data?.text;
-                        if (text != null) {
-                          _terminalModel.terminal.paste(text);
-                        }
+                        await _pasteClipboardText();
                       }
                     },
                   );
@@ -324,66 +374,171 @@ class _TerminalPageState extends State<TerminalPage>
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Row 1 follows the latest reviewed PR layout.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: _buildKeyboardKeyButtons(terminalKeyboardRow1Keys),
+            ),
+            // Row 2 ends with the full-width Row3 collapse/expand toggle.
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildKeyButton('Esc'),
-                const SizedBox(width: 2),
-                _buildKeyButton('/'),
-                const SizedBox(width: 2),
-                _buildKeyButton('|'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Home'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↑'),
-                const SizedBox(width: 2),
-                _buildKeyButton('End'),
-                const SizedBox(width: 2),
-                _buildKeyButton('PgUp'),
+                ..._buildKeyboardKeyButtons(terminalKeyboardRow2Keys),
+                const SizedBox(width: terminalKeyboardKeySpacing),
+                _buildCollapseButton(),
               ],
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildKeyButton('Tab'),
-                const SizedBox(width: 2),
-                _buildKeyButton('Ctrl+C'),
-                const SizedBox(width: 2),
-                _buildKeyButton('~'),
-                const SizedBox(width: 2),
-                _buildKeyButton('←'),
-                const SizedBox(width: 2),
-                _buildKeyButton('↓'),
-                const SizedBox(width: 2),
-                _buildKeyButton('→'),
-                const SizedBox(width: 2),
-                _buildKeyButton('PgDn'),
-              ],
-            ),
+            // Row 3 restores paging keys and trailing alignment placeholders.
+            if (_row3Expanded)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ..._buildKeyboardKeyButtons(terminalKeyboardRow3Keys),
+                  for (var i = 0;
+                      i < terminalKeyboardRow3TrailingPlaceholderCount;
+                      i++) ...[
+                    const SizedBox(width: terminalKeyboardKeySpacing),
+                    const SizedBox(width: terminalKeyboardKeyWidth),
+                  ],
+                ],
+              ),
           ],
         ),
       ),
     );
   }
 
+  // Ctrl toggle button with highlighted locked state
+  Widget _buildCtrlKeyButton() {
+    return _buildModifierToggleButton(
+      text: 'Ctrl',
+      semanticsLabel: 'Ctrl',
+      isLocked: _ctrlLocked,
+      onPressed: () => setState(() => _ctrlLocked = !_ctrlLocked),
+    );
+  }
+
+  // Alt toggle button with highlighted locked state
+  Widget _buildAltKeyButton() {
+    return _buildModifierToggleButton(
+      text: 'Alt',
+      semanticsLabel: 'Alt',
+      isLocked: _altLocked,
+      onPressed: () => setState(() => _altLocked = !_altLocked),
+    );
+  }
+
+  // Collapse/expand toggle button for Row3
+  void _toggleRow3Expanded() {
+    final willExpand = !_row3Expanded;
+    final shouldClearModifiers = shouldClearTerminalModifiersWhenRow3Collapses(
+      wasExpanded: _row3Expanded,
+      willExpand: willExpand,
+      ctrlLocked: _ctrlLocked,
+      altLocked: _altLocked,
+    );
+    setState(() {
+      _row3Expanded = willExpand;
+      if (shouldClearModifiers) {
+        _ctrlLocked = false;
+        _altLocked = false;
+      }
+    });
+    mainSetLocalBoolOption(kOptionShowTerminalCtrlKeys, willExpand);
+
+    // The floating keyboard height changes after Row3 is inserted/removed.
+    // Re-measure on the next frame so terminal padding uses the new height.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showTerminalExtraKeys) return;
+      setState(() {
+        _updateKeyboardHeight();
+      });
+    });
+  }
+
+  Widget _buildCollapseButton() {
+    return Semantics(
+      label: translate('Show terminal extra keys'),
+      toggled: _row3Expanded,
+      child: ElevatedButton(
+        onPressed: _toggleRow3Expanded,
+        child: Text(_row3Expanded ? '∧' : '∨'),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(terminalKeyboardKeyWidth, 32),
+          padding: EdgeInsets.zero,
+          textStyle: const TextStyle(fontSize: 12),
+          backgroundColor:
+              Theme.of(context).colorScheme.surfaceContainerHighest,
+          foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  /// Builds a fixed-width key sequence with the reviewed 2dp spacing.
+  List<Widget> _buildKeyboardKeyButtons(List<String> labels) {
+    return [
+      for (var i = 0; i < labels.length; i++) ...[
+        _buildKeyButton(labels[i]),
+        if (i < labels.length - 1)
+          const SizedBox(width: terminalKeyboardKeySpacing),
+      ],
+    ];
+  }
+
+  /// Build a modifier toggle button (Ctrl/Alt) with one-shot behavior.
+  /// When [isLocked] is true, the button highlights in blue and the next
+  /// single-character input is mapped to its modified equivalent.
+  Widget _buildModifierToggleButton({
+    required String text,
+    required String semanticsLabel,
+    required bool isLocked,
+    required VoidCallback onPressed,
+  }) {
+    return Semantics(
+      // Ctrl and Alt are technical key names and intentionally stay unchanged.
+      label: semanticsLabel,
+      toggled: isLocked,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        child: Text(text),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(terminalKeyboardKeyWidth, 32),
+          padding: EdgeInsets.zero,
+          textStyle: const TextStyle(fontSize: 12),
+          backgroundColor: isLocked
+              ? Colors.blue
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          foregroundColor: isLocked
+              ? Colors.white
+              : Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
   Widget _buildKeyButton(String label) {
+    if (label == 'Ctrl') return _buildCtrlKeyButton();
+    if (label == 'Alt') return _buildAltKeyButton();
+
     return ElevatedButton(
       onPressed: () {
         _sendKeyToTerminal(label);
       },
       child: Text(label),
       style: ElevatedButton.styleFrom(
-        minimumSize: const Size(48, 32),
+        minimumSize: const Size(terminalKeyboardKeyWidth, 32),
         padding: EdgeInsets.zero,
         textStyle: const TextStyle(fontSize: 12),
-        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+        backgroundColor:
+            Theme.of(context).colorScheme.surfaceContainerHighest,
         foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
 
   void _sendKeyToTerminal(String key) {
-    String? send;
+    String send;
 
     switch (key) {
       case 'Esc':
@@ -427,9 +582,7 @@ class _TerminalPageState extends State<TerminalPage>
         break;
     }
 
-    if (send != null) {
-      _terminalModel.sendVirtualKey(send);
-    }
+    _terminalModel.sendVirtualKey(send);
   }
 
   // https://github.com/TerminalStudio/xterm.dart/issues/42#issuecomment-877495472
