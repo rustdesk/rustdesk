@@ -1,0 +1,159 @@
+name: DRM capture (opt-in drm feature)
+
+# Everything CI-side about the opt-in `drm` backend lives here, so the stock CI and release workflows
+# stay byte-identical to a build with the feature off. Nothing in this file runs unless a drm-related
+# path changes (or someone dispatches it by hand), so a PR that does not touch the backend pays nothing.
+#
+# The stock `CI` workflow deliberately does NOT compile with `--features drm`: the shipped default is
+# the drm-off configuration and that stays the primary verified one.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "libs/scrap/src/common/drm_reader.rs"
+      - "libs/scrap/src/common/drm_render.rs"
+      - "libs/scrap/src/common/drmtap_dl.rs"
+      - "libs/scrap/src/common/mod.rs"
+      - "libs/scrap/Cargo.toml"
+      - "src/ipc.rs"
+      - "src/ipc/**"
+      - "src/server/drm_capturer.rs"
+      - "src/server/wayland.rs"
+      - "src/server/display_service.rs"
+      - "build.py"
+      - ".github/workflows/drm-capture.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "libs/scrap/src/common/drm_reader.rs"
+      - "libs/scrap/src/common/drm_render.rs"
+      - "libs/scrap/src/common/drmtap_dl.rs"
+      - "src/ipc.rs"
+      - "src/ipc/**"
+      - "src/server/drm_capturer.rs"
+      - "build.py"
+      - ".github/workflows/drm-capture.yml"
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+
+jobs:
+  drm-tests:
+    name: drm unit tests (linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: false
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install prerequisites
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get install -y \
+            clang cmake curl gcc git g++ \
+            libpam0g-dev libasound2-dev libunwind-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgtk-3-dev libpulse-dev libva-dev libvdpau-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxdo-dev libxfixes-dev nasm wget
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      # The whole rustdesk-crate test set with the feature ON, not just the `_drm` ones by name: a name
+      # filter would skip the sibling asserts that also matter in this configuration, notably the one
+      # bounding `size_of::<Data>()`, which the new DmabufDesc variant grows.
+      - name: Run rustdesk crate tests with the drm feature
+        shell: bash
+        run: cargo test --locked --target x86_64-unknown-linux-gnu -p rustdesk --features drm
+
+  libdrmtap:
+    name: libdrmtap pin, build and .so contract
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install libdrmtap build deps
+        shell: bash
+        run: |
+          sudo apt-get -y update
+          sudo apt-get install -y meson ninja-build pkg-config libdrm-dev \
+            libegl1-mesa-dev libgles2-mesa-dev
+
+      # Exercises the real fetch-and-build path in build.py, which pins the commit by sha, so a bad or
+      # moved pin fails here rather than in a release job.
+      - name: Fetch the pinned libdrmtap and build the .so
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("b", "build.py")
+          b = importlib.util.module_from_spec(spec)
+          sys.argv = ["build.py"]
+          spec.loader.exec_module(b)
+          so = b.build_libdrmtap_so()
+          print(f"::notice::built {so}")
+          open("so_path", "w").write(so)
+          PY
+
+      # The shipped hot path is the EGL detile. libdrmtap degrades to a CPU-only stub when the egl or
+      # glesv2 pkg-config files are missing on the build host, and nothing else in the pipeline notices,
+      # so assert here that the object we would ship really carries EGL and really exports every symbol
+      # the runtime loader resolves.
+      - name: Assert the .so contract (EGL enabled, loader symbols present)
+        shell: bash
+        run: |
+          SO="$(cat so_path)"
+          echo "checking $SO"
+          missing=0
+          # Every symbol drmtap_dl.rs resolves, derived from the loader itself so the two cannot drift.
+          for sym in $(grep -oE 'b"drmtap_[a-z_]+"' libs/scrap/src/common/drmtap_dl.rs \
+                       | sed 's/^b"//; s/"$//' | sort -u); do
+            if ! nm -D --defined-only "$SO" | grep -q " T $sym\$"; then
+              echo "::error::libdrmtap does not export $sym, which the runtime loader resolves"
+              missing=1
+            fi
+          done
+          # EGL is reached by lazy dlopen, on purpose, so that the privileged process never links the
+          # vendor GL stack. That means there is NO DT_NEEDED entry and no undefined egl* symbol to look
+          # for: the naive ELF check reports "no EGL" on a perfectly good library. What a CPU-only stub
+          # build really lacks is the dlopen target name and the import call itself.
+          for s in "libEGL.so.1" "eglCreateImageKHR"; do
+            if ! strings "$SO" | grep -qF "$s"; then
+              echo "::error::libdrmtap looks like a CPU-only stub (no $s): the EGL detile hot path is missing"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+          echo "::notice::libdrmtap .so contract ok (13 loader symbols, EGL detile present)"
