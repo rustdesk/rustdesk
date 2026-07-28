@@ -1506,6 +1506,8 @@ impl Connection {
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         v["session_id"] = json!(self.lr.session_id);
+        // Unique per record; the api server dedups retried posts by it.
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         allow_err!(self.tx_post_seq.send((url, v)));
     }
 
@@ -1555,6 +1557,7 @@ impl Connection {
             "path":path,
             "is_file":is_file,
             "info":json!(info).to_string(),
+            "nonce": uuid::Uuid::new_v4().to_string(),
         });
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -1576,6 +1579,7 @@ impl Connection {
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         if typ == AlarmAuditType::IpWhitelist || typ == AlarmAuditType::IdWhitelist {
             if let Some(audit_ref) = self.conn_audit_ref() {
                 v["conn_audit_ref"] = json!(audit_ref);
@@ -1603,9 +1607,24 @@ impl Connection {
         );
     }
 
-    #[inline]
     async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
-        crate::post_request(url, v.to_string(), "").await
+        // Audit records are compliance evidence; retry transient api-server
+        // failures so they are not silently dropped.
+        const ATTEMPTS: u32 = 3;
+        let body = v.to_string();
+        for i in 1..ATTEMPTS {
+            match crate::post_request(url.clone(), body.clone(), "").await {
+                Ok(x) => return Ok(x),
+                Err(e) => {
+                    log::warn!("Audit post failed (attempt {}/{}): {}", i, ATTEMPTS, e);
+                    time::sleep(Duration::from_secs(1 << (i - 1))).await;
+                }
+            }
+        }
+        crate::post_request(url, body, "").await.map_err(|e| {
+            log::error!("Audit post dropped after {} attempts: {}", ATTEMPTS, e);
+            e
+        })
     }
 
     fn set_conn_audit_primary_auth(&mut self, method: ConnAuditPrimaryAuth) {
