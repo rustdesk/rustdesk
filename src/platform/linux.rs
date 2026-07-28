@@ -720,6 +720,40 @@ fn start_server(desktop: Option<&Desktop>, server: &mut Option<Child>) {
     }
 }
 
+/// Whether a just-spawned `--server` is still running after a short grace period, taking ownership of
+/// the corpse (clearing `server`) when it is not. `start_server` reports only whether the SPAWN
+/// succeeded, which is not the same question: a child that execs and exits immediately still leaves
+/// `Some(child)` behind.
+///
+/// A child that exits is detected as soon as it does; a healthy one costs the full grace, once per
+/// start. A server that dies LATER than this is a different (transient) failure, and the restart
+/// throttle in `should_start_server` already bounds that case.
+#[cfg(feature = "drm")]
+fn server_survived_grace(server: &mut Option<Child>) -> bool {
+    const GRACE: Duration = Duration::from_millis(1000);
+    const STEP_MS: u64 = 100;
+    let Some(ps) = server.as_mut() else {
+        return false; // spawn itself failed
+    };
+    let deadline = Instant::now() + GRACE;
+    while Instant::now() < deadline {
+        match ps.try_wait() {
+            Ok(Some(status)) => {
+                log::warn!("--server exited {status} within {GRACE:?} of starting");
+                *server = None;
+                return false;
+            }
+            Ok(None) => sleep_millis(STEP_MS),
+            // We cannot tell; treat it as alive rather than tearing down a possibly healthy child.
+            Err(err) => {
+                log::error!("error waiting on the just-started --server: {err}");
+                return true;
+            }
+        }
+    }
+    true
+}
+
 fn stop_server(server: &mut Option<Child>) {
     if let Some(mut ps) = server.take() {
         allow_err!(ps.kill());
@@ -904,21 +938,25 @@ pub fn start_os_service() {
                 // uid, so this drops to whichever greeter owns seat0. A greeter is_gdm_user does not
                 // recognize (e.g. LightDM) never reaches this branch -- it takes the unprivileged
                 // else-branch below already. A genuine root graphical session (username=="root")
-                // has no lower uid to drop to, so it stays root. Gated on the drm feature so the
-                // non-drm build stays byte-identical to upstream.
-                #[cfg(feature = "drm")]
-                let run_as_greeter = desktop.username != "root" && !desktop.uid.is_empty();
+                // has no lower uid to drop to, so it stays root. The whole branch is gated on the drm
+                // feature, so the drm-off build is upstream's single `start_server(None, ..)` line.
                 #[cfg(not(feature = "drm"))]
-                let run_as_greeter = false;
-                if run_as_greeter {
+                start_server(None, &mut server);
+                #[cfg(feature = "drm")]
+                if desktop.username != "root" && !desktop.uid.is_empty() {
                     start_server(Some(&desktop), &mut server);
-                    // If dropping to the greeter uid did not produce a running server (spawn/exec
-                    // failure), fall back to a root --server so the login screen stays remotable
-                    // instead of looping on a failing greeter spawn. This pays the GPU-in-root
-                    // tradeoff only on that failure path, never in the normal greeter case.
-                    if server.is_none() {
+                    // If dropping to the greeter uid did not produce a RUNNING server, fall back to a
+                    // root --server so the login screen stays remotable instead of looping on a
+                    // failing greeter spawn. This pays the GPU-in-root tradeoff only on that failure
+                    // path, never in the normal greeter case. Liveness, not just spawn success: a
+                    // greeter account that cannot actually run it (a nologin shell, a hardened home,
+                    // no writable config dir) leaves a child that exits at once, and the loop above
+                    // notices only that the child is gone and respawns it, forever, without ever
+                    // reaching this fallback -- so the login screen becomes permanently un-remotable
+                    // on a host where it used to work.
+                    if !server_survived_grace(&mut server) {
                         log::warn!(
-                            "greeter --server did not start; falling back to a root --server"
+                            "greeter --server did not stay up; falling back to a root --server"
                         );
                         start_server(None, &mut server);
                     }

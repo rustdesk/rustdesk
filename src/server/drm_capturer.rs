@@ -1147,45 +1147,103 @@ pub(super) fn get_primary_index() -> usize {
 /// (already at 0,0, scale 1.0) needs no augmentation, matching the PipeWire path's logical-scale gate.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     let wl = scrap::wayland::display::get_displays();
-    let multi = drm.len() > 1 && wl.displays.len() > 1;
-    drm.iter()
-        .map(|d| {
-            let mut info = display_info_from_drm(d);
-            if multi {
-                if let Some(w) = match_wayland_display(d, &wl.displays) {
-                    info.x = w.x;
-                    info.y = w.y;
-                    if let Some((lw, lh)) = w.logical_size {
-                        if lw > 0 && lh > 0 {
-                            info.scale = d.width as f64 / lw as f64;
-                            // original_resolution is the logical size (physical / scale).
-                            info.original_resolution = super::display_service::get_original_resolution(
-                                &d.name,
-                                lw as usize,
-                                lh as usize,
-                            );
-                        }
-                    }
-                }
+    let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
+    if drm.len() < 2 || wl.displays.len() < 2 {
+        return infos;
+    }
+    let matched = assign_wayland_outputs(drm, &wl.displays);
+    for (i, info) in infos.iter_mut().enumerate() {
+        let Some(w) = matched[i].map(|j| &wl.displays[j]) else {
+            continue;
+        };
+        info.x = w.x;
+        info.y = w.y;
+        if let Some((lw, lh)) = w.logical_size {
+            if lw > 0 && lh > 0 {
+                info.scale = drm[i].width as f64 / lw as f64;
+                // original_resolution is the logical size (physical / scale).
+                info.original_resolution = super::display_service::get_original_resolution(
+                    &drm[i].name,
+                    lw as usize,
+                    lh as usize,
+                );
             }
-            info
-        })
-        .collect()
+        }
+    }
+    infos
 }
 
-/// Match a DRM display to its compositor output: by normalized connector name first, then by a
-/// uniquely-matching physical resolution.
-fn match_wayland_display<'a>(
-    d: &DrmDisplayInfo,
-    wl: &'a [hbb_common::platform::linux::WaylandDisplayInfo],
-) -> Option<&'a hbb_common::platform::linux::WaylandDisplayInfo> {
-    let dn = normalize_connector(&d.name);
-    if let Some(w) = wl.iter().find(|w| normalize_connector(&w.name) == dn) {
-        return Some(w);
+/// Which compositor output each DRM connector corresponds to, as an index into `wl` (or `None` when
+/// there is nothing left to give it). Pure, so the assignment is unit-testable without a compositor.
+///
+/// Each output goes to at most one connector, which the per-display rules alone did not guarantee:
+/// the unique-resolution rule could hand the same output to two connectors of that resolution.
+///
+/// Connectors that match nothing take the next free output in layout order, with a warning. Leaving
+/// them unaugmented is not the safe choice it looks like: DRM reports every connector at origin
+/// (0,0), so two monitors of the same model and resolution whose names do not normalize to the
+/// compositor's would both keep (0,0), the client stacks them, and injected coordinates land on the
+/// wrong monitor with certainty. Positional order is at worst a swap of two identically-sized
+/// rectangles, and the layout stays coherent either way. A free output of the same physical size is
+/// preferred, so a mixed layout does not pair a connector with an output it cannot be.
+fn assign_wayland_outputs(
+    drm: &[DrmDisplayInfo],
+    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+) -> Vec<Option<usize>> {
+    let mut taken = vec![false; wl.len()];
+    let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
+    for (i, d) in drm.iter().enumerate() {
+        if let Some(j) = match_wayland_display(d, wl, &taken) {
+            matched[i] = Some(j);
+            taken[j] = true;
+        }
     }
-    let same_res: Vec<_> = wl
+    for (i, d) in drm.iter().enumerate() {
+        if matched[i].is_some() {
+            continue;
+        }
+        let free_same_size = wl
+            .iter()
+            .enumerate()
+            .position(|(j, w)| !taken[j] && w.width == d.width as i32 && w.height == d.height as i32);
+        let Some(j) = free_same_size.or_else(|| taken.iter().position(|t| !t)) else {
+            continue; // more connectors than outputs; leave the rest unaugmented
+        };
+        log::warn!(
+            "drm: connector {} matched no compositor output by name or by a unique resolution; \
+             falling back to layout order and taking {} at ({}, {})",
+            d.name,
+            wl[j].name,
+            wl[j].x,
+            wl[j].y
+        );
+        matched[i] = Some(j);
+        taken[j] = true;
+    }
+    matched
+}
+
+/// Index of the compositor output for a DRM display: by normalized connector name first, then by a
+/// uniquely-matching physical resolution. `taken` outputs are skipped so one output cannot be
+/// claimed twice.
+fn match_wayland_display(
+    d: &DrmDisplayInfo,
+    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+    taken: &[bool],
+) -> Option<usize> {
+    let dn = normalize_connector(&d.name);
+    if let Some((j, _)) = wl
         .iter()
-        .filter(|w| w.width == d.width as i32 && w.height == d.height as i32)
+        .enumerate()
+        .find(|(j, w)| !taken[*j] && normalize_connector(&w.name) == dn)
+    {
+        return Some(j);
+    }
+    let same_res: Vec<usize> = wl
+        .iter()
+        .enumerate()
+        .filter(|(j, w)| !taken[*j] && w.width == d.width as i32 && w.height == d.height as i32)
+        .map(|(j, _)| j)
         .collect();
     if same_res.len() == 1 {
         return Some(same_res[0]);
@@ -1421,6 +1479,99 @@ mod drm_capturer_tests {
         let mut c = capturer_with(None);
         put_frame(&c, 800, 600);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+    }
+
+    fn drm_display(name: &str, w: u32, h: u32) -> DrmDisplayInfo {
+        DrmDisplayInfo {
+            name: name.to_owned(),
+            crtc_id: 1,
+            x: 0,
+            y: 0,
+            width: w,
+            height: h,
+            active: true,
+            render_node: String::new(),
+            device: String::new(),
+        }
+    }
+
+    fn wl_display(
+        name: &str,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    ) -> hbb_common::platform::linux::WaylandDisplayInfo {
+        hbb_common::platform::linux::WaylandDisplayInfo {
+            name: name.to_owned(),
+            x,
+            y,
+            width: w,
+            height: h,
+            logical_size: Some((w, h)),
+            refresh_rate: 60,
+        }
+    }
+
+    #[test]
+    fn outputs_are_matched_by_name_across_the_drm_naming_difference() {
+        let drm = [drm_display("HDMI-A-1", 1920, 1080), drm_display("DP-1", 2560, 1440)];
+        // Deliberately in the other order, and the second entry is the one that matches by name.
+        let wl = [wl_display("DP-1", 1920, 0, 2560, 1440), wl_display("HDMI-1", 0, 0, 1920, 1080)];
+        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(1), Some(0)]);
+    }
+
+    // The M10 case: two monitors of the same model and resolution whose names do not normalize to
+    // the compositor's. Both used to end up unmatched, keeping the DRM origin (0,0), which stacks
+    // them on the client. Every connector must now get a distinct output.
+    #[test]
+    fn identical_monitors_that_match_no_name_take_layout_order() {
+        let drm = [drm_display("DP-1", 1920, 1080), drm_display("DP-2", 1920, 1080)];
+        let wl = [
+            wl_display("Unknown-1", 0, 0, 1920, 1080),
+            wl_display("Unknown-2", 1920, 0, 1920, 1080),
+        ];
+        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1)]);
+    }
+
+    // The same aliasing, one step earlier: the unique-resolution rule handed ONE output to both
+    // connectors of that resolution, so two displays claimed the same origin.
+    #[test]
+    fn one_output_is_never_claimed_by_two_connectors() {
+        let drm = [drm_display("DP-1", 1920, 1080), drm_display("DP-2", 1920, 1080)];
+        let wl = [
+            wl_display("Unknown-1", 0, 0, 1920, 1080),
+            wl_display("Unknown-2", 1920, 0, 3840, 2160),
+        ];
+        let got = assign_wayland_outputs(&drm, &wl);
+        assert_eq!(got[0], Some(0));
+        assert_ne!(got[0], got[1], "two connectors must not share one output");
+    }
+
+    // A name match must still win over a same-size output that comes earlier in the layout.
+    #[test]
+    fn a_name_match_beats_the_positional_fallback() {
+        let drm = [drm_display("DP-1", 1920, 1080), drm_display("HDMI-A-1", 1920, 1080)];
+        let wl = [
+            wl_display("Unknown-1", 0, 0, 1920, 1080),
+            wl_display("HDMI-1", 1920, 0, 1920, 1080),
+        ];
+        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1)]);
+    }
+
+    // More connectors than outputs: the extras stay unaugmented rather than sharing one.
+    #[test]
+    fn extra_connectors_stay_unmatched() {
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+            drm_display("DP-3", 1920, 1080),
+        ];
+        let wl = [
+            wl_display("Unknown-1", 0, 0, 1920, 1080),
+            wl_display("Unknown-2", 1920, 0, 1920, 1080),
+        ];
+        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1), None]);
     }
 
     #[test]
