@@ -1686,6 +1686,30 @@ mod drm_conn_tests {
         );
     }
 
+    // A header announcing a body that never arrives must not park the receive loop forever. The
+    // header and the body are two separate reads, so the caller's own per-message budget does not
+    // cover the second one; DRM_BODY_TIMEOUT_MS is what bounds it. This waits out the real deadline
+    // rather than a paused clock (tokio's test-util feature is not enabled here), which costs
+    // DRM_BODY_TIMEOUT_MS on a thread the rest of the suite is not waiting on.
+    #[tokio::test]
+    async fn a_body_that_never_arrives_times_out() {
+        let (mut a, b) = tokio::net::UnixStream::pair().unwrap();
+        let mut rx = DrmConn::new(b);
+        // Announce ten bytes and send none of them. `a` is kept alive, so this is a stall and not
+        // the EOF the read path already handles.
+        a.write_all(&10u32.to_be_bytes()).await.unwrap();
+        let mut got = Vec::new();
+        let err = rx
+            .next_raw_into(&mut got)
+            .await
+            .err()
+            .expect("a body that never arrives must time out");
+        assert!(
+            err.to_string().contains("did not arrive"),
+            "unexpected error: {err}"
+        );
+    }
+
     // A peer that packs more than one fd into a single SCM_RIGHTS cmsg (the safe API never does) must
     // not smuggle extra fds into the consumer: drm_recvmsg keeps the FIRST and closes the rest. The
     // frame otherwise decodes normally and the kept fd is the first one sent. (Two fds fit the control

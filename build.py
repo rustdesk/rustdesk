@@ -291,7 +291,12 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
-    if not windows and not osx and args.drm:
+    if args.drm:
+        # Say so rather than quietly handing back a stock build: the backend is Linux-only, so on
+        # any other host the flag cannot be honoured and the resulting binary would look like a
+        # DRM build without being one.
+        if windows or osx:
+            raise Exception('--drm is Linux only')
         features.append('drm')
     if osx:
         if args.screencapturekit:
@@ -332,14 +337,39 @@ def ffi_bindgen_function_refactor():
 # flutter_rust_bridge, ...), rather than carrying a git submodule. It is the ONLY
 # pin for the drm backend: rustdesk dlopens this .so at runtime and does not depend on
 # the libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
-# libdrm/seccomp/cap). Override the repo via env (DRMTAP_REPO) for local testing
-# or another fork.
+# libdrm/seccomp/cap). DRMTAP_REPO, DRMTAP_SHA and DRMTAP_PREBUILT_DIR override it for local testing
+# or another fork, and each requires DRMTAP_ALLOW_UNPINNED=1 alongside it (see below).
 # The commit is fetched directly by sha, so no branch or tag name takes part in the build: see
 # build_libdrmtap_so(). This is the SINGLE source of truth for the pin, deliberately not duplicated in
 # any workflow, so a bump is one edit here (plus the informational version comment in
 # libs/scrap/Cargo.toml). This commit is libdrmtap v0.4.15.
-LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
-LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'cbc5e6af5b353b6bc351072a27a5351d82ba66e3')
+LIBDRMTAP_REPO_PINNED = 'https://github.com/rustdesk-org/libdrmtap'
+LIBDRMTAP_SHA_PINNED = 'cbc5e6af5b353b6bc351072a27a5351d82ba66e3'
+LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', LIBDRMTAP_REPO_PINNED)
+LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
+# Every way of getting a different .so than the pin needs the same explicit opt-in. Otherwise the
+# claim this feature rests on -- that the privileged capture library is the reviewed object at
+# LIBDRMTAP_SHA_PINNED -- would hold only as long as nobody happened to have one of these set, and a
+# build that silently used something else would be indistinguishable from one that did not.
+# DRMTAP_PREBUILT_DIR is in the list because it is the widest of the three: it skips both the fetch
+# and the sha verification and hands over an object built from nothing this script can see.
+DRMTAP_UNPINNED_OK = os.environ.get('DRMTAP_ALLOW_UNPINNED') == '1'
+_overridden = [
+    name
+    for name, value, pinned in (
+        ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
+        ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
+        ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR'), None),
+    )
+    if value != pinned
+]
+if _overridden and not DRMTAP_UNPINNED_OK:
+    raise Exception(
+        f'{", ".join(_overridden)} would build libdrmtap from something other than the pinned '
+        f'{LIBDRMTAP_REPO_PINNED} at {LIBDRMTAP_SHA_PINNED}. That is supported for local work and '
+        'cross-builds, but it has to be deliberate: set DRMTAP_ALLOW_UNPINNED=1 as well.')
+if _overridden:
+    print(f'WARNING: libdrmtap is NOT the pinned build ({", ".join(_overridden)} set)')
 # Both are interpolated into shell commands below, and both are env-overridable, so validate their
 # SHAPE before they get there. This is not only about a hostile environment: a truncated or
 # abbreviated sha would otherwise reach `git fetch` and fail with something far less obvious than
