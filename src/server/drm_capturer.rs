@@ -339,6 +339,46 @@ impl IpcDrmCapturer {
             displays,
         ))
     }
+
+    /// Record that this session ended without ever handing a usable frame to the encoder. If enough
+    /// sessions in a row end this way for the same display, its scanout is effectively ungrabbable;
+    /// counting them is what makes `get_capturer_info()` refuse that display so the video service
+    /// falls back to PipeWire for it (other displays are unaffected).
+    ///
+    /// Called from both places a session can end with nothing delivered -- the stream dying, and a
+    /// first frame whose geometry does not match what the display list advertised -- so the two
+    /// cannot drift apart.
+    ///
+    /// No identity means the handshake list did not describe this index, so there is nothing safe to
+    /// attribute the failure to; skip rather than blame a neighbour. Recording it under the empty key
+    /// would do exactly that, because an index that cannot be resolved reads back as the same empty
+    /// key in get_capturer_info: one unidentifiable display would demote the next one.
+    fn note_session_without_frame(&self) {
+        let Some(key) = self.connector.clone() else {
+            log::debug!(
+                "drm: display {} produced no frame but has no connector identity; \
+                 not counting it against any display",
+                self.display
+            );
+            return;
+        };
+        let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
+        let h = map.entry(key).or_insert_with(DisplayHealth::new);
+        h.zero_frame_streak += 1;
+        h.since = Instant::now();
+        // Count the demote cycle exactly once, as the streak crosses the threshold.
+        if h.zero_frame_streak == DRM_GRAB_MAX_FAILURES {
+            h.demotes += 1;
+            log::warn!(
+                "drm: display {} produced no frame in {} sessions; using PipeWire for it, \
+                 retrying DRM in {:?} (demotion {})",
+                self.display,
+                h.zero_frame_streak,
+                demote_cooldown(h.demotes),
+                h.demotes
+            );
+        }
+    }
 }
 
 impl Drop for IpcDrmCapturer {
@@ -372,16 +412,31 @@ impl TraitCapturer for IpcDrmCapturer {
                 // and convert_to_yuv only refuses a source LARGER than its destination, so a smaller
                 // frame would be encoded into the old canvas and the stale right and bottom edges
                 // would stay on screen until the connection was torn down. Fail hard instead, which
-                // routes a shrink through the same rebuild an enlargement already takes. got_frame is
-                // set first: this session did produce frames, so it must not be counted as one of the
-                // zero-frame sessions that demote a display to PipeWire.
+                // routes a shrink through the same rebuild an enlargement already takes.
+                //
+                // If this is the FIRST frame of the session the size never changed: the advertised
+                // geometry and the frames simply disagree. They come from different places -- the
+                // display list carries the CRTC mode (`crtc->mode.hdisplay`) while a frame carries
+                // the scanout framebuffer (`fb2->width`), and a CRTC that scales a smaller buffer up
+                // to its mode makes those two permanently different numbers. That display cannot be
+                // served over DRM at all, so count it as a session that produced nothing and let the
+                // usual streak demote it to PipeWire. Marking it as having produced frames instead
+                // would leave only the rapid-rebuild guard to catch it, several seconds later and
+                // under a message about a change that never happened.
                 if self.session_size.is_some_and(|(sw, sh)| (w, h) != (sw, sh)) {
-                    self.got_frame = true;
+                    if !self.got_frame {
+                        self.note_session_without_frame();
+                    }
                     let (sw, sh) = self.session_size.unwrap_or_default();
+                    let what = if self.got_frame {
+                        "changed geometry mid-session"
+                    } else {
+                        "never matched its advertised geometry"
+                    };
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         format!(
-                            "drm: display {} changed geometry mid-session ({sw}x{sh} -> {w}x{h}); rebuilding",
+                            "drm: display {} {what} ({sw}x{sh} -> {w}x{h}); rebuilding",
                             self.display
                         ),
                     ));
@@ -408,39 +463,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     .clone()
                     .unwrap_or_else(|| "drm stream ended".to_owned());
                 if !self.got_frame {
-                    // This session never produced a frame for THIS display. If enough sessions in a
-                    // row fail this way for the same display, its scanout is effectively ungrababble;
-                    // count it so get_capturer_info() will refuse that display and the video service
-                    // falls back to PipeWire for it (other displays are unaffected).
-                    // No identity means the handshake list did not describe this index, so there is
-                    // nothing safe to attribute the failure to; skip rather than blame a neighbour.
-                    // Recording it under the empty key would do exactly that, because an index that
-                    // cannot be resolved reads back as the same empty key in get_capturer_info: one
-                    // unidentifiable display would demote the next one.
-                    if let Some(key) = self.connector.clone() {
-                        let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
-                        let h = map.entry(key).or_insert_with(DisplayHealth::new);
-                        h.zero_frame_streak += 1;
-                        h.since = Instant::now();
-                        // Count the demote cycle exactly once, as the streak crosses the threshold.
-                        if h.zero_frame_streak == DRM_GRAB_MAX_FAILURES {
-                            h.demotes += 1;
-                            log::warn!(
-                                "drm: display {} produced no frame in {} sessions; using PipeWire for it, \
-                                 retrying DRM in {:?} (demotion {})",
-                                self.display,
-                                h.zero_frame_streak,
-                                demote_cooldown(h.demotes),
-                                h.demotes
-                            );
-                        }
-                    } else {
-                        log::debug!(
-                            "drm: display {} produced no frame but has no connector identity; \
-                             not counting it against any display",
-                            self.display
-                        );
-                    }
+                    self.note_session_without_frame();
                 }
                 return Err(io::Error::new(io::ErrorKind::Other, err));
             }
@@ -1535,6 +1558,14 @@ mod drm_capturer_tests {
     // `shared`, so a test can put a frame there directly and drive `frame()` exactly as the encoder
     // loop does.
     fn capturer_with(session: Option<(usize, usize)>) -> IpcDrmCapturer {
+        capturer_named(session, None)
+    }
+
+    // A capturer with a connector identity, so the per-display health bookkeeping actually has
+    // somewhere to record. DRM_DISPLAY_HEALTH is process-wide and the test binary runs threads in
+    // parallel, so every test that inspects it must pass its OWN key.
+    fn capturer_named(session: Option<(usize, usize)>, key: Option<&str>) -> IpcDrmCapturer {
+        let connector = key.map(|k| k.to_owned());
         IpcDrmCapturer {
             shared: Arc::new(Shared {
                 slot: Mutex::new(FrameSlot {
@@ -1546,7 +1577,7 @@ mod drm_capturer_tests {
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
-            connector: None,
+            connector,
             session_size: session,
             cur: Vec::new(),
             cur_w: 0,
@@ -1554,6 +1585,17 @@ mod drm_capturer_tests {
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
         }
+    }
+
+    // The zero-frame streak recorded against this capturer's display, 0 when nothing was recorded.
+    fn zero_frame_streak_of(c: &IpcDrmCapturer) -> u32 {
+        let key = c.connector.clone().expect("this check needs an identity");
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get(&key)
+            .map(|h| h.zero_frame_streak)
+            .unwrap_or(0)
     }
 
     // Publishes exactly the way the receive path does, so the recycling is exercised too: take a
@@ -1582,7 +1624,11 @@ mod drm_capturer_tests {
     // into the old canvas and the stale edges stay on screen for the rest of the connection.
     #[test]
     fn a_smaller_frame_ends_the_session_instead_of_being_encoded() {
-        let mut c = capturer_with(Some((1920, 1080)));
+        let mut c = capturer_named(Some((1920, 1080)), Some("test:mid-session-shrink"));
+        // Deliver one frame at the session geometry first, so this is a genuine MID-session shrink
+        // and not a display whose frames never matched what was advertised (covered below).
+        put_frame(&c, 1920, 1080);
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
         put_frame(&c, 1280, 720);
         // `Frame` is not Debug, so match rather than expect_err.
         let err = match c.frame(Duration::from_millis(50)) {
@@ -1591,7 +1637,37 @@ mod drm_capturer_tests {
         };
         assert!(err.to_string().contains("changed geometry mid-session"));
         // Sessions that delivered frames must not be counted toward the zero-frame demotion streak.
-        assert!(c.got_frame, "the rebuild must not look like a display that never produced a frame");
+        assert!(
+            c.got_frame,
+            "the rebuild must not look like a display that never produced a frame"
+        );
+        assert_eq!(
+            zero_frame_streak_of(&c),
+            0,
+            "a session that streamed must not be counted as one that produced nothing"
+        );
+    }
+
+    // The advertised geometry comes from the CRTC mode and a frame comes from the scanout
+    // framebuffer, so a CRTC that scales a smaller buffer up to its mode makes the two permanently
+    // different. Every session for such a display then dies on its FIRST frame having delivered
+    // nothing, which is precisely what the zero-frame streak exists to demote; it must be counted,
+    // not excused as a mid-session change that never happened.
+    #[test]
+    fn a_first_frame_that_never_matched_counts_as_a_session_without_frames() {
+        let mut c = capturer_named(Some((1920, 1080)), Some("test:never-matched"));
+        put_frame(&c, 1280, 720);
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a first frame off the advertised geometry must be a hard error"),
+        };
+        assert!(err.to_string().contains("never matched its advertised geometry"));
+        assert!(!c.got_frame, "no frame reached the encoder, so none was produced");
+        assert_eq!(
+            zero_frame_streak_of(&c),
+            1,
+            "the display must be on its way to a PipeWire demotion, not just rebuilding"
+        );
     }
 
     #[test]
