@@ -947,12 +947,25 @@ void androidChannelInit() {
             }
             break;
           }
+        case "onIntent":
+          {
+            final action = arguments['action'] as String?;
+            if (action == 'com.carriez.flutter_hbb.action.OPEN_SCREEN_SHARING') {
+              _openScreenSharing();
+            }
+            break;
+          }
       }
     } catch (e) {
       debugPrintStack(label: "MethodCallHandler err:$e");
     }
     return "";
   });
+}
+
+void _openScreenSharing() {
+  // Используем Get для навигации, так как приложение уже на GetMaterialApp
+  Get.to(() => const ServerPage());
 }
 
 void showScamWarning(BuildContext context, ServerModel serverModel) {

@@ -78,6 +78,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="rustdesk" />
             </intent-filter>
+
+             <!-- НОВЫЙ фильтр для открытия меню Screen Sharing -->
+            <intent-filter>
+                <action android:name="com.carriez.flutter_hbb.action.OPEN_SCREEN_SHARING" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <activity

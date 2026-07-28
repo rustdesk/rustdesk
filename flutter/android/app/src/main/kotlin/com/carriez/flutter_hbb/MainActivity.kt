@@ -45,6 +45,7 @@ class MainActivity : FlutterActivity() {
 
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
+    private var pendingIntentAction: String? = null
     private var mainService: MainService? = null
 
     private var isAudioStart = false
@@ -62,6 +63,12 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        // === ДОБАВЛЕНО: обработка Intent, полученного до готовности FlutterEngine ===
+        pendingIntentAction?.let { action ->
+            sendIntentToFlutter(flutterEngine, action)
+            pendingIntentAction = null
+        }
+        // =================================
         thread {
             try {
                 setCodecInfo()
@@ -96,12 +103,18 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {        // === ДОБАВЛЕНО ===
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (_rdClipboardManager == null) {
             _rdClipboardManager = RdClipboardManager(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             FFI.setClipboardManager(_rdClipboardManager!!)
         }
+        handleIntent(intent)                          // === ДОБАВЛЕНО ===
     }
 
     override fun onDestroy() {
@@ -274,12 +287,37 @@ class MainActivity : FlutterActivity() {
                 "on_voice_call_closed" -> {
                     onVoiceCallClosed()
                 }
+                // === ДОБАВЛЕНО ===
+                "onIntent" -> {
+                    val action = call.argument<String>("action")
+                    // Здесь можно обработать, если нужно что-то вернуть
+                    result.success(null)
+                }
+                // =================
                 else -> {
                     result.error("-1", "No such method", null)
                 }
             }
         }
     }
+
+    // === ДОБАВЛЕННЫЕ МЕТОДЫ ===
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == "com.carriez.flutter_hbb.action.OPEN_SCREEN_SHARING") {
+            val engine = flutterEngine
+            if (engine != null) {
+                sendIntentToFlutter(engine, intent.action!!)
+            } else {
+                pendingIntentAction = intent.action!!
+            }
+        }
+    }
+
+    private fun sendIntentToFlutter(engine: FlutterEngine, action: String) {
+        MethodChannel(engine.dartExecutor.binaryMessenger, channelTag)
+            .invokeMethod("onIntent", mapOf("action" to action))
+    }
+    // ===========================
 
     private fun setCodecInfo() {
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
