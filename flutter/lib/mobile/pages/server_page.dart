@@ -965,7 +965,7 @@ void androidChannelInit() {
 
 void _openScreenSharing() {
   // Используем Get для навигации, так как приложение уже на GetMaterialApp
-  Get.to(() => const ServerPage());
+  Get.to(() => ServerPage());
 }
 
 void showScamWarning(BuildContext context, ServerModel serverModel) {
