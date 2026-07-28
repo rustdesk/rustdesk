@@ -299,29 +299,22 @@ def get_features(args):
     return features
 
 
-def generate_control_file(version, extra_depends="", package_name="rustdesk"):
+def generate_control_file(version):
     control_file_path = "../res/DEBIAN/control"
     system2('/bin/rm -rf %s' % control_file_path)
 
-    # An alternative-build package (e.g. the opt-in unattended-wayland / DRM
-    # variant) installs the same files as the stock `rustdesk` package, so it
-    # must conflict with / replace it: you install one OR the other, not both.
-    variant_control = ""
-    if package_name != "rustdesk":
-        variant_control = "Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n"
-
-    content = """Package: %s
+    content = """Package: rustdesk
 Section: net
 Priority: optional
 Version: %s
 Architecture: %s
 Maintainer: rustdesk <info@rustdesk.com>
 Homepage: https://rustdesk.com
-%sDepends: libgtk-3-0t64 | libgtk-3-0, libxcb-randr0, libxdo3 | libxdo4, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2t64 | libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpam0g, gstreamer1.0-pipewire%s%s
+Depends: libgtk-3-0t64 | libgtk-3-0, libxcb-randr0, libxdo3 | libxdo4, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2t64 | libasound2, libsystemd0, curl, libva2, libva-drm2, libva-x11-2, libgstreamer-plugins-base1.0-0, libpam0g, gstreamer1.0-pipewire%s
 Recommends: libayatana-appindicator3-1
 Description: A remote control software.
 
-""" % (package_name, version, get_deb_arch(), variant_control, get_deb_extra_depends(), extra_depends)
+""" % (version, get_deb_arch(), get_deb_extra_depends())
     file = open(control_file_path, "w")
     file.write(content)
     file.close()
@@ -416,32 +409,47 @@ def build_libdrmtap_so():
     return _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
 
 
-def finalize_deb(version, ships_so, so_basename=None):
-    # Shared deb finalization for build_flutter_deb / build_deb_from_folder. Any DRM .so is assumed
-    # already staged at tmpdeb/usr/lib/rustdesk/. For a DRM build this adds the soname symlink and
-    # names the package rustdesk-unattended-wayland with libdrmtap's runtime deps (libdrm / EGL /
-    # GLESv2); the .so is dlopen'd by absolute path so no ld.so.conf.d drop-in or ldconfig postinst is
-    # needed and the stock postinst is used unchanged. Otherwise it builds the stock rustdesk package.
-    # Then it writes the control, checksums, builds, and renames the .deb.
-    if ships_so:
-        # Only the soname symlink is needed. libdrmtap is resolved by ABSOLUTE path
-        # (/usr/lib/rustdesk/libdrmtap.so.0) at the in-process dlopen site (drmtap_dl.rs), so the deb
-        # does NOT drop /usr/lib/rustdesk into the system-wide /etc/ld.so.conf.d search path -- that
-        # would let this private library shadow a system library for every binary on the host, which
-        # Debian Policy 10.2 forbids. No ld.so.conf.d drop-in and no ldconfig trigger are shipped.
-        system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
-    package_name = 'rustdesk-unattended-wayland' if ships_so else 'rustdesk'
-    drm_depends = ", libdrm2, libegl1, libgles2" if ships_so else ""
-    system2('mkdir -p tmpdeb/DEBIAN')
-    generate_control_file(version, drm_depends, package_name)
-    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
-    # No ldconfig postinst: libdrmtap is dlopen'd by absolute path (see drmtap_dl.rs), so there is
-    # nothing to register with the linker cache and the stock postinst is used unchanged.
-    md5_file_folder("tmpdeb/")
-    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
-    system2('/bin/rm -rf tmpdeb/')
-    system2('/bin/rm -rf ../res/DEBIAN/control')
-    os.rename('rustdesk.deb', f'../{package_name}-{version}.deb')
+DRM_PACKAGE_NAME = 'rustdesk-unattended-wayland'
+
+
+def stage_libdrmtap_into_deb(so_path):
+    # Put the built libdrmtap object plus its soname symlink into the staged deb. Only the soname
+    # symlink is needed: libdrmtap is resolved by ABSOLUTE path (/usr/lib/rustdesk/libdrmtap.so.0) at
+    # the in-process dlopen site (drmtap_dl.rs), so the deb does NOT drop /usr/lib/rustdesk into the
+    # system-wide /etc/ld.so.conf.d search path, which would let this private library shadow a system
+    # library for every binary on the host (Debian Policy 10.2 forbids that). No ld.so.conf.d drop-in
+    # and no ldconfig trigger are shipped, so the stock postinst is used unchanged.
+    so_basename = os.path.basename(so_path)
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    system2(f'cp {so_path} tmpdeb/usr/lib/rustdesk/')
+    system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
+
+
+def retarget_control_to_drm_variant():
+    # Rewrite the control file that generate_control_file just produced, instead of parameterizing that
+    # function: the stock packaging path stays exactly as upstream wrote it, and everything specific to
+    # this variant lives here. The variant installs the same files as the stock package, so it must
+    # conflict with and replace it: you install one or the other, never both. It also needs libdrmtap's
+    # own runtime deps, which the stock package has no reason to carry.
+    path = '../res/DEBIAN/control'
+    with open(path) as f:
+        lines = f.readlines()
+    out = []
+    for line in lines:
+        if line.startswith('Package: rustdesk'):
+            out.append(f'Package: {DRM_PACKAGE_NAME}\n')
+            out.append('Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n')
+        elif line.startswith('Depends:'):
+            out.append(line.rstrip('\n') + ', libdrm2, libegl1, libgles2\n')
+        else:
+            out.append(line)
+    body = ''.join(out)
+    # Fail loudly rather than silently shipping a package that says `rustdesk`: a stock control file
+    # that stopped matching either anchor would otherwise produce a variant deb wearing the stock name.
+    if f'Package: {DRM_PACKAGE_NAME}\n' not in body or 'libegl1' not in body:
+        raise Exception(f'could not retarget {path} to the drm variant; upstream control layout changed')
+    with open(path, 'w') as f:
+        f.write(body)
 
 
 def build_flutter_deb(version, features):
@@ -480,21 +488,26 @@ def build_flutter_deb(version, features):
         'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-    # Bundle libdrmtap.so for the DRM/KMS capture path — but ONLY when this build
-    # actually enabled the `drm` feature, so normal packages stay opt-out. The root
-    # service dlopen-s it in-process (no setcap helper) from its private dir by
-    # absolute path (/usr/lib/rustdesk/libdrmtap.so.0), so no linker-path registration.
-    # Bundle libdrmtap.so for a DRM build (opt-in), then finalize the deb. A DRM build ships as a
-    # separately-named rustdesk-unattended-wayland package (finalize_deb marks it
-    # Conflicts/Replaces/Provides rustdesk), so installing it is an explicit choice.
+    # Bundle libdrmtap.so only when this build actually enabled the `drm` feature, so stock packages
+    # stay exactly what they were. The root service dlopens it in-process by absolute path.
     ships_so = 'drm' in features
-    so_basename = None
     if ships_so:
-        so_path = build_libdrmtap_so()
-        so_basename = os.path.basename(so_path)
-        system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-        system2(f'cp {so_path} tmpdeb/usr/lib/rustdesk/')
-    finalize_deb(version, ships_so, so_basename)
+        stage_libdrmtap_into_deb(build_libdrmtap_so())
+
+    system2('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version)
+    if ships_so:
+        retarget_control_to_drm_variant()
+    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
+    md5_file_folder("tmpdeb/")
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+
+    system2('/bin/rm -rf tmpdeb/')
+    system2('/bin/rm -rf ../res/DEBIAN/control')
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    if ships_so:
+        # Named apart from the stock package so installing the consent-free variant is a deliberate act.
+        os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
 
 
@@ -543,14 +556,25 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
             'the staged bundle carries libdrmtap.so.0.* but --drm was not passed; refusing '
             'to silently ship the consent-bypass unattended-wayland variant (pass --drm to '
             'build it deliberately)')
-    so_basename = None
     if ships_so:
         so = _single_real_so(bundled_glob, 'the staged --drm bundle')
-        so_basename = os.path.basename(so)
-        system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-        system2(f'mv {so} tmpdeb/usr/lib/rustdesk/')
+        stage_libdrmtap_into_deb(so)
+        system2(f'rm -f {so}')
         system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
-    finalize_deb(version, ships_so, so_basename)
+
+    system2('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version)
+    if ships_so:
+        retarget_control_to_drm_variant()
+    system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
+    md5_file_folder("tmpdeb/")
+    system2('dpkg-deb -b tmpdeb rustdesk.deb;')
+
+    system2('/bin/rm -rf tmpdeb/')
+    system2('/bin/rm -rf ../res/DEBIAN/control')
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    if ships_so:
+        os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
 
 
