@@ -49,6 +49,14 @@ pub(super) struct LocalFile {
 }
 
 impl LocalFile {
+    fn descriptor_name_too_long_error() -> CliprdrError {
+        CliprdrError::InvalidRequest {
+            description: format!(
+                "clipboard file name exceeds {MAX_FILE_NAME_CODE_UNITS} UTF-16 code units"
+            ),
+        }
+    }
+
     fn validated_descriptor_name(
         relative_root: &Path,
         path: &Path,
@@ -66,11 +74,7 @@ impl LocalFile {
         let descriptor_name = descriptor_path.to_string_lossy().into_owned();
         validate_file_name(&descriptor_name)?;
         if descriptor_name.encode_utf16().count() > MAX_FILE_NAME_CODE_UNITS {
-            return Err(CliprdrError::InvalidRequest {
-                description: format!(
-                    "clipboard file name exceeds {MAX_FILE_NAME_CODE_UNITS} UTF-16 code units"
-                ),
-            });
+            return Err(Self::descriptor_name_too_long_error());
         }
         Ok(descriptor_name)
     }
@@ -124,6 +128,12 @@ impl LocalFile {
         validate_file_name(&self.descriptor_name)?;
         let wstr: WString<utf16string::LE> = WString::from(&self.descriptor_name);
         let name = wstr.as_bytes();
+        let Some(name_field_size) = name.len().checked_add(UTF16_CODE_UNIT_SIZE) else {
+            return Err(Self::descriptor_name_too_long_error());
+        };
+        if name_field_size > FILE_NAME_FIELD_SIZE {
+            return Err(Self::descriptor_name_too_long_error());
+        }
         log::trace!(
             "put file to list: name_len {}, name {}",
             name.len(),
@@ -131,7 +141,7 @@ impl LocalFile {
         );
         buf.put(name);
         buf.put_u16_le(0);
-        buf.put_bytes(0, FILE_NAME_FIELD_SIZE - name.len() - UTF16_CODE_UNIT_SIZE);
+        buf.put_bytes(0, FILE_NAME_FIELD_SIZE - name_field_size);
         Ok(())
     }
 
@@ -441,14 +451,21 @@ mod file_list_test {
             LocalFile::validated_descriptor_name(Path::new("root"), &path)
         };
         let valid_name = validate(&"a".repeat(MAX_FILE_NAME_CODE_UNITS))?;
-        let invalid_name = validate(&"a".repeat(MAX_FILE_NAME_CODE_UNITS + 1));
+        let oversized_name = "a".repeat(MAX_FILE_NAME_CODE_UNITS + 1);
+        let invalid_name = validate(&oversized_name);
         let mut valid_file = generate_tree("").remove(0);
         valid_file.descriptor_name = valid_name;
         let valid_descriptor = valid_file.as_bin()?;
+        valid_file.descriptor_name = oversized_name;
+        let invalid_descriptor = valid_file.as_bin();
 
         assert_eq!(valid_descriptor.len(), FILE_DESCRIPTOR_SIZE);
         assert!(valid_descriptor.ends_with(&[0_u8; UTF16_CODE_UNIT_SIZE]));
         assert!(invalid_name.is_err());
+        assert!(matches!(
+            invalid_descriptor,
+            Err(CliprdrError::InvalidRequest { .. })
+        ));
         Ok(())
     }
 
