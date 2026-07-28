@@ -1621,10 +1621,26 @@ impl Connection {
                 match crate::post_request_with_status(url.clone(), body.clone(), "").await {
                     Ok((status, text)) => {
                         if (200..300).contains(&status) {
-                            return Ok(text);
+                            // hbbs reports handler failures (e.g. a db write
+                            // error) as 200 with an {"error": ...} body;
+                            // success is an empty body. Not retryable: the
+                            // server already consumed the nonce, and fixing
+                            // persistence is the server's job.
+                            let server_err = serde_json::from_str::<Value>(&text)
+                                .ok()
+                                .and_then(|v| v.get("error")?.as_str().map(|s| s.to_owned()))
+                                .filter(|e| !e.is_empty());
+                            match server_err {
+                                Some(e) => {
+                                    let brief: String = e.chars().take(128).collect();
+                                    (false, format!("server error: {}", brief))
+                                }
+                                None => return Ok(text),
+                            }
+                        } else {
+                            let brief: String = text.chars().take(128).collect();
+                            (status >= 500, format!("status {}: {}", status, brief))
                         }
-                        let brief: String = text.chars().take(128).collect();
-                        (status >= 500, format!("status {}: {}", status, brief))
                     }
                     Err(e) => (true, e.to_string()),
                 };
