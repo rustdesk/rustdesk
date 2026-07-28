@@ -359,7 +359,10 @@ _overridden = [
     for name, value, pinned in (
         ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
         ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
-        ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR'), None),
+        # `or None` so an empty value reads as unset here exactly as it does in
+        # build_libdrmtap_so(), which tests it for truthiness. Otherwise `DRMTAP_PREBUILT_DIR=`
+        # would demand the opt-in for an override that is not going to happen.
+        ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR') or None, None),
     )
     if value != pinned
 ]
