@@ -113,19 +113,62 @@ struct CapDisplayInfo {
 /// too, otherwise on a multi-monitor host the injected pointer lands on the wrong output — and the
 /// hardware cursor, which lives on whichever CRTC the pointer is over, never appears on the captured
 /// CRTC (the "cursor not visible" symptom). Reads the layout from the Wayland outputs, so it is
-/// independent of the capture backend. DRM-only: check_init keeps its own inline copy so the
-/// drm-off build stays byte-identical to upstream.
+/// independent of the capture backend.
+///
+/// This is the DRM path's single copy of what `check_init` does inline for PipeWire, and it does the
+/// same three things, for the same reasons:
+///
+/// - drops the cached Wayland layout first, because it can predate compositor changes made while no
+///   session was active (rustdesk#15601), and on the hotplug path it is stale by definition;
+/// - bounds the IPC wait, because `uinput::client::set_resolution` reads its reply with no timeout of
+///   its own, so a hung uinput socket would otherwise block every video-service start on this branch
+///   and wedge the hotplug worker inside `rt.block_on`, leaving `UINPUT_REFRESH_BUSY` latched true so
+///   that every later hotplug refresh is silently skipped for the process lifetime;
+/// - records the applied rect and snapshots the per-display layout baseline, which is what arms the
+///   #15601 drift remap. Without it the remap never activates on the DRM path at all.
+///
+/// It stays a separate copy rather than being folded into `check_init` because `check_init` ships in
+/// every Linux build and this feature must not change the drm-off one by so much as a line.
 #[cfg(feature = "drm")]
 pub(super) async fn update_uinput_resolution() {
-    if crate::input_service::wayland_use_uinput() {
-        if let Some((minx, maxx, miny, maxy)) =
-            scrap::wayland::display::get_desktop_rect_for_uinput()
-        {
-            log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
-            allow_err!(input_service::update_mouse_resolution(minx, maxx, miny, maxy).await);
-        } else {
-            log::warn!("Failed to get desktop rect for uinput");
+    if !crate::input_service::wayland_use_uinput() {
+        return;
+    }
+    scrap::wayland::display::clear_wayland_displays_cache();
+    let Some(rect) = scrap::wayland::display::get_desktop_rect_for_uinput() else {
+        log::warn!("Failed to get desktop rect for uinput");
+        return;
+    };
+    // Re-snapshot the baseline on every call: this runs at session init and after every hotplug, and
+    // the baseline is what the client's coordinates are measured against.
+    let snapshot_layout = || {
+        super::display_service::set_wayland_layout_baseline(
+            scrap::wayland::display::get_display_rects_for_uinput(),
+        );
+    };
+    // Reprogram the device only when the range actually changes. A display stuck in a rebuild loop
+    // calls this about once a second, and reapplying an identical range is an IPC roundtrip plus a
+    // uinput device reconfiguration under a user who may be at the console.
+    if super::display_service::wayland_uinput_rect() == Some(rect) {
+        snapshot_layout();
+        return;
+    }
+    let (minx, maxx, miny, maxy) = rect;
+    log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
+    match timeout(
+        3_000,
+        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+    )
+    .await
+    {
+        // Record the rect only after a successful apply, so a transient failure is retried on the
+        // next call instead of being remembered as applied.
+        Ok(Ok(())) => {
+            super::display_service::set_wayland_uinput_rect(rect);
+            snapshot_layout();
         }
+        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
     }
 }
 

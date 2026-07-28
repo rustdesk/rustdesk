@@ -65,6 +65,13 @@ pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
 }
 
+// The uinput ABS range currently programmed into the device, for the DRM path's "reapply only when
+// it changed" check. The PipeWire path compares it inline in refresh_wayland_uinput_rect_if_changed.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) fn wayland_uinput_rect() -> Option<(i32, i32, i32, i32)> {
+    WAYLAND_UINPUT_RECT.lock().unwrap().rect
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
     WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
