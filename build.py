@@ -8,6 +8,7 @@ import zipfile
 import urllib.request
 import shutil
 import hashlib
+import re
 import subprocess
 import argparse
 import sys
@@ -339,6 +340,15 @@ def ffi_bindgen_function_refactor():
 # libs/scrap/Cargo.toml). This commit is libdrmtap v0.4.15.
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', 'https://github.com/rustdesk-org/libdrmtap')
 LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', 'cbc5e6af5b353b6bc351072a27a5351d82ba66e3')
+# Both are interpolated into shell commands below, and both are env-overridable, so validate their
+# SHAPE before they get there. This is not only about a hostile environment: a truncated or
+# abbreviated sha would otherwise reach `git fetch` and fail with something far less obvious than
+# saying so here, and an abbreviated one would defeat the point of pinning.
+if not re.fullmatch(r'[0-9a-f]{40}', LIBDRMTAP_SHA):
+    raise Exception(
+        f'DRMTAP_SHA must be a full 40-character commit sha, got {LIBDRMTAP_SHA!r}')
+if not re.fullmatch(r'(https://|git@)[A-Za-z0-9._~:/@-]+', LIBDRMTAP_REPO):
+    raise Exception(f'DRMTAP_REPO does not look like a git remote url: {LIBDRMTAP_REPO!r}')
 
 
 def _single_real_so(paths, where):

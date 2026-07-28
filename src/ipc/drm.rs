@@ -1138,7 +1138,12 @@ pub(crate) struct DrmConn {
 /// hostile/oversized length prefix). Distinct from the raw-body cap because a body can be a whole
 /// CPU-fallback frame.
 const MAX_DRM_JSON_BYTES: usize = 8 * 1024 * 1024;
-/// Cap on a raw body read by `next_raw` (CPU-fallback BGRA / cursor RGBA). Covers a 256 MiB 8K
+/// Total budget for one raw body, from the header that announced it. Generous on purpose: the body is
+/// a full frame on the CPU path (33 MB at 4K) but it crosses a unix socket, so it is milliseconds in
+/// practice and this only has to bound a peer that stopped.
+const DRM_BODY_TIMEOUT_MS: u64 = 5_000;
+
+/// Cap on a raw body read by `next_raw_into` (CPU-fallback BGRA / cursor RGBA). Covers a 256 MiB 8K
 /// scanout (`DrmReader` bounds a frame to that) with margin.
 const MAX_DRM_RAW_BYTES: usize = 512 * 1024 * 1024;
 /// Control-buffer capacity for one SCM_RIGHTS cmsg carrying a single fd. `CMSG_SPACE(sizeof(int))` is
@@ -1486,7 +1491,22 @@ impl DrmConn {
     /// `ConnectionTmpl::next_raw`, except that the caller owns the buffer so it can be recycled
     /// across frames. A raw body never carries an fd; a stray fd (protocol desync) is collected by
     /// `drm_read_full` and dropped/closed.
+    ///
+    /// Bounded as a whole: the header that announced this body has already been consumed, so a body
+    /// that never finishes cannot be resumed, and an overrun is a hard error that ends the stream.
+    /// Without the bound a producer that writes a header and then stops (crashed, stopped, wedged)
+    /// pins the consumer receive thread forever on `readable()`. That thread is also the one that
+    /// observes `stop`, so every capturer rebuild would strand another thread and its render context.
     pub async fn next_raw_into(&mut self, out: &mut Vec<u8>) -> ResultType<()> {
+        match timeout(DRM_BODY_TIMEOUT_MS, self.next_raw_into_unbounded(out)).await {
+            Ok(res) => res,
+            Err(_) => bail!(
+                "drm: raw body did not arrive within {DRM_BODY_TIMEOUT_MS}ms of its header; closing"
+            ),
+        }
+    }
+
+    async fn next_raw_into_unbounded(&mut self, out: &mut Vec<u8>) -> ResultType<()> {
         // next_raw is not called through recv_msg_timeout2, so its progress flag is unused; pass the
         // field for signature parity (recv_msg clears it before its own reads).
         let mut prefix = [0u8; 4];

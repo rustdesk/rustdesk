@@ -1414,7 +1414,12 @@ pub(super) fn get_capturer_info(
     // Identity of the display being asked for, resolved ONCE and before any of the per-display maps
     // are locked: connector_key_of takes DRM_STATE, and nesting that inside a map lock would be the
     // one lock order this file does not otherwise have.
-    let key = connector_key_of(display_idx as i32).unwrap_or_default();
+    // `None` when the display list does not describe this index (not enumerated yet, or out of
+    // range). Kept as an Option rather than collapsed to "": an empty key is a REAL key in the map,
+    // so two unidentifiable displays would share one entry and one could demote the other. That is
+    // the aliasing frame() already refuses to take part in, and both blocks below skip on None for
+    // the same reason. A display with no identity simply carries no health.
+    let key = connector_key_of(display_idx as i32);
     // Refuse a display already demoted (repeated zero-frame sessions, or a detected flap below), so
     // the video service uses PipeWire for it instead of rebuilding onto DRM forever. Per-display, not
     // a global DRM disable.
@@ -1424,7 +1429,7 @@ pub(super) fn get_capturer_info(
         // The demote count itself is KEPT, so a display that fails again waits twice as long; only a
         // delivered frame erases it (frame() drops the entry outright).
         let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
-        if let Some(h) = map.get_mut(&key) {
+        if let Some(h) = key.as_ref().and_then(|k| map.get_mut(k)) {
             if h.zero_frame_streak >= DRM_GRAB_MAX_FAILURES {
                 if h.demoted() {
                     bail!(
@@ -1447,10 +1452,10 @@ pub(super) fn get_capturer_info(
     // resets the count, so a healthy display (built once, streams long) never accumulates. The
     // initial build counts 0, so demotion fires on the RAPID_REBUILD_MAX-th rapid rebuild — i.e.
     // the (RAPID_REBUILD_MAX + 1)-th build inside the window.
-    {
+    if let Some(key) = key.clone() {
         let now = Instant::now();
         let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
-        let h = map.entry(key.clone()).or_insert_with(DisplayHealth::new);
+        let h = map.entry(key).or_insert_with(DisplayHealth::new);
         h.rapid_builds = match h.last_build {
             Some(last) if now.duration_since(last) < RAPID_REBUILD_WINDOW => h.rapid_builds + 1,
             _ => 0,

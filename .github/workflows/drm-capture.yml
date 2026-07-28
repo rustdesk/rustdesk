@@ -6,6 +6,12 @@ name: DRM capture (opt-in drm feature)
 permissions:
   contents: read
 
+# Supersede a stale run when a PR is pushed again; never cancel a master run, whose whole job is to
+# record that a given commit on master was verified.
+concurrency:
+  group: drm-capture-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Everything CI-side about the opt-in `drm` backend lives here, so the stock CI and release workflows
 # stay byte-identical to a build with the feature off. Nothing in this file runs unless a drm-related
 # path changes (or someone dispatches it by hand), so a PR that does not touch the backend pays nothing.
@@ -32,13 +38,19 @@ on:
   push:
     branches:
       - master
+    # Deliberately the SAME list as the pull_request trigger above: a shorter one here means a push
+    # that touches only the missing paths (a squash merge, a direct push) skips re-verification.
     paths:
       - "libs/scrap/src/common/drm_reader.rs"
       - "libs/scrap/src/common/drm_render.rs"
       - "libs/scrap/src/common/drmtap_dl.rs"
+      - "libs/scrap/src/common/mod.rs"
+      - "libs/scrap/Cargo.toml"
       - "src/ipc.rs"
       - "src/ipc/**"
       - "src/server/drm_capturer.rs"
+      - "src/server/wayland.rs"
+      - "src/server/display_service.rs"
       - "build.py"
       - ".github/workflows/drm-capture.yml"
 
@@ -66,6 +78,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Install prerequisites
         shell: bash
@@ -121,6 +134,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Install libdrmtap build deps
         shell: bash
@@ -199,6 +214,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Restore bridge files
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
