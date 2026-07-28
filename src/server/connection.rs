@@ -1608,23 +1608,43 @@ impl Connection {
     }
 
     async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
-        // Audit records are compliance evidence; retry transient api-server
-        // failures so they are not silently dropped.
+        // Audit records are compliance evidence; retry transport errors and
+        // 5xx (e.g. a reverse proxy answering while the api server restarts)
+        // so transient failures don't silently drop them. A 4xx is a
+        // deterministic rejection and fails immediately.
         const ATTEMPTS: u32 = 3;
         let body = v.to_string();
-        for i in 1..ATTEMPTS {
-            match crate::post_request(url.clone(), body.clone(), "").await {
-                Ok(x) => return Ok(x),
-                Err(e) => {
-                    log::warn!("Audit post failed (attempt {}/{}): {}", i, ATTEMPTS, e);
-                    time::sleep(Duration::from_secs(1 << (i - 1))).await;
-                }
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let (retryable, err) =
+                match crate::post_request_with_status(url.clone(), body.clone(), "").await {
+                    Ok((status, text)) => {
+                        if (200..300).contains(&status) {
+                            return Ok(text);
+                        }
+                        let brief: String = text.chars().take(128).collect();
+                        (status >= 500, format!("status {}: {}", status, brief))
+                    }
+                    Err(e) => (true, e.to_string()),
+                };
+            if !retryable || attempt >= ATTEMPTS {
+                log::error!(
+                    "Audit post dropped (attempt {}/{}): {}",
+                    attempt,
+                    ATTEMPTS,
+                    err
+                );
+                bail!("{}", err);
             }
+            log::warn!(
+                "Audit post failed (attempt {}/{}): {}",
+                attempt,
+                ATTEMPTS,
+                err
+            );
+            time::sleep(Duration::from_secs(1 << (attempt - 1))).await;
         }
-        crate::post_request(url, body, "").await.map_err(|e| {
-            log::error!("Audit post dropped after {} attempts: {}", ATTEMPTS, e);
-            e
-        })
     }
 
     fn set_conn_audit_primary_auth(&mut self, method: ConnAuditPrimaryAuth) {
