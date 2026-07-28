@@ -1703,6 +1703,17 @@ mod desktop {
                 && self.has_required_session_envs()
         }
 
+        fn set_session_id(&mut self, sid: String) {
+            if self.sid != sid {
+                self.display.clear();
+                self.xauth.clear();
+                self.wl_display.clear();
+                self.dbus.clear();
+                self.xwayland_env_session = None;
+            }
+            self.sid = sid;
+        }
+
         fn get_display_xauth_wayland(&mut self) {
             // Re-run the optional X11 lookup if Xwayland is started again later.
             self.xwayland_env_session = None;
@@ -1733,10 +1744,10 @@ mod desktop {
             }
 
             self.xwayland_env_session = None;
+            // A session change clears every value in set_session_id(). Within the same
+            // session, keep the required Wayland values while refreshing optional X11 ones.
             self.display.clear();
             self.xauth.clear();
-            self.wl_display.clear();
-            self.dbus.clear();
 
             let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
             let fallback_proc = format!(
@@ -1983,7 +1994,7 @@ mod desktop {
                 return;
             }
 
-            self.sid = seat0_values[0].clone();
+            self.set_session_id(seat0_values[0].clone());
             self.uid = seat0_values[1].clone();
             self.username = seat0_values[2].clone();
             self.protocol = get_display_server_of_session(&self.sid).into();
@@ -2092,6 +2103,33 @@ mod desktop {
             assert!(d.has_cached_xwayland_envs());
             d.sid = "3".to_owned();
             assert!(!d.has_cached_xwayland_envs());
+        }
+
+        #[test]
+        fn session_change_clears_discovered_envs() {
+            let mut d = Desktop {
+                sid: "2".to_owned(),
+                display: ":0".to_owned(),
+                xauth: "/tmp/xauth".to_owned(),
+                wl_display: "wayland-0".to_owned(),
+                dbus: "unix:path=/run/user/1000/bus".to_owned(),
+                xwayland_env_session: Some("2".to_owned()),
+                ..Default::default()
+            };
+
+            d.set_session_id("2".to_owned());
+            assert_eq!(d.display, ":0");
+            assert_eq!(d.xauth, "/tmp/xauth");
+            assert_eq!(d.wl_display, "wayland-0");
+            assert_eq!(d.dbus, "unix:path=/run/user/1000/bus");
+            assert_eq!(d.xwayland_env_session.as_deref(), Some("2"));
+
+            d.set_session_id("3".to_owned());
+            assert!(d.display.is_empty());
+            assert!(d.xauth.is_empty());
+            assert!(d.wl_display.is_empty());
+            assert!(d.dbus.is_empty());
+            assert!(d.xwayland_env_session.is_none());
         }
     }
 }
