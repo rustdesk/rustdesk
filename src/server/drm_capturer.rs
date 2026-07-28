@@ -63,6 +63,10 @@ pub struct IpcDrmCapturer {
     // What that index MEANT when the stream started. Per-display memory is keyed by this, not by the
     // index, so a hotplug that renumbers the list cannot make one monitor inherit another's verdict.
     connector: Option<String>,
+    // The geometry this session was built with, which is also what the encoder was sized from: the
+    // video service reads CapturerInfo{width,height} once, at build time. A frame of any other size
+    // must not be delivered against it. `None` only if the handshake list did not describe this index.
+    session_size: Option<(usize, usize)>,
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -208,6 +212,9 @@ impl IpcDrmCapturer {
                 stop,
                 display,
                 connector: displays.get(display.max(0) as usize).map(connector_key),
+                session_size: displays
+                    .get(display.max(0) as usize)
+                    .map(|d| (d.width as usize, d.height as usize)),
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
@@ -246,6 +253,24 @@ impl TraitCapturer for IpcDrmCapturer {
             // Deliver a pending frame before surfacing an end, so the last frame is not dropped.
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
+                // A mid-session modeset. The encoder was sized once from CapturerInfo at build time,
+                // and convert_to_yuv only refuses a source LARGER than its destination, so a smaller
+                // frame would be encoded into the old canvas and the stale right and bottom edges
+                // would stay on screen until the connection was torn down. Fail hard instead, which
+                // routes a shrink through the same rebuild an enlargement already takes. got_frame is
+                // set first: this session did produce frames, so it must not be counted as one of the
+                // zero-frame sessions that demote a display to PipeWire.
+                if self.session_size.is_some_and(|(sw, sh)| (w, h) != (sw, sh)) {
+                    self.got_frame = true;
+                    let (sw, sh) = self.session_size.unwrap_or_default();
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "drm: display {} changed geometry mid-session ({sw}x{sh} -> {w}x{h}); rebuilding",
+                            self.display
+                        ),
+                    ));
+                }
                 self.cur = buf;
                 self.cur_w = w;
                 self.cur_h = h;
@@ -1245,4 +1270,82 @@ pub(super) fn get_capturer_info(
         _capturer_privacy_mode_id: 0,
         capturer: Box::new(capturer),
     })
+}
+
+#[cfg(test)]
+mod drm_capturer_tests {
+    use super::*;
+
+    // Build a capturer with no live stream behind it: the receive thread only ever writes into
+    // `shared`, so a test can put a frame there directly and drive `frame()` exactly as the encoder
+    // loop does.
+    fn capturer_with(session: Option<(usize, usize)>) -> IpcDrmCapturer {
+        IpcDrmCapturer {
+            shared: Arc::new(Shared {
+                slot: Mutex::new(FrameSlot {
+                    latest: None,
+                    ended: None,
+                }),
+                cv: Condvar::new(),
+            }),
+            stop: Arc::new(AtomicBool::new(false)),
+            display: 0,
+            connector: None,
+            session_size: session,
+            cur: Vec::new(),
+            cur_w: 0,
+            cur_h: 0,
+            cur_fmt: Pixfmt::BGRA,
+            got_frame: false,
+        }
+    }
+
+    fn put_frame(c: &IpcDrmCapturer, w: usize, h: usize) {
+        let mut slot = c.shared.slot.lock().unwrap();
+        slot.latest = Some((w, h, Pixfmt::BGRA, vec![0u8; w * h * 4]));
+    }
+
+    #[test]
+    fn frame_of_the_session_size_is_delivered() {
+        let mut c = capturer_with(Some((64, 32)));
+        put_frame(&c, 64, 32);
+        assert!(
+            matches!(c.frame(Duration::from_millis(50)), Ok(_)),
+            "a frame matching the session geometry must be delivered"
+        );
+        assert!(c.got_frame);
+    }
+
+    // The regression this guards: the encoder is sized once from CapturerInfo, and convert_to_yuv
+    // only refuses a source LARGER than its destination, so without this a smaller frame is encoded
+    // into the old canvas and the stale edges stay on screen for the rest of the connection.
+    #[test]
+    fn a_smaller_frame_ends_the_session_instead_of_being_encoded() {
+        let mut c = capturer_with(Some((1920, 1080)));
+        put_frame(&c, 1280, 720);
+        // `Frame` is not Debug, so match rather than expect_err.
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a mid-session shrink must be a hard error, not a delivered frame"),
+        };
+        assert!(err.to_string().contains("changed geometry mid-session"));
+        // Sessions that delivered frames must not be counted toward the zero-frame demotion streak.
+        assert!(c.got_frame, "the rebuild must not look like a display that never produced a frame");
+    }
+
+    #[test]
+    fn a_larger_frame_ends_the_session_too() {
+        let mut c = capturer_with(Some((1280, 720)));
+        put_frame(&c, 1920, 1080);
+        assert!(matches!(c.frame(Duration::from_millis(50)), Err(_)));
+    }
+
+    // An index the handshake list did not describe leaves the size unknown; the guard must then stay
+    // out of the way rather than reject every frame.
+    #[test]
+    fn unknown_session_size_delivers_whatever_arrives() {
+        let mut c = capturer_with(None);
+        put_frame(&c, 800, 600);
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+    }
 }
