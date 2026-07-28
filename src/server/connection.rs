@@ -74,12 +74,14 @@ use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;
+// How long a rejection counts, so also how long a blocked address stays blocked. Longer
+// throttles enumeration harder; shorter limits collateral on whitelisted neighbours.
+const ID_WHITELIST_FAILURE_DECAY_MINUTES: i32 = 10;
 
 lazy_static::lazy_static! {
     // [0] password, [1] 2FA, [2] ID whitelist.
-    // The ID whitelist has its own bucket: its counters never decay, and a peer rejected by
-    // it can never clear them with a successful login, so sharing the password bucket would
-    // let a rejected ID lock out whitelisted peers behind the same IP / IPv6 prefix.
+    // Bucket 2 is separate so its rejections do not touch the password / 2FA budgets. It is
+    // decayed in `check_id_whitelist` and cleared on auth, never on a bare id match.
     static ref LOGIN_FAILURES: [Arc::<Mutex<HashMap<String, (i32, i32, i32)>>>; 3] = Default::default();
     static ref SESSIONS: Arc::<Mutex<HashMap<SessionKey, Session>>> = Default::default();
     static ref ALIVE_CONNS: Arc::<Mutex<Vec<i32>>> = Default::default();
@@ -1389,15 +1391,19 @@ impl Connection {
             .map(|x| x.trim().to_owned())
             .filter(|x| !x.is_empty())
             .collect();
-        if id_whitelist_allows(&id_whitelist, &self.lr.my_id) {
+        if id_whitelist.is_empty() {
             return true;
         }
-        // Rate limit rejections so that the whitelist can not be used as an oracle to
-        // enumerate allowed IDs. Whitelisted peers return above without touching this
-        // bucket, so a rejected ID can not lock them out.
+        // Limit before matching, or a match returning early would never touch the counter and
+        // leave enumeration unthrottled. Not cleared here: `my_id` is self-reported, so that
+        // would let anyone holding one allowed id reset the budget between probes.
+        self.decay_id_whitelist_failures();
         let (failure, res) = self.check_failure(FAILURE_IDX_ID_WHITELIST).await;
         if !res {
             return false;
+        }
+        if id_whitelist_allows(&id_whitelist, &self.lr.my_id) {
+            return true;
         }
         self.update_failure(failure, false, FAILURE_IDX_ID_WHITELIST);
         self.send_login_error("Your ID is blocked by the peer")
@@ -1407,6 +1413,34 @@ impl Connection {
             json!({ "id": self.lr.my_id.clone(), "ip": self.ip.clone(), "name": self.lr.my_name.clone() }),
         );
         false
+    }
+
+    // What `check_failure` consults: the source address, plus shared IPv6 prefixes.
+    fn failure_keys(&self) -> Vec<String> {
+        let mut keys = vec![self.ip.clone()];
+        if let Some((p64, p56, p48)) = self.get_ipv6_prefixes() {
+            keys.extend([p64, p56, p48]);
+        }
+        keys
+    }
+
+    // Only this connection's own keys, so it stays O(1) instead of scanning the map.
+    fn decay_id_whitelist_failures(&self) {
+        decay_stale_failures(
+            &mut LOGIN_FAILURES[FAILURE_IDX_ID_WHITELIST].lock().unwrap(),
+            &self.failure_keys(),
+            (get_time() / 60_000) as i32,
+            ID_WHITELIST_FAILURE_DECAY_MINUTES,
+        );
+    }
+
+    // Not `update_failure(.., true, ..)`: it no-ops when the peer's own address has no entry,
+    // normal on IPv6, leaving the shared prefixes that are what actually block it.
+    fn clear_id_whitelist_failures(&self) {
+        clear_failures(
+            &mut LOGIN_FAILURES[FAILURE_IDX_ID_WHITELIST].lock().unwrap(),
+            &self.failure_keys(),
+        );
     }
 
     async fn on_open(&mut self, addr: SocketAddr) -> bool {
@@ -1693,6 +1727,9 @@ impl Connection {
             return false;
         }
         self.authorized = true;
+        // Releases the budget `check_id_whitelist` charges against this address: only a peer
+        // that got this far proved more than a self-reported id.
+        self.clear_id_whitelist_failures();
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
             (1, AuthConnType::FileTransfer)
         } else if self.port_forward_socket.is_some() {
@@ -6809,6 +6846,32 @@ fn id_whitelist_allows(id_whitelist: &[String], my_id: &str) -> bool {
         .any(|x| wildcard_match(x, my_id) || wildcard_match(x, bare_id))
 }
 
+// Drop `keys` whose last failure (`.0`, in minutes) is at least `window` old. A backwards
+// clock gives a negative age and keeps the entry, so it never widens access.
+fn decay_stale_failures(
+    failures: &mut HashMap<String, (i32, i32, i32)>,
+    keys: &[String],
+    now: i32,
+    window: i32,
+) {
+    for key in keys {
+        if failures
+            .get(key)
+            .is_some_and(|v| now.saturating_sub(v.0) >= window)
+        {
+            failures.remove(key);
+        }
+    }
+}
+
+// Unconditionally forget `keys`, unlike `update_failure`'s remove path which requires the
+// per-address entry to exist.
+fn clear_failures(failures: &mut HashMap<String, (i32, i32, i32)>, keys: &[String]) {
+    for key in keys {
+        failures.remove(key);
+    }
+}
+
 // Simple glob matching for the ID whitelist: '*' matches any sequence of characters
 // (including the empty one), '?' matches exactly one character. Case-insensitive.
 fn wildcard_match(pattern: &str, text: &str) -> bool {
@@ -6871,6 +6934,54 @@ mod test {
         assert!(wildcard_match("1?3*7?9", "123456789"));
         // Whitespace around entries is ignored.
         assert!(wildcard_match(" 123456789 ", "123456789"));
+    }
+
+    #[test]
+    fn test_decay_stale_failures() {
+        let entry = |minute: i32| (minute, 1, 40);
+        let keys = ["ip".to_string(), "p64".to_string(), "absent".to_string()];
+        let mut m: HashMap<String, (i32, i32, i32)> = HashMap::new();
+        m.insert("ip".to_string(), entry(100));
+        m.insert("p64".to_string(), entry(160));
+        m.insert("untouched".to_string(), entry(100));
+
+        // Exactly at the window: forgotten. Still inside it: kept.
+        decay_stale_failures(&mut m, &keys, 160, 60);
+        assert!(!m.contains_key("ip"));
+        assert!(m.contains_key("p64"));
+        // Keys that were not passed in are never visited, absent ones are a no-op.
+        assert!(m.contains_key("untouched"));
+
+        // One minute short of the window keeps the entry.
+        decay_stale_failures(&mut m, &keys, 219, 60);
+        assert!(m.contains_key("p64"));
+        decay_stale_failures(&mut m, &keys, 220, 60);
+        assert!(!m.contains_key("p64"));
+
+        // A clock that jumped backwards must not drop anything.
+        m.insert("ip".to_string(), entry(500));
+        decay_stale_failures(&mut m, &keys, 0, 60);
+        assert!(m.contains_key("ip"));
+    }
+
+    #[test]
+    fn test_clear_failures_drops_shared_prefixes() {
+        // On IPv6 a whitelisted peer usually has no entry of its own, while the shared
+        // prefixes that block it do. Clearing must not depend on the per-address entry.
+        let mut m: HashMap<String, (i32, i32, i32)> = HashMap::new();
+        m.insert("p64".to_string(), (100, 1, 55));
+        m.insert("p56".to_string(), (100, 1, 75));
+        m.insert("p48".to_string(), (100, 1, 95));
+        m.insert("someone-else".to_string(), (100, 1, 95));
+        let keys = ["ip", "p64", "p56", "p48"].map(|k| k.to_string());
+
+        clear_failures(&mut m, &keys);
+
+        for key in ["p64", "p56", "p48"] {
+            assert!(!m.contains_key(key), "{key} should have been cleared");
+        }
+        // Keys belonging to other peers are left alone.
+        assert!(m.contains_key("someone-else"));
     }
 
     #[test]
