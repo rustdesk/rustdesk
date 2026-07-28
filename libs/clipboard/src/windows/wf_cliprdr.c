@@ -50,6 +50,7 @@
 #define WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS 255u
 /* Bound the peer-provided UTF-8 scan separately from the converted Windows name. */
 #define WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES (WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS * 4u)
+#define WF_CLIPRDR_COM_LPT_PREFIX_LENGTH 3u
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
 
@@ -95,7 +96,7 @@ static BOOL wf_cliprdr_file_name_equals(const WCHAR *component, SIZE_T length,
  * https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file */
 static BOOL wf_cliprdr_file_name_numbered_device(const WCHAR *component, SIZE_T length)
 {
-	SIZE_T prefix_length = wcslen(L"COM");
+	SIZE_T prefix_length = WF_CLIPRDR_COM_LPT_PREFIX_LENGTH;
 	return length == prefix_length + 1 &&
 		   (wf_cliprdr_file_name_equals(component, prefix_length, L"COM") ||
 			wf_cliprdr_file_name_equals(component, prefix_length, L"LPT")) &&

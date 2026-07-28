@@ -121,6 +121,8 @@ impl PasteTask {
             target_dir,
             files,
         };
+        // Path validation and creation are not atomic. Local filesystem changes can
+        // invalidate checked paths, and entries created before an error are not rolled back.
         if let Err(error) = task_handle
             .validate_paths()
             .and_then(|_| task_handle.update_next(0))

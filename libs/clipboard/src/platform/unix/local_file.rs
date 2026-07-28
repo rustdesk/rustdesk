@@ -383,23 +383,16 @@ mod file_list_test {
         let parsed = FileDescription::parse_file_descriptors(pdu.to_vec(), 0)?;
         assert_eq!(parsed.len(), 4);
 
-        if !prefix.is_empty() {
-            assert_eq!(parsed[0].name.to_str().unwrap(), format!("{}", prefix));
-            assert_eq!(
-                parsed[1].name.to_str().unwrap(),
-                format!("{}/a.txt", prefix)
-            );
-            assert_eq!(parsed[2].name.to_str().unwrap(), format!("{}/b", prefix));
-            assert_eq!(
-                parsed[3].name.to_str().unwrap(),
-                format!("{}/b/c.txt", prefix)
-            );
-        } else {
-            assert_eq!(parsed[0].name.to_str().unwrap(), ".");
-            assert_eq!(parsed[1].name.to_str().unwrap(), "a.txt");
-            assert_eq!(parsed[2].name.to_str().unwrap(), "b");
-            assert_eq!(parsed[3].name.to_str().unwrap(), "b/c.txt");
-        }
+        assert_eq!(parsed[0].name.to_str().unwrap(), format!("{}", prefix));
+        assert_eq!(
+            parsed[1].name.to_str().unwrap(),
+            format!("{}/a.txt", prefix)
+        );
+        assert_eq!(parsed[2].name.to_str().unwrap(), format!("{}/b", prefix));
+        assert_eq!(
+            parsed[3].name.to_str().unwrap(),
+            format!("{}/b/c.txt", prefix)
+        );
 
         assert!(parsed[0].perm & 0o777 == 0o754);
         assert!(parsed[1].perm & 0o777 == 0o754);
