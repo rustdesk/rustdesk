@@ -1631,6 +1631,13 @@ mod desktop {
     const ENV_KEY_XAUTHORITY: &str = "XAUTHORITY";
     const ENV_KEY_WAYLAND_DISPLAY: &str = "WAYLAND_DISPLAY";
     const ENV_KEY_DBUS_SESSION_BUS_ADDRESS: &str = "DBUS_SESSION_BUS_ADDRESS";
+    const WAYLAND_ENV_KEYS: [&str; 4] = [
+        ENV_KEY_WAYLAND_DISPLAY,
+        ENV_KEY_DBUS_SESSION_BUS_ADDRESS,
+        ENV_KEY_DISPLAY,
+        ENV_KEY_XAUTHORITY,
+    ];
+    const X11_ENV_KEYS: [&str; 2] = [ENV_KEY_DISPLAY, ENV_KEY_XAUTHORITY];
 
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
@@ -1644,6 +1651,8 @@ mod desktop {
         pub dbus: String,
         pub is_rustdesk_subprocess: bool,
         pub wl_display: String,
+        // Session whose required Xwayland-path environment has been discovered.
+        xwayland_env_session: Option<String>,
     }
 
     impl Desktop {
@@ -1662,19 +1671,44 @@ mod desktop {
             self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
+        fn fill_missing_env(
+            target: &mut String,
+            envs: &std::collections::HashMap<&str, String>,
+            name: &str,
+        ) {
+            if target.is_empty() {
+                if let Some(value) = envs.get(name).filter(|value| !value.is_empty()) {
+                    target.clone_from(value);
+                }
+            }
+        }
+
+        fn fill_missing_session_envs(&mut self, envs: &std::collections::HashMap<&str, String>) {
+            Self::fill_missing_env(&mut self.display, envs, ENV_KEY_DISPLAY);
+            Self::fill_missing_env(&mut self.xauth, envs, ENV_KEY_XAUTHORITY);
+            Self::fill_missing_env(&mut self.wl_display, envs, ENV_KEY_WAYLAND_DISPLAY);
+            Self::fill_missing_env(&mut self.dbus, envs, ENV_KEY_DBUS_SESSION_BUS_ADDRESS);
+        }
+
+        fn has_required_session_envs(&self) -> bool {
+            if self.is_wayland() {
+                !self.wl_display.is_empty() && !self.dbus.is_empty()
+            } else {
+                !self.display.is_empty() && !self.xauth.is_empty()
+            }
+        }
+
+        fn has_cached_xwayland_envs(&self) -> bool {
+            self.xwayland_env_session.as_deref() == Some(self.sid.as_str())
+                && self.has_required_session_envs()
+        }
+
         fn get_display_xauth_wayland(&mut self) {
+            // Re-run the optional X11 lookup if Xwayland is started again later.
+            self.xwayland_env_session = None;
             for _ in 1..=10 {
                 // Prefer Wayland-related variables first when multiple portal processes match.
-                let mut envs = get_envs(
-                    &self.uid,
-                    XDG_DESKTOP_PORTAL,
-                    &[
-                        ENV_KEY_WAYLAND_DISPLAY,
-                        ENV_KEY_DBUS_SESSION_BUS_ADDRESS,
-                        ENV_KEY_DISPLAY,
-                        ENV_KEY_XAUTHORITY,
-                    ],
-                );
+                let mut envs = get_envs(&self.uid, XDG_DESKTOP_PORTAL, &WAYLAND_ENV_KEYS);
                 self.display = envs.remove(ENV_KEY_DISPLAY).unwrap_or_default();
                 self.xauth = envs.remove(ENV_KEY_XAUTHORITY).unwrap_or_default();
                 self.wl_display = envs.remove(ENV_KEY_WAYLAND_DISPLAY).unwrap_or_default();
@@ -1694,24 +1728,38 @@ mod desktop {
         }
 
         fn get_display_xauth_xwayland(&mut self) {
+            if self.has_cached_xwayland_envs() {
+                return;
+            }
+
+            self.xwayland_env_session = None;
+            self.display.clear();
+            self.xauth.clear();
+            self.wl_display.clear();
+            self.dbus.clear();
+
             let tray = format!("{} +--tray", crate::get_app_name().to_lowercase());
+            let fallback_proc = format!(
+                "{}|{}|{}|{}|{}",
+                XWAYLAND,
+                IBUS_DAEMON,
+                GNOME_GOA_DAEMON,
+                PLASMA_KDED,
+                regex::escape(&tray),
+            );
             for _ in 1..=10 {
-                let display_proc = vec![
-                    XDG_DESKTOP_PORTAL,
-                    XWAYLAND,
-                    IBUS_DAEMON,
-                    GNOME_GOA_DAEMON,
-                    PLASMA_KDED,
-                    tray.as_str(),
-                ];
-                for proc in display_proc {
-                    self.display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
-                    self.xauth = get_env(ENV_KEY_XAUTHORITY, &self.uid, proc);
-                    self.wl_display = get_env(ENV_KEY_WAYLAND_DISPLAY, &self.uid, proc);
-                    self.dbus = get_env(ENV_KEY_DBUS_SESSION_BUS_ADDRESS, &self.uid, proc);
-                    if !self.display.is_empty() && !self.xauth.is_empty() {
-                        return;
-                    }
+                let portal_envs = get_envs(&self.uid, XDG_DESKTOP_PORTAL, &WAYLAND_ENV_KEYS);
+                self.fill_missing_session_envs(&portal_envs);
+
+                // Keep the controlled-side Xwayland fallback from #5935, but only
+                // supplement values that the portal process did not provide.
+                let fallback_envs = get_envs(&self.uid, &fallback_proc, &X11_ENV_KEYS);
+                self.fill_missing_session_envs(&fallback_envs);
+
+                if self.has_required_session_envs() {
+                    // Optional X11 values must not keep rootless Xwayland sessions retrying.
+                    self.xwayland_env_session = Some(self.sid.clone());
+                    return;
                 }
                 sleep_millis(300);
             }
@@ -1914,8 +1962,12 @@ mod desktop {
 
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
+                if self.is_login_wayland() {
+                    self.is_rustdesk_subprocess = false;
+                    return;
+                }
                 // Xwayland display and xauth may not be available in a short time after login.
-                if is_xwayland_running() && !self.is_login_wayland() {
+                if is_xwayland_running() {
                     self.get_display_xauth_xwayland();
                     self.is_rustdesk_subprocess = false;
                 } else if self.is_wayland() {
@@ -1978,6 +2030,68 @@ mod desktop {
                     }
                 }
             }
+        }
+
+        #[test]
+        fn required_session_envs_follow_protocol() {
+            let wayland = Desktop {
+                protocol: DISPLAY_SERVER_WAYLAND.to_owned(),
+                wl_display: "wayland-0".to_owned(),
+                dbus: "unix:path=/run/user/1000/bus".to_owned(),
+                ..Default::default()
+            };
+
+            assert!(wayland.has_required_session_envs());
+            assert!(wayland.display.is_empty());
+            assert!(wayland.xauth.is_empty());
+
+            let mut x11 = Desktop {
+                display: ":0".to_owned(),
+                ..Default::default()
+            };
+            assert!(!x11.has_required_session_envs());
+            x11.xauth = "/tmp/xauth".to_owned();
+            assert!(x11.has_required_session_envs());
+        }
+
+        #[test]
+        fn session_envs_fill_only_missing_values() {
+            let mut d = Desktop {
+                display: ":portal".to_owned(),
+                ..Default::default()
+            };
+            let envs = std::collections::HashMap::from([
+                (ENV_KEY_DISPLAY, ":fallback".to_owned()),
+                (ENV_KEY_XAUTHORITY, "/tmp/xauth".to_owned()),
+                (ENV_KEY_WAYLAND_DISPLAY, "wayland-0".to_owned()),
+                (
+                    ENV_KEY_DBUS_SESSION_BUS_ADDRESS,
+                    "unix:path=/run/user/1000/bus".to_owned(),
+                ),
+            ]);
+
+            d.fill_missing_session_envs(&envs);
+
+            assert_eq!(d.display, ":portal");
+            assert_eq!(d.xauth, "/tmp/xauth");
+            assert_eq!(d.wl_display, "wayland-0");
+            assert_eq!(d.dbus, "unix:path=/run/user/1000/bus");
+        }
+
+        #[test]
+        fn xwayland_env_cache_is_scoped_to_session() {
+            let mut d = Desktop {
+                sid: "2".to_owned(),
+                protocol: DISPLAY_SERVER_WAYLAND.to_owned(),
+                wl_display: "wayland-0".to_owned(),
+                dbus: "unix:path=/run/user/1000/bus".to_owned(),
+                xwayland_env_session: Some("2".to_owned()),
+                ..Default::default()
+            };
+
+            assert!(d.has_cached_xwayland_envs());
+            d.sid = "3".to_owned();
+            assert!(!d.has_cached_xwayland_envs());
         }
     }
 }
