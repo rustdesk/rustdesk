@@ -33,9 +33,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-// Upper bound on how long `new()` waits for the service to answer with the display list before
-// giving up and letting the caller fall back.
+// Upper bound on how long the receive thread waits for the service to answer with the display list.
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
+// How long that thread may spend connecting to `_drm` before the handshake starts.
+const DRM_CONNECT_TIMEOUT_MS: u64 = 1000;
+/// How long a caller waits for the receive thread to hand back the display list. It must DOMINATE
+/// what that thread is allowed to spend, or the outer timer fires first and abandons a handshake
+/// that was still inside its own budget: the thread spends up to the connect timeout, then
+/// `recv_msg_timeout2` applies HANDSHAKE_TIMEOUT_MS TWICE in the worst case (once waiting for the
+/// first byte, once for the body). Derived from those parts rather than written as a constant, so a
+/// change to either one cannot silently invert the relationship again.
+const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + HANDSHAKE_TIMEOUT_MS * 2 + 500;
 
 struct FrameSlot {
     // (width, height, pixel format, packed pixels) of the newest frame not yet consumed by
@@ -271,7 +279,7 @@ impl IpcDrmCapturer {
             let stop = stop.clone();
             std::thread::spawn(move || recv_thread(display, shared, stop, tx));
         }
-        let displays = match rx.recv_timeout(Duration::from_millis(HANDSHAKE_TIMEOUT_MS + 500)) {
+        let displays = match rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS)) {
             Ok(res) => res?,
             Err(_) => {
                 // The recv thread still has its own connect/handshake budget. If we just returned,
@@ -429,7 +437,7 @@ async fn recv_thread(
     // remove_drm_cursor); a rebuilt stream for the same display index gets a newer epoch.
     let cursor_epoch = next_cursor_epoch();
     // Handshake: connect, receive the display list, request the display.
-    let mut conn = match connect_drm(1000).await {
+    let mut conn = match connect_drm(DRM_CONNECT_TIMEOUT_MS).await {
         Ok(c) => c,
         Err(err) => {
             let _ = tx.send(Err(err));
@@ -908,13 +916,13 @@ fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     std::thread::spawn(move || {
         let _ = tx.send(query_displays_async());
     });
-    rx.recv_timeout(Duration::from_millis(HANDSHAKE_TIMEOUT_MS + 1000))
+    rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS))
         .map_err(|_| anyhow!("drm display query timed out"))?
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn query_displays_async() -> ResultType<Vec<DrmDisplayInfo>> {
-    let mut conn = connect_drm(1000).await?;
+    let mut conn = connect_drm(DRM_CONNECT_TIMEOUT_MS).await?;
     match conn.recv_msg_timeout2(HANDSHAKE_TIMEOUT_MS).await {
         Some(Ok((Data::DrmDisplayList(v), _fd))) => Ok(v),
         Some(Ok((other, _fd))) => Err(anyhow!("expected DrmDisplayList, got {:?}", other)),

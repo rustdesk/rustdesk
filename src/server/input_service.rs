@@ -408,18 +408,26 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
+                // File the shape under the id ACTUALLY served, not the one requested. Deliberately a
+                // NEW name rather than shadowing `hcursor`: the insert below reads as the requested
+                // id everywhere else in this function, and a cfg-gated shadow would make the two
+                // builds disagree about what that line means.
                 #[cfg(all(target_os = "linux", feature = "drm"))]
-                let hcursor = data.id;
+                let served_id = data.id;
                 #[cfg(all(target_os = "linux", feature = "drm"))]
                 {
-                    drm_served_id = hcursor;
+                    drm_served_id = served_id;
                 }
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                let cache_key = served_id;
+                #[cfg(not(all(target_os = "linux", feature = "drm")))]
+                let cache_key = hcursor;
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
-                state.cached_cursor_data.insert(hcursor, msg.clone());
-                super::log::trace!("Cursor data updated, hcursor: {}", hcursor);
+                state.cached_cursor_data.insert(cache_key, msg.clone());
+                super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
             }
             #[cfg(not(all(target_os = "linux", feature = "drm")))]
             {
