@@ -206,6 +206,37 @@ fn demote_cooldown(demotes: u32) -> Duration {
     DEMOTE_COOLDOWN * (1u32 << demotes.saturating_sub(1).min(DEMOTE_BACKOFF_MAX_SHIFT))
 }
 
+/// What a completed background refresh should do with the cached verdict. Pure, so the policy is
+/// unit-testable: the effects it names all touch process-global state (`DRM_STATE` and the failure
+/// counter), which several tests cannot share, but the DECISION does not have to.
+#[derive(Debug, PartialEq, Eq)]
+enum RefreshOutcome {
+    /// The probe returned displays: republish that list and restamp.
+    Publish,
+    /// The probe returned NOTHING. Every monitor is gone, and keeping the previous list is what
+    /// leaves enumeration advertising removed displays on an idle host, where there is no live
+    /// stream to carry the hotplug push.
+    Unavailable,
+    /// The probe failed, but not often enough to mean anything. Keep the verdict, restamp the TTL
+    /// so the next attempt waits a full interval.
+    Restamp,
+    /// The probe has failed this many times in a row: the evidence is now about the PRODUCER being
+    /// gone, not about the hardware, so give the verdict up. To `Unknown`, not to `Unavailable`,
+    /// because we know nothing about the displays.
+    GiveUp,
+}
+
+/// `probe` is the display count on success and `None` when the probe failed; `failures` counts the
+/// consecutive failures INCLUDING this one, so it is 1 on the first.
+fn refresh_outcome(probe: Option<usize>, failures: u32) -> RefreshOutcome {
+    match probe {
+        Some(0) => RefreshOutcome::Unavailable,
+        Some(_) => RefreshOutcome::Publish,
+        None if failures >= DRM_REFRESH_MAX_FAILURES => RefreshOutcome::GiveUp,
+        None => RefreshOutcome::Restamp,
+    }
+}
+
 fn drm_prefer_cpu(key: &Option<String>) -> bool {
     key.as_ref().is_some_and(|k| {
         DRM_DISPLAY_HEALTH
@@ -1104,42 +1135,39 @@ fn refresh_available_async() {
                 // verdict is newer than ours; leave it alone.
                 return;
             }
-            match result {
-                Ok(fresh) if fresh.is_empty() => {
-                    // No active CRTC left: every monitor is gone. Keeping the previous list here is
-                    // what leaves enumeration advertising removed displays indefinitely on an idle
-                    // host, where there is no live stream to deliver the hotplug push. Drop to
-                    // Unavailable exactly as swap_available_displays does; a later probe restores
-                    // Available when a monitor comes back.
-                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
+            // Count the failure BEFORE deciding, so `failures` includes this one.
+            let failures = match &result {
+                Ok(_) => {
                     DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
+                    0
+                }
+                Err(_) => DRM_REFRESH_FAILURES.fetch_add(1, Ordering::Relaxed) + 1,
+            };
+            match refresh_outcome(result.as_ref().ok().map(|l| l.len()), failures) {
+                RefreshOutcome::Publish => {
+                    let fresh = result.unwrap_or_default();
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                }
+                RefreshOutcome::Unavailable => {
+                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
                     publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
                 }
-                Ok(fresh) => {
-                    DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
-                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh))
-                }
-                // A failed probe is not evidence that the displays are gone (a transient open or
-                // EACCES); keep the verdict, just restamp so we retry after the next TTL. That
-                // restamp touches only the TTL, not the verdict, so it deliberately does NOT go
+                // Only the TTL stamp moves, not the verdict, so this deliberately does NOT go
                 // through publish_probe_state: there is nothing for a concurrent probe to lose by
-                // publishing over it. But a RUN of failures says the producer is gone, and holding
-                // a positive verdict then is what leaves enumeration advertising a DRM list nothing
-                // can serve, with every display restart-looping; after DRM_REFRESH_MAX_FAILURES
-                // give the verdict up (to Unknown, which does go through publish_probe_state) and
-                // let the next enumeration decide from scratch.
-                Err(err) => {
-                    let n = DRM_REFRESH_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
-                    if n >= DRM_REFRESH_MAX_FAILURES {
-                        log::info!(
-                            "drm: availability refresh failed {n}x ({err}); the producer looks gone, \
-                             dropping the cached verdict so the next enumeration re-probes"
-                        );
-                        DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
-                        publish_probe_state(&mut st, ProbeState::Unknown);
-                    } else if let ProbeState::Available(since, _) = &mut *st {
+                // publishing over it.
+                RefreshOutcome::Restamp => {
+                    if let ProbeState::Available(since, _) = &mut *st {
                         *since = Instant::now();
                     }
+                }
+                RefreshOutcome::GiveUp => {
+                    log::info!(
+                        "drm: availability refresh failed {failures}x ({:?}); the producer looks \
+                         gone, dropping the cached verdict so the next enumeration re-probes",
+                        result.as_ref().err()
+                    );
+                    DRM_REFRESH_FAILURES.store(0, Ordering::Relaxed);
+                    publish_probe_state(&mut st, ProbeState::Unknown);
                 }
             }
         });
@@ -1714,6 +1742,51 @@ mod drm_capturer_tests {
             wl_display("Unknown-2", 1920, 0, 1920, 1080),
         ];
         assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1), None]);
+    }
+
+    // The other half of the availability state machine the review called untested: what a completed
+    // background refresh decides. The effects touch process-global state that parallel tests cannot
+    // share, but the decision is pure, so this covers it directly.
+    #[test]
+    fn refresh_keeps_a_verdict_through_one_failure_and_gives_it_up_after_a_run() {
+        // A probe that found displays always republishes.
+        assert_eq!(refresh_outcome(Some(3), 0), RefreshOutcome::Publish);
+        assert_eq!(refresh_outcome(Some(1), 0), RefreshOutcome::Publish);
+        // A probe that found NONE is a real answer, not a failure: the monitors are gone.
+        assert_eq!(refresh_outcome(Some(0), 0), RefreshOutcome::Unavailable);
+        // One failure, or any run short of the threshold, must NOT disable a working session.
+        assert_eq!(refresh_outcome(None, 1), RefreshOutcome::Restamp);
+        assert_eq!(
+            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES - 1),
+            RefreshOutcome::Restamp
+        );
+        // At the threshold the evidence is about the producer, so the verdict is given up.
+        assert_eq!(
+            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES),
+            RefreshOutcome::GiveUp
+        );
+        // And it stays given up if the counter ever runs past it.
+        assert_eq!(
+            refresh_outcome(None, DRM_REFRESH_MAX_FAILURES + 5),
+            RefreshOutcome::GiveUp
+        );
+    }
+
+    // The reported symptom this policy exists for: the root --service dies while this --server
+    // lives, so every probe fails from then on. The verdict has to be given up in bounded time
+    // rather than kept forever, and it must go to Unknown so the next enumeration decides from
+    // scratch instead of asserting the hardware is gone.
+    #[test]
+    fn a_dead_producer_stops_being_advertised() {
+        let mut outcome = RefreshOutcome::Restamp;
+        for failures in 1..=DRM_REFRESH_MAX_FAILURES {
+            outcome = refresh_outcome(None, failures);
+        }
+        assert_eq!(outcome, RefreshOutcome::GiveUp);
+        assert!(
+            DRM_REFRESH_MAX_FAILURES >= 2,
+            "a single transient failure must never be enough to drop the verdict"
+        );
     }
 
     #[test]
