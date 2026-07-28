@@ -272,13 +272,6 @@ impl DrmReader {
         }
     }
 
-    /// True if the loaded libdrmtap exposes the split-capture export entry point
-    /// (`drmtap_grab_desc`, libdrmtap >= 0.4.9). When false the caller must use
-    /// the CPU-mapped `grab()` path (an older `.so`).
-    pub fn supports_grab_desc(&self) -> bool {
-        self.lib.grab_desc.is_some()
-    }
-
     /// Render node (`/dev/dri/renderD*`) of the GPU this reader captures from, to
     /// hand to the unprivileged converter so it binds to the device that EXPORTS
     /// the scanout. On a multi-GPU host the converter's own auto-selection can
@@ -327,14 +320,10 @@ impl DrmReader {
     /// -> WouldBlock (retry); ENOTSUP -> a distinct `Unsupported` error (this
     /// seat/driver produced pixels but no transferable dma-buf) so the caller
     /// falls back to the mapped/PipeWire path instead of a per-frame rebuild loop;
-    /// any other errno -> hard error. Errors when `grab_desc` is unbound (old .so).
+    /// any other errno -> hard error. Always available: the loader refuses a
+    /// libdrmtap that does not export this symbol (see `drmtap_dl::abi_accepted`).
     pub fn grab_desc(&mut self) -> io::Result<(OwnedFd, drmtap_dmabuf_desc)> {
-        let grab_desc = self.lib.grab_desc.ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "libdrmtap too old: drmtap_grab_desc unavailable (need >= 0.4.9)",
-            )
-        })?;
+        let grab_desc = self.lib.grab_desc;
         // SAFETY: self.ctx is a valid context; desc/frame are zeroed before the
         // call and the frame is released on every return path (after the dup).
         unsafe {

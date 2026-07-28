@@ -102,6 +102,13 @@ jobs:
           cargo test --locked --target x86_64-unknown-linux-gnu -p rustdesk --features drm \
             --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state
 
+      # The capture backend itself lives in the scrap crate, so its unit tests are a separate
+      # package. `--lib` keeps this to unit tests; none of them touch a device or a display server.
+      - name: Run scrap crate tests with the drm feature
+        shell: bash
+        run: |
+          cargo test --locked --target x86_64-unknown-linux-gnu -p scrap --features drm --lib
+
   libdrmtap:
     name: libdrmtap pin, build and .so contract
     runs-on: ubuntu-24.04

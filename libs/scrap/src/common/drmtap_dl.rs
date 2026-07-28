@@ -148,7 +148,7 @@ type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
-// Split-capture entry points (libdrmtap >= 0.4.9). Bound OPTIONALLY (see below).
+// Split-capture entry points (libdrmtap >= 0.4.9). REQUIRED (see below).
 // `grab_desc` runs on the privileged export side; `open_render`/`convert_dmabuf`
 // on the unprivileged converter side.
 type FnGrabDesc =
@@ -176,13 +176,15 @@ pub struct DrmtapLib {
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
-    // Split-capture symbols (present only on libdrmtap >= 0.4.9). `None` on an
-    // older .so; callers gate on `Some(..)` and fall back to the mapped path.
+    // Split-capture symbols (libdrmtap >= 0.4.9). Not optional: a library that
+    // cannot do the split is refused at load time (see `abi_accepted`), so these
+    // are plain pointers and the type system carries the guarantee that no
+    // caller can silently take an in-process-convert path instead.
     // Root needs `grab_desc`; the unprivileged converter needs
     // `open_render` + `convert_dmabuf`.
-    pub grab_desc: Option<FnGrabDesc>,
-    pub open_render: Option<FnOpenRender>,
-    pub convert_dmabuf: Option<FnConvertDmabuf>,
+    pub grab_desc: FnGrabDesc,
+    pub open_render: FnOpenRender,
+    pub convert_dmabuf: FnConvertDmabuf,
     // libdrmtap >= 0.4.15; `None` on an older .so, where the converter keeps
     // relying on `open_render(NULL)` auto-selection exactly as before.
     pub render_node: Option<FnRenderNode>,
@@ -202,6 +204,33 @@ unsafe impl Sync for DrmtapLib {}
 // be laid out differently, so we refuse the library rather than read through a
 // mismatched layout. Minor/patch bumps are additive and remain compatible.
 const DRMTAP_ABI_MAJOR: c_int = 0;
+
+// Lowest (minor, patch) this build accepts. The project is still 0.x, so the
+// major alone bounds nothing: every release it has ever made reports major 0,
+// and comparing only that accepts a library from before the split existed.
+//
+// 0.4.9 is where `drmtap_grab_desc` / `drmtap_open_render` /
+// `drmtap_convert_dmabuf` landed, i.e. the oldest library that can serve the
+// architecture this code implements: the privileged process exports the scanout
+// dma-buf and NEVER converts, so it never loads libEGL/libGLESv2. An older .so
+// has none of those entry points, and the only way to capture with it is the
+// in-process convert, in the ROOT service. That is precisely the property the
+// split exists to remove, so treat such a library as unusable and fall back to
+// PipeWire/portal rather than quietly pulling the vendor GL stack into the
+// privileged process because a stale file happened to be on the load path.
+//
+// The mirrored `#[repr(C)]` layouts above are unchanged across 0.4.9..0.4.15
+// (verified field by field against include/drmtap.h at both ends), so the floor
+// costs no compatibility that was real.
+const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 9);
+
+/// Whether a library reporting `major.minor.patch` may be loaded. Pure, so the
+/// version rule is unit-testable without an .so to dlopen: the major must match
+/// exactly (struct layouts track it) and (minor, patch) must be at or above the
+/// floor that provides the split-capture API.
+fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
+    major == DRMTAP_ABI_MAJOR && (minor, patch) >= DRMTAP_MIN_MINOR_PATCH
+}
 
 impl DrmtapLib {
     fn load() -> Option<Self> {
@@ -240,11 +269,20 @@ impl DrmtapLib {
             // definitions above. Resolving symbols alone would not catch that.
             let v = version();
             let (major, minor, patch) = ((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
-            if major != DRMTAP_ABI_MAJOR {
+            if !abi_accepted(major, minor, patch) {
+                let why = if major != DRMTAP_ABI_MAJOR {
+                    "the struct layouts this build mirrors track the ABI major, so reading a \
+                     frame descriptor through a mismatched one would mis-decode it"
+                } else {
+                    "it predates the split-capture API, so its only capture path converts \
+                     in-process, which in the root service means loading the GL stack there"
+                };
+                let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
                 log::warn!(
-                    "libdrmtap {name} reports ABI major {major} (v{major}.{minor}.{patch}), \
-                     expected {DRMTAP_ABI_MAJOR}; refusing to load to avoid struct-layout \
-                     mismatch (falling back to PipeWire/portal)"
+                    "libdrmtap {name} reports v{major}.{minor}.{patch}, which this build cannot \
+                     use (needs ABI major {DRMTAP_ABI_MAJOR}, at least \
+                     v{DRMTAP_ABI_MAJOR}.{min_minor}.{min_patch}): {why}. Refusing to load; \
+                     falling back to PipeWire/portal."
                 );
                 return None;
             }
@@ -257,14 +295,42 @@ impl DrmtapLib {
             let frame_release: FnFrameRelease = *lib.get(b"drmtap_frame_release").ok()?;
             let get_cursor: FnGetCursor = *lib.get(b"drmtap_get_cursor").ok()?;
             let cursor_release: FnCursorRelease = *lib.get(b"drmtap_cursor_release").ok()?;
-            // Split-capture symbols are bound OPTIONALLY (not through the `.ok()?`
-            // chain above): a pre-0.4.9 .so lacks them, and forcing them here would
-            // fail the WHOLE load and silently disable DRM. Each side checks the
-            // symbol it needs before taking the split path.
-            let grab_desc: Option<FnGrabDesc> = lib.get(b"drmtap_grab_desc").ok().map(|s| *s);
-            let open_render: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
-            let convert_dmabuf: Option<FnConvertDmabuf> =
+            // Split-capture symbols are required too. The version floor above already turns
+            // away the libraries that predate them; requiring the symbols as well covers what
+            // the floor cannot see, a library that REPORTS a new enough version without
+            // carrying the API. That is not hypothetical (see the stale-build note below), and
+            // it fails the same way: no split export means the only capture path left runs the
+            // convert in the root service. Both refusals disable DRM capture and fall back to
+            // PipeWire/portal, which is the outcome we want.
+            // Resolved as a group and reported by name rather than through a bare `?`, so the
+            // log says which symbols are absent instead of the generic "dlopen failed" line,
+            // which would send whoever reads it hunting for a missing file.
+            let grab: Option<FnGrabDesc> = lib.get(b"drmtap_grab_desc").ok().map(|s| *s);
+            let open_r: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
+            let conv: Option<FnConvertDmabuf> =
                 lib.get(b"drmtap_convert_dmabuf").ok().map(|s| *s);
+            let (grab_desc, open_render, convert_dmabuf) = match (grab, open_r, conv) {
+                (Some(g), Some(o), Some(c)) => (g, o, c),
+                (grab, open_r, conv) => {
+                    let mut missing = Vec::new();
+                    if grab.is_none() {
+                        missing.push("drmtap_grab_desc");
+                    }
+                    if open_r.is_none() {
+                        missing.push("drmtap_open_render");
+                    }
+                    if conv.is_none() {
+                        missing.push("drmtap_convert_dmabuf");
+                    }
+                    log::warn!(
+                        "libdrmtap {name} reports v{major}.{minor}.{patch} but does not export \
+                         {}: it is a stale or pre-release build, not the version it claims. \
+                         Refusing to load; falling back to PipeWire/portal.",
+                        missing.join(", ")
+                    );
+                    return None;
+                }
+            };
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
             // Log the load only now that every required symbol resolved: this function still returns
@@ -329,15 +395,59 @@ impl DrmtapLib {
 static DRMTAP_LIB: OnceLock<Option<DrmtapLib>> = OnceLock::new();
 
 /// Returns the loaded libdrmtap, or None if the .so (or one of its runtime deps)
-/// is not present. Loaded once; a failure is remembered (no repeated dlopen).
+/// is not present, or is too old to serve the split-capture architecture (see
+/// `abi_accepted`). Loaded once; a failure is remembered (no repeated dlopen).
 pub fn get() -> Option<&'static DrmtapLib> {
     DRMTAP_LIB
         .get_or_init(|| {
             let lib = DrmtapLib::load();
             if lib.is_none() {
-                log::info!("libdrmtap not available (dlopen failed); DRM capture disabled");
+                // Deliberately not "dlopen failed": the load also declines a library that opens
+                // fine but is too old or does not carry the split API, and each of those paths
+                // has already said so, with the file name, at warn level.
+                log::info!("libdrmtap not available or not usable; DRM capture disabled");
             }
             lib
         })
         .as_ref()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{abi_accepted, DRMTAP_ABI_MAJOR, DRMTAP_MIN_MINOR_PATCH};
+
+    #[test]
+    fn abi_gate_rejects_a_library_from_before_the_split() {
+        // The releases that predate drmtap_grab_desc. Accepting any of these means the
+        // privileged service has no export-only path and converts in-process, which is
+        // the whole thing the split was built to prevent.
+        for (minor, patch) in [(3, 3), (4, 0), (4, 8)] {
+            assert!(
+                !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
+                "v0.{minor}.{patch} predates the split-capture API and must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn abi_gate_accepts_the_floor_and_every_release_above_it() {
+        let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
+        assert!(abi_accepted(DRMTAP_ABI_MAJOR, min_minor, min_patch));
+        // 0.4.15 is what the deb ships today; the later ones guard against a floor
+        // comparison that only ever looks at `patch` (0.5.0 must pass, 0.4.15 too).
+        for (minor, patch) in [(4, 15), (4, 200), (5, 0), (9, 9)] {
+            assert!(
+                abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
+                "v0.{minor}.{patch} is at or above the floor and must be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn abi_gate_rejects_another_major_in_both_directions() {
+        // The mirrored #[repr(C)] layouts track the major, so a newer one is as unsafe
+        // to read through as an older one, however high its minor.
+        assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 0, 0));
+        assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 99, 99));
+    }
 }

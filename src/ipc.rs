@@ -497,7 +497,7 @@ pub enum Data {
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
-    // (drmtap_open_render failed, or an old .so lacks the split symbols). The service then streams the
+    // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
     // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
     // detile, so a render-node-less seat still captures instead of losing the stream.
     DrmStart { display: i32, need_cpu: bool },
@@ -512,7 +512,7 @@ pub enum Data {
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmDisplaysChanged(Vec<DrmDisplayInfo>),
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
-    /// CPU-fallback path (old .so, no render node): pixels cross the wire.
+    /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmFrame { width: u32, height: u32 },
     /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
@@ -1641,9 +1641,10 @@ enum DrmProducerMsg {
         fd: Option<OwnedFd>,
     },
     /// A captured frame (CPU-mapped fallback path): a full packed-BGRA frame body. Used when the
-    /// loaded libdrmtap predates the split API (no `drmtap_grab_desc`) or the seat has no transferable
-    /// dma-buf (ENOTSUP). Forwarded as `Data::DrmFrame{width,height}` + `send_raw(BGRA)`, exactly like
-    /// the pre-split protocol, so an unprivileged converter is never required.
+    /// consumer has no render-node convert context (`need_cpu`) or the seat has no transferable
+    /// dma-buf (ENOTSUP) -- both hardware/seat facts, with no alternative that keeps the stream.
+    /// Forwarded as `Data::DrmFrame{width,height}` + `send_raw(BGRA)`, exactly like the pre-split
+    /// protocol, so an unprivileged converter is never required.
     FrameCpu {
         width: u32,
         height: u32,
@@ -2067,15 +2068,14 @@ fn drm_prewarm() {
     schedule_drm_cache_refresh();
     match scrap::drm_reader::DrmReader::open(None, 0) {
         Some(mut r) => {
-            // Warm the first framebuffer export. On the split path, grab_desc() exports a dma-buf fd
-            // WITHOUT loading libEGL/libGLESv2 into the root service (the convert now runs in the
-            // unprivileged --server); only an old .so (no grab_desc) still force-maps via grab().
-            if r.supports_grab_desc() {
-                if let Ok((fd, _desc)) = r.grab_desc() {
-                    drop(fd); // close the warm-up fd; we only wanted to prime the device/import path
-                }
-            } else {
-                let _ = r.grab();
+            // Warm the first framebuffer export with grab_desc(), which exports a dma-buf fd WITHOUT
+            // loading libEGL/libGLESv2 into the root service (the convert runs in the unprivileged
+            // --server). Deliberately NOT grab(): that maps and detiles, so warming with it would
+            // pull the vendor GL stack into the privileged process on every start, before any
+            // consumer has even asked for a frame. A libdrmtap without grab_desc never loads (see
+            // drmtap_dl::abi_accepted), so there is no older-library branch to fall back to here.
+            if let Ok((fd, _desc)) = r.grab_desc() {
+                drop(fd); // close the warm-up fd; we only wanted to prime the device/import path
             }
             log::info!("drm: pre-warm framebuffer primed in {:?}", t.elapsed());
         }
@@ -2548,11 +2548,14 @@ fn drm_capture_worker(
     let conn_epoch = DRM_CONN_EPOCH.fetch_add(1, Ordering::Relaxed);
 
     // Prefer the zero-copy split export (root does NO EGL / convert / copy). Fall back to the
-    // CPU-mapped path for this connection (pixels cross the wire) when: the loaded libdrmtap predates
-    // the split API, grab_desc later reports ENOTSUP (no transferable dma-buf on this seat), OR the
-    // consumer asked for the CPU path because it has no render-node convert context (need_cpu) — in
-    // that last case the dma-buf fd would be useless to it and the stream would be lost.
-    let mut use_dmabuf = reader.supports_grab_desc() && !need_cpu;
+    // CPU-mapped path for this connection (pixels cross the wire, and root pays the convert) only
+    // when the alternative is no stream at all: the consumer asked for it because it has no
+    // render-node convert context (need_cpu), so a dma-buf fd would be useless to it, or grab_desc
+    // later reports ENOTSUP (no transferable dma-buf on this seat). Both are facts about the seat or
+    // the consumer. A stale libdrmtap is NOT one of them: one too old for the split export is
+    // refused at load time, so this never demotes root to the in-process convert merely because of
+    // which file was on the load path.
+    let mut use_dmabuf = !need_cpu;
 
     let mut last_cursor_id: u64 = 0;
     let mut stalled: u32 = 0;

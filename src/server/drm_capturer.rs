@@ -394,7 +394,8 @@ async fn recv_thread(
     // SUCCEEDS and yields corrupted pixels, so there is no convert error for the prefer-cpu bit above
     // to learn from - the stream just looks broken. The node is empty when the service ran against a
     // libdrmtap without `drmtap_render_node` (we dlopen by soname, so the runtime .so can be older
-    // than the one this was built against). Ask for the CPU path instead: the service converts on the
+    // than the one this was built against, anywhere in 0.4.9..0.4.14 -- below that it does not load
+    // at all). Ask for the CPU path instead: the service converts on the
     // device it already has open, which is correct by construction. Single-render-node hosts (the
     // common case) keep the dma-buf fast path untouched.
     let ambiguous_gpu = render_node.is_empty() && render_node_count() > 1;
@@ -414,7 +415,8 @@ async fn recv_thread(
             } else if force_cpu {
                 "a prior consumer convert failed, e.g. multi-GPU render-node mismatch"
             } else {
-                "no render-node convert context: drmtap_open_render failed or old .so"
+                "no render-node convert context: libdrmtap did not load here, or \
+                 drmtap_open_render found no usable /dev/dri/renderD*"
             }
         );
     }

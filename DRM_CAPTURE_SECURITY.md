@@ -21,14 +21,24 @@ imported once and re-imports are elided), detiles/converts it to linear RGBA in
 its own unprivileged address space, and feeds the encoder — so the root service
 never loads libEGL/libGLESv2 and never copies scanout pixels. Only the **CPU
 fallback path** (used when the seat/driver cannot produce a transferable DMA-BUF,
-or the loaded `libdrmtap` predates the split export) copies the scanout to packed
-BGRA inside the root service and streams those bytes over `_drm`. This mirrors
+or the consumer has no render node of its own, see *When the CPU fallback is
+chosen* below) copies the scanout to packed BGRA inside the root service and
+streams those bytes over `_drm`. This mirrors
 the Windows `portable_service` split (a privileged process captures, an
 unprivileged one presents) but reuses RustDesk's own hardened IPC.
 
 - `libdrmtap.so` is loaded through a small `dlopen` loader (`drmtap_dl`); if the
   library or one of its runtime deps is missing the load fails cleanly and the
   caller falls back to the PipeWire/portal path.
+- The loader also **refuses a library that cannot do the split**: one reporting
+  below 0.4.9, and one reporting a newer version without actually exporting
+  `drmtap_grab_desc` / `drmtap_open_render` / `drmtap_convert_dmabuf` (a stale or
+  pre-release build). The only way to capture with such a library is the
+  in-process convert, which in the root service means loading the vendor GL stack
+  there, so it is refused and the caller falls back to PipeWire/portal. The
+  privileged process therefore never loads GL because of which file happened to
+  be on the load path; the CPU fallback below is entered only for a fact about
+  the seat or the consumer.
 - The reader restricts the device it opens to a realpath under `/dev/dri/`
   (`drm_reader.rs`); RustDesk always runs libdrmtap in direct in-process mode
   (`helper_path` is `NULL`), so no privileged child process is ever spawned and
@@ -76,10 +86,9 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
   packed-BGRA bytes over the same authorized socket (no fd passing, no shared
   memory).
 - **When the CPU fallback is chosen.** The split path is the default; the
-  consumer asks the service for the CPU-converted frame in three cases: the
-  `.so` predates the split (no `drmtap_open_render` / `drmtap_convert_dmabuf`),
-  no render node can be opened for this seat, or a previous convert on this
-  display already failed. A fourth case is a **multi-GPU safety fallback**: if
+  consumer asks the service for the CPU-converted frame in two cases: no render
+  node can be opened for this seat, or a previous convert on this display
+  already failed. A third case is a **multi-GPU safety fallback**: if
   the service could not name the render node of the GPU that exports the scanout
   (an older `libdrmtap` without `drmtap_render_node`) and the host has more than
   one render node, the consumer refuses to guess one, because importing a scanout

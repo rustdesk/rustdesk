@@ -53,23 +53,14 @@ impl RenderConverter {
     /// of the GPU that exports the scanout (from the service's display list); `None` or
     /// an empty/invalid path falls back to libdrmtap auto-selection. It opens no KMS
     /// card, spawns no helper, and needs no elevated capability. Returns `None` when
-    /// libdrmtap is unavailable, the split convert symbols are missing (a pre-0.4.9
-    /// `.so`), or no render node could be opened (a locked-down seat with no
-    /// `/dev/dri/renderD*` access) — the caller then degrades to the service-side CPU
-    /// convert / PipeWire path. MUST be called on the thread that will later `convert()`
-    /// and drop it.
+    /// libdrmtap is unavailable or too old to carry the split convert symbols (the
+    /// loader refuses a pre-0.4.9 `.so` outright), or when no render node could be
+    /// opened (a locked-down seat with no `/dev/dri/renderD*` access) — the caller
+    /// then degrades to the service-side CPU convert / PipeWire path. MUST be called
+    /// on the thread that will later `convert()` and drop it.
     pub fn open_render(node: Option<&str>) -> Option<RenderConverter> {
         let lib = drmtap_dl::get()?;
-        // The converter needs BOTH split symbols; bail (so the caller degrades) if either
-        // is absent, rather than open a ctx we could never convert with.
-        let open_render = lib.open_render?;
-        if lib.convert_dmabuf.is_none() {
-            log::info!(
-                "libdrmtap exposes drmtap_open_render but not drmtap_convert_dmabuf; \
-                 cannot convert dma-buf frames (old .so)"
-            );
-            return None;
-        }
+        let open_render = lib.open_render;
         // The service names the render node of the GPU that EXPORTS the scanout, which
         // is the only device guaranteed to understand its tiling modifier; auto-select
         // (NULL) is the fallback when it cannot. Same /dev/dri gate the capture device
@@ -131,12 +122,8 @@ impl RenderConverter {
         desc: &mut drmtap_dmabuf_desc,
         received_fd: RawFd,
     ) -> io::Result<(&[u8], u32, u32, Pixfmt)> {
-        let convert_dmabuf = self.lib.convert_dmabuf.ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "libdrmtap too old: drmtap_convert_dmabuf unavailable (need >= 0.4.9)",
-            )
-        })?;
+        // Always bound: a libdrmtap without the split convert symbols never loads.
+        let convert_dmabuf = self.lib.convert_dmabuf;
         // Overwrite the descriptor's fd with the one THIS process received (split_capture.c
         // does the same at recv time). -1 means "reuse the cached import for `fb_id`".
         desc.dma_buf_fd = received_fd;
