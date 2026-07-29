@@ -798,6 +798,9 @@ async fn recv_thread(
                 UINPUT_REFRESH_GEN.fetch_add(1, Ordering::AcqRel);
                 if !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
                     std::thread::spawn(|| {
+                        // We hold the flag from the swap above; the guard hands it back on every
+                        // exit from here, including a panic inside the refresh below.
+                        let mut busy = UinputRefreshGuard(true);
                         let rt = match tokio::runtime::Builder::new_current_thread()
                             .enable_all()
                             .build()
@@ -810,8 +813,7 @@ async fn recv_thread(
                                 log::warn!(
                                     "drm: uinput refresh worker could not build a runtime: {err}"
                                 );
-                                UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
-                                return;
+                                return; // the guard hands the slot back
                             }
                         };
                         let mut served = 0u64;
@@ -824,11 +826,11 @@ async fn recv_thread(
                             }
                             // Caught up: release, then re-check for a request that raced in after our
                             // load but before the release, taking the worker role back if so.
-                            UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
+                            busy.release();
                             if UINPUT_REFRESH_GEN.load(Ordering::Acquire) == served {
                                 break;
                             }
-                            if UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
+                            if !busy.retake() {
                                 break; // another handler already started a fresh worker
                             }
                         }
@@ -1028,6 +1030,37 @@ struct ProbeInFlightGuard;
 impl Drop for ProbeInFlightGuard {
     fn drop(&mut self) {
         DRM_PROBE_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
+/// Ownership of `UINPUT_REFRESH_BUSY`, released on every exit including an unwind. Same job as
+/// `ProbeInFlightGuard`, but this flag is deliberately handed back and re-taken mid-loop (the
+/// caught-up/re-check dance), so it has to track whether we still hold it: releasing on drop
+/// unconditionally would clear a flag a REPLACEMENT worker owns.
+///
+/// Without this the worker body could leave it latched true forever -- it locks several process-wide
+/// mutexes and does a Wayland roundtrip -- and every later hotplug would then skip the spawn and
+/// never reapply the uinput range, which is the stale-range/wrong-output symptom
+/// `wayland::update_uinput_resolution` is written to prevent.
+struct UinputRefreshGuard(bool);
+impl UinputRefreshGuard {
+    /// Hand the flag back, if we are the ones holding it.
+    fn release(&mut self) {
+        if self.0 {
+            self.0 = false;
+            UINPUT_REFRESH_BUSY.store(false, Ordering::Release);
+        }
+    }
+    /// Take the worker role back. False when someone else already did, in which case we are NOT the
+    /// owner and must not release it on the way out.
+    fn retake(&mut self) -> bool {
+        self.0 = !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel);
+        self.0
+    }
+}
+impl Drop for UinputRefreshGuard {
+    fn drop(&mut self) {
+        self.release();
     }
 }
 

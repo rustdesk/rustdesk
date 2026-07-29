@@ -256,6 +256,24 @@ impl DrmReader {
                     ));
                 }
             };
+            // Bound the SOURCE extent too, not just the destination. The row loop below reads up to
+            // (h-1)*stride + w*4, so a large stride reads far past the mapping however small the
+            // destination is, and `y * stride` can overflow usize on the way. drm_render::convert
+            // bounds stride*h the same way; the two halves of the split must agree about what they
+            // are willing to touch, or the privileged half is the weaker one.
+            match stride.checked_mul(h) {
+                Some(sz) if sz > 0 && sz <= MAX_FRAME_BYTES => {}
+                other => {
+                    log::warn!(
+                        "DRM scanout stride {stride} x {h} rows is out of range ({other:?} bytes); falling back"
+                    );
+                    (self.lib.frame_release)(self.ctx, &mut frame);
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "DRM scanout stride out of range",
+                    ));
+                }
+            }
             if self.buf.len() != frame_size {
                 self.buf.resize(frame_size, 0);
             }

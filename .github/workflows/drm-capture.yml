@@ -63,6 +63,7 @@ jobs:
   drm-tests:
     name: drm unit tests (linux)
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -131,6 +132,7 @@ jobs:
   libdrmtap:
     name: libdrmtap pin, build and .so contract
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -199,6 +201,7 @@ jobs:
     name: unattended-wayland deb (verification build)
     needs: generate-bridge
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
