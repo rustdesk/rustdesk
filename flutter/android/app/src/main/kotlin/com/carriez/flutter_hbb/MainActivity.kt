@@ -361,6 +361,7 @@ class MainActivity : FlutterActivity() {
                         thread {
                             var temporary: File? = null
                             var reservedDestination = false
+                            var errorCode = "import_failed"
                             try {
                                 val temporaryFile = File.createTempFile(
                                     ".rustdesk-import-",
@@ -383,13 +384,14 @@ class MainActivity : FlutterActivity() {
                                     if (reservedDestination) {
                                         destination.delete()
                                     }
+                                    errorCode = "rename_failed"
                                     throw IllegalStateException("Unable to replace the destination")
                                 }
                                 runOnUiThread { result.success(true) }
                             } catch (e: Exception) {
                                 Log.e(logTag, "Failed to import file", e)
                                 runOnUiThread {
-                                    result.error("import_failed", e.message, null)
+                                    result.error(errorCode, e.message, null)
                                 }
                             } finally {
                                 temporary?.delete()

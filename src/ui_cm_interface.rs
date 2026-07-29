@@ -1001,6 +1001,23 @@ async fn handle_fs(
                 return;
             }
         }
+        if let ipc::FS::Rename { path, new_name, id } = &fs {
+            let destination = std::path::Path::new(path)
+                .parent()
+                .map(|parent| parent.join(new_name));
+            let allowed = destination
+                .as_deref()
+                .and_then(std::path::Path::to_str)
+                .map_or(false, crate::common::is_peer_path_allowed);
+            if !allowed {
+                log::warn!(
+                    "Reject rename destination outside the app workspace: {:?}",
+                    destination
+                );
+                send_raw(fs::new_error(*id, "Permission denied", 0), tx);
+                return;
+            }
+        }
     }
     match fs {
         ipc::FS::ReadEmptyDirs {

@@ -220,7 +220,7 @@ class MainService : Service() {
             stopCapture()
             virtualDisplay?.release()
             virtualDisplay = null
-            mediaProjection = null
+            releaseMediaProjection()
             _isReady = false
             checkMediaPermission()
         }

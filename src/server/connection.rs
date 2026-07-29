@@ -3239,6 +3239,24 @@ impl Connection {
                                     return true;
                                 }
                             }
+                            if let Some(file_action::Union::Rename(r)) = &fa.union {
+                                let destination = std::path::Path::new(&r.path)
+                                    .parent()
+                                    .map(|parent| parent.join(&r.new_name));
+                                let allowed = destination
+                                    .as_deref()
+                                    .and_then(std::path::Path::to_str)
+                                    .map_or(false, crate::common::is_peer_path_allowed);
+                                if !allowed {
+                                    log::warn!(
+                                        "Reject rename destination outside the app workspace: {:?}",
+                                        destination
+                                    );
+                                    self.send(fs::new_error(r.id, "Permission denied", -1))
+                                        .await;
+                                    return true;
+                                }
+                            }
                         }
                         match fa.union {
                             Some(file_action::Union::ReadEmptyDirs(rd)) => {
