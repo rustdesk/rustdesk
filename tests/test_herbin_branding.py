@@ -547,6 +547,13 @@ def main() -> None:
     assert "UNATTENDED_WINDOW_END_HOUR: u32 = 7" in memory_watchdog_rs
     assert "Connection::alive_conns" not in memory_watchdog_rs
     assert "std::process::exit(RESTART_EXIT_CODE)" in memory_watchdog_rs
+    assert "proc_pid_rusage" in memory_watchdog_rs
+    assert "RUSAGE_INFO_V0" in memory_watchdog_rs
+    assert "phys_footprint" in memory_watchdog_rs
+    assert "current_rss_bytes" not in memory_watchdog_rs
+    assert "sysinfo::" not in memory_watchdog_rs
+    assert "rss=" not in memory_watchdog_rs
+    assert "RSS" not in memory_watchdog_rs
     assert mac_agent_plist["RunAtLoad"] is True
     assert mac_agent_plist["KeepAlive"] is True
 

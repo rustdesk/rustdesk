@@ -33,8 +33,9 @@ Custom keyboard mapping and high-volume mouse diagnostics must remain absent.
 ## Built-in memory recovery
 
 RDH does not need a Codex or cron automation to recover its leaking user server.
-The macOS `--server` process monitors its own resident memory only when
-`XPC_SERVICE_NAME` proves that the RDH launchd agent is supervising it.
+The macOS `--server` process monitors its own physical footprint only when
+`XPC_SERVICE_NAME` proves that the RDH launchd agent is supervising it. The value
+is public `proc_pid_rusage(RUSAGE_INFO_V0).ri_phys_footprint`.
 
 - The default threshold is 1024 MiB.
 - Memory is checked once daily at 06:00 local time.
@@ -43,6 +44,8 @@ The macOS `--server` process monitors its own resident memory only when
   server restarts even if a remote session happens to be connected.
 - If sleep or clock movement delays the 06:00 wake beyond 07:00, that day's check
   is skipped instead of restarting outside the unattended window.
+- A `proc_pid_rusage` read error skips that day's decision and never falls back to
+  RSS.
 - Recovery exits only the user `--server` with a nonzero status. The existing
   launchd `KeepAlive` policy relaunches it; the root service is not restarted and
   no administrator prompt is involved.
