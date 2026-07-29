@@ -285,6 +285,9 @@ struct wf_clipboard
 	UINT32 requestedFormatId;
 
 	HWND hwnd;
+	/* hmem and req_fdata are single-flight response slots. ContextSend::proc
+	 * serializes inbound callbacks, and their events synchronize each response
+	 * with the clipboard STA. Revisit this if requests become concurrent. */
 	HANDLE hmem;
 	SIZE_T hmem_data_len;
 	HANDLE thread;
