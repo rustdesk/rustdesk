@@ -1,7 +1,7 @@
 # clipboard
 
 Copy files and text through network.
-Main lowlevel logic from [FreeRDP](https://github.com/FreeRDP/FreeRDP).
+Main low-level logic from [FreeRDP](https://github.com/FreeRDP/FreeRDP).
 
 To enjoy file copy and paste feature on Linux/OSX,
 please build with `unix-file-copy-paste` feature.
