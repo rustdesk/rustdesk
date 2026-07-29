@@ -52,6 +52,16 @@
 /* File clipboard redirection always advertises the descriptor and contents formats. */
 #define WF_CLIPRDR_FILE_FORMAT_COUNT 2u
 
+#define SAFE_FREE(p) \
+	do                        \
+	{                         \
+		if (p)                \
+		{                     \
+			free(p);          \
+			p = NULL;         \
+		}                     \
+	} while (0)
+
 /* Validates the remote descriptor array size after cItems has been read safely. */
 static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
 {
@@ -1108,9 +1118,9 @@ static CliprdrDataObject *CliprdrDataObject_New(UINT32 connID, FORMATETC *fmtetc
 
 	return instance;
 error:
-	if (iDataObject && iDataObject->lpVtbl)
+	if (iDataObject)
 	{
-		free(iDataObject->lpVtbl);
+		SAFE_FREE(iDataObject->lpVtbl);
 	}
 	if (instance)
 	{
@@ -1133,9 +1143,9 @@ void CliprdrDataObject_Delete(CliprdrDataObject *instance)
 {
 	if (instance)
 	{
-		free(instance->iDataObject.lpVtbl);
-		free(instance->m_pFormatEtc);
-		free(instance->m_pStgMedium);
+		SAFE_FREE(instance->iDataObject.lpVtbl);
+		SAFE_FREE(instance->m_pFormatEtc);
+		SAFE_FREE(instance->m_pStgMedium);
 
 		if (instance->m_pStream)
 		{
@@ -1280,10 +1290,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Skip(IEnumFORMATETC *This,
 	if (!instance)
 		return E_INVALIDARG;
 
-	if (instance->m_nIndex + (LONG)celt > instance->m_nNumFormats)
+	if (instance->m_nIndex < 0 || instance->m_nIndex > instance->m_nNumFormats ||
+		celt > (ULONG)(instance->m_nNumFormats - instance->m_nIndex))
 		return E_FAIL;
 
-	instance->m_nIndex += celt;
+	instance->m_nIndex += (LONG)celt;
 	return S_OK;
 }
 
@@ -3251,7 +3262,11 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 			hRet = IStream_Seek(pStreamStc, dlibMove, STREAM_SEEK_SET, &dlibNewPosition);
 
 			if (SUCCEEDED(hRet))
+			{
 				hRet = IStream_Read(pStreamStc, pData, cbRequested, (PULONG)&uSize);
+				if (uSize > cbRequested)
+					goto exit;
+			}
 		}
 	}
 	else
