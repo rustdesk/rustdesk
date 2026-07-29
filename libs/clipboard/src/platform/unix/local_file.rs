@@ -302,7 +302,6 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
     }
 
     let mut file_list = Vec::new();
-    let mut visited = HashSet::new();
 
     if paths.is_empty() {
         return Err(CliprdrError::InvalidRequest {
@@ -313,6 +312,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         let relative_root = path.parent().ok_or(CliprdrError::InvalidRequest {
             description: "empty parent".to_string(),
         })?;
+        let mut visited = HashSet::new();
         constr_file_lst(relative_root, path, &mut file_list, &mut visited)?;
     }
     Ok(file_list)
