@@ -774,5 +774,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Jūsų IP adresą užblokavo nuotolinis įrenginys"),
         ("id_whitelist_caveat_tip", "ID praneša prisijungiantis klientas. Šis sąrašas sumažina atakos paviršių ir nepakeičia slaptažodžio ar 2FA"),
         ("whitelist_cidr_tip", "Palaikomas CIDR žymėjimas, pavyzdžiui 192.168.1.0/24"),
+        ("Browser didn't open?", ""),
+        ("Open sign-in page", ""),
     ].iter().cloned().collect();
 }

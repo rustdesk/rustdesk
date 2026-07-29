@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import './dialog.dart';
+import './oidc_auth_status.dart';
 
 const kOpSvgList = [
   'github',
@@ -180,6 +181,20 @@ class _WidgetOPState extends State<WidgetOP> {
     });
   }
 
+  Future<void> _launchAuthUrl(String url) async {
+    try {
+      final launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        debugPrint('Failed to open OIDC authentication URL');
+      }
+    } catch (_) {
+      debugPrint('Failed to open OIDC authentication URL');
+    }
+  }
+
   _updateState() {
     bind.mainAccountAuthResult().then((result) {
       if (result.isEmpty) {
@@ -196,10 +211,10 @@ class _WidgetOPState extends State<WidgetOP> {
       final authBody = resultMap['auth_body'];
       if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
         if (_url.isEmpty && url != null && url.isNotEmpty) {
-          if (!urlLaunched) {
-            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          }
           _url = url;
+          if (!urlLaunched) {
+            unawaited(_launchAuthUrl(url));
+          }
         }
         if (authBody != null) {
           _updateTimer?.cancel();
@@ -247,6 +262,7 @@ class _WidgetOPState extends State<WidgetOP> {
               widget.curOP.value != widget.config.op) {
             _failedMsg = '';
           }
+          final authUrl = _url;
           return Offstage(
             offstage:
                 _failedMsg.isEmpty && widget.curOP.value != widget.config.op,
@@ -256,11 +272,13 @@ class _WidgetOPState extends State<WidgetOP> {
                 if (_stateMsg.isNotEmpty && _failedMsg.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: SelectableText(
-                      translate(_stateMsg),
-                      style: DefaultTextStyle.of(context)
-                          .style
-                          .copyWith(fontSize: 12),
+                    child: OidcAuthStatus(
+                      message: translate(_stateMsg),
+                      browserFallbackPrompt: translate("Browser didn't open?"),
+                      openLabel: translate('Open sign-in page'),
+                      onOpen: authUrl.isEmpty
+                          ? null
+                          : () => unawaited(_launchAuthUrl(authUrl)),
                     ),
                   ),
                 if (_failedMsg.isNotEmpty)
