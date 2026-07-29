@@ -298,11 +298,27 @@ jobs:
           dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0 ->'
           mv "$deb" "${deb%.deb}-x86_64.deb"
 
-      # Verification artifact, deliberately NOT a release deliverable: it is built on the runner rather
-      # than in the old container the stock release debs use, so its glibc floor is higher. The consent
-      # free variant stays out of the published release either way.
+      # MEASURE the glibc floor rather than describing it. This job builds on the runner instead of the
+      # ubuntu18.04 container the stock release debs use, so the artifact only runs on a host at least
+      # as new as the runner -- and that number belongs in the artifact NAME, because a comment in this
+      # file is not visible to whoever downloads it from the Actions UI.
+      - name: Measure the deb glibc floor
+        id: floor
+        shell: bash
+        run: |
+          deb="$(ls rustdesk-unattended-wayland-*-x86_64.deb)"
+          rm -rf /tmp/debfloor && dpkg-deb -R "$deb" /tmp/debfloor
+          floor="$(objdump -T /tmp/debfloor/usr/share/rustdesk/lib/librustdesk.so \
+                   | grep -oE 'GLIBC_2\.[0-9]+' | sort -uV | tail -1)"
+          test -n "$floor"
+          echo "floor=${floor#GLIBC_}" >> "$GITHUB_OUTPUT"
+          echo "::notice::deb requires ${floor} or newer (built on the runner, not the ubuntu18.04 release container)"
+
+      # Verification artifact, deliberately NOT a release deliverable. The consent-free variant stays
+      # out of the published release either way; the name states the floor so nobody installs it on an
+      # older distro and hits a bare loader error.
       - name: Upload the deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: rustdesk-unattended-wayland-x86_64.deb
+          name: rustdesk-unattended-wayland-x86_64-verification-glibc${{ steps.floor.outputs.floor }}.deb
           path: rustdesk-unattended-wayland-*-x86_64.deb
