@@ -28,6 +28,18 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Whether the engine has generated its first frame. Note that a generated
+  // frame is not necessarily presented: the resize synchronization may reject
+  // it (see kForceRedrawTimerId in the .cpp file).
+  bool first_frame_rendered_ = false;
+
+  // Whether a resize arrived before the first frame was generated, i.e. the
+  // window may be stuck white with a rejected frame.
+  bool resized_before_first_frame_ = false;
+
+  // Number of force-redraw attempts made so far.
+  UINT force_redraw_tries_ = 0;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
