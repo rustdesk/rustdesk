@@ -3162,12 +3162,24 @@ impl Drop for WakeLock {
     }
 }
 
-// `check_process("--tray", ..)` can miss an already running tray process: it
-// cannot read the command line of an elevated process from a non-elevated one,
-// and wmic (used by 32-bit builds, #11638) is gone from newer Windows 11. Each
-// missed check spawns one more tray icon, and `connection.rs` checks once per
-// incoming connection, so the icons kept piling up (#6692, #15689). Hold a named
-// mutex as the authoritative single instance guard instead.
+// `check_process("--tray", ..)` can miss a tray process that is already running,
+// and every miss spawns one more tray icon.
+//
+// The case confirmed in #15689: `run_after_run_cmds()` spawns the tray in the
+// caller's own context, so installing or toggling the service from a RustDesk
+// that was itself started elevated leaves a high integrity tray behind. A main
+// window started normally afterwards runs at medium integrity and cannot open
+// that process with `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`. sysinfo then
+// falls back to `PROCESS_QUERY_LIMITED_INFORMATION`, which is not enough for
+// `GetModuleFileNameExW`, so the executable path comes back empty and the tray
+// is skipped before its command line is ever looked at.
+//
+// A second blind spot: 32-bit builds read the command line through `wmic`
+// (#11638), which is no longer installed by default since Windows 11 24H2.
+//
+// Both are cases of one process failing to inspect another, and patching the
+// inspection has regressed twice already (#6692), so use a named mutex instead:
+// the kernel answers without us needing any access to the other process.
 //
 // Returns `false` if another tray process is already running in this session.
 pub fn try_lock_tray_single_instance() -> bool {
@@ -3193,9 +3205,9 @@ pub fn try_lock_tray_single_instance() -> bool {
             return true;
         }
         if last_error == ERROR_ACCESS_DENIED {
-            // The mutex exists but belongs to a tray process we may not touch,
-            // i.e. one spawned by the elevated installer. Defer to it instead of
-            // adding a second icon.
+            // The mutex exists but was created by a tray running at a higher
+            // integrity level, which is exactly the elevated tray described
+            // above. Defer to it instead of adding a second icon.
             return false;
         }
         // Unexpected: show the tray icon anyway, a duplicated icon is better
