@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/hbbs/hbbs.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
@@ -165,6 +166,7 @@ class WidgetOP extends StatefulWidget {
 
 class _WidgetOPState extends State<WidgetOP> {
   Timer? _updateTimer;
+  int _authAttempt = 0;
   String _stateMsg = '';
   String _failedMsg = '';
   String _url = '';
@@ -175,9 +177,10 @@ class _WidgetOPState extends State<WidgetOP> {
     _updateTimer?.cancel();
   }
 
-  _beginQueryState() {
+  _beginQueryState(int authAttempt) {
+    _updateTimer?.cancel();
     _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      _updateState();
+      _updateState(authAttempt);
     });
   }
 
@@ -190,14 +193,51 @@ class _WidgetOPState extends State<WidgetOP> {
       if (!launched) {
         debugPrint('Failed to open OIDC authentication URL');
       }
-    } catch (_) {
-      debugPrint('Failed to open OIDC authentication URL');
+    } catch (error, stackTrace) {
+      debugPrint(
+          'Failed to open OIDC authentication URL (${error.runtimeType})');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
-  _updateState() {
+  Future<void> _copyAuthUrl(String url) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: url));
+      showToast(translate('Copied'));
+    } catch (error, stackTrace) {
+      debugPrint(
+          'Failed to copy OIDC authentication URL (${error.runtimeType})');
+      debugPrintStack(stackTrace: stackTrace);
+      showToast(translate('Failed'));
+    }
+  }
+
+  void _runCurrentAuthUrlAction(
+    int authAttempt,
+    String authUrl,
+    Future<void> Function(String) action,
+  ) {
+    if (!mounted ||
+        authAttempt != _authAttempt ||
+        widget.curOP.value != widget.config.op ||
+        authUrl.isEmpty ||
+        _url != authUrl) {
+      return;
+    }
+    unawaited(action(authUrl));
+  }
+
+  void _invalidateAuthAttempt() {
+    _authAttempt++;
+    _url = '';
+  }
+
+  _updateState(int authAttempt) {
     bind.mainAccountAuthResult().then((result) {
-      if (result.isEmpty) {
+      if (!mounted ||
+          authAttempt != _authAttempt ||
+          widget.curOP.value != widget.config.op ||
+          result.isEmpty) {
         return;
       }
       final resultMap = jsonDecode(result);
@@ -209,35 +249,45 @@ class _WidgetOPState extends State<WidgetOP> {
       final String? url = resultMap['url'];
       final bool urlLaunched = (resultMap['url_launched'] as bool?) ?? false;
       final authBody = resultMap['auth_body'];
-      if (_stateMsg != stateMsg || _failedMsg != failedMsg) {
-        if (_url.isEmpty && url != null && url.isNotEmpty) {
-          _url = url;
-          if (!urlLaunched) {
-            unawaited(_launchAuthUrl(url));
-          }
+      if (authBody != null) {
+        _updateTimer?.cancel();
+        _invalidateAuthAttempt();
+        widget.curOP.value = '';
+        widget.cbLogin(authBody as Map<String, dynamic>);
+        return;
+      }
+      final stateChanged =
+          _stateMsg != stateMsg || _failedMsg != failedMsg;
+      final newUrl = _url.isEmpty && url != null && url.isNotEmpty ? url : null;
+      if (!stateChanged && newUrl == null) {
+        return;
+      }
+      setState(() {
+        _stateMsg = stateMsg;
+        _failedMsg = failedMsg;
+        if (newUrl != null) {
+          _url = newUrl;
         }
-        if (authBody != null) {
-          _updateTimer?.cancel();
+        if (failedMsg.isNotEmpty) {
+          _invalidateAuthAttempt();
           widget.curOP.value = '';
-          widget.cbLogin(authBody as Map<String, dynamic>);
+          _updateTimer?.cancel();
         }
-
-        setState(() {
-          _stateMsg = stateMsg;
-          _failedMsg = failedMsg;
-          if (failedMsg.isNotEmpty) {
-            widget.curOP.value = '';
-            _updateTimer?.cancel();
-          }
-        });
+      });
+      if (newUrl != null && failedMsg.isEmpty && !urlLaunched) {
+        unawaited(_launchAuthUrl(newUrl));
       }
     });
   }
 
-  _resetState() {
-    _stateMsg = '';
-    _failedMsg = '';
-    _url = '';
+  int _resetState() {
+    _updateTimer?.cancel();
+    setState(() {
+      _invalidateAuthAttempt();
+      _stateMsg = '';
+      _failedMsg = '';
+    });
+    return _authAttempt;
   }
 
   @override
@@ -251,10 +301,15 @@ class _WidgetOPState extends State<WidgetOP> {
           primaryColor: str2color(widget.config.op, 0x7f),
           height: 36,
           onTap: () async {
-            _resetState();
+            final authAttempt = _resetState();
             widget.curOP.value = widget.config.op;
             await bind.mainAccountAuth(op: widget.config.op, rememberMe: true);
-            _beginQueryState();
+            if (!mounted ||
+                authAttempt != _authAttempt ||
+                widget.curOP.value != widget.config.op) {
+              return;
+            }
+            _beginQueryState(authAttempt);
           },
         ),
         Obx(() {
@@ -262,6 +317,7 @@ class _WidgetOPState extends State<WidgetOP> {
               widget.curOP.value != widget.config.op) {
             _failedMsg = '';
           }
+          final authAttempt = _authAttempt;
           final authUrl = _url;
           return Offstage(
             offstage:
@@ -276,9 +332,21 @@ class _WidgetOPState extends State<WidgetOP> {
                       message: translate(_stateMsg),
                       browserFallbackPrompt: translate("Browser didn't open?"),
                       openLabel: translate('Open sign-in page'),
+                      copyTooltip: translate('Copy to clipboard'),
                       onOpen: authUrl.isEmpty
                           ? null
-                          : () => unawaited(_launchAuthUrl(authUrl)),
+                          : () => _runCurrentAuthUrlAction(
+                                authAttempt,
+                                authUrl,
+                                _launchAuthUrl,
+                              ),
+                      onCopy: authUrl.isEmpty
+                          ? null
+                          : () => _runCurrentAuthUrlAction(
+                                authAttempt,
+                                authUrl,
+                                _copyAuthUrl,
+                              ),
                     ),
                   ),
                 if (_failedMsg.isNotEmpty)
