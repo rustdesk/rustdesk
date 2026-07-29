@@ -2833,6 +2833,13 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		}
 
 		clear_file_array(clipboard);
+		/* HGLOBAL layout:
+		 * [DROPFILES header][optional padding][double-NUL-terminated file list]
+		 * ^ offset 0                          ^ byte offset pFiles
+		 * pFiles is an offset, not a pointer:
+		 * https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ns-shlobj_core-dropfiles
+		 * Keep remaining in bytes, parse within the HGLOBAL bounds, and accept only
+		 * after the empty terminator is found. */
 		dropFilesSize = GlobalSize(stg_medium.hGlobal);
 		if (dropFilesSize >= sizeof(DROPFILES) &&
 			dropFiles->pFiles >= sizeof(DROPFILES) &&
@@ -2910,6 +2917,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			goto exit;
 		}
+		/* FILEGROUPDESCRIPTORW has a variable-length fgd[] tail. */
 		size = offsetof(FILEGROUPDESCRIPTORW, fgd) +
 			clipboard->nFiles * sizeof(FILEDESCRIPTORW);
 		groupDsc = (FILEGROUPDESCRIPTORW *)calloc(1, size);
