@@ -304,20 +304,16 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
     let mut file_list = Vec::new();
     let mut visited = HashSet::new();
 
-    // TODO: Support clipboard selections containing top-level paths from different
-    // directories; using the first path's parent rejects paths outside that directory.
-    let relative_root = paths
-        .first()
-        .ok_or(CliprdrError::InvalidRequest {
+    if paths.is_empty() {
+        return Err(CliprdrError::InvalidRequest {
             description: "empty file list".to_string(),
-        })?
-        .parent()
-        .ok_or(CliprdrError::InvalidRequest {
-            description: "empty parent".to_string(),
-        })?
-        .to_path_buf();
+        });
+    }
     for path in paths {
-        constr_file_lst(&relative_root, path, &mut file_list, &mut visited)?;
+        let relative_root = path.parent().ok_or(CliprdrError::InvalidRequest {
+            description: "empty parent".to_string(),
+        })?;
+        constr_file_lst(relative_root, path, &mut file_list, &mut visited)?;
     }
     Ok(file_list)
 }
