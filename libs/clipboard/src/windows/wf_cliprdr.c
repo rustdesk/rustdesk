@@ -2914,26 +2914,26 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 			clipboard->nFiles * sizeof(FILEDESCRIPTORW);
 		groupDsc = (FILEGROUPDESCRIPTORW *)calloc(1, size);
 
-		if (!groupDsc)
+		if (groupDsc)
 		{
-			IDataObject_Release(dataObj);
+			groupDsc->cItems = (UINT)clipboard->nFiles;
+
+			for (i = 0; i < clipboard->nFiles; i++)
+			{
+				if (clipboard->fileDescriptor[i])
+					groupDsc->fgd[i] = *clipboard->fileDescriptor[i];
+			}
+
+			buff = groupDsc;
+			rc = ERROR_SUCCESS;
+		}
+		else
+		{
 			size = 0;
 			rc = CHANNEL_RC_NO_MEMORY;
-			goto exit;
 		}
-
-		groupDsc->cItems = (UINT)clipboard->nFiles;
-
-		for (i = 0; i < clipboard->nFiles; i++)
-		{
-			if (clipboard->fileDescriptor[i])
-				groupDsc->fgd[i] = *clipboard->fileDescriptor[i];
-		}
-
-		buff = groupDsc;
 
 		IDataObject_Release(dataObj);
-		rc = ERROR_SUCCESS;
 	}
 	else
 	{
