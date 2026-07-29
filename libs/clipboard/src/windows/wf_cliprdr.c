@@ -340,7 +340,8 @@ static BOOL is_set_by_instance(wfClipboard *clipboard);
 
 static void CliprdrDataObject_Delete(CliprdrDataObject *instance);
 
-static CliprdrEnumFORMATETC *CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc);
+static HRESULT CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc,
+										CliprdrEnumFORMATETC **ppInstance);
 static void CliprdrEnumFORMATETC_Delete(CliprdrEnumFORMATETC *instance);
 
 static void CliprdrStream_Delete(CliprdrStream *instance);
@@ -1012,6 +1013,8 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_EnumFormatEtc(IDataObject *Th
 																 DWORD dwDirection,
 																 IEnumFORMATETC **ppenumFormatEtc)
 {
+	HRESULT result;
+	CliprdrEnumFORMATETC *enumerator;
 	CliprdrDataObject *instance = (CliprdrDataObject *)This;
 
 	if (!instance || !ppenumFormatEtc)
@@ -1019,9 +1022,10 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_EnumFormatEtc(IDataObject *Th
 
 	if (dwDirection == DATADIR_GET)
 	{
-		*ppenumFormatEtc = (IEnumFORMATETC *)CliprdrEnumFORMATETC_New(instance->m_nNumFormats,
-																	  instance->m_pFormatEtc);
-		return (*ppenumFormatEtc) ? S_OK : E_OUTOFMEMORY;
+		result = CliprdrEnumFORMATETC_New(instance->m_nNumFormats,
+											instance->m_pFormatEtc, &enumerator);
+		*ppenumFormatEtc = (IEnumFORMATETC *)enumerator;
+		return result;
 	}
 	else
 	{
@@ -1118,24 +1122,7 @@ static CliprdrDataObject *CliprdrDataObject_New(UINT32 connID, FORMATETC *fmtetc
 
 	return instance;
 error:
-	if (iDataObject)
-	{
-		SAFE_FREE(iDataObject->lpVtbl);
-	}
-	if (instance)
-	{
-		if (instance->m_pFormatEtc)
-		{
-			free(instance->m_pFormatEtc);
-		}
-
-		if (instance->m_pStgMedium)
-		{
-			free(instance->m_pStgMedium);
-		}
-
-		CliprdrDataObject_Delete(instance);
-	}
+	CliprdrDataObject_Delete(instance);
 	return NULL;
 }
 
@@ -1199,17 +1186,29 @@ static void wf_destroy_file_obj(IDataObject *instance)
  * IEnumFORMATETC
  */
 
-static void cliprdr_format_deep_copy(FORMATETC *dest, FORMATETC *source)
+static HRESULT cliprdr_format_deep_copy(FORMATETC *dest, const FORMATETC *source)
 {
+	SIZE_T target_device_size;
+
+	if (!dest || !source)
+		return E_INVALIDARG;
+
 	*dest = *source;
 
-	if (source->ptd)
-	{
-		dest->ptd = (DVTARGETDEVICE *)CoTaskMemAlloc(sizeof(DVTARGETDEVICE));
+	if (!source->ptd)
+		return S_OK;
 
-		if (dest->ptd)
-			*(dest->ptd) = *(source->ptd);
-	}
+	dest->ptd = NULL;
+	target_device_size = source->ptd->tdSize;
+	if (target_device_size < offsetof(DVTARGETDEVICE, tdData))
+		return DV_E_DVTARGETDEVICE;
+
+	dest->ptd = (DVTARGETDEVICE *)CoTaskMemAlloc(target_device_size);
+	if (!dest->ptd)
+		return E_OUTOFMEMORY;
+
+	CopyMemory(dest->ptd, source->ptd, target_device_size);
+	return S_OK;
 }
 
 static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_QueryInterface(IEnumFORMATETC *This,
@@ -1266,6 +1265,7 @@ static ULONG STDMETHODCALLTYPE CliprdrEnumFORMATETC_Release(IEnumFORMATETC *This
 static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Next(IEnumFORMATETC *This, ULONG celt,
 														   FORMATETC *rgelt, ULONG *pceltFetched)
 {
+	HRESULT result = S_OK;
 	ULONG copied = 0;
 	CliprdrEnumFORMATETC *instance = (CliprdrEnumFORMATETC *)This;
 
@@ -1274,11 +1274,19 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Next(IEnumFORMATETC *This,
 
 	while ((instance->m_nIndex < instance->m_nNumFormats) && (copied < celt))
 	{
-		cliprdr_format_deep_copy(&rgelt[copied++], &instance->m_pFormatEtc[instance->m_nIndex++]);
+		result = cliprdr_format_deep_copy(&rgelt[copied],
+										  &instance->m_pFormatEtc[instance->m_nIndex]);
+		if (FAILED(result))
+			break;
+		copied++;
+		instance->m_nIndex++;
 	}
 
 	if (pceltFetched != 0)
 		*pceltFetched = copied;
+
+	if (FAILED(result))
+		return result;
 
 	return (copied == celt) ? S_OK : E_FAIL;
 }
@@ -1312,29 +1320,40 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Reset(IEnumFORMATETC *This
 static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Clone(IEnumFORMATETC *This,
 															IEnumFORMATETC **ppEnum)
 {
+	HRESULT result;
+	CliprdrEnumFORMATETC *clone;
 	CliprdrEnumFORMATETC *instance = (CliprdrEnumFORMATETC *)This;
 
 	if (!instance || !ppEnum)
 		return E_INVALIDARG;
 
-	*ppEnum =
-		(IEnumFORMATETC *)CliprdrEnumFORMATETC_New(instance->m_nNumFormats, instance->m_pFormatEtc);
+	result = CliprdrEnumFORMATETC_New(instance->m_nNumFormats, instance->m_pFormatEtc,
+										&clone);
+	if (FAILED(result))
+	{
+		*ppEnum = NULL;
+		return result;
+	}
 
-	if (!*ppEnum)
-		return E_OUTOFMEMORY;
-
-	((CliprdrEnumFORMATETC *)*ppEnum)->m_nIndex = instance->m_nIndex;
+	clone->m_nIndex = instance->m_nIndex;
+	*ppEnum = (IEnumFORMATETC *)clone;
 	return S_OK;
 }
 
-CliprdrEnumFORMATETC *CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc)
+HRESULT CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc,
+									CliprdrEnumFORMATETC **ppInstance)
 {
 	ULONG i;
-	CliprdrEnumFORMATETC *instance;
+	HRESULT result = E_OUTOFMEMORY;
+	CliprdrEnumFORMATETC *instance = NULL;
 	IEnumFORMATETC *iEnumFORMATETC;
 
+	if (!ppInstance)
+		return E_INVALIDARG;
+
+	*ppInstance = NULL;
 	if ((nFormats != 0) && !pFormatEtc)
-		return NULL;
+		return E_INVALIDARG;
 
 	instance = (CliprdrEnumFORMATETC *)calloc(1, sizeof(CliprdrEnumFORMATETC));
 
@@ -1366,13 +1385,18 @@ CliprdrEnumFORMATETC *CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pForma
 			goto error;
 
 		for (i = 0; i < nFormats; i++)
-			cliprdr_format_deep_copy(&instance->m_pFormatEtc[i], &pFormatEtc[i]);
+		{
+			result = cliprdr_format_deep_copy(&instance->m_pFormatEtc[i], &pFormatEtc[i]);
+			if (FAILED(result))
+				goto error;
+		}
 	}
 
-	return instance;
+	*ppInstance = instance;
+	return S_OK;
 error:
 	CliprdrEnumFORMATETC_Delete(instance);
-	return NULL;
+	return result;
 }
 
 void CliprdrEnumFORMATETC_Delete(CliprdrEnumFORMATETC *instance)
@@ -2485,9 +2509,14 @@ static UINT wf_cliprdr_server_capabilities(CliprdrClientContext *context,
 {
 	UINT32 index;
 	CLIPRDR_CAPABILITY_SET *capabilitySet;
-	wfClipboard *clipboard = (wfClipboard *)context->Custom;
+	wfClipboard *clipboard;
 
-	if (!context || !capabilities)
+	if (!context || !capabilities || capabilities->cCapabilitiesSets != 1 ||
+		!capabilities->capabilitySets)
+		return ERROR_INTERNAL_ERROR;
+
+	clipboard = (wfClipboard *)context->Custom;
+	if (!clipboard)
 		return ERROR_INTERNAL_ERROR;
 
 	for (index = 0; index < capabilities->cCapabilitiesSets; index++)
