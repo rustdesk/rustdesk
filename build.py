@@ -449,7 +449,39 @@ def build_libdrmtap_so():
     sos = glob.glob(os.path.join(build_dir, 'libdrmtap.so.0.*'))
     # keep the real object (libdrmtap.so.0.4.x), not the .so/.so.0 symlinks or meson's .p dir, and
     # require exactly one so a stale object from an earlier build is never silently picked.
-    return _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
+    so = _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
+    _assert_so_has_egl(so)
+    return so
+
+
+def _assert_so_has_egl(so_path):
+    # libdrmtap treats egl/glesv2 as OPTIONAL dependencies: without their headers and pkg-config
+    # files, meson silently builds a CPU-only stub. That stub still exports every symbol the loader
+    # checks for, so nothing downstream notices -- and the split architecture depends entirely on the
+    # unprivileged side EGL-detiling the scanout it receives. The result is a build where DRM capture
+    # quietly degrades to PipeWire on every tiled-scanout host, which is most of them.
+    #
+    # Assert on the ARTIFACT rather than passing an option that demands it: `-Degl=enabled` exists
+    # only in libdrmtap past 0.4.15, and checking what was actually produced also catches a stale or
+    # hand-substituted object, which a build flag cannot.
+    #
+    # EGL is reached by lazy dlopen, on purpose, so that the privileged service never links the GPU
+    # stack. That means there is no DT_NEEDED to look for and an ELF-level check reports "no EGL" on a
+    # perfectly good library; the dlopen name and an extension symbol are what a CPU-only stub really
+    # lacks. Same two markers the drm-capture workflow asserts in CI.
+    try:
+        with open(so_path, 'rb') as f:
+            blob = f.read()
+    except OSError as err:
+        raise Exception(f'cannot read the built libdrmtap at {so_path}: {err}')
+    missing = [m for m in (b'libEGL.so.1', b'eglCreateImageKHR') if m not in blob]
+    if missing:
+        raise Exception(
+            f'{so_path} looks like a CPU-only libdrmtap stub (missing '
+            f'{", ".join(m.decode() for m in missing)}): the EGL detile path the split capture '
+            'depends on is not in it, and DRM capture would silently fall back to PipeWire. '
+            'Install the EGL development packages and rebuild (Debian/Ubuntu: libegl-dev '
+            'libgles2-mesa-dev; Arch: mesa libglvnd).')
 
 
 DRM_PACKAGE_NAME = 'rustdesk-unattended-wayland'
