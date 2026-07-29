@@ -1576,34 +1576,6 @@ static BOOL cliprdr_GetUpdatedClipboardFormats(wfClipboard *clipboard, PUINT lpu
 	return TRUE;
 }
 
-/*
- * A local CF_HDROP is represented by exactly two virtual-file formats.
- * FileGroupDescriptorW describes every copied file, while FileContents retrieves
- * each file by index, so CountClipboardFormats() is unrelated to this list's size.
- *
- * Keep population capacity-checked: the old code allocated CountClipboardFormats()
- * entries but always wrote these two. A clipboard containing only CF_HDROP returned
- * one entry and caused an out-of-bounds write to the second CLIPRDR_FORMAT.
- */
-UINT32 wf_cliprdr_populate_file_formats(CLIPRDR_FORMAT *formats, UINT32 capacity)
-{
-	if (!formats || capacity < WF_CLIPRDR_FILE_FORMAT_COUNT)
-		return 0;
-
-	formats[0].formatId = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
-	formats[0].formatName = NULL;
-	formats[1].formatId = RegisterClipboardFormat(CFSTR_FILECONTENTS);
-	formats[1].formatName = NULL;
-
-	if (!formats[0].formatId || !formats[1].formatId)
-	{
-		ZeroMemory(formats, WF_CLIPRDR_FILE_FORMAT_COUNT * sizeof(CLIPRDR_FORMAT));
-		return 0;
-	}
-
-	return WF_CLIPRDR_FILE_FORMAT_COUNT;
-}
-
 static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 {
 	UINT rc;
@@ -1641,13 +1613,19 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard, UINT32 connID)
 			return CHANNEL_RC_NO_MEMORY;
 		}
 
-		numFormats = wf_cliprdr_populate_file_formats(formats, WF_CLIPRDR_FILE_FORMAT_COUNT);
-		if (numFormats == 0)
+		index = 0;
+		// IsClipboardFormatAvailable(CF_HDROP) is checked above
+		UINT fsid = RegisterClipboardFormat(CFSTR_FILEDESCRIPTORW);
+		UINT fcid = RegisterClipboardFormat(CFSTR_FILECONTENTS);
+		if (!fsid || !fcid)
 		{
 			CloseClipboard();
 			free(formats);
 			return ERROR_INTERNAL_ERROR;
 		}
+		formats[index++].formatId = fsid;
+		formats[index++].formatId = fcid;
+		numFormats = index;
 
 		if (!CloseClipboard())
 		{
@@ -2330,6 +2308,9 @@ static BOOL wf_cliprdr_array_ensure_capacity(wfClipboard *clipboard)
 static BOOL wf_cliprdr_add_to_file_arrays(wfClipboard *clipboard, WCHAR *full_file_name,
 										  size_t pathLen)
 {
+	if (!clipboard || clipboard->nFiles >= WF_CLIPRDR_MAX_STREAMS)
+		return FALSE;
+
 	if (!wf_cliprdr_array_ensure_capacity(clipboard))
 		return FALSE;
 
@@ -2808,8 +2789,11 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 	{
 		size_t len;
 		size_t i;
+		SIZE_T dropFilesSize;
+		SIZE_T remaining;
 		WCHAR *wFileName;
 		HRESULT result;
+		BOOL fileListValid = FALSE;
 		LPDATAOBJECT dataObj;
 		FORMATETC format_etc;
 		STGMEDIUM stg_medium;
@@ -2849,60 +2833,104 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		}
 
 		clear_file_array(clipboard);
-
-		if (dropFiles->fWide)
+		dropFilesSize = GlobalSize(stg_medium.hGlobal);
+		if (dropFilesSize >= sizeof(DROPFILES) &&
+			dropFiles->pFiles >= sizeof(DROPFILES) &&
+			(SIZE_T)dropFiles->pFiles < dropFilesSize)
 		{
-			/* dropFiles contains file names */
-			for (wFileName = (WCHAR *)((char *)dropFiles + dropFiles->pFiles);
-				 (len = wcslen(wFileName)) > 0; wFileName += len + 1)
+			remaining = dropFilesSize - dropFiles->pFiles;
+			if (dropFiles->fWide && (dropFiles->pFiles % sizeof(WCHAR)) == 0)
 			{
-				wf_cliprdr_process_filename(clipboard, wFileName, wcslen(wFileName));
-			}
-		}
-		else
-		{
-			char *p;
-			for (p = (char *)((char *)dropFiles + dropFiles->pFiles); (len = strlen(p)) > 0;
-				 p += len + 1, clipboard->nFiles++)
-			{
-				int cchWideChar;
-				cchWideChar = MultiByteToWideChar(CP_ACP, MB_COMPOSITE, p, len, NULL, 0);
-				wFileName = (LPWSTR)calloc(cchWideChar, sizeof(WCHAR));
-				if (wFileName)
+				wFileName = (WCHAR *)((BYTE *)dropFiles + dropFiles->pFiles);
+				while (remaining >= sizeof(WCHAR))
 				{
-					MultiByteToWideChar(CP_ACP, MB_COMPOSITE, p, len, wFileName, cchWideChar);
-					wf_cliprdr_process_filename(clipboard, wFileName, cchWideChar);
-					free(wFileName);
+					if (FAILED(StringCchLengthW(
+							wFileName, remaining / sizeof(WCHAR), &len)))
+						break;
+					if (len == 0)
+					{
+						fileListValid = TRUE;
+						break;
+					}
+					if (!wf_cliprdr_process_filename(clipboard, wFileName, len))
+						break;
+					wFileName += len + 1;
+					remaining -= (len + 1) * sizeof(WCHAR);
 				}
-				else
+			}
+			else if (!dropFiles->fWide)
+			{
+				char *name = (char *)dropFiles + dropFiles->pFiles;
+				while (remaining > 0)
 				{
-					rc = ERROR_INTERNAL_ERROR;
-					GlobalUnlock(stg_medium.hGlobal);
-					ReleaseStgMedium(&stg_medium);
-					goto exit;
+					int wideLen;
+					if (FAILED(StringCchLengthA(name, remaining, &len)))
+						break;
+					if (len == 0)
+					{
+						fileListValid = TRUE;
+						break;
+					}
+					wideLen = MultiByteToWideChar(
+						CP_ACP, MB_COMPOSITE, name, (int)len, NULL, 0);
+					if (wideLen <= 0)
+						break;
+					wFileName = (WCHAR *)calloc((size_t)wideLen + 1, sizeof(WCHAR));
+					if (!wFileName)
+						break;
+					if (MultiByteToWideChar(CP_ACP, MB_COMPOSITE, name,
+							(int)len, wFileName, wideLen) != wideLen ||
+						!wf_cliprdr_process_filename(
+							clipboard, wFileName, (size_t)wideLen))
+					{
+						free(wFileName);
+						break;
+					}
+					free(wFileName);
+					name += len + 1;
+					remaining -= len + 1;
 				}
 			}
 		}
 
 		GlobalUnlock(stg_medium.hGlobal);
 		ReleaseStgMedium(&stg_medium);
-	resp:
-		// size will not overflow, because size type is size_t (unsigned __int64)
-		size = 4 + clipboard->nFiles * sizeof(FILEDESCRIPTORW);
-		groupDsc = (FILEGROUPDESCRIPTORW *)malloc(size);
-
-		if (groupDsc)
+		if (!fileListValid)
 		{
-			groupDsc->cItems = clipboard->nFiles;
-
-			for (i = 0; i < clipboard->nFiles; i++)
-			{
-				if (clipboard->fileDescriptor[i])
-					groupDsc->fgd[i] = *clipboard->fileDescriptor[i];
-			}
-
-			buff = groupDsc;
+			clear_file_array(clipboard);
+			IDataObject_Release(dataObj);
+			rc = ERROR_INTERNAL_ERROR;
+			goto exit;
 		}
+	resp:
+		if (clipboard->nFiles == 0 ||
+			clipboard->nFiles > WF_CLIPRDR_MAX_STREAMS)
+		{
+			IDataObject_Release(dataObj);
+			rc = ERROR_INTERNAL_ERROR;
+			goto exit;
+		}
+		size = offsetof(FILEGROUPDESCRIPTORW, fgd) +
+			clipboard->nFiles * sizeof(FILEDESCRIPTORW);
+		groupDsc = (FILEGROUPDESCRIPTORW *)calloc(1, size);
+
+		if (!groupDsc)
+		{
+			IDataObject_Release(dataObj);
+			size = 0;
+			rc = CHANNEL_RC_NO_MEMORY;
+			goto exit;
+		}
+
+		groupDsc->cItems = (UINT)clipboard->nFiles;
+
+		for (i = 0; i < clipboard->nFiles; i++)
+		{
+			if (clipboard->fileDescriptor[i])
+				groupDsc->fgd[i] = *clipboard->fileDescriptor[i];
+		}
+
+		buff = groupDsc;
 
 		IDataObject_Release(dataObj);
 		rc = ERROR_SUCCESS;
