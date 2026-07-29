@@ -314,49 +314,84 @@ fn schedule_drm_cache_refresh() {
     use std::sync::atomic::{AtomicBool, Ordering};
     static RUNNING: AtomicBool = AtomicBool::new(false);
     static PENDING: AtomicBool = AtomicBool::new(false);
+    // Ownership of RUNNING, released on every exit including an unwind and a failed spawn. Same
+    // shape as UinputRefreshGuard in drm_capturer: the flag is deliberately handed back and
+    // re-taken mid-loop, so the guard tracks whether WE still hold it -- an unconditional release
+    // on drop would clear a flag a replacement worker owns. Without this, a panic anywhere in the
+    // loop body outside the catch_unwind below, or `thread::spawn` itself failing (it panics on
+    // EAGAIN, and that happens AFTER the swap), leaves RUNNING true for the process lifetime and
+    // every later refresh -- including every udev hotplug -- returns early forever.
+    struct RefreshSlot(bool);
+    impl RefreshSlot {
+        fn release(&mut self) {
+            if self.0 {
+                self.0 = false;
+                RUNNING.store(false, Ordering::Release);
+            }
+        }
+        fn retake(&mut self) -> bool {
+            self.0 = !RUNNING.swap(true, Ordering::AcqRel);
+            self.0
+        }
+    }
+    impl Drop for RefreshSlot {
+        fn drop(&mut self) {
+            self.release();
+        }
+    }
     // Announce a refresh is wanted before trying to run, so an active worker is guaranteed to see it.
     PENDING.store(true, Ordering::Release);
     if RUNNING.swap(true, Ordering::AcqRel) {
         return; // a worker is already active; it will observe PENDING and refresh again
     }
-    std::thread::spawn(|| loop {
-        PENDING.store(false, Ordering::Release);
-        // Panic-safety: enumeration must not be able to leave RUNNING stuck true (which would wedge
-        // every future refresh). Catch a panic here and the cache lock is recovered from poison
-        // below, so the RUNNING/PENDING bookkeeping always runs.
-        let fresh = std::panic::catch_unwind(drm_enumerate_all_displays).unwrap_or_else(|_| {
-            log::error!("drm: display enumeration panicked; treating as no displays");
-            Vec::new()
-        });
-        let changed = {
-            let mut cache = match DRM_DISPLAY_CACHE.lock() {
-                Ok(g) => g,
-                Err(poisoned) => poisoned.into_inner(),
+    // We hold the slot from the swap above; hand it to the guard NOW, before the spawn, so a spawn
+    // failure releases it too (the closure that owns it is dropped along with the error).
+    let mut slot = RefreshSlot(true);
+    let spawned = std::thread::Builder::new()
+        .name("drm-cache-refresh".into())
+        .spawn(move || loop {
+            PENDING.store(false, Ordering::Release);
+            // Panic-safety, two layers: enumeration panics are caught here so a flaky driver does
+            // not lose the refresh; anything else that unwinds is covered by `slot`'s Drop.
+            let fresh = std::panic::catch_unwind(drm_enumerate_all_displays).unwrap_or_else(|_| {
+                log::error!("drm: display enumeration panicked; treating as no displays");
+                Vec::new()
+            });
+            let changed = {
+                let mut cache = match DRM_DISPLAY_CACHE.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if *cache != fresh {
+                    *cache = fresh;
+                    true
+                } else {
+                    false
+                }
             };
-            if *cache != fresh {
-                *cache = fresh;
-                true
-            } else {
-                false
+            DRM_CACHE_WARMED.store(true, Ordering::Release);
+            if changed {
+                DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
+                log::info!("drm: display cache refreshed (topology changed)");
             }
-        };
-        DRM_CACHE_WARMED.store(true, Ordering::Release);
-        if changed {
-            DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
-            log::info!("drm: display cache refreshed (topology changed)");
-        }
-        // Exit only if no request arrived during this enumeration. The re-check after releasing
-        // RUNNING closes the lost-wakeup window (a request that set PENDING just before the release).
-        if !PENDING.load(Ordering::Acquire) {
-            RUNNING.store(false, Ordering::Release);
+            // Exit only if no request arrived during this enumeration. The re-check after releasing
+            // the slot closes the lost-wakeup window (a request that set PENDING just before the
+            // release).
             if !PENDING.load(Ordering::Acquire) {
-                break;
+                slot.release();
+                if !PENDING.load(Ordering::Acquire) {
+                    break;
+                }
+                if !slot.retake() {
+                    break; // another caller re-acquired the slot; it will handle the pending refresh
+                }
             }
-            if RUNNING.swap(true, Ordering::AcqRel) {
-                break; // another caller re-acquired the slot; it will handle the pending refresh
-            }
-        }
-    });
+        });
+    if let Err(err) = spawned {
+        // The closure was dropped without running, and the guard inside it released RUNNING, so the
+        // next request retries the spawn instead of being locked out forever.
+        log::error!("drm: could not spawn the display-cache refresh worker: {err}");
+    }
 }
 
 /// True if a kernel uevent datagram is a DRM-subsystem topology change (a connector hotplug/modeset).
@@ -511,8 +546,18 @@ pub async fn start_drm() {
     match new_drm_listener() {
         Ok(mut incoming) => {
             // Warm libdrmtap/EGL + enumeration off-thread so the first consumer does not pay that
-            // one-time cost on its critical path.
-            std::thread::spawn(drm_prewarm);
+            // one-time cost on its critical path. Skipped when the current session is X11 -- every
+            // consumer gates on !is_x11(), so none will connect, and the prewarm opens a DrmReader
+            // and grabs a frame in the root service for nothing. The LISTENER below still starts
+            // either way: the root service outlives sessions, a later Wayland login must find the
+            // `_drm` socket, and its first connection re-enumerates on demand (the handshake serves
+            // a throwaway enumeration when the cache is cold), so skipping the prewarm costs that
+            // session only the one-time warmup the prewarm exists to hide.
+            if !scrap::is_x11() {
+                std::thread::spawn(drm_prewarm);
+            } else {
+                log::info!("drm: X11 session; skipping the pre-warm (the _drm listener still runs)");
+            }
             // Watch for connector hotplug/modeset uevents so a mid-session topology change refreshes
             // the display cache and is pushed to live consumers (best-effort; own thread since it
             // blocks on recv and re-enumeration is a blocking `!Send` open).
@@ -807,7 +852,13 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         let gen = DRM_DISPLAY_GENERATION.load(Ordering::Acquire);
         if gen != seen_gen {
             seen_gen = gen;
-            let fresh = DRM_DISPLAY_CACHE.lock().unwrap().clone();
+            // Recover from poison exactly like the writer does: the cache holds plain data whose
+            // invariants cannot be torn, and a panicking holder elsewhere must not make every live
+            // connection's topology push panic its task while the refresh worker keeps running.
+            let fresh = DRM_DISPLAY_CACHE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone();
             // Send even an EMPTY list: when the last active CRTC disappears (all monitors
             // unplugged) the consumer must learn the topology is now empty, otherwise it keeps
             // advertising the removed displays indefinitely.
@@ -922,7 +973,11 @@ fn drm_capture_worker(
     // it is empty (all monitors off), which is a real state, not "not ready". Only an unwarmed cache
     // (a connection racing the pre-warm) triggers a synchronous per-connection enumeration.
     let displays = if DRM_CACHE_WARMED.load(Ordering::Acquire) {
-        DRM_DISPLAY_CACHE.lock().unwrap().clone()
+        // Poison-recovery for the same reason as the topology push above.
+        DRM_DISPLAY_CACHE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     } else {
         drm_enumerate_all_displays()
     };

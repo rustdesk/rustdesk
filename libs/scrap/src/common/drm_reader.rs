@@ -18,9 +18,22 @@ use std::ffi::CString;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
+// The validation limits and pixel formats BOTH halves of the split rely on to agree about what data
+// they will touch. They live here, once, and `drm_render` (the unprivileged converter) imports them:
+// these are trust-boundary guards, so two independently-edited copies that drift apart would silently
+// weaken validation on one side of the boundary.
+//
 // Largest scanout we will copy; also bounds w*4*h against overflow. 16384 covers
 // 8K+ with headroom; anything larger is rejected as a bogus/hostile geometry.
-const MAX_DIM: u32 = 16384;
+pub(crate) const MAX_DIM: u32 = 16384;
+// 256 MiB covers an 8K BGRA frame (7680x4320x4 ~= 127 MiB) with margin.
+pub(crate) const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
+// DRM fourccs of the 32-bit linear formats the split can carry. XRGB/ARGB are little-endian
+// B,G,R,{X,A} in memory == `Pixfmt::BGRA`; XBGR/ABGR are R,G,B,{X,A} == `Pixfmt::RGBA`.
+pub(crate) const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
+pub(crate) const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
+pub(crate) const DRM_FORMAT_XBGR8888: u32 = 0x3432_4258; // 'XB24'
+pub(crate) const DRM_FORMAT_ABGR8888: u32 = 0x3432_4241; // 'AB24'
 
 /// Sentinel cursor id published when the plane reports the cursor hidden, so the
 /// id changes and the client drops the last shape. Distinct from any real hash.
@@ -220,8 +233,6 @@ impl DrmReader {
             // XBGR8888 passes the stride check above but, labeled BGRA downstream, would ship with red
             // and blue swapped — so reject any fourcc we cannot present as BGRA. A zero/unknown fourcc
             // falls through to the stride invariant (kept for libdrmtap builds that do not set it).
-            const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
-            const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
             if frame.format != 0
                 && frame.format != DRM_FORMAT_XRGB8888
                 && frame.format != DRM_FORMAT_ARGB8888
@@ -241,8 +252,8 @@ impl DrmReader {
             // would otherwise resize to gigabytes and, with several concurrent readers, OOM the root
             // --service. 256 MiB covers an 8K BGRA scanout (7680x4320x4 ~= 127 MiB) with margin;
             // anything larger (or an overflow) is rejected as unsupported. checked_mul guards the
-            // multiply on 32-bit usize too.
-            const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
+            // multiply on 32-bit usize too. MAX_FRAME_BYTES is the file-level shared limit, the
+            // same one the converter enforces on its side of the boundary.
             let frame_size = match w.checked_mul(4).and_then(|x| x.checked_mul(h)) {
                 Some(sz) if sz > 0 && sz <= MAX_FRAME_BYTES => sz,
                 other => {

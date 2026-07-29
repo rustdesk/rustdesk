@@ -565,7 +565,10 @@ def build_flutter_deb(version, features):
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     # Bundle libdrmtap.so only when this build actually enabled the `drm` feature, so stock packages
     # stay exactly what they were. The root service dlopens it in-process by absolute path.
-    ships_so = 'drm' in features
+    # `features` is the comma-joined string, so split it: a bare substring test would also match any
+    # future feature merely containing "drm" (drm-lease, vaapi-drm) and rename the deb to the
+    # consent-bypass variant without --drm ever being passed.
+    ships_so = 'drm' in features.split(',')
     if ships_so:
         stage_libdrmtap_into_deb(build_libdrmtap_so())
 

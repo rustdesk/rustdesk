@@ -172,9 +172,19 @@ jobs:
           SO="$(cat so_path)"
           echo "checking $SO"
           missing=0
-          # Every symbol drmtap_dl.rs resolves, derived from the loader itself so the two cannot drift.
-          for sym in $(grep -oE 'b"drmtap_[a-z_]+"' libs/scrap/src/common/drmtap_dl.rs \
-                       | sed 's/^b"//; s/"$//' | sort -u); do
+          # Every symbol drmtap_dl.rs resolves, derived from the loader itself so the two cannot
+          # drift. The character class allows digits (a drmtap_grab_desc2 would otherwise be
+          # silently dropped from the loop), and the count is asserted below so a refactor of the
+          # loader away from b"..." literals cannot quietly turn this whole check into a no-op that
+          # iterates zero times and passes.
+          syms=$(grep -oE 'b"drmtap_[a-z0-9_]+"' libs/scrap/src/common/drmtap_dl.rs \
+                 | sed 's/^b"//; s/"$//' | sort -u)
+          nsyms=$(echo "$syms" | grep -c .)
+          if [ "$nsyms" -lt 13 ]; then
+            echo "::error::extracted only $nsyms loader symbols from drmtap_dl.rs (expected >= 13); the extraction pattern no longer matches the loader"
+            missing=1
+          fi
+          for sym in $syms; do
             if ! nm -D --defined-only "$SO" | grep -q " T $sym\$"; then
               echo "::error::libdrmtap does not export $sym, which the runtime loader resolves"
               missing=1
@@ -191,7 +201,7 @@ jobs:
             fi
           done
           test "$missing" -eq 0
-          echo "::notice::libdrmtap .so contract ok (13 loader symbols, EGL detile present)"
+          echo "::notice::libdrmtap .so contract ok ($nsyms loader symbols, EGL detile present)"
 
   # The bridge generator is a reusable workflow, so this calls the stock one instead of duplicating it.
   generate-bridge:

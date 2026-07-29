@@ -22,22 +22,15 @@ use std::ffi::CString;
 use std::io;
 use std::os::fd::RawFd;
 
-// DRM fourccs of the 32-bit linear formats libdrmtap's convert can emit. XRGB/ARGB
-// are little-endian B,G,R,{X,A} in memory == our `Pixfmt::BGRA`; XBGR/ABGR are
-// R,G,B,{X,A} == `Pixfmt::RGBA`. libdrmtap normalizes the EGL path to XRGB8888, but
-// we read `frame.format` per frame so a CPU-fallback convert that keeps the source
-// channel order is still presented correctly (not hardcoded BGRA).
-const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
-const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
-const DRM_FORMAT_XBGR8888: u32 = 0x3432_4258; // 'XB24'
-const DRM_FORMAT_ABGR8888: u32 = 0x3432_4241; // 'AB24'
-
-// Same geometry / size guards as the export side (`drm_reader`), applied to the
-// convert OUTPUT so a malformed `frame_info` cannot make us build an out-of-range
-// slice from the context-owned pointer. 16384 covers 8K+; 256 MiB covers an 8K
-// BGRA frame (7680x4320x4 ~= 127 MiB) with margin.
-const MAX_DIM: u32 = 16384;
-const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
+// The geometry/size limits and pixel fourccs are SHARED with the export side, declared once in
+// `drm_reader`: they are the guards both halves of the trust boundary rely on to agree about what
+// data they will touch, so a private copy here could silently drift from the privileged side's.
+// libdrmtap normalizes the EGL path to XRGB8888, but we read `frame.format` per frame so a
+// CPU-fallback convert that keeps the source channel order is still presented correctly.
+use super::drm_reader::{
+    DRM_FORMAT_ABGR8888, DRM_FORMAT_ARGB8888, DRM_FORMAT_XBGR8888, DRM_FORMAT_XRGB8888,
+    MAX_DIM, MAX_FRAME_BYTES,
+};
 
 /// An unprivileged DRM render-node convert context (`drmtap_open_render`). Imports a
 /// scanout dma-buf (received over SCM_RIGHTS) and EGL-detiles it to linear pixels.
@@ -187,11 +180,16 @@ impl RenderConverter {
                 DRM_FORMAT_XBGR8888 | DRM_FORMAT_ABGR8888 => Pixfmt::RGBA,
                 // Unset by an older convert -> libdrmtap's normalized BGRA.
                 0 => Pixfmt::BGRA,
+                // Every other invalid frame_info property in this function is a hard error
+                // that lets the caller fall back to PipeWire; an output format this build
+                // cannot interpret must be one too. Presenting it as BGRA would pass the
+                // stride checks (a 64bpp output still satisfies stride >= w*4) and encode
+                // garbage instead of degrading.
                 other => {
-                    log::debug!(
-                        "drm: convert output fourcc {other:#010x} unrecognized; presenting as BGRA"
-                    );
-                    Pixfmt::BGRA
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drmtap_convert_dmabuf produced an unsupported output fourcc {other:#010x}"),
+                    ));
                 }
             };
             // Borrow the context-owned pixels. The returned lifetime is tied to `&mut self`
