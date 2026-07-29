@@ -224,12 +224,26 @@ const DRMTAP_ABI_MAJOR: c_int = 0;
 // costs no compatibility that was real.
 const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 10);
 
+// The MINOR series this build's mirrored structs were verified against. Under 0.x semver the minor is
+// the breaking axis, and libdrmtap's own header freezes only `drmtap_device` and
+// `drmtap_dmabuf_desc`: `drmtap_frame_info`, `drmtap_display`, `drmtap_config` and
+// `drmtap_cursor_info` are explicitly NOT frozen. So a 0.5.0 that adds one field to
+// `drmtap_frame_info` would be layout-incompatible while still reporting major 0, and a floor alone
+// would load it and read every field at the wrong offset -- inside the root service.
+//
+// Refusing an unknown-newer minor means a libdrmtap 0.5.x needs a deliberate bump here, after
+// re-checking the layouts field by field. That is the point: the check should fail closed on a
+// library nobody has compared against, not assume forward compatibility a 0.x project does not offer.
+const DRMTAP_ABI_MINOR: c_int = 4;
+
 /// Whether a library reporting `major.minor.patch` may be loaded. Pure, so the
-/// version rule is unit-testable without an .so to dlopen: the major must match
-/// exactly (struct layouts track it) and (minor, patch) must be at or above the
-/// floor that provides the split-capture API.
+/// version rule is unit-testable without an .so to dlopen: the major AND the minor must match
+/// exactly (unfrozen struct layouts track the minor under 0.x semver), and the patch must be at or
+/// above the floor that provides the split-capture API.
 fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
-    major == DRMTAP_ABI_MAJOR && (minor, patch) >= DRMTAP_MIN_MINOR_PATCH
+    major == DRMTAP_ABI_MAJOR
+        && minor == DRMTAP_ABI_MINOR
+        && (minor, patch) >= DRMTAP_MIN_MINOR_PATCH
 }
 
 impl DrmtapLib {
@@ -432,15 +446,34 @@ mod tests {
     }
 
     #[test]
-    fn abi_gate_accepts_the_floor_and_every_release_above_it() {
+    fn abi_gate_accepts_the_floor_and_later_patches_of_the_same_minor() {
         let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
         assert!(abi_accepted(DRMTAP_ABI_MAJOR, min_minor, min_patch));
-        // 0.4.15 is what the deb ships today; the later ones guard against a floor
-        // comparison that only ever looks at `patch` (0.5.0 must pass, 0.4.15 too).
-        for (minor, patch) in [(4, 15), (4, 200), (5, 0), (9, 9)] {
+        // 0.4.15 is what the deb ships today. A later PATCH of the verified minor is fine:
+        // patch releases do not change the layouts.
+        for (minor, patch) in [(4, 15), (4, 200)] {
             assert!(
                 abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
-                "v0.{minor}.{patch} is at or above the floor and must be accepted"
+                "v0.{minor}.{patch} is a patch of the verified minor and must be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn abi_gate_rejects_an_unknown_newer_minor() {
+        // Under 0.x semver the MINOR is the breaking axis, and libdrmtap freezes only
+        // drmtap_device and drmtap_dmabuf_desc -- drmtap_frame_info, drmtap_display,
+        // drmtap_config and drmtap_cursor_info are not frozen. A 0.5.0 that adds one field
+        // to drmtap_frame_info still reports major 0, so a floor-only check would load it
+        // and read every field at the wrong offset, in the ROOT service. Fail closed on a
+        // minor nobody has compared the layouts against; bumping is a deliberate act.
+        //
+        // This test replaces one that asserted the opposite ("0.5.0 must pass"), which was
+        // holding the hazard in place.
+        for (minor, patch) in [(5, 0), (5, 99), (9, 9)] {
+            assert!(
+                !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
+                "v0.{minor}.{patch} is an unverified minor and must be refused"
             );
         }
     }

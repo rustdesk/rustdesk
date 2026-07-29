@@ -603,8 +603,12 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         });
         // Warm the DRM availability cache before any client connects, so the first connection does
         // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
+        // Skipped on X11: every consumer of the verdict is behind an `!is_x11()` check, so probing
+        // there makes the root service open DRM readers for a path this session can never use.
         #[cfg(all(target_os = "linux", feature = "drm"))]
-        std::thread::spawn(drm_capturer::warm_availability);
+        if !scrap::is_x11() {
+            std::thread::spawn(drm_capturer::warm_availability);
+        }
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
         if input_service::wayland_use_uinput() {
