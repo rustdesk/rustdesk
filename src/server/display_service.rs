@@ -462,16 +462,17 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
 // list shorter than the synced list means at least one advertised display is served by PipeWire.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub fn has_non_drm_backed_display() -> bool {
-    match super::drm_capturer::get_display_infos() {
-        // A display served by PipeWire is either ABSENT from the DRM list (a shorter list, e.g. a
+    match super::drm_capturer::display_count_and_any_demoted() {
+        // A display served by PipeWire is either ABSENT from the DRM list (a shorter count, e.g. a
         // pure-portal display) or PRESENT-BUT-DEMOTED (kept in place at the same index and marked
-        // offline so the index space stays aligned -- see get_display_infos). The length check alone
-        // misses the demotion case (same length), so a display that is not online-DRM (`!online`) is
-        // treated as non-DRM-backed too. This is what gates the hidden-cursor sentinel: it stays
-        // authoritative only in a pure-DRM session.
-        Some(drm) => {
-            drm.len() < SYNC_DISPLAYS.lock().unwrap().displays.len()
-                || drm.iter().any(|d| !d.online)
+        // offline so the index space stays aligned -- see get_display_infos). The count check alone
+        // misses the demotion case (same count), so a demoted display is treated as non-DRM-backed
+        // too. This is what gates the hidden-cursor sentinel: it stays authoritative only in a
+        // pure-DRM session. The scalar accessor is deliberate: this is polled every cursor tick
+        // while the sentinel is active, and cloning + geometry-augmenting the whole list per tick
+        // (what get_display_infos does) answered the same two facts.
+        Some((count, any_demoted)) => {
+            count < SYNC_DISPLAYS.lock().unwrap().displays.len() || any_demoted
         }
         None => false,
     }

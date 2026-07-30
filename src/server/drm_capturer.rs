@@ -51,6 +51,11 @@ const DISPLAY_LIST_TIMEOUT_MS: u64 = HANDSHAKE_TIMEOUT_MS + 4000;
 /// the first byte, once for the body). Derived from those parts rather than written as a constant,
 /// so a change to either one cannot silently invert the relationship again.
 const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS * 2 + 500;
+/// Deadline for a message BODY once its header has arrived (cpu frame, cursor pixels). Bodies
+/// follow their header immediately on a local socket, so this is generous by orders of magnitude;
+/// it exists so a producer that dies mid-message cannot pin the receive thread forever (only the
+/// header read re-checks `stop`).
+const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct FrameSlot {
     // (width, height, pixel format, packed pixels) of the newest frame not yet consumed by
@@ -752,9 +757,16 @@ async fn recv_thread(
                     .saturating_mul(4);
                 // Read the body straight into a recycled frame buffer and publish that same buffer:
                 // the pixels are copied once, by the kernel, on their way out of the socket.
+                // Deadlined: only the HEADER read re-checks `stop` (the 200ms poll at the loop top),
+                // so a producer that dies between a header and its body would otherwise pin this
+                // thread forever -- Drop sets `stop`, nobody observes it, and every rebuild leaks a
+                // thread plus its render context. The body follows its header immediately on a local
+                // socket (a 20MB 2880x1800 frame arrives in single-digit ms), so a whole
+                // BODY_READ_TIMEOUT of silence is a dead producer, not a slow one.
                 let mut buf = shared.slot.lock().unwrap().free.take().unwrap_or_default();
-                match conn.next_raw_into(&mut buf).await {
-                    Ok(()) => {
+                match tokio::time::timeout(BODY_READ_TIMEOUT, conn.next_raw_into(&mut buf)).await {
+                    Err(_) => break "cpu frame body read timed out".to_owned(),
+                    Ok(Ok(())) => {
                         if buf.len() < need {
                             break format!(
                                 "cpu frame: body {} bytes < {need} for {width}x{height}",
@@ -765,7 +777,7 @@ async fn recv_thread(
                         slot.publish(width as usize, height as usize, Pixfmt::BGRA, buf);
                         shared.cv.notify_one();
                     }
-                    Err(err) => break format!("frame body: {err}"),
+                    Ok(Err(err)) => break format!("frame body: {err}"),
                 }
                 // Ack this CPU frame too (flow control; see the dma-buf arm above).
                 if let Err(err) = conn.send_frame_ack().await {
@@ -788,9 +800,11 @@ async fn recv_thread(
                     .saturating_mul(4);
                 // A cursor is tiny and changes rarely, so this one keeps its own buffer (the frame
                 // recycler is for scanout-sized bodies) and hands it straight to the cursor cache.
+                // Deadlined for the same reason as the cpu-frame body above.
                 let mut raw = Vec::new();
-                match conn.next_raw_into(&mut raw).await {
-                    Ok(()) => {
+                match tokio::time::timeout(BODY_READ_TIMEOUT, conn.next_raw_into(&mut raw)).await {
+                    Err(_) => break "cursor body read timed out".to_owned(),
+                    Ok(Ok(())) => {
                         if raw.len() < need {
                             break format!(
                                 "cursor body {} bytes < {need} for {width}x{height}",
@@ -810,7 +824,7 @@ async fn recv_thread(
                             },
                         );
                     }
-                    Err(err) => break format!("cursor body: {err}"),
+                    Ok(Err(err)) => break format!("cursor body: {err}"),
                 }
             }
             // Live hotplug: the service pushed a fresh display list after a connector-topology change.
@@ -818,15 +832,23 @@ async fn recv_thread(
             // this never trips the wayland::clear() re-probe restart loop). A subsequent
             // get_display_infos()/get_primary_index() then reports the fresh geometry.
             Data::DrmDisplaysChanged(list) => {
-                // Did this stream's index just come to mean a different monitor? Compare against what
+                // Did this stream's slot just come to mean a different monitor? Compare against what
                 // the service actually bound us to. If it moved, keeping the stream alive would send
                 // monitor A's pixels under monitor B's advertised geometry, and route injected input
                 // by B's rect, until something else happened to fail. End it instead: the video
                 // service rebuilds against the fresh list, which is the same path a resolution change
                 // already takes. Checked BEFORE the list is swapped in, so the comparison is against
                 // the topology this stream was started on.
+                //
+                // The probe uses wire_idx, not `display`: this pushed list is in the SERVICE'S index
+                // space (the same fresh-enumeration construction as the handshake list), and wire_idx
+                // is where our monitor sat in that space when the stream was bound. `display` is a
+                // position in the list the CLIENT chose from, which is exactly the index space that
+                // can disagree with the service's whenever a wake or hotplug renumbered entries --
+                // probing it here would pit slot `display` against slot wire_idx and either tear down
+                // a healthy stream or miss a genuine renumbering.
                 let now_at_our_index = list
-                    .get(display.max(0) as usize)
+                    .get(wire_idx)
                     .map(|d| (d.device.clone(), d.crtc_id));
                 if bound_to.is_some() && now_at_our_index != bound_to {
                     swap_available_displays(list);
@@ -1459,6 +1481,41 @@ pub(super) async fn refresh_displays_for_login() {
             t.elapsed()
         ),
     }
+}
+
+/// The advertised DRM display count plus whether any display is demoted to PipeWire, as two
+/// scalars. `None` until probed/available. This exists for the cursor path, which polls
+/// `display_service::has_non_drm_backed_display` on every tick while the hidden-cursor sentinel is
+/// active (the steady state whenever the pointer is off a captured CRTC) and only ever needed these
+/// two facts -- `get_display_infos` would clone the whole list and run the wayland geometry
+/// augmentation per tick just to read `len()` and `online`.
+///
+/// Mirrors get_display_infos' demotion semantics exactly: only a MULTI-display host advertises a
+/// demoted display (on a single-display host the whole-desktop PipeWire stream IS that display, so
+/// it stays online and served).
+pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
+    // Snapshot the identity keys under DRM_STATE, then consult health with DRM_STATE released --
+    // same order as get_display_infos, and the same reason: never hold DRM_STATE while taking one
+    // of the per-display maps.
+    let (len, keys): (usize, Vec<String>) = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => (
+            list.len(),
+            if list.len() > 1 {
+                list.iter().map(connector_key).collect()
+            } else {
+                Vec::new()
+            },
+        ),
+        _ => return None,
+    };
+    let any_demoted = if len > 1 {
+        let health = DRM_DISPLAY_HEALTH.lock().unwrap();
+        keys.iter()
+            .any(|k| health.get(k).is_some_and(|h| h.demoted()))
+    } else {
+        false
+    };
+    Some((len, any_demoted))
 }
 
 /// The cached DRM displays as protobuf `DisplayInfo`, augmented with the compositor's logical layout

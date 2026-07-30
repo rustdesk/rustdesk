@@ -354,34 +354,41 @@ LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
 # DRMTAP_PREBUILT_DIR is in the list because it is the widest of the three: it skips both the fetch
 # and the sha verification and hands over an object built from nothing this script can see.
 DRMTAP_UNPINNED_OK = os.environ.get('DRMTAP_ALLOW_UNPINNED') == '1'
-_overridden = [
-    name
-    for name, value, pinned in (
-        ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
-        ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
-        # `or None` so an empty value reads as unset here exactly as it does in
-        # build_libdrmtap_so(), which tests it for truthiness. Otherwise `DRMTAP_PREBUILT_DIR=`
-        # would demand the opt-in for an override that is not going to happen.
-        ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR') or None, None),
-    )
-    if value != pinned
-]
-if _overridden and not DRMTAP_UNPINNED_OK:
-    raise Exception(
-        f'{", ".join(_overridden)} would build libdrmtap from something other than the pinned '
-        f'{LIBDRMTAP_REPO_PINNED} at {LIBDRMTAP_SHA_PINNED}. That is supported for local work and '
-        'cross-builds, but it has to be deliberate: set DRMTAP_ALLOW_UNPINNED=1 as well.')
-if _overridden:
-    print(f'WARNING: libdrmtap is NOT the pinned build ({", ".join(_overridden)} set)')
-# Both are interpolated into shell commands below, and both are env-overridable, so validate their
-# SHAPE before they get there. This is not only about a hostile environment: a truncated or
-# abbreviated sha would otherwise reach `git fetch` and fail with something far less obvious than
-# saying so here, and an abbreviated one would defeat the point of pinning.
-if not re.fullmatch(r'[0-9a-f]{40}', LIBDRMTAP_SHA):
-    raise Exception(
-        f'DRMTAP_SHA must be a full 40-character commit sha, got {LIBDRMTAP_SHA!r}')
-if not re.fullmatch(r'(https://|git@)[A-Za-z0-9._~:/@-]+', LIBDRMTAP_REPO):
-    raise Exception(f'DRMTAP_REPO does not look like a git remote url: {LIBDRMTAP_REPO!r}')
+
+
+def _validate_libdrmtap_pin():
+    # Called from build_libdrmtap_so(), NOT at import: a stock (non --drm) build must stay
+    # byte-identical to upstream in behaviour too, and leftover DRMTAP_* variables in the
+    # environment (or a malformed sha) must not be able to fail a build that never touches
+    # libdrmtap.
+    overridden = [
+        name
+        for name, value, pinned in (
+            ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
+            ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
+            # `or None` so an empty value reads as unset here exactly as it does in
+            # build_libdrmtap_so(), which tests it for truthiness. Otherwise `DRMTAP_PREBUILT_DIR=`
+            # would demand the opt-in for an override that is not going to happen.
+            ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR') or None, None),
+        )
+        if value != pinned
+    ]
+    if overridden and not DRMTAP_UNPINNED_OK:
+        raise Exception(
+            f'{", ".join(overridden)} would build libdrmtap from something other than the pinned '
+            f'{LIBDRMTAP_REPO_PINNED} at {LIBDRMTAP_SHA_PINNED}. That is supported for local work and '
+            'cross-builds, but it has to be deliberate: set DRMTAP_ALLOW_UNPINNED=1 as well.')
+    if overridden:
+        print(f'WARNING: libdrmtap is NOT the pinned build ({", ".join(overridden)} set)')
+    # Both are interpolated into shell commands below, and both are env-overridable, so validate
+    # their SHAPE before they get there. This is not only about a hostile environment: a truncated
+    # or abbreviated sha would otherwise reach `git fetch` and fail with something far less obvious
+    # than saying so here, and an abbreviated one would defeat the point of pinning.
+    if not re.fullmatch(r'[0-9a-f]{40}', LIBDRMTAP_SHA):
+        raise Exception(
+            f'DRMTAP_SHA must be a full 40-character commit sha, got {LIBDRMTAP_SHA!r}')
+    if not re.fullmatch(r'(https://|git@)[A-Za-z0-9._~:/@-]+', LIBDRMTAP_REPO):
+        raise Exception(f'DRMTAP_REPO does not look like a git remote url: {LIBDRMTAP_REPO!r}')
 
 
 def _single_real_so(paths, where):
@@ -401,6 +408,7 @@ def build_libdrmtap_so():
     # CAP_SYS_ADMIN) — no setcap helper, no privileged child. Only the shared
     # library target is built (the source also carries a helper binary we do not
     # ship). Returns the path to the built versioned .so (e.g. libdrmtap.so.0.4.x).
+    _validate_libdrmtap_pin()
     repo_root = os.path.dirname(os.path.abspath(__file__))
     # Allow a caller (e.g. CI) to build the .so ahead of time and hand it in via
     # DRMTAP_PREBUILT_DIR (must contain the real libdrmtap.so.0.* object).

@@ -426,6 +426,21 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
+                // A DRM cursor id is derived from the shape's pixels plus geometry, so an animated
+                // pointer mints a new id on every shape change and this map would grow for the life
+                // of the service, each entry pinning a compressed cursor message. (Upstream's X11
+                // ids come from a small set of XFixes serials, so the map is effectively bounded
+                // there -- which is why the ceiling is gated and the stock build stays untouched.)
+                // Past the ceiling, drop the map and start over: the next request for any evicted
+                // shape just recompresses it, and the ceiling comfortably covers every static shape
+                // plus a generous animation window.
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                {
+                    const CURSOR_CACHE_MAX: usize = 64;
+                    if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
+                        state.cached_cursor_data.clear();
+                    }
+                }
                 state.cached_cursor_data.insert(cache_key, msg.clone());
                 super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
             }

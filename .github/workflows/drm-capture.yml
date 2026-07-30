@@ -293,7 +293,9 @@ jobs:
           # `[[ ... ]] && cmd` as the last line makes the STEP fail once FLUTTER_VERSION moves off
           # the pinned value, because the failed test becomes the script's exit status. An explicit
           # if/else skips instead. Reading the values from the environment rather than interpolating
-          # ${{ }} into the script also keeps this off zizmor's template-injection list.
+          # github expressions into the script also keeps this off zizmor's template-injection list.
+          # (spelled out in prose: a literal expression marker here, even in a comment, is parsed by
+          # actionlint and breaks workflow linting.)
           if [[ "$FLUTTER_VERSION" == "3.24.5" ]]; then
             git apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
           else
