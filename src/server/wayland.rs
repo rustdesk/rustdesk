@@ -452,13 +452,24 @@ pub(super) fn get_capturer_for_display(
             // this guard is skipped, preserving upstream behavior exactly.
             #[cfg(feature = "drm")]
             if super::drm_capturer::is_available_cached() {
-                if let Some(advertised) = super::drm_capturer::get_display_infos()
-                    .and_then(|l| l.get(display_idx).cloned())
-                {
+                let (advertised, single_display) = match super::drm_capturer::get_display_infos() {
+                    Some(list) => (list.get(display_idx).cloned(), list.len() == 1),
+                    None => (None, false),
+                };
+                if let Some(advertised) = advertised {
+                    // The advertised DRM geometry is PHYSICAL while the PipeWire rect is the
+                    // compositor's LOGICAL size (try_fix_logical_size), so on a scaled output the
+                    // two sizes legitimately disagree (2880x1800 vs 1440x900) even when the stream
+                    // IS this display. On a single-display host the whole-desktop stream is this
+                    // display by construction, so only the position has to agree there; comparing
+                    // the physical size too rejected the one valid fallback and restart-looped the
+                    // display instead of degrading. On a multi-monitor host the size check stays:
+                    // it is what tells one connector apart from the full-desktop rect.
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
-                        && advertised.width as usize == rect.1
-                        && advertised.height as usize == rect.2;
+                        && (single_display
+                            || (advertised.width as usize == rect.1
+                                && advertised.height as usize == rect.2));
                     if !consistent {
                         bail!(
                             "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",

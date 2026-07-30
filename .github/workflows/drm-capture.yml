@@ -181,6 +181,10 @@ jobs:
       - name: Assert the .so contract (EGL enabled, loader symbols present)
         shell: bash
         run: |
+          # Strict mode is load-bearing here: without it the trailing ::notice echo would return 0
+          # and mask the `test "$missing" -eq 0` assertion, so the step would pass with a missing
+          # loader symbol or a CPU-only stub. (pipefail also keeps the grep -c pipelines honest.)
+          set -euo pipefail
           SO="$(cat so_path)"
           echo "checking $SO"
           missing=0
@@ -189,9 +193,12 @@ jobs:
           # silently dropped from the loop), and the count is asserted below so a refactor of the
           # loader away from b"..." literals cannot quietly turn this whole check into a no-op that
           # iterates zero times and passes.
+          # `|| true` on the extraction pipelines: under set -e/pipefail a zero-match grep would
+          # abort the script before the explicit ::error guard below can say WHY it failed; the
+          # guard on nsyms is the intended reporter for that case.
           syms=$(grep -oE 'b"drmtap_[a-z0-9_]+"' libs/scrap/src/common/drmtap_dl.rs \
-                 | sed 's/^b"//; s/"$//' | sort -u)
-          nsyms=$(echo "$syms" | grep -c .)
+                 | sed 's/^b"//; s/"$//' | sort -u || true)
+          nsyms=$(echo "$syms" | grep -c . || true)
           if [ "$nsyms" -lt 13 ]; then
             echo "::error::extracted only $nsyms loader symbols from drmtap_dl.rs (expected >= 13); the extraction pattern no longer matches the loader"
             missing=1
