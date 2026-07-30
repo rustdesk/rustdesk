@@ -44,10 +44,12 @@ class HttpService {
     return _parseHttpResponse(resJson);
   }
 
-  // Keep this above the Rust side's per-attempt timeout (12s) so it only
-  // bounds requests the OS would otherwise let hang (e.g. a black-holed
-  // TLS handshake), see #15700.
-  static const _requestTimeout = Duration(seconds: 15);
+  // Bounds only the pure-Dart branch below, which the OS would otherwise
+  // let hang forever (e.g. a black-holed TLS handshake), see #15700.
+  // The Rust branch has its own 12s-per-attempt timeouts and must be
+  // awaited to completion: a Dart-side timeout there would race the
+  // URL-keyed ASYNC_HTTP_STATUS entry of the abandoned request.
+  static const _requestTimeout = Duration(seconds: 30);
 
   Future<http.Response> _pollFlutterHttp(
     Uri url,
