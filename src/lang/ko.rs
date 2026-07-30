@@ -332,6 +332,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "릴레이 연결"),
         ("Secure Connection", "보안 연결"),
         ("Insecure Connection", "보안되지 않은 연결"),
+        ("Continue", ""),
         ("Scale original", "원본 크기 조정"),
         ("Scale adaptive", "크기 조정 가능"),
         ("General", "일반"),
@@ -775,5 +776,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("whitelist_cidr_tip", "CIDR 표기를 지원합니다. 예: 192.168.1.0/24"),
         ("Browser didn't open?", ""),
         ("Open sign-in page", ""),
+        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
+        ("Copy sign-in link", ""),
+        ("Sign-in link copied. Paste it into your browser.", ""),
     ].iter().cloned().collect();
 }

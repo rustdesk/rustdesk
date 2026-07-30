@@ -776,5 +776,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("whitelist_cidr_tip", "نماد CIDR پشتیبانی می شود، برای مثال 192.168.1.0/24"),
         ("Browser didn't open?", ""),
         ("Open sign-in page", ""),
+        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
+        ("Copy sign-in link", ""),
+        ("Sign-in link copied. Paste it into your browser.", ""),
     ].iter().cloned().collect();
 }

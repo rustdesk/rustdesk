@@ -203,7 +203,9 @@ class _WidgetOPState extends State<WidgetOP> {
   Future<void> _copyAuthUrl(String url) async {
     try {
       await Clipboard.setData(ClipboardData(text: url));
-      showToast(translate('Copied'));
+      showToast(
+        translate('Sign-in link copied. Paste it into your browser.'),
+      );
     } catch (error, stackTrace) {
       debugPrint(
           'Failed to copy OIDC authentication URL (${error.runtimeType})');
@@ -256,8 +258,7 @@ class _WidgetOPState extends State<WidgetOP> {
         widget.cbLogin(authBody as Map<String, dynamic>);
         return;
       }
-      final stateChanged =
-          _stateMsg != stateMsg || _failedMsg != failedMsg;
+      final stateChanged = _stateMsg != stateMsg || _failedMsg != failedMsg;
       final newUrl = _url.isEmpty && url != null && url.isNotEmpty ? url : null;
       if (!stateChanged && newUrl == null) {
         return;
@@ -330,9 +331,11 @@ class _WidgetOPState extends State<WidgetOP> {
                     padding: const EdgeInsets.only(top: 8.0),
                     child: OidcAuthStatus(
                       message: translate(_stateMsg),
-                      browserFallbackPrompt: translate("Browser didn't open?"),
+                      browserFallbackPrompt: translate(
+                        "If the browser didn't open, open the sign-in page or copy the link below.",
+                      ),
                       openLabel: translate('Open sign-in page'),
-                      copyTooltip: translate('Copy to clipboard'),
+                      copyTooltip: translate('Copy sign-in link'),
                       onOpen: authUrl.isEmpty
                           ? null
                           : () => _runCurrentAuthUrlAction(
@@ -353,8 +356,7 @@ class _WidgetOPState extends State<WidgetOP> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Builder(builder: (context) {
-                      final errorColor =
-                          Theme.of(context).colorScheme.error;
+                      final errorColor = Theme.of(context).colorScheme.error;
                       final bgColor = Theme.of(context)
                           .colorScheme
                           .errorContainer
@@ -375,12 +377,11 @@ class _WidgetOPState extends State<WidgetOP> {
                             Flexible(
                               child: SelectableText(
                                 translate(_failedMsg),
-                                style: DefaultTextStyle.of(context)
-                                    .style
-                                    .copyWith(
-                                      fontSize: 13,
-                                      color: errorColor,
-                                    ),
+                                style:
+                                    DefaultTextStyle.of(context).style.copyWith(
+                                          fontSize: 13,
+                                          color: errorColor,
+                                        ),
                               ),
                             ),
                           ],
