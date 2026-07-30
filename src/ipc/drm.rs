@@ -997,6 +997,21 @@ fn drm_conn_admitted(prev_count: usize) -> bool {
     prev_count < MAX_DRM_CONNS
 }
 
+/// How many peers may be having their authorization evaluated AT ONCE. Deliberately small and
+/// deliberately SEPARATE from `MAX_DRM_CONNS`: the socket is world-connectable, so this is the
+/// bound on work an UNAUTHENTICATED peer can make the root service do, while `MAX_DRM_CONNS` bounds
+/// peers that already passed. Keeping the two counters apart is the point -- sharing one would let
+/// a rejected flood eat the capacity the real consumer needs. Four is well above the real demand
+/// (one connection per captured display, arriving once per session) and low enough that a flood
+/// cannot occupy the blocking pool.
+const MAX_DRM_AUTH_IN_FLIGHT: usize = 4;
+
+/// Whether a peer may enter the authorization step, given the in-flight count taken BEFORE it.
+/// Pure, for the same reason as `drm_conn_admitted`.
+fn drm_auth_admitted(prev_in_flight: usize) -> bool {
+    prev_in_flight < MAX_DRM_AUTH_IN_FLIGHT
+}
+
 /// Whether a `_drm` peer may keep receiving frames: root (uid 0) always, any other peer
 /// only while it still matches the active-session uid, and an unknown peer never (fail closed). Pure,
 /// so the per-frame re-authorization decision is unit-testable without a live logind session.
@@ -1023,11 +1038,40 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // (`get_active_userid`). Because the socket is 0666, any local uid can make us do that, and
     // unlike `_service` this runtime is shared by EVERY live capture stream, so a stall here
     // hitches frames for all of them rather than just delaying one config sync.
+    //
+    // And bound how many peers can be in that step at once, BEFORE entering it. Everything above
+    // describes work an unauthenticated peer can make us do; the `MAX_DRM_CONNS` cap further down
+    // does not help, because it only counts peers that already passed. Without this, a local uid
+    // that will be rejected can still open connections in a loop and keep the shared blocking pool
+    // busy -- with a `loginctl` fork each, whenever the active-uid cache misses. The guard is taken
+    // BEFORE the spawn and dropped as soon as the answer is in, so the slot is held for the
+    // authorization only and not for the life of the stream (the same ownership-before-spawn shape
+    // the other flags here use; a guard built inside the spawned closure would not exist at all if
+    // the spawn itself failed).
+    static DRM_AUTH_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+    struct DrmAuthGuard;
+    impl Drop for DrmAuthGuard {
+        fn drop(&mut self) {
+            DRM_AUTH_IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+    if !drm_auth_admitted(DRM_AUTH_IN_FLIGHT.fetch_add(1, Ordering::SeqCst)) {
+        DRM_AUTH_IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+        // Deliberately `debug`, not `warn`: this is reachable by any local uid, so logging it at a
+        // level that reaches the service log on every attempt would hand exactly the peer this
+        // rejects an unbounded log-write primitive -- the same reason the rejection below is silent.
+        log::debug!("drm: too many _drm authorizations in flight; dropping this connection");
+        return Ok(());
+    }
+    let auth_guard = DrmAuthGuard;
     let (stream, authorized) = tokio::task::spawn_blocking(move || {
         let ok = authorize_service_scoped_ipc_connection(&stream, "_drm");
         (stream, ok)
     })
     .await?;
+    // The verdict is in; free the pre-auth slot for the next peer. An admitted connection is bounded
+    // from here on by MAX_DRM_CONNS instead.
+    drop(auth_guard);
     if !authorized {
         // Deliberately no log here: `log_rejected_service_connection` inside the call above already
         // reports the rejection with the peer and active uid, and rate-limits it to one line per 5 s
@@ -2318,5 +2362,22 @@ mod drm_conn_tests {
         assert!(drm_conn_admitted(MAX_DRM_CONNS - 1)); // last admitted slot
         assert!(!drm_conn_admitted(MAX_DRM_CONNS)); // cap reached -> rejected
         assert!(!drm_conn_admitted(MAX_DRM_CONNS + 5)); // over cap -> rejected
+    }
+
+    // PRE-auth bound, the one that applies to a peer nobody has vetted yet. Same shape as the test
+    // above, and separate on purpose: these two counters must stay independent, so that a flood of
+    // connections that will be REJECTED cannot consume the capacity an authorized consumer needs.
+    #[test]
+    fn drm_auth_admission_bound() {
+        assert!(drm_auth_admitted(0));
+        assert!(drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT - 1)); // last admitted slot
+        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT)); // cap reached -> rejected
+        assert!(!drm_auth_admitted(MAX_DRM_AUTH_IN_FLIGHT + 5)); // over cap -> rejected
+        // The pre-auth bound must be the TIGHTER of the two: it gates unauthenticated work, so
+        // letting it exceed the post-auth cap would make it decorative.
+        assert!(
+            MAX_DRM_AUTH_IN_FLIGHT <= MAX_DRM_CONNS,
+            "the pre-auth bound must not be looser than the connection cap"
+        );
     }
 }
