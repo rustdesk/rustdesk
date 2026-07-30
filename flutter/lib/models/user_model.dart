@@ -92,6 +92,11 @@ class UserModel {
       _parseAndUpdateUser(user);
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
+      // Also surface non-transport failures (bad status, non-JSON body) in
+      // the address book / group tabs, which offer a retry.
+      if (networkError.value.isEmpty) {
+        networkError.value = e.toString();
+      }
     } finally {
       refreshingUser = false;
       await updateOtherModels();
