@@ -133,7 +133,28 @@ impl RenderConverter {
                     format!("drm: refusing a dma-buf descriptor with geometry {w}x{h}"),
                 ));
             }
-            let planes = desc.num_planes.clamp(1, 4) as usize;
+            // REJECT out of range, do not clamp -- and write the normalized value back, so the
+            // count the C reads is the count this side actually bounded. Clamping validated planes
+            // 0..3 and then handed libdrmtap the raw wire value, so a descriptor claiming 7 planes
+            // passed a check for 4. The pinned libdrmtap does refuse >4 itself (drm_grab.c,
+            // `num_planes > 4` -> error), so this was not an overflow today; but the whole point of
+            // this block, as stated above, is that the two halves of the split agree about what
+            // they will touch BEFORE the C sees it, and that only holds if the number travelling
+            // with the descriptor is the validated one. It also stops this side depending on an
+            // internal check in a library pinned from another repo. Mirrors what the EXPORT half
+            // already does (drm_reader.rs `grab_desc`: reject >4, then assign the normalized count).
+            let planes = if desc.num_planes == 0 { 1 } else { desc.num_planes };
+            if planes > 4 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "drm: refusing a dma-buf descriptor with num_planes {} (1..=4)",
+                        desc.num_planes
+                    ),
+                ));
+            }
+            desc.num_planes = planes;
+            let planes = planes as usize;
             for p in 0..planes {
                 let extent = (desc.pitches[p] as usize)
                     .checked_mul(h as usize)
