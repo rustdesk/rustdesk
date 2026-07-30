@@ -323,16 +323,18 @@ pub fn register_switch_grant(switch_uuid: String) {
         }
         use hbb_common::sodiumoxide::crypto::{hash::sha256, sign};
         let switch_code = crate::encode64(sha256::hash(switch_uuid.as_bytes()).0);
+        let timestamp = (hbb_common::get_time() / 1000).to_string();
         let id = Config::get_id();
         let kp = Config::get_key_pair();
         let Some(sk) = sign::SecretKey::from_slice(&kp.0) else {
             log::error!("Failed to register switch grant: no device key");
             return;
         };
-        let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code), &sk);
+        let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code, &timestamp), &sk);
         let body = json!({
             "id": id,
             "switch_code": switch_code,
+            "timestamp": timestamp,
             "signature": crate::encode64(signed),
         })
         .to_string();
@@ -345,11 +347,36 @@ pub fn register_switch_grant(switch_uuid: String) {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn switch_grant_signed_msg(id: &str, switch_code: &str) -> Vec<u8> {
-    let mut msg = Vec::with_capacity(13 + id.len() + 1 + switch_code.len());
+fn switch_grant_signed_msg(id: &str, switch_code: &str, timestamp: &str) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(13 + id.len() + 1 + switch_code.len() + 1 + timestamp.len());
     msg.extend_from_slice(b"switch-grant\0");
     msg.extend_from_slice(id.as_bytes());
     msg.push(0);
     msg.extend_from_slice(switch_code.as_bytes());
+    msg.push(0);
+    msg.extend_from_slice(timestamp.as_bytes());
     msg
+}
+
+#[cfg(all(
+    test,
+    feature = "flutter",
+    not(any(target_os = "android", target_os = "ios"))
+))]
+mod tests {
+    use super::switch_grant_signed_msg;
+
+    #[test]
+    fn test_switch_grant_signed_msg_layout() {
+        let expected: Vec<u8> = [
+            &b"switch-grant\0"[..],
+            b"id1",
+            b"\0",
+            b"c1",
+            b"\0",
+            b"1700000000",
+        ]
+        .concat();
+        assert_eq!(switch_grant_signed_msg("id1", "c1", "1700000000"), expected);
+    }
 }
