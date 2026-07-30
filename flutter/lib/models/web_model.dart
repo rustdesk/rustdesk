@@ -2,10 +2,13 @@
 
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 import 'dart:js';
 import 'dart:html';
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
@@ -17,6 +20,22 @@ import 'package:uuid/uuid.dart';
 
 final List<StreamSubscription<MouseEvent>> mouseListeners = [];
 final List<StreamSubscription<KeyboardEvent>> keyListeners = [];
+
+// WebCodecs VideoFrames handed over from js/src/webcodecs.js arrive as plain
+// interop objects (the package language version predates extension types).
+// This side owns each frame and must close it quickly: hardware decoders
+// stall once their small output frame pool is exhausted.
+int _videoFrameWidth(Object frame) =>
+    js_util.getProperty(frame, 'displayWidth');
+int _videoFrameHeight(Object frame) =>
+    js_util.getProperty(frame, 'displayHeight');
+void _closeVideoFrame(Object frame) {
+  try {
+    js_util.callMethod(frame, 'close', []);
+  } catch (_) {
+    // closing twice is the only failure mode and is harmless
+  }
+}
 
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
@@ -160,6 +179,79 @@ class PlatformFFI {
         fun(display, rgba);
       }
     };
+  }
+
+  void Function(int, ui.Image)? _videoImageCallback;
+  final Map<int, Object> _pendingVideoFrames = {};
+  bool _processingVideoFrames = false;
+  bool _videoFramesDisabled = false;
+
+  // Zero-readback video path: the JS decoder hands decoded VideoFrames here
+  // (checking typeof window.onVideoFrame before every frame), and the engine
+  // imports them GPU-to-GPU via createImageBitmap. Unregistering the JS global
+  // reverts the JS side to the RGBA readback path.
+  void setVideoFrameCallback(void Function(int, ui.Image) fun) {
+    _videoImageCallback = fun;
+    if (_videoFramesDisabled) return;
+    js_util.setProperty(js_util.globalThis, 'onVideoFrame',
+        js_util.allowInterop((int display, Object frame) {
+      _handleVideoFrame(display, frame);
+    }));
+  }
+
+  void _handleVideoFrame(int display, Object frame) {
+    if (_videoFramesDisabled || _videoImageCallback == null) {
+      _closeVideoFrame(frame);
+      return;
+    }
+    // Keep only the newest undrawn frame per display: a remote desktop wants
+    // freshness, and the decoder needs its frame pool returned promptly.
+    final stale = _pendingVideoFrames[display];
+    if (stale != null) {
+      _closeVideoFrame(stale);
+    }
+    _pendingVideoFrames[display] = frame;
+    if (_processingVideoFrames) return;
+    _processingVideoFrames = true;
+    Future(() async {
+      while (_pendingVideoFrames.isNotEmpty) {
+        final display = _pendingVideoFrames.keys.first;
+        final frame = _pendingVideoFrames.remove(display)!;
+        if (_videoFramesDisabled) {
+          _closeVideoFrame(frame);
+          continue;
+        }
+        ui.Image? image;
+        try {
+          image = await ui_web.createImageFromTextureSource(frame as JSAny,
+              width: _videoFrameWidth(frame),
+              height: _videoFrameHeight(frame));
+        } catch (e) {
+          debugPrint(
+              'createImageFromTextureSource failed, using RGBA path: $e');
+          _videoFramesDisabled = true;
+          js_util.setProperty(js_util.globalThis, 'onVideoFrame', null);
+        } finally {
+          _closeVideoFrame(frame);
+        }
+        if (image != null) {
+          final callback = _videoImageCallback;
+          if (callback == null) {
+            image.dispose();
+          } else {
+            try {
+              callback(display, image);
+            } catch (e) {
+              // Nothing downstream took ownership (ImageModel catches its own
+              // errors before adopting the image), so free the texture here.
+              image.dispose();
+              debugPrint('video image callback error: $e');
+            }
+          }
+        }
+      }
+      _processingVideoFrames = false;
+    });
   }
 
   void startDesktopWebListener() {

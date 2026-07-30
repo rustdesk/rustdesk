@@ -1952,6 +1952,15 @@ class ImageModel with ChangeNotifier {
     platformFFI.nextRgba(sessionId, display);
   }
 
+  // web only: image already created from a decoded WebCodecs frame
+  onImage(int display, ui.Image image) async {
+    try {
+      await update(image);
+    } catch (e) {
+      debugPrint('onImage error: $e');
+    }
+  }
+
   decodeAndUpdate(int display, Uint8List rgba) async {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
@@ -3852,6 +3861,10 @@ class FFI {
       platformFFI.setRgbaCallback((int display, Uint8List data) {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
+      });
+      platformFFI.setVideoFrameCallback((int display, ui.Image image) {
+        onEvent2UIRgba();
+        imageModel.onImage(display, image);
       });
       this.id = id;
       return;
