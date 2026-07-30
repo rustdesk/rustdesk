@@ -774,7 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "IP của bạn đã bị phía bên kia chặn"),
         ("id_whitelist_caveat_tip", "ID do máy khách kết nối tự khai báo. Danh sách trắng giúp giảm mức độ lộ diện và không thay thế mật khẩu hay 2FA"),
         ("whitelist_cidr_tip", "Hỗ trợ ký hiệu CIDR, ví dụ 192.168.1.0/24"),
-        ("Browser didn't open?", ""),
         ("Open sign-in page", ""),
         ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
         ("Copy sign-in link", ""),
