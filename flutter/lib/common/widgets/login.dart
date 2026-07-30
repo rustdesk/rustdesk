@@ -166,6 +166,7 @@ class WidgetOP extends StatefulWidget {
 
 class _WidgetOPState extends State<WidgetOP> {
   Timer? _updateTimer;
+  bool _isAuthStatusQueryInFlight = false;
   int _authAttempt = 0;
   String _stateMsg = '';
   String _failedMsg = '';
@@ -180,8 +181,20 @@ class _WidgetOPState extends State<WidgetOP> {
   _beginQueryState(int authAttempt) {
     _updateTimer?.cancel();
     _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      _updateState(authAttempt);
+      unawaited(_runAuthStatusQuery(() => _updateState(authAttempt)));
     });
+  }
+
+  Future<void> _runAuthStatusQuery(Future<void> Function() query) async {
+    if (_isAuthStatusQueryInFlight) {
+      return;
+    }
+    _isAuthStatusQueryInFlight = true;
+    try {
+      await query();
+    } finally {
+      _isAuthStatusQueryInFlight = false;
+    }
   }
 
   Future<void> _launchAuthUrl(String url) async {
@@ -234,8 +247,8 @@ class _WidgetOPState extends State<WidgetOP> {
     _url = '';
   }
 
-  _updateState(int authAttempt) {
-    bind.mainAccountAuthResult().then((result) {
+  Future<void> _updateState(int authAttempt) {
+    return bind.mainAccountAuthResult().then((result) {
       if (!mounted ||
           authAttempt != _authAttempt ||
           widget.curOP.value != widget.config.op ||
