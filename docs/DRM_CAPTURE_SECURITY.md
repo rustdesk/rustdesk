@@ -115,6 +115,34 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
   rather than fail. The conversion then happens in the service, on the device it
   already has open, so it is correct by construction. Hosts with a single render
   node have nothing to pick wrong and keep the DMA-BUF fast path.
+- **The display wake injects synthetic input from the root service.** A
+  compositor that idles long enough DISABLES a connector, leaving no scanout for
+  any backend, so on a `_drm` handshake that finds a CONNECTED display with no
+  CRTC the service emits one synthetic pointer round trip over `/dev/uinput`
+  (`+1` then `-1` on one relative axis: net-zero displacement, no button press,
+  no keys) to make the compositor re-enable it. This is deliberate input
+  injection by privileged code, so its bounds are worth stating precisely:
+  - it can only be reached through an **already-authorized** `_drm` connection
+    (same per-connection authz as every other use of the channel), so it grants
+    nothing to a local attacker that the channel itself does not;
+  - it runs in the root service because that is the only place it can:
+    `/dev/uinput` is root-only here, and a modeset of our own is not an option
+    since the compositor holds DRM master (the sysfs `dpms` attribute is
+    read-only). Session-bus routes (`org.gnome.ScreenSaver`) authenticate by
+    uid, refuse root, and are desktop-specific;
+  - the trigger is narrow — a connected-but-undriven connector, not "no
+    frames" — and connectors a wake demonstrably cannot bring back are
+    remembered by connector identity and stop triggering (the memory drops any
+    entry later seen scanning out, so it cannot wedge);
+  - it is rate limited to **one wake per 20 s process-wide** with exactly one
+    concurrent winner (compare-exchange claim), so a reconnect storm cannot
+    become an input-injection storm, and it is useless as a way to keep a
+    screen lit;
+  - the uinput device is created and destroyed around the emit — nothing
+    persists in the input stack between wakes;
+  - without `/dev/uinput` the wake is skipped and latched off. Such a session
+    was already view-only (input injection on Wayland needs uinput too), so
+    this adds no new failure mode.
 
 ## Deployment
 
