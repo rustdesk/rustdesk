@@ -178,7 +178,7 @@ pub(super) async fn ensure_inited() -> ResultType<()> {
     // IPC, so there is no PipeWire recorder to initialize here. But we still must set the uinput
     // desktop rect (check_init does this on the PipeWire path, and the DRM path skips check_init).
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available() {
+    if super::drm_capturer::is_available_cached() {
         update_uinput_resolution().await;
         return Ok(());
     }
@@ -190,7 +190,7 @@ pub(super) fn is_inited() -> Option<Message> {
         None
     } else {
         #[cfg(feature = "drm")]
-        if super::drm_capturer::is_available() {
+        if super::drm_capturer::is_available_cached() {
             return None;
         }
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
@@ -320,7 +320,7 @@ pub(super) async fn check_init() -> ResultType<()> {
 
 pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available() {
+    if super::drm_capturer::is_available_cached() {
         if let Some(displays) = super::drm_capturer::get_display_infos() {
             // DRM connector order is not the compositor's primary; resolve the real primary from
             // the compositor layout (matched by normalized connector name), not a hardcoded index 0.
@@ -351,7 +351,7 @@ pub fn clear() {
     // against STALE geometry after a monitor hotplug/rotation/scale change. Invalidate it on teardown
     // so the next session re-reads fresh geometry (lazily, on the next enumeration) and self-heals.
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available() {
+    if super::drm_capturer::is_available_cached() {
         scrap::wayland::display::clear_wayland_displays_cache();
     }
     // NOTE: intentionally do NOT reset the DRM probe cache here. `clear()` runs on every capturer
@@ -397,6 +397,11 @@ pub(super) fn get_capturer_for_display(
     // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
     // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
     // display; the other DRM outputs keep streaming over DRM.
+    // The ONE gate that keeps the probing form on purpose: this runs on the plain video thread,
+    // not an async executor, and it is the capture-build path, so a definitive verdict is worth
+    // seconds here. It is also what makes a cold cache recoverable at all -- warm_availability
+    // gives up after its attempts, so if EVERY gate were cache-only a --server that started
+    // before the root service would never see DRM again for the rest of its life.
     #[cfg(feature = "drm")]
     if super::drm_capturer::is_available() {
         match super::drm_capturer::get_capturer_info(display_idx) {
@@ -436,7 +441,7 @@ pub(super) fn get_capturer_for_display(
             // that display) and is served normally. On a pure-PipeWire host is_available() is false and
             // this guard is skipped, preserving upstream behavior exactly.
             #[cfg(feature = "drm")]
-            if super::drm_capturer::is_available() {
+            if super::drm_capturer::is_available_cached() {
                 if let Some(advertised) = super::drm_capturer::get_display_infos()
                     .and_then(|l| l.get(display_idx).cloned())
                 {

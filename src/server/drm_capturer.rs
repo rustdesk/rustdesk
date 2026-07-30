@@ -1075,10 +1075,33 @@ impl Drop for UinputRefreshGuard {
     }
 }
 
+/// Cache-only view of the same verdict: is DRM capture KNOWN to be available right now. Never probes,
+/// never blocks, never expires a stale negative -- one mutex read.
+///
+/// This is the form the routing gates must use. `is_available()` below can run the blocking
+/// `query_displays()` inline whenever the state is `Unknown` (a cold start, or a `NEGATIVE_TTL`
+/// expiry mid-session), which is seconds of IPC. Paying that inside `wayland::clear()`,
+/// `is_inited()`, the display enumeration or `get_displays_and_primary()` is exactly the stall
+/// `wayland.rs`'s own NOTE says must never happen there: it blocks the executor long enough to trip
+/// "deadline has elapsed" and spiral into a video-service restart loop. The comment was right and the
+/// code used the probing accessor anyway.
+///
+/// The distinction is safe because these are ROUTING decisions, not capability decisions: with the
+/// cache cold they answer "not DRM" and the caller takes the PipeWire path it would have taken
+/// anyway, and `warm_availability` seeds the cache at `--server` start so a genuine DRM host answers
+/// true from the first connection. Only the capture-build path (`get_capturer_info`) still uses the
+/// probing form, where paying for a definitive answer is the entire point.
+pub(super) fn is_available_cached() -> bool {
+    matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
+}
+
 /// Whether the root service offers DRM/KMS capture. The positive result and a definitive negative
 /// (connected, but no displays) are cached; a transient probe error stays `Unknown` for a few
 /// retries. Normally the cache is warmed at `--server` startup (`warm_availability`), so the first
 /// client connection hits the fast `Available` path.
+///
+/// MAY BLOCK for seconds (see `is_available_cached`). Use it only where a definitive verdict is worth
+/// that, never as a routing gate.
 pub(super) fn is_available() -> bool {
     // Fast path under the lock: read the cached verdict, expiring a stale negative so a host that had
     // no displays at probe time can still enable DRM once displays appear (without a --server
