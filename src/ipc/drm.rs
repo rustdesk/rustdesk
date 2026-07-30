@@ -218,14 +218,22 @@ static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic:
 
 /// Snapshot a reader's enumerated displays as the IPC `DrmDisplayInfo` form. `displays()` lists all
 /// device outputs regardless of the reader's target CRTC, so a capture reader can refresh the cache.
+/// Returns the displays this reader can serve, plus the identity (`device:connector`) of every
+/// CONNECTED output dropped for having no CRTC. The identities are RETURNED rather than accumulated
+/// in a static: several handshakes enumerate concurrently (a multi-monitor client opens one `_drm`
+/// connection per display), and a shared counter meant their looks at the hardware added together --
+/// observed as "2 connected display(s) had no CRTC" on a machine with exactly one. They are
+/// identities rather than a count so the wake bookkeeping can reason about WHICH output stayed dark
+/// (see DRM_WAKE_HOPELESS), not merely how many.
 fn drm_displays_from_reader(
     reader: &mut scrap::drm_reader::DrmReader,
     device: &str,
-) -> Vec<DrmDisplayInfo> {
+) -> (Vec<DrmDisplayInfo>, Vec<String>) {
     // Every display this reader enumerates belongs to the reader's device, so they
     // all share its render node. Resolved once here rather than per display.
     let render_node = reader.render_node().unwrap_or_default();
-    reader
+    let mut undriven = Vec::new();
+    let displays: Vec<DrmDisplayInfo> = reader
         .displays()
         .into_iter()
         // Only offer outputs actually bound to a CRTC (i.e. scanning out). A
@@ -238,7 +246,17 @@ fn drm_displays_from_reader(
         // `src rect > dst rect`), which failed every frame and drove a ~1/sec
         // capturer restart loop (the flap that leaked EGL contexts to OOM). Drop
         // these here so they are never offered; the client keeps its real monitors.
-        .filter(|d| d.active && d.crtc_id != 0)
+        .filter(|d| {
+            if !d.active || d.crtc_id == 0 {
+                // Also the signal that a display EXISTS but is not being driven, which is what an
+                // idle compositor leaves behind when it disables an output. Recorded so the
+                // handshake can tell "this host has no monitors" apart from "this host has a
+                // monitor that is switched off", which look identical once they are filtered out.
+                undriven.push(format!("{device}:{name}", name = d.name));
+                return false;
+            }
+            true
+        })
         .map(|d| DrmDisplayInfo {
             name: d.name,
             crtc_id: d.crtc_id,
@@ -250,7 +268,8 @@ fn drm_displays_from_reader(
             render_node: render_node.clone(),
             device: device.to_owned(),
         })
-        .collect()
+        .collect();
+    (displays, undriven)
 }
 
 /// Enumerate the active displays of EVERY DRM device, so a multi-GPU host advertises
@@ -260,7 +279,11 @@ fn drm_displays_from_reader(
 /// auto-detected device when libdrmtap cannot enumerate (a pre-0.4.15 `.so`) or found
 /// nothing to open -- in which case `device` is left empty and capture reopens with
 /// auto-detect, exactly the previous behaviour.
-fn drm_enumerate_all_displays() -> Vec<DrmDisplayInfo> {
+/// Every active display of every DRM device, plus the identities of the CONNECTED outputs currently
+/// NOT being driven. Both come from the SAME look at the hardware, which is the point: the two were
+/// once a list and a separate static, and a handshake could act on a count that belonged to somebody
+/// else's enumeration.
+fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
     if let Some(devices) = scrap::drm_reader::list_devices() {
         if devices.len() > 1 {
             log::info!(
@@ -279,33 +302,348 @@ fn drm_enumerate_all_displays() -> Vec<DrmDisplayInfo> {
             );
         }
         let mut all = Vec::new();
+        let mut undriven_total = Vec::new();
+        let mut any_opened = false;
         for dev in devices {
-            // Skip a card with no active CRTC (a compute/offload GPU, or one whose
-            // monitors are all off): opening it and enumerating would add nothing.
-            if dev.display_count == 0 {
-                continue;
-            }
+            // A card with no active CRTC used to be SKIPPED here, on the grounds that opening it and
+            // enumerating "would add nothing". That was true while the only question was which
+            // displays can be captured. It is false now: a card whose monitors are all off is exactly
+            // where a display sits that could be captured if the compositor switched it back on, and
+            // drm_displays_from_reader records those and RETURNS them, so the handshake can
+            // wake them. Skipping the card meant they were never seen and the wake never fired, which
+            // is how an Apple T2 handed a client its Touch Bar strip while the 2880x1800 panel sat
+            // disabled next to it.
+            //
+            // Opening such a card is fine and was measured: the context opens, list_displays reports
+            // the connector as `crtc=0 (inactive)`, and only a GRAB would fail with "no active CRTC".
+            // It contributes zero entries to the list, exactly as before -- the only difference is
+            // that we now know it is there. The cost is one device open per idle card per
+            // enumeration, which happens off the capture path.
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
-                all.append(&mut drm_displays_from_reader(&mut r, &dev.path));
+                any_opened = true;
+                let (mut got, mut undriven) = drm_displays_from_reader(&mut r, &dev.path);
+                all.append(&mut got);
+                undriven_total.append(&mut undriven);
+            } else if dev.display_count == 0 {
+                log::debug!(
+                    "drm: {} has no active display and did not open; cannot tell whether it has a \
+                     connected output that is merely switched off",
+                    dev.path
+                );
             }
         }
-        if !all.is_empty() {
-            return all;
+        // Answer from the per-device enumeration whenever ANY card opened -- including when the
+        // active list is EMPTY. "Every connected output is idle-disabled" is exactly the state the
+        // wake exists for, and it used to fall through to the auto-detect path below, which
+        // enumerates the same connectors under `device = ""`. That re-keying is not cosmetic: the
+        // undriven identities feed DRM_WAKE_HOPELESS, and an entry latched under the fallback key
+        // (":eDP-1") could never be refuted by an enumeration that sees the panel driven, because a
+        // driven panel makes this list non-empty and its identity is then "/dev/dri/cardN:eDP-1" --
+        // a permanent latch on any single-GPU host whose only panel idles, i.e. the most common
+        // machine there is. (The fall-through also silently threw undriven_total away.) The
+        // auto-detect fallback below now runs only when NO card opened (no rights, or a
+        // pre-0.4.15 .so without list_devices), regimes in which every enumeration consistently
+        // uses the "" key, so identities still match each other.
+        if any_opened {
+            return (all, undriven_total);
         }
-        // list_devices worked but nothing opened/enumerated (e.g. no rights on any
-        // card): fall through to the single auto-detected device rather than return
-        // an empty list that would read as "no displays".
     }
     match scrap::drm_reader::DrmReader::open(None, 0) {
         Some(mut r) => drm_displays_from_reader(&mut r, ""),
-        None => Vec::new(),
+        None => (Vec::new(), Vec::new()),
     }
 }
 
-/// True once DRM_DISPLAY_CACHE has been populated at least once, so an EMPTY cache can be told apart
-/// from an unwarmed one: a warmed-but-empty cache (all monitors off) is served directly, while an
-/// unwarmed cache triggers a synchronous enumeration.
-static DRM_CACHE_WARMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Connector identities (`device:connector`) a wake was already tried on and did NOT bring back:
+/// whatever is still undriven when a fired wake's recheck window closes lands here, and later
+/// handshakes no longer count those connectors as a reason to wake (or to wait). A connected
+/// connector the compositor will never drive -- a dummy HDMI plug, a lid-closed docked laptop's
+/// eDP, a monitor the user disabled in display settings -- would otherwise invite a wake plus a
+/// full recheck wait on every connection, forever, for a display that is never coming.
+///
+/// The set is SELF-REFUTING, which is what makes it safe where a single global latch was not: an
+/// entry that a later enumeration sees DRIVEN is removed (drm_wakeable_undriven), because a lit
+/// panel is direct proof the "never coming" verdict was wrong -- a modeset that outran the recheck
+/// deadline, or a lid that opened. One slow wake therefore costs one stale entry until that panel
+/// is next seen alight, not the whole feature for the rest of the service's life. And because the
+/// latch is per-connector, a permanently dark connector cannot suppress the wake for a DIFFERENT
+/// panel that idles later, which a global flag deterministically did (latched by the dock's closed
+/// lid, it would have refused to wake the real monitor).
+///
+/// A Vec, not a HashSet, for const init; it holds at most a handful of entries.
+static DRM_WAKE_HOPELESS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// The undriven connectors still worth waking: `undriven` minus the hopeless set. Also where the
+/// hopeless set is REFUTED: any entry the current enumeration shows driven is removed, so the latch
+/// heals itself the moment reality disproves it.
+fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Vec<String> {
+    let mut hopeless = DRM_WAKE_HOPELESS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !hopeless.is_empty() {
+        hopeless.retain(|id| {
+            let driven_now = displays
+                .iter()
+                .any(|d| format!("{}:{}", d.device, d.name) == *id);
+            if driven_now {
+                log::info!("drm: {id} is scanning out after all; treating it as wakeable again");
+            }
+            !driven_now
+        });
+    }
+    undriven
+        .iter()
+        .filter(|id| !hopeless.iter().any(|h| h == *id))
+        .cloned()
+        .collect()
+}
+
+/// Last time a display wake was emitted, as seconds since the service started, so a reconnect storm
+/// cannot turn into an input-injection storm. 0 = never.
+static DRM_LAST_WAKE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Set once /dev/uinput has been found unusable, so the diagnosis is logged once instead of per
+/// connection. A host without uinput cannot inject input at all on Wayland (there is no XTEST), so a
+/// failure here means the session was already view-only -- it is not a new failure mode.
+static DRM_WAKE_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Minimum gap between two wakes. Long enough that a client reconnecting in a loop cannot flood the
+/// compositor with synthetic activity, short enough to be useless as a way to keep a screen lit.
+const DRM_WAKE_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(20);
+/// How long to let udev bind a freshly created uinput device before writing to it. Measured, not
+/// guessed: see drm_wake_displays.
+const DRM_WAKE_DEVICE_SETTLE: std::time::Duration = std::time::Duration::from_millis(400);
+/// How long to keep re-enumerating after a wake before giving up on the outputs coming back. A
+/// modeset is asynchronous: the compositor has to see the input, decide to un-idle, and commit.
+const DRM_WAKE_RECHECK_TOTAL: std::time::Duration = std::time::Duration::from_secs(3);
+/// How long after a wake its outcome may still be developing: the device-bind pause, the emits, the
+/// full recheck, plus slack for the enumerations in between. A handshake that was rate-limited away
+/// from waking looks at this to decide whether the recent wake is still in flight (then it waits for
+/// the outcome like the winner does) or is old news (then the current state IS the settled state).
+const DRM_WAKE_SETTLE_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Seconds since the service started, on a monotonic clock. This is the clock the wake rate limiter
+/// stores in DRM_LAST_WAKE; SystemTime would let a clock step re-open the gate.
+fn drm_wake_clock_secs() -> u64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs()
+}
+
+/// Ask the compositor to bring its outputs back, by looking like user activity for one pixel.
+///
+/// A compositor that has been idle long enough does not merely blank the panel: it DISABLES the
+/// connector, i.e. commits a modeset that leaves it with no CRTC. At that point there is no scanout
+/// anywhere, so there is nothing for ANY capture backend to read -- not this one, not PipeWire, not
+/// X11. The image does not exist rather than being unreadable. (X11 does not have this problem for a
+/// different reason: its root window is a software surface the X server keeps regardless of what the
+/// physical output is doing.)
+///
+/// Measured on an Apple T2 MacBook whose greeter had idled: `card2-eDP-1 dpms=Off enabled=disabled`
+/// and zero active displays enumerated on that card; one synthetic relative move restored
+/// `dpms=On enabled=enabled` with a full 2880x1800 scanout, and capture then worked.
+///
+/// A relative +1/-1 round trip is deliberate: it nets ZERO displacement, so the pointer does not
+/// actually move, and it needs no knowledge of the desktop rect (an absolute device would have to
+/// invent a coordinate). The device is created and destroyed around the emit rather than kept alive,
+/// so nothing persists in the input stack between wakes.
+///
+/// Two alternatives were measured and rejected. The connector `dpms` attribute in sysfs is read-only,
+/// and a modeset of our own would need DRM master, which the compositor holds. A third,
+/// `org.gnome.ScreenSaver.SetActive(false)`, does work and does NOT fake input -- but the session bus
+/// authenticates by uid and refuses root even though the socket is world-writable, so the root
+/// service would have to drop privilege to the session user, and the interface is GNOME-specific.
+/// uinput is the only route that works from where this code already runs, on any desktop.
+///
+/// Returns true when a wake was actually emitted.
+fn drm_wake_displays(reason: &str) -> bool {
+    use std::sync::atomic::Ordering;
+
+    if DRM_WAKE_UNAVAILABLE.load(Ordering::Relaxed) {
+        return false;
+    }
+    // Rate limit on the shared monotonic clock (see drm_wake_clock_secs).
+    let now = drm_wake_clock_secs();
+    // CLAIM the slot before emitting, not after. A multi-monitor client opens one `_drm` connection per
+    // captured display, so several handshakes run concurrently and a check-then-emit lets all of them
+    // through: two wakes were observed in the SAME millisecond. compare_exchange makes exactly one
+    // winner, and the losers log at debug and move on -- the winner's wake serves them all.
+    loop {
+        let last = DRM_LAST_WAKE.load(Ordering::Acquire);
+        if last != 0 && now.saturating_sub(last) < DRM_WAKE_MIN_GAP.as_secs() {
+            log::debug!(
+                "drm: not waking displays ({reason}): a wake {}s ago is still recent",
+                now.saturating_sub(last)
+            );
+            return false;
+        }
+        if DRM_LAST_WAKE
+            .compare_exchange(last, now.max(1), Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            break;
+        }
+        // Another thread claimed it between our load and our exchange; re-read and let the rate-limit
+        // branch above turn us away.
+    }
+
+    // It has to look like a MOUSE, not merely like something that emits a relative axis. libinput
+    // classifies devices before it will treat their events as pointer activity, and a device with a
+    // single relative axis and no buttons does not qualify: it is ignored outright, so the events go
+    // nowhere and the compositor never un-idles. Measured three ways on the same machine in the same
+    // state -- REL_X + REL_Y + BTN_LEFT woke the panel, REL_X alone did not, and neither did REL_X
+    // with the settle removed. Declaring both axes and a button is the part that makes it real.
+    let mut axes = evdev::AttributeSet::<evdev::RelativeAxisType>::new();
+    axes.insert(evdev::RelativeAxisType::REL_X);
+    axes.insert(evdev::RelativeAxisType::REL_Y);
+    let mut keys = evdev::AttributeSet::<evdev::Key>::new();
+    keys.insert(evdev::Key::BTN_LEFT);
+    let built = evdev::uinput::VirtualDeviceBuilder::new()
+        .and_then(|b| b.name("RustDesk DRM display wake").with_relative_axes(&axes))
+        .and_then(|b| b.with_keys(&keys))
+        .and_then(|b| b.build());
+    let mut dev = match built {
+        Ok(d) => d,
+        Err(err) => {
+            // Sticky: without /dev/uinput this can never succeed, and retrying it per connection
+            // would log the same failure forever.
+            DRM_WAKE_UNAVAILABLE.store(true, Ordering::Relaxed);
+            log::warn!(
+                "drm: cannot wake displays ({reason}): no uinput device ({err}). A compositor that                  disabled its outputs will keep them disabled, so there is no scanout to capture                  until something else generates input. Note input injection needs uinput too, so                  this session cannot control the host either."
+            );
+            return false;
+        }
+    };
+
+    // A FRESH uinput device is not listening yet: udev has to notice it and the compositor's input
+    // stack has to open it, and until that happens the events are written to a device nobody reads and
+    // are simply lost. Measured on the same machine in the same state, back to back: with this pause
+    // the panel went `disabled -> enabled`, without it `disabled -> disabled`. This is the entire
+    // difference between the wake working and silently doing nothing, so it is not a "give it a
+    // moment" superstition -- it is the binding window.
+    std::thread::sleep(DRM_WAKE_DEVICE_SETTLE);
+
+    // +1 then -1 on the same axis: activity without displacement. evdev's emit() appends the
+    // SYN_REPORT itself, so each call is a complete packet.
+    let step = |v: i32| {
+        evdev::InputEvent::new(
+            evdev::EventType::RELATIVE,
+            evdev::RelativeAxisType::REL_X.0,
+            v,
+        )
+    };
+    let ok = dev.emit(&[step(1)]).and_then(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        dev.emit(&[step(-1)])
+    });
+    if let Err(err) = ok {
+        log::warn!("drm: display wake ({reason}) failed to emit: {err}");
+        return false;
+    }
+    log::info!("drm: no display was scanning out ({reason}); asked the compositor to wake up");
+    true
+}
+
+/// One enumeration a handshake can answer with: enumerate, wake sleeping displays if that could
+/// help, and WAIT for the outcome before returning. The wait is the load-bearing part, and it
+/// applies to every handshake that saw a connected-but-undriven display -- not only the one whose
+/// wake attempt won the rate limit. The losers used to return immediately with the pre-wake list,
+/// which is exactly the intermediate state the winner was waiting out: with one `_drm` connection
+/// per captured display plus the consumer's availability refresher, a wake in flight had its
+/// half-done topology served to whichever consumer asked at the wrong moment, and the client ended
+/// up with duplicate, misindexed monitors. Every caller of this function gets the settled truth or
+/// a bounded timeout -- never the transition.
+///
+/// A compositor that has idled long enough DISABLES its outputs, and a disabled output has no
+/// scanout for anything to read -- not this backend, not PipeWire, not X11. The trigger is "a
+/// connected display is not being driven", NOT "no display at all": on a laptop with a second DRM
+/// card (an Apple T2's Touch Bar strip) the list is never empty, so an emptiness check never fires
+/// and the client would be handed whatever is still scanning out. libdrmtap does report the idle
+/// panel (`crtc=0 (inactive)`); it is our own active-CRTC filter that drops it, so the count of
+/// what was dropped is exactly the right signal.
+fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
+    use std::sync::atomic::Ordering;
+
+    let (displays, undriven) = drm_enumerate_all_displays();
+    let wakeable = drm_wakeable_undriven(&displays, &undriven);
+    if wakeable.is_empty() {
+        return displays;
+    }
+    let fired = drm_wake_displays(&format!(
+        "{reason} and {n} connected display(s) had no CRTC",
+        n = wakeable.len()
+    ));
+    if !fired {
+        if DRM_WAKE_UNAVAILABLE.load(Ordering::Relaxed) {
+            // No uinput on this host: nothing will ever wake these displays, so the pre-wake list
+            // is not "pre" anything -- it is the state of the world.
+            return displays;
+        }
+        // Rate-limited: somebody woke recently. If that wake may still be developing, wait for its
+        // outcome below, exactly like the winner. If it is old news (the panel re-idled inside
+        // DRM_WAKE_MIN_GAP, or the winner's recheck expired long ago), what we enumerated IS the
+        // settled state and waiting would just tax this handshake for nothing.
+        let last = DRM_LAST_WAKE.load(Ordering::Acquire);
+        if last == 0
+            || drm_wake_clock_secs().saturating_sub(last) > DRM_WAKE_SETTLE_WINDOW.as_secs()
+        {
+            return displays;
+        }
+    }
+    // Poll for the outcome rather than looking once at a fixed delay: the wake is asynchronous on
+    // the compositor side, and a single re-enumeration is a bet on how long a modeset takes. Two
+    // exits: nothing WAKEABLE is left undriven (connectors already latched hopeless do not hold
+    // the answer hostage -- on a host with a dummy plug next to a real panel, the poll ends when
+    // the panel lights, because the plug stopped counting after its first failed wake), or the
+    // deadline (the wake failed, or the winner's did and we were waiting on it).
+    let before_len = displays.len();
+    let deadline = std::time::Instant::now() + DRM_WAKE_RECHECK_TOTAL;
+    let mut cur = displays;
+    let mut cur_wakeable = wakeable;
+    while !cur_wakeable.is_empty() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let (next, next_undriven) = drm_enumerate_all_displays();
+        cur_wakeable = drm_wakeable_undriven(&next, &next_undriven);
+        cur = next;
+    }
+    if cur.len() > before_len {
+        log::info!(
+            "drm: {} display(s) came back after the wake ({} -> {}{})",
+            cur.len() - before_len,
+            before_len,
+            cur.len(),
+            if cur_wakeable.is_empty() {
+                String::new()
+            } else {
+                format!(", {} still undriven", cur_wakeable.len())
+            }
+        );
+        // Publish through the single cache writer so the topology push and the udev listener's
+        // cache converge on the woken state without another consumer having to repeat the wake.
+        schedule_drm_cache_refresh();
+    }
+    if fired && !cur_wakeable.is_empty() {
+        // Whatever OUR OWN wake could not bring back inside its window is latched hopeless, so the
+        // next connection neither wakes for it nor waits on it. Only the handshake that fired
+        // latches (a loser timing out says nothing: its baseline was taken mid-transition), and
+        // the latch is per-connector and self-refuting -- see DRM_WAKE_HOPELESS for why both of
+        // those properties are load-bearing.
+        let mut hopeless = DRM_WAKE_HOPELESS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        for id in &cur_wakeable {
+            if !hopeless.iter().any(|h| h == id) {
+                hopeless.push(id.clone());
+            }
+        }
+        log::info!(
+            "drm: the wake did not bring back {list}; not asking again for {these} until {it_is} \
+             seen scanning out",
+            list = cur_wakeable.join(", "),
+            these = if cur_wakeable.len() == 1 { "it" } else { "them" },
+            it_is = if cur_wakeable.len() == 1 { "it is" } else { "they are" },
+        );
+    }
+    cur
+}
 
 /// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION): enumerate every card, diff
 /// against the cache, and on a real change swap it and bump the generation so live consumers get the
@@ -358,10 +696,14 @@ fn schedule_drm_cache_refresh() {
             PENDING.store(false, Ordering::Release);
             // Panic-safety, two layers: enumeration panics are caught here so a flaky driver does
             // not lose the refresh; anything else that unwinds is covered by `slot`'s Drop.
-            let fresh = std::panic::catch_unwind(drm_enumerate_all_displays).unwrap_or_else(|_| {
-                log::error!("drm: display enumeration panicked; treating as no displays");
-                Vec::new()
-            });
+            // Only the LIST matters to the cache: the undriven identities belong to the moment they
+            // were taken, and caching them is exactly the desynchronisation this refactor removed.
+            let fresh = std::panic::catch_unwind(drm_enumerate_all_displays)
+                .unwrap_or_else(|_| {
+                    log::error!("drm: display enumeration panicked; treating as no displays");
+                    (Vec::new(), Vec::new())
+                })
+                .0;
             let changed = {
                 let mut cache = match DRM_DISPLAY_CACHE.lock() {
                     Ok(g) => g,
@@ -374,7 +716,6 @@ fn schedule_drm_cache_refresh() {
                     false
                 }
             };
-            DRM_CACHE_WARMED.store(true, Ordering::Release);
             if changed {
                 DRM_DISPLAY_GENERATION.fetch_add(1, Ordering::Release);
                 log::info!("drm: display cache refreshed (topology changed)");
@@ -742,9 +1083,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_gate = frames_gated.clone();
     std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate));
 
-    // Handshake: the worker sends the display list (from the pre-warmed cache, or a throwaway
-    // enumeration open if the cache is empty). A closed channel (no Displays) means the reader was
-    // unavailable, so let the client fall back.
+    // Handshake: the worker sends the display list -- a fresh, settled enumeration
+    // (drm_enumerate_settled), possibly held back while a display wake completes. A closed channel
+    // (no Displays) means the reader was unavailable, so let the client fall back.
     let displays = match frame_rx.recv().await {
         Some(DrmProducerMsg::Displays(d)) => d,
         _ => {
@@ -1014,18 +1355,27 @@ fn drm_capture_worker(
 
     let t_conn = std::time::Instant::now();
 
-    // Send the display list. Serve the cache once it has been warmed at least once -- INCLUDING when
-    // it is empty (all monitors off), which is a real state, not "not ready". Only an unwarmed cache
-    // (a connection racing the pre-warm) triggers a synchronous per-connection enumeration.
-    let displays = if DRM_CACHE_WARMED.load(Ordering::Acquire) {
-        // Poison-recovery for the same reason as the topology push above.
-        DRM_DISPLAY_CACHE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
-    } else {
-        drm_enumerate_all_displays()
-    };
+    // Enumerate FRESH here rather than serving the warm cache, wake anything sleeping, and answer
+    // only once the topology has settled (drm_enumerate_settled). The cache exists to keep this
+    // handshake fast, and it cost us correctness twice over:
+    //
+    //  - It can offer a display that is no longer being driven. A cache published while the panel was
+    //    awake still lists it after the compositor disables it; the consumer picks it, the capture
+    //    reader OPENS (opening tolerates an inactive CRTC) and then never produces a frame, and the
+    //    client sits on "waiting for image" -- the exact symptom this backend was built to remove.
+    //  - The wake decision reads a count of connected-but-undriven displays, and when the list came
+    //    from the cache that count belonged to some OTHER enumeration. Two things that must agree were
+    //    never synchronised, so the wake did not fire on a stale-cache connection.
+    //
+    // The saving was small and measured: the whole prewarm, which is this work plus priming the export
+    // path, runs in 1.4-16 ms. Paying it per connection to always tell the client the truth is the
+    // right trade. The cache still serves the topology-change push and the udev listener.
+    //
+    // Holding the answer back while the wake settles is deliberate, and the consumer's list-read
+    // timeout is sized for it (drm_capturer's DISPLAY_LIST_TIMEOUT_MS): one stable truth per
+    // handshake beats a fast answer that changes seconds later, because the consumer publishes this
+    // list to the client at login and every revision after that walks the hotplug path.
+    let displays = drm_enumerate_settled("a consumer connected");
     // Send even an empty list: the consumer treats "0 displays" as Unavailable and falls back
     // promptly, rather than waiting out repeated probe failures.
     if frame_tx
@@ -1054,19 +1404,17 @@ fn drm_capture_worker(
                 "drm: failed to open crtc {target_crtc} on {}; closing _drm connection",
                 if target_device.is_empty() { "auto" } else { &target_device }
             );
-            // The cached display list handed out a CRTC that no longer opens (a hotplug/modeset
-            // likely invalidated it). Mark the cache unwarmed so the next connection re-enumerates
-            // synchronously from the live device instead of serving the same stale, unopenable CRTC
-            // on every reconnect; also kick an async refresh so the cache converges even without a
-            // new connection.
-            DRM_CACHE_WARMED.store(false, Ordering::Release);
+            // The display list handed out a CRTC that no longer opens (a hotplug/modeset likely
+            // invalidated it between the handshake and here). Kick an async refresh so the cache the
+            // topology push reads converges even without a new connection. The next connection
+            // enumerates fresh regardless, so there is no stale-list flag to clear any more.
             schedule_drm_cache_refresh();
             return;
         }
     };
-    // Refresh the cache for the NEXT consumer's handshake, off this connection's first-frame path
-    // and single-flight (see schedule_drm_cache_refresh) so a reconnect storm cannot spawn unbounded
-    // enumeration threads.
+    // Refresh the cache the topology push and the udev listener read (handshakes enumerate fresh
+    // and never read it), off this connection's first-frame path and single-flight (see
+    // schedule_drm_cache_refresh) so a reconnect storm cannot spawn unbounded enumeration threads.
     schedule_drm_cache_refresh();
     log::debug!(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",

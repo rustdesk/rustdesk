@@ -321,6 +321,16 @@ pub(super) async fn check_init() -> ResultType<()> {
 pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(feature = "drm")]
     if super::drm_capturer::is_available_cached() {
+        // This function runs once per login (update_get_sync_displays_on_login is its only
+        // caller), and login is the moment the client is PROMISED a display list -- so refresh
+        // that list over a live `_drm` handshake first. The service wakes sleeping displays and
+        // answers with the settled truth, which is what makes an unattended box with an idled,
+        // DISABLED panel connectable at all: the cached list would either omit the panel (probed
+        // while asleep) or advertise a display with no scanout behind it (probed while awake), and
+        // either way the wake then firing inside the capture handshake would change the list the
+        // client had already been given. Properly async, so the executor is never blocked; on any
+        // failure the cache serves as before.
+        super::drm_capturer::refresh_displays_for_login().await;
         if let Some(displays) = super::drm_capturer::get_display_infos() {
             // DRM connector order is not the compositor's primary; resolve the real primary from
             // the compositor layout (matched by normalized connector name), not a hardcoded index 0.

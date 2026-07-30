@@ -33,17 +33,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-// Upper bound on how long the receive thread waits for the service to answer with the display list.
+// Upper bound on how long the receive thread waits for an ordinary handshake message.
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
 // How long that thread may spend connecting to `_drm` before the handshake starts.
 const DRM_CONNECT_TIMEOUT_MS: u64 = 1000;
+/// How long to wait for the display list specifically. The service may hold it back while it wakes
+/// sleeping displays and waits for the topology to settle -- uinput device bind, the emits, then up
+/// to DRM_WAKE_RECHECK_TOTAL of re-enumeration (see the DRM_WAKE_* constants in ipc/drm.rs), about
+/// 3.6s end to end. The list read must outlive that budget on top of the ordinary handshake
+/// allowance, or the wake turns into a spurious handshake timeout on exactly the host it exists
+/// for: the one whose panel was asleep when the client connected.
+const DISPLAY_LIST_TIMEOUT_MS: u64 = HANDSHAKE_TIMEOUT_MS + 4000;
 /// How long a caller waits for the receive thread to hand back the display list. It must DOMINATE
 /// what that thread is allowed to spend, or the outer timer fires first and abandons a handshake
 /// that was still inside its own budget: the thread spends up to the connect timeout, then
-/// `recv_msg_timeout2` applies HANDSHAKE_TIMEOUT_MS TWICE in the worst case (once waiting for the
-/// first byte, once for the body). Derived from those parts rather than written as a constant, so a
-/// change to either one cannot silently invert the relationship again.
-const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + HANDSHAKE_TIMEOUT_MS * 2 + 500;
+/// `recv_msg_timeout2` applies DISPLAY_LIST_TIMEOUT_MS TWICE in the worst case (once waiting for
+/// the first byte, once for the body). Derived from those parts rather than written as a constant,
+/// so a change to either one cannot silently invert the relationship again.
+const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS * 2 + 500;
 
 struct FrameSlot {
     // (width, height, pixel format, packed pixels) of the newest frame not yet consumed by
@@ -113,13 +120,13 @@ fn connector_key(d: &DrmDisplayInfo) -> String {
     format!("{}:{}", d.device, d.name)
 }
 
-/// Resolve a list index to that identity against the currently advertised topology. `None` when no
-/// list is available or the index is out of range; callers then simply do not consult the per-display
-/// memory, which costs one retry rather than applying someone else's verdict.
-/// Takes DRM_STATE, so never call it while holding one of the maps below.
-fn connector_key_of(display: i32) -> Option<String> {
+/// The advertised display at a list index, cloned out of DRM_STATE -- the monitor the client MEANS
+/// when it names that index. `None` when no list is available or the index is out of range; callers
+/// then simply do not consult the per-display memory, which costs one retry rather than applying
+/// someone else's verdict. Takes DRM_STATE, so never call it while holding one of the maps below.
+fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
     match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(_, list) => list.get(display.max(0) as usize).map(connector_key),
+        ProbeState::Available(_, list) => list.get(display.max(0) as usize).cloned(),
         _ => None,
     }
 }
@@ -291,10 +298,24 @@ static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::A
 
 impl IpcDrmCapturer {
     /// Connect to the service `_drm` channel, complete the handshake (receive the display list, then
-    /// request `display`), and start streaming on a background thread. Returns the capturer plus the
-    /// enumerated displays so the caller can populate `display_service`. `Err` if the service has no
-    /// DRM capture available or the handshake fails — the caller then falls back to PipeWire/portal.
-    pub fn new(display: i32) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>)> {
+    /// request the display), and start streaming on a background thread. Returns the capturer plus
+    /// the enumerated displays so the caller can populate `display_service`. `Err` if the service has
+    /// no DRM capture available or the handshake fails — the caller then falls back to PipeWire/portal.
+    ///
+    /// `expected` is the monitor the client actually MEANS by `display` (the entry at that index in
+    /// the list the client chose from). The service resolves the index it receives against ITS OWN
+    /// fresh enumeration, and the two lists can disagree whenever the topology moved between the
+    /// login list and this handshake (a woken panel inserting itself ahead of the Touch Bar is the
+    /// measured case) -- so the receive thread re-resolves `expected` by connector identity in the
+    /// handshake list and requests THAT index, or fails the build cleanly when the monitor is gone,
+    /// instead of silently streaming whichever monitor now occupies the number.
+    /// Returns the capturer, the handshake display list, and the index WITHIN THAT LIST that the
+    /// stream was actually bound to (the identity-resolved one) -- geometry read out of the
+    /// handshake list must use that index, never the client's.
+    pub fn new(
+        display: i32,
+        expected: Option<DrmDisplayInfo>,
+    ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize)> {
         let shared = Arc::new(Shared {
             slot: Mutex::new(FrameSlot {
                 latest: None,
@@ -304,13 +325,13 @@ impl IpcDrmCapturer {
             cv: Condvar::new(),
         });
         let stop = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = std::sync::mpsc::channel::<ResultType<Vec<DrmDisplayInfo>>>();
+        let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
         {
             let shared = shared.clone();
             let stop = stop.clone();
-            std::thread::spawn(move || recv_thread(display, shared, stop, tx));
+            std::thread::spawn(move || recv_thread(display, expected, shared, stop, tx));
         }
-        let displays = match rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS)) {
+        let (displays, wire_idx) = match rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS)) {
             Ok(res) => res?,
             Err(_) => {
                 // The recv thread still has its own connect/handshake budget. If we just returned,
@@ -326,9 +347,12 @@ impl IpcDrmCapturer {
                 shared,
                 stop,
                 display,
-                connector: displays.get(display.max(0) as usize).map(connector_key),
+                // Identity and geometry come from the entry actually REQUESTED (the identity-resolved
+                // index in the handshake list), not from `display`, whose meaning belongs to the
+                // client's list.
+                connector: displays.get(wire_idx).map(connector_key),
                 session_size: displays
-                    .get(display.max(0) as usize)
+                    .get(wire_idx)
                     .map(|d| (d.width as usize, d.height as usize)),
                 cur: Vec::new(),
                 cur_w: 0,
@@ -337,6 +361,7 @@ impl IpcDrmCapturer {
                 got_frame: false,
             },
             displays,
+            wire_idx,
         ))
     }
 
@@ -483,9 +508,10 @@ impl TraitCapturer for IpcDrmCapturer {
 #[tokio::main(flavor = "current_thread")]
 async fn recv_thread(
     display: i32,
+    expected: Option<DrmDisplayInfo>,
     shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
-    tx: std::sync::mpsc::Sender<ResultType<Vec<DrmDisplayInfo>>>,
+    tx: std::sync::mpsc::Sender<ResultType<(Vec<DrmDisplayInfo>, usize)>>,
 ) {
     // Unique tag for this stream's cursor entries so teardown only erases its own (see
     // remove_drm_cursor); a rebuilt stream for the same display index gets a newer epoch.
@@ -498,7 +524,7 @@ async fn recv_thread(
             return;
         }
     };
-    let displays = match conn.recv_msg_timeout2(HANDSHAKE_TIMEOUT_MS).await {
+    let displays = match conn.recv_msg_timeout2(DISPLAY_LIST_TIMEOUT_MS).await {
         Some(Ok((Data::DrmDisplayList(v), _fd))) => v,
         Some(Ok((other, _fd))) => {
             let _ = tx.send(Err(anyhow!("expected DrmDisplayList, got {:?}", other)));
@@ -513,15 +539,45 @@ async fn recv_thread(
             return;
         }
     };
+    // The index that names our monitor IN THIS CONNECTION'S LIST. The service resolves the DrmStart
+    // index against the fresh enumeration it just sent us, while `display` is an index into the list
+    // the CLIENT chose from -- and between those two lists a wake or hotplug may have inserted or
+    // removed entries (a woken 2880x1800 panel re-enters AHEAD of the Touch Bar's card order on the
+    // measured T2, so "index 0" flips from the Touch Bar to the panel). Resolve the intended monitor
+    // by connector identity in the list we were just handed and request THAT index. If the monitor is
+    // gone from the handshake list entirely, fail the build: streaming whichever monitor now holds
+    // the number would put the wrong pixels under the client's geometry and route its input by the
+    // wrong rect, which is precisely the class of bug the login-time settle exists to end.
+    let wire_idx = match &expected {
+        Some(e) => {
+            match displays
+                .iter()
+                .position(|d| d.device == e.device && d.name == e.name)
+            {
+                Some(i) => i,
+                None => {
+                    let _ = tx.send(Err(anyhow!(
+                        "display {display} ({}) is no longer in the service's list; \
+                         the video service will rebuild against the fresh topology",
+                        e.name
+                    )));
+                    return;
+                }
+            }
+        }
+        // No identity to hold the service to (a caller without a cached list); the raw index is
+        // all there is, exactly the pre-identity behaviour.
+        None => display.max(0) as usize,
+    };
     // The service binds this stream to (device, crtc_id) at DrmStart, which survives a topology change.
     // Everything on this side is addressed by LIST INDEX, which does not: drm_enumerate_all_displays
     // concatenates per-card lists, so plugging or unplugging a monitor renumbers them. Record what this
     // stream was actually bound to, so a renumbering can be detected on the next hotplug instead of the
     // client being shown, and having its clicks mapped to, whichever monitor now occupies this index.
     let bound_to = displays
-        .get(display.max(0) as usize)
+        .get(wire_idx)
         .map(|d| (d.device.clone(), d.crtc_id));
-    let our_key = displays.get(display.max(0) as usize).map(connector_key);
+    let our_key = displays.get(wire_idx).map(connector_key);
     // Open the unprivileged render-node convert context ONCE, on THIS thread, before we answer the
     // display list with DrmStart; it is dropped on this same thread when the loop exits (its EGL
     // state + import-once cache are thread-local). `None` means no usable render node (a locked-down
@@ -540,7 +596,7 @@ async fn recv_thread(
     // the ambiguity check below. Every display of one device carries the same node, so a display
     // index that does not resolve still gets the right answer from the first entry.
     let render_node = displays
-        .get(display.max(0) as usize)
+        .get(wire_idx)
         .or_else(|| displays.first())
         .map(|d| d.render_node.clone())
         .unwrap_or_default();
@@ -577,13 +633,19 @@ async fn recv_thread(
         );
     }
     if let Err(err) = conn
-        .send_msg(&Data::DrmStart { display, need_cpu }, None)
+        .send_msg(
+            &Data::DrmStart {
+                display: wire_idx as i32,
+                need_cpu,
+            },
+            None,
+        )
         .await
     {
         let _ = tx.send(Err(err));
         return;
     }
-    let _ = tx.send(Ok(displays));
+    let _ = tx.send(Ok((displays, wire_idx)));
 
     // Stream until stopped or the connection ends. Poll the header read with a short timeout (rather
     // than blocking indefinitely) so a dropped capturer re-checks `stop` and tears down promptly even
@@ -947,11 +1009,12 @@ pub fn drm_cursor() -> Option<DrmCursorData> {
 // Server capture-path integration (the parallel, gated DRM path)
 //
 // The `--server` selects DRM/KMS capture over PipeWire when the root service offers the `_drm`
-// channel. Availability + the display list are probed once and cached: the `_drm` listener now
-// serves consumers concurrently (one connection per captured display), but re-probing on every
-// enumeration still churns connections needlessly and briefly tripped a restart loop in testing, so
-// the result is cached durably. The cache is seeded before capture starts (display enumeration) and
-// by the capturer handshake, and only reset by `clear()` on teardown.
+// channel. Availability + the display list are probed and cached: the `_drm` listener serves
+// consumers concurrently (one connection per captured display), but re-probing on every
+// enumeration would churn connections needlessly and briefly tripped a restart loop in testing, so
+// the result is cached durably. The cache is written only by ordered, fresh-by-construction
+// sources: the startup warm, the login refresh, the DrmDisplaysChanged push, and the TTL
+// refresher. The capture handshake deliberately does NOT write it (see get_capturer_info).
 // ---------------------------------------------------------------------------
 
 enum ProbeState {
@@ -989,8 +1052,16 @@ fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
 
 #[tokio::main(flavor = "current_thread")]
 async fn query_displays_async() -> ResultType<Vec<DrmDisplayInfo>> {
+    query_displays_inner().await
+}
+
+/// The probe itself, as a plain future so an async caller already on a runtime (the login path's
+/// `refresh_displays_for_login`) can await it directly instead of paying a thread + a nested
+/// runtime. The list read uses DISPLAY_LIST_TIMEOUT_MS because the service may hold the answer
+/// back while it wakes sleeping displays (see the constant).
+async fn query_displays_inner() -> ResultType<Vec<DrmDisplayInfo>> {
     let mut conn = connect_drm(DRM_CONNECT_TIMEOUT_MS).await?;
-    match conn.recv_msg_timeout2(HANDSHAKE_TIMEOUT_MS).await {
+    match conn.recv_msg_timeout2(DISPLAY_LIST_TIMEOUT_MS).await {
         Some(Ok((Data::DrmDisplayList(v), _fd))) => Ok(v),
         Some(Ok((other, _fd))) => Err(anyhow!("expected DrmDisplayList, got {:?}", other)),
         Some(Err(err)) => Err(err),
@@ -1236,7 +1307,21 @@ fn refresh_available_async() {
             match refresh_outcome(result.as_ref().ok().map(|l| l.len()), failures) {
                 RefreshOutcome::Publish => {
                     let fresh = result.unwrap_or_default();
+                    let changed = match &*st {
+                        ProbeState::Available(_, old) => *old != fresh,
+                        _ => true,
+                    };
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                    if changed {
+                        // The topology moved under an idle session. The compositor's logical
+                        // layout (which scrap caches process-wide) moved with it, so invalidate
+                        // that cache exactly like the hotplug push and the login refresh do --
+                        // this writer used to be the ONE list-replacing publisher that skipped it,
+                        // leaving the geometry augmentation married to stale origins until some
+                        // other writer happened to clear the cache.
+                        drop(st);
+                        scrap::wayland::display::clear_wayland_displays_cache();
+                    }
                 }
                 RefreshOutcome::Unavailable => {
                     log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
@@ -1295,6 +1380,85 @@ pub(super) fn warm_availability() {
         }
     }
     log::info!("drm: consumer cache warm found no producer at startup (will probe lazily)");
+}
+
+/// Refresh the cached display list over a live `_drm` handshake, for the one moment where a stale
+/// list does damage that lasts the whole session: login, right before the client is promised its
+/// display list. The service side wakes sleeping displays and holds its answer until the topology
+/// settles (see `drm_enumerate_settled` in ipc/drm.rs), so the list published here is the list
+/// capture will actually find. Serving the cache here instead was how a client connected to a
+/// laptop with an idle panel: the login list, the wake firing later inside the capture handshake,
+/// and the resulting topology push each told the client something different, and it ended up with
+/// duplicate, misindexed monitors all showing the Touch Bar.
+///
+/// Replaces only an `Available` verdict and only with a non-empty list; every failure mode leaves
+/// the cache alone, so a login can never get HARDER than it is today, only truer. Concurrent
+/// publishers are already ordered: the background refresher discards its result when the
+/// generation moved (see `refresh_available_async`), and a later publish through
+/// `publish_probe_state` simply wins over this one.
+pub(super) async fn refresh_displays_for_login() {
+    // Generation of the verdict this refresh is refreshing, sampled under the lock together with
+    // the Available check, for the same reason refresh_available_async does it: the probe below is
+    // slow and UNLOCKED (the service may hold the answer for seconds while a wake settles), so a
+    // hotplug push or a concurrent login can publish a NEWER list meanwhile, and publishing over it
+    // with our older probe would re-serve exactly the staleness this function exists to remove.
+    let sampled_gen = {
+        let st = DRM_STATE.lock().unwrap();
+        if !matches!(&*st, ProbeState::Available(..)) {
+            // Establishing availability is the probe path's job (warm_availability / is_available);
+            // this refresh only keeps an existing verdict truthful.
+            return;
+        }
+        DRM_STATE_GEN.load(Ordering::Acquire)
+    };
+    let t = Instant::now();
+    match query_displays_inner().await {
+        Ok(list) if !list.is_empty() => {
+            let changed = {
+                let mut st = DRM_STATE.lock().unwrap();
+                if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
+                    // Someone republished while we probed; their list is newer than ours. The
+                    // login still serves fresh data -- theirs.
+                    log::debug!(
+                        "drm: login display refresh superseded while probing; keeping the newer list"
+                    );
+                    return;
+                }
+                match &*st {
+                    ProbeState::Available(_, old) => {
+                        let changed = *old != list;
+                        log::debug!(
+                            "drm: login display refresh -> {} display(s) in {:?}{}",
+                            list.len(),
+                            t.elapsed(),
+                            if changed { " (list changed)" } else { "" }
+                        );
+                        publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                        changed
+                    }
+                    // The verdict moved while we probed (a hotplug drop to Unavailable, a GiveUp
+                    // to Unknown). That verdict is newer evidence than our list; leave it.
+                    _ => return,
+                }
+            };
+            if changed {
+                // The compositor's logical layout usually changed with the topology -- re-enabling
+                // a panel is a modeset -- and scrap caches that layout process-wide. Invalidate it
+                // so the geometry augmentation marries the fresh DRM list to fresh logical origins
+                // instead of stale ones. Same invalidation the hotplug push does; the uinput range
+                // converges through the display service's periodic refresh, as it already does.
+                scrap::wayland::display::clear_wayland_displays_cache();
+            }
+        }
+        Ok(_) => log::debug!(
+            "drm: login display refresh found no displays in {:?}; keeping the cached list",
+            t.elapsed()
+        ),
+        Err(err) => log::debug!(
+            "drm: login display refresh failed in {:?} ({err}); keeping the cached list",
+            t.elapsed()
+        ),
+    }
 }
 
 /// The cached DRM displays as protobuf `DisplayInfo`, augmented with the compositor's logical layout
@@ -1524,20 +1688,34 @@ fn display_info_from_drm(d: &DrmDisplayInfo) -> DisplayInfo {
     }
 }
 
-/// Build a `CapturerInfo` backed by a DRM-IPC capturer for `display_idx`, refreshing the cached
-/// display list from the capturer's handshake so mid-capture enumeration uses fresh geometry.
+/// Build a `CapturerInfo` backed by a DRM-IPC capturer for `display_idx`.
+///
+/// Deliberately does NOT publish the handshake list into DRM_STATE, although it used to. Freshness
+/// is already supplied by writers that are ordered and coherent -- the login refresh (every login),
+/// the DrmDisplaysChanged push (every topology change, straight to live streams), and the TTL
+/// refresher -- while THIS list is read off the wire before a possibly seconds-long stall (the
+/// health-map work and the augment's compositor roundtrip below), so publishing it here could
+/// clobber a newer settled list with pre-wake data. Worse, when `wire_idx != display_idx` the
+/// handshake list is ordered differently from the list the client's indices mean, and publishing
+/// it would make the 300ms display sync re-advertise a list in which this very session's index
+/// names a DIFFERENT monitor than the stream it is watching.
 pub(super) fn get_capturer_info(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
-    // Identity of the display being asked for, resolved ONCE and before any of the per-display maps
-    // are locked: connector_key_of takes DRM_STATE, and nesting that inside a map lock would be the
-    // one lock order this file does not otherwise have.
+    // The display being asked for, resolved ONCE out of DRM_STATE and before any of the per-display
+    // maps are locked: display_info_of takes DRM_STATE, and nesting that inside a map lock would be
+    // the one lock order this file does not otherwise have. The full entry is kept (not just its
+    // key) because the handshake below re-resolves it BY IDENTITY in the service's fresh list --
+    // the service answers each connection with its own enumeration, and an index is only meaningful
+    // against the list it came from.
     // `None` when the display list does not describe this index (not enumerated yet, or out of
-    // range). Kept as an Option rather than collapsed to "": an empty key is a REAL key in the map,
-    // so two unidentifiable displays would share one entry and one could demote the other. That is
-    // the aliasing frame() already refuses to take part in, and both blocks below skip on None for
-    // the same reason. A display with no identity simply carries no health.
-    let key = connector_key_of(display_idx as i32);
+    // range). The derived key is kept as an Option rather than collapsed to "": an empty key is a
+    // REAL key in the map, so two unidentifiable displays would share one entry and one could
+    // demote the other. That is the aliasing frame() already refuses to take part in, and both
+    // blocks below skip on None for the same reason. A display with no identity simply carries no
+    // health.
+    let expected = display_info_of(display_idx as i32);
+    let key = expected.as_ref().map(connector_key);
     // Refuse a display already demoted (repeated zero-frame sessions, or a detected flap below), so
     // the video service uses PipeWire for it instead of rebuilding onto DRM forever. Per-display, not
     // a global DRM disable.
@@ -1562,7 +1740,7 @@ pub(super) fn get_capturer_info(
     // Build the capturer FIRST. A transient `_drm` outage (e.g. the root --service restarting) makes
     // this fail, and such a failure must NOT count toward the flap threshold — it self-heals once the
     // service returns. Only a SUCCESSFUL (re)build reaches the rapid-rebuild guard below.
-    let (capturer, displays) = IpcDrmCapturer::new(display_idx as i32)?;
+    let (capturer, displays, wire_idx) = IpcDrmCapturer::new(display_idx as i32, expected)?;
     // Rapid-rebuild guard (defense-in-depth): a display whose capturer is successfully rebuilt many
     // times in a short window is flapping (delivering a first frame then failing downstream every
     // cycle, which the got_frame streak alone cannot catch). Count the cadence of successful builds
@@ -1593,18 +1771,23 @@ pub(super) fn get_capturer_info(
         }
     }
     let ndisplay = displays.len();
+    // Geometry comes from the entry the stream was actually BOUND to (wire_idx, the
+    // identity-resolved index in the handshake list). `display_idx` means "position in the list the
+    // client chose from", and between that list and this handshake a wake or hotplug can have
+    // renumbered entries -- indexing the handshake list with it would stream the right monitor
+    // under the WRONG monitor's advertised geometry, the same class of bug the identity resolution
+    // in the handshake exists to end.
     let d = displays
-        .get(display_idx)
-        .ok_or_else(|| anyhow!("drm display index {display_idx} out of range ({ndisplay})"))?
+        .get(wire_idx)
+        .ok_or_else(|| anyhow!("drm display index {wire_idx} out of range ({ndisplay})"))?
         .clone();
     // Publish the compositor's LOGICAL origin (the same augmentation get_display_infos advertises)
     // so the video service's origin matches the reported display geometry on multi-monitor / scaled
     // layouts; keep the raw physical dimensions for the capture buffer.
     let origin = augment_with_wayland_geometry(&displays)
-        .get(display_idx)
+        .get(wire_idx)
         .map(|di| (di.x, di.y))
         .unwrap_or((d.x, d.y));
-    publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), displays));
     Ok(super::video_service::CapturerInfo {
         origin,
         width: d.width as usize,
