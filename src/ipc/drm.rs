@@ -507,7 +507,10 @@ fn drm_wake_displays(reason: &str) -> bool {
             // would log the same failure forever.
             DRM_WAKE_UNAVAILABLE.store(true, Ordering::Relaxed);
             log::warn!(
-                "drm: cannot wake displays ({reason}): no uinput device ({err}). A compositor that                  disabled its outputs will keep them disabled, so there is no scanout to capture                  until something else generates input. Note input injection needs uinput too, so                  this session cannot control the host either."
+                "drm: cannot wake displays ({reason}): no uinput device ({err}). A compositor that \
+                 disabled its outputs will keep them disabled, so there is no scanout to capture \
+                 until something else generates input. Note input injection needs uinput too, so \
+                 this session cannot control the host either."
             );
             return false;
         }

@@ -454,6 +454,11 @@ impl TraitCapturer for IpcDrmCapturer {
                 // would leave only the rapid-rebuild guard to catch it, several seconds later and
                 // under a message about a change that never happened.
                 if self.session_size.is_some_and(|(sw, sh)| (w, h) != (sw, sh)) {
+                    // Hand the buffer back for recycling before erroring out: the receive path is
+                    // still alive until it observes this session ending, and this is a
+                    // scanout-sized allocation the recycler exists to keep. Dropping it here made
+                    // every rebuild cycle re-allocate one.
+                    self.shared.slot.lock().unwrap().free = Some(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
                     }

@@ -30,10 +30,17 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
 - `libdrmtap.so` is loaded through a small `dlopen` loader (`drmtap_dl`); if the
   library or one of its runtime deps is missing the load fails cleanly and the
   caller falls back to the PipeWire/portal path.
-- The loader also **refuses a library that cannot do the split**: one reporting
-  below 0.4.10, and one reporting a newer version without actually exporting
+- The loader also **refuses a library that cannot do the split** — and, more
+  broadly, any version outside the vetted window. Accepted is exactly the pinned
+  minor with a patch floor (currently `0.4.x`, `x >= 10`): an older minor
+  predates the split entry points, and a **newer minor is refused too** (`0.5.x`
+  included), because the loader mirrors C struct layouts that are only
+  field-by-field verified against the pinned minor; widening the window is a
+  deliberate act done together with re-verifying the layouts and moving the
+  build pin. Independently of the version report, a library that does not
+  actually export
   `drmtap_grab_desc` / `drmtap_open_render` / `drmtap_convert_dmabuf` (a stale or
-  pre-release build). The only way to capture with such a library is the
+  pre-release build) is refused as well. The only way to capture with such a library is the
   in-process convert, which in the root service means loading the vendor GL stack
   there, so it is refused and the caller falls back to PipeWire/portal. The
   privileged process therefore never loads GL because of which file happened to
@@ -151,7 +158,8 @@ ls -l /usr/lib/rustdesk/libdrmtap.so.0*
 # the dlopen names the symlink by absolute path, so what matters is where the symlink points:
 readlink /usr/lib/rustdesk/libdrmtap.so.0   # expect: the versioned object shipped by the package
 # and there should be no other object left beside it (a leftover is not loaded on its own, but it
-# is what a stray ldconfig over this directory would repoint the symlink to)
+# is what a stray ldconfig over this directory would repoint the symlink to):
+ls /usr/lib/rustdesk/libdrmtap.so.0.*       # expect: exactly one versioned object
 ls /etc/ld.so.conf.d/ | grep -i rustdesk               # expect: no output (none is shipped)
 # confirm no privileged helper is present (there should be none)
 getcap -r /usr/lib/rustdesk 2>/dev/null                  # expect: no output

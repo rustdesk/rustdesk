@@ -320,6 +320,9 @@ jobs:
       - name: Assert the deb is a real drm build
         shell: bash
         run: |
+          # Strict mode so the mid-script checks can fail the step (without it only the LAST
+          # command's status counts and the greps above it are decorative).
+          set -euo pipefail
           deb="$(ls rustdesk-unattended-wayland-*.deb)"
           test -n "$deb"
           echo "::notice::built $deb ($(stat -c %s "$deb") bytes)"
@@ -335,10 +338,14 @@ jobs:
         id: floor
         shell: bash
         run: |
+          # Strict mode for the same reason as the assert step above. The floor extraction gets an
+          # explicit rescue so a no-match grep reaches the `test -n` reporter instead of dying as a
+          # bare pipeline failure.
+          set -euo pipefail
           deb="$(ls rustdesk-unattended-wayland-*-x86_64.deb)"
           rm -rf /tmp/debfloor && dpkg-deb -R "$deb" /tmp/debfloor
           floor="$(objdump -T /tmp/debfloor/usr/share/rustdesk/lib/librustdesk.so \
-                   | grep -oE 'GLIBC_2\.[0-9]+' | sort -uV | tail -1)"
+                   | grep -oE 'GLIBC_2\.[0-9]+' | sort -uV | tail -1 || true)"
           test -n "$floor"
           echo "floor=${floor#GLIBC_}" >> "$GITHUB_OUTPUT"
           echo "::notice::deb requires ${floor} or newer (built on the runner, not the ubuntu18.04 release container)"
