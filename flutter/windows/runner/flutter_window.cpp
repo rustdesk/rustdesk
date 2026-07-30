@@ -14,7 +14,6 @@
 
 #include <windows.h>
 
-#include <iostream>
 #include <optional>
 #include <memory>
 
@@ -42,9 +41,12 @@ namespace {
 //   window created hidden and shown later, with nothing scheduling a frame.
 // - The SetNextFrameCallback used to detect the first frame fires when a frame
 //   is GENERATED (raster thread), even if the resize gate then rejects its
-//   present. So it must not be the only stop condition: when a resize was seen
-//   before the first frame, one final ForceChildRefresh() is issued to
-//   guarantee a present at the current size.
+//   present. So it must not be the only stop condition: one final
+//   ForceChildRefresh() is issued to guarantee a present at the current size.
+//   Note this premise is not load-bearing, and the redundancy is deliberate:
+//   if the callback in fact only fired on a successful present, then
+//   first_frame_rendered_ would stay false and the timer below would keep
+//   nudging until it healed.
 // This also relies on HandleTopLevelWindowProc not consuming WM_TIMER (no
 // plugin registers a delegate for it today).
 constexpr UINT_PTR kForceRedrawTimerId = 0xFB15;
@@ -186,34 +188,28 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
-    case WM_SIZE:
-      // A resize before the first frame is the FancyZones wedge described on
-      // kForceRedrawTimerId; remember it so the timer issues a final child
-      // refresh even though the first-frame callback has fired.
-      if (!first_frame_rendered_) {
-        resized_before_first_frame_ = true;
-      }
-      break;
     case WM_TIMER:
       if (wparam == kForceRedrawTimerId) {
         if (!flutter_controller_) {
           KillTimer(hwnd, kForceRedrawTimerId);
         } else if (first_frame_rendered_) {
-          // A frame was generated, but if a resize happened before it, the
-          // resize gate may have rejected its present (see the comment on
-          // kForceRedrawTimerId). One child refresh guarantees a present at
-          // the current size. Note that in practice nearly every window takes
-          // this path - a WM_SIZE usually arrives during creation/show before
-          // the first frame - so this is an effectively unconditional,
-          // imperceptible safety net rather than an exceptional case.
-          if (resized_before_first_frame_) {
-            resized_before_first_frame_ = false;
-            ForceChildRefresh(flutter_controller_->view()->GetNativeWindow());
-          }
+          // A frame was generated, which does not mean it was presented: if a
+          // resize was pending, the gate rejected it (see the comment on
+          // kForceRedrawTimerId). One child refresh guarantees a present at the
+          // current size. Unconditional because gating it bought nothing: the
+          // WM_SIZE that CreateWindow() sends already arrives before the first
+          // frame, so the flag this used to check was always set by the time we
+          // got here. Doing it unconditionally is safe either way - at worst it
+          // is one extra nudge, and it is cheap once the engine is running.
+          ForceChildRefresh(flutter_controller_->view()->GetNativeWindow());
           KillTimer(hwnd, kForceRedrawTimerId);
         } else if (++force_redraw_tries_ > kForceRedrawMaxTries) {
-          std::cerr << "Flutter window did not render its first frame, giving up."
-                    << std::endl;
+          // Not std::cerr: the runner only attaches a console when started from
+          // one or under a debugger (see main.cpp), and this fires on end-user
+          // machines. OutputDebugString is readable with DebugView there.
+          OutputDebugStringA(
+              "rustdesk: Flutter window did not render its first frame, "
+              "giving up.\n");
           KillTimer(hwnd, kForceRedrawTimerId);
         } else if (force_redraw_tries_ <= kForceRedrawCheapTries) {
           flutter_controller_->ForceRedraw();
