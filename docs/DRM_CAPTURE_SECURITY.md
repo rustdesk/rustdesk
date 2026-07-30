@@ -18,14 +18,31 @@ pixels: it exports the active scanout as a DMA-BUF and passes just that
 service-scoped IPC channel (`_drm`) via `SCM_RIGHTS`. The `--server` keeps an
 **import-once EGLImage cache** (keyed on the buffer, so a given scanout buffer is
 imported once and re-imports are elided), detiles/converts it to linear RGBA in
-its own unprivileged address space, and feeds the encoder — so the root service
-never loads libEGL/libGLESv2 and never copies scanout pixels. Only the **CPU
-fallback path** (used when the seat/driver cannot produce a transferable DMA-BUF,
-or the consumer has no render node of its own, see *When the CPU fallback is
-chosen* below) copies the scanout to packed BGRA inside the root service and
-streams those bytes over `_drm`. This mirrors
-the Windows `portable_service` split (a privileged process captures, an
-unprivileged one presents) but reuses RustDesk's own hardened IPC.
+its own unprivileged address space, and feeds the encoder — so **on that path**
+the root service never copies scanout pixels and never loads libEGL/libGLESv2
+(measured on the running service, see *Auditing*). Only the **CPU fallback path**
+(used when the seat/driver cannot produce a transferable DMA-BUF, or the consumer
+has no render node of its own, see *When the CPU fallback is chosen* below)
+copies the scanout to packed BGRA inside the root service and streams those bytes
+over `_drm`.
+
+**The no-GL property is a property of the default path, not of the process.** Be
+precise about it, because the CPU fallback is the whole reason the split exists:
+converting a scanout in-process means decoding whatever layout it is in, and a
+tiled scanout (the common case on modern Intel and AMD) can only be decoded
+through the GPU. `drmtap_grab_mapped` therefore reaches libdrmtap's auto-process
+step, which lazily `dlopen`s libEGL/libGLESv2 **in the calling process** when the
+scanout needs a GPU detile. So a host that has fallen back to the CPU path can
+map the GL stack inside the `CAP_SYS_ADMIN` service. What the design does about
+that is bound the cases: the fallback is entered only for the three reasons
+listed below, never as a silent degradation of the split path (the loader refuses
+a `libdrmtap` that cannot export the fd at all, precisely so "old library" cannot
+turn into "convert in the privileged process"), and a linear or CPU-mappable
+scanout is converted without touching GL. Every host measured here runs the split
+path with zero GL regions in the service; a CPU-fallback host is a different
+posture and is worth measuring separately. This mirrors the Windows
+`portable_service` split (a privileged process captures, an unprivileged one
+presents) but reuses RustDesk's own hardened IPC.
 
 - `libdrmtap.so` is loaded through a small `dlopen` loader (`drmtap_dl`); if the
   library or one of its runtime deps is missing the load fails cleanly and the
@@ -118,10 +135,14 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
 - **The display wake injects synthetic input from the root service.** A
   compositor that idles long enough DISABLES a connector, leaving no scanout for
   any backend, so on a `_drm` handshake that finds a CONNECTED display with no
-  CRTC the service emits one synthetic pointer round trip over `/dev/uinput`
-  (`+1` then `-1` on one relative axis: net-zero displacement, no button press,
-  no keys) to make the compositor re-enable it. This is deliberate input
-  injection by privileged code, so its bounds are worth stating precisely:
+  CRTC the service emits one synthetic pointer round trip over `/dev/uinput` to
+  make the compositor re-enable it. The virtual device **declares** two relative
+  axes and `BTN_LEFT`, because libinput classifies a device before it will treat
+  its events as pointer activity at all and a single axis with no buttons is
+  ignored outright (measured three ways on the same idle machine). What it
+  actually **emits** is `+1` then `-1` on one axis: net-zero displacement, no
+  button press, no key events. This is deliberate input injection by privileged
+  code, so its bounds are worth stating precisely:
   - it can only be reached through an **already-authorized** `_drm` connection
     (same per-connection authz as every other use of the channel), so it grants
     nothing to a local attacker that the channel itself does not;
@@ -132,8 +153,16 @@ unprivileged one presents) but reuses RustDesk's own hardened IPC.
     uid, refuse root, and are desktop-specific;
   - the trigger is narrow — a connected-but-undriven connector, not "no
     frames" — and connectors a wake demonstrably cannot bring back are
-    remembered by connector identity and stop triggering (the memory drops any
-    entry later seen scanning out, so it cannot wedge);
+    remembered by connector identity and stop triggering. That memory is
+    per-connector rather than global, so a permanently dark connector cannot
+    suppress the wake for a different panel, and it drops any entry later seen
+    scanning out. Note what that recovery rule does and does not give you: it
+    clears the moment the display is driven **by anything**, but nothing else
+    retries, so a connector latched after a wake that failed for a transient
+    reason stays latched until that display comes back some other way — on an
+    unattended host, typically not until the service restarts. It is a
+    deliberate trade against waking on every connection forever for a display
+    that is never coming;
   - it is rate limited to **one wake per 20 s process-wide** with exactly one
     concurrent winner (compare-exchange claim), so a reconnect storm cannot
     become an input-injection storm, and it is useless as a way to keep a

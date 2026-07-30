@@ -28,6 +28,12 @@ on:
       - "libs/scrap/src/common/drmtap_dl.rs"
       - "libs/scrap/src/common/mod.rs"
       - "libs/scrap/Cargo.toml"
+      # The ROOT manifest is where the top-level `drm` feature is DEFINED, and the lock file is
+      # what every cargo invocation here resolves against (`--locked`). Without these two, a PR
+      # that changes what `drm` pulls in, or bumps a dependency the drm path uses, skips the
+      # entire verification this workflow exists for.
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "src/ipc.rs"
       - "src/ipc/**"
       - "src/server/drm_capturer.rs"
@@ -52,6 +58,12 @@ on:
       - "libs/scrap/src/common/drmtap_dl.rs"
       - "libs/scrap/src/common/mod.rs"
       - "libs/scrap/Cargo.toml"
+      # The ROOT manifest is where the top-level `drm` feature is DEFINED, and the lock file is
+      # what every cargo invocation here resolves against (`--locked`). Without these two, a PR
+      # that changes what `drm` pulls in, or bumps a dependency the drm path uses, skips the
+      # entire verification this workflow exists for.
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "src/ipc.rs"
       - "src/ipc/**"
       - "src/server/drm_capturer.rs"
@@ -336,6 +348,16 @@ jobs:
           echo "::notice::built $deb ($(stat -c %s "$deb") bytes)"
           dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+$'
           dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0 ->'
+          # The library alone does not make this a drm build: build.py stages it whenever --drm is
+          # passed, independently of what was compiled, and the deb name is what tells a user this
+          # is the consent-bypass variant. Assert the BINARY too, by the absolute dlopen path that
+          # only exists when the feature is compiled in -- otherwise a stock binary could ship
+          # under the unattended-wayland name with a library it can never reach.
+          rm -rf /tmp/debassert && dpkg-deb -R "$deb" /tmp/debassert
+          if ! grep -qF /usr/lib/rustdesk/libdrmtap.so.0 /tmp/debassert/usr/share/rustdesk/lib/librustdesk.so; then
+            echo "::error::the packaged librustdesk.so has no libdrmtap dlopen path; this is not a drm build"
+            exit 1
+          fi
           mv "$deb" "${deb%.deb}-x86_64.deb"
 
       # MEASURE the glibc floor rather than describing it. This job builds on the runner instead of the

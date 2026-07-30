@@ -575,9 +575,19 @@ async fn recv_thread(
                 }
             }
         }
-        // No identity to hold the service to (a caller without a cached list); the raw index is
-        // all there is, exactly the pre-identity behaviour.
-        None => display.max(0) as usize,
+        // No identity to hold the service to. From get_capturer_info this means DRM_STATE does not
+        // describe `display` at all -- the index is out of range of the advertised list -- and
+        // falling back to the raw index would resolve it against the SERVICE's list, which the
+        // wake can have grown back past that index. The build would then succeed against an
+        // arbitrary monitor: two video services bound to one display, and the per-display health
+        // that gates demotion recorded under the wrong identity. Fail instead, so the video
+        // service rebuilds once the advertised list and the index agree again.
+        None => {
+            let _ = tx.send(Err(anyhow!(
+                "display {display} is not in the advertised list; not guessing a monitor for it"
+            )));
+            return;
+        }
     };
     // The service binds this stream to (device, crtc_id) at DrmStart, which survives a topology change.
     // Everything on this side is addressed by LIST INDEX, which does not: drm_enumerate_all_displays
@@ -845,15 +855,27 @@ async fn recv_thread(
                 // already takes. Checked BEFORE the list is swapped in, so the comparison is against
                 // the topology this stream was started on.
                 //
-                // The probe uses wire_idx, not `display`: this pushed list is in the SERVICE'S index
-                // space (the same fresh-enumeration construction as the handshake list), and wire_idx
-                // is where our monitor sat in that space when the stream was bound. `display` is a
-                // position in the list the CLIENT chose from, which is exactly the index space that
-                // can disagree with the service's whenever a wake or hotplug renumbered entries --
-                // probing it here would pit slot `display` against slot wire_idx and either tear down
-                // a healthy stream or miss a genuine renumbering.
+                // The probe asks about `display`, the CLIENT's index, and that is deliberate --
+                // it was briefly changed to wire_idx and that was wrong. Two facts settle it:
+                //
+                //  - `bound_to` is an IDENTITY, `(device, crtc_id)`, not a position. So comparing
+                //    it against any slot is not a cross-index-space comparison; it is the question
+                //    "does that slot name MY monitor".
+                //  - `swap_available_displays` two lines below installs this very list as
+                //    DRM_STATE, which IS the client-space list: display_service re-advertises it,
+                //    input is mapped through it, and the next rebuild reads `expected` out of it
+                //    at `display`. So the only question worth asking here is whether slot
+                //    `display` will still name this stream's monitor once that publish lands.
+                //
+                // Probing wire_idx instead answers a question nothing downstream consumes, and it
+                // stays quiet in exactly the case this guard exists for: a stream whose
+                // wire_idx != display keeps running while the client's index silently comes to
+                // mean another monitor, so the client renders monitor A believing it is monitor B
+                // and every pointer coordinate it computes lands on the wrong output. Checked
+                // BEFORE the swap, so the comparison is against the topology this stream started
+                // on.
                 let now_at_our_index = list
-                    .get(wire_idx)
+                    .get(display.max(0) as usize)
                     .map(|d| (d.device.clone(), d.crtc_id));
                 if bound_to.is_some() && now_at_our_index != bound_to {
                     swap_available_displays(list);

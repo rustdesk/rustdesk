@@ -457,37 +457,40 @@ pub(super) fn get_capturer_for_display(
                     None => (None, false),
                 };
                 if let Some(advertised) = advertised {
-                    // Compare LOGICAL against LOGICAL. The advertised DRM geometry carries the
-                    // PHYSICAL mode plus the compositor scale (augment_with_wayland_geometry sets
-                    // x/y/scale and deliberately leaves width/height physical), while the PipeWire
-                    // rect is already logical (try_fix_logical_size). Comparing the two raw made a
-                    // scaled output disagree with itself -- 2880x1800 against 1440x900 -- and the
-                    // guard then rejected a portal stream that really was this display, leaving it
-                    // advertised offline instead of degrading to PipeWire.
+                    // BOTH SIDES ARE PHYSICAL, so compare them raw. Traced rather than assumed,
+                    // because it was twice "corrected" to a scale conversion that broke it:
+                    // `rect` is built above from `Display::width()/height()`, and the WAYLAND
+                    // variant of those returns `physical_width()/physical_height()`
+                    // (scrap `common/wayland.rs`), i.e. `PipeWireCapturable.physical_size`.
+                    // `try_fix_logical_size` only repairs the capturable's SEPARATE
+                    // `logical_size` field and never touches `physical_size`, so the rect is not
+                    // logical. The advertised DRM geometry is physical too
+                    // (`augment_with_wayland_geometry` sets x/y/scale and deliberately leaves
+                    // width/height as the DRM mode). Dividing one side by the scale therefore
+                    // compares logical against physical and rejects the valid stream on exactly
+                    // the scaled outputs it was meant to rescue.
                     //
-                    // The size check itself stays, because on a multi-monitor host it is what
-                    // tells a single connector apart from the whole-desktop rect the portal
-                    // usually exposes. On a single-display host that rect IS this display by
-                    // construction, so only the position has to agree.
-                    let scale = if advertised.scale > 0.0 {
-                        advertised.scale
-                    } else {
-                        1.0
-                    };
-                    let logical_w = (advertised.width as f64 / scale).round() as usize;
-                    let logical_h = (advertised.height as f64 / scale).round() as usize;
+                    // The size check is what tells one connector apart from the whole-desktop
+                    // rect the portal usually exposes. It is skipped only when BOTH sides say
+                    // there is a single display -- the DRM list has one entry and the PipeWire
+                    // map has one -- because only then is "the whole-desktop stream IS this
+                    // display" true by construction. (The portal can report a different physical
+                    // size for a Full Workspace selection than the connector's mode, which is why
+                    // that case needs the carve-out at all.) The DRM count alone is not enough:
+                    // a monitor on a card the service cannot open is missing from the DRM list
+                    // while the compositor still drives it.
+                    let single_display = single_display && cap_display_info.num == 1;
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
-                        && (single_display || (logical_w == rect.1 && logical_h == rect.2));
+                        && (single_display
+                            || (advertised.width as usize == rect.1
+                                && advertised.height as usize == rect.2));
                     if !consistent {
-                        // Report the LOGICAL numbers, the ones actually compared, so the message
-                        // does not look like a mismatch of quantities that were never expected to
-                        // match on a scaled output.
                         bail!(
-                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{} logical +{}+{} vs stream {}x{}+{}+{}); advertised offline",
+                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
                             display_idx,
-                            logical_w,
-                            logical_h,
+                            advertised.width,
+                            advertised.height,
                             advertised.x,
                             advertised.y,
                             rect.1,
