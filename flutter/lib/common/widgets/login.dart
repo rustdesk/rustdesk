@@ -304,7 +304,23 @@ class _WidgetOPState extends State<WidgetOP> {
           onTap: () async {
             final authAttempt = _resetState();
             widget.curOP.value = widget.config.op;
-            await bind.mainAccountAuth(op: widget.config.op, rememberMe: true);
+            try {
+              await bind.mainAccountAuth(
+                  op: widget.config.op, rememberMe: true);
+            } catch (e) {
+              debugPrint('Failed to start account authentication $e');
+              if (!mounted ||
+                  authAttempt != _authAttempt ||
+                  widget.curOP.value != widget.config.op) {
+                return;
+              }
+              setState(() {
+                _failedMsg = 'Failed';
+                _invalidateAuthAttempt();
+                widget.curOP.value = '';
+              });
+              return;
+            }
             if (!mounted ||
                 authAttempt != _authAttempt ||
                 widget.curOP.value != widget.config.op) {
