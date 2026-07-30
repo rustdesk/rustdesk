@@ -32,12 +32,12 @@ typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 DynamicLibrary _openLinuxCoreLib() {
   final bundled =
       '${File(Platform.resolvedExecutable).parent.path}/lib/librustdesk.so';
-  if (File(bundled).existsSync()) {
-    try {
+  try {
+    if (File(bundled).existsSync()) {
       return DynamicLibrary.open(bundled);
-    } catch (e) {
-      debugPrint("Failed to load '$bundled': $e");
     }
+  } catch (e) {
+    debugPrint("Failed to load '$bundled': $e");
   }
   return DynamicLibrary.open('librustdesk.so');
 }

@@ -18,7 +18,7 @@ void print_help_install_pkg(const char* so);
 static void* dlopen_bundled_lib() {
   char exe_path[PATH_MAX];
   ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-  if (len <= 0) return nullptr;
+  if (len <= 0 || len >= (ssize_t)(sizeof(exe_path) - 1)) return nullptr;
   exe_path[len] = '\0';
   char* last_slash = strrchr(exe_path, '/');
   if (last_slash == nullptr) return nullptr;
