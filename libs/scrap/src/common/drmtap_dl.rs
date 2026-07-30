@@ -287,6 +287,15 @@ impl DrmtapLib {
                 let why = if major != DRMTAP_ABI_MAJOR {
                     "the struct layouts this build mirrors track the ABI major, so reading a \
                      frame descriptor through a mismatched one would mis-decode it"
+                } else if minor != DRMTAP_ABI_MINOR {
+                    // A NEWER minor lands here too, and telling its user the library "predates the
+                    // split" would send them looking for the wrong problem. Under 0.x semver the
+                    // minor is the breaking axis, and the structs this file mirrors are not frozen,
+                    // so an unverified minor could be read at the wrong offsets.
+                    "this build mirrors the struct layouts of one minor and only that one; \
+                     under 0.x semver the minor is the breaking axis, so an unverified minor \
+                     could be read at the wrong offsets. Widening it is a deliberate act, done \
+                     with the layouts re-checked field by field"
                 } else {
                     "it predates the split-capture API, so its only capture path converts \
                      in-process, which in the root service means loading the GL stack there"
@@ -294,7 +303,7 @@ impl DrmtapLib {
                 let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
                 log::warn!(
                     "libdrmtap {name} reports v{major}.{minor}.{patch}, which this build cannot \
-                     use (needs ABI major {DRMTAP_ABI_MAJOR}, at least \
+                     use (needs ABI major {DRMTAP_ABI_MAJOR}, minor {DRMTAP_ABI_MINOR}, at least \
                      v{DRMTAP_ABI_MAJOR}.{min_minor}.{min_patch}): {why}. Refusing to load; \
                      falling back to PipeWire/portal."
                 );

@@ -196,9 +196,11 @@ presents) but reuses RustDesk's own hardened IPC.
   the capture runs inside the root `--service`, which already holds the
   capability it needs. Hosts without `/dev/dri` access (or where the library
   fails to load) transparently fall back to the PipeWire/portal path.
-- **Minimum libdrm: 2.4.95 (Ubuntu 18.04 or equivalent).** `libdrmtap` needs the DRM
-  `GetFB2` framebuffer API (libdrm 2.4.95); Ubuntu 18.04 ships 2.4.101, so every supported
-  distribution satisfies the API floor. That is an API statement, not a binary-compatibility one:
+- **Minimum libdrm: 2.4.95.** `libdrmtap` needs the DRM `GetFB2` framebuffer API, which
+  landed in libdrm 2.4.95. Ubuntu 18.04 is the oldest distribution worth naming here, and it
+  straddles the floor: base bionic shipped 2.4.91, below it, while the updates/HWE stack
+  (2.4.101) is above — so read this as "18.04 with updates, or anything newer", not as
+  "any 18.04". That is an API statement, not a binary-compatibility one:
   the `rustdesk-unattended-wayland` deb in this repo's CI is built on an ubuntu-24.04 runner, so the
   shipped binaries carry that build host's glibc floor. Running on an older distribution means
   building the deb there (or in a matching container), which the libdrm floor above permits.

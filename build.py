@@ -655,7 +655,21 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
         marker = b'/usr/lib/rustdesk/libdrmtap.so.0'
         binaries = [p for p in glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
                     + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk') if os.path.isfile(p)]
-        if not any(marker in open(p, 'rb').read() for p in binaries):
+        def _carries_marker(path):
+            # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk
+            # boundary: librustdesk.so is ~45 MB and there is no reason to hold it all in memory,
+            # and the `with` closes deterministically instead of relying on refcounting.
+            with open(path, 'rb') as f:
+                tail = b''
+                while True:
+                    chunk = f.read(1 << 20)
+                    if not chunk:
+                        return False
+                    if marker in tail + chunk:
+                        return True
+                    tail = chunk[-(len(marker) - 1):]
+
+        if not any(_carries_marker(p) for p in binaries):
             raise Exception(
                 f'--drm was requested but the staged bundle does not look like a drm build (no '
                 f'{marker.decode()} dlopen path in {binaries or "any staged binary"}); refusing to '
