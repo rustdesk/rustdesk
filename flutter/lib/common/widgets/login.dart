@@ -278,6 +278,19 @@ class _WidgetOPState extends State<WidgetOP> {
       if (newUrl != null && failedMsg.isEmpty && !urlLaunched) {
         unawaited(_launchAuthUrl(newUrl));
       }
+    }).catchError((e) {
+      debugPrint('Failed to query account authentication $e');
+      if (!mounted ||
+          authAttempt != _authAttempt ||
+          widget.curOP.value != widget.config.op) {
+        return;
+      }
+      _updateTimer?.cancel();
+      setState(() {
+        _failedMsg = 'Failed';
+        _invalidateAuthAttempt();
+        widget.curOP.value = '';
+      });
     });
   }
 
