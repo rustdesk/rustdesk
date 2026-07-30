@@ -797,10 +797,15 @@ async fn recv_thread(
                 // runs ONE thread and the final layout wins. Not ordered against frame delivery.
                 UINPUT_REFRESH_GEN.fetch_add(1, Ordering::AcqRel);
                 if !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
-                    std::thread::spawn(|| {
-                        // We hold the flag from the swap above; the guard hands it back on every
-                        // exit from here, including a panic inside the refresh below.
-                        let mut busy = UinputRefreshGuard(true);
+                    // Take ownership of the flag BEFORE the spawn and move it into the closure.
+                    // Constructing the guard inside the closure only covers paths where the closure
+                    // actually runs: `thread::spawn` panics on EAGAIN, and that happens after the
+                    // swap above, so no guard would ever exist and the flag would stay set for the
+                    // process lifetime. Same mistake, same shape, as the two flags before it.
+                    let mut busy = UinputRefreshGuard(true);
+                    let spawned = std::thread::Builder::new()
+                        .name("drm-uinput-refresh".into())
+                        .spawn(move || {
                         let rt = match tokio::runtime::Builder::new_current_thread()
                             .enable_all()
                             .build()
@@ -835,6 +840,12 @@ async fn recv_thread(
                             }
                         }
                     });
+                    if let Err(err) = spawned {
+                        // The closure never ran, so it was dropped along with the guard it owned,
+                        // and the guard released the slot: the next topology change retries the
+                        // spawn instead of being locked out for the process lifetime.
+                        log::error!("drm: could not spawn the uinput refresh worker: {err}");
+                    }
                 }
             }
             _ => {} // ignore any unexpected control message

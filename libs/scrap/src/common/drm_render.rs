@@ -116,6 +116,43 @@ impl RenderConverter {
         desc: &mut drmtap_dmabuf_desc,
         received_fd: RawFd,
     ) -> io::Result<(&[u8], u32, u32, Pixfmt)> {
+        // Bound the INCOMING descriptor, not just the frame libdrmtap hands back. Every field here
+        // was deserialized from the `_drm` wire, and while the producer is authenticated as root
+        // (`connect_drm` refuses a non-root peer) and libdrmtap has validated the fd against the
+        // descriptor since 0.4.12, this side already bounds the export descriptor symmetrically --
+        // the two halves of the split should agree about what they will touch before the C sees it,
+        // not after.
+        //
+        // offsets/pitches are the interesting ones: they address plane ranges inside the dma-buf, so
+        // a malformed pair is what would reach past the buffer. Bound each populated plane's extent
+        // the same way the frame path is bounded.
+        {
+            let (w, h) = (desc.width, desc.height);
+            if w == 0 || h == 0 || w > MAX_DIM || h > MAX_DIM {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("drm: refusing a dma-buf descriptor with geometry {w}x{h}"),
+                ));
+            }
+            let planes = desc.num_planes.clamp(1, 4) as usize;
+            for p in 0..planes {
+                let extent = (desc.pitches[p] as usize)
+                    .checked_mul(h as usize)
+                    .and_then(|rows| rows.checked_add(desc.offsets[p] as usize));
+                match extent {
+                    Some(end) if end <= MAX_FRAME_BYTES => {}
+                    other => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "drm: refusing dma-buf plane {p} (offset {} pitch {} over {h} rows -> {other:?}, cap {MAX_FRAME_BYTES})",
+                                desc.offsets[p], desc.pitches[p]
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
         // Always bound: a libdrmtap without the split convert symbols never loads.
         let convert_dmabuf = self.lib.convert_dmabuf;
         // Overwrite the descriptor's fd with the one THIS process received (split_capture.c

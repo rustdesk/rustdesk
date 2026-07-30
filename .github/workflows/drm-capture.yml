@@ -278,7 +278,15 @@ jobs:
         shell: bash
         run: |
           cd $(dirname $(dirname $(which flutter)))
-          [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]] && git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          # `[[ ... ]] && cmd` as the last line makes the STEP fail once FLUTTER_VERSION moves off
+          # the pinned value, because the failed test becomes the script's exit status. An explicit
+          # if/else skips instead. Reading the values from the environment rather than interpolating
+          # ${{ }} into the script also keeps this off zizmor's template-injection list.
+          if [[ "$FLUTTER_VERSION" == "3.24.5" ]]; then
+            git apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          else
+            echo "::notice::flutter $FLUTTER_VERSION is not 3.24.5; skipping the dropdown patch"
+          fi
 
       - name: Build the unattended-wayland deb
         shell: bash

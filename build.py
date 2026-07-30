@@ -409,7 +409,14 @@ def build_libdrmtap_so():
         # DRMTAP_PREBUILT_DIR explicitly names the artifact source, so honor it strictly: fail
         # (rather than silently falling back to a source build) if it holds no single real .so.
         prebuilt = glob.glob(os.path.join(prebuilt_dir, 'libdrmtap.so.0.*'))
-        return _single_real_so(prebuilt, f'DRMTAP_PREBUILT_DIR={prebuilt_dir}')
+        so = _single_real_so(prebuilt, f'DRMTAP_PREBUILT_DIR={prebuilt_dir}')
+        # Check the stub case HERE too, not only on the source path below. This is the widest
+        # override of the three -- no fetch, no sha verification, an object built by something this
+        # script cannot see -- so it is the likeliest to hand over a CPU-only build, and skipping the
+        # assertion on exactly this path would leave the check guarding only the case that was
+        # already trustworthy.
+        _assert_so_has_egl(so)
+        return so
     # Fetch the pinned source if it is not already present. third_party/libdrmtap is not a submodule
     # anymore; it is git-ignored. The commit is fetched BY SHA rather than by cloning a branch:
     # `clone --depth 1 --branch main` only ever fetches the tip, so the moment upstream pushes to
