@@ -117,13 +117,20 @@ pub fn list_devices() -> Option<Vec<DrmDevice>> {
     )
 }
 
-/// Returns true only if `path` canonicalizes to a node directly under /dev/dri/.
-/// This is the realpath gate the libdrmtap helper applied but the in-process
-/// (direct) path does not, so the service must apply it itself.
-pub(super) fn device_under_dev_dri(path: &str) -> bool {
-    match std::fs::canonicalize(path) {
-        Ok(p) => p.parent().map_or(false, |d| d == std::path::Path::new("/dev/dri")),
-        Err(_) => false,
+/// The CANONICAL path, when `path` canonicalizes to a node directly under /dev/dri/, else `None`.
+/// This is the realpath gate the libdrmtap helper applied but the in-process (direct) path does
+/// not, so the service must apply it itself.
+///
+/// Returning the resolved path rather than a bool is the point: a gate that answers yes/no leaves
+/// the caller opening the ORIGINAL string, so every symlink component gets resolved a second time,
+/// by the library, after the check -- a check-then-use window in which a component could be
+/// repointed outside /dev/dri, in the root service. Callers must open the value this returns.
+pub(super) fn device_under_dev_dri(path: &str) -> Option<std::path::PathBuf> {
+    let p = std::fs::canonicalize(path).ok()?;
+    if p.parent() == Some(std::path::Path::new("/dev/dri")) {
+        Some(p)
+    } else {
+        None
     }
 }
 
@@ -149,13 +156,17 @@ impl DrmReader {
         let device_cstr = match device {
             None => None,
             Some(d) => {
-                if !device_under_dev_dri(d) {
+                // Open the CANONICAL path the gate resolved, never the caller's string: handing the
+                // original back would make libdrmtap re-walk the symlinks after the check.
+                let Some(canonical) = device_under_dev_dri(d) else {
                     log::warn!("DRM device {d:?} is not under /dev/dri; refusing to open");
                     return None;
-                }
-                match CString::new(d) {
-                    Ok(c) => Some(c),
-                    Err(_) => return None, // interior NUL
+                };
+                match canonical.to_str().and_then(|s| CString::new(s).ok()) {
+                    Some(c) => Some(c),
+                    // Non-UTF-8 or an interior NUL. /dev/dri node names are neither, so this is a
+                    // path we do not need to serve.
+                    None => return None,
                 }
             }
         };

@@ -628,41 +628,60 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
-    # A staged bundle (binary_folder) carries its own libdrmtap.so.0* for a --drm build, so we do
-    # not rebuild it here; the `cp -r` above placed it under usr/share/rustdesk/. Move it to the
-    # private lib dir, then finalize the deb the same way build_flutter_deb does.
+    # Where the capture library comes from for a `--package <folder> --drm` build. Two shapes are
+    # supported, because two exist in practice: a bundle that already carries libdrmtap.so.0.*
+    # (someone staged it, e.g. a CI artifact), and a plain bundle, which is what every build path
+    # here actually produces -- the flutter deb builds the library straight into the staged deb, so
+    # nothing ever puts it inside the bundle folder. Demanding it in the bundle made this flag
+    # combination impossible to satisfy.
     bundled_glob = glob.glob('tmpdeb/usr/share/rustdesk/libdrmtap.so.0.*')
-    ships_so = any(os.path.isfile(p) and not os.path.islink(p) for p in bundled_glob)
-    # The variant must be decided by the EXPLICIT --drm request, not merely by what happens
-    # to be staged. Cross-check the two and fail loudly on a mismatch: a drm binary staged
-    # WITHOUT its libdrmtap.so.0.* would otherwise be silently shipped as the stock
-    # `rustdesk` package (no drm deps, a dlopen that can never resolve), and a
-    # bundle that DOES carry the .so would be shipped as the consent-bypass variant even
-    # when --drm was never asked for.
-    if want_drm and not ships_so:
-        raise Exception(
-            '--drm was requested but no real libdrmtap.so.0.* is staged under '
-            'usr/share/rustdesk/ in the bundle; refusing to package a drm binary as the '
-            'stock rustdesk package (it would ship without the capture library or its deps)')
-    if ships_so and not want_drm:
+    bundle_carries_so = any(os.path.isfile(p) and not os.path.islink(p) for p in bundled_glob)
+    # The variant must be decided by the EXPLICIT --drm request, not merely by what happens to be
+    # staged: a bundle that carries the .so must NOT be shipped as the consent-bypass variant when
+    # --drm was never passed.
+    if bundle_carries_so and not want_drm:
         raise Exception(
             'the staged bundle carries libdrmtap.so.0.* but --drm was not passed; refusing '
             'to silently ship the consent-bypass unattended-wayland variant (pass --drm to '
             'build it deliberately)')
-    if ships_so:
-        so = _single_real_so(bundled_glob, 'the staged --drm bundle')
-        # The THIRD artifact source, and the last one that was missing the check: --package takes the
-        # .so straight out of a bundle somebody else produced, so it has the same exposure as
-        # DRMTAP_PREBUILT_DIR (see the comment on that branch). A CPU-only stub would ship, the loader
-        # would accept it, and capture would degrade to PipeWire without a word.
-        _assert_so_has_egl(so)
-        stage_libdrmtap_into_deb(so)
-        system2(f'rm -f {so}')
-        system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
+    if want_drm:
+        # Whichever shape we are in, the staged BINARY must really be a drm build. This is the
+        # property the old presence-of-the-.so test stood in for, badly: a stock binary packaged as
+        # the unattended-wayland variant would carry the consent-bypass name, conflict with and
+        # replace the stock package, and never be able to capture. The marker is the absolute
+        # dlopen path from drmtap_dl.rs, present only when the feature is compiled in -- the same
+        # kind of artifact assertion as _assert_so_has_egl, and for the same reason: assert what
+        # was produced, not what was asked for.
+        marker = b'/usr/lib/rustdesk/libdrmtap.so.0'
+        binaries = [p for p in glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
+                    + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk') if os.path.isfile(p)]
+        if not any(marker in open(p, 'rb').read() for p in binaries):
+            raise Exception(
+                f'--drm was requested but the staged bundle does not look like a drm build (no '
+                f'{marker.decode()} dlopen path in {binaries or "any staged binary"}); refusing to '
+                'package it as the unattended-wayland variant, which conflicts with and replaces '
+                'the stock package but could never capture')
+        if bundle_carries_so:
+            so = _single_real_so(bundled_glob, 'the staged --drm bundle')
+            # The THIRD artifact source, and the last one that was missing the check: --package
+            # takes the .so straight out of a bundle somebody else produced, so it has the same
+            # exposure as DRMTAP_PREBUILT_DIR (see the comment on that branch). A CPU-only stub
+            # would ship, the loader would accept it, and capture would degrade to PipeWire
+            # without a word.
+            _assert_so_has_egl(so)
+            stage_libdrmtap_into_deb(so)
+            system2(f'rm -f {so}')
+            system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
+        else:
+            # Build it here, exactly as the flutter deb path does (build_libdrmtap_so asserts the
+            # EGL backend itself). The library is independent of the staged binary.
+            stage_libdrmtap_into_deb(build_libdrmtap_so())
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
-    if ships_so:
+    # Keyed on the EXPLICIT request, not on what happened to be staged: by here a --drm build has
+    # its library in tmpdeb whichever of the two shapes it came from.
+    if want_drm:
         retarget_control_to_drm_variant()
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file_folder("tmpdeb/")
@@ -671,7 +690,7 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
-    if ships_so:
+    if want_drm:
         os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
 

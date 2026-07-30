@@ -62,17 +62,16 @@ impl RenderConverter {
         // opens whatever path it is handed is a needless widening.
         let node_cstr = match node.filter(|n| !n.is_empty()) {
             None => None,
-            Some(n) => {
-                if !super::drm_reader::device_under_dev_dri(n) {
+            // Open the CANONICAL path the gate resolved, not the string that arrived over IPC:
+            // opening the original would re-walk its symlinks after the check (see
+            // device_under_dev_dri).
+            Some(n) => match super::drm_reader::device_under_dev_dri(n) {
+                None => {
                     log::warn!("drm: render node {n:?} is not under /dev/dri; auto-selecting");
                     None
-                } else {
-                    match CString::new(n) {
-                        Ok(c) => Some(c),
-                        Err(_) => None, // interior NUL
-                    }
                 }
-            }
+                Some(canonical) => canonical.to_str().and_then(|s| CString::new(s).ok()),
+            },
         };
         // SAFETY: `open_render` is a resolved C entry point; `node_cstr` outlives the
         // call, and NULL requests auto-selection of a render node.

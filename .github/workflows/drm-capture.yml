@@ -323,8 +323,16 @@ jobs:
           # Strict mode so the mid-script checks can fail the step (without it only the LAST
           # command's status counts and the greps above it are decorative).
           set -euo pipefail
-          deb="$(ls rustdesk-unattended-wayland-*.deb)"
-          test -n "$deb"
+          # Glob into an array and assert the COUNT. `deb="$(ls ...)"` aborted on zero matches
+          # before its own `test -n` could report, and on several matches produced a multi-line
+          # value whose `mv` failed with something unrelated to the real problem.
+          shopt -s nullglob
+          debs=(rustdesk-unattended-wayland-*.deb)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rustdesk-unattended-wayland-*.deb, found ${#debs[@]}: ${debs[*]-none}"
+            exit 1
+          fi
+          deb="${debs[0]}"
           echo "::notice::built $deb ($(stat -c %s "$deb") bytes)"
           dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+$'
           dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0 ->'
