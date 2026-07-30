@@ -516,8 +516,53 @@ fn drm_udev_listener() {
 /// on the first consumer and can push the first frame past the client's initial-frame timeout) off
 /// the critical path. Runs on its own thread since `DrmReader` is `!Send` and `open`/`grab` block.
 fn drm_prewarm() {
+    // The X11 gate lives HERE and not at the call site. Every consumer gates on `!is_x11()`, so on a
+    // real X11 host none will ever connect and warming the root service is pure waste -- but the
+    // answer is not yet knowable in the first moments of a boot. `get_display_server()` reads the
+    // active seat0 session through loginctl and falls back to "x11" when it cannot tell, so a check
+    // made ONCE at service start can answer "x11" on a Wayland host, and nothing revisits it: the
+    // prewarm is then skipped for the life of the service. Measured on a boot: the skip was logged
+    // 0.8s in, while loginctl reported the seat0 greeter session as wayland in that same second and
+    // graphical-session.target only at +5s. That silently disabled the prewarm in the deployment this
+    // feature is for (unit enabled at boot, unattended access at the login screen) -- it ran only
+    // after a manual restart, which is how every deploy happened to exercise it.
+    //
+    // So re-ask, bounded. A genuine X11 or headless host exhausts the budget and returns having
+    // opened no DrmReader and no DRM fd, which is what the gate is for. A host that boots to X11 and
+    // gains a Wayland session much later gives its first connection the cold path -- exactly today's
+    // behaviour for every boot, already handled, and not worth a permanent watcher thread.
+    //
+    // What this does NOT fix, deliberately: `_get_values_of_seat0` skips an active seat0 session
+    // whose user `is_gdm_user()` AND whose type is wayland, and that filter is permanent, not a boot
+    // transient. On a display manager whose greeter session user is literally `gdm` or `sddm`, an
+    // unattended login screen therefore reads as X11 forever and this wait just times out -- no
+    // worse than before, but no better either. It is not the common case on a current GDM, where the
+    // greeter runs as a separate `gdm-greeter` account that the filter does not match (verified: the
+    // prewarm primes while sitting at the Wayland greeter with nobody logged in). Widening the gate
+    // to a greeter-inclusive check would mean a new helper in the shared platform code, which is a
+    // bigger blast radius than the milliseconds justify.
+    //
+    // `scrap::is_x11()` is deliberately the UNMEMOISED path (it re-runs loginctl per call).
+    // `crate::platform::linux::is_x11()` latches its answer in a lazy_static, so switching this loop
+    // to it would leave the first reading cached and make the whole re-check a no-op.
+    const PREWARM_SESSION_RECHECK: std::time::Duration = std::time::Duration::from_secs(2);
+    const PREWARM_SESSION_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
+    let waited = std::time::Instant::now();
+    while scrap::is_x11() {
+        if waited.elapsed() >= PREWARM_SESSION_BUDGET {
+            log::info!(
+                "drm: session still reads as X11 after {:?}; skipping the pre-warm \
+                 (the _drm listener still runs)",
+                PREWARM_SESSION_BUDGET
+            );
+            return;
+        }
+        std::thread::sleep(PREWARM_SESSION_RECHECK);
+    }
+    // Timed from AFTER the session wait, so the number stays comparable to a restart-time prewarm
+    // instead of silently including however long the boot took to bring a session up.
     let t = std::time::Instant::now();
-    // Populate the cache (every card) through the single writer, which sets DRM_CACHE_WARMED, then
+    // Populate the cache (every card) through the single writer, then
     // warm the first framebuffer export on one auto-detected reader (the priming cost is per-process,
     // not per-card). A connection arriving before the async populate finishes self-enumerates.
     schedule_drm_cache_refresh();
@@ -551,18 +596,13 @@ pub async fn start_drm() {
     match new_drm_listener() {
         Ok(mut incoming) => {
             // Warm libdrmtap/EGL + enumeration off-thread so the first consumer does not pay that
-            // one-time cost on its critical path. Skipped when the current session is X11 -- every
-            // consumer gates on !is_x11(), so none will connect, and the prewarm opens a DrmReader
-            // and grabs a frame in the root service for nothing. The LISTENER below still starts
-            // either way: the root service outlives sessions, a later Wayland login must find the
-            // `_drm` socket, and its first connection re-enumerates on demand (the handshake serves
-            // a throwaway enumeration when the cache is cold), so skipping the prewarm costs that
-            // session only the one-time warmup the prewarm exists to hide.
-            if !scrap::is_x11() {
-                std::thread::spawn(drm_prewarm);
-            } else {
-                log::info!("drm: X11 session; skipping the pre-warm (the _drm listener still runs)");
-            }
+            // one-time cost on its critical path. `drm_prewarm` decides for itself whether this host
+            // is X11 (see there: deciding it HERE is too early on a boot and skipped the prewarm for
+            // good on a Wayland host). The LISTENER below starts either way: the root service
+            // outlives sessions, a later Wayland login must find the `_drm` socket, and every
+            // handshake enumerates fresh (drm_enumerate_settled), so a skipped prewarm costs that
+            // session only the one-time library/EGL warmup the prewarm exists to hide.
+            std::thread::spawn(drm_prewarm);
             // Watch for connector hotplug/modeset uevents so a mid-session topology change refreshes
             // the display cache and is pushed to live consumers (best-effort; own thread since it
             // blocks on recv and re-enumeration is a blocking `!Send` open).
