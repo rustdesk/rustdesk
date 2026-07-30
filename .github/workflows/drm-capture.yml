@@ -33,6 +33,12 @@ on:
       - "src/server/drm_capturer.rs"
       - "src/server/wayland.rs"
       - "src/server/display_service.rs"
+      # These three carry DRM wiring too (warm_availability, the cursor path in run_cursor, and the
+      # producer start + get_cursor/get_cursor_data), so a PR touching only them must not skip the
+      # whole drm verification.
+      - "src/server.rs"
+      - "src/server/input_service.rs"
+      - "src/platform/linux.rs"
       - "build.py"
       - ".github/workflows/drm-capture.yml"
   push:
@@ -51,6 +57,12 @@ on:
       - "src/server/drm_capturer.rs"
       - "src/server/wayland.rs"
       - "src/server/display_service.rs"
+      # These three carry DRM wiring too (warm_availability, the cursor path in run_cursor, and the
+      # producer start + get_cursor/get_cursor_data), so a PR touching only them must not skip the
+      # whole drm verification.
+      - "src/server.rs"
+      - "src/server/input_service.rs"
+      - "src/platform/linux.rs"
       - "build.py"
       - ".github/workflows/drm-capture.yml"
 

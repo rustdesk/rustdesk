@@ -643,6 +643,11 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
             'build it deliberately)')
     if ships_so:
         so = _single_real_so(bundled_glob, 'the staged --drm bundle')
+        # The THIRD artifact source, and the last one that was missing the check: --package takes the
+        # .so straight out of a bundle somebody else produced, so it has the same exposure as
+        # DRMTAP_PREBUILT_DIR (see the comment on that branch). A CPU-only stub would ship, the loader
+        # would accept it, and capture would degrade to PipeWire without a word.
+        _assert_so_has_egl(so)
         stage_libdrmtap_into_deb(so)
         system2(f'rm -f {so}')
         system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')

@@ -188,7 +188,12 @@ impl Drop for DrmStopGuard {
 /// closing ITS fd, while the dup keeps the socket alive via the shared open file description.
 fn dup_to_drm_conn(stream: &Connection) -> ResultType<DrmConn> {
     let raw = stream.inner.get_ref().as_raw_fd();
-    let dup = unsafe { hbb_common::libc::dup(raw) };
+    // F_DUPFD_CLOEXEC, not dup(): `dup` never copies the close-on-exec flag, so the new fd would be
+    // inherited by every child this process forks. This process is the ROOT service and it does fork
+    // synchronously elsewhere (the `loginctl` active-uid lookup), and this fd is an ALREADY-AUTHORIZED
+    // `_drm` socket -- the one thing on the box that hands out scanout dma-bufs. Leaking it into an
+    // unrelated child is a privilege leak even if no child ever reads it.
+    let dup = unsafe { hbb_common::libc::fcntl(raw, hbb_common::libc::F_DUPFD_CLOEXEC, 0) };
     if dup < 0 {
         return Err(std::io::Error::last_os_error().into());
     }
