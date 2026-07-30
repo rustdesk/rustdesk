@@ -44,6 +44,11 @@ class HttpService {
     return _parseHttpResponse(resJson);
   }
 
+  // Keep this above the Rust side's per-attempt timeout (12s) so it only
+  // bounds requests the OS would otherwise let hang (e.g. a black-holed
+  // TLS handshake), see #15700.
+  static const _requestTimeout = Duration(seconds: 15);
+
   Future<http.Response> _pollFlutterHttp(
     Uri url,
     HttpMethod method, {
@@ -54,16 +59,23 @@ class HttpService {
 
     switch (method) {
       case HttpMethod.get:
-        response = await http.get(url, headers: headers);
+        response =
+            await http.get(url, headers: headers).timeout(_requestTimeout);
         break;
       case HttpMethod.post:
-        response = await http.post(url, headers: headers, body: body);
+        response = await http
+            .post(url, headers: headers, body: body)
+            .timeout(_requestTimeout);
         break;
       case HttpMethod.put:
-        response = await http.put(url, headers: headers, body: body);
+        response = await http
+            .put(url, headers: headers, body: body)
+            .timeout(_requestTimeout);
         break;
       case HttpMethod.delete:
-        response = await http.delete(url, headers: headers, body: body);
+        response = await http
+            .delete(url, headers: headers, body: body)
+            .timeout(_requestTimeout);
         break;
       default:
         throw Exception('Unsupported HTTP method');

@@ -468,9 +468,18 @@ Future<bool?> loginDialog() async {
   bool isCloseHovered = false;
 
   final loginOptions = [].obs;
-  Future.delayed(Duration.zero, () async {
-    loginOptions.value = await UserModel.queryOidcLoginOptions();
-  });
+  final loginOptionsError = Rxn<String>();
+  fetchLoginOptions() async {
+    loginOptionsError.value = null;
+    try {
+      loginOptions.value = await UserModel.queryOidcLoginOptions();
+    } catch (e) {
+      debugPrint("queryOidcLoginOptions failed: $e");
+      loginOptionsError.value = e.toString();
+    }
+  }
+
+  Future.delayed(Duration.zero, fetchLoginOptions);
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     username.addListener(() {
@@ -574,6 +583,28 @@ Future<bool?> loginDialog() async {
     }
 
     thirdAuthWidget() => Obx(() {
+          final error = loginOptionsError.value;
+          if (error != null) {
+            return Column(
+              children: [
+                const SizedBox(height: 8.0),
+                Text(
+                  translate('network_error_tip'),
+                  style: const TextStyle(fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+                TextButton(
+                  onPressed: fetchLoginOptions,
+                  child: Text(translate('Retry')),
+                ),
+                SelectableText(
+                  error,
+                  style: const TextStyle(fontSize: 11, color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          }
           return Offstage(
             offstage: loginOptions.isEmpty,
             child: Column(
