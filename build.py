@@ -488,7 +488,7 @@ def _assert_so_has_egl(so_path):
         with open(so_path, 'rb') as f:
             blob = f.read()
     except OSError as err:
-        raise Exception(f'cannot read the built libdrmtap at {so_path}: {err}')
+        raise Exception(f'cannot read the built libdrmtap at {so_path}: {err}') from err
     missing = [m for m in (b'libEGL.so.1', b'eglCreateImageKHR') if m not in blob]
     if missing:
         raise Exception(
