@@ -215,8 +215,22 @@ jobs:
             echo "::error::extracted only $nsyms loader symbols from drmtap_dl.rs (expected >= 13); the extraction pattern no longer matches the loader"
             missing=1
           fi
+          # Inspect the object ONCE into a variable, then match with bash's own pattern operator --
+          # NO PIPE ANYWHERE IN THESE CHECKS. `anything | grep -q` under `set -o pipefail` reports a
+          # FALSE FAILURE as soon as the producer outruns the 64 KB pipe buffer: grep -q exits at the
+          # first match, the producer dies on SIGPIPE (141), and pipefail makes that the pipeline's
+          # status, so a library that HAS the symbol is reported as missing it. Measured on a real
+          # EGL-enabled .so (101 KB of `strings`, both markers present): the piped form reported both
+          # missing and failed the step. Note the obvious repair does NOT work -- materializing the
+          # output and then doing `printf '%s\n' "$var" | grep -q` keeps the pipe and just swaps the
+          # producer, and it fails identically (measured). Today's release-sized .so happens to fit in
+          # the buffer, which is the only reason this has not fired yet.
+          exported="$(nm -D --defined-only "$SO")"
+          strs="$(strings "$SO")"
           for sym in $syms; do
-            if ! nm -D --defined-only "$SO" | grep -q " T $sym\$"; then
+            # Line-anchored: wrap in newlines so the pattern can require a whole line, the same
+            # thing `grep " T $sym$"` was expressing.
+            if [[ $'\n'"$exported"$'\n' != *$'\n'*" T $sym"$'\n'* ]]; then
               echo "::error::libdrmtap does not export $sym, which the runtime loader resolves"
               missing=1
             fi
@@ -226,7 +240,7 @@ jobs:
           # for: the naive ELF check reports "no EGL" on a perfectly good library. What a CPU-only stub
           # build really lacks is the dlopen target name and the import call itself.
           for s in "libEGL.so.1" "eglCreateImageKHR"; do
-            if ! strings "$SO" | grep -qF "$s"; then
+            if [[ "$strs" != *"$s"* ]]; then
               echo "::error::libdrmtap looks like a CPU-only stub (no $s): the EGL detile hot path is missing"
               missing=1
             fi
@@ -346,8 +360,19 @@ jobs:
           fi
           deb="${debs[0]}"
           echo "::notice::built $deb ($(stat -c %s "$deb") bytes)"
-          dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+$'
-          dpkg -c "$deb" | grep -E 'usr/lib/rustdesk/libdrmtap\.so\.0 ->'
+          # Pipe-free for the same reason as the .so contract step above (see the comment there:
+          # a producer feeding a grep that can exit early is a SIGPIPE reported as a failure under
+          # pipefail). `grep -E` without -q reads to EOF so these two happen to be safe, but the
+          # shape is the hazard and the next `-q` added here would inherit it silently.
+          contents="$(dpkg -c "$deb")"
+          if [[ ! "$contents" =~ usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::the deb does not contain a versioned libdrmtap.so.0.x.y"
+            exit 1
+          fi
+          if [[ "$contents" != *"usr/lib/rustdesk/libdrmtap.so.0 ->"* ]]; then
+            echo "::error::the deb does not contain the libdrmtap.so.0 soname symlink"
+            exit 1
+          fi
           # The library alone does not make this a drm build: build.py stages it whenever --drm is
           # passed, independently of what was compiled, and the deb name is what tells a user this
           # is the consent-bypass variant. Assert the BINARY too, by the absolute dlopen path that

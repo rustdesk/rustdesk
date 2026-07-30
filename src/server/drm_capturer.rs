@@ -1411,10 +1411,28 @@ pub(super) fn warm_availability() {
     // Nothing on X11 can consume a DRM stream, and probing makes the ROOT service open DRM readers,
     // so an X11 host running a drm build would pay that at every startup for a path it can never
     // take. The lazy probe behind is_available is reached only from the Wayland paths already.
-    if crate::platform::linux::is_x11() {
-        return;
-    }
+    //
+    // Two things about WHERE and HOW this is decided, both learned the hard way on the pre-warm's
+    // identical gate (see `drm_prewarm` in ipc/drm.rs):
+    //
+    //  - it is decided HERE, not at the call site in server.rs. This runs during startup, and
+    //    `get_display_server()` answers "x11" whenever loginctl cannot yet name the seat0 session,
+    //    which during a boot is precisely then. A one-shot check outside the retry loop skipped the
+    //    warm for the life of the process on a Wayland host that came up slowly, handing back the
+    //    cold-probe "No displays" symptom this function exists to remove.
+    //  - it uses `scrap::is_x11()`, the UNMEMOISED form that re-runs loginctl per call.
+    //    `crate::platform::linux::is_x11()` latches its first answer in a lazy_static, so asking it
+    //    inside a retry loop would re-read the same early "x11" ten times and change nothing.
+    //
+    // The re-check rides the existing retry loop rather than adding a second wait: a genuine X11
+    // host spends the same ten short attempts it already spent on `query_displays` and opens
+    // nothing, and a host whose session turns out to be Wayland proceeds on the attempt where that
+    // becomes knowable.
     for _ in 0..10 {
+        if scrap::is_x11() {
+            std::thread::sleep(Duration::from_millis(300));
+            continue;
+        }
         if matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..)) {
             return;
         }

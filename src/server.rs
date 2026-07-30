@@ -603,12 +603,15 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         });
         // Warm the DRM availability cache before any client connects, so the first connection does
         // not race a cold `_drm` probe and ship an empty display list ("No displays" + retry).
-        // Skipped on X11: every consumer of the verdict is behind an `!is_x11()` check, so probing
-        // there makes the root service open DRM readers for a path this session can never use.
+        // X11 is skipped -- probing there makes the root service open DRM readers for a path this
+        // session can never take -- but that decision belongs to `warm_availability`, which already
+        // makes it, and NOT to this call site. Deciding it here is the same one-shot-at-startup
+        // mistake the pre-warm had: `is_x11()` answers "x11" whenever loginctl cannot yet name the
+        // seat0 session, which during a boot is exactly when this runs, and nothing revisits it --
+        // so a Wayland host that came up slowly skipped the warm for the life of the process and
+        // got back the cold-probe "No displays" symptom the warm exists to remove.
         #[cfg(all(target_os = "linux", feature = "drm"))]
-        if !scrap::is_x11() {
-            std::thread::spawn(drm_capturer::warm_availability);
-        }
+        std::thread::spawn(drm_capturer::warm_availability);
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
         if input_service::wayland_use_uinput() {

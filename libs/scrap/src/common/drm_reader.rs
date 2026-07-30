@@ -365,8 +365,14 @@ impl DrmReader {
     /// libdrmtap that does not export this symbol (see `drmtap_dl::abi_accepted`).
     pub fn grab_desc(&mut self) -> io::Result<(OwnedFd, drmtap_dmabuf_desc)> {
         let grab_desc = self.lib.grab_desc;
-        // SAFETY: self.ctx is a valid context; desc/frame are zeroed before the
-        // call and the frame is released on every return path (after the dup).
+        // SAFETY: self.ctx is a valid context; desc/frame are zeroed before the call. The frame is
+        // released on every return path that OWNS one, which is not the same as every return path:
+        // a failing `drmtap_grab_desc` leaves nothing for us to release, and releasing anyway would
+        // be a double free. Traced in the C rather than assumed -- on `-EINVAL` it returns before
+        // allocating, on a failed inner grab that grab has already cleaned up after itself, and on
+        // `-ENOTSUP` (pixels but no transferable fd) libdrmtap calls `drmtap_frame_release` ITSELF
+        // before returning. So the error arm below deliberately returns without releasing, and only
+        // the paths that reach a populated frame release it, after dupping the fd out of it.
         unsafe {
             let mut desc: drmtap_dmabuf_desc = std::mem::zeroed();
             let mut frame: drmtap_frame_info = std::mem::zeroed();
