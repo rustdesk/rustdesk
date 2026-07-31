@@ -202,7 +202,9 @@ presents) but reuses RustDesk's own hardened IPC.
   byte-identical to upstream. Build it explicitly with
   `python3 build.py --flutter --drm` (Linux only).
 - **Separate opt-in package.** A `--drm` build ships as a distinctly named
-  `rustdesk-unattended-wayland` package (Conflicts/Replaces `rustdesk`), so
+  `rustdesk-unattended-wayland` package (Conflicts/Replaces/**Provides** `rustdesk` --
+  `Provides` is what lets a third-party package that depends on `rustdesk` be satisfied by the
+  consent-free variant, so it belongs in an audit of this metadata), so
   enabling consent-free capture is an explicit install choice.
 - **Bundled library, no capabilities.** The package installs the versioned
   `libdrmtap.so.0.<minor>.<patch>` plus a `libdrmtap.so.0` soname symlink under

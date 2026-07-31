@@ -1124,9 +1124,16 @@ const POSITIVE_TTL: Duration = Duration::from_secs(15);
 /// context (a nested `#[tokio::main]` would panic when called from inside a runtime).
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(query_displays_async());
-    });
+    // Builder, like every other thread in this feature: `thread::spawn` panics when the thread
+    // cannot be created, and this site is reached from both `get_capturer_info` and
+    // `warm_availability`, so that panic would hit the capture-build path. A spawn failure is just
+    // a failed probe, which every caller already handles.
+    std::thread::Builder::new()
+        .name("drm-query".into())
+        .spawn(move || {
+            let _ = tx.send(query_displays_async());
+        })
+        .map_err(|err| anyhow!("could not spawn the drm display query thread: {err}"))?;
     rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS))
         .map_err(|_| anyhow!("drm display query timed out"))?
 }

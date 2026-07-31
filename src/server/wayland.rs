@@ -426,6 +426,21 @@ pub(super) fn get_capturer_for_display(
             }
         }
     }
+    // Resolved BEFORE the read guard below, deliberately. `get_display_infos` runs
+    // `augment_with_wayland_geometry`, which is a compositor output roundtrip, and `clear()` takes
+    // the WRITE guard on every capturer teardown -- which is exactly what is happening when a DRM
+    // display is demoted or flapping, i.e. precisely when this path runs. Holding the read guard
+    // across that roundtrip would stall every concurrent teardown for its duration, and the value
+    // does not depend on anything inside the guard.
+    #[cfg(feature = "drm")]
+    let drm_advertised = if super::drm_capturer::is_available_cached() {
+        match super::drm_capturer::get_display_infos() {
+            Some(list) => Some((list.get(display_idx).cloned(), list.len() == 1)),
+            None => Some((None, false)),
+        }
+    } else {
+        None
+    };
     let cap_map = CAP_DISPLAY_INFO.read().unwrap();
     // Serve ONLY the exact PipeWire entry for this index. Do NOT fall back to another index's
     // `CapDisplayInfo`: `CapturerPtr` is a bare `*mut Capturer` cloned by raw-pointer copy, so aliasing
@@ -451,11 +466,7 @@ pub(super) fn get_capturer_for_display(
             // that display) and is served normally. On a pure-PipeWire host is_available() is false and
             // this guard is skipped, preserving upstream behavior exactly.
             #[cfg(feature = "drm")]
-            if super::drm_capturer::is_available_cached() {
-                let (advertised, single_display) = match super::drm_capturer::get_display_infos() {
-                    Some(list) => (list.get(display_idx).cloned(), list.len() == 1),
-                    None => (None, false),
-                };
+            if let Some((advertised, single_display)) = drm_advertised {
                 if let Some(advertised) = advertised {
                     // BOTH SIDES ARE PHYSICAL, so compare them raw. Traced rather than assumed,
                     // because it was twice "corrected" to a scale conversion that broke it:
