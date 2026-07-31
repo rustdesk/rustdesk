@@ -15,7 +15,7 @@ class OidcAuthStatus extends StatelessWidget {
   final String message;
   final String browserFallbackPrompt;
   final String openLabel;
-  final String copyTooltip;
+  final String copyLabel;
   final VoidCallback? onOpen;
   final VoidCallback? onCopy;
 
@@ -24,7 +24,7 @@ class OidcAuthStatus extends StatelessWidget {
     required this.message,
     required this.browserFallbackPrompt,
     required this.openLabel,
-    required this.copyTooltip,
+    required this.copyLabel,
     this.onOpen,
     this.onCopy,
   });
@@ -61,7 +61,7 @@ class OidcAuthStatus extends StatelessWidget {
             child: _OidcAuthActions(
               browserFallbackPrompt: browserFallbackPrompt,
               openLabel: openLabel,
-              copyLabel: copyTooltip,
+              copyLabel: copyLabel,
               helperStyle: helperStyle,
               actionStyle: actionStyle,
               onOpen: onOpen,
@@ -121,16 +121,13 @@ class _OidcAuthActions extends StatelessWidget {
         if (onCopy != null)
           Padding(
             padding: const EdgeInsets.only(top: _statusSpacing),
-            child: Tooltip(
-              message: copyLabel,
-              child: TextButton.icon(
-                style: actionStyle,
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_outlined, size: _copyIconSize),
-                label: Text(
-                  copyLabel,
-                  style: const TextStyle(fontSize: _statusFontSize),
-                ),
+            child: TextButton.icon(
+              style: actionStyle,
+              onPressed: onCopy,
+              icon: const Icon(Icons.copy_outlined, size: _copyIconSize),
+              label: Text(
+                copyLabel,
+                style: const TextStyle(fontSize: _statusFontSize),
               ),
             ),
           ),

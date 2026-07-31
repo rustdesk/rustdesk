@@ -377,7 +377,7 @@ class _WidgetOPState extends State<WidgetOP> {
                         "If the browser didn't open, open the sign-in page or copy the link below.",
                       ),
                       openLabel: translate('Open sign-in page'),
-                      copyTooltip: translate('Copy sign-in link'),
+                      copyLabel: translate('Copy sign-in link'),
                       onOpen: authUrl.isEmpty
                           ? null
                           : () => _runCurrentAuthUrlAction(
