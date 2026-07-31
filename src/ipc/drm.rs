@@ -371,11 +371,13 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
 /// lid, it would have refused to wake the real monitor).
 ///
 /// A Vec, not a HashSet, for const init; it holds at most a handful of entries.
+#[cfg(feature = "drm-wake")]
 static DRM_WAKE_HOPELESS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// The undriven connectors still worth waking: `undriven` minus the hopeless set. Also where the
 /// hopeless set is REFUTED: any entry the current enumeration shows driven is removed, so the latch
 /// heals itself the moment reality disproves it.
+#[cfg(feature = "drm-wake")]
 fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Vec<String> {
     let mut hopeless = DRM_WAKE_HOPELESS
         .lock()
@@ -400,29 +402,53 @@ fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Ve
 
 /// Last time a display wake was emitted, as seconds since the service started, so a reconnect storm
 /// cannot turn into an input-injection storm. 0 = never.
+#[cfg(feature = "drm-wake")]
 static DRM_LAST_WAKE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// Set once /dev/uinput has been found unusable, so the diagnosis is logged once instead of per
 /// connection. A host without uinput cannot inject input at all on Wayland (there is no XTEST), so a
 /// failure here means the session was already view-only -- it is not a new failure mode.
+#[cfg(feature = "drm-wake")]
 static DRM_WAKE_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Minimum gap between two wakes. Long enough that a client reconnecting in a loop cannot flood the
 /// compositor with synthetic activity, short enough to be useless as a way to keep a screen lit.
+/// Server-side config key: may the service wake a display the compositor has idle-DISABLED, by
+/// injecting one synthetic pointer round trip, so there is a scanout to capture?
+///
+/// Declared HERE and not in `hbb_common`'s `keys` module, which is where rustdesk's own option
+/// constants live, for one reason: `hbb_common` is a SUBMODULE of a repo we do not control, so a
+/// constant there could only land after an upstream change to that repo plus a submodule bump.
+/// The option system reads by string, so nothing needs the constant to be registered; the cost is
+/// that this key does not appear in the settings UI list and is set in the config file, which is
+/// how an unattended host is configured anyway (`direct-server` is set the same way).
+///
+/// The `enable-` prefix is load-bearing, not decoration: `option2bool` reads an absent value as
+/// `!= "N"`, so the default is ON. That is deliberate -- a host whose screen went dark is exactly
+/// the case the unattended package exists for. Setting it to "N" keeps the service read-only with
+/// respect to input, at the cost of that host being unreachable over DRM while its outputs are off.
+#[cfg(feature = "drm-wake")]
+const OPTION_ENABLE_DRM_DISPLAY_WAKE: &str = "enable-drm-display-wake";
+
+#[cfg(feature = "drm-wake")]
 const DRM_WAKE_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(20);
 /// How long to let udev bind a freshly created uinput device before writing to it. Measured, not
 /// guessed: see drm_wake_displays.
+#[cfg(feature = "drm-wake")]
 const DRM_WAKE_DEVICE_SETTLE: std::time::Duration = std::time::Duration::from_millis(400);
 /// How long to keep re-enumerating after a wake before giving up on the outputs coming back. A
 /// modeset is asynchronous: the compositor has to see the input, decide to un-idle, and commit.
+#[cfg(feature = "drm-wake")]
 const DRM_WAKE_RECHECK_TOTAL: std::time::Duration = std::time::Duration::from_secs(3);
 /// How long after a wake its outcome may still be developing: the device-bind pause, the emits, the
 /// full recheck, plus slack for the enumerations in between. A handshake that was rate-limited away
 /// from waking looks at this to decide whether the recent wake is still in flight (then it waits for
 /// the outcome like the winner does) or is old news (then the current state IS the settled state).
+#[cfg(feature = "drm-wake")]
 const DRM_WAKE_SETTLE_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Seconds since the service started, on a monotonic clock. This is the clock the wake rate limiter
 /// stores in DRM_LAST_WAKE; SystemTime would let a clock step re-open the gate.
+#[cfg(feature = "drm-wake")]
 fn drm_wake_clock_secs() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs()
@@ -454,6 +480,7 @@ fn drm_wake_clock_secs() -> u64 {
 /// uinput is the only route that works from where this code already runs, on any desktop.
 ///
 /// Returns true when a wake was actually emitted.
+#[cfg(feature = "drm-wake")]
 fn drm_wake_displays(reason: &str) -> bool {
     use std::sync::atomic::Ordering;
 
@@ -562,10 +589,43 @@ fn drm_wake_displays(reason: &str) -> bool {
 /// and the client would be handed whatever is still scanning out. libdrmtap does report the idle
 /// panel (`crtc=0 (inactive)`); it is our own active-CRTC filter that drops it, so the count of
 /// what was dropped is exactly the right signal.
+/// Wake-less build (`--features drm` without `drm-wake`): enumerate and answer. No wake code is
+/// compiled in at all, so the service cannot inject input even by accident; a host whose outputs
+/// are idle-disabled simply reports the displays that are still scanning out, which is the
+/// behaviour that predates the wake.
+#[cfg(not(feature = "drm-wake"))]
+fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
+    let (displays, undriven) = drm_enumerate_all_displays();
+    if !undriven.is_empty() {
+        log::debug!(
+            "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
+            undriven.len()
+        );
+    }
+    displays
+}
+
+#[cfg(feature = "drm-wake")]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
     let (displays, undriven) = drm_enumerate_all_displays();
+    // RUNTIME gate, on top of the compile gate. The wake is the one part of this backend that
+    // writes into the user's session rather than reading from it, so an administrator can turn it
+    // off without giving up DRM capture -- the same shape rustdesk already uses for the closest
+    // thing it does to this (`keep-awake-during-incoming-sessions`, also server-side). Read per
+    // call rather than cached: an operator who flips it expects it to take effect, and this runs
+    // once per handshake, not per frame.
+    if !hbb_common::config::Config::get_bool_option(OPTION_ENABLE_DRM_DISPLAY_WAKE) {
+        if !undriven.is_empty() {
+            log::info!(
+                "drm: {} connected display(s) have no CRTC ({reason}), but the display wake is \
+                 disabled by configuration ({OPTION_ENABLE_DRM_DISPLAY_WAKE}=N)",
+                undriven.len()
+            );
+        }
+        return displays;
+    }
     let wakeable = drm_wakeable_undriven(&displays, &undriven);
     if wakeable.is_empty() {
         return displays;

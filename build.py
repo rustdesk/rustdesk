@@ -298,6 +298,13 @@ def get_features(args):
         if windows or osx:
             raise Exception('--drm is Linux only')
         features.append('drm')
+        # The display wake is its own compile gate on top of `drm`, and the unattended package is
+        # exactly where it belongs: that variant exists to reach a machine nobody is sitting at,
+        # and a machine whose screen went dark is the case it is for. Dropping `drm-wake` from
+        # this line builds the same capture backend with no wake code in the binary at all --
+        # which is the point of having the gate, so the answer to an objection is one word, not a
+        # revert. It is ALSO switchable at runtime; see OPTION_ENABLE_DRM_DISPLAY_WAKE.
+        features.append('drm-wake')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
