@@ -113,7 +113,17 @@ presents) but reuses RustDesk's own hardened IPC.
   `grab`), and non-32bpp scanouts are rejected before the copy. The device is
   realpath-gated to `/dev/dri/` on both paths.
 - **`_drm` is a screen-content channel.** It is authorized per connection (see
-  above); without that authz any local process could read the screen. On the
+  above); without that authz any local process could read the screen. Authorization
+  is also **re-checked on every frame**, not only at accept, because DRM/KMS
+  capture is not session-scoped: it grabs the physical scanout of a CRTC no matter
+  which session owns the display. So when the active session changes -- a user
+  logging in at a greeter -- the greeter's `_drm` stream is CLOSED rather than
+  continued (`drm: _drm peer no longer matches the active session`; observed with
+  peer_uid=60578 against active_uid=1000, and the greeter's uinput channel goes
+  with it). That is what stops an outgoing greeter process from capturing the
+  logged-in user's screen. The cost is a reconnect, not the session: the client
+  re-establishes itself against the new session's `--server` on its own in about
+  2.5 s (~3.6 s of dark screen, measured 2026-07-31). On the
   **default (split) path** the channel carries the scanout DMA-BUF fd, passed to
   the unprivileged `--server` over `SCM_RIGHTS` as a **read-only** descriptor
   (the `--server` holds an import-once EGLImage cache, so a given scanout buffer
@@ -167,6 +177,13 @@ presents) but reuses RustDesk's own hardened IPC.
     concurrent winner (compare-exchange claim), so a reconnect storm cannot
     become an input-injection storm, and it is useless as a way to keep a
     screen lit;
+  - the wake is **one-shot: it resets the compositor's idle timer, it does not
+    hold the display on**. If nothing else keeps the session awake, the connector
+    idles off again one full idle period later -- measured 2026-07-31: 30.3 s at
+    a GDM greeter, 70.3 s in a user session with `idle-delay=60`. Keeping a
+    screen lit for the length of a session is the job of RustDesk's existing
+    keep-awake inhibitor, not of this wake, which only recovers a connector that
+    is *already* dark;
   - the uinput device is created and destroyed around the emit — nothing
     persists in the input stack between wakes;
   - without `/dev/uinput` the wake is skipped and latched off. Such a session
