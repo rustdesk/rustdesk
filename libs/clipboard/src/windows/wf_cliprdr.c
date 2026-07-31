@@ -287,7 +287,8 @@ struct wf_clipboard
 	HWND hwnd;
 	/* hmem and req_fdata are single-flight response slots. ContextSend::proc
 	 * serializes inbound callbacks, and their events synchronize each response
-	 * with the clipboard STA. Revisit this if requests become concurrent. */
+	 * with the clipboard STA. This assumes one request/response at a time;
+	 * concurrent copy/paste and duplicate or late responses are unsupported. */
 	HANDLE hmem;
 	SIZE_T hmem_data_len;
 	HANDLE thread;
@@ -303,6 +304,7 @@ struct wf_clipboard
 	BOOL req_f_received;
 	UINT32 req_f_conn_id_expected;     // connID of the outstanding request
 	UINT32 req_f_stream_id_expected;   // streamId of the outstanding request; responses for another are dropped
+	ULONG req_fsize_expected;           // maximum response size of the outstanding request
 	LONG req_f_stream_id_seq;          // source of unique per-stream ids
 
 	size_t nFiles;
@@ -946,6 +948,9 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		wf_cliprdr_reset_streams(instance);
 		instance->m_pStream = streams;
 		instance->m_nStreams = stream_count;
+		/* pUnkForRelease is NULL, so the caller now owns hGlobal. */
+		clipboard->hmem = NULL;
+		clipboard->hmem_data_len = 0;
 		return S_OK;
 	}
 	else if (instance->m_pFormatEtc[idx].cfFormat == RegisterClipboardFormat(CFSTR_FILECONTENTS))
@@ -1859,6 +1864,7 @@ static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 con
 	clipboard->req_f_received = FALSE;
 	clipboard->req_f_conn_id_expected = connID;
 	clipboard->req_f_stream_id_expected = streamId;
+	clipboard->req_fsize_expected = nreq;
 
 	fileContentsRequest.connID = connID;
 	fileContentsRequest.streamId = streamId;
@@ -1986,11 +1992,12 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 			if (clipboard->hmem)
 			{
 				GlobalFree(clipboard->hmem);
-				clipboard->hmem = NULL;
 			}
 		}
 
-		/* Note: GlobalFree() is not needed when success */
+		/* SetClipboardData owns hmem on success; the failure path frees it above. */
+		clipboard->hmem = NULL;
+		clipboard->hmem_data_len = 0;
 		break;
 
 	case WM_DRAWCLIPBOARD:
@@ -2083,9 +2090,11 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 					if (clipboard->hmem)
 					{
 						GlobalFree(clipboard->hmem);
-						clipboard->hmem = NULL;
 					}
 				}
+				/* SetClipboardData owns hmem on success; the failure path frees it above. */
+				clipboard->hmem = NULL;
+				clipboard->hmem_data_len = 0;
 			}
 
 			if (!CloseClipboard() && GetLastError())
@@ -2423,33 +2432,37 @@ static BOOL wf_cliprdr_traverse_directory(wfClipboard *clipboard, WCHAR *Dir, si
 		{
 			WCHAR DirAdd[MAX_PATH];
 			if (wcslen(Dir) + wcslen(FindFileData.cFileName) + 2 > MAX_PATH)
-				return FALSE;
+				goto fail;
 			StringCchCopyW(DirAdd, MAX_PATH, Dir);
 			StringCchCatW(DirAdd, MAX_PATH, L"\\");
 			StringCchCatW(DirAdd, MAX_PATH, FindFileData.cFileName);
 
 			if (!wf_cliprdr_add_to_file_arrays(clipboard, DirAdd, pathLen))
-				return FALSE;
+				goto fail;
 
 			if (!wf_cliprdr_traverse_directory(clipboard, DirAdd, pathLen))
-				return FALSE;
+				goto fail;
 		}
 		else
 		{
 			WCHAR fileName[MAX_PATH];
 			if (wcslen(Dir) + wcslen(FindFileData.cFileName) + 2 > MAX_PATH)
-				return FALSE;
+				goto fail;
 			StringCchCopyW(fileName, MAX_PATH, Dir);
 			StringCchCatW(fileName, MAX_PATH, L"\\");
 			StringCchCatW(fileName, MAX_PATH, FindFileData.cFileName);
 
 			if (!wf_cliprdr_add_to_file_arrays(clipboard, fileName, pathLen))
-				return FALSE;
+				goto fail;
 		}
 	}
 
 	FindClose(hFind);
 	return TRUE;
+
+fail:
+	FindClose(hFind);
+	return FALSE;
 }
 
 static UINT wf_cliprdr_send_client_capabilities(wfClipboard *clipboard)
@@ -2486,9 +2499,13 @@ static UINT wf_cliprdr_monitor_ready(CliprdrClientContext *context,
 									 const CLIPRDR_MONITOR_READY *monitorReady)
 {
 	UINT rc;
-	wfClipboard *clipboard = (wfClipboard *)context->Custom;
+	wfClipboard *clipboard;
 
 	if (!context || !monitorReady)
+		return ERROR_INTERNAL_ERROR;
+
+	clipboard = (wfClipboard *)context->Custom;
+	if (!clipboard)
 		return ERROR_INTERNAL_ERROR;
 
 	clipboard->sync = TRUE;
@@ -2514,13 +2531,15 @@ static UINT wf_cliprdr_server_capabilities(CliprdrClientContext *context,
 	CLIPRDR_CAPABILITY_SET *capabilitySet;
 	wfClipboard *clipboard;
 
-	if (!context || !capabilities || capabilities->cCapabilitiesSets != 1 ||
-		!capabilities->capabilitySets)
+	if (!context || !capabilities ||
+		capabilities->cCapabilitiesSets > 1 ||
+		(capabilities->cCapabilitiesSets == 1 && !capabilities->capabilitySets))
 		return ERROR_INTERNAL_ERROR;
 
 	clipboard = (wfClipboard *)context->Custom;
 	if (!clipboard)
 		return ERROR_INTERNAL_ERROR;
+	clipboard->capabilities = 0;
 
 	for (index = 0; index < capabilities->cCapabilitiesSets; index++)
 	{
@@ -2725,7 +2744,9 @@ wf_cliprdr_server_format_list_response(CliprdrClientContext *context,
 									   const CLIPRDR_FORMAT_LIST_RESPONSE *formatListResponse)
 {
 	(void)context;
-	(void)formatListResponse;
+
+	if (!formatListResponse)
+		return ERROR_INTERNAL_ERROR;
 
 	if (formatListResponse->msgFlags != CB_RESPONSE_OK)
 		return E_FAIL;
@@ -3428,6 +3449,11 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
 		{
 			rc = E_FAIL;
+			break;
+		}
+		if (fileContentsResponse->cbRequested > clipboard->req_fsize_expected)
+		{
+			rc = ERROR_INVALID_DATA;
 			break;
 		}
 
