@@ -348,10 +348,68 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
             return (all, undriven_total);
         }
     }
-    match scrap::drm_reader::DrmReader::open(None, 0) {
-        Some(mut r) => drm_displays_from_reader(&mut r, ""),
-        None => (Vec::new(), Vec::new()),
+    // Reached when `list_devices` gave us nothing to work with (an older `.so` that does not export
+    // it, or no card opened). The obvious fallback -- one auto-detected reader -- is NOT enough, and
+    // the reason is subtle enough to be worth stating: libdrmtap's auto-detect picks a card that is
+    // SCANNING OUT. On a multi-card host where the interesting display is asleep, it therefore picks
+    // a DIFFERENT card and we enumerate only that one, so the asleep display is never seen at all --
+    // not as a display, and not as an undriven connector either, which is what the wake keys on.
+    //
+    // Measured on the T2, with the panel idle-disabled: auto-detect SUCCEEDS and binds `card0`, the
+    // Touch Bar, because the Touch Bar is the thing still scanning out. The 2880x1800 panel on
+    // `card2` is invisible to that reader. Opening `card2` by explicit path in the same instant
+    // reports `eDP-1 crtc=0 active=0` exactly as needed. So the auto-detected card is the wrong unit
+    // of enumeration whenever more than one card exists: walk /dev/dri/card* and ask each.
+    //
+    // Auto-detect stays as the LAST resort, for the case where the directory cannot be read or no
+    // card opens by path (a locked-down seat), which is the one situation where its activity-based
+    // heuristic can still find something we could not.
+    let mut all = Vec::new();
+    let mut undriven_total = Vec::new();
+    let mut paths: Vec<std::path::PathBuf> = match std::fs::read_dir("/dev/dri") {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    // cardN only: a render node has no KMS resources to enumerate.
+                    .is_some_and(|n| n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()))
+            })
+            .collect(),
+        Err(err) => {
+            log::debug!("drm: cannot read /dev/dri to enumerate cards: {err}");
+            Vec::new()
+        }
+    };
+    // Deterministic order, so the display list does not depend on directory order.
+    paths.sort();
+    let n_paths = paths.len();
+    for p in paths {
+        let Some(path) = p.to_str() else { continue };
+        if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(path), 0) {
+            let (mut got, mut undriven) = drm_displays_from_reader(&mut r, path);
+            all.append(&mut got);
+            undriven_total.append(&mut undriven);
+        }
     }
+    // Logged UNCONDITIONALLY, including the empty case. A silent "found nothing" is exactly what
+    // made the original defect invisible: the handshake answered an empty list and no log line said
+    // where that answer came from.
+    log::info!(
+        "drm: enumerated /dev/dri directly ({} card path(s)): {} active display(s), {} connected \
+         but undriven",
+        n_paths,
+        all.len(),
+        undriven_total.len()
+    );
+    if all.is_empty() && undriven_total.is_empty() {
+        // Nothing by path: only now is the activity-based auto-detect worth a try.
+        if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
+            log::info!("drm: no card enumerated by path; falling back to the auto-detected reader");
+            return drm_displays_from_reader(&mut r, "");
+        }
+    }
+    (all, undriven_total)
 }
 
 /// Connector identities (`device:connector`) a wake was already tried on and did NOT bring back:
