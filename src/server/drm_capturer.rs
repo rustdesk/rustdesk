@@ -144,8 +144,11 @@ fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
 /// The three verdicts live together because they are three answers to one question, "can this display
 /// be captured over DRM right now", and they feed each other: the rebuild cadence and the zero-frame
 /// streak both end in the same demotion, and the convert verdict is what keeps a multi-GPU display
-/// off the dma-buf path so it never gets there. An entry is dropped entirely the moment the display
-/// delivers a frame, which is the single reset for all of it.
+/// off the dma-buf path so it never gets there. A delivered frame resets the streak verdicts
+/// (`zero_frame_streak`, `demotes`) and NOTHING else: it is evidence that a grab succeeded once, not
+/// evidence about the rebuild cadence -- which exists for displays that deliver a first frame and
+/// then fail -- nor about which GPU exports the scanout. The entry itself is bounded by connector
+/// count, so it costs nothing to keep.
 #[derive(Clone, Copy)]
 struct DisplayHealth {
     /// Consecutive capture sessions that ended without ever producing a frame. A display whose
@@ -486,10 +489,30 @@ impl TraitCapturer for IpcDrmCapturer {
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // First frame of this session: DRM capture works for this display, clear its
-                    // failure streak.
+                    // failure streak. Clear ONLY the streak, not the whole entry.
+                    //
+                    // Dropping the entry here is what a first frame used to do, and it silently
+                    // disarmed the two verdicts that a first frame says nothing about:
+                    //  - `last_build`/`rapid_builds` exist precisely for a display that DELIVERS a
+                    //    first frame and then fails downstream every cycle. Wiping the cadence on
+                    //    that frame meant the flap guard could never reach RAPID_REBUILD_MAX in the
+                    //    one case its own doc comment describes -- a guard that cannot fire.
+                    //  - `prefer_cpu` is a property of the HOST (which GPU exports this monitor),
+                    //    documented as following the monitor for the process run. It is learned by
+                    //    a failed dma-buf session and consumed by the next one, so erasing it on
+                    //    the first frame it made possible meant every rebuild re-paid that failed
+                    //    session. Worse, the set happens on the recv thread and this delete on the
+                    //    encoder thread, so a convert failure racing a queued frame could destroy
+                    //    the bit inside the very session that learned it.
+                    // Only `drm_clear_prefer_cpu` (on a topology change, where the mapping really
+                    // can have changed) may clear the convert verdict.
                     self.got_frame = true;
                     if let Some(key) = &self.connector {
-                        DRM_DISPLAY_HEALTH.lock().unwrap().remove(key);
+                        if let Some(h) = DRM_DISPLAY_HEALTH.lock().unwrap().get_mut(key) {
+                            h.zero_frame_streak = 0;
+                            h.demotes = 0;
+                            h.since = Instant::now();
+                        }
                     }
                 }
             } else {
@@ -1596,23 +1619,31 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 }
 
 /// Index (into the cached DRM display list) of the compositor's PRIMARY output. DRM connector order
-/// is not the compositor's primary, so match the compositor's primary (from the same Wayland source
-/// the geometry augmentation uses) to the DRM list by normalized connector name; fall back to 0 when
-/// unknown. Without this the first DRM connector is always streamed, which is the wrong initial
-/// display whenever the primary is not connector 0.
+/// is not the compositor's primary, so find which DRM entry was assigned the compositor's primary
+/// output; fall back to 0 when unknown. Without this the first DRM connector is always streamed,
+/// which is the wrong initial display whenever the primary is not connector 0.
+///
+/// It asks `assign_wayland_outputs` rather than re-matching by name, and that is the point: whatever
+/// that function decides IS the geometry advertised to the client for each index, so deriving the
+/// primary from the same assignment makes the advertised primary and the advertised geometry agree
+/// BY CONSTRUCTION. Matching by name here separately was the second, weaker copy of the same
+/// question -- it had neither the unique-resolution step nor the layout-order fallback, so on any
+/// compositor whose output names do not normalize to the DRM connector names (or reports none at
+/// all, which the Wayland display code has its own "nameless compositor" path for) it silently
+/// answered 0 while the geometry augmentation had matched that display to a different output.
 pub(super) fn get_primary_index() -> usize {
     let list = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
         _ => return 0,
     };
     let wl = scrap::wayland::display::get_displays();
-    if let Some(pw) = wl.displays.get(wl.primary) {
-        let pn = normalize_connector(&pw.name);
-        if let Some(idx) = list.iter().position(|d| normalize_connector(&d.name) == pn) {
-            return idx;
-        }
+    if wl.displays.is_empty() {
+        return 0;
     }
-    0
+    assign_wayland_outputs(&list, &wl.displays)
+        .iter()
+        .position(|assigned| *assigned == Some(wl.primary))
+        .unwrap_or(0)
 }
 
 /// The DRM enumeration reports every monitor at physical size and origin (0,0) — it deliberately

@@ -509,6 +509,52 @@ def _assert_so_has_egl(so_path):
 DRM_PACKAGE_NAME = 'rustdesk-unattended-wayland'
 
 
+def assert_so_satisfies_the_runtime_abi_gate(so_path):
+    """The .so we are about to ship must be one the RUNTIME will actually accept.
+
+    `abi_accepted` in libs/scrap/src/common/drmtap_dl.rs is the only place the pinned library's
+    version is ever validated, and it runs at dlopen time on the USER's machine. Nothing in the
+    build or in CI compared the two, so the pin and the gate could drift apart and every existing
+    assertion would still pass: the EGL check does not look at the version, the CI symbol contract
+    does not call drmtap_version(), and the deb-contents regex matches any `libdrmtap.so.0.X.Y`.
+    A green pipeline could therefore produce a deb in which DRM capture can never start, and the
+    only symptom on the host is one log line before it falls back to the portal.
+
+    So parse the gate out of the Rust and apply it here, to the object being staged. This is the
+    same rule, not a copy of the numbers: if someone bumps the constants, this reads the new ones.
+    """
+    m = re.search(r'libdrmtap\.so\.(\d+)\.(\d+)\.(\d+)', os.path.basename(so_path))
+    if not m:
+        # Not a versioned soname (a local dev build, say). The gate cannot be evaluated, and
+        # inventing a verdict would be worse than saying so.
+        print(f'[drm] cannot read a version out of {so_path}; skipping the ABI-gate cross-check')
+        return
+    so_ver = tuple(int(g) for g in m.groups())
+    gate_src = open('libs/scrap/src/common/drmtap_dl.rs').read()
+
+    def _const(name):
+        mm = re.search(rf'const {name}: c_int = (\d+);', gate_src)
+        return int(mm.group(1)) if mm else None
+
+    major, minor = _const('DRMTAP_ABI_MAJOR'), _const('DRMTAP_ABI_MINOR')
+    mm = re.search(r'const DRMTAP_MIN_MINOR_PATCH: \(c_int, c_int\) = \((\d+), (\d+)\);', gate_src)
+    floor = (int(mm.group(1)), int(mm.group(2))) if mm else None
+    if major is None or minor is None or floor is None:
+        raise Exception(
+            'could not parse the libdrmtap ABI gate out of drmtap_dl.rs (DRMTAP_ABI_MAJOR / '
+            'DRMTAP_ABI_MINOR / DRMTAP_MIN_MINOR_PATCH). The gate moved and this check did not; '
+            'fix the check rather than removing it, or the pin and the gate can drift silently.')
+    accepted = so_ver[0] == major and so_ver[1] == minor and (so_ver[1], so_ver[2]) >= floor
+    if not accepted:
+        raise Exception(
+            f'the libdrmtap being packaged is {so_ver[0]}.{so_ver[1]}.{so_ver[2]}, which the '
+            f'runtime loader would REFUSE: drmtap_dl.rs accepts exactly major {major}, minor '
+            f'{minor}, patch >= {floor[1]}. Shipping it produces a deb whose DRM capture can never '
+            'start. Move the build pin and the gate together, or fix whichever one is wrong.')
+    print(f'[drm] libdrmtap {so_ver[0]}.{so_ver[1]}.{so_ver[2]} satisfies the runtime ABI gate '
+          f'(major {major}, minor {minor}, patch >= {floor[1]})')
+
+
 def stage_libdrmtap_into_deb(so_path):
     # Put the built libdrmtap object plus its soname symlink into the staged deb. Only the soname
     # symlink is needed: libdrmtap is resolved by ABSOLUTE path (/usr/lib/rustdesk/libdrmtap.so.0) at
@@ -516,6 +562,7 @@ def stage_libdrmtap_into_deb(so_path):
     # system-wide /etc/ld.so.conf.d search path, which would let this private library shadow a system
     # library for every binary on the host (Debian Policy 10.2 forbids that). No ld.so.conf.d drop-in
     # and no ldconfig trigger are shipped, so the stock postinst is used unchanged.
+    assert_so_satisfies_the_runtime_abi_gate(so_path)
     so_basename = os.path.basename(so_path)
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
     system2(f'cp {so_path} tmpdeb/usr/lib/rustdesk/')
@@ -615,9 +662,14 @@ def build_flutter_deb(version, features):
 
 
 DRMTAP_DLOPEN_MARKER = b'/usr/lib/rustdesk/libdrmtap.so.0'
+# Present only when `drm-wake` is compiled in: the runtime option constant is itself
+# #[cfg(feature = "drm-wake")] (src/ipc/drm.rs). The dlopen marker above cannot stand in for it -
+# `--features drm` alone produces a binary that carries the dlopen path and NO wake code, and that
+# is exactly the deb this assertion is here to refuse.
+DRMTAP_WAKE_MARKER = b'enable-drm-display-wake'
 
 
-def _carries_drmtap_marker(path):
+def _carries_drmtap_marker(path, marker=DRMTAP_DLOPEN_MARKER):
     # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk boundary:
     # librustdesk.so is ~45 MB and there is no reason to hold it all in memory, and the `with`
     # closes deterministically instead of relying on refcounting.
@@ -627,9 +679,9 @@ def _carries_drmtap_marker(path):
             chunk = f.read(1 << 20)
             if not chunk:
                 return False
-            if DRMTAP_DLOPEN_MARKER in tail + chunk:
+            if marker in tail + chunk:
                 return True
-            tail = chunk[-(len(DRMTAP_DLOPEN_MARKER) - 1):]
+            tail = chunk[-(len(marker) - 1):]
 
 
 def assert_staged_binary_is_drm():
@@ -650,6 +702,18 @@ def assert_staged_binary_is_drm():
             f'{DRMTAP_DLOPEN_MARKER.decode()} dlopen path in {binaries or "any staged binary"}); '
             'refusing to package it as the unattended-wayland variant, which conflicts with and '
             'replaces the stock package but could never capture')
+    # And the WAKE half. `--drm` enables `drm-wake` too (see get_features), and the deb is named and
+    # documented as the variant that can reach a machine whose screen has gone dark. The dlopen
+    # marker above does not distinguish them: `--features drm` alone carries it and has no wake code
+    # at all. Asserting only the first half is how a deb can be named for a feature it does not have.
+    if not any(_carries_drmtap_marker(p, DRMTAP_WAKE_MARKER) for p in binaries):
+        raise Exception(
+            f'--drm was requested but the staged binary has no {DRMTAP_WAKE_MARKER.decode()} '
+            f'marker in {binaries or "any staged binary"}, so it was built without `drm-wake`; '
+            'refusing to package it as the unattended-wayland variant, which is named and '
+            'documented as the build that can wake an idle-disabled display. If this fired under '
+            '--skip-cargo, the cargo line that produced the bundle is missing the feature: '
+            '--features ...,drm,drm-wake')
 
 
 def build_deb_from_folder(version, binary_folder, want_drm=False):
