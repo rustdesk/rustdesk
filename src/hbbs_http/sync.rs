@@ -309,10 +309,9 @@ pub fn is_pro() -> bool {
     PRO.lock().unwrap().clone()
 }
 
-// Fire-and-forget by design: the switch flow must not block on this POST,
-// and there is no retry — the peer connects within seconds, so a late
-// retry would land after its punch request was already rejected. If the
-// switch fails, the user triggers it again, which registers a fresh grant.
+// Fire-and-forget by design: the switch flow must not block on this POST.
+// If the device clock is outside the server's accepted window, the server
+// returns its current Unix time and this task re-signs and retries once.
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn register_switch_grant(switch_uuid: String) {
@@ -330,17 +329,49 @@ pub fn register_switch_grant(switch_uuid: String) {
             log::error!("Failed to register switch grant: no device key");
             return;
         };
-        let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code, &timestamp), &sk);
-        let body = json!({
-            "id": id,
-            "switch_code": switch_code,
-            "timestamp": timestamp,
-            "signature": crate::encode64(signed),
-        })
-        .to_string();
         let url = format!("{}/api/switch-grant", api_server);
-        if let Err(e) = crate::post_request(url, body, "").await {
-            log::error!("Failed to register switch grant: {}", e);
+        let mut timestamp = timestamp;
+        for attempt in 0..2 {
+            let signed = sign::sign(&switch_grant_signed_msg(&id, &switch_code, &timestamp), &sk);
+            let body = json!({
+                "id": &id,
+                "switch_code": &switch_code,
+                "timestamp": &timestamp,
+                "signature": crate::encode64(signed),
+            })
+            .to_string();
+            let response = match crate::post_request(url.clone(), body, "").await {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to register switch grant: {}", e);
+                    return;
+                }
+            };
+            let response = match serde_json::from_str::<Value>(&response) {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to register switch grant: invalid response: {}", e);
+                    return;
+                }
+            };
+            match response.get("accepted").and_then(Value::as_bool) {
+                Some(true) => return,
+                Some(false) => {}
+                None => {
+                    log::error!("Failed to register switch grant: missing accepted response");
+                    return;
+                }
+            }
+            let Some(server_time) = response["server_time"].as_i64() else {
+                log::error!("Failed to register switch grant: rejected by server");
+                return;
+            };
+            if attempt == 0 {
+                log::warn!("Switch grant timestamp rejected, retrying with server time");
+                timestamp = server_time.to_string();
+            } else {
+                log::error!("Failed to register switch grant after retrying with server time");
+            }
         }
     });
 }
