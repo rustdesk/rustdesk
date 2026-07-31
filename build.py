@@ -592,6 +592,9 @@ def build_flutter_deb(version, features):
     # consent-bypass variant without --drm ever being passed.
     ships_so = 'drm' in features.split(',')
     if ships_so:
+        # Same artifact assertion as the --package path. Under --skip-cargo nothing here rebuilt the
+        # binary, so `features` says what was ASKED for while the staged bundle can be anything.
+        assert_staged_binary_is_drm()
         stage_libdrmtap_into_deb(build_libdrmtap_so())
 
     system2('mkdir -p tmpdeb/DEBIAN')
@@ -609,6 +612,44 @@ def build_flutter_deb(version, features):
         # Named apart from the stock package so installing the consent-free variant is a deliberate act.
         os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
+
+
+DRMTAP_DLOPEN_MARKER = b'/usr/lib/rustdesk/libdrmtap.so.0'
+
+
+def _carries_drmtap_marker(path):
+    # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk boundary:
+    # librustdesk.so is ~45 MB and there is no reason to hold it all in memory, and the `with`
+    # closes deterministically instead of relying on refcounting.
+    with open(path, 'rb') as f:
+        tail = b''
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return False
+            if DRMTAP_DLOPEN_MARKER in tail + chunk:
+                return True
+            tail = chunk[-(len(DRMTAP_DLOPEN_MARKER) - 1):]
+
+
+def assert_staged_binary_is_drm():
+    """The staged BINARY must really be a drm build before it is named the unattended-wayland
+    variant. That package conflicts with and replaces the stock one, so shipping a stock binary
+    under that name produces something that can never capture and cannot be installed alongside
+    what it replaced. The marker is the absolute dlopen path from drmtap_dl.rs, present only when
+    the feature is compiled in -- assert what was produced, not what was asked for.
+
+    Called from BOTH packaging paths. It used to guard only one of them, and `--skip-cargo` (which
+    is how CI packages) reaches the other, where nothing had rebuilt the binary at all.
+    """
+    binaries = [p for p in glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
+                + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk') if os.path.isfile(p)]
+    if not any(_carries_drmtap_marker(p) for p in binaries):
+        raise Exception(
+            f'--drm was requested but the staged bundle does not look like a drm build (no '
+            f'{DRMTAP_DLOPEN_MARKER.decode()} dlopen path in {binaries or "any staged binary"}); '
+            'refusing to package it as the unattended-wayland variant, which conflicts with and '
+            'replaces the stock package but could never capture')
 
 
 def build_deb_from_folder(version, binary_folder, want_drm=False):
@@ -659,29 +700,7 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
         # dlopen path from drmtap_dl.rs, present only when the feature is compiled in -- the same
         # kind of artifact assertion as _assert_so_has_egl, and for the same reason: assert what
         # was produced, not what was asked for.
-        marker = b'/usr/lib/rustdesk/libdrmtap.so.0'
-        binaries = [p for p in glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
-                    + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk') if os.path.isfile(p)]
-        def _carries_marker(path):
-            # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk
-            # boundary: librustdesk.so is ~45 MB and there is no reason to hold it all in memory,
-            # and the `with` closes deterministically instead of relying on refcounting.
-            with open(path, 'rb') as f:
-                tail = b''
-                while True:
-                    chunk = f.read(1 << 20)
-                    if not chunk:
-                        return False
-                    if marker in tail + chunk:
-                        return True
-                    tail = chunk[-(len(marker) - 1):]
-
-        if not any(_carries_marker(p) for p in binaries):
-            raise Exception(
-                f'--drm was requested but the staged bundle does not look like a drm build (no '
-                f'{marker.decode()} dlopen path in {binaries or "any staged binary"}); refusing to '
-                'package it as the unattended-wayland variant, which conflicts with and replaces '
-                'the stock package but could never capture')
+        assert_staged_binary_is_drm()
         if bundle_carries_so:
             so = _single_real_so(bundled_glob, 'the staged --drm bundle')
             # The THIRD artifact source, and the last one that was missing the check: --package

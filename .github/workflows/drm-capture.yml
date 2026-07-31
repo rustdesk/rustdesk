@@ -338,7 +338,9 @@ jobs:
       - name: Build the unattended-wayland deb
         shell: bash
         run: |
-          cargo build --locked --lib --release --features hwcodec,flutter,unix-file-copy-paste,drm
+          # drm-wake must be listed HERE: build.py adds it for --drm, but the next line passes
+          # --skip-cargo, so build.py never rebuilds and whatever this line compiled is what ships.
+          cargo build --locked --lib --release --features hwcodec,flutter,unix-file-copy-paste,drm,drm-wake
           python3 ./build.py --flutter --drm --skip-cargo
 
       # build.py exits 0 on some inner failures, so assert the artifact instead of trusting the status,

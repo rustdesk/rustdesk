@@ -142,7 +142,12 @@ presents) but reuses RustDesk's own hardened IPC.
   rather than fail. The conversion then happens in the service, on the device it
   already has open, so it is correct by construction. Hosts with a single render
   node have nothing to pick wrong and keep the DMA-BUF fast path.
-- **The display wake injects synthetic input from the root service.** A
+- **The display wake injects synthetic input from the root service.** It is
+  compiled in only with the `drm-wake` feature, which `build.py --drm` adds on
+  top of `drm`, and it can be switched off at runtime with
+  `enable-drm-display-wake=N`. Building with `--features drm` alone leaves no
+  wake code in the binary at all, so an operator auditing the deb can answer
+  "is the injection path even present here?" from the artifact. A
   compositor that idles long enough DISABLES a connector, leaving no scanout for
   any backend, so on a `_drm` handshake that finds a CONNECTED display with no
   CRTC the service emits one synthetic pointer round trip over `/dev/uinput` to
