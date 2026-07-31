@@ -611,7 +611,15 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         // so a Wayland host that came up slowly skipped the warm for the life of the process and
         // got back the cold-probe "No displays" symptom the warm exists to remove.
         #[cfg(all(target_os = "linux", feature = "drm"))]
-        std::thread::spawn(drm_capturer::warm_availability);
+        if let Err(err) = std::thread::Builder::new()
+            .name("drm-warm".into())
+            .spawn(drm_capturer::warm_availability)
+        {
+            // Same reason as the root service's startup threads: `thread::spawn` panics on EAGAIN
+            // and that would abort `start_server`. Skipping the warm costs the first session the
+            // cold probe, which is what happened before the warm existed.
+            log::warn!("drm: could not spawn the availability warm ({err}); skipping it");
+        }
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
         if input_service::wayland_use_uinput() {

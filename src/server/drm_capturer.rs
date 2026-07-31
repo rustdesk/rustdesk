@@ -337,7 +337,12 @@ impl IpcDrmCapturer {
         {
             let shared = shared.clone();
             let stop = stop.clone();
-            std::thread::spawn(move || recv_thread(display, expected, shared, stop, tx));
+            // Builder, like the startup threads: `thread::spawn` panics on EAGAIN, and this runs
+            // inside a function that already returns ResultType, so a failure has a clean home.
+            std::thread::Builder::new()
+                .name("drm-recv".into())
+                .spawn(move || recv_thread(display, expected, shared, stop, tx))
+                .map_err(|err| anyhow!("could not spawn the drm receive thread: {err}"))?;
         }
         let (displays, wire_idx) = match rx.recv_timeout(Duration::from_millis(HANDSHAKE_WAIT_MS)) {
             Ok(res) => res?,
@@ -737,10 +742,14 @@ async fn recv_thread(
                     format: desc.format,
                     modifier: desc.modifier,
                     fb_id: desc.fb_id,
-                    // Clamped although the producer already normalizes it and must be root: this
-                    // value indexes offsets/pitches inside libdrmtap, and the wire is the one place
-                    // it arrives from another process.
-                    num_planes: desc.num_planes.clamp(1, 4),
+                    // Passed through RAW on purpose. This used to clamp to 1..=4, which was added
+                    // before `drm_render::convert` grew its own check -- and convert REJECTS an
+                    // out-of-range count rather than clamping, precisely so the count the C reads is
+                    // the count this side validated. Clamping here made that reject unreachable for
+                    // any over-range wire value: a descriptor claiming 7 planes arrived at convert
+                    // as 4 and passed. One validation site for this field, and it is the one next to
+                    // the code that dereferences it.
+                    num_planes: desc.num_planes,
                     offsets: desc.offsets,
                     pitches: desc.pitches,
                     hdr_eotf: desc.hdr_eotf,

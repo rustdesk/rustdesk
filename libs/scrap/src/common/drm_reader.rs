@@ -477,7 +477,10 @@ impl DrmReader {
     /// reports the cursor invisible, the real shape when visible, or None on a
     /// read error / unsupported cursor. Ported from the old drm.rs update_cursor.
     pub fn cursor(&mut self) -> Option<CursorSnapshot> {
-        // SAFETY: ctx valid; c zeroed before the call; released only on success.
+        // SAFETY: ctx valid; c zeroed before the call; released on EVERY path after a
+        // successful get_cursor -- the hidden-cursor sentinel and the rejected-geometry arm
+        // included. Only a failed get_cursor (cret != 0) returns without releasing, because then
+        // there is nothing to release. The release protocol is why this block is unsafe.
         unsafe {
             let mut c: drmtap_cursor_info = std::mem::zeroed();
             let cret = (self.lib.get_cursor)(self.ctx, &mut c);

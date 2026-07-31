@@ -1064,11 +1064,28 @@ pub async fn start_drm() {
             // outlives sessions, a later Wayland login must find the `_drm` socket, and every
             // handshake enumerates fresh (drm_enumerate_settled), so a skipped prewarm costs that
             // session only the one-time library/EGL warmup the prewarm exists to hide.
-            std::thread::spawn(drm_prewarm);
+            // Builder, not `thread::spawn`: the latter PANICS if the thread cannot be created
+            // (EAGAIN under a thread-count or memory limit), and that panic would unwind out of
+            // `start_drm` and take the `_drm` listener with it -- losing the whole feature entry
+            // point to a failure whose only cost should be one best-effort task.
+            if let Err(err) = std::thread::Builder::new()
+                .name("drm-prewarm".into())
+                .spawn(drm_prewarm)
+            {
+                log::warn!("drm: could not spawn the pre-warm thread ({err}); skipping the warmup");
+            }
             // Watch for connector hotplug/modeset uevents so a mid-session topology change refreshes
             // the display cache and is pushed to live consumers (best-effort; own thread since it
             // blocks on recv and re-enumeration is a blocking `!Send` open).
-            std::thread::spawn(drm_udev_listener);
+            if let Err(err) = std::thread::Builder::new()
+                .name("drm-udev".into())
+                .spawn(drm_udev_listener)
+            {
+                log::warn!(
+                    "drm: could not spawn the udev listener ({err}); a mid-session topology change \
+                     will not be pushed, and consumers pick it up on their next handshake"
+                );
+            }
             loop {
                 match incoming.next().await {
                     Some(Ok(stream)) => {
@@ -1246,7 +1263,13 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     // on the dma-buf path) inside the privileged service for a consumer that is behind.
     let frames_gated = Arc::new(AtomicBool::new(false));
     let worker_gate = frames_gated.clone();
-    std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate));
+    // Builder for the same reason as the startup threads, and here the caller is an async task
+    // that already returns ResultType: a spawn failure ends this one connection with an error
+    // instead of unwinding a panic through the connection handler.
+    std::thread::Builder::new()
+        .name("drm-capture".into())
+        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     // Handshake: the worker sends the display list -- a fresh, settled enumeration
     // (drm_enumerate_settled), possibly held back while a display wake completes. A closed channel

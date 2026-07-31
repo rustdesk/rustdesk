@@ -530,7 +530,13 @@ def assert_so_satisfies_the_runtime_abi_gate(so_path):
         print(f'[drm] cannot read a version out of {so_path}; skipping the ABI-gate cross-check')
         return
     so_ver = tuple(int(g) for g in m.groups())
-    gate_src = open('libs/scrap/src/common/drmtap_dl.rs').read()
+    # Anchored on THIS file, not on the cwd: both callers of stage_libdrmtap_into_deb have already
+    # chdir'd into flutter/ by the time they get here, so a cwd-relative path raises FileNotFoundError
+    # and fails every --drm packaging run. (It did; CI caught it.)
+    gate_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'libs', 'scrap', 'src', 'common', 'drmtap_dl.rs')
+    with open(gate_path) as f:
+        gate_src = f.read()
 
     def _const(name):
         mm = re.search(rf'const {name}: c_int = (\d+);', gate_src)
