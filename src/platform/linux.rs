@@ -2062,6 +2062,23 @@ mod desktop {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
                 self.is_rustdesk_subprocess = false;
+                // Resolve HOME even on this path. Upstream returned without it because nothing then
+                // consumed a login-Wayland Desktop, but the drm build starts a `--server` as the
+                // greeter uid here, and a child with no HOME has nowhere to put its config. The
+                // compositor variables (WAYLAND_DISPLAY, DBUS, DISPLAY, XAUTHORITY) are left blank
+                // on purpose and are NOT an oversight: the drm capture path talks to the root
+                // service over `_drm` and to a render node, never to the compositor or the portal,
+                // which is the entire reason it works at a login screen. `try_start_server_` skips
+                // empty entries, so the greeter child simply does not get them.
+                //
+                // NOT REPRODUCIBLE ON OUR HARDWARE, so it is a reasoned fix, not a measured one:
+                // `is_login_wayland` needs `is_gdm_user(username)`, and a current GDM runs its
+                // greeter as `gdm-greeter`, which that helper does not match -- measured on the
+                // test host, where the greeter server therefore takes the branch below and gets a
+                // fully populated environment. This is for the display managers whose greeter user
+                // does match.
+                #[cfg(feature = "drm")]
+                self.get_home();
                 return;
             }
 

@@ -440,11 +440,20 @@ impl DrmReader {
             }
             // dup the fd into an OwnedFd BEFORE releasing the frame: after release
             // the library may recycle its handle, but our dup (an independent fd on
-            // the same open dma-buf) keeps the buffer alive for the peer. dup(2)
-            // shares the same open file description, so it preserves the O_RDONLY
-            // access mode of libdrmtap's exported scanout fd (DRM_RDWR dropped) --
-            // the peer's fd stays read-only and cannot write the live scanout.
-            let dup_fd = hbb_common::libc::dup(raw_fd);
+            // the same open dma-buf) keeps the buffer alive for the peer. It shares
+            // the same open file description, so it preserves the O_RDONLY access
+            // mode of libdrmtap's exported scanout fd (DRM_RDWR dropped) -- the
+            // peer's fd stays read-only and cannot write the live scanout.
+            //
+            // F_DUPFD_CLOEXEC, not dup(): `dup` never copies the close-on-exec flag, so this fd
+            // would be inherited by every child this process forks. This runs in the ROOT service,
+            // which does fork synchronously elsewhere (the `loginctl` active-uid lookup), and what
+            // this fd names is the LIVE SCANOUT -- the screen contents. Leaking that into an
+            // unrelated child is a disclosure even if no child ever reads it. Same fix, same
+            // reason, as `dup_to_drm_conn` in ipc/drm.rs, which closed this on the socket fd; this
+            // was its sibling and the one that carries the pixels. SCM_RIGHTS delivery is
+            // unaffected: the receiver gets its own descriptor with its own flags.
+            let dup_fd = hbb_common::libc::fcntl(raw_fd, hbb_common::libc::F_DUPFD_CLOEXEC, 0);
             if dup_fd < 0 {
                 let e = io::Error::last_os_error();
                 (self.lib.frame_release)(self.ctx, &mut frame);

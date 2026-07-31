@@ -397,7 +397,17 @@ jobs:
           # explicit rescue so a no-match grep reaches the `test -n` reporter instead of dying as a
           # bare pipeline failure.
           set -euo pipefail
-          deb="$(ls rustdesk-unattended-wayland-*-x86_64.deb)"
+          # Same nullglob array + count assertion as the assert step above, for the same two
+          # reasons: under set -e a zero-match `ls` aborts before anything can report WHY, and
+          # several matches make `deb` multi-line so dpkg-deb fails with an unrelated error. (This
+          # was the sibling left behind when that one was fixed.)
+          shopt -s nullglob
+          debs=(rustdesk-unattended-wayland-*-x86_64.deb)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one renamed deb to measure, found ${#debs[@]}: ${debs[*]-none}"
+            exit 1
+          fi
+          deb="${debs[0]}"
           rm -rf /tmp/debfloor && dpkg-deb -R "$deb" /tmp/debfloor
           floor="$(objdump -T /tmp/debfloor/usr/share/rustdesk/lib/librustdesk.so \
                    | grep -oE 'GLIBC_2\.[0-9]+' | sort -uV | tail -1 || true)"
