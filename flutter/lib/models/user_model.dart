@@ -20,6 +20,9 @@ class UserModel {
   final RxString avatar = ''.obs;
   final RxBool isAdmin = false.obs;
   final RxString networkError = ''.obs;
+  // True when networkError carries a server-reported error rather than a
+  // connectivity failure; netWorkErrorWidget hides the network tip then.
+  final RxBool networkErrorFromServer = false.obs;
   bool get isLogin => userName.isNotEmpty;
   String get displayNameOrUserName =>
       displayName.value.trim().isEmpty ? userName.value : displayName.value;
@@ -50,6 +53,7 @@ class UserModel {
   void refreshCurrentUser() async {
     if (bind.isDisableAccount()) return;
     networkError.value = '';
+    networkErrorFromServer.value = false;
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
       await updateOtherModels();
@@ -92,9 +96,12 @@ class UserModel {
       _parseAndUpdateUser(user);
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
-      // Also surface non-transport failures (bad status, non-JSON body) in
-      // the address book / group tabs, which offer a retry.
+      // Also surface non-transport failures in the address book / group
+      // tabs, which offer a retry. A FormatException means the body was not
+      // the expected JSON (e.g. a filter's block page), so the network tip
+      // still applies; anything else is an error the server reported.
       if (networkError.value.isEmpty) {
+        networkErrorFromServer.value = e is! FormatException;
         networkError.value = e.toString();
       }
     } finally {
