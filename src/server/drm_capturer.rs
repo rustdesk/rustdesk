@@ -2007,6 +2007,46 @@ mod drm_capturer_tests {
         slot.publish(w, h, Pixfmt::BGRA, buf);
     }
 
+    // The regression this guards, and it was a guard that could never fire: a delivered frame used
+    // to DROP the whole DisplayHealth entry, which took `last_build`/`rapid_builds` with it. Those
+    // exist precisely for a display that delivers a first frame and then fails downstream every
+    // cycle -- so the rapid-rebuild threshold was unreachable in exactly the case its own doc
+    // comment describes. `prefer_cpu` went the same way: learned by a failed dma-buf session and
+    // erased by the first frame it made possible.
+    #[test]
+    fn a_delivered_frame_clears_the_streak_but_keeps_the_cadence_and_the_convert_verdict() {
+        let key = "test:frame-keeps-cadence";
+        let mut c = capturer_named(Some((64, 32)), Some(key));
+        // A display that has already failed a few sessions, been built once, and been found to need
+        // the CPU path.
+        {
+            let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
+            let h = map.entry(key.to_owned()).or_insert_with(DisplayHealth::new);
+            h.zero_frame_streak = 2;
+            h.demotes = 1;
+            h.rapid_builds = 3;
+            h.last_build = Some(Instant::now());
+            h.prefer_cpu = true;
+        }
+        put_frame(&c, 64, 32);
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+
+        let map = DRM_DISPLAY_HEALTH.lock().unwrap();
+        let h = map.get(key).expect("the entry must SURVIVE a delivered frame");
+        assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
+        assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
+        assert_eq!(
+            h.rapid_builds, 3,
+            "but it says NOTHING about the rebuild cadence: keeping it is what lets the flap guard \
+             reach RAPID_REBUILD_MAX for a display that delivers a first frame and then fails"
+        );
+        assert!(h.last_build.is_some(), "same for the timestamp the cadence is measured from");
+        assert!(
+            h.prefer_cpu,
+            "and nothing about which GPU exports the scanout: only a topology change may clear it"
+        );
+    }
+
     #[test]
     fn frame_of_the_session_size_is_delivered() {
         let mut c = capturer_with(Some((64, 32)));
