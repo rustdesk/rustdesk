@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID 由对端客户端上报，白名单用于减少暴露面，不能替代密码或 2FA"),
         ("whitelist_cidr_tip", "支持 CIDR 写法，例如 192.168.1.0/24"),
         ("Continue", "继续"),
-        ("Open sign-in page", "打开登录页面"),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", "如果浏览器未打开，请打开登录页面或复制下方链接。"),
-        ("Copy sign-in link", "复制登录链接"),
-        ("Sign-in link copied. Paste it into your browser.", "登录链接已复制。请将其粘贴到浏览器中。"),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }

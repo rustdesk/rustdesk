@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "Az azonosítót a csatlakozó kliens jelenti. Az engedélyezési lista csökkenti a kitettséget, és nem helyettesíti a jelszót vagy a 2FA-t"),
         ("whitelist_cidr_tip", "A CIDR jelölés támogatott, például 192.168.1.0/24"),
         ("Continue", ""),
-        ("Open sign-in page", ""),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
-        ("Copy sign-in link", ""),
-        ("Sign-in link copied. Paste it into your browser.", ""),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }

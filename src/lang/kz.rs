@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID қосылатын клиентпен хабарланады. Ақ-тізім әсер ету аумағын азайтады және құпия сөзді немесе 2FA-ны алмастырмайды"),
         ("whitelist_cidr_tip", "CIDR жазбасына қолдау көрсетіледі, мысалы 192.168.1.0/24"),
         ("Continue", ""),
-        ("Open sign-in page", ""),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
-        ("Copy sign-in link", ""),
-        ("Sign-in link copied. Paste it into your browser.", ""),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }

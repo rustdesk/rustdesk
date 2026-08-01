@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "இணைக்கும் கிளையண்டே ID-ஐ தெரிவிக்கிறது. அனுமதிப்பட்டியல் வெளிப்பாட்டைக் குறைக்கிறது; கடவுச்சொல் அல்லது 2FA-க்கு மாற்றாகாது"),
         ("whitelist_cidr_tip", "CIDR குறியீடு ஆதரிக்கப்படுகிறது, எடுத்துக்காட்டாக 192.168.1.0/24"),
         ("Continue", ""),
-        ("Open sign-in page", ""),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
-        ("Copy sign-in link", ""),
-        ("Sign-in link copied. Paste it into your browser.", ""),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }

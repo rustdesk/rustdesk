@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID કનેક્ટ થતા ક્લાયન્ટ દ્વારા જણાવવામાં આવે છે. વ્હાઇટલિસ્ટ એક્સપોઝર ઘટાડે છે અને પાસવર્ડ કે 2FA નો વિકલ્પ નથી"),
         ("whitelist_cidr_tip", "CIDR નોટેશન સપોર્ટેડ છે, ઉदાહરણ તરીકે 192.168.1.0/24"),
         ("Continue", ""),
-        ("Open sign-in page", ""),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
-        ("Copy sign-in link", ""),
-        ("Sign-in link copied. Paste it into your browser.", ""),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }

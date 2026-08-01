@@ -374,17 +374,10 @@ class _WidgetOPState extends State<WidgetOP> {
                     child: OidcAuthStatus(
                       message: translate(_stateMsg),
                       browserFallbackPrompt: translate(
-                        "If the browser didn't open, open the sign-in page or copy the link below.",
+                        "Browser didn't open? Visit the URL below to sign in.",
                       ),
-                      openLabel: translate('Open sign-in page'),
+                      authUrl: authUrl,
                       copyLabel: translate('Copy sign-in link'),
-                      onOpen: authUrl.isEmpty
-                          ? null
-                          : () => _runCurrentAuthUrlAction(
-                                authAttempt,
-                                authUrl,
-                                _launchAuthUrl,
-                              ),
                       onCopy: authUrl.isEmpty
                           ? null
                           : () => _runCurrentAuthUrlAction(

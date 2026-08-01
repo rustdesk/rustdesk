@@ -774,9 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID는 연결하는 클라이언트가 보고합니다. 화이트리스트는 노출을 줄이는 것으로 비밀번호나 2FA를 대체하지 않습니다"),
         ("whitelist_cidr_tip", "CIDR 표기를 지원합니다. 예: 192.168.1.0/24"),
         ("Continue", ""),
-        ("Open sign-in page", ""),
-        ("If the browser didn't open, open the sign-in page or copy the link below.", ""),
-        ("Copy sign-in link", ""),
-        ("Sign-in link copied. Paste it into your browser.", ""),
+        ("Browser didn't open? Visit the URL below to sign in.", ""),
     ].iter().cloned().collect();
 }
