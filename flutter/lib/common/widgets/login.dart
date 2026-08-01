@@ -25,6 +25,8 @@ const kOpSvgList = [
   'auth0',
   'microsoft'
 ];
+const _requestingAccountAuth = 'Requesting account auth';
+const _waitingAccountAuth = 'Waiting account auth';
 
 class _OidcProviderBranding {
   final String label;
@@ -113,11 +115,9 @@ class ButtonOP extends StatelessWidget {
         width: 200,
         child: Obx(() => ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: curOP.value.isEmpty || curOP.value == op
-                  ? primaryColor
-                  : Colors.grey,
+              backgroundColor: primaryColor,
             ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
-            onPressed: curOP.value.isEmpty || curOP.value == op ? onTap : null,
+            onPressed: curOP.value == 'rustdesk' ? null : onTap,
             child: Row(
               children: [
                 SizedBox(
@@ -147,15 +147,85 @@ class ConfigOP {
   ConfigOP({required this.op, required this.icon});
 }
 
+class _OidcAuthController {
+  final RxString curOP = ''.obs;
+  Future<void> _pendingOperation = Future<void>.value();
+  int _authAttempt = 0;
+  bool _closed = false;
+
+  bool _isCurrent(int authAttempt, String op) {
+    return !_closed && authAttempt == _authAttempt && curOP.value == op;
+  }
+
+  Future<bool> start(String op) {
+    if (_closed) {
+      return Future<bool>.value(false);
+    }
+    final authAttempt = ++_authAttempt;
+    curOP.value = op;
+    // Web auth must start during the original user gesture so popups are allowed.
+    if (isWeb) {
+      return _startWeb(authAttempt, op);
+    }
+    final completer = Completer<bool>();
+    _pendingOperation = _pendingOperation.then((_) async {
+      if (!_isCurrent(authAttempt, op)) {
+        completer.complete(false);
+        return;
+      }
+      try {
+        await bind.mainAccountAuthCancel();
+        if (!_isCurrent(authAttempt, op)) {
+          completer.complete(false);
+          return;
+        }
+        await bind.mainAccountAuth(op: op, rememberMe: true);
+        completer.complete(_isCurrent(authAttempt, op));
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<bool> _startWeb(int authAttempt, String op) async {
+    await bind.mainAccountAuth(op: op, rememberMe: true);
+    return _isCurrent(authAttempt, op);
+  }
+
+  Future<void> _cancelBackend() async {
+    try {
+      await bind.mainAccountAuthCancel();
+    } catch (error, stackTrace) {
+      debugPrint('Failed to cancel account authentication $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> close() async {
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    _authAttempt++;
+    curOP.value = '';
+    await _cancelBackend();
+    await _pendingOperation;
+    await _cancelBackend();
+  }
+}
+
 class WidgetOP extends StatefulWidget {
   final ConfigOP config;
   final RxString curOP;
   final Function(Map<String, dynamic>) cbLogin;
+  final Future<bool> Function(String) startAuth;
   const WidgetOP({
     Key? key,
     required this.config,
     required this.curOP,
     required this.cbLogin,
+    required this.startAuth,
   }) : super(key: key);
 
   @override
@@ -180,6 +250,7 @@ class _WidgetOPState extends State<WidgetOP> {
 
   _beginQueryState(int authAttempt) {
     _updateTimer?.cancel();
+    unawaited(_runAuthStatusQuery(() => _updateState(authAttempt)));
     _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       unawaited(_runAuthStatusQuery(() => _updateState(authAttempt)));
     });
@@ -248,6 +319,12 @@ class _WidgetOPState extends State<WidgetOP> {
   }
 
   Future<void> _updateState(int authAttempt) {
+    if (!mounted ||
+        authAttempt != _authAttempt ||
+        widget.curOP.value != widget.config.op) {
+      _updateTimer?.cancel();
+      return Future<void>.value();
+    }
     return bind.mainAccountAuthResult().then((result) {
       if (!mounted ||
           authAttempt != _authAttempt ||
@@ -259,9 +336,13 @@ class _WidgetOPState extends State<WidgetOP> {
       if (resultMap == null) {
         return;
       }
-      final String stateMsg = resultMap['state_msg'];
+      final String backendStateMsg = resultMap['state_msg'];
       String failedMsg = resultMap['failed_msg'];
       final String? url = resultMap['url'];
+      final stateMsg = backendStateMsg == _requestingAccountAuth &&
+              (url == null || url.isEmpty)
+          ? _waitingAccountAuth
+          : backendStateMsg;
       final bool urlLaunched = (resultMap['url_launched'] as bool?) ?? false;
       final authBody = resultMap['auth_body'];
       if (authBody != null) {
@@ -311,7 +392,7 @@ class _WidgetOPState extends State<WidgetOP> {
     _updateTimer?.cancel();
     setState(() {
       _invalidateAuthAttempt();
-      _stateMsg = '';
+      _stateMsg = _waitingAccountAuth;
       _failedMsg = '';
     });
     return _authAttempt;
@@ -329,10 +410,11 @@ class _WidgetOPState extends State<WidgetOP> {
           height: 36,
           onTap: () async {
             final authAttempt = _resetState();
-            widget.curOP.value = widget.config.op;
             try {
-              await bind.mainAccountAuth(
-                  op: widget.config.op, rememberMe: true);
+              final started = await widget.startAuth(widget.config.op);
+              if (!started) {
+                return;
+              }
             } catch (e) {
               debugPrint('Failed to start account authentication $e');
               if (!mounted ||
@@ -428,34 +510,6 @@ class _WidgetOPState extends State<WidgetOP> {
             ),
           );
         }),
-        Obx(
-          () => Offstage(
-            offstage: widget.curOP.value != widget.config.op,
-            child: const SizedBox(
-              height: 5.0,
-            ),
-          ),
-        ),
-        Obx(
-          () => Offstage(
-            offstage: widget.curOP.value != widget.config.op,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: 20),
-              child: ElevatedButton(
-                onPressed: () {
-                  widget.curOP.value = '';
-                  _updateTimer?.cancel();
-                  _resetState();
-                  bind.mainAccountAuthCancel();
-                },
-                child: Text(
-                  translate('Cancel'),
-                  style: TextStyle(fontSize: 15),
-                ),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -465,12 +519,14 @@ class LoginWidgetOP extends StatelessWidget {
   final List<ConfigOP> ops;
   final RxString curOP;
   final Function(Map<String, dynamic>) cbLogin;
+  final Future<bool> Function(String) startAuth;
 
   LoginWidgetOP({
     Key? key,
     required this.ops,
     required this.curOP,
     required this.cbLogin,
+    required this.startAuth,
   }) : super(key: key);
 
   @override
@@ -481,6 +537,7 @@ class LoginWidgetOP extends StatelessWidget {
                 config: op,
                 curOP: curOP,
                 cbLogin: cbLogin,
+                startAuth: startAuth,
               ),
               const Divider(
                 indent: 5,
@@ -585,7 +642,8 @@ Future<bool?> loginDialog() async {
   String? usernameMsg;
   String? passwordMsg;
   var isInProgress = false;
-  final RxString curOP = ''.obs;
+  final oidcAuth = _OidcAuthController();
+  final curOP = oidcAuth.curOP;
   // Track hover state for the close icon
   bool isCloseHovered = false;
 
@@ -716,6 +774,7 @@ Future<bool?> loginDialog() async {
                       .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
                       .toList(),
                   curOP: curOP,
+                  startAuth: oidcAuth.start,
                   cbLogin: (Map<String, dynamic> authBody) async {
                     LoginResponse? resp;
                     try {
@@ -797,7 +856,7 @@ Future<bool?> loginDialog() async {
       onCancel: onDialogCancel,
       onSubmit: onLogin,
     );
-  });
+  }).whenComplete(oidcAuth.close);
 
   if (res != null) {
     await UserModel.updateOtherModels();
