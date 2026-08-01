@@ -18,12 +18,18 @@ class RawKeyFocusScope extends StatelessWidget {
   final ValueChanged<bool>? onFocusChange;
   final InputModel inputModel;
   final Widget child;
+  // Called before a key event would be forwarded to the remote peer. Return
+  // true to consume the event locally instead of forwarding it.
+  final bool Function(RawKeyEvent)? shouldConsumeRawKeyEvent;
+  final bool Function(KeyEvent)? shouldConsumeKeyEvent;
 
   RawKeyFocusScope({
     this.focusNode,
     this.onFocusChange,
     required this.inputModel,
     required this.child,
+    this.shouldConsumeRawKeyEvent,
+    this.shouldConsumeKeyEvent,
   });
 
   @override
@@ -41,12 +47,16 @@ class RawKeyFocusScope extends StatelessWidget {
             onFocusChange: onFocusChange,
             onKey: useRawKeyEvents
                 ? (FocusNode data, RawKeyEvent event) =>
-                    inputModel.handleRawKeyEvent(event)
+                    (shouldConsumeRawKeyEvent?.call(event) ?? false)
+                        ? KeyEventResult.handled
+                        : inputModel.handleRawKeyEvent(event)
                 : null,
             onKeyEvent: useRawKeyEvents
                 ? null
                 : (FocusNode node, KeyEvent event) =>
-                    inputModel.handleKeyEvent(event),
+                    (shouldConsumeKeyEvent?.call(event) ?? false)
+                        ? KeyEventResult.handled
+                        : inputModel.handleKeyEvent(event),
             child: child));
   }
 }

@@ -492,6 +492,12 @@ class _GeneralState extends State<_General> {
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
             kOptionEnableConfirmClosingTabs,
             isServer: false),
+      if (!isWeb && !incomingOnly)
+        _OptionCheckBox(
+            context,
+            'Switch monitor with Cmd/Ctrl+Alt+Left/Right',
+            kOptionEnableMonitorSwitchHotkey,
+            isServer: false),
       if (!incomingOnly)
         _OptionCheckBox(
           context,

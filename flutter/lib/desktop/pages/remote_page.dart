@@ -225,6 +225,52 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  // Cmd+Alt+Left/Right on macOS, Ctrl+Alt+Left/Right elsewhere: jump to the
+  // previous/next monitor of the remote peer without opening the display
+  // switcher in the toolbar. Must be checked from inside RawKeyFocusScope's
+  // key callbacks (passed down as shouldConsumeKeyEvent/shouldConsumeRawKeyEvent
+  // below) rather than a separate HardwareKeyboard.addHandler: HardwareKeyboard
+  // handlers run on their own dispatch chain and can't veto forwarding to the
+  // remote peer, which happens via Focus.onKeyEvent -> InputModel.handleKeyEvent.
+  bool _tryMonitorSwitch(LogicalKeyboardKey key) {
+    if (key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight) {
+      return false;
+    }
+    if (!mainGetLocalBoolOptionSync(kOptionEnableMonitorSwitchHotkey)) {
+      return false;
+    }
+    final modifiersMatch = isMacOS
+        ? HardwareKeyboard.instance.isMetaPressed &&
+            HardwareKeyboard.instance.isAltPressed &&
+            !HardwareKeyboard.instance.isControlPressed &&
+            !HardwareKeyboard.instance.isShiftPressed
+        : HardwareKeyboard.instance.isControlPressed &&
+            HardwareKeyboard.instance.isAltPressed &&
+            !HardwareKeyboard.instance.isMetaPressed &&
+            !HardwareKeyboard.instance.isShiftPressed;
+    if (!modifiersMatch) return false;
+    if (!_ffi.ffiModel.pi.isSupportMultiDisplay) return false;
+    final cycle = MonitorCycle(widget.id, _ffi);
+    if (cycle.total < 2) return false;
+    if (key == LogicalKeyboardKey.arrowRight) {
+      cycle.next();
+    } else {
+      cycle.prev();
+    }
+    return true;
+  }
+
+  bool _shouldConsumeMonitorSwitchKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    return _tryMonitorSwitch(event.logicalKey);
+  }
+
+  bool _shouldConsumeMonitorSwitchRawKeyEvent(RawKeyEvent event) {
+    if (event is! RawKeyDownEvent) return false;
+    return _tryMonitorSwitch(event.logicalKey);
+  }
+
   Future<void> _normalizeWaylandKeyboardModeIfNeeded() async {
     if (!mounted ||
         _waylandKeyboardModeNormalized ||
@@ -709,6 +755,9 @@ class _RemotePageState extends State<RemotePage>
               color: kColorCanvas,
               child: RawKeyFocusScope(
                   focusNode: _rawKeyFocusNode,
+                  shouldConsumeKeyEvent: _shouldConsumeMonitorSwitchKeyEvent,
+                  shouldConsumeRawKeyEvent:
+                      _shouldConsumeMonitorSwitchRawKeyEvent,
                   onFocusChange: (bool imageFocused) {
                     debugPrint(
                         "onFocusChange(window active:${!_isWindowBlur}) $imageFocused");

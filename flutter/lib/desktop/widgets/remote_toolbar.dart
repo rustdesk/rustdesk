@@ -977,10 +977,10 @@ class _MobileActionMenu extends StatelessWidget {
   }
 }
 
-class _MonitorCycle {
+class MonitorCycle {
   final String id;
   final FFI ffi;
-  const _MonitorCycle(this.id, this.ffi);
+  const MonitorCycle(this.id, this.ffi);
 
   PeerInfo get _pi => ffi.ffiModel.pi;
   int get total => _pi.displays.length;
@@ -990,11 +990,7 @@ class _MonitorCycle {
   String get label => _inRange ? '${_current + 1}' : '*';
   String get tooltip => '${translate('Switch display')} ($label/$total)';
 
-  void next() {
-    final t = total;
-    if (t < 2) return;
-    final from = _inRange ? _current : -1;
-    final target = (from + 1) % t;
+  void _switchTo(int target) {
     final isChooseDisplayToOpenInNewWindow = _pi.isSupportMultiDisplay &&
         bind.sessionGetDisplaysAsIndividualWindows(sessionId: ffi.sessionId) ==
             'Y';
@@ -1003,6 +999,20 @@ class _MonitorCycle {
     } else {
       openMonitorInTheSameTab(target, ffi, _pi, updateCursorPos: false);
     }
+  }
+
+  void next() {
+    final t = total;
+    if (t < 2) return;
+    final from = _inRange ? _current : -1;
+    _switchTo((from + 1) % t);
+  }
+
+  void prev() {
+    final t = total;
+    if (t < 2) return;
+    final from = _inRange ? _current : 0;
+    _switchTo((from - 1 + t) % t);
   }
 }
 
@@ -1018,7 +1028,7 @@ class _MainMonitorSwitchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cycle = _MonitorCycle(id, ffi);
+    final cycle = MonitorCycle(id, ffi);
     return Obx(() {
       if (cycle.total < 2) return const Offstage();
       final label = cycle.label;
@@ -3527,7 +3537,7 @@ class _MinimizedMonitorSwitchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const double iconSize = 20;
-    final cycle = _MonitorCycle(id, ffi);
+    final cycle = MonitorCycle(id, ffi);
 
     return Obx(() {
       final label = cycle.label;
