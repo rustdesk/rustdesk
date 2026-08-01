@@ -774,5 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Teine pool on sinu IP-aadressi blokeerinud"),
         ("id_whitelist_caveat_tip", "ID edastab ühenduv klient. Lubamisloend vähendab eksponeeritust ega asenda parooli või 2FA-d"),
         ("whitelist_cidr_tip", "Toetatud on CIDR-tähistus, näiteks 192.168.1.0/24"),
+        ("Switch monitor with Cmd/Ctrl+Alt+Left/Right", ""),
     ].iter().cloned().collect();
 }

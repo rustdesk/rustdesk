@@ -117,6 +117,12 @@ class _RemotePageState extends State<RemotePage>
 
   final FocusNode _rawKeyFocusNode = FocusNode(debugLabel: "rawkeyFocusNode");
 
+  // Logical keys currently suppressed by the monitor-switch hotkey (i.e. we
+  // consumed their KeyDownEvent/RawKeyDownEvent), so their matching repeats
+  // and the eventual release are also consumed instead of leaking through to
+  // the remote peer as an un-paired key-up.
+  final Set<LogicalKeyboardKey> _consumedMonitorSwitchKeys = {};
+
   // Debounce timer for pointer lock center updates during window events.
   // Uses kDefaultPointerLockCenterThrottleMs from consts.dart for the duration.
   Timer? _pointerLockCenterDebounceTimer;
@@ -262,13 +268,39 @@ class _RemotePageState extends State<RemotePage>
   }
 
   bool _shouldConsumeMonitorSwitchKeyEvent(KeyEvent event) {
+    final key = event.logicalKey;
+    if (event is KeyUpEvent) {
+      return _consumedMonitorSwitchKeys.remove(key);
+    }
+    if (_consumedMonitorSwitchKeys.contains(key)) {
+      // Auto-repeat of an already-consumed key: keep consuming it locally
+      // without switching monitors again.
+      return true;
+    }
     if (event is! KeyDownEvent) return false;
-    return _tryMonitorSwitch(event.logicalKey);
+    if (_tryMonitorSwitch(key)) {
+      _consumedMonitorSwitchKeys.add(key);
+      return true;
+    }
+    return false;
   }
 
   bool _shouldConsumeMonitorSwitchRawKeyEvent(RawKeyEvent event) {
+    final key = event.logicalKey;
+    if (event is RawKeyUpEvent) {
+      return _consumedMonitorSwitchKeys.remove(key);
+    }
+    if (_consumedMonitorSwitchKeys.contains(key)) {
+      // RawKeyEvent has no distinct repeat type: auto-repeat resends
+      // RawKeyDownEvent, so keep consuming without switching again.
+      return true;
+    }
     if (event is! RawKeyDownEvent) return false;
-    return _tryMonitorSwitch(event.logicalKey);
+    if (_tryMonitorSwitch(key)) {
+      _consumedMonitorSwitchKeys.add(key);
+      return true;
+    }
+    return false;
   }
 
   Future<void> _normalizeWaylandKeyboardModeIfNeeded() async {

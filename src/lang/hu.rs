@@ -774,5 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Az IP-címét a távoli fél letiltotta"),
         ("id_whitelist_caveat_tip", "Az azonosítót a csatlakozó kliens jelenti. Az engedélyezési lista csökkenti a kitettséget, és nem helyettesíti a jelszót vagy a 2FA-t"),
         ("whitelist_cidr_tip", "A CIDR jelölés támogatott, például 192.168.1.0/24"),
+        ("Switch monitor with Cmd/Ctrl+Alt+Left/Right", ""),
     ].iter().cloned().collect();
 }

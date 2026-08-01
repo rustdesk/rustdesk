@@ -774,5 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Vašu IP adresu je blokirala druga strana"),
         ("id_whitelist_caveat_tip", "ID prijavljuje klijent koji se povezuje. Ova lista smanjuje izloženost i ne zamenjuje lozinku ni 2FA"),
         ("whitelist_cidr_tip", "Podržan je CIDR zapis, na primer 192.168.1.0/24"),
+        ("Switch monitor with Cmd/Ctrl+Alt+Left/Right", ""),
     ].iter().cloned().collect();
 }
