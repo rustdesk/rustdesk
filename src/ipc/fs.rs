@@ -701,6 +701,42 @@ pub(crate) fn should_scrub_parent_entries_after_check_pid(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn test_remove_ipc_entry_via_secure_parent_fd_clears_a_directory_squatter() {
+        let unique = format!(
+            "rustdesk-ipc-entry-remove-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let base = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&base).unwrap();
+        let squatter = base.join("ipc_drm");
+        std::fs::create_dir(&squatter).unwrap();
+
+        // Positive control for the defect this closes: `remove_file` is `unlink(2)` and cannot
+        // remove a directory. That is why the listener could not clear one, and then failed to
+        // bind over it. Without this line a passing test would prove nothing.
+        assert!(
+            std::fs::remove_file(&squatter).is_err(),
+            "remove_file must fail on a directory, or this test is vacuous"
+        );
+        assert!(squatter.is_dir());
+
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+        assert!(
+            !squatter.exists(),
+            "the fd-based removal picks AT_REMOVEDIR and clears it"
+        );
+
+        // Idempotent: this runs before every bind, so a path that is already gone is not an error.
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
     fn test_write_pid_file_rejects_symlink() {
         use std::os::unix::fs::symlink;
 
