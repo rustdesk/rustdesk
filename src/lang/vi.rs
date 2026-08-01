@@ -774,6 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID do máy khách kết nối tự khai báo. Danh sách trắng giúp giảm mức độ lộ diện và không thay thế mật khẩu hay 2FA"),
         ("whitelist_cidr_tip", "Hỗ trợ ký hiệu CIDR, ví dụ 192.168.1.0/24"),
         ("Continue", ""),
-        ("Browser didn't open? Visit the URL below to sign in.", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

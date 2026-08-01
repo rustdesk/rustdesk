@@ -774,6 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "Het ID wordt gemeld door de verbindende client. De witte lijst vermindert blootstelling en vervangt het wachtwoord of 2FA niet"),
         ("whitelist_cidr_tip", "CIDR-notatie wordt ondersteund, bijvoorbeeld 192.168.1.0/24"),
         ("Continue", ""),
-        ("Browser didn't open? Visit the URL below to sign in.", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

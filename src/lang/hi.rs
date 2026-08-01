@@ -774,6 +774,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("id_whitelist_caveat_tip", "ID कनेक्ट करने वाले क्लाइंट द्वारा बताई जाती है। श्वेतसूची जोखिम कम करती है और पासवर्ड या 2FA का विकल्प नहीं है"),
         ("whitelist_cidr_tip", "CIDR नोटेशन समर्थित है, उदाहरण के लिए 192.168.1.0/24"),
         ("Continue", ""),
-        ("Browser didn't open? Visit the URL below to sign in.", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

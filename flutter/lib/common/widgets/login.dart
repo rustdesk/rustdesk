@@ -374,7 +374,7 @@ class _WidgetOPState extends State<WidgetOP> {
                     child: OidcAuthStatus(
                       message: translate(_stateMsg),
                       browserFallbackPrompt: translate(
-                        "Browser didn't open? Visit the URL below to sign in.",
+                        "Browser didn't open? Use the url below to sign in.",
                       ),
                       authUrl: authUrl,
                       copyLabel: translate('Copy to clipboard'),

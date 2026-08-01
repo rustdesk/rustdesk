@@ -4,7 +4,6 @@ const _statusFontSize = 12.0;
 const _statusSpacing = 4.0;
 const _messageActionSpacing = 8.0;
 const _desktopActionSize = 28.0;
-const _copyIconSize = 16.0;
 const _touchPlatforms = <TargetPlatform>{
   TargetPlatform.android,
   TargetPlatform.iOS,
@@ -91,23 +90,32 @@ class _OidcAuthFallbackState extends State<_OidcAuthFallback> {
     final isTouchPlatform = _touchPlatforms.contains(theme.platform);
     final actionSize =
         isTouchPlatform ? kMinInteractiveDimension : _desktopActionSize;
+    final urlStyle =
+        DefaultTextStyle.of(context).style.copyWith(fontSize: _statusFontSize);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildToggle(helperStyle, linkColor, actionSize),
-        if (_expanded)
-          Padding(
-            padding: const EdgeInsets.only(top: _statusSpacing),
-            child: _buildUrl(linkColor, actionSize),
-          ),
+        Text(
+          widget.browserFallbackPrompt,
+          style: helperStyle,
+          textAlign: TextAlign.center,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: _statusSpacing),
+          child: _buildUrl(urlStyle, linkColor, actionSize),
+        ),
       ],
     );
   }
 
-  Widget _buildToggle(
-      TextStyle helperStyle, Color linkColor, double actionSize) {
-    return Semantics(
-      expanded: _expanded,
+  void _copyAndExpand() {
+    setState(() => _expanded = true);
+    widget.onCopy?.call();
+  }
+
+  Widget _buildUrl(TextStyle urlStyle, Color linkColor, double actionSize) {
+    final collapsedUrl = SizedBox(
+      width: double.infinity,
       child: TextButton(
         style: TextButton.styleFrom(
           foregroundColor: linkColor,
@@ -116,57 +124,34 @@ class _OidcAuthFallbackState extends State<_OidcAuthFallback> {
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.standard,
         ),
-        onPressed: () => setState(() => _expanded = !_expanded),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                widget.browserFallbackPrompt,
-                style: helperStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(width: _statusSpacing),
-            Icon(
-              _expanded ? Icons.expand_less : Icons.expand_more,
-              size: _copyIconSize,
-            ),
-          ],
+        onPressed: _copyAndExpand,
+        child: Text(
+          widget.authUrl,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: urlStyle.copyWith(
+            color: linkColor,
+            decoration: TextDecoration.underline,
+          ),
         ),
       ),
     );
-  }
-
-  Widget _buildUrl(Color linkColor, double actionSize) {
-    final urlStyle =
-        DefaultTextStyle.of(context).style.copyWith(fontSize: _statusFontSize);
+    final collapsedChild = widget.onCopy == null
+        ? collapsedUrl
+        : Tooltip(message: widget.copyLabel, child: collapsedUrl);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(left: _messageActionSpacing),
+      constraints: BoxConstraints(minHeight: actionSize),
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: _messageActionSpacing),
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(_statusSpacing),
       ),
-      child: Row(
-        children: [
-          Expanded(child: SelectableText(widget.authUrl, style: urlStyle)),
-          if (widget.onCopy != null)
-            IconButton(
-              tooltip: widget.copyLabel,
-              constraints: BoxConstraints.tightFor(
-                width: actionSize,
-                height: actionSize,
-              ),
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.standard,
-              color: linkColor,
-              iconSize: _copyIconSize,
-              onPressed: widget.onCopy,
-              icon: const Icon(Icons.copy_outlined),
-            ),
-        ],
-      ),
+      child: _expanded
+          ? SelectableText(widget.authUrl, style: urlStyle)
+          : collapsedChild,
     );
   }
 }
