@@ -217,7 +217,7 @@ class _WidgetOPState extends State<WidgetOP> {
     try {
       await Clipboard.setData(ClipboardData(text: url));
       showToast(
-        translate('Sign-in link copied. Paste it into your browser.'),
+        translate('Copied'),
       );
     } catch (error, stackTrace) {
       debugPrint(
@@ -377,7 +377,7 @@ class _WidgetOPState extends State<WidgetOP> {
                         "Browser didn't open? Visit the URL below to sign in.",
                       ),
                       authUrl: authUrl,
-                      copyLabel: translate('Copy sign-in link'),
+                      copyLabel: translate('Copy to clipboard'),
                       onCopy: authUrl.isEmpty
                           ? null
                           : () => _runCurrentAuthUrlAction(
