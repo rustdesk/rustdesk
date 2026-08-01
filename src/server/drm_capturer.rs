@@ -1648,7 +1648,11 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// It asks `assign_wayland_outputs` rather than re-matching by name, and that is the point: whatever
 /// that function decides IS the geometry advertised to the client for each index, so deriving the
 /// primary from the same assignment makes the advertised primary and the advertised geometry agree
-/// BY CONSTRUCTION. Matching by name here separately was the second, weaker copy of the same
+/// BY CONSTRUCTION -- whenever the geometry augmentation runs it at all. `augment_with_wayland_geometry`
+/// declines below two DRM connectors or two compositor outputs, and in that band this function still
+/// runs the full assignment; it cannot answer worse than the documented fallback there, because a sole
+/// output is matched to the lowest connector and the fallback branch returns 0 anyway.
+/// Matching by name here separately was the second, weaker copy of the same
 /// question -- it had neither the unique-resolution step nor the layout-order fallback, so on any
 /// compositor whose output names do not normalize to the DRM connector names (or reports none at
 /// all, which the Wayland display code has its own "nameless compositor" path for) it silently

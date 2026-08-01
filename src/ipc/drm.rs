@@ -125,8 +125,15 @@ fn new_drm_listener() -> ResultType<Incoming> {
     // postfix reuses hbb_common's expected mode for that directory; it only creates/chmods the
     // directory (no pid/socket side effects) and is idempotent with the real `_service` listener.
     let _ = ensure_secure_ipc_parent_dir(&path, "_service")?;
-    // Clear any stale socket from a previous run before binding.
-    std::fs::remove_file(&path).ok();
+    // Clear any stale entry from a previous run before binding. NOT `std::fs::remove_file`: that is
+    // `unlink(2)`, which returns EISDIR against a directory-typed squatter and leaves it in place,
+    // and `endpoint.incoming()` below then fails EADDRINUSE -- DRM capture would fall back to the
+    // portal for the whole boot over an entry we could have removed. The fd-based helper the
+    // `_service` listener already uses fstats the entry and picks `AT_REMOVEDIR` when it needs to,
+    // on the directory this function hardened one statement earlier.
+    if let Err(err) = remove_ipc_entry_via_secure_parent_fd(&path) {
+        log::warn!("drm: could not clear a stale entry at {}: {}", &path, err);
+    }
     let mut endpoint = Endpoint::new(path.clone());
     endpoint.set_security_attributes(SecurityAttributes::allow_everyone_create()?);
     let incoming = endpoint.incoming()?;
@@ -469,7 +476,10 @@ static DRM_LAST_WAKE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU6
 static DRM_WAKE_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Minimum gap between two wakes. Long enough that a client reconnecting in a loop cannot flood the
-/// compositor with synthetic activity, short enough to be useless as a way to keep a screen lit.
+/// compositor with synthetic activity. It is NOT what stops the wake being used to hold a screen
+/// on: 20 s is SHORTER than every idle period we have measured (30.3 s at a greeter, 70.3 s in a
+/// session), so a shorter gap would make relighting easier, not harder. What bounds that is that
+/// the wake is one-shot -- it resets the compositor's idle timer and does not hold the display up.
 /// Server-side config key: may the service wake a display the compositor has idle-DISABLED, by
 /// injecting one synthetic pointer round trip, so there is a scanout to capture?
 ///
@@ -647,6 +657,10 @@ fn drm_wake_displays(reason: &str) -> bool {
 /// and the client would be handed whatever is still scanning out. libdrmtap does report the idle
 /// panel (`crtc=0 (inactive)`); it is our own active-CRTC filter that drops it, so the count of
 /// what was dropped is exactly the right signal.
+///
+/// Everything above is the shared contract of both cfg arms. This last paragraph specialises the
+/// one it sits on; the `drm-wake` arm follows below.
+///
 /// Wake-less build (`--features drm` without `drm-wake`): enumerate and answer. No wake code is
 /// compiled in at all, so the service cannot inject input even by accident; a host whose outputs
 /// are idle-disabled simply reports the displays that are still scanning out, which is the

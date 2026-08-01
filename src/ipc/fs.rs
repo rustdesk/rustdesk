@@ -164,9 +164,19 @@ fn scrub_preexisting_ipc_parent_entries(
     Ok(())
 }
 
-fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
-    let path = config::Config::ipc_path(postfix);
-    let parent_dir = Path::new(&path)
+/// Remove one entry from the IPC parent directory through a no-follow fd on that directory.
+///
+/// Prefer this over `std::fs::remove_file` for anything about to be bound: `remove_file` is
+/// `unlink(2)`, which returns EISDIR against a directory-typed squatter and leaves it in place,
+/// and the bind that follows then fails EADDRINUSE. `remove_parent_entry_via_fd` fstats the
+/// entry first and picks `AT_REMOVEDIR` when it needs to.
+pub(crate) fn remove_ipc_entry_via_secure_parent_fd(path: &str) -> ResultType<()> {
+    let entry_name = Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, format!("invalid ipc path: {path}")))?
+        .to_owned();
+    let parent_dir = Path::new(path)
         .parent()
         .ok_or_else(|| Error::new(ErrorKind::InvalidInput, format!("invalid ipc path: {path}")))?;
     let parent_c = CString::new(parent_dir.as_os_str().as_bytes().to_vec())?;
@@ -179,8 +189,8 @@ fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
             return Err(Error::new(
                 open_err.kind(),
                 format!(
-                    "failed to open ipc parent dir for stale socket cleanup (no-follow): postfix={}, parent={}, err={}",
-                    postfix,
+                    "failed to open ipc parent dir for stale socket cleanup (no-follow): path={}, parent={}, err={}",
+                    path,
                     parent_dir.display(),
                     open_err
                 ),
@@ -189,7 +199,11 @@ fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
         }
     };
     let _fd_guard = FdGuard(fd);
-    remove_parent_entry_via_fd(fd, parent_dir, &format!("ipc{}", postfix))
+    remove_parent_entry_via_fd(fd, parent_dir, &entry_name)
+}
+
+fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
+    remove_ipc_entry_via_secure_parent_fd(&config::Config::ipc_path(postfix))
 }
 
 // Purpose:
