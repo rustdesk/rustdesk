@@ -180,14 +180,13 @@ presents) but reuses RustDesk's own hardened IPC.
     that is never coming;
   - it is rate limited to **one wake per 20 s process-wide** with exactly one
     concurrent winner (compare-exchange claim), so a reconnect storm cannot
-    become an input-injection storm. That is a bound on injection RATE and
-    nothing else. It does not stop a screen being kept lit, and neither does
-    the one-shot property below: 20 s is shorter than every idle period
-    measured below, so an authorized peer that keeps reconnecting can have the
-    panel relit shortly after each idle-off. What makes that acceptable is the
-    authorization requirement above -- reaching the wake takes root or the
-    active session's own uid, who can keep the screen lit with `systemd-inhibit`
-    anyway;
+    become an input-injection storm. That bounds the injection RATE. It does
+    not bound how long a screen stays lit, and neither does the one-shot
+    property below: 20 s is shorter than every idle period measured below, so a
+    remote peer that reconnects in a loop can have the panel relit after each
+    idle-off. What that peer gains is a lit panel on a machine whose screen it
+    is already authorized to watch: it is visible to someone standing there,
+    not additional access;
   - the wake is **one-shot: it resets the compositor's idle timer, it does not
     hold the display on**. If nothing else keeps the session awake, the connector
     idles off again one full idle period later -- measured 2026-07-31: 30.3 s at

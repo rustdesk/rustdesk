@@ -172,10 +172,10 @@ fn scrub_preexisting_ipc_parent_entries(
 /// entry first and picks `AT_REMOVEDIR` when it needs to.
 ///
 /// `AT_REMOVEDIR` is `rmdir(2)`, so the directory case this closes is the EMPTY one; a non-empty
-/// squatter still yields ENOTEMPTY and still blocks the bind. That is deliberate, and the "obvious"
-/// fix is worse than the bug: removing it recursively would be root deleting a tree an unprivileged
-/// process planted, inside a world-writable directory. What the caller gets in that case is a named
-/// error instead of the bare EADDRINUSE it used to get.
+/// squatter still yields ENOTEMPTY and still blocks the bind that follows. That is deliberate, and
+/// the "obvious" fix is worse than the bug: removing it recursively would be root deleting a tree
+/// an unprivileged process planted. What the caller gains there is a named error to log ahead of
+/// the bind's own failure, not a successful bind.
 pub(crate) fn remove_ipc_entry_via_secure_parent_fd(path: &str) -> ResultType<()> {
     let entry_name = Path::new(path)
         .file_name()

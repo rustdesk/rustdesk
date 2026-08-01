@@ -497,21 +497,14 @@ static DRM_WAKE_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::
 #[cfg(feature = "drm-wake")]
 const OPTION_ENABLE_DRM_DISPLAY_WAKE: &str = "enable-drm-display-wake";
 
-/// Minimum gap between two wakes, process-wide.
+/// Minimum gap between two wakes, process-wide: a client reconnecting in a loop cannot turn the
+/// handshake into a stream of synthetic pointer events.
 ///
-/// What it bounds is the RATE OF INJECTION: a client reconnecting in a loop cannot turn the
-/// handshake into a stream of synthetic pointer events. That is the whole of its job, and the only
-/// claim to make for it.
-///
-/// It does NOT bound how long a screen can be kept lit, and neither does the wake being one-shot.
-/// 20 s is shorter than every idle period we have measured (about 30 s at a GDM greeter, about 70 s
-/// in a session with `idle-delay=60`), so an authorized peer that keeps reconnecting can have the
-/// panel relit shortly after each idle-off. What makes that acceptable is not a limit in this file:
-/// it is that reaching the wake at all requires an already-authorized `_drm` connection, i.e. root
-/// or the uid of the active session running this same binary -- who can keep their own screen lit
-/// with `systemd-inhibit` or `idle-delay=0` and need nothing from us. Do not describe this constant
-/// as making the wake "useless for holding a screen on"; a SHORTER gap would make relighting
-/// easier, not harder, and the sentence has already been wrong here twice.
+/// It does not bound how long a screen can be kept lit. 20 s is shorter than every idle period we
+/// have measured (about 30 s at a GDM greeter, about 70 s in a session with `idle-delay=60`), so a
+/// peer that keeps reconnecting can have the panel relit after each idle-off. Do not write that
+/// this constant makes the wake "useless for holding a screen on" -- a SHORTER gap would make
+/// relighting easier, not harder, and that sentence has already been wrong here twice.
 #[cfg(feature = "drm-wake")]
 const DRM_WAKE_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(20);
 /// How long to let udev bind a freshly created uinput device before writing to it. Measured, not
@@ -655,20 +648,8 @@ fn drm_wake_displays(reason: &str) -> bool {
     true
 }
 
-// SHARED CONTRACT of the two `drm_enumerate_settled` arms below. Deliberately a plain comment and
-// not `///`: a doc comment can only attach to ONE of the two cfg arms, and `build.py --drm` adds
-// `drm-wake`, so in every shipped build the documented arm is the one compiled OUT and a maintainer
-// reading the real function finds nothing. Each arm keeps its own `///` for what is specific to it.
-//
-// One enumeration a handshake can answer with: enumerate, wake sleeping displays if that could
-// help, and WAIT for the outcome before returning. The wait is the load-bearing part, and it
-// applies to every handshake that saw a connected-but-undriven display -- not only the one whose
-// wake attempt won the rate limit. The losers used to return immediately with the pre-wake list,
-// which is exactly the intermediate state the winner was waiting out: with one `_drm` connection
-// per captured display plus the consumer's availability refresher, a wake in flight had its
-// half-done topology served to whichever consumer asked at the wrong moment, and the client ended
-// up with duplicate, misindexed monitors. Every caller of this function gets the settled truth or
-// a bounded timeout -- never the transition.
+// Background for BOTH `drm_enumerate_settled` arms below. A plain comment, not `///`, because a doc
+// comment attaches to one item and there are two arms here.
 //
 // A compositor that has idled long enough DISABLES its outputs, and a disabled output has no
 // scanout for anything to read -- not this backend, not PipeWire, not X11. The trigger is "a
@@ -678,10 +659,10 @@ fn drm_wake_displays(reason: &str) -> bool {
 // panel (`crtc=0 (inactive)`); it is our own active-CRTC filter that drops it, so the count of
 // what was dropped is exactly the right signal.
 
-/// Wake-less build (`--features drm` without `drm-wake`): enumerate and answer, per the shared
-/// contract above. No wake code is compiled in at all, so the service cannot inject input even by
-/// accident; a host whose outputs are idle-disabled simply reports the displays that are still
-/// scanning out, which is the behaviour that predates the wake.
+/// Wake-less build (`--features drm` without `drm-wake`): enumerate and answer, nothing else. No
+/// wake code is compiled in at all, so the service cannot inject input even by accident; a host
+/// whose outputs are idle-disabled simply reports the displays that are still scanning out, which
+/// is the behaviour that predates the wake.
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     let (displays, undriven) = drm_enumerate_all_displays();
@@ -694,10 +675,16 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     displays
 }
 
-/// Wake build, and this is the arm every shipped `--drm` package compiles: enumerate, and if a
-/// connected display is not being driven, ask the compositor to wake up and wait for the outcome,
-/// per the shared contract above. The wake itself is gated a second time at runtime by
-/// `enable-drm-display-wake`, checked below on every call.
+/// Wake build, and the arm every shipped `--drm` package compiles: enumerate, and if a connected
+/// display is not being driven, ask the compositor to wake up and WAIT for the outcome before
+/// returning. The wait is the load-bearing part, and it applies to every handshake that saw an
+/// undriven display -- not only the one whose wake attempt won the rate limit. The losers used to
+/// return immediately with the pre-wake list, which is exactly the intermediate state the winner
+/// was waiting out: with one `_drm` connection per captured display plus the consumer's
+/// availability refresher, a wake in flight had its half-done topology served to whichever consumer
+/// asked at the wrong moment, and the client ended up with duplicate, misindexed monitors. Callers
+/// of this arm get the settled truth or a bounded timeout, never the transition. The wake itself is
+/// gated a second time at runtime by `enable-drm-display-wake`, checked below on every call.
 #[cfg(feature = "drm-wake")]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;

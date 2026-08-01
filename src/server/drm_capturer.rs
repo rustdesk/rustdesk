@@ -1648,13 +1648,12 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// It asks `assign_wayland_outputs` rather than re-matching by name, and that is the point: whatever
 /// that function decides IS the geometry advertised to the client for each index, so deriving the
 /// primary from the same assignment makes the advertised primary and the advertised geometry agree
-/// BY CONSTRUCTION -- whenever the geometry augmentation runs it at all. `augment_with_wayland_geometry`
-/// declines below two DRM connectors or two compositor outputs, and in that band this function still
-/// runs the full assignment, so the two disagree. That is not a defect but it is not free either:
-/// with one compositor output and several connectors, pass 1 can match that output to a connector by
-/// NAME or by unique resolution, so the answer may be any index, not index 0. It is still the better
-/// answer -- a name or resolution match is evidence that connector is the driven one, where the
-/// fallback would blindly say 0 -- but do not read the invariant as holding in that band.
+/// BY CONSTRUCTION -- but only where the geometry augmentation runs the assignment at all.
+/// `augment_with_wayland_geometry` declines below two DRM connectors or two compositor outputs, so
+/// do not read the invariant as holding in that band. The case that matters there is ONE compositor
+/// output with several connectors: pass 1 can claim that output for a connector by NAME or by
+/// unique resolution, so the answer may be any index, not 0. That is still better than the blind 0
+/// the fallback would give.
 /// Matching by name here separately was the second, weaker copy of the same
 /// question -- it had neither the unique-resolution step nor the layout-order fallback, so on any
 /// compositor whose output names do not normalize to the DRM connector names (or reports none at
