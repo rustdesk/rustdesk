@@ -1650,8 +1650,11 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// primary from the same assignment makes the advertised primary and the advertised geometry agree
 /// BY CONSTRUCTION -- whenever the geometry augmentation runs it at all. `augment_with_wayland_geometry`
 /// declines below two DRM connectors or two compositor outputs, and in that band this function still
-/// runs the full assignment; it cannot answer worse than the documented fallback there, because a sole
-/// output is matched to the lowest connector and the fallback branch returns 0 anyway.
+/// runs the full assignment, so the two disagree. That is not a defect but it is not free either:
+/// with one compositor output and several connectors, pass 1 can match that output to a connector by
+/// NAME or by unique resolution, so the answer may be any index, not index 0. It is still the better
+/// answer -- a name or resolution match is evidence that connector is the driven one, where the
+/// fallback would blindly say 0 -- but do not read the invariant as holding in that band.
 /// Matching by name here separately was the second, weaker copy of the same
 /// question -- it had neither the unique-resolution step nor the layout-order fallback, so on any
 /// compositor whose output names do not normalize to the DRM connector names (or reports none at

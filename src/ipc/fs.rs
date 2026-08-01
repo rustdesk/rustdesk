@@ -170,6 +170,12 @@ fn scrub_preexisting_ipc_parent_entries(
 /// `unlink(2)`, which returns EISDIR against a directory-typed squatter and leaves it in place,
 /// and the bind that follows then fails EADDRINUSE. `remove_parent_entry_via_fd` fstats the
 /// entry first and picks `AT_REMOVEDIR` when it needs to.
+///
+/// `AT_REMOVEDIR` is `rmdir(2)`, so the directory case this closes is the EMPTY one; a non-empty
+/// squatter still yields ENOTEMPTY and still blocks the bind. That is deliberate, and the "obvious"
+/// fix is worse than the bug: removing it recursively would be root deleting a tree an unprivileged
+/// process planted, inside a world-writable directory. What the caller gets in that case is a named
+/// error instead of the bare EADDRINUSE it used to get.
 pub(crate) fn remove_ipc_entry_via_secure_parent_fd(path: &str) -> ResultType<()> {
     let entry_name = Path::new(path)
         .file_name()
@@ -700,8 +706,11 @@ pub(crate) fn should_scrub_parent_entries_after_check_pid(
 
 #[cfg(test)]
 mod tests {
+    // Pins the HELPER's contract, which is all `new_drm_listener` consists of at that line -- not
+    // the call site itself. Binding the real `/tmp/<app>-service/ipc_drm` from a test would collide
+    // with a live root service, so "the listener still calls this" is not covered here.
     #[test]
-    fn test_remove_ipc_entry_via_secure_parent_fd_clears_a_directory_squatter() {
+    fn test_remove_ipc_entry_via_secure_parent_fd_clears_an_empty_directory_squatter() {
         let unique = format!(
             "rustdesk-ipc-entry-remove-test-{}-{}",
             std::process::id(),
@@ -732,6 +741,18 @@ mod tests {
 
         // Idempotent: this runs before every bind, so a path that is already gone is not an error.
         super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+
+        // And the documented limit, pinned so the doc cannot drift: AT_REMOVEDIR is rmdir(2), so a
+        // NON-empty squatter is reported, not cleared. The caller logs that and carries on; nothing
+        // here should ever start deleting a tree it did not create.
+        std::fs::create_dir(&squatter).unwrap();
+        std::fs::write(squatter.join("planted"), b"x").unwrap();
+        assert!(
+            super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref())
+                .is_err(),
+            "a non-empty directory must be reported, not silently left as success"
+        );
+        assert!(squatter.join("planted").exists(), "and not deleted");
 
         std::fs::remove_dir_all(&base).ok();
     }
