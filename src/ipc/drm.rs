@@ -1778,6 +1778,17 @@ const MAX_DRM_JSON_BYTES: usize = 8 * 1024 * 1024;
 /// a full frame on the CPU path (33 MB at 4K) but it crosses a unix socket, so it is milliseconds in
 /// practice and this only has to bound a peer that stopped.
 const DRM_BODY_TIMEOUT_MS: u64 = 5_000;
+/// Total budget for one wire SEND. The read side has bounded every wait since the beginning, with
+/// the argument written at `next_raw_into`: a peer that stops mid-message pins the other end's
+/// thread forever on a readiness wait. The WRITE side had no deadline at all, and the asymmetry
+/// matters more here, because the parked task is in the ROOT service: a peer that simply stops
+/// reading (a `kill -STOP` on its own `--server`, a ptrace stop, a cgroup freeze) leaves the send
+/// blocked inside the forward loop, so the loop top is never reached again -- and the loop top is
+/// where the credit stall, the per-frame reauthorization and the topology-generation check live.
+/// The connection slot, the worker thread and its DRM context stay pinned until the peer chooses to
+/// resume. Generous for the same reason as the read budget: this only has to bound a peer that
+/// stopped, not pace a healthy one.
+const DRM_SEND_TIMEOUT_MS: u64 = 5_000;
 
 /// Cap on a raw body read by `next_raw_into` (CPU-fallback BGRA / cursor RGBA). Covers a 256 MiB 8K
 /// scanout (`DrmReader` bounds a frame to that) with margin.
@@ -1904,7 +1915,16 @@ async fn drm_write_all(
     mut pass_fd: Option<RawFd>,
 ) -> ResultType<()> {
     while !buf.is_empty() {
-        stream.writable().await?;
+        // Bounded, and a timeout is a hard error rather than a retry: a partial write has already
+        // desynchronized the framing and cannot be resumed, which is the same argument
+        // `next_raw_into` makes for the read side.
+        match timeout(DRM_SEND_TIMEOUT_MS, stream.writable()).await {
+            Ok(r) => r?,
+            Err(_) => bail!(
+                "drm: peer did not accept the remaining {} byte(s) within {DRM_SEND_TIMEOUT_MS}ms; closing",
+                buf.len()
+            ),
+        }
         let raw = stream.as_raw_fd();
         let chunk = buf;
         let fd_now = pass_fd;
@@ -2022,7 +2042,15 @@ impl DrmConn {
     /// Uses `&self.stream` directly, so it never conflicts with a concurrent `send_msg`/`recv_msg`.
     pub async fn send_frame_ack(&self) -> ResultType<()> {
         loop {
-            self.stream.writable().await?;
+            // Same bound as drm_write_all, same reason: an unbounded readiness wait lets a wedged
+            // peer pin this thread. Here the parked side is the consumer, so the cost is one stalled
+            // stream rather than a root slot, but the shape is identical and so is the fix.
+            match timeout(DRM_SEND_TIMEOUT_MS, self.stream.writable()).await {
+                Ok(r) => r?,
+                Err(_) => bail!(
+                    "drm: _drm frame-ack was not accepted within {DRM_SEND_TIMEOUT_MS}ms; closing"
+                ),
+            }
             match self.stream.try_write(&[1u8]) {
                 Ok(n) if n > 0 => return Ok(()),
                 // A non-empty write returning 0 means the write half is shut down (the producer is
@@ -2040,14 +2068,31 @@ impl DrmConn {
     /// (a single `try_read` that returns WouldBlock).
     pub fn drain_frame_acks(&self, credit: &mut i32, max: i32) -> ResultType<()> {
         let mut buf = [0u8; 64];
-        loop {
+        // BOUNDED, and the bound is the point: this is a synchronous loop on the single-threaded
+        // `_drm` runtime, so "drain until WouldBlock" is a promise the PEER gets to keep. A peer
+        // that writes a continuous stream instead of one ack byte per frame keeps the receive queue
+        // non-empty forever, WouldBlock never happens, and this never returns -- pinning the root
+        // service's runtime thread at 100% CPU and starving every other stream on it, which on a
+        // multi-monitor client is one connection wedging its own siblings.
+        // Credit is capped at `max` anyway, so a full budget is reached long before this cap; there
+        // is nothing to gain by reading further in one call, and whatever is left stays queued for
+        // the next pass.
+        const MAX_ACK_READS: usize = 64;
+        for _ in 0..MAX_ACK_READS {
             match self.stream.try_read(&mut buf) {
                 Ok(0) => bail!("drm: _drm frame-ack peer closed"),
-                Ok(n) => *credit = (*credit + n as i32).min(max),
+                Ok(n) => {
+                    *credit = (*credit + n as i32).min(max);
+                    // Full budget: nothing further to gain from this pass.
+                    if *credit >= max {
+                        return Ok(());
+                    }
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
                 Err(e) => return Err(e.into()),
             }
         }
+        Ok(())
     }
 
     /// Producer: await until the socket is readable (a frame ack arrived, or the peer errored/closed).

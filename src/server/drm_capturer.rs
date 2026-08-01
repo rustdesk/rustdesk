@@ -215,8 +215,9 @@ const RAPID_REBUILD_MAX: u32 = 6;
 /// waits 30 s, is advertised online again, fails its four sessions in a few seconds and is demoted
 /// again, which is PeerInfo churn on a ~35 s cycle for as long as the process lives. Doubling turns
 /// that into a handful of retries and then near-silence, while keeping the property that made the
-/// cooldown recoverable in the first place, because the entry is dropped entirely the moment the
-/// display delivers a frame (see `frame()`), not decayed by time.
+/// cooldown recoverable in the first place, because a delivered frame zeroes the demote count (see
+/// `frame()`), not decayed by time. It zeroes ONLY the streak verdicts: the rebuild cadence and the
+/// convert verdict survive on purpose, since a first frame says nothing about either.
 fn demote_cooldown(demotes: u32) -> Duration {
     DEMOTE_COOLDOWN * (1u32 << demotes.saturating_sub(1).min(DEMOTE_BACKOFF_MAX_SHIFT))
 }
@@ -509,8 +510,13 @@ impl TraitCapturer for IpcDrmCapturer {
                     //    session. Worse, the set happens on the recv thread and this delete on the
                     //    encoder thread, so a convert failure racing a queued frame could destroy
                     //    the bit inside the very session that learned it.
-                    // Only `drm_clear_prefer_cpu` (on a topology change, where the mapping really
-                    // can have changed) may clear the convert verdict.
+                    // Nothing clears the convert verdict, and that is deliberate: which GPU exports
+                    // a given monitor is a property of the HOST, so the bit is keyed by connector
+                    // identity (`device:name`) and follows that monitor for the process run, exactly
+                    // as its own doc says. A monitor that moves to another GPU arrives under a new
+                    // identity and starts clean, so there is nothing to invalidate on a topology
+                    // change either. (An earlier revision pointed at `drm_clear_prefer_cpu` here;
+                    // that function no longer exists.)
                     self.got_frame = true;
                     if let Some(key) = &self.connector {
                         if let Some(h) = DRM_DISPLAY_HEALTH.lock().unwrap().get_mut(key) {
@@ -1872,7 +1878,8 @@ pub(super) fn get_capturer_info(
         // Refuse a demoted display UNLESS its demotion has aged past the cooldown for its demote
         // count, in which case clear the failure streak so the display retries DRM (recoverable).
         // The demote count itself is KEPT, so a display that fails again waits twice as long; only a
-        // delivered frame erases it (frame() drops the entry outright).
+        // delivered frame erases it (frame() zeroes `demotes`; it deliberately leaves the rebuild
+        // cadence and the convert verdict alone).
         let mut map = DRM_DISPLAY_HEALTH.lock().unwrap();
         if let Some(h) = key.as_ref().and_then(|k| map.get_mut(k)) {
             if h.zero_frame_streak >= DRM_GRAB_MAX_FAILURES {
@@ -2031,8 +2038,14 @@ mod drm_capturer_tests {
         put_frame(&c, 64, 32);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
 
-        let map = DRM_DISPLAY_HEALTH.lock().unwrap();
-        let h = map.get(key).expect("the entry must SURVIVE a delivered frame");
+        // Copy the fields out and RELEASE the guard before asserting: DRM_DISPLAY_HEALTH is
+        // process-wide, and a failing assertion while holding it poisons the mutex for every
+        // sibling test in the binary -- so the one failure this test exists to report would arrive
+        // buried under unrelated PoisonErrors. `zero_frame_streak_of` above does the same.
+        let h = {
+            let map = DRM_DISPLAY_HEALTH.lock().unwrap();
+            *map.get(key).expect("the entry must SURVIVE a delivered frame")
+        };
         assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
         assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
         assert_eq!(
