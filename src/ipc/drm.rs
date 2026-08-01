@@ -1936,11 +1936,18 @@ async fn drm_write_all(
     mut buf: &[u8],
     mut pass_fd: Option<RawFd>,
 ) -> ResultType<()> {
+    // ONE deadline for the whole write, taken before the loop. Arming it per readiness wait instead
+    // is what the first version of this did, and it does not bound anything: a peer that accepts a
+    // byte just inside each window, or that keeps the socket flapping to WouldBlock, re-arms the
+    // budget on every iteration and parks this task forever -- which is the exact stall the constant
+    // says it bounds.
+    let deadline =
+        tokio::time::Instant::now() + std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS);
     while !buf.is_empty() {
-        // Bounded, and a timeout is a hard error rather than a retry: a partial write has already
-        // desynchronized the framing and cannot be resumed, which is the same argument
-        // `next_raw_into` makes for the read side.
-        match timeout(DRM_SEND_TIMEOUT_MS, stream.writable()).await {
+        // A timeout is a hard error rather than a retry: a partial write has already desynchronized
+        // the framing and cannot be resumed, which is the same argument `next_raw_into` makes for
+        // the read side.
+        match tokio::time::timeout_at(deadline, stream.writable()).await {
             Ok(r) => r?,
             Err(_) => bail!(
                 "drm: peer did not accept the remaining {} byte(s) within {DRM_SEND_TIMEOUT_MS}ms; closing",
@@ -2063,11 +2070,13 @@ impl DrmConn {
     /// consumer processes an ever-growing backlog of stale frames (a permanently-behind desktop).
     /// Uses `&self.stream` directly, so it never conflicts with a concurrent `send_msg`/`recv_msg`.
     pub async fn send_frame_ack(&self) -> ResultType<()> {
+        // Same bound as drm_write_all and taken the same way, before the loop: a deadline armed per
+        // readiness wait re-arms on every WouldBlock and bounds nothing. Here the parked side is the
+        // consumer, so the cost is one stalled stream rather than a root slot.
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS);
         loop {
-            // Same bound as drm_write_all, same reason: an unbounded readiness wait lets a wedged
-            // peer pin this thread. Here the parked side is the consumer, so the cost is one stalled
-            // stream rather than a root slot, but the shape is identical and so is the fix.
-            match timeout(DRM_SEND_TIMEOUT_MS, self.stream.writable()).await {
+            match tokio::time::timeout_at(deadline, self.stream.writable()).await {
                 Ok(r) => r?,
                 Err(_) => bail!(
                     "drm: _drm frame-ack was not accepted within {DRM_SEND_TIMEOUT_MS}ms; closing"
