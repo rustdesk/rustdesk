@@ -503,6 +503,7 @@ class FileController {
     try {
       final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden);
       fd.format(isWindows, sort: sortBy.value);
+      selectedItems.reconcile(fd.entries);
       directory.value = fd;
       return true;
     } catch (e) {
@@ -1850,6 +1851,21 @@ class SelectedItems {
 
   void clear() {
     items.clear();
+  }
+
+  void reconcile(List<Entry> entries) {
+    if (items.isEmpty) return;
+    final currentByPath = {for (final entry in entries) entry.path: entry};
+    final reconciled = <Entry>[];
+    for (final item in items) {
+      final current = currentByPath[item.path];
+      if (current != null && current.entryType == item.entryType) {
+        reconciled.add(current);
+      }
+    }
+    items
+      ..clear()
+      ..addAll(reconciled);
   }
 
   void selectAll(List<Entry> entries) {
