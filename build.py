@@ -443,10 +443,10 @@ def build_libdrmtap_so():
         if os.path.isdir(src):
             shutil.rmtree(src)
         os.makedirs(src, exist_ok=True)
-        system2(f'git -C {src} init -q')
-        system2(f'git -C {src} remote add origin {LIBDRMTAP_REPO}')
-        system2(f'git -C {src} fetch --depth 1 origin {LIBDRMTAP_SHA}')
-        system2(f'git -C {src} checkout -q FETCH_HEAD')
+        system2(f'git -C "{src}" init -q')
+        system2(f'git -C "{src}" remote add origin {LIBDRMTAP_REPO}')
+        system2(f'git -C "{src}" fetch --depth 1 origin {LIBDRMTAP_SHA}')
+        system2(f'git -C "{src}" checkout -q FETCH_HEAD')
     # Verify the pin whenever the source is a GIT checkout. A fetch by sha cannot resolve to anything
     # else, so this now guards the OTHER case: a reused checkout left by an earlier build at a
     # different pin, which is what a bump leaves behind. Reject and remove it so the next run re-fetches
@@ -462,12 +462,12 @@ def build_libdrmtap_so():
                 f'(stale checkout from a different pin; removed, re-run to re-fetch)')
     build_dir = os.path.join(src, 'build-pkg')
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
-        system2(f'meson setup {build_dir} {src} --buildtype=release')
+        system2(f'meson setup "{build_dir}" "{src}" --buildtype=release')
     # Build only the shared library, not the bundled helper binary or the static archive. Since
     # libdrmtap 0.4.11 the project is `both_libraries` (a version-scripted .so + a static .a), so the
     # bare `drmtap` target is ambiguous ("drmtap:shared_library" vs "drmtap:static_library"); ask for
     # the shared one explicitly (rustdesk dlopens the .so and never needs the archive).
-    system2(f'meson compile -C {build_dir} drmtap:shared_library')
+    system2(f'meson compile -C "{build_dir}" drmtap:shared_library')
     sos = glob.glob(os.path.join(build_dir, 'libdrmtap.so.0.*'))
     # keep the real object (libdrmtap.so.0.4.x), not the .so/.so.0 symlinks or meson's .p dir, and
     # require exactly one so a stale object from an earlier build is never silently picked.
