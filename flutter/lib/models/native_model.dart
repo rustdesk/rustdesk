@@ -285,7 +285,10 @@ class PlatformFFI {
   void setRgbaCallback(void Function(int, Uint8List) fun) async {}
 
   // web only, decoded WebCodecs frames arriving as ready-made images
-  void setVideoFrameCallback(void Function(int, ui.Image) fun) {}
+  void setVideoFrameCallback(
+      Future<void> Function(int, ui.Image, bool Function()) fun) {}
+
+  void clearVideoFrameCallback() {}
 
   void startDesktopWebListener() {}
 
