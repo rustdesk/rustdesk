@@ -33,8 +33,8 @@ int _videoFrameHeight(JSObject frame) =>
 void _closeVideoFrame(JSObject frame) {
   try {
     frame.callMethod<JSAny?>('close'.toJS);
-  } catch (_) {
-    // closing twice is the only failure mode and is harmless
+  } catch (error) {
+    debugPrint('VideoFrame.close failed: $error');
   }
 }
 

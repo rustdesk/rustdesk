@@ -40,6 +40,7 @@ class WebVideoFrameQueue<Frame, Image> {
 
   void beginSession(VideoImageCallback<Image> callback) {
     _invalidateSession();
+    _enabled = true;
     _callback = callback;
   }
 
@@ -70,9 +71,11 @@ class WebVideoFrameQueue<Frame, Image> {
     return true;
   }
 
+  // Test hook for synchronizing with an in-flight frame import.
   Future<void> waitForImport() =>
       _importStarted?.future ?? Future<void>.value();
 
+  // Test hook for synchronizing with queue processing completion.
   Future<void> waitUntilIdle() => _idle?.future ?? Future<void>.value();
 
   void _startProcessing() {
