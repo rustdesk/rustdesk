@@ -571,8 +571,10 @@ def stage_libdrmtap_into_deb(so_path):
     assert_so_satisfies_the_runtime_abi_gate(so_path)
     so_basename = os.path.basename(so_path)
     system2('mkdir -p tmpdeb/usr/lib/rustdesk')
-    system2(f'cp {so_path} tmpdeb/usr/lib/rustdesk/')
-    system2(f'ln -sf {so_basename} tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
+    # Quoted: so_path comes from the repo root or from DRMTAP_PREBUILT_DIR, either of which can
+    # contain a space, and an unquoted interpolation would split the argument and fail obscurely.
+    system2(f'cp "{so_path}" tmpdeb/usr/lib/rustdesk/')
+    system2(f'ln -sf "{so_basename}" tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
 
 
 def retarget_control_to_drm_variant():

@@ -202,7 +202,10 @@ unsafe impl Sync for DrmtapLib {}
 // which in turn tracks the `.so.0` soname. drmtap_version() packs the semver as
 // (major << 16) | (minor << 8) | patch. A major mismatch means the structs may
 // be laid out differently, so we refuse the library rather than read through a
-// mismatched layout. Minor/patch bumps are additive and remain compatible.
+// mismatched layout. A minor bump is NOT accepted either -- `abi_accepted` requires an exact
+// `minor` match, for the reason spelled out with DRMTAP_ABI_MINOR below. Do not widen this on the
+// strength of "minor bumps are additive": that sentence used to live here and it no longer
+// describes the gate.
 const DRMTAP_ABI_MAJOR: c_int = 0;
 
 // Lowest (minor, patch) this build accepts. The project is still 0.x, so the

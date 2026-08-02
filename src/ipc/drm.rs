@@ -2427,6 +2427,62 @@ mod drm_conn_tests {
         );
     }
 
+    // The send deadline must bound the WHOLE write, not each readiness wait. This is the regression
+    // that shipped once: with the timeout inside the loop, a peer that accepts a little data now and
+    // then re-arms the budget on every iteration and the sender never returns -- in the root service.
+    //
+    // So the peer here DRIPS rather than stalling outright. A peer that never reads at all would not
+    // prove anything: that case times out correctly under both the broken and the fixed form, since
+    // there is only ever one readiness wait. Dripping is what separates them.
+    //
+    // Costs DRM_SEND_TIMEOUT_MS of real time (tokio's test-util feature is not enabled here, so
+    // there is no clock to pause -- same tradeoff as `a_body_that_never_arrives_times_out`). The
+    // outer timeout exists so the broken form fails as a test failure instead of hanging the suite.
+    #[tokio::test]
+    async fn a_dripping_peer_cannot_re_arm_the_send_deadline() {
+        use tokio::io::AsyncReadExt;
+        let (mut reader, writer) = tokio::net::UnixStream::pair().unwrap();
+        // Far more than the socket buffer plus everything the drip can consume, so the write cannot
+        // finish on its own within the test.
+        let payload = vec![0u8; 32 * 1024 * 1024];
+        // The chunk size is load-bearing and was measured, not guessed. Draining 1 KiB at a time
+        // does NOT make the socket writable again -- Linux asserts POLLOUT on a stream socket only
+        // once a decent fraction of the send buffer is free -- so the sender still sees ONE long
+        // readiness wait and the broken per-wait form times out just like the fixed one, and the
+        // test proves nothing. 64 KiB does re-assert writability, which is what makes the two forms
+        // diverge. Verified by running this against both.
+        let drip = tokio::spawn(async move {
+            let mut sink = vec![0u8; 64 * 1024];
+            loop {
+                if reader.read(&mut sink).await.unwrap_or(0) == 0 {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+        });
+        let started = std::time::Instant::now();
+        let outcome = tokio::time::timeout(
+            std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 4),
+            drm_write_all(&writer, &payload, None),
+        )
+        .await;
+        drip.abort();
+        let inner = outcome.expect(
+            "the send deadline did not fire: the budget is being re-armed per readiness wait",
+        );
+        let err = inner.err().expect("a dripping peer must not complete the write");
+        assert!(
+            err.to_string().contains("did not accept the remaining"),
+            "unexpected error: {err}"
+        );
+        // And it fired on ITS budget, not on the outer guard.
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(DRM_SEND_TIMEOUT_MS * 3),
+            "took {:?}, which is not the send deadline firing",
+            started.elapsed()
+        );
+    }
+
     // A peer that packs more than one fd into a single SCM_RIGHTS cmsg (the safe API never does) must
     // not smuggle extra fds into the consumer: drm_recvmsg keeps the FIRST and closes the rest. The
     // frame otherwise decodes normally and the kept fd is the first one sent. (Two fds fit the control

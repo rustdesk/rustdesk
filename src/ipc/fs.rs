@@ -742,6 +742,13 @@ mod tests {
         // Idempotent: this runs before every bind, so a path that is already gone is not an error.
         super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
 
+        // The ORDINARY case, and the one the listener hits on every restart: a stale socket left by
+        // the previous run, i.e. a regular file. Covered here because the other file-removal test
+        // goes through `remove_parent_entry_via_fd` and the postfix path, not this entry point.
+        std::fs::write(&squatter, b"stale").unwrap();
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+        assert!(!squatter.exists(), "a stale regular file is cleared too");
+
         // And the documented limit, pinned so the doc cannot drift: AT_REMOVEDIR is rmdir(2), so a
         // NON-empty squatter is reported, not cleared. The caller logs that and carries on; nothing
         // here should ever start deleting a tree it did not create.

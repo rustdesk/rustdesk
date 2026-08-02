@@ -198,8 +198,10 @@ impl DrmReader {
     /// mean. Errno failures map to WouldBlock (retry) or a hard error (tear
     /// down) as in the old path.
     pub fn grab(&mut self) -> io::Result<(&[u8], usize, usize)> {
-        // SAFETY: self.ctx is a valid context; frame is zeroed before the call
-        // and released on every path.
+        // SAFETY: self.ctx is a valid context; frame is zeroed before the call. The frame is
+        // released on every return path that OWNS one, which is not the same as every return path:
+        // a failing `drmtap_grab_mapped` (the `ret < 0` arm) leaves nothing to release, and
+        // releasing anyway would be a double free. Same distinction as `grab_desc` and `cursor`.
         unsafe {
             let mut frame: drmtap_frame_info = std::mem::zeroed();
             let ret = (self.lib.grab_mapped)(self.ctx, &mut frame);
@@ -437,6 +439,30 @@ impl DrmReader {
                     io::ErrorKind::Other,
                     format!("DRM scanout num_planes {} out of range (1..=4)", desc.num_planes),
                 ));
+            }
+            // Same per-plane bound the converter applies (`drm_render::convert`), applied here so
+            // both halves refuse the same descriptors. `grab()` states the principle a few hundred
+            // lines up: the two sides must agree about what they are willing to touch. Nothing on
+            // this side reads pixels, so this is not an out-of-bounds fix -- it stops a bogus pitch
+            // or offset from reaching the wire at all, and keeps the rejection message on the side
+            // that can name the device.
+            for p in 0..(planes as usize) {
+                let extent = (desc.pitches[p] as usize)
+                    .checked_mul(h as usize)
+                    .and_then(|rows| rows.checked_add(desc.offsets[p] as usize));
+                match extent {
+                    Some(end) if end <= MAX_FRAME_BYTES => {}
+                    other => {
+                        (self.lib.frame_release)(self.ctx, &mut frame);
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            format!(
+                                "DRM scanout plane {p} out of range (offset {} pitch {} over {h} rows -> {other:?}, cap {MAX_FRAME_BYTES})",
+                                desc.offsets[p], desc.pitches[p]
+                            ),
+                        ));
+                    }
+                }
             }
             // dup the fd into an OwnedFd BEFORE releasing the frame: after release
             // the library may recycle its handle, but our dup (an independent fd on
