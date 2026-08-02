@@ -652,7 +652,7 @@ fn drm_wake_displays(reason: &str) -> bool {
 // comment attaches to one item and there are two arms here.
 //
 // A compositor that has idled long enough DISABLES its outputs, and a disabled output has no
-// scanout for anything to read -- not this backend, not PipeWire, not X11. The trigger is "a
+// scanout for anything to read -- not this backend, not PipeWire, not X11. The signal is "a
 // connected display is not being driven", NOT "no display at all": on a laptop with a second DRM
 // card (an Apple T2's Touch Bar strip) the list is never empty, so an emptiness check never fires
 // and the client would be handed whatever is still scanning out. libdrmtap does report the idle
@@ -660,9 +660,11 @@ fn drm_wake_displays(reason: &str) -> bool {
 // what was dropped is exactly the right signal.
 
 /// Wake-less build (`--features drm` without `drm-wake`): enumerate and answer, nothing else. No
-/// wake code is compiled in at all, so the service cannot inject input even by accident; a host
-/// whose outputs are idle-disabled simply reports the displays that are still scanning out, which
-/// is the behaviour that predates the wake.
+/// wake code is compiled in, so THIS path never injects; a host whose outputs are idle-disabled
+/// simply reports the displays that are still scanning out, which is the behaviour that predates
+/// the wake. That is a statement about the capture path only -- the root service still runs
+/// RustDesk's uinput injection for remote control on every build (`start_os_service` ->
+/// `start_uinput_service`, ungated), so do not read this as "the service cannot inject input".
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     let (displays, undriven) = drm_enumerate_all_displays();
@@ -677,8 +679,10 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 
 /// Wake build, and the arm every shipped `--drm` package compiles: enumerate, and if a connected
 /// display is not being driven, ask the compositor to wake up and WAIT for the outcome before
-/// returning. The wait is the load-bearing part, and it applies to every handshake that saw an
-/// undriven display -- not only the one whose wake attempt won the rate limit. The losers used to
+/// returning. The wait is the load-bearing part, and it applies to every handshake whose wake may
+/// still be in flight -- not only the one whose attempt won the rate limit. (A handshake that
+/// returns early below never waits: the runtime option off, nothing wakeable, no uinput, or no
+/// recent wake to settle.) The losers used to
 /// return immediately with the pre-wake list, which is exactly the intermediate state the winner
 /// was waiting out: with one `_drm` connection per captured display plus the consumer's
 /// availability refresher, a wake in flight had its half-done topology served to whichever consumer
