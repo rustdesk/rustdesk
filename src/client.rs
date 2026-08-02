@@ -32,7 +32,6 @@ use crate::{
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
-    secure_tcp,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
@@ -426,12 +425,10 @@ impl Client {
             NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
         };
 
-        if !key.is_empty() && !token.is_empty() {
-            // mainly for the security of token
-            secure_tcp(&mut socket, &key)
-                .await
-                .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
-        } else if let Some(udp) = udp.1.as_ref() {
+        // Do not force secure_tcp when logged in (token present).
+        // That handshake often fails on self-hosted/open-source hbbs and blocks connect.
+        // Trade-off: access_token may be sent in cleartext to rendezvous over TCP.
+        if let Some(udp) = udp.1.as_ref() {
             let tm = Instant::now();
             loop {
                 let port = *udp.lock().unwrap();
@@ -855,10 +852,7 @@ impl Client {
                 .await
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
-            if !key.is_empty() && !token.is_empty() {
-                // mainly for the security of token
-                secure_tcp(&mut socket, key).await?;
-            }
+            // Skip secure_tcp after login; see _start_inner comment above.
 
             ipv4 = socket.local_addr().is_ipv4();
             let mut msg_out = RendezvousMessage::new();
