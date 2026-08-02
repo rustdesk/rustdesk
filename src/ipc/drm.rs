@@ -291,6 +291,7 @@ fn drm_displays_from_reader(
 /// auto-detected device when libdrmtap cannot enumerate (a pre-0.4.15 `.so`) or found
 /// nothing to open -- in which case `device` is left empty and capture reopens with
 /// auto-detect, exactly the previous behaviour.
+///
 /// Every active display of every DRM device, plus the identities of the CONNECTED outputs currently
 /// NOT being driven. Both come from the SAME look at the hardware, which is the point: the two were
 /// once a list and a separate static, and a handshake could act on a count that belonged to somebody
@@ -1137,13 +1138,6 @@ pub async fn start_drm() {
     }
 }
 
-/// Handle one `_drm` consumer. `DrmReader` is `!Send` and `grab()` is a blocking C call, so it
-/// cannot live on the shared listener runtime; this task spawns a private std worker thread that
-/// owns the reader (`drm_capture_worker`) and streams `DrmProducerMsg`s back over a bounded channel
-/// (capacity 2 = backpressure: a slow consumer throttles capture instead of growing memory). The
-/// task itself stays fully async — hence `Send`, hence `tokio::spawn`able — and only forwards
-/// messages to the wire. On any error / disconnect it returns; the `DrmStopGuard` plus dropping the
-/// channels tears the worker down, and the client falls back to PipeWire/portal.
 /// Concurrency cap on accepted `_drm` consumer connections. Each accepted consumer spawns a worker
 /// that opens a DRM context, so even though the peer is authorized we still bound how many a single
 /// (buggy or compromised) --server can open, to keep it from exhausting root-service threads/memory.
@@ -1184,6 +1178,13 @@ fn drm_peer_authorized(peer_uid: Option<u32>, active_uid: Option<u32>) -> bool {
     }
 }
 
+/// Handle one `_drm` consumer. `DrmReader` is `!Send` and `grab()` is a blocking C call, so it
+/// cannot live on the shared listener runtime; this task spawns a private std worker thread that
+/// owns the reader (`drm_capture_worker`) and streams `DrmProducerMsg`s back over a bounded channel
+/// (capacity 2 = backpressure: a slow consumer throttles capture instead of growing memory). The
+/// task itself stays fully async — hence `Send`, hence `tokio::spawn`able — and only forwards
+/// messages to the wire. On any error / disconnect it returns; the `DrmStopGuard` plus dropping the
+/// channels tears the worker down, and the client falls back to PipeWire/portal.
 async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
