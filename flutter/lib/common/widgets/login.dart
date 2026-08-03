@@ -94,6 +94,7 @@ class ButtonOP extends StatelessWidget {
   final Color primaryColor;
   final double height;
   final Function() onTap;
+  final bool Function() canStartAuth;
 
   const ButtonOP({
     Key? key,
@@ -103,6 +104,7 @@ class ButtonOP extends StatelessWidget {
     required this.primaryColor,
     required this.height,
     required this.onTap,
+    required this.canStartAuth,
   }) : super(key: key);
 
   @override
@@ -117,7 +119,8 @@ class ButtonOP extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
             ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
-            onPressed: curOP.value == 'rustdesk' ? null : onTap,
+            onPressed:
+                curOP.value == 'rustdesk' || !canStartAuth() ? null : onTap,
             child: Row(
               children: [
                 SizedBox(
@@ -152,13 +155,14 @@ class _OidcAuthController {
   Future<void> _pendingOperation = Future<void>.value();
   int _authAttempt = 0;
   bool _closed = false;
+  final _cancelInProgress = false.obs;
 
   bool _isCurrent(int authAttempt, String op) {
     return !_closed && authAttempt == _authAttempt && curOP.value == op;
   }
 
   Future<bool> start(String op) {
-    if (_closed) {
+    if (!canStart()) {
       return Future<bool>.value(false);
     }
     final authAttempt = ++_authAttempt;
@@ -193,6 +197,30 @@ class _OidcAuthController {
     return _isCurrent(authAttempt, op);
   }
 
+  bool canStart() {
+    return !_closed && !_cancelInProgress.value;
+  }
+
+  Future<bool> cancelCurrent(String op) {
+    if (!canStart() || curOP.value != op) {
+      return Future<bool>.value(false);
+    }
+    final authAttempt = ++_authAttempt;
+    final completer = Completer<bool>();
+    _cancelInProgress.value = true;
+    _pendingOperation = _pendingOperation.then((_) async {
+      try {
+        await bind.mainAccountAuthCancel();
+        completer.complete(_isCurrent(authAttempt, op));
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        _cancelInProgress.value = false;
+      }
+    });
+    return completer.future;
+  }
+
   Future<void> _cancelBackend() async {
     try {
       await bind.mainAccountAuthCancel();
@@ -220,12 +248,16 @@ class WidgetOP extends StatefulWidget {
   final RxString curOP;
   final Function(Map<String, dynamic>) cbLogin;
   final Future<bool> Function(String) startAuth;
+  final Future<bool> Function(String) cancelAuth;
+  final bool Function() canStartAuth;
   const WidgetOP({
     Key? key,
     required this.config,
     required this.curOP,
     required this.cbLogin,
     required this.startAuth,
+    required this.cancelAuth,
+    required this.canStartAuth,
   }) : super(key: key);
 
   @override
@@ -318,6 +350,40 @@ class _WidgetOPState extends State<WidgetOP> {
     _url = '';
   }
 
+  bool _isCurrentAuthAttempt(int authAttempt) {
+    return mounted &&
+        authAttempt == _authAttempt &&
+        widget.curOP.value == widget.config.op;
+  }
+
+  Future<void> _handleAuthStatusQueryFailure(
+    int authAttempt,
+    Object e,
+  ) async {
+    debugPrint('Failed to query account authentication $e');
+    if (!_isCurrentAuthAttempt(authAttempt)) {
+      return;
+    }
+    _updateTimer?.cancel();
+    setState(() => _failedMsg = 'Failed');
+    try {
+      final canceled = await widget.cancelAuth(widget.config.op);
+      if (!canceled || !_isCurrentAuthAttempt(authAttempt)) {
+        return;
+      }
+    } catch (cancelError, stackTrace) {
+      debugPrint('Failed to cancel account authentication $cancelError');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!_isCurrentAuthAttempt(authAttempt)) {
+        return;
+      }
+    }
+    setState(() {
+      _invalidateAuthAttempt();
+      widget.curOP.value = '';
+    });
+  }
+
   Future<void> _updateState(int authAttempt) {
     if (!mounted ||
         authAttempt != _authAttempt ||
@@ -325,7 +391,7 @@ class _WidgetOPState extends State<WidgetOP> {
       _updateTimer?.cancel();
       return Future<void>.value();
     }
-    return bind.mainAccountAuthResult().then((result) {
+    return bind.mainAccountAuthResult().then<void>((result) {
       if (!mounted ||
           authAttempt != _authAttempt ||
           widget.curOP.value != widget.config.op ||
@@ -372,20 +438,9 @@ class _WidgetOPState extends State<WidgetOP> {
       if (newUrl != null && failedMsg.isEmpty && !urlLaunched) {
         unawaited(_launchAuthUrl(newUrl));
       }
-    }).catchError((e) {
-      debugPrint('Failed to query account authentication $e');
-      if (!mounted ||
-          authAttempt != _authAttempt ||
-          widget.curOP.value != widget.config.op) {
-        return;
-      }
-      _updateTimer?.cancel();
-      setState(() {
-        _failedMsg = 'Failed';
-        _invalidateAuthAttempt();
-        widget.curOP.value = '';
-      });
-    });
+    }).catchError(
+      (e) => _handleAuthStatusQueryFailure(authAttempt, e),
+    );
   }
 
   int _resetState() {
@@ -408,7 +463,11 @@ class _WidgetOPState extends State<WidgetOP> {
           icon: widget.config.icon,
           primaryColor: str2color(widget.config.op, 0x7f),
           height: 36,
+          canStartAuth: widget.canStartAuth,
           onTap: () async {
+            if (!widget.canStartAuth()) {
+              return;
+            }
             final authAttempt = _resetState();
             try {
               final started = await widget.startAuth(widget.config.op);
@@ -520,6 +579,8 @@ class LoginWidgetOP extends StatelessWidget {
   final RxString curOP;
   final Function(Map<String, dynamic>) cbLogin;
   final Future<bool> Function(String) startAuth;
+  final Future<bool> Function(String) cancelAuth;
+  final bool Function() canStartAuth;
 
   LoginWidgetOP({
     Key? key,
@@ -527,6 +588,8 @@ class LoginWidgetOP extends StatelessWidget {
     required this.curOP,
     required this.cbLogin,
     required this.startAuth,
+    required this.cancelAuth,
+    required this.canStartAuth,
   }) : super(key: key);
 
   @override
@@ -538,6 +601,8 @@ class LoginWidgetOP extends StatelessWidget {
                 curOP: curOP,
                 cbLogin: cbLogin,
                 startAuth: startAuth,
+                cancelAuth: cancelAuth,
+                canStartAuth: canStartAuth,
               ),
               const Divider(
                 indent: 5,
@@ -775,6 +840,8 @@ Future<bool?> loginDialog() async {
                       .toList(),
                   curOP: curOP,
                   startAuth: oidcAuth.start,
+                  cancelAuth: oidcAuth.cancelCurrent,
+                  canStartAuth: oidcAuth.canStart,
                   cbLogin: (Map<String, dynamic> authBody) async {
                     LoginResponse? resp;
                     try {
