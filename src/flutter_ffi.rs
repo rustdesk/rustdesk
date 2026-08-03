@@ -3128,13 +3128,13 @@ pub mod server_side {
         crate::server::video_service::refresh()
     }
 
-    /// Close outgoing sessions when the task is swiped away. The service keeps
-    /// the process alive, so without this the session outlives its UI.
+    /// Close outgoing sessions when the UI goes away but the process may not,
+    /// so a session cannot outlive the UI that is able to close it.
     #[no_mangle]
     pub unsafe extern "system" fn Java_ffi_FFI_closeAllSessions(_env: JNIEnv, _class: JClass) {
         let closed = crate::flutter::sessions::close_all_sessions();
         if closed > 0 {
-            log::info!("closed {} session(s) on task removed", closed);
+            log::info!("closed {} outgoing session(s)", closed);
         }
     }
 
