@@ -15,6 +15,13 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch:
 
+# A manual dispatch overlapping the weekly run would race it force-pushing
+# the same branch; queue instead of overlapping, and never cancel a run
+# that may have already pushed.
+concurrency:
+  group: update-webpki-roots
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -31,7 +38,7 @@ jobs:
         id: update
         run: |
           set -e
-          for lock in $(git ls-files '*Cargo.lock'); do
+          git ls-files -z '*Cargo.lock' | while IFS= read -r -d '' lock; do
             dir=$(dirname "$lock")
             for v in $(sed -n '/name = "webpki-roots"/{n;s/.*version = "\(.*\)"/\1/p;}' "$lock" | sort -u); do
               echo "updating webpki-roots@$v in $dir"
