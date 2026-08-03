@@ -1,13 +1,4 @@
-// Service-side DRM/KMS read engine. Runs in the ROOT `--service`, which already
-// holds CAP_SYS_ADMIN, so libdrmtap reads the scanout in-process (direct mode,
-// no helper fork, no setcap). Loaded via the dlopen loader (drmtap_dl) so the
-// main binary has no hard libdrm/EGL dependency.
-//
-// SECURITY (direct-mode mitigation): the scanout parse now runs in the root
-// service with no seccomp cage, so we do NOT honor an untrusted device path.
-// The caller passes either None (libdrmtap auto-detects /dev/dri/card* by a
-// hardcoded pattern) or an explicit path that we realpath-gate to /dev/dri/
-// before opening. The DRM_DEVICE env is intentionally NOT consulted here.
+// Service-side DRM/KMS read engine, in the ROOT `--service`: libdrmtap reads the scanout in-process (direct mode). The DRM_DEVICE env is not consulted here.
 
 use super::drmtap_dl::{
     self, drmtap_config, drmtap_ctx, drmtap_cursor_info, drmtap_device, drmtap_display,
@@ -18,28 +9,20 @@ use std::ffi::CString;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
-// The validation limits and pixel formats BOTH halves of the split rely on to agree about what data
-// they will touch. They live here, once, and `drm_render` (the unprivileged converter) imports them:
-// these are trust-boundary guards, so two independently-edited copies that drift apart would silently
-// weaken validation on one side of the boundary.
-//
-// Largest scanout we will copy; also bounds w*4*h against overflow. 16384 covers
-// 8K+ with headroom; anything larger is rejected as a bogus/hostile geometry.
+// Trust-boundary limits and formats `drm_render` (the unprivileged converter) imports: two copies that drift apart would weaken one side.
+// 16384 covers 8K+ with headroom; anything larger is rejected as a bogus/hostile geometry.
 pub(crate) const MAX_DIM: u32 = 16384;
 // 256 MiB covers an 8K BGRA frame (7680x4320x4 ~= 127 MiB) with margin.
 pub(crate) const MAX_FRAME_BYTES: usize = 256 * 1024 * 1024;
-// DRM fourccs of the 32-bit linear formats the split can carry. XRGB/ARGB are little-endian
-// B,G,R,{X,A} in memory == `Pixfmt::BGRA`; XBGR/ABGR are R,G,B,{X,A} == `Pixfmt::RGBA`.
+// XRGB/ARGB are little-endian B,G,R,{X,A} in memory == `Pixfmt::BGRA`; XBGR/ABGR are R,G,B,{X,A} == `Pixfmt::RGBA`.
 pub(crate) const DRM_FORMAT_XRGB8888: u32 = 0x3432_5258; // 'XR24'
 pub(crate) const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
 pub(crate) const DRM_FORMAT_XBGR8888: u32 = 0x3432_4258; // 'XB24'
 pub(crate) const DRM_FORMAT_ABGR8888: u32 = 0x3432_4241; // 'AB24'
 
-/// Sentinel cursor id published when the plane reports the cursor hidden, so the
-/// id changes and the client drops the last shape. Distinct from any real hash.
+/// Cursor id published when the plane reports the cursor hidden, so the id changes and the client drops the last shape.
 pub const HIDDEN_CURSOR_ID: u64 = u64::MAX;
 
-/// A hardware-cursor snapshot to ship to the server (RGBA colors).
 pub struct CursorSnapshot {
     pub id: u64,
     pub width: u32,
@@ -49,8 +32,7 @@ pub struct CursorSnapshot {
     pub colors: Vec<u8>,
 }
 
-/// One enumerated DRM display (physical geometry only; the server augments with
-/// the Wayland logical geometry/scale, which needs the user session).
+/// One enumerated DRM display, physical geometry only (the server adds the Wayland logical geometry/scale).
 pub struct DisplaySnapshot {
     pub name: String,
     pub crtc_id: u32,
@@ -61,46 +43,32 @@ pub struct DisplaySnapshot {
     pub active: bool,
 }
 
-/// One capturable DRM device, from `list_devices`. On a multi-GPU host each card
-/// is a separate device; the caller opens one `DrmReader` per `path` to reach the
-/// displays every card drives.
 pub struct DrmDevice {
-    /// KMS card node, e.g. `/dev/dri/card1`.
     pub path: String,
-    /// Render node of this device, or empty if it has none.
+    /// Render node, or empty if this device has none.
     pub render_node: String,
-    /// CRTCs actively scanning out on this device.
     pub display_count: u32,
 }
 
-/// Copy a fixed C char array into a `String`, stopping at the first NUL WITHIN
-/// the array so a field libdrmtap failed to terminate cannot read past it (lossy
-/// on non-UTF-8, which a /dev path never is).
+/// Copy a fixed C char array into a `String`, stopping at the first NUL WITHIN the array, so a
+/// field libdrmtap failed to terminate cannot read past it.
 fn cstr_field(buf: &[std::os::raw::c_char]) -> String {
-    // c_char and u8 share size/alignment; reinterpret the exact-length slice.
+    // SAFETY: c_char and u8 share size/alignment; the slice is the exact length of `buf`.
     let bytes: &[u8] =
         unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len()) };
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     String::from_utf8_lossy(&bytes[..end]).into_owned()
 }
 
-/// Enumerate every DRM device with KMS resources (libdrmtap >= 0.4.15). Returns
-/// `None` when libdrmtap is unavailable or the `.so` predates the symbol, so the
-/// caller can fall back to a single auto-detected device. An empty `Vec` means
-/// the library is new enough but found nothing.
+/// Enumerate every DRM device with KMS resources. `None` = unavailable, too old, or failed (the caller keeps its single-device auto-detect); empty `Vec` = none found.
 pub fn list_devices() -> Option<Vec<DrmDevice>> {
     let lib = drmtap_dl::get()?;
     let f = lib.list_devices?;
-    // A handful of GPUs at most; the array is small and stack-friendly.
     const MAX: usize = 16;
     let mut raw: [drmtap_device; MAX] = unsafe { std::mem::zeroed() };
-    // SAFETY: `raw` is MAX valid, zeroed drmtap_device slots; the call fills up to
-    // MAX and returns the count (negative on error).
+    // SAFETY: `raw` is MAX valid, zeroed drmtap_device slots; the call fills up to MAX and returns the count.
     let n = unsafe { f(raw.as_mut_ptr(), MAX as std::os::raw::c_int) };
     if n < 0 {
-        // An enumeration FAILURE, not "found nothing" -> None, so the caller keeps
-        // its single-device auto-detect fallback rather than treating this as an
-        // authoritative empty device list.
         log::warn!("drmtap_list_devices failed ({n}); using single-device auto-detect");
         return None;
     }
@@ -118,13 +86,7 @@ pub fn list_devices() -> Option<Vec<DrmDevice>> {
 }
 
 /// The CANONICAL path, when `path` canonicalizes to a node directly under /dev/dri/, else `None`.
-/// This is the realpath gate the libdrmtap helper applied but the in-process (direct) path does
-/// not, so the service must apply it itself.
-///
-/// Returning the resolved path rather than a bool is the point: a gate that answers yes/no leaves
-/// the caller opening the ORIGINAL string, so every symlink component gets resolved a second time,
-/// by the library, after the check -- a check-then-use window in which a component could be
-/// repointed outside /dev/dri, in the root service. Callers must open the value this returns.
+/// Callers must open the value returned: opening the original re-resolves every symlink component after the check.
 pub(super) fn device_under_dev_dri(path: &str) -> Option<std::path::PathBuf> {
     let p = std::fs::canonicalize(path).ok()?;
     if p.parent() == Some(std::path::Path::new("/dev/dri")) {
@@ -134,38 +96,26 @@ pub(super) fn device_under_dev_dri(path: &str) -> Option<std::path::PathBuf> {
     }
 }
 
-/// An open DRM read context. Not Send/Sync deliberately (the raw ctx is used on
-/// one thread, like the old Capturer).
+/// An open DRM read context. Not Send/Sync deliberately (the raw ctx is used on one thread).
 pub struct DrmReader {
     lib: &'static DrmtapLib,
     ctx: *mut drmtap_ctx,
-    // grow-once packed-BGRA scratch buffer (preallocated model): resized up to the
-    // frame size and never shrunk.
     buf: Vec<u8>,
 }
 
 impl DrmReader {
-    /// Open the DRM device. `device = None` auto-detects (safe); `Some(path)` is
-    /// realpath-gated to /dev/dri/. `crtc_id = 0` auto-selects the first active
-    /// CRTC (primary); a non-zero value targets that specific CRTC/display (from
-    /// `displays()`). Returns None if libdrmtap is unavailable (dlopen failed),
-    /// the device is not allowed, or the open failed — the caller then falls back
-    /// to PipeWire/portal.
+    /// Open the DRM device. `device = None` auto-detects, `Some(path)` is realpath-gated to /dev/dri/. `crtc_id = 0` auto-selects the first active CRTC.
     pub fn open(device: Option<&str>, crtc_id: u32) -> Option<DrmReader> {
         let lib = drmtap_dl::get()?;
         let device_cstr = match device {
             None => None,
             Some(d) => {
-                // Open the CANONICAL path the gate resolved, never the caller's string: handing the
-                // original back would make libdrmtap re-walk the symlinks after the check.
                 let Some(canonical) = device_under_dev_dri(d) else {
                     log::warn!("DRM device {d:?} is not under /dev/dri; refusing to open");
                     return None;
                 };
                 match canonical.to_str().and_then(|s| CString::new(s).ok()) {
                     Some(c) => Some(c),
-                    // Non-UTF-8 or an interior NUL. /dev/dri node names are neither, so this is a
-                    // path we do not need to serve.
                     None => return None,
                 }
             }
@@ -190,25 +140,15 @@ impl DrmReader {
         })
     }
 
-    /// Grab one frame and copy it, tightly packed as BGRA (`w*4*h` bytes), into
-    /// the internal buffer. Returns (width, height). The returned slice is valid
-    /// until the next grab. A non-32bpp scanout, an oversized/degenerate
-    /// geometry, or a stride < w*4 is rejected with a hard error so the caller
-    /// falls back to PipeWire rather than encoding whatever the bytes happen to
-    /// mean. Errno failures map to WouldBlock (retry) or a hard error (tear
-    /// down) as in the old path.
+    /// Grab one frame, tightly packed as BGRA (`w*4*h` bytes), into the internal buffer; valid until the next grab.
     pub fn grab(&mut self) -> io::Result<(&[u8], usize, usize)> {
-        // SAFETY: self.ctx is a valid context; frame is zeroed before the call. The frame is
-        // released on every return path that OWNS one, which is not the same as every return path:
-        // a failing `drmtap_grab_mapped` (the `ret < 0` arm) leaves nothing to release, and
-        // releasing anyway would be a double free. Same distinction as `grab_desc` and `cursor`.
+        // SAFETY: ctx is valid; frame is zeroed before the call. The frame is released on every return path that OWNS one: a failing
+        // `drmtap_grab_mapped` leaves nothing to release, and releasing anyway would be a double free.
         unsafe {
             let mut frame: drmtap_frame_info = std::mem::zeroed();
             let ret = (self.lib.grab_mapped)(self.ctx, &mut frame);
             if ret < 0 {
                 let errno = -ret;
-                // Transient contention (compositor mid page-flip, device momentarily
-                // busy, interrupted syscall) -> retry rather than tear the stream down.
                 if errno == hbb_common::libc::EAGAIN
                     || errno == hbb_common::libc::EBUSY
                     || errno == hbb_common::libc::EINTR
@@ -227,9 +167,7 @@ impl DrmReader {
             let w = frame.width;
             let h = frame.height;
             let stride = frame.stride as usize;
-            // 4-bytes-per-pixel-per-row invariant: the row copy reads w*4 bytes
-            // from a source that is only stride*height bytes. Reject sub-32bpp /
-            // insane geometry to avoid an OOB read (heap disclosure to the peer).
+            // The row copy reads w*4 bytes from a source only stride*height bytes: reject sub-32bpp / insane geometry to avoid an OOB read.
             if w > MAX_DIM || h > MAX_DIM || stride < (w as usize) * 4 {
                 log::warn!(
                     "DRM scanout not 32-bit BGRA-compatible ({w}x{h} stride {stride} fourcc {:#010x}); falling back",
@@ -241,11 +179,7 @@ impl DrmReader {
                     "unsupported DRM scanout format",
                 ));
             }
-            // Byte-order guard: libdrmtap normalizes the scanout to a BGRA-compatible 32-bit layout
-            // (XRGB/ARGB8888 = little-endian B,G,R,{X,A} in memory). A different 32-bit order such as
-            // XBGR8888 passes the stride check above but, labeled BGRA downstream, would ship with red
-            // and blue swapped — so reject any fourcc we cannot present as BGRA. A zero/unknown fourcc
-            // falls through to the stride invariant (kept for libdrmtap builds that do not set it).
+            // XBGR8888 passes the stride check but, labeled BGRA downstream, would ship red and blue swapped; a zero fourcc falls through to the stride invariant (kept for libdrmtap builds that do not set it).
             if frame.format != 0
                 && frame.format != DRM_FORMAT_XRGB8888
                 && frame.format != DRM_FORMAT_ARGB8888
@@ -261,12 +195,6 @@ impl DrmReader {
                 ));
             }
             let (w, h) = (w as usize, h as usize);
-            // Bound the reusable buffer: a malformed or hostile scanout geometry (e.g. 16384x16384)
-            // would otherwise resize to gigabytes and, with several concurrent readers, OOM the root
-            // --service. 256 MiB covers an 8K BGRA scanout (7680x4320x4 ~= 127 MiB) with margin;
-            // anything larger (or an overflow) is rejected as unsupported. checked_mul guards the
-            // multiply on 32-bit usize too. MAX_FRAME_BYTES is the file-level shared limit, the
-            // same one the converter enforces on its side of the boundary.
             let frame_size = match w.checked_mul(4).and_then(|x| x.checked_mul(h)) {
                 Some(sz) if sz > 0 && sz <= MAX_FRAME_BYTES => sz,
                 other => {
@@ -280,11 +208,7 @@ impl DrmReader {
                     ));
                 }
             };
-            // Bound the SOURCE extent too, not just the destination. The row loop below reads up to
-            // (h-1)*stride + w*4, so a large stride reads far past the mapping however small the
-            // destination is, and `y * stride` can overflow usize on the way. drm_render::convert
-            // bounds stride*h the same way; the two halves of the split must agree about what they
-            // are willing to touch, or the privileged half is the weaker one.
+            // Bound the SOURCE extent too: the row loop reads up to (h-1)*stride + w*4, and `y * stride` can overflow.
             match stride.checked_mul(h) {
                 Some(sz) if sz > 0 && sz <= MAX_FRAME_BYTES => {}
                 other => {
@@ -315,18 +239,11 @@ impl DrmReader {
         }
     }
 
-    /// Render node (`/dev/dri/renderD*`) of the GPU this reader captures from, to
-    /// hand to the unprivileged converter so it binds to the device that EXPORTS
-    /// the scanout. On a multi-GPU host the converter's own auto-selection can
-    /// land on a different GPU, and importing a scanout across vendors can fail
-    /// on an incompatible tiling modifier. `None` on a pre-0.4.15 `.so` (the
-    /// symbol is absent) or on a display-only device with no render node; the
-    /// converter then auto-selects exactly as before.
+    /// Render node of the GPU this reader captures from, so the converter binds to the device that EXPORTS the scanout:
+    /// importing across vendors can fail on an incompatible tiling modifier. `None` if the symbol is absent or the device is display-only.
     pub fn render_node(&mut self) -> Option<String> {
         let f = self.lib.render_node?;
-        // SAFETY: self.ctx is a valid context. The returned pointer is owned by
-        // the context and stays valid until it is closed, so copying out of it
-        // here (while &mut self is held) cannot outlive it.
+        // SAFETY: self.ctx is valid; the returned pointer is owned by the context and stays valid until it is closed.
         let ptr = unsafe { f(self.ctx) };
         if ptr.is_null() {
             return None;
@@ -337,44 +254,13 @@ impl DrmReader {
             .map(|s| s.to_owned())
     }
 
-    /// Zero-copy EXPORT grab for the split-capture path (root `--service`). Calls
-    /// `drmtap_grab_desc`, which fills a `drmtap_dmabuf_desc` (the scanout dma-buf
-    /// fd + the full plane layout + HDR metadata) WITHOUT mapping, detiling or
-    /// copying any pixels — so on this path the root process never loads
-    /// libEGL/libGLESv2 (the EGL convert now lives in the unprivileged `--server`).
-    ///
-    /// The scanout `dma_buf_fd` is dup'd into an `OwnedFd` BEFORE the frame is
-    /// released, so we keep an independently-owned reference to the buffer that
-    /// survives `drmtap_frame_release` (the dma-buf refcount keeps the memory
-    /// alive while the peer also holds a reference). The exported fd is
-    /// READ-ONLY: libdrmtap exports the scanout via `drmPrimeHandleToFD` with
-    /// `DRM_RDWR` dropped (`O_RDONLY`), and `dup()` shares the same open file
-    /// description, so it preserves that access mode — the unprivileged
-    /// `--server` that receives the fd over `SCM_RIGHTS` can map the scanout for
-    /// reading but can never write into the live framebuffer. The descriptor is
-    /// validated on METADATA ONLY (no pixel access on the export side):
-    /// geometry `<= MAX_DIM` and `num_planes` in `1..=4`. There is deliberately
-    /// NO fourcc gate here (that is the CPU-mapped `grab()` fallback's job); the
-    /// format check is delegated to the unprivileged converter.
-    ///
-    /// Returns the owned fd + the validated descriptor with `dma_buf_fd` reset to
-    /// `-1` (the `OwnedFd` owns the fd now; the descriptor's local int must never
-    /// be closed or re-used). Errno mapping mirrors `grab()`: EAGAIN/EBUSY/EINTR
-    /// -> WouldBlock (retry); ENOTSUP -> a distinct `Unsupported` error (this
-    /// seat/driver produced pixels but no transferable dma-buf) so the caller
-    /// falls back to the mapped/PipeWire path instead of a per-frame rebuild loop;
-    /// any other errno -> hard error. Always available: the loader refuses a
-    /// libdrmtap that does not export this symbol (see `drmtap_dl::abi_accepted`).
+    /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
+    /// path the root process never loads libEGL/libGLESv2. The exported fd is READ-ONLY (libdrmtap drops `DRM_RDWR` and `dup` shares that open file
+    /// description), so the `--server` that receives it can map the scanout but never write the live framebuffer. Validation here is METADATA ONLY.
     pub fn grab_desc(&mut self) -> io::Result<(OwnedFd, drmtap_dmabuf_desc)> {
         let grab_desc = self.lib.grab_desc;
-        // SAFETY: self.ctx is a valid context; desc/frame are zeroed before the call. The frame is
-        // released on every return path that OWNS one, which is not the same as every return path:
-        // a failing `drmtap_grab_desc` leaves nothing for us to release, and releasing anyway would
-        // be a double free. Traced in the C rather than assumed -- on `-EINVAL` it returns before
-        // allocating, on a failed inner grab that grab has already cleaned up after itself, and on
-        // `-ENOTSUP` (pixels but no transferable fd) libdrmtap calls `drmtap_frame_release` ITSELF
-        // before returning. So the error arm below deliberately returns without releasing, and only
-        // the paths that reach a populated frame release it, after dupping the fd out of it.
+        // SAFETY: self.ctx is valid; desc/frame are zeroed before the call. Only paths that reach a populated frame release it: on `-EINVAL`
+        // libdrmtap returns before allocating, a failed inner grab has already cleaned up, and on `-ENOTSUP` libdrmtap releases the frame itself.
         unsafe {
             let mut desc: drmtap_dmabuf_desc = std::mem::zeroed();
             let mut frame: drmtap_frame_info = std::mem::zeroed();
@@ -388,10 +274,7 @@ impl DrmReader {
                     return Err(io::ErrorKind::WouldBlock.into());
                 }
                 if errno == hbb_common::libc::ENOTSUP {
-                    // Pixels exist but there is no transferable dma-buf on this
-                    // seat/driver: the split export can never work here. A distinct
-                    // Unsupported error so the caller degrades (CPU-mapped/PipeWire)
-                    // rather than tight-looping a rebuild.
+                    // A distinct error so the caller degrades to the mapped/PipeWire path instead of tight-looping a rebuild.
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
                         "drmtap_grab_desc: no transferable dma-buf (ENOTSUP)",
@@ -402,9 +285,7 @@ impl DrmReader {
                     format!("drmtap_grab_desc failed: errno {errno}"),
                 ));
             }
-            // The canonical fd is `desc.dma_buf_fd` (what split_capture.c sends);
-            // `frame` also owns it and `frame_release` will close the library's
-            // copy. A negative fd here means no new scanout this grab -> retry.
+            // `desc.dma_buf_fd` is the canonical fd (what split_capture.c sends); `frame` owns it too and `frame_release` closes the library's copy.
             let raw_fd = if desc.dma_buf_fd >= 0 {
                 desc.dma_buf_fd
             } else {
@@ -414,7 +295,6 @@ impl DrmReader {
                 (self.lib.frame_release)(self.ctx, &mut frame);
                 return Err(io::ErrorKind::WouldBlock.into());
             }
-            // ---- METADATA-ONLY validation (no pixel access on the export side) ----
             let w = desc.width;
             let h = desc.height;
             if w == 0 || h == 0 || w > MAX_DIM || h > MAX_DIM {
@@ -424,14 +304,7 @@ impl DrmReader {
                     format!("DRM scanout geometry {w}x{h} out of range"),
                 ));
             }
-            // NO fourcc restriction on the export side. Unlike the CPU-mapped grab() (which returns a
-            // ready-to-encode BGRA buffer and so must reject a format it cannot present), grab_desc
-            // exports the RAW scanout dma-buf and the unprivileged converter (drmtap_convert_dmabuf)
-            // handles every format libdrmtap supports -- XRGB8888/ARGB8888, 10-bit XR30/AR30 (tone
-            // mapped), HDR and CCS-compressed -- down to linear RGBA, exactly as the old grab_mapped
-            // did internally. Gating on the raw fourcc here wrongly dropped a convertible scanout
-            // (e.g. XR30 = 0x30335258, a 10-bit primary that is common on modern Intel/AMD).
-            // num_planes must index offsets/pitches (0 is treated as 1 per the ABI).
+            // No fourcc gate here: the converter handles every format libdrmtap supports, and gating here dropped convertible scanouts such as XR30.
             let planes = if desc.num_planes == 0 { 1 } else { desc.num_planes };
             if planes > 4 {
                 (self.lib.frame_release)(self.ctx, &mut frame);
@@ -440,12 +313,6 @@ impl DrmReader {
                     format!("DRM scanout num_planes {} out of range (1..=4)", desc.num_planes),
                 ));
             }
-            // Same per-plane bound the converter applies (`drm_render::convert`), applied here so
-            // both halves refuse the same descriptors. `grab()` states the principle a few hundred
-            // lines up: the two sides must agree about what they are willing to touch. Nothing on
-            // this side reads pixels, so this is not an out-of-bounds fix -- it stops a bogus pitch
-            // or offset from reaching the wire at all, and keeps the rejection message on the side
-            // that can name the device.
             for p in 0..(planes as usize) {
                 let extent = (desc.pitches[p] as usize)
                     .checked_mul(h as usize)
@@ -464,21 +331,8 @@ impl DrmReader {
                     }
                 }
             }
-            // dup the fd into an OwnedFd BEFORE releasing the frame: after release
-            // the library may recycle its handle, but our dup (an independent fd on
-            // the same open dma-buf) keeps the buffer alive for the peer. It shares
-            // the same open file description, so it preserves the O_RDONLY access
-            // mode of libdrmtap's exported scanout fd (DRM_RDWR dropped) -- the
-            // peer's fd stays read-only and cannot write the live scanout.
-            //
-            // F_DUPFD_CLOEXEC, not dup(): `dup` never copies the close-on-exec flag, so this fd
-            // would be inherited by every child this process forks. This runs in the ROOT service,
-            // which does fork synchronously elsewhere (the `loginctl` active-uid lookup), and what
-            // this fd names is the LIVE SCANOUT -- the screen contents. Leaking that into an
-            // unrelated child is a disclosure even if no child ever reads it. Same fix, same
-            // reason, as `dup_to_drm_conn` in ipc/drm.rs, which closed this on the socket fd; this
-            // was its sibling and the one that carries the pixels. SCM_RIGHTS delivery is
-            // unaffected: the receiver gets its own descriptor with its own flags.
+            // dup BEFORE releasing the frame: after release the library may recycle its handle, while an independent fd on the same open dma-buf
+            // keeps the buffer alive for the peer. F_DUPFD_CLOEXEC, not dup(): `dup` never copies close-on-exec and this root service forks elsewhere.
             let dup_fd = hbb_common::libc::fcntl(raw_fd, hbb_common::libc::F_DUPFD_CLOEXEC, 0);
             if dup_fd < 0 {
                 let e = io::Error::last_os_error();
@@ -486,27 +340,16 @@ impl DrmReader {
                 return Err(e);
             }
             let owned = OwnedFd::from_raw_fd(dup_fd);
-            // Release now that the fd is safely dup'd (split_capture.c releases only
-            // after the send; we release after the dup, which is equivalent because
-            // the dup holds its own reference to the dma-buf).
             (self.lib.frame_release)(self.ctx, &mut frame);
-            // Normalize num_planes and blank the descriptor's local fd int: the
-            // OwnedFd owns the fd, and the wire descriptor carries `has_fd` + the
-            // ancillary fd, never this integer.
             desc.num_planes = planes;
             desc.dma_buf_fd = -1;
             Ok((owned, desc))
         }
     }
 
-    /// Read the hardware cursor plane. Returns a hidden sentinel when the plane
-    /// reports the cursor invisible, the real shape when visible, or None on a
-    /// read error / unsupported cursor. Ported from the old drm.rs update_cursor.
+    /// Read the hardware cursor plane: the hidden sentinel when the plane reports the cursor invisible, the real shape when visible.
     pub fn cursor(&mut self) -> Option<CursorSnapshot> {
-        // SAFETY: ctx valid; c zeroed before the call; released on EVERY path after a
-        // successful get_cursor -- the hidden-cursor sentinel and the rejected-geometry arm
-        // included. Only a failed get_cursor (cret != 0) returns without releasing, because then
-        // there is nothing to release. The release protocol is why this block is unsafe.
+        // SAFETY: ctx valid; c zeroed; released on EVERY path after a successful get_cursor. Only a failed get_cursor returns without releasing, because then there is nothing to release.
         unsafe {
             let mut c: drmtap_cursor_info = std::mem::zeroed();
             let cret = (self.lib.get_cursor)(self.ctx, &mut c);
@@ -566,9 +409,9 @@ impl DrmReader {
                 } else {
                     (0, 0)
                 };
-                // Fold geometry + hotspot into the id: a cursor with identical pixels but a changed
-                // size or hotspot must count as a new shape, otherwise drm_capture_worker suppresses
-                // the update (it dedupes by id) and the client keeps rendering the stale cursor.
+                // Fold geometry + hotspot into the id: identical pixels with a changed size or
+                // hotspot must count as a new shape, otherwise drm_capture_worker suppresses the
+                // update (it dedupes by id) and the client keeps rendering the stale cursor.
                 let mut id = hash;
                 for v in [cw as u32 as u64, ch as u32 as u64, hotx as u32 as u64, hoty as u32 as u64] {
                     id ^= v;
@@ -590,12 +433,8 @@ impl DrmReader {
         }
     }
 
-    /// Enumerate the connected DRM displays (physical geometry). The buffer holds
-    /// up to 16 connectors (the old path truncated at 8); the raw list is shipped
-    /// to the server, which does primary selection + Wayland logical geometry.
     pub fn displays(&mut self) -> Vec<DisplaySnapshot> {
-        // SAFETY: ctx valid; raw is a zeroed, correctly-sized array; count is
-        // clamped to the buffer before indexing.
+        // SAFETY: ctx valid; raw is a zeroed, correctly-sized array; count is clamped to the buffer before indexing.
         unsafe {
             let mut raw = vec![std::mem::zeroed::<drmtap_display>(); 16];
             let cap = raw.len() as i32;

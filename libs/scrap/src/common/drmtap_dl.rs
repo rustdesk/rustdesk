@@ -1,21 +1,10 @@
-// Runtime loader for libdrmtap.so (the DRM/KMS capture engine), loaded via
-// dlopen instead of static-linked. This keeps the main rustdesk binary free of
-// hard libdrm/libEGL/libGLESv2 dependencies: the .so is only opened when the
-// drm capture path is actually used, and if it (or one of its deps) is missing
-// the load fails cleanly and the caller falls back to PipeWire/portal. The .so
-// is shipped only in the opt-in unattended-wayland package.
-//
-// The privileged read runs in-process in whatever process opens it. When that
-// process already holds CAP_SYS_ADMIN (the root --service) libdrmtap reads the
-// scanout directly, without forking the setcap helper (see do_grab() in the C).
-//
-// Mirrors the graceful-load pattern of libs/libxdo-sys-stub.
+// Runtime loader for libdrmtap.so (the DRM/KMS capture engine), dlopen'd so the binary carries no hard libdrm/libEGL/libGLESv2 dependency.
 
 use hbb_common::{libloading::Library, log};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::OnceLock;
 
-// ---- C ABI structs (must match libdrmtap include/drmtap.h / libdrmtap-sys) ----
+// C ABI structs: must match libdrmtap include/drmtap.h.
 
 #[repr(C)]
 pub struct drmtap_ctx {
@@ -55,10 +44,6 @@ pub struct drmtap_display {
     pub active: c_int,
 }
 
-// A capturable DRM device from `drmtap_list_devices` (libdrmtap >= 0.4.15).
-// Mirrors `drmtap_device` in include/drmtap.h EXACTLY (field order + widths);
-// its layout is FROZEN there for the same reason as drmtap_dmabuf_desc (written
-// into caller-owned storage). `path`/`render_node`/`driver` are NUL-terminated.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct drmtap_device {
@@ -81,12 +66,9 @@ pub struct drmtap_frame_info {
     pub _priv: *mut c_void,
 }
 
-// Descriptor of an externally-supplied scanout DMA-BUF (the split-capture
-// contract). Mirrors `drmtap_dmabuf_desc` in libdrmtap include/drmtap.h EXACTLY
-// (field order + widths); a mismatch mis-reads CCS/HDR scanouts. The privileged
-// exporter fills it in one call via `drmtap_grab_desc`; the unprivileged
-// converter receives it over IPC, overwrites `dma_buf_fd` with the fd it got via
-// SCM_RIGHTS, and passes it to `drmtap_convert_dmabuf`.
+// Descriptor of an externally-supplied scanout DMA-BUF: the privileged exporter fills it via
+// `drmtap_grab_desc`; the converter overwrites `dma_buf_fd` with the fd it got via SCM_RIGHTS.
+// Mirrors `drmtap_dmabuf_desc` EXACTLY (field order + widths); a mismatch mis-reads CCS/HDR scanouts.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct drmtap_dmabuf_desc {
@@ -134,114 +116,61 @@ pub struct drmtap_cursor_info {
     pub _priv: *mut c_void,
 }
 
-// ---- resolved symbol typedefs ----
+// Resolved symbol typedefs.
 
 type FnVersion = unsafe extern "C" fn() -> c_int;
 type FnOpen = unsafe extern "C" fn(*const drmtap_config) -> *mut drmtap_ctx;
 type FnClose = unsafe extern "C" fn(*mut drmtap_ctx);
 type FnListDisplays = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_display, c_int) -> c_int;
-// libdrmtap >= 0.4.15. Enumerates every DRM device with KMS resources, so a
-// multi-GPU host can open one context per device instead of only advertising the
-// first card's displays. Bound as an Option; `None` on an older .so.
 type FnListDevices = unsafe extern "C" fn(*mut drmtap_device, c_int) -> c_int;
 type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info) -> c_int;
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
-// Split-capture entry points (libdrmtap >= 0.4.10). REQUIRED (see below).
-// `grab_desc` runs on the privileged export side; `open_render`/`convert_dmabuf`
-// on the unprivileged converter side.
+// Split-capture entry points (libdrmtap >= 0.4.10), required: `grab_desc` runs on the privileged
+// export side, `open_render`/`convert_dmabuf` on the unprivileged converter side.
 type FnGrabDesc =
     unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 type FnOpenRender = unsafe extern "C" fn(*const c_char) -> *mut drmtap_ctx;
-// libdrmtap >= 0.4.15. Names the render node of the device a context is bound to,
-// so the exporter can tell the converter which GPU to bind to instead of leaving
-// it to auto-selection. Returns a ctx-owned string, or NULL if it has none.
+// libdrmtap >= 0.4.15; returns a ctx-owned string, or NULL if it has none.
 type FnRenderNode = unsafe extern "C" fn(*mut drmtap_ctx) -> *const c_char;
 type FnConvertDmabuf =
     unsafe extern "C" fn(*mut drmtap_ctx, *const drmtap_dmabuf_desc, *mut drmtap_frame_info) -> c_int;
 
-/// The dlopen'd libdrmtap with its resolved entry points. The `Library` is kept
-/// alive for the process lifetime (this lives in a `OnceLock`), so the raw fn
-/// pointers stay valid.
+/// The dlopen'd libdrmtap; the `Library` is kept alive for the process lifetime, so the raw fn pointers stay valid.
 pub struct DrmtapLib {
     _lib: Library,
     pub open: FnOpen,
     pub close: FnClose,
     pub list_displays: FnListDisplays,
-    // libdrmtap >= 0.4.15; `None` on an older .so (the service then enumerates a
-    // single auto-detected device, exactly as before).
     pub list_devices: Option<FnListDevices>,
     pub grab_mapped: FnGrabMapped,
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
-    // Split-capture symbols (libdrmtap >= 0.4.10). Not optional: a library that
-    // cannot do the split is refused at load time (see `abi_accepted`), so these
-    // are plain pointers and the type system carries the guarantee that no
-    // caller can silently take an in-process-convert path instead.
-    // Root needs `grab_desc`; the unprivileged converter needs
-    // `open_render` + `convert_dmabuf`.
     pub grab_desc: FnGrabDesc,
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
-    // libdrmtap >= 0.4.15; `None` on an older .so, where the converter keeps
-    // relying on `open_render(NULL)` auto-selection exactly as before.
     pub render_node: Option<FnRenderNode>,
-    // Parsed (major, minor, patch) from `drmtap_version()`, for feature gating.
     pub version: (c_int, c_int, c_int),
 }
 
-// SAFETY: the resolved fn pointers are plain C entry points with no interior
-// mutability; libdrmtap contexts are used single-threaded by the caller. The
-// Library handle is never moved out. Matches how libxdo-sys-stub treats XdoLib.
+// SAFETY: the resolved fn pointers are plain C entry points with no interior mutability;
+// libdrmtap contexts are used single-threaded by the caller. The Library handle is never moved out.
 unsafe impl Send for DrmtapLib {}
 unsafe impl Sync for DrmtapLib {}
 
-// The #[repr(C)] struct layouts above track libdrmtap's ABI *major* version,
-// which in turn tracks the `.so.0` soname. drmtap_version() packs the semver as
-// (major << 16) | (minor << 8) | patch. A major mismatch means the structs may
-// be laid out differently, so we refuse the library rather than read through a
-// mismatched layout. A minor bump is NOT accepted either -- `abi_accepted` requires an exact
-// `minor` match, for the reason spelled out with DRMTAP_ABI_MINOR below. Do not widen this on the
-// strength of "minor bumps are additive".
 const DRMTAP_ABI_MAJOR: c_int = 0;
 
-// Lowest (minor, patch) this build accepts. The project is still 0.x, so the
-// major alone bounds nothing: every release it has ever made reports major 0,
-// and comparing only that accepts a library from before the split existed.
-//
-// 0.4.10 is the oldest release with the WHOLE split API: `drmtap_open_render`
-// and `drmtap_convert_dmabuf` arrived in 0.4.9, `drmtap_grab_desc` in 0.4.10.
-// That is the oldest library that can serve the architecture this code
-// implements, where the privileged process exports the scanout dma-buf and NEVER
-// converts, so it never loads libEGL/libGLESv2. Below it the only way to capture
-// is the in-process convert, in the ROOT service, which is precisely the
-// property the split exists to remove: treat such a library as unusable and fall
-// back to PipeWire/portal rather than quietly pull the vendor GL stack into the
-// privileged process because a stale file happened to be on the load path.
-//
-// The mirrored `#[repr(C)]` layouts above are unchanged across 0.4.9..0.4.15
-// (verified field by field against include/drmtap.h at both ends), so the floor
-// costs no compatibility that was real.
+// Lowest (minor, patch) accepted: 0.4.10 is the oldest release with the WHOLE split API
+// (`drmtap_open_render`/`drmtap_convert_dmabuf` in 0.4.9, `drmtap_grab_desc` in 0.4.10).
 const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 10);
 
-// The MINOR series this build's mirrored structs were verified against. Under 0.x semver the minor is
-// the breaking axis, and libdrmtap's own header freezes only `drmtap_device` and
-// `drmtap_dmabuf_desc`: `drmtap_frame_info`, `drmtap_display`, `drmtap_config` and
-// `drmtap_cursor_info` are explicitly NOT frozen. So a 0.5.0 that adds one field to
-// `drmtap_frame_info` would be layout-incompatible while still reporting major 0, and a floor alone
-// would load it and read every field at the wrong offset -- inside the root service.
-//
-// Refusing an unknown-newer minor means a libdrmtap 0.5.x needs a deliberate bump here, after
-// re-checking the layouts field by field. That is the point: the check should fail closed on a
-// library nobody has compared against, not assume forward compatibility a 0.x project does not offer.
+// The MINOR series this build's mirrored structs were verified against: libdrmtap's header freezes
+// only `drmtap_device` and `drmtap_dmabuf_desc`, so an unverified minor could be read at wrong offsets.
 const DRMTAP_ABI_MINOR: c_int = 4;
 
-/// Whether a library reporting `major.minor.patch` may be loaded. Pure, so the
-/// version rule is unit-testable without an .so to dlopen: the major AND the minor must match
-/// exactly (unfrozen struct layouts track the minor under 0.x semver), and the patch must be at or
-/// above the floor that provides the split-capture API.
+/// Whether a library reporting `major.minor.patch` may be loaded (major and minor exact, patch at or above the floor).
 fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
     major == DRMTAP_ABI_MAJOR
         && minor == DRMTAP_ABI_MINOR
@@ -250,11 +179,7 @@ fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
 
 impl DrmtapLib {
     fn load() -> Option<Self> {
-        // Absolute install path FIRST: the deb bundles the .so privately under /usr/lib/rustdesk and
-        // deliberately does NOT register that dir in the system-wide ld.so search path (Debian Policy
-        // 10.2 forbids a private lib shadowing system libraries for every binary), so the packaged
-        // build must resolve it by absolute path. The bare sonames remain as a fallback for a dev build
-        // where the .so is reachable via LD_LIBRARY_PATH or a local ldconfig.
+        // Absolute path FIRST: the deb bundles the .so privately under /usr/lib/rustdesk and does NOT register that dir with ld.so.
         const LIB_NAMES: [&str; 3] = [
             "/usr/lib/rustdesk/libdrmtap.so.0",
             "libdrmtap.so.0",
@@ -264,25 +189,13 @@ impl DrmtapLib {
             let (lib, name) = LIB_NAMES
                 .iter()
                 .find_map(|n| Library::new(n).ok().map(|l| (l, *n)))?;
-            // Resolve what we ACTUALLY opened, for the absolute candidate only. That name is a soname
-            // symlink, so a second file declaring the same soname beside the packaged one (an upgrade
-            // leftover, a hand-built .so) can end up being the one it points at, and then the path we
-            // asked for tells the reader nothing about which library is loaded. ONLY for an absolute
-            // name: `dlopen` does not search the process CWD for a bare soname (it uses DT_RUNPATH,
-            // LD_LIBRARY_PATH, the ld.so cache, the default dirs), while `canonicalize` resolves a
-            // relative name against the CWD, so canonicalizing a fallback could name a same-named file
-            // the loader never touched. For those we keep logging the plain name.
+            // Canonicalize the absolute candidate only: `dlopen` does not search the CWD for a bare
+            // soname, while `canonicalize` resolves a relative name against it.
             let real = std::path::Path::new(name)
                 .is_absolute()
                 .then(|| std::fs::canonicalize(name).ok())
                 .flatten();
-            // every symbol is required; a missing one means an incompatible .so,
-            // so bail to None and let the caller fall back to PipeWire.
             let version: FnVersion = *lib.get(b"drmtap_version").ok()?;
-            // Call it once at load time: this smoke-checks that the .so responds
-            // through the resolved entry point *and* lets us reject a rebuilt
-            // library whose ABI (struct layout) no longer matches the #[repr(C)]
-            // definitions above. Resolving symbols alone would not catch that.
             let v = version();
             let (major, minor, patch) = ((v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
             if !abi_accepted(major, minor, patch) {
@@ -290,10 +203,6 @@ impl DrmtapLib {
                     "the struct layouts this build mirrors track the ABI major, so reading a \
                      frame descriptor through a mismatched one would mis-decode it"
                 } else if minor != DRMTAP_ABI_MINOR {
-                    // A NEWER minor lands here too, and telling its user the library "predates the
-                    // split" would send them looking for the wrong problem. Under 0.x semver the
-                    // minor is the breaking axis, and the structs this file mirrors are not frozen,
-                    // so an unverified minor could be read at the wrong offsets.
                     "this build mirrors the struct layouts of one minor and only that one; \
                      under 0.x semver the minor is the breaking axis, so an unverified minor \
                      could be read at the wrong offsets. Widening it is a deliberate act, done \
@@ -320,16 +229,6 @@ impl DrmtapLib {
             let frame_release: FnFrameRelease = *lib.get(b"drmtap_frame_release").ok()?;
             let get_cursor: FnGetCursor = *lib.get(b"drmtap_get_cursor").ok()?;
             let cursor_release: FnCursorRelease = *lib.get(b"drmtap_cursor_release").ok()?;
-            // Split-capture symbols are required too. The version floor above already turns
-            // away the libraries that predate them; requiring the symbols as well covers what
-            // the floor cannot see, a library that REPORTS a new enough version without
-            // carrying the API. That is not hypothetical (see the stale-build note below), and
-            // it fails the same way: no split export means the only capture path left runs the
-            // convert in the root service. Both refusals disable DRM capture and fall back to
-            // PipeWire/portal, which is the outcome we want.
-            // Resolved as a group and reported by name rather than through a bare `?`, so the
-            // log says which symbols are absent instead of the generic "dlopen failed" line,
-            // which would send whoever reads it hunting for a missing file.
             let grab: Option<FnGrabDesc> = lib.get(b"drmtap_grab_desc").ok().map(|s| *s);
             let open_r: Option<FnOpenRender> = lib.get(b"drmtap_open_render").ok().map(|s| *s);
             let conv: Option<FnConvertDmabuf> =
@@ -358,9 +257,7 @@ impl DrmtapLib {
             };
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
-            // Log the load only now that every required symbol resolved: this function still returns
-            // None on a missing one, and announcing success first would print "libdrmtap loaded"
-            // followed by "libdrmtap not available" for the same library.
+            // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
                 .map_or_else(|| name.to_owned(), |p| p.display().to_string());
@@ -369,11 +266,6 @@ impl DrmtapLib {
             } else {
                 log::info!("libdrmtap loaded: {name} -> {loaded_from} (v{major}.{minor}.{patch})");
             }
-            // A library can REPORT a version whose symbols it does not actually have, and that is not
-            // hypothetical: the multi-GPU accessors landed after an earlier build had already stamped
-            // itself 0.4.15, so a stale copy of that build keeps claiming 0.4.15 while lacking them.
-            // It degrades SILENTLY (the service stops naming the exporting GPU, so the converter is
-            // left guessing), so say it out loud and name the file, because the version alone lies.
             let (no_node, no_devices) = (render_node.is_none(), list_devices.is_none());
             if (minor, patch) >= (4, 15) && (no_node || no_devices) {
                 let missing = if no_node && no_devices {
@@ -383,7 +275,6 @@ impl DrmtapLib {
                 } else {
                     "drmtap_list_devices"
                 };
-                // Name only the capability each absent symbol actually costs.
                 let effect = if no_node && no_devices {
                     "Multi-GPU display enumeration and exporting-GPU selection stay disabled."
                 } else if no_node {
@@ -419,17 +310,12 @@ impl DrmtapLib {
 
 static DRMTAP_LIB: OnceLock<Option<DrmtapLib>> = OnceLock::new();
 
-/// Returns the loaded libdrmtap, or None if the .so (or one of its runtime deps)
-/// is not present, or is too old to serve the split-capture architecture (see
-/// `abi_accepted`). Loaded once; a failure is remembered (no repeated dlopen).
+/// The loaded libdrmtap, or None if the .so (or a runtime dep) is absent or too old for split capture. Loaded once; a failure is remembered.
 pub fn get() -> Option<&'static DrmtapLib> {
     DRMTAP_LIB
         .get_or_init(|| {
             let lib = DrmtapLib::load();
             if lib.is_none() {
-                // Deliberately not "dlopen failed": the load also declines a library that opens
-                // fine but is too old or does not carry the split API, and each of those paths
-                // has already said so, with the file name, at warn level.
                 log::info!("libdrmtap not available or not usable; DRM capture disabled");
             }
             lib
@@ -443,11 +329,7 @@ mod tests {
 
     #[test]
     fn abi_gate_rejects_a_library_from_before_the_split() {
-        // The releases that predate drmtap_grab_desc. Accepting any of these means the
-        // privileged service has no export-only path and converts in-process, which is
-        // the whole thing the split was built to prevent. 0.4.9 is in the list on
-        // purpose: it introduced the convert half of the split but not the export half,
-        // so it cannot serve the privileged side either.
+        // 0.4.9 is in the list on purpose: it has the convert half of the split, not the export half.
         for (minor, patch) in [(3, 3), (4, 0), (4, 8), (4, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
@@ -460,8 +342,6 @@ mod tests {
     fn abi_gate_accepts_the_floor_and_later_patches_of_the_same_minor() {
         let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
         assert!(abi_accepted(DRMTAP_ABI_MAJOR, min_minor, min_patch));
-        // 0.4.15 is what the deb ships today. A later PATCH of the verified minor is fine:
-        // patch releases do not change the layouts.
         for (minor, patch) in [(4, 15), (4, 200)] {
             assert!(
                 abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
@@ -472,12 +352,6 @@ mod tests {
 
     #[test]
     fn abi_gate_rejects_an_unknown_newer_minor() {
-        // Under 0.x semver the MINOR is the breaking axis, and libdrmtap freezes only
-        // drmtap_device and drmtap_dmabuf_desc -- drmtap_frame_info, drmtap_display,
-        // drmtap_config and drmtap_cursor_info are not frozen. A 0.5.0 that adds one field
-        // to drmtap_frame_info still reports major 0, so a floor-only check would load it
-        // and read every field at the wrong offset, in the ROOT service. Fail closed on a
-        // minor nobody has compared the layouts against; bumping is a deliberate act.
         for (minor, patch) in [(5, 0), (5, 99), (9, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
@@ -488,8 +362,6 @@ mod tests {
 
     #[test]
     fn abi_gate_rejects_another_major_in_both_directions() {
-        // The mirrored #[repr(C)] layouts track the major, so a newer one is as unsafe
-        // to read through as an older one, however high its minor.
         assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 0, 0));
         assert!(!abi_accepted(DRMTAP_ABI_MAJOR + 1, 99, 99));
     }
