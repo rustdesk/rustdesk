@@ -821,7 +821,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         Some(Err(e)) => return Err(e),
         None => return Ok(()), // timed out: client never chose a display
     };
-    // Reject crtc 0: `open(crtc=0)` auto-selects the primary CRTC and streams the WRONG monitor.
+    // Reject crtc 0: `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams the WRONG monitor.
     let selected = usize::try_from(display_idx)
         .ok()
         .and_then(|i| displays.get(i));
