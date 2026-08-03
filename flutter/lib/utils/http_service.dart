@@ -57,33 +57,38 @@ class HttpService {
     Map<String, String>? headers,
     dynamic body,
   }) async {
-    var response = http.Response('', 400);
+    final client = http.Client();
+    try {
+      var response = http.Response('', 400);
 
-    switch (method) {
-      case HttpMethod.get:
-        response =
-            await http.get(url, headers: headers).timeout(_requestTimeout);
-        break;
-      case HttpMethod.post:
-        response = await http
-            .post(url, headers: headers, body: body)
-            .timeout(_requestTimeout);
-        break;
-      case HttpMethod.put:
-        response = await http
-            .put(url, headers: headers, body: body)
-            .timeout(_requestTimeout);
-        break;
-      case HttpMethod.delete:
-        response = await http
-            .delete(url, headers: headers, body: body)
-            .timeout(_requestTimeout);
-        break;
-      default:
-        throw Exception('Unsupported HTTP method');
+      switch (method) {
+        case HttpMethod.get:
+          response =
+              await client.get(url, headers: headers).timeout(_requestTimeout);
+          break;
+        case HttpMethod.post:
+          response = await client
+              .post(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        case HttpMethod.put:
+          response = await client
+              .put(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        case HttpMethod.delete:
+          response = await client
+              .delete(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        default:
+          throw Exception('Unsupported HTTP method');
+      }
+
+      return response;
+    } finally {
+      client.close();
     }
-
-    return response;
   }
 
   Future<String> _pollForResponse(String url) async {
