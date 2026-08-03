@@ -595,7 +595,14 @@ async fn recv_thread(
                 }
             }
             Data::DrmDisplaysChanged(list) => {
-                // Checked BEFORE the swap, against the topology this stream started on.
+                // `display` (the CLIENT's index) and NOT `wire_idx`, deliberately. `bound_to` is an
+                // identity `(device, crtc_id)`, not a position, so this asks "does that slot still
+                // name MY monitor"; and the swap below installs this list as DRM_STATE, which is the
+                // client-space list display_service re-advertises and input is mapped through.
+                // Probing `wire_idx` stays quiet in exactly the case this guard exists for: a stream
+                // whose wire_idx differs from display keeps running while the client's index comes to
+                // mean another monitor. Checked BEFORE the swap, against the topology this stream
+                // started on.
                 let now_at_our_index = list
                     .get(display.max(0) as usize)
                     .map(|d| (d.device.clone(), d.crtc_id));
