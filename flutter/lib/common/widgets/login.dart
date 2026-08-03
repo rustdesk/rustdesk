@@ -593,20 +593,25 @@ Future<bool?> loginDialog() async {
                 const SizedBox(height: 8.0),
                 // NOT use Offstage to wrap LinearProgressIndicator
                 if (inProgress) const LinearProgressIndicator(),
-                Text(
-                  translate('network_error_tip'),
-                  style: const TextStyle(fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
+                if (!inProgress)
+                  Text(
+                    translate('network_error_tip'),
+                    style: const TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
                 TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                  ),
                   onPressed: inProgress ? null : fetchLoginOptions,
                   child: Text(translate('Retry')),
                 ),
-                SelectableText(
-                  error,
-                  style: const TextStyle(fontSize: 11, color: Colors.red),
-                  textAlign: TextAlign.center,
-                ),
+                if (!inProgress)
+                  SelectableText(
+                    error,
+                    style: const TextStyle(fontSize: 11, color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
               ],
             );
           }
