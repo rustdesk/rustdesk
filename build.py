@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import subprocess
 import platform
 import zipfile
 import urllib.request
@@ -40,7 +41,7 @@ def get_deb_extra_depends() -> str:
     return ""
 
 def system2(cmd):
-    exit_code = os.system(cmd)
+    exit_code = subprocess.run(cmd, shell=True).returncode
     if exit_code != 0:
         sys.stderr.write(f"Error occurred when executing: `{cmd}`. Exiting.\n")
         sys.exit(-1)
@@ -222,7 +223,7 @@ def download_extract_features(features, res_dir):
                 checksum_md5 = line.split()[0]
                 filename, _headers = urllib.request.urlretrieve(feat_info['zip_url'],
                                                                 download_filename)
-                md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+                md5 = hashlib.sha256(open(filename, 'rb').read()).hexdigest()
                 if checksum_md5 != md5:
                     raise Exception(f'{feat} download failed')
                 print(f'{feat} download end. extract bein')
@@ -639,7 +640,10 @@ def main():
 
 
 def md5_file(fn):
-    md5 = hashlib.md5(open('tmpdeb/' + fn, 'rb').read()).hexdigest()
+    safe_path = os.path.realpath(os.path.join('tmpdeb', fn))
+    if not safe_path.startswith(os.path.realpath('tmpdeb')):
+        raise ValueError(f"Path traversal detected: {fn}")
+    md5 = hashlib.sha256(open(safe_path, 'rb').read()).hexdigest()
     system2('echo "%s  /%s" >> tmpdeb/DEBIAN/md5sums' % (md5, fn))
 
 def md5_file_folder(base_dir):
