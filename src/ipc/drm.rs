@@ -14,7 +14,9 @@ pub struct DrmDisplayInfo {
     pub height: u32,
     pub active: bool,
     /// Render node of the GPU that EXPORTS this display's scanout; on a multi-GPU host auto-select
-    /// can bind a different GPU whose cross-vendor import then fails. Empty = auto-select.
+    /// can bind a different GPU whose cross-vendor import then fails. Empty when the service cannot
+    /// name it: the consumer then auto-selects on a single-render-node host, and forces the CPU
+    /// path where there are several.
     #[serde(default)]
     pub render_node: String,
     /// KMS card node (`/dev/dri/card*`) driving this display. crtc_ids are card-local, so the index
