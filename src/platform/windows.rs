@@ -3162,6 +3162,64 @@ impl Drop for WakeLock {
     }
 }
 
+// `check_process("--tray", ..)` can miss a tray process that is already running,
+// and every miss spawns one more tray icon.
+//
+// The case confirmed in #15689: `run_after_run_cmds()` spawns the tray in the
+// caller's own context, so installing or toggling the service from a RustDesk
+// that was itself started elevated leaves a high integrity tray behind. A main
+// window started normally afterwards runs at medium integrity and cannot open
+// that process with `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`. sysinfo then
+// falls back to `PROCESS_QUERY_LIMITED_INFORMATION`, which is not enough for
+// `GetModuleFileNameExW`, so the executable path comes back empty and the tray
+// is skipped before its command line is ever looked at.
+//
+// A second blind spot: 32-bit builds read the command line through `wmic`
+// (#11638), which is no longer installed by default since Windows 11 24H2.
+//
+// Both are cases of one process failing to inspect another, and patching the
+// inspection has regressed twice already (#6692), so use a named mutex instead:
+// the kernel answers without us needing any access to the other process.
+//
+// Returns `false` if another tray process is already running in this session.
+pub fn try_lock_tray_single_instance() -> bool {
+    use winapi::um::{
+        errhandlingapi::{GetLastError, SetLastError},
+        synchapi::CreateMutexW,
+    };
+    // `Local\` is the per session namespace, so the name is scoped to this
+    // session already and cannot be squatted by another user.
+    let name = wide_string(&format!("Local\\{}_tray", crate::get_app_name()));
+    unsafe {
+        // A successful `CreateMutexW` doesn't clear the last error, clear it to
+        // reliably detect `ERROR_ALREADY_EXISTS`.
+        SetLastError(0);
+        // The handle is deliberately kept open for the lifetime of the process.
+        let handle = CreateMutexW(null_mut(), FALSE, name.as_ptr());
+        let last_error = GetLastError();
+        if !handle.is_null() {
+            if last_error == ERROR_ALREADY_EXISTS {
+                CloseHandle(handle);
+                return false;
+            }
+            return true;
+        }
+        if last_error == ERROR_ACCESS_DENIED {
+            // The mutex exists but was created by a tray running at a higher
+            // integrity level, which is exactly the elevated tray described
+            // above. Defer to it instead of adding a second icon.
+            return false;
+        }
+        // Unexpected: show the tray icon anyway, a duplicated icon is better
+        // than never showing the tray icon at all.
+        log::warn!(
+            "Failed to create the tray single instance mutex: {}",
+            io::Error::from_raw_os_error(last_error as _)
+        );
+        true
+    }
+}
+
 pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     log::info!("Uninstalling service...");
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
@@ -3268,6 +3326,18 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     }
 
     let app_exe_name = &format!("{}.exe", &app_name);
+    // NOTE: The pids below are matched by command line, which can silently come
+    // back empty even while the processes are running:
+    // - a 32-bit build cannot read the command line of a 64-bit process, so it
+    //   shells out to `wmic` instead (#11638), and `wmic` is no longer installed
+    //   by default since Windows 11 24H2;
+    // - a non-elevated process cannot read the command line of an elevated one.
+    // The `taskkill` in the commands below matches by image name and is not
+    // affected, but `*_sessions` are then empty, so `_restore_session_guard`
+    // silently restores nothing and the update leaves the user without a tray
+    // icon and main window until the app is launched again. Reading the command
+    // line through `NtQueryInformationProcess` instead would fix the queries for
+    // every caller.
     let main_window_pids =
         crate::platform::get_pids_of_process_with_args::<_, &str>(&app_exe_name, &[]);
     let main_window_sessions = main_window_pids
