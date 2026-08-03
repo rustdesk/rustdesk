@@ -89,6 +89,10 @@ class UserModel {
       final data = json.decode(decode_http_response(response));
       final error = data['error'];
       if (error != null) {
+        // The only failure known to come from the server itself, so the
+        // check-your-network tip does not apply. Flag before the message is
+        // set in the catch below so rebuilds read a consistent pair.
+        networkErrorFromServer.value = true;
         throw error;
       }
 
@@ -96,12 +100,11 @@ class UserModel {
       _parseAndUpdateUser(user);
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
-      // Also surface non-transport failures in the address book / group
-      // tabs, which offer a retry. A FormatException means the body was not
-      // the expected JSON (e.g. a filter's block page), so the network tip
-      // still applies; anything else is an error the server reported.
+      // Surface failures in the address book / group tabs, which offer a
+      // retry. Anything not flagged above -- transport errors, non-JSON or
+      // unexpected-schema bodies (e.g. a filter's block page) -- keeps the
+      // check-your-network tip.
       if (networkError.value.isEmpty) {
-        networkErrorFromServer.value = e is! FormatException;
         networkError.value = e.toString();
       }
     } finally {
