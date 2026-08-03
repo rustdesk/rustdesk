@@ -254,6 +254,16 @@ class MainService : Service() {
         super.onDestroy()
     }
 
+    // Swiping the app away from recents destroys the UI but this service keeps
+    // the process alive, so outgoing sessions would stay connected with no way
+    // to close them. Incoming connections are unaffected: the service keeps
+    // running so the device stays reachable.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(logTag, "onTaskRemoved, closing outgoing sessions")
+        FFI.closeAllSessions()
+        super.onTaskRemoved(rootIntent)
+    }
+
     private var isHalfScale: Boolean? = null;
     private fun updateScreenInfo(orientation: Int) {
         var w: Int

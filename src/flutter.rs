@@ -2131,6 +2131,42 @@ pub mod sessions {
         s
     }
 
+    /// Close every client session, returning how many peer sessions were closed.
+    ///
+    /// Used when the UI is gone but the process keeps running, e.g. the Android
+    /// task is swiped away from recents while a foreground service keeps the
+    /// process alive. The orphaned `io_loop` would otherwise keep answering
+    /// `TestDelay`, so the peer never hits its inactivity timeout and the
+    /// session stays established with no way to close it.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    pub fn close_all_sessions() -> usize {
+        // Drain first so the map lock is released before closing each session.
+        let sessions: Vec<FlutterSession> = SESSIONS
+            .write()
+            .unwrap()
+            .drain()
+            .map(|(_, session)| session)
+            .collect();
+        if !sessions.is_empty() {
+            crate::keyboard::release_remote_keys("map");
+        }
+        for session in sessions.iter() {
+            let session_ids: Vec<SessionID> = session
+                .ui_handler
+                .session_handlers
+                .read()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            for session_id in session_ids {
+                session.close_event_stream(session_id);
+            }
+            session.close();
+        }
+        sessions.len()
+    }
+
     /// Check if removing a session by session_id would result in removing the entire peer.
     ///
     /// Returns:
