@@ -2,6 +2,7 @@
 
 import os
 import glob
+import contextlib
 import pathlib
 import platform
 import zipfile
@@ -138,6 +139,13 @@ def make_parser():
         action='store_true',
         help='Linux only: build the DRM/KMS capture backend (bundles libdrmtap.so, '
              'dlopen-ed in-process by the root service). Off by default.'
+    )
+    parser.add_argument(
+        '--print-features',
+        action='store_true',
+        help='Print the cargo feature list these flags select, and exit without building. For a '
+             'caller that runs its own cargo line and then packages with --skip-cargo: it can ask '
+             'for the list rather than repeat it, so the two cannot drift.'
     )
     parser.add_argument(
         '--skip-cargo',
@@ -877,6 +885,19 @@ def main():
     global skip_cargo
     parser = make_parser()
     args = parser.parse_args()
+
+    # Before anything with a side effect: this is a query, and a caller uses it to build the very
+    # binary it will then package. `get_features` stays the single definition of what a flag
+    # combination means; a caller that hardcodes the list instead is one edit away from compiling
+    # something other than what it ships.
+    if args.print_features:
+        # stdout carries the list and nothing else, so a caller can use it directly in a command
+        # substitution. `get_features` prints a human-readable line of its own; send that to stderr
+        # for this call rather than silencing it, which would change what every other path prints.
+        with contextlib.redirect_stdout(sys.stderr):
+            feats = ','.join(get_features(args))
+        print(feats)
+        return
 
     if os.path.exists(exe_path):
         os.unlink(exe_path)

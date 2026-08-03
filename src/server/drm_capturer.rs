@@ -64,13 +64,20 @@ struct FrameSlot {
     // assuming BGRA; the CPU-fallback path stores BGRA. The row stride is recoverable from
     // `pixels.len() / height` (the convert output may carry a padded stride).
     latest: Option<(usize, usize, Pixfmt, Vec<u8>)>,
-    // A frame buffer no longer in use, handed back for the receive path to fill again: by `frame()`
+    // Frame buffers no longer in use, handed back for the receive path to fill again: by `frame()`
     // when it swaps in a new frame, and by the receive path itself when it supersedes one that was
     // never consumed. A scanout is megabytes (33 MB at 4K), so allocating one per frame and freeing
-    // it a moment later is the kind of churn a 30 fps loop should not be doing. One slot is enough:
-    // at most one buffer is idle at a time, since the pipeline holds exactly two (the one being
-    // filled and the one published) plus the one `frame()` is lending to the encoder.
-    free: Option<Vec<u8>>,
+    // it a moment later is the kind of churn a 30 fps loop should not be doing.
+    //
+    // TWO slots, not one. The pipeline holds three buffers -- the one being filled, the one
+    // published, and the one `frame()` is lending to the encoder -- so two of them can be idle at
+    // the same moment: the receive path supersedes an unconsumed frame while the encoder hands its
+    // borrow back. With a single slot those two writers raced for it, and they do not even race
+    // under one lock, since the receive path takes a buffer and publishes in two SEPARATE
+    // acquisitions. The later write then dropped a scanout-sized allocation this exists to keep.
+    // Two is the exact bound for three in-flight buffers; a third deposit cannot happen, and if it
+    // ever did, dropping it is the fail-safe direction (churn, never a leak).
+    free: [Option<Vec<u8>>; 2],
     // Set once the stream ends so `frame()` returns a hard error (triggers a capturer rebuild).
     ended: Option<String>,
 }
@@ -79,9 +86,21 @@ impl FrameSlot {
     /// Publish `buf` as the newest frame, recycling whatever it supersedes.
     fn publish(&mut self, w: usize, h: usize, fmt: Pixfmt, buf: Vec<u8>) {
         if let Some((.., old)) = self.latest.take() {
-            self.free = Some(old);
+            self.recycle(old);
         }
         self.latest = Some((w, h, fmt, buf));
+    }
+
+    /// Hand a buffer back for the receive path to refill. See `free` for why there are two slots.
+    fn recycle(&mut self, buf: Vec<u8>) {
+        if let Some(slot) = self.free.iter_mut().find(|s| s.is_none()) {
+            *slot = Some(buf);
+        }
+    }
+
+    /// Take a buffer to fill, if one is on offer.
+    fn take_free(&mut self) -> Option<Vec<u8>> {
+        self.free.iter_mut().find_map(|s| s.take())
     }
 }
 
@@ -328,7 +347,7 @@ impl IpcDrmCapturer {
         let shared = Arc::new(Shared {
             slot: Mutex::new(FrameSlot {
                 latest: None,
-                free: None,
+                free: [None, None],
                 ended: None,
             }),
             cv: Condvar::new(),
@@ -467,7 +486,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     // still alive until it observes this session ending, and this is a
                     // scanout-sized allocation the recycler exists to keep. Dropping it here made
                     // every rebuild cycle re-allocate one.
-                    self.shared.slot.lock().unwrap().free = Some(buf);
+                    self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
                     }
@@ -489,7 +508,7 @@ impl TraitCapturer for IpcDrmCapturer {
                 // The encoder is done with it: `frame()` takes `&mut self`, so the borrow it lent
                 // out last time has ended.
                 let previous = std::mem::replace(&mut self.cur, buf);
-                self.shared.slot.lock().unwrap().free = Some(previous);
+                self.shared.slot.lock().unwrap().recycle(previous);
                 self.cur_w = w;
                 self.cur_h = h;
                 self.cur_fmt = fmt;
@@ -767,7 +786,7 @@ async fn recv_thread(
                         // until the next convert, so it must be copied out. Copy into a recycled
                         // buffer, and outside the slot lock, so a multi-megabyte memcpy never holds
                         // the encoder off the slot.
-                        let mut buf = shared.slot.lock().unwrap().free.take().unwrap_or_default();
+                        let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
                         buf.clear();
                         buf.extend_from_slice(data);
                         let mut slot = shared.slot.lock().unwrap();
@@ -816,7 +835,7 @@ async fn recv_thread(
                 // thread plus its render context. The body follows its header immediately on a local
                 // socket (a 20MB 2880x1800 frame arrives in single-digit ms), so a whole
                 // BODY_READ_TIMEOUT of silence is a dead producer, not a slow one.
-                let mut buf = shared.slot.lock().unwrap().free.take().unwrap_or_default();
+                let mut buf = shared.slot.lock().unwrap().take_free().unwrap_or_default();
                 match tokio::time::timeout(BODY_READ_TIMEOUT, conn.next_raw_into(&mut buf)).await {
                     Err(_) => break "cpu frame body read timed out".to_owned(),
                     Ok(Ok(())) => {
@@ -1444,7 +1463,16 @@ fn refresh_available_async() {
     // guard moved into the closure, which is dropped along with it, so the flag clears on that path
     // too. Releasing it explicitly would be worse than redundant -- by then another refresh may have
     // acquired the flag, and clearing it would let two probes run at once.
-    let _ = spawned;
+    //
+    // Log it anyway. There is no wedge, but a refresh that can never start is invisible otherwise:
+    // the cached verdict just keeps being re-served past its TTL, and the symptom (enumeration
+    // advertising a display an idle hotplug removed) looks nothing like the cause.
+    if let Err(err) = spawned {
+        log::warn!(
+            "drm: could not spawn the availability refresh thread: {err}; the cached verdict \
+             stays stale until the next probe"
+        );
+    }
 }
 
 /// Warm the availability cache at `--server` startup so the first client connection does not race a
@@ -1982,7 +2010,7 @@ mod drm_capturer_tests {
             shared: Arc::new(Shared {
                 slot: Mutex::new(FrameSlot {
                     latest: None,
-                    free: None,
+                    free: [None, None],
                     ended: None,
                 }),
                 cv: Condvar::new(),
@@ -2013,7 +2041,7 @@ mod drm_capturer_tests {
     // Publishes exactly the way the receive path does, so the recycling is exercised too: take a
     // free buffer if one is on offer, fill it, publish it.
     fn put_frame(c: &IpcDrmCapturer, w: usize, h: usize) {
-        let mut buf = c.shared.slot.lock().unwrap().free.take().unwrap_or_default();
+        let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
         buf.clear();
         buf.resize(w * h * 4, 0);
         let mut slot = c.shared.slot.lock().unwrap();
@@ -2191,7 +2219,8 @@ mod drm_capturer_tests {
             .lock()
             .unwrap()
             .free
-            .as_ref()
+            .iter()
+            .find_map(|b| b.as_ref())
             .map(|b| b.as_ptr());
         assert!(
             recycled.is_some(),
@@ -2212,8 +2241,42 @@ mod drm_capturer_tests {
         );
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
         assert!(
-            c.shared.slot.lock().unwrap().free.is_some(),
+            c.shared.slot.lock().unwrap().free.iter().any(|b| b.is_some()),
             "the buffer the encoder finished with must be handed back to the receive path"
+        );
+    }
+
+    // Two buffers can be idle at the same moment, and a single free slot silently dropped one of
+    // them. The order below is the one the real paths take: the receive path supersedes a frame
+    // nobody consumed (deposit #1) and the encoder then returns the borrow it was lent (deposit #2).
+    // They are not serialised by one lock -- the receive path takes a buffer and publishes in two
+    // separate acquisitions -- so both deposits land before either is picked up.
+    //
+    // Against the one-slot version this asserts red: the second deposit overwrote the first, so one
+    // scanout-sized allocation was freed and the next frame re-allocated it. Counting the offers is
+    // the point; asserting only "some buffer came back" passes against the defect.
+    #[test]
+    fn two_idle_buffers_are_both_kept_rather_than_one_being_dropped() {
+        let mut c = capturer_with(Some((64, 32)));
+        put_frame(&c, 64, 32);
+        // Lend one out to the encoder, so there is a borrow to return later.
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+        // Drain whatever is on offer, so the count below is only what THIS sequence deposits.
+        while c.shared.slot.lock().unwrap().take_free().is_some() {}
+
+        put_frame(&c, 64, 32); // fills a fresh buffer (nothing on offer) and publishes it
+        put_frame(&c, 64, 32); // supersedes it -> deposit #1
+        assert_eq!(
+            c.shared.slot.lock().unwrap().free.iter().flatten().count(),
+            1,
+            "the superseded frame is the first idle buffer"
+        );
+        // The encoder returns its borrow -> deposit #2, into a slot that must still be empty.
+        assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+        assert_eq!(
+            c.shared.slot.lock().unwrap().free.iter().flatten().count(),
+            2,
+            "both idle buffers must be kept; a single slot dropped the older one"
         );
     }
 

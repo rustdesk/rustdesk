@@ -338,10 +338,30 @@ jobs:
       - name: Build the unattended-wayland deb
         shell: bash
         run: |
-          # drm-wake must be listed HERE: build.py adds it for --drm, but the next line passes
-          # --skip-cargo, so build.py never rebuilds and whatever this line compiled is what ships.
-          cargo build --locked --lib --release --features hwcodec,flutter,unix-file-copy-paste,drm,drm-wake
-          python3 ./build.py --flutter --drm --skip-cargo
+          set -euo pipefail
+          # The features have to be on the cargo line HERE, because the packaging line below passes
+          # --skip-cargo and never rebuilds: whatever this compiles is what ships. ASK build.py for
+          # the list rather than repeating it -- get_features() is the single definition of what
+          # these flags mean, and a hardcoded copy silently ships something other than what
+          # `build.py --drm` produces the moment that function changes. The flags must be the same
+          # on both lines for that to hold, so keep them in one variable.
+          DRM_BUILD_FLAGS=(--flutter --drm --hwcodec --unix-file-copy-paste)
+          FEATURES="$(python3 ./build.py "${DRM_BUILD_FLAGS[@]}" --print-features)"
+          echo "features from build.py: $FEATURES"
+          # Assert rather than trust: an empty or error-shaped value would otherwise become a cargo
+          # line that builds a stock binary, which only the staged-binary marker check would catch.
+          # Match whole comma-separated TOKENS, one feature at a time. A substring test would depend
+          # on the order get_features happens to append them (failing a correct build the day they
+          # are reordered) and would also match a future feature that merely contains "drm", the same
+          # trap build.py avoids by splitting on commas rather than testing a substring.
+          for want in drm drm-wake; do
+            case ",$FEATURES," in
+              *",$want,"*) ;;
+              *) echo "::error::build.py --print-features returned no '$want' feature: $FEATURES"; exit 1 ;;
+            esac
+          done
+          cargo build --locked --lib --release --features "$FEATURES"
+          python3 ./build.py "${DRM_BUILD_FLAGS[@]}" --skip-cargo
 
       # build.py exits 0 on some inner failures, so assert the artifact instead of trusting the status,
       # and assert the two things that make it the drm variant at all.

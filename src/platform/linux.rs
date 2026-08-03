@@ -362,6 +362,13 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
     // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
+    //
+    // The MEMOISED `is_x11()` here, deliberately, unlike the capture-path callers that take the
+    // unmemoised `scrap::is_x11()` because this one latches on first use. The tradeoff is the other
+    // way round at cursor cadence: the unmemoised form forks `loginctl` per call, and this runs on
+    // every cursor poll. A latch that guessed wrong costs a cursor served by the wrong source until
+    // the process restarts, not a capture that cannot start -- and by the time a cursor is being
+    // polled there is a live session, which is the case the latch reads correctly.
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
@@ -399,6 +406,9 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // DRM/KMS capture: return the latest hardware-cursor snapshot from the `_drm` stream. Its id may
     // have advanced past `hcursor` between get_cursor() and here, so return the latest rather than
     // bailing (which would trigger a MouseCursorService backoff).
+    //
+    // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
+    // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
     if !is_x11() {
         if let Some(c) = crate::server::drm_capturer::drm_cursor() {
@@ -888,10 +898,24 @@ pub fn start_os_service() {
     // scanout frames to the user `--server` over the `_drm` service-scoped channel. Runs here
     // because this process is the root service that already holds CAP_SYS_ADMIN for the in-process
     // (direct-mode) libdrmtap read.
+    //
+    // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the thread
+    // cannot be created (EAGAIN under a thread-count or memory limit), and here that panic would
+    // unwind out of `start_os_service` -- taking down the root service itself, for a feature whose
+    // failure should only cost DRM capture. Losing the producer leaves the consumer to fall back to
+    // PipeWire/X11, which is the same path a host without the feature takes.
     #[cfg(feature = "drm")]
-    std::thread::spawn(|| {
-        crate::ipc::start_drm();
-    });
+    if let Err(err) = std::thread::Builder::new()
+        .name("drm-producer".into())
+        .spawn(|| {
+            crate::ipc::start_drm();
+        })
+    {
+        log::warn!(
+            "failed to spawn the drm capture producer thread: {err}; DRM capture is off for \
+             this boot and the consumer falls back to PipeWire/X11"
+        );
+    }
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();

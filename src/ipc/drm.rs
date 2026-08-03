@@ -1734,6 +1734,11 @@ fn drm_capture_worker(
                 );
                 use_dmabuf = false;
                 logged_first = false;
+                // The stall counter measured the path we just abandoned, so carrying it over would
+                // spend part of the CPU path's budget on the dma-buf path's failures and could trip
+                // MAX_STALLED early -- closing a connection the fallback was about to serve. This is
+                // a fresh path; give it the whole budget.
+                stalled = 0;
                 continue;
             }
             Some(Err(err)) => {
