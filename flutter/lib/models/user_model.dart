@@ -240,24 +240,25 @@ class UserModel {
     final url = await bind.mainGetApiServer();
     if (url.trim().isEmpty) return [];
     final resp = await http.get(Uri.parse('$url/api/login-options'));
-    try {
-      final List<String> ops = [];
-      for (final item in jsonDecode(resp.body)) {
-        ops.add(item as String);
-      }
-      for (final item in ops) {
-        if (item.startsWith('common-oidc/')) {
-          return jsonDecode(item.substring('common-oidc/'.length));
-        }
-      }
-      return ops
-          .where((item) => item.startsWith('oidc/'))
-          .map((item) => {'name': item.substring('oidc/'.length)})
-          .toList();
-    } catch (e) {
-      debugPrint(
-          "queryOidcLoginOptions: jsonDecode resp body failed: ${e.toString()}");
-      return [];
+    const successStatusCodeStart = 200;
+    const successStatusCodeEnd = 300;
+    if (resp.statusCode < successStatusCodeStart ||
+        resp.statusCode >= successStatusCodeEnd) {
+      throw RequestException(
+          resp.statusCode, resp.reasonPhrase ?? 'Request failed');
     }
+    final List<String> ops = [];
+    for (final item in jsonDecode(resp.body)) {
+      ops.add(item as String);
+    }
+    for (final item in ops) {
+      if (item.startsWith('common-oidc/')) {
+        return jsonDecode(item.substring('common-oidc/'.length));
+      }
+    }
+    return ops
+        .where((item) => item.startsWith('oidc/'))
+        .map((item) => {'name': item.substring('oidc/'.length)})
+        .toList();
   }
 }
