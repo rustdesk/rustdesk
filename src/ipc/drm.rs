@@ -505,7 +505,7 @@ const OPTION_ENABLE_DRM_DISPLAY_WAKE: &str = "enable-drm-display-wake";
 /// have measured (about 30 s at a GDM greeter, about 70 s in a session with `idle-delay=60`), so a
 /// peer that keeps reconnecting can have the panel relit after each idle-off. Do not write that
 /// this constant makes the wake "useless for holding a screen on" -- a SHORTER gap would make
-/// relighting easier, not harder, and that sentence has already been wrong here twice.
+/// relighting easier, not harder.
 #[cfg(feature = "drm-wake")]
 const DRM_WAKE_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(20);
 /// How long to let udev bind a freshly created uinput device before writing to it. Measured, not

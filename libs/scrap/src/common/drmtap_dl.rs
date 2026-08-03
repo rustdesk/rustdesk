@@ -204,8 +204,7 @@ unsafe impl Sync for DrmtapLib {}
 // be laid out differently, so we refuse the library rather than read through a
 // mismatched layout. A minor bump is NOT accepted either -- `abi_accepted` requires an exact
 // `minor` match, for the reason spelled out with DRMTAP_ABI_MINOR below. Do not widen this on the
-// strength of "minor bumps are additive": that sentence used to live here and it no longer
-// describes the gate.
+// strength of "minor bumps are additive".
 const DRMTAP_ABI_MAJOR: c_int = 0;
 
 // Lowest (minor, patch) this build accepts. The project is still 0.x, so the
@@ -479,9 +478,6 @@ mod tests {
         // to drmtap_frame_info still reports major 0, so a floor-only check would load it
         // and read every field at the wrong offset, in the ROOT service. Fail closed on a
         // minor nobody has compared the layouts against; bumping is a deliberate act.
-        //
-        // This test replaces one that asserted the opposite ("0.5.0 must pass"), which was
-        // holding the hazard in place.
         for (minor, patch) in [(5, 0), (5, 99), (9, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),

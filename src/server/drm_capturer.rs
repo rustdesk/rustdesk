@@ -112,8 +112,6 @@ struct Shared {
 pub struct IpcDrmCapturer {
     shared: Arc<Shared>,
     stop: Arc<AtomicBool>,
-    // The buffer `frame()` hands out a borrow of; kept across calls (grow-once) and only replaced
-    // when a new frame is taken from the slot.
     // The requested display index this capturer streams, for per-display failure tracking.
     display: i32,
     // What that index MEANT when the stream started. Per-display memory is keyed by this, not by the
@@ -123,6 +121,8 @@ pub struct IpcDrmCapturer {
     // video service reads CapturerInfo{width,height} once, at build time. A frame of any other size
     // must not be delivered against it. `None` only if the handshake list did not describe this index.
     session_size: Option<(usize, usize)>,
+    // The buffer `frame()` hands out a borrow of; kept across calls (grow-once) and only replaced
+    // when a new frame is taken from the slot.
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -534,8 +534,7 @@ impl TraitCapturer for IpcDrmCapturer {
                     // identity (`device:name`) and follows that monitor for the process run, exactly
                     // as its own doc says. A monitor that moves to another GPU arrives under a new
                     // identity and starts clean, so there is nothing to invalidate on a topology
-                    // change either. (An earlier revision pointed at `drm_clear_prefer_cpu` here;
-                    // that function no longer exists.)
+                    // change either.
                     self.got_frame = true;
                     if let Some(key) = &self.connector {
                         if let Some(h) = DRM_DISPLAY_HEALTH.lock().unwrap().get_mut(key) {
@@ -969,7 +968,7 @@ async fn recv_thread(
                     // Constructing the guard inside the closure only covers paths where the closure
                     // actually runs: `thread::spawn` panics on EAGAIN, and that happens after the
                     // swap above, so no guard would ever exist and the flag would stay set for the
-                    // process lifetime. Same mistake, same shape, as the two flags before it.
+                    // process lifetime.
                     let mut busy = UinputRefreshGuard(true);
                     let spawned = std::thread::Builder::new()
                         .name("drm-uinput-refresh".into())
@@ -1267,8 +1266,7 @@ impl Drop for UinputRefreshGuard {
 /// expiry mid-session), which is seconds of IPC. Paying that inside `wayland::clear()`,
 /// `is_inited()`, the display enumeration or `get_displays_and_primary()` is exactly the stall
 /// `wayland.rs`'s own NOTE says must never happen there: it blocks the executor long enough to trip
-/// "deadline has elapsed" and spiral into a video-service restart loop. The comment was right and the
-/// code used the probing accessor anyway.
+/// "deadline has elapsed" and spiral into a video-service restart loop.
 ///
 /// The distinction is safe because these are ROUTING decisions, not capability decisions: with the
 /// cache cold they answer "not DRM" and the caller takes the PipeWire path it would have taken

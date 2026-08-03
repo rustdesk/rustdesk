@@ -2095,7 +2095,6 @@ mod desktop {
                 // which is the entire reason it works at a login screen. `try_start_server_` skips
                 // empty entries, so the greeter child simply does not get them.
                 //
-                // NOT REPRODUCIBLE ON OUR HARDWARE, so it is a reasoned fix, not a measured one:
                 // `is_login_wayland` needs `is_gdm_user(username)`, and a current GDM runs its
                 // greeter as `gdm-greeter`, which that helper does not match -- measured on the
                 // test host, where the greeter server therefore takes the branch below and gets a
