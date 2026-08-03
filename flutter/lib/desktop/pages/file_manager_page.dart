@@ -1276,7 +1276,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   ],
                 ))),
           );
-        }).toList(growable: false);
+        });
 
         return Column(
           children: [
@@ -1292,7 +1292,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 controller: scrollController,
                 itemExtent: kDesktopFileTransferRowHeight,
                 itemBuilder: (context, index) {
-                  return rows[index];
+                  return rows.elementAt(index);
                 },
                 itemCount: rows.length,
               ),

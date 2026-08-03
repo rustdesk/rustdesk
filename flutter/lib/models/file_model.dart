@@ -47,6 +47,8 @@ class JobID {
 typedef GetSessionID = SessionID Function();
 typedef GetDialogManager = OverlayDialogManager? Function();
 
+const _kRemoteReadDirTimeout = Duration(seconds: 30);
+
 class FileModel {
   final WeakReference<FFI> parent;
   // late final String sessionId;
@@ -472,6 +474,8 @@ class FileController {
   }
 
   Future<bool> _openDirectoryPath(String path, {bool isBack = false}) async {
+    // Keep directory requests independent so a slow read cannot block later
+    // navigation. Out-of-order replies are accepted until requests have IDs.
     if (!isBack) {
       pushHistory();
     }
@@ -1400,12 +1404,13 @@ class FileFetcher {
     final c = Completer<FileDirectory>();
     tasks[path] = c;
 
-    Timer(Duration(seconds: 2), () {
-      tasks.remove(path);
+    final timer = Timer(_kRemoteReadDirTimeout, () {
+      // An earlier timer must not remove a newer task for the same path.
+      if (tasks[path] == c) tasks.remove(path);
       if (c.isCompleted) return;
       c.completeError("Failed to read dir, timeout");
     });
-    return c.future;
+    return c.future.whenComplete(timer.cancel);
   }
 
   Future<FileDirectory> registerReadRecursiveTask(int actID) {
@@ -1499,20 +1504,28 @@ class FileFetcher {
 
   Future<FileDirectory> fetchDirectory(
       String path, bool isLocal, bool showHidden) async {
-    try {
-      if (isLocal) {
-        final res = await bind.sessionReadLocalDirSync(
-            sessionId: sessionId, path: path, showHidden: showHidden);
-        final fd = FileDirectory.fromJson(jsonDecode(res));
-        return fd;
-      } else {
-        await bind.sessionReadRemoteDir(
-            sessionId: sessionId, path: path, includeHidden: showHidden);
-        return registerReadTask(isLocal, path);
-      }
-    } catch (e) {
-      return Future.error(e);
+    if (isLocal) {
+      final res = await bind.sessionReadLocalDirSync(
+          sessionId: sessionId, path: path, showHidden: showHidden);
+      return FileDirectory.fromJson(jsonDecode(res));
     }
+
+    // Register before sending so a fast reply cannot be lost. This task's
+    // 30-second timeout applies only to normal remote directory listings.
+    final task = registerReadTask(isLocal, path);
+    try {
+      await bind.sessionReadRemoteDir(
+          sessionId: sessionId, path: path, includeHidden: showHidden);
+    } catch (error, stackTrace) {
+      final completer = remoteTasks.remove(path);
+      if (completer == null) {
+        rethrow;
+      }
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+    }
+    return await task;
   }
 
   Future<FileDirectory> fetchDirectoryRecursiveToRemove(
