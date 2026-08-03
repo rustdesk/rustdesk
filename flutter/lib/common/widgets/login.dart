@@ -234,12 +234,18 @@ class _OidcAuthController {
     if (_closed) {
       return;
     }
+    final hasActiveOidcAuth =
+        curOP.value.isNotEmpty && curOP.value != 'rustdesk';
     _closed = true;
     _authAttempt++;
     curOP.value = '';
-    await _cancelBackend();
+    if (hasActiveOidcAuth) {
+      await _cancelBackend();
+    }
     await _pendingOperation;
-    await _cancelBackend();
+    if (hasActiveOidcAuth) {
+      await _cancelBackend();
+    }
   }
 }
 
@@ -356,11 +362,12 @@ class _WidgetOPState extends State<WidgetOP> {
         widget.curOP.value == widget.config.op;
   }
 
-  Future<void> _handleAuthStatusQueryFailure(
+  Future<void> _handleAuthFailure(
     int authAttempt,
-    Object e,
+    Object error,
+    String operation,
   ) async {
-    debugPrint('Failed to query account authentication $e');
+    debugPrint('Failed to $operation $error');
     if (!_isCurrentAuthAttempt(authAttempt)) {
       return;
     }
@@ -374,9 +381,7 @@ class _WidgetOPState extends State<WidgetOP> {
     } catch (cancelError, stackTrace) {
       debugPrint('Failed to cancel account authentication $cancelError');
       debugPrintStack(stackTrace: stackTrace);
-      if (!_isCurrentAuthAttempt(authAttempt)) {
-        return;
-      }
+      return;
     }
     setState(() {
       _invalidateAuthAttempt();
@@ -439,7 +444,11 @@ class _WidgetOPState extends State<WidgetOP> {
         unawaited(_launchAuthUrl(newUrl));
       }
     }).catchError(
-      (e) => _handleAuthStatusQueryFailure(authAttempt, e),
+      (e) => _handleAuthFailure(
+        authAttempt,
+        e,
+        'query account authentication',
+      ),
     );
   }
 
@@ -475,17 +484,11 @@ class _WidgetOPState extends State<WidgetOP> {
                 return;
               }
             } catch (e) {
-              debugPrint('Failed to start account authentication $e');
-              if (!mounted ||
-                  authAttempt != _authAttempt ||
-                  widget.curOP.value != widget.config.op) {
-                return;
-              }
-              setState(() {
-                _failedMsg = 'Failed';
-                _invalidateAuthAttempt();
-                widget.curOP.value = '';
-              });
+              await _handleAuthFailure(
+                authAttempt,
+                e,
+                'start account authentication',
+              );
               return;
             }
             if (!mounted ||
@@ -680,12 +683,11 @@ class LoginWidgetUserPass extends StatelessWidget {
                         translate('Login'),
                         style: TextStyle(fontSize: 16),
                       ),
-                      onPressed:
-                          curOP.value.isEmpty || curOP.value == 'rustdesk'
-                              ? () {
-                                  onLogin();
-                                }
-                              : null,
+                      onPressed: curOP.value.isEmpty && !isInProgress
+                          ? () {
+                              onLogin();
+                            }
+                          : null,
                     )),
               ),
             ])),
@@ -696,8 +698,28 @@ class LoginWidgetUserPass extends StatelessWidget {
 
 const kAuthReqTypeOidc = 'oidc/';
 
+Future<bool?>? _activeLoginDialog;
+
 // call this directly
-Future<bool?> loginDialog() async {
+Future<bool?> loginDialog() {
+  final activeDialog = _activeLoginDialog;
+  if (activeDialog != null) {
+    return activeDialog;
+  }
+  final dialog = _openLoginDialogOnce();
+  _activeLoginDialog = dialog;
+  return dialog;
+}
+
+Future<bool?> _openLoginDialogOnce() async {
+  try {
+    return await _openLoginDialog();
+  } finally {
+    _activeLoginDialog = null;
+  }
+}
+
+Future<bool?> _openLoginDialog() async {
   var username =
       TextEditingController(text: UserModel.getLocalUserInfo()?['name'] ?? '');
   var password = TextEditingController();
@@ -789,6 +811,9 @@ Future<bool?> loginDialog() async {
     }
 
     onLogin() async {
+      if (curOP.value.isNotEmpty || isInProgress) {
+        return;
+      }
       // validate
       if (username.text.isEmpty) {
         setState(() => usernameMsg = translate('Username missed'));
