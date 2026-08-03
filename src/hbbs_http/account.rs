@@ -169,6 +169,7 @@ impl OidcSession {
             "id": id,
             "uuid": uuid,
             "deviceInfo": crate::ui_interface::get_login_device_info(),
+            "apiDomain": api_server,
         })
         .to_string();
         let resp = crate::post_request_sync(format!("{}/api/oidc/auth", api_server), body, "")?;

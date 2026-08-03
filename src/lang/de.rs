@@ -771,9 +771,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid ID", "Ungültige ID"),
         ("Your ID is blocked by the peer", "Ihre ID wird von der Gegenstelle blockiert"),
         ("Your ip is blocked by the peer", "Ihre IP-Adresse wird von der Gegenstelle blockiert"),
-        ("id_whitelist_caveat_tip", "Die ID wird vom verbindenden Client gemeldet. Die Whitelist verringert die Angriffsfläche und ersetzt weder Passwort noch 2FA"),
+        ("id_whitelist_caveat_tip", "Die ID wird vom verbindenden Client gemeldet. Die Whitelist verringert die Angriffsfläche und ersetzt weder Passwort noch 2FA."),
         ("whitelist_cidr_tip", "Die CIDR-Notation wird unterstützt, z. B. 192.168.1.0/24"),
-        ("Continue", ""),
+        ("Continue", "Weiter"),
         ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

@@ -1,7 +1,7 @@
 # clipboard
 
 Copy files and text through network.
-Main lowlevel logic from [FreeRDP](https://github.com/FreeRDP/FreeRDP).
+Main low-level logic from [FreeRDP](https://github.com/FreeRDP/FreeRDP).
 
 To enjoy file copy and paste feature on Linux/OSX,
 please build with `unix-file-copy-paste` feature.
@@ -151,7 +151,7 @@ the FUSE server will figure out the file system tree and rearrange its content.
 - you may notice
   the mountpoint is still occupied after the application quits.
   That's because the FUSE server was not mounted with `AUTO_UNMOUNT`.
-  - It's hard to implement gressful shutdown for a multi-processed program
+  - It's hard to implement graceful shutdown for a multi-processed program
   - `AUTO_UNMOUNT` was not enabled by default and requires enable
     `user_allow_other` in configure. Letting users edit such global
     configuration to use this feature might not be a good idea.
