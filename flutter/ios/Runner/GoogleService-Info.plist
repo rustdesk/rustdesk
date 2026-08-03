@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>768133699366-k1rn3ls1u2n3nklmgd9t4cmpdob0c8bn.apps.googleusercontent.com</string>
+	<string>YOUR_CLIENT_ID.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.768133699366-k1rn3ls1u2n3nklmgd9t4cmpdob0c8bn</string>
+	<string>com.googleusercontent.apps.YOUR_CLIENT_ID</string>
 	<key>API_KEY</key>
-	<string>AIzaSyCf57HjCwSokt91CqFI0Mwf8D--ek0jvfc</string>
+	<string>YOUR_API_KEY</string>
 	<key>GCM_SENDER_ID</key>
-	<string>768133699366</string>
+	<string>YOUR_GCM_SENDER_ID</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
@@ -29,7 +29,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:768133699366:ios:c33078a6181b9d507993e7</string>
+	<string>YOUR_GOOGLE_APP_ID</string>
 	<key>DATABASE_URL</key>
 	<string>https://rustdesk.firebaseio.com</string>
 </dict>
