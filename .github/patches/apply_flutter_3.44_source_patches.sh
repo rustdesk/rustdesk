@@ -31,10 +31,12 @@ has_exact_count() {
   [[ "$actual_count" -eq "$expected_count" ]]
 }
 
+# The target background-color line must directly follow DialogThemeData in the selected range.
 has_dialog_background_in_theme_range() {
   local -r start_pattern="$1"
   local -r end_pattern="$2"
   local -r target_pattern="$3"
+  local -r file="$4"
   awk -v start_pattern="$start_pattern" \
     -v end_pattern="$end_pattern" \
     -v target_pattern="$target_pattern" '
@@ -57,7 +59,18 @@ has_dialog_background_in_theme_range() {
       END {
         exit matched ? 0 : 1
       }
-    ' flutter/lib/common.dart
+    ' "$file"
+}
+
+validate_patch_inputs() {
+  if [[ ! -f flutter/lib/common.dart || ! -r flutter/lib/common.dart ]]; then
+    echo "Flutter 3.44 source patch input is missing or unreadable: flutter/lib/common.dart" >&2
+    return 1
+  fi
+  if [[ ! -f flutter/pubspec.yaml || ! -r flutter/pubspec.yaml ]]; then
+    echo "Flutter 3.44 source patch input is missing or unreadable: flutter/pubspec.yaml" >&2
+    return 1
+  fi
 }
 
 is_complete_patch_state() {
@@ -72,9 +85,11 @@ is_complete_patch_state() {
     has_exact_count "$NO_MATCHES" 'extended_text: 14.0.0' flutter/pubspec.yaml &&
     has_exact_count "$NO_MATCHES" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&
     has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \
-      'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' &&
+      'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \
+      flutter/lib/common.dart &&
     has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
-      'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),'
+      'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \
+      flutter/lib/common.dart
 }
 
 is_unpatched_state() {
@@ -89,6 +104,10 @@ is_unpatched_state() {
     has_exact_count "$NO_MATCHES" 'extended_text: 15.0.2' flutter/pubspec.yaml &&
     has_exact_count "$NO_MATCHES" 'google_fonts: ^8.1.0' flutter/pubspec.yaml
 }
+
+if ! validate_patch_inputs; then
+  exit 1
+fi
 
 if is_complete_patch_state; then
   echo "Flutter 3.44 source patches already applied."
