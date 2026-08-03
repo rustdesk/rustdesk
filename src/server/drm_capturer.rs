@@ -17,10 +17,11 @@ const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
 const DRM_CONNECT_TIMEOUT_MS: u64 = 1000;
 /// The service may hold the list back while it wakes sleeping displays: ~3.6s (DRM_WAKE_*).
 const DISPLAY_LIST_TIMEOUT_MS: u64 = HANDSHAKE_TIMEOUT_MS + 4000;
-/// Must DOMINATE what the receive thread may spend: connect timeout, then `recv_msg_timeout2`
-/// applies DISPLAY_LIST_TIMEOUT_MS TWICE in the worst case (first byte, then body).
+/// Covers the connect timeout plus `recv_msg_timeout2` applying DISPLAY_LIST_TIMEOUT_MS TWICE
+/// (first byte, then body). The render-node open and the DrmStart send can still overrun it.
 const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS * 2 + 500;
-/// Only the header read rechecks `stop`, so a dead producer would pin the receive thread forever.
+/// Only the header read rechecks `stop`, so bound the body read here rather than relying on
+    /// `next_raw_into`'s own cap.
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct FrameSlot {
@@ -83,7 +84,8 @@ fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
     }
 }
 
-/// A delivered frame resets the streak verdicts (`zero_frame_streak`, `demotes`) and nothing else.
+/// A delivered frame resets the streak verdicts (`zero_frame_streak`, `demotes`, `since`) and
+    /// nothing else.
 #[derive(Clone, Copy)]
 struct DisplayHealth {
     zero_frame_streak: u32,
@@ -563,8 +565,8 @@ async fn recv_thread(
             } => {
                 // get_cursor_data() hands `colors` straight to the client, which renders
                 // width*height*4 RGBA bytes: a short body would make it READ PAST THE BUFFER. A
-                // hidden-cursor sentinel arrives as 0x0 with an empty body, so `need` is 0 and this
-                // check is a no-op.
+                // hidden-cursor sentinel arrives as 1x1 with a 4-byte body, so `need` is 4 and the
+                // check is live.
                 let need = (width as usize)
                     .saturating_mul(height as usize)
                     .saturating_mul(4);
@@ -620,7 +622,7 @@ async fn recv_thread(
                 scrap::wayland::display::clear_wayland_displays_cache();
                 UINPUT_REFRESH_GEN.fetch_add(1, Ordering::AcqRel);
                 if !UINPUT_REFRESH_BUSY.swap(true, Ordering::AcqRel) {
-                    // Taken BEFORE the spawn and moved in: `thread::spawn` panics on EAGAIN after
+                    // Taken BEFORE the spawn and moved in: `Builder::spawn` can FAIL with EAGAIN after
                     // the swap, so a guard built inside the closure would never exist and the flag
                     // would stay set for the PROCESS LIFETIME.
                     let mut busy = UinputRefreshGuard(true);
@@ -782,7 +784,8 @@ static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::A
 /// Advanced by every publish, so a slow UNLOCKED probe can tell a newer verdict landed meanwhile.
 static DRM_STATE_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// EVERY write to DRM_STATE goes through here so the generation stays truthful.
+/// EVERY verdict change to DRM_STATE goes through here so the generation stays truthful; the TTL
+    /// restamp in `refresh_available_async` is the one direct write.
 #[inline]
 fn publish_probe_state(st: &mut ProbeState, next: ProbeState) {
     *st = next;
@@ -1128,8 +1131,9 @@ fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     infos
 }
 
-/// Each output goes to at most one connector; unmatched ones take the next free one in layout
-/// order, since leaving them unaugmented keeps them all at DRM's (0,0).
+/// Each output goes to at most one connector; unmatched ones take the next free output of the same
+/// size, else the next free one in layout order, since leaving them unaugmented keeps them all at
+/// DRM's (0,0).
 fn assign_wayland_outputs(
     drm: &[DrmDisplayInfo],
     wl: &[hbb_common::platform::linux::WaylandDisplayInfo],

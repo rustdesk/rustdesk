@@ -20,7 +20,7 @@ pub(crate) const DRM_FORMAT_ARGB8888: u32 = 0x3432_5241; // 'AR24'
 pub(crate) const DRM_FORMAT_XBGR8888: u32 = 0x3432_4258; // 'XB24'
 pub(crate) const DRM_FORMAT_ABGR8888: u32 = 0x3432_4241; // 'AB24'
 
-/// Cursor id published when the plane reports the cursor hidden, so the id changes and the client drops the last shape.
+/// Cursor id published when the plane reports the cursor hidden, so the id changes and, where the DRM cursor is authoritative, the client drops the last shape.
 pub const HIDDEN_CURSOR_ID: u64 = u64::MAX;
 
 pub struct CursorSnapshot {
@@ -32,7 +32,7 @@ pub struct CursorSnapshot {
     pub colors: Vec<u8>,
 }
 
-/// One enumerated DRM display, physical geometry only (the server adds the Wayland logical geometry/scale).
+/// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
 pub struct DisplaySnapshot {
     pub name: String,
     pub crtc_id: u32,
@@ -60,7 +60,7 @@ fn cstr_field(buf: &[std::os::raw::c_char]) -> String {
     String::from_utf8_lossy(&bytes[..end]).into_owned()
 }
 
-/// Enumerate every DRM device with KMS resources. `None` = unavailable, too old, or failed (the caller keeps its single-device auto-detect); empty `Vec` = none found.
+/// Enumerate every DRM device with KMS resources. `None` = unavailable, too old, or failed (the caller then scans /dev/dri/card* itself); empty `Vec` = none found.
 pub fn list_devices() -> Option<Vec<DrmDevice>> {
     let lib = drmtap_dl::get()?;
     let f = lib.list_devices?;
@@ -347,7 +347,7 @@ impl DrmReader {
         }
     }
 
-    /// Read the hardware cursor plane: the hidden sentinel when the plane reports the cursor invisible, the real shape when visible.
+    /// Read the hardware cursor plane: the hidden sentinel when the plane reports the cursor invisible, the real shape when visible, and `None` when the read fails.
     pub fn cursor(&mut self) -> Option<CursorSnapshot> {
         // SAFETY: ctx valid; c zeroed; released on EVERY path after a successful get_cursor. Only a failed get_cursor returns without releasing, because then there is nothing to release.
         unsafe {

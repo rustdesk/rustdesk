@@ -26,7 +26,7 @@ pub struct DrmDisplayInfo {
 }
 
 /// Mirrors `scrap::drm_reader::drmtap_dmabuf_desc` except `dma_buf_fd` (never serializes — it rides
-/// SCM_RIGHTS ancillary), and adds `buffer_id` (the producer's stable pool key) and `has_fd`.
+/// SCM_RIGHTS ancillary), and adds `buffer_id` (fb_id tagged with a per-connection epoch; no consumer reads it today) and `has_fd`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DmabufDesc {
     pub buffer_id: u64,
@@ -149,7 +149,7 @@ fn drm_displays_from_reader(
         .displays()
         .into_iter()
         // Only outputs bound to a CRTC: a CONNECTED-but-unbound connector enumerates with
-        // `crtc_id == 0`, and `open(crtc=0)` auto-selects the primary CRTC and streams ITS frames.
+        // `crtc_id == 0`, and `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams ITS frames.
         .filter(|d| {
             if !d.active || d.crtc_id == 0 {
                 undriven.push(format!("{device}:{name}", name = d.name));
@@ -762,9 +762,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     .await?;
     drop(auth_guard);
     if !authorized {
-        // Deliberately no log here: `log_rejected_service_connection` inside the call above already
-        // reports it, rate-limited to one line per 5 s; a second, unthrottled warn would be the same
-        // unbounded log-write primitive.
+        // Deliberately no log here: the call above already reports it -- the uid mismatch through
+        // `log_rejected_service_connection`, throttled to one line per 5 s, and the executable
+        // mismatch as a plain warn. A second, unthrottled warn here would be the same unbounded
+        // log-write primitive.
         return Ok(());
     }
 
@@ -883,7 +884,8 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
             }
         };
         // Re-authorize per frame with the CACHE-ONLY active uid: a fresh lookup forks `loginctl` and
-        // would stall every stream on this single-threaded runtime. A miss is fail-closed.
+        // would stall every stream on this single-threaded runtime. A miss is fail-closed for a non-root peer
+            // (root stays authorized; see `drm_peer_authorized`).
         let peer_ok = drm_peer_authorized(peer_uid, active_uid_cached());
         if !peer_ok {
             log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
@@ -1126,7 +1128,8 @@ fn drm_capture_worker(
 }
 
 /// Ancillary-fd transport for `_drm`: `Framed`/`BytesCodec` cannot carry an SCM_RIGHTS cmsg, so the
-/// WHOLE channel uses a 4-byte big-endian length + payload, with any fd bound to the first byte.
+/// messages and raw bodies use a 4-byte big-endian length + payload, with any fd bound to the first
+    /// byte. The reverse-direction frame acks are bare bytes, not framed.
 pub(crate) struct DrmConn {
     stream: tokio::net::UnixStream,
     read_buf: Vec<u8>,
@@ -1479,7 +1482,7 @@ mod drm_conn_tests {
             serde_json::from_str(legacy).expect("a pre-render_node payload must still decode");
         assert_eq!(info.name, "DP-1");
         assert_eq!(info.crtc_id, 386);
-        assert!(info.render_node.is_empty(), "missing node means auto-select");
+        assert!(info.render_node.is_empty(), "missing node; the consumer auto-selects only where there is one render node");
         assert!(info.device.is_empty(), "missing device means auto-detect");
 
         let current = DrmDisplayInfo {

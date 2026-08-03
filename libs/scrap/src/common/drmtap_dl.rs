@@ -15,7 +15,7 @@ pub struct drmtap_ctx {
 pub struct drmtap_config {
     pub device_path: *const c_char, // NULL = auto-detect /dev/dri/card*
     pub crtc_id: u32,               // 0 = auto-select first active CRTC
-    pub helper_path: *const c_char, // only consulted if a helper is needed (never, when root)
+    pub helper_path: *const c_char, // only consulted if the direct DRM export is denied (no CAP_SYS_ADMIN)
     pub debug: c_int,
 }
 
@@ -310,7 +310,7 @@ impl DrmtapLib {
 
 static DRMTAP_LIB: OnceLock<Option<DrmtapLib>> = OnceLock::new();
 
-/// The loaded libdrmtap, or None if the .so (or a runtime dep) is absent or too old for split capture. Loaded once; a failure is remembered.
+/// The loaded libdrmtap, or None if the .so (or a runtime dep) is absent or its version/exports fall outside the ABI gate. Loaded once; a failure is remembered.
 pub fn get() -> Option<&'static DrmtapLib> {
     DRMTAP_LIB
         .get_or_init(|| {
