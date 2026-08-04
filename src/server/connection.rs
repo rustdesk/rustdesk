@@ -1636,9 +1636,11 @@ impl Connection {
                         if (200..300).contains(&status) {
                             // hbbs reports handler failures (e.g. a db write
                             // error) as 200 with an {"error": ...} body;
-                            // success is an empty body. Not retryable: the
-                            // server already consumed the nonce, and fixing
-                            // persistence is the server's job.
+                            // success is an empty body. Retryable: the server
+                            // releases the record's nonce when its write fails,
+                            // and answers a post whose earlier attempt is still
+                            // being written with an error too, so in both cases
+                            // trying again is what stores the record.
                             let server_err = serde_json::from_str::<Value>(&text)
                                 .ok()
                                 .and_then(|v| v.get("error")?.as_str().map(|s| s.to_owned()))
@@ -1646,7 +1648,7 @@ impl Connection {
                             match server_err {
                                 Some(e) => {
                                     let brief: String = e.chars().take(128).collect();
-                                    (false, format!("server error: {}", brief))
+                                    (true, format!("server error: {}", brief))
                                 }
                                 None => return Ok(text),
                             }
