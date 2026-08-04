@@ -2140,16 +2140,19 @@ pub mod sessions {
     /// session stays established with no way to close it.
     #[cfg(any(target_os = "android", target_os = "ios"))]
     pub fn close_all_sessions() -> usize {
-        // Drain first so the map lock is released before closing each session.
+        // Release held keys before draining: the release path sends through
+        // `get_cur_session()`, which resolves against SESSIONS, so draining
+        // first would take TO_RELEASE and then silently drop every key-up,
+        // leaving the key stuck on the controlled side. A no-op when nothing
+        // is held.
+        crate::keyboard::release_remote_keys("map");
+        // Drain so the map lock is released before closing each session.
         let sessions: Vec<FlutterSession> = SESSIONS
             .write()
             .unwrap()
             .drain()
             .map(|(_, session)| session)
             .collect();
-        if !sessions.is_empty() {
-            crate::keyboard::release_remote_keys("map");
-        }
         for session in sessions.iter() {
             let session_ids: Vec<SessionID> = session
                 .ui_handler
