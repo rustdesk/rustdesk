@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Viderestillingsforbindelse"),
         ("Secure Connection", "Sikker forbindelse"),
         ("Insecure Connection", "Usikker forbindelse"),
-        ("Continue", ""),
         ("Scale original", "Original skalering"),
         ("Scale adaptive", "Adaptiv skalering"),
         ("General", "Generelt"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Din IP-adresse er blokeret af modparten"),
         ("id_whitelist_caveat_tip", "ID'et rapporteres af den klient, der opretter forbindelse. Whitelisten reducerer eksponeringen og erstatter ikke adgangskode eller 2FA"),
         ("whitelist_cidr_tip", "CIDR-notation understøttes, f.eks. 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

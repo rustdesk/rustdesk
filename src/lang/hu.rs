@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Kapcsolódás továbbító-kiszolgálón keresztül"),
         ("Secure Connection", "Biztonságos kapcsolat"),
         ("Insecure Connection", "Nem biztonságos kapcsolat"),
-        ("Continue", ""),
         ("Scale original", "Eredeti méretarány"),
         ("Scale adaptive", "Adaptív méretarány"),
         ("General", "Általános"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Az IP-címét a távoli fél letiltotta"),
         ("id_whitelist_caveat_tip", "Az azonosítót a csatlakozó kliens jelenti. Az engedélyezési lista csökkenti a kitettséget, és nem helyettesíti a jelszót vagy a 2FA-t"),
         ("whitelist_cidr_tip", "A CIDR jelölés támogatott, például 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

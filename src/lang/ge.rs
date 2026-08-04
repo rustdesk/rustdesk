@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "რეტრანსლირებული კავშირი"),
         ("Secure Connection", "უსაფრთხო კავშირი"),
         ("Insecure Connection", "არაუსაფრთხო კავშირი"),
-        ("Continue", ""),
         ("Scale original", "ორიგინალური მასშტაბი"),
         ("Scale adaptive", "ადაპტირებადი მასშტაბი"),
         ("General", "ზოგადი"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "თქვენი IP მისამართი დაბლოკილია მეორე მხარის მიერ"),
         ("id_whitelist_caveat_tip", "ID-ს აცხადებს დამაკავშირებელი კლიენტი. თეთრი სია ამცირებს ექსპოზიციას და ვერ ჩაანაცვლებს პაროლს ან 2FA-ს"),
         ("whitelist_cidr_tip", "მხარდაჭერილია CIDR ჩანაწერი, მაგალითად 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

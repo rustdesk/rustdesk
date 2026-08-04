@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Reléové pripojenie"),
         ("Secure Connection", "Zabezpečené pripojenie"),
         ("Insecure Connection", "Nezabezpečené pripojenie"),
-        ("Continue", ""),
         ("Scale original", "Pôvodná mierka"),
         ("Scale adaptive", "Prispôsobivá mierka"),
         ("General", "Všeobecné"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Vaša IP adresa je blokovaná protistranou"),
         ("id_whitelist_caveat_tip", "ID nahlasuje pripájajúci sa klient. Tento zoznam znižuje vystavenie a nenahrádza heslo ani 2FA"),
         ("whitelist_cidr_tip", "Je podporovaný zápis CIDR, napríklad 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

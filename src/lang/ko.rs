@@ -773,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "귀하의 IP가 상대방에 의해 차단되었습니다"),
         ("id_whitelist_caveat_tip", "ID는 연결하는 클라이언트가 보고합니다. 화이트리스트는 노출을 줄이는 것으로 비밀번호나 2FA를 대체하지 않습니다"),
         ("whitelist_cidr_tip", "CIDR 표기를 지원합니다. 예: 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

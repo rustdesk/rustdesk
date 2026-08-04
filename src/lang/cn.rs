@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "中继连接"),
         ("Secure Connection", "安全连接"),
         ("Insecure Connection", "非安全连接"),
-        ("Continue", "继续"),
         ("Scale original", "原始尺寸"),
         ("Scale adaptive", "适应窗口"),
         ("General", "常规"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "你的 IP 已被对方阻止"),
         ("id_whitelist_caveat_tip", "ID 由对端客户端上报，白名单用于减少暴露面，不能替代密码或 2FA"),
         ("whitelist_cidr_tip", "支持 CIDR 写法，例如 192.168.1.0/24"),
+        ("Continue", "继续"),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

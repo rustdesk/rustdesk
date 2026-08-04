@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Posredna veza"),
         ("Secure Connection", "Sigurna veza"),
         ("Insecure Connection", "Nesigurna veza"),
-        ("Continue", ""),
         ("Scale original", "Skaliraj izvornik"),
         ("Scale adaptive", "Prilagođeno skaliranje"),
         ("General", "Općenito"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Vašu IP adresu je blokiralo udaljeno računalo"),
         ("id_whitelist_caveat_tip", "ID prijavljuje klijent koji se povezuje. Ova lista smanjuje izloženost i ne zamjenjuje lozinku ni 2FA"),
         ("whitelist_cidr_tip", "Podržan je CIDR zapis, primjerice 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Välitetty yhteys"),
         ("Secure Connection", "Suojattu yhteys"),
         ("Insecure Connection", "Suojaamaton yhteys"),
-        ("Continue", ""),
         ("Scale original", "Skaalaa alkuperäinen"),
         ("Scale adaptive", "Mukautuva skaalaus"),
         ("General", "Yleiset"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Vastapuoli on estänyt IP-osoitteesi"),
         ("id_whitelist_caveat_tip", "ID on yhdistävän asiakkaan ilmoittama. Sallintalista pienentää altistusta eikä korvaa salasanaa tai 2FA:ta"),
         ("whitelist_cidr_tip", "CIDR-merkintä on tuettu, esimerkiksi 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }

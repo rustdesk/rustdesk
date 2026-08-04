@@ -113,7 +113,7 @@ pub struct OidcSession {
     failed_msg: String,
     code_url: Option<OidcAuthUrl>,
     auth_body: Option<AuthBody>,
-    keep_querying: bool,
+    auth_attempt: u64,
     running: bool,
     query_timeout: Duration,
 }
@@ -140,7 +140,7 @@ impl OidcSession {
             failed_msg: "".to_owned(),
             code_url: None,
             auth_body: None,
-            keep_querying: false,
+            auth_attempt: 0,
             running: false,
             query_timeout: Duration::from_secs(QUERY_TIMEOUT_SECS),
         }
@@ -192,12 +192,8 @@ impl OidcSession {
             body: String,
         }
 
-        let resp = crate::http_request_sync(
-            url.to_string(),
-            "GET".to_owned(),
-            None,
-            "{}".to_owned(),
-        )?;
+        let resp =
+            crate::http_request_sync(url.to_string(), "GET".to_owned(), None, "{}".to_owned())?;
         let resp = serde_json::from_str::<HttpResponseBody>(&resp)?;
         HbbHttpResponse::parse(&resp.body)
     }
@@ -205,7 +201,6 @@ impl OidcSession {
     fn reset(&mut self) {
         self.state_msg = REQUESTING_ACCOUNT_AUTH;
         self.failed_msg = "".to_owned();
-        self.keep_querying = true;
         self.running = false;
         self.code_url = None;
         self.auth_body = None;
@@ -220,49 +215,92 @@ impl OidcSession {
         self.running = false;
     }
 
+    fn start_auth_attempt(&mut self) -> u64 {
+        self.auth_attempt = self.auth_attempt.wrapping_add(1);
+        self.auth_attempt
+    }
+
+    fn cancel_auth_attempt(&mut self) {
+        self.auth_attempt = self.auth_attempt.wrapping_add(1);
+    }
+
+    fn is_current_auth_attempt(&self, auth_attempt: u64) -> bool {
+        self.auth_attempt == auth_attempt
+    }
+
+    fn auth_attempt_is_current(auth_attempt: u64) -> bool {
+        OIDC_SESSION
+            .read()
+            .unwrap()
+            .is_current_auth_attempt(auth_attempt)
+    }
+
+    fn set_state_if_current(auth_attempt: u64, state_msg: &'static str, failed_msg: String) {
+        let mut session = OIDC_SESSION.write().unwrap();
+        if session.is_current_auth_attempt(auth_attempt) {
+            session.set_state(state_msg, failed_msg);
+        }
+    }
+
     fn sleep(secs: f32) {
         std::thread::sleep(std::time::Duration::from_secs_f32(secs));
     }
 
-    fn auth_task(api_server: String, op: String, id: String, uuid: String, remember_me: bool) {
+    fn auth_task(
+        api_server: String,
+        op: String,
+        id: String,
+        uuid: String,
+        remember_me: bool,
+        auth_attempt: u64,
+    ) {
         let auth_request_res = Self::auth(&api_server, &op, &id, &uuid);
         log::info!("Request oidc auth result: {:?}", &auth_request_res);
+        if !Self::auth_attempt_is_current(auth_attempt) {
+            return;
+        }
         let code_url = match auth_request_res {
             Ok(HbbHttpResponse::<_>::Data(code_url)) => code_url,
             Ok(HbbHttpResponse::<_>::Error(err)) => {
-                OIDC_SESSION
-                    .write()
-                    .unwrap()
-                    .set_state(REQUESTING_ACCOUNT_AUTH, err);
+                Self::set_state_if_current(auth_attempt, REQUESTING_ACCOUNT_AUTH, err);
                 return;
             }
             Ok(_) => {
-                OIDC_SESSION
-                    .write()
-                    .unwrap()
-                    .set_state(REQUESTING_ACCOUNT_AUTH, "Invalid auth response".to_owned());
+                Self::set_state_if_current(
+                    auth_attempt,
+                    REQUESTING_ACCOUNT_AUTH,
+                    "Invalid auth response".to_owned(),
+                );
                 return;
             }
             Err(err) => {
-                OIDC_SESSION
-                    .write()
-                    .unwrap()
-                    .set_state(REQUESTING_ACCOUNT_AUTH, err.to_string());
+                Self::set_state_if_current(auth_attempt, REQUESTING_ACCOUNT_AUTH, err.to_string());
                 return;
             }
         };
 
-        OIDC_SESSION
-            .write()
-            .unwrap()
-            .set_state(WAITING_ACCOUNT_AUTH, "".to_owned());
-        OIDC_SESSION.write().unwrap().code_url = Some(code_url.clone());
+        {
+            let mut session = OIDC_SESSION.write().unwrap();
+            if !session.is_current_auth_attempt(auth_attempt) {
+                return;
+            }
+            session.set_state(WAITING_ACCOUNT_AUTH, "".to_owned());
+            session.code_url = Some(code_url.clone());
+        }
 
         let begin = Instant::now();
         let query_timeout = OIDC_SESSION.read().unwrap().query_timeout;
-        while OIDC_SESSION.read().unwrap().keep_querying && begin.elapsed() < query_timeout {
-            match Self::query(&api_server, &code_url.code, &id, &uuid) {
+        while Self::auth_attempt_is_current(auth_attempt) && begin.elapsed() < query_timeout {
+            let query_result = Self::query(&api_server, &code_url.code, &id, &uuid);
+            if !Self::auth_attempt_is_current(auth_attempt) {
+                return;
+            }
+            match query_result {
                 Ok(HbbHttpResponse::<_>::Data(auth_body)) => {
+                    let mut session = OIDC_SESSION.write().unwrap();
+                    if !session.is_current_auth_attempt(auth_attempt) {
+                        return;
+                    }
                     if auth_body.r#type == "access_token" {
                         if remember_me {
                             LocalConfig::set_option(
@@ -281,21 +319,15 @@ impl OidcSession {
                             );
                         }
                     }
-                    OIDC_SESSION
-                        .write()
-                        .unwrap()
-                        .set_state(LOGIN_ACCOUNT_AUTH, "".to_owned());
-                    OIDC_SESSION.write().unwrap().auth_body = Some(auth_body);
+                    session.set_state(LOGIN_ACCOUNT_AUTH, "".to_owned());
+                    session.auth_body = Some(auth_body);
                     return;
                 }
                 Ok(HbbHttpResponse::<_>::Error(err)) => {
                     if err.contains("No authed oidc is found") {
                         // ignore, keep querying
                     } else {
-                        OIDC_SESSION
-                            .write()
-                            .unwrap()
-                            .set_state(WAITING_ACCOUNT_AUTH, err);
+                        Self::set_state_if_current(auth_attempt, WAITING_ACCOUNT_AUTH, err);
                         return;
                     }
                 }
@@ -310,14 +342,9 @@ impl OidcSession {
             Self::sleep(QUERY_INTERVAL_SECS);
         }
 
-        if begin.elapsed() >= query_timeout {
-            OIDC_SESSION
-                .write()
-                .unwrap()
-                .set_state(WAITING_ACCOUNT_AUTH, "timeout".to_owned());
+        if begin.elapsed() >= query_timeout && Self::auth_attempt_is_current(auth_attempt) {
+            Self::set_state_if_current(auth_attempt, WAITING_ACCOUNT_AUTH, "timeout".to_owned());
         }
-
-        // no need to handle "keep_querying == false"
     }
 
     fn set_state(&mut self, state_msg: &'static str, failed_msg: String) {
@@ -339,11 +366,17 @@ impl OidcSession {
         uuid: String,
         remember_me: bool,
     ) {
-        Self::auth_cancel();
+        let auth_attempt = OIDC_SESSION.write().unwrap().start_auth_attempt();
         Self::wait_stop_querying();
-        OIDC_SESSION.write().unwrap().before_task();
+        {
+            let mut session = OIDC_SESSION.write().unwrap();
+            if !session.is_current_auth_attempt(auth_attempt) {
+                return;
+            }
+            session.before_task();
+        }
         std::thread::spawn(move || {
-            Self::auth_task(api_server, op, id, uuid, remember_me);
+            Self::auth_task(api_server, op, id, uuid, remember_me, auth_attempt);
             OIDC_SESSION.write().unwrap().after_task();
         });
     }
@@ -358,7 +391,7 @@ impl OidcSession {
     }
 
     pub fn auth_cancel() {
-        OIDC_SESSION.write().unwrap().keep_querying = false;
+        OIDC_SESSION.write().unwrap().cancel_auth_attempt();
     }
 
     pub fn get_result() -> AuthResult {

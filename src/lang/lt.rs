@@ -332,7 +332,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Tarpinė jungtis"),
         ("Secure Connection", "Saugus ryšys"),
         ("Insecure Connection", "Nesaugus ryšys"),
-        ("Continue", ""),
         ("Scale original", "Pakeisti originalų mastelį"),
         ("Scale adaptive", "Pritaikomas mastelis"),
         ("General", "Bendra"),
@@ -774,5 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Jūsų IP adresą užblokavo nuotolinis įrenginys"),
         ("id_whitelist_caveat_tip", "ID praneša prisijungiantis klientas. Šis sąrašas sumažina atakos paviršių ir nepakeičia slaptažodžio ar 2FA"),
         ("whitelist_cidr_tip", "Palaikomas CIDR žymėjimas, pavyzdžiui 192.168.1.0/24"),
+        ("Continue", ""),
+        ("Browser didn't open? Use the url below to sign in.", ""),
     ].iter().cloned().collect();
 }
