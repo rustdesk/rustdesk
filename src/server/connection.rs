@@ -1617,16 +1617,21 @@ impl Connection {
         // for: a proxy answering 502 during a restart fails fast, so without them
         // every attempt lands within a few seconds and none outlives the restart.
         //
-        // The window is bounded on the other side: the api server dedups by nonce
-        // for five minutes, and a retry arriving after that expired would be
-        // stored a second time. Worst case here is ATTEMPTS * (12s HTTP timeout +
-        // 36s TCP-proxy fallback) plus these delays, a little over three minutes.
-        //
+        // The window is bounded on the other side: the api server only remembers a
+        // record's nonce for five minutes, so a retry arriving after that expired
+        // would be stored a second time. Counting attempts cannot bound it - one
+        // attempt is already up to 84s (post_request_ retries the TLS handshake up
+        // to four times at 12s each, then the TCP-proxy fallback adds 36s), and a
+        // suspend between attempts stretches the wall clock without limit. So stop
+        // by elapsed time instead, early enough that the last attempt still lands
+        // inside the server's window.
+        const RETRY_DEADLINE: Duration = Duration::from_secs(120);
         // One delay per retry, so the attempt count follows from the table and the
         // two cannot drift apart.
         const RETRY_BACKOFF_SECS: [u64; 2] = [10, 30];
         const ATTEMPTS: usize = RETRY_BACKOFF_SECS.len() + 1;
         let body = v.to_string();
+        let started = Instant::now();
         let mut attempt = 0usize;
         loop {
             attempt += 1;
@@ -1654,16 +1659,23 @@ impl Connection {
                             }
                         } else {
                             let brief: String = text.chars().take(128).collect();
-                            (status >= 500, format!("status {}: {}", status, brief))
+                            // 408 and 429 are the transient 4xx: the request timed
+                            // out upstream, or a proxy is shedding load. Every other
+                            // 4xx is a deterministic rejection and retrying it would
+                            // only delay the log line.
+                            let transient = status >= 500 || status == 408 || status == 429;
+                            (transient, format!("status {}: {}", status, brief))
                         }
                     }
                     Err(e) => (true, e.to_string()),
                 };
-            if !retryable || attempt >= ATTEMPTS {
+            let elapsed = started.elapsed();
+            if !retryable || attempt >= ATTEMPTS || elapsed >= RETRY_DEADLINE {
                 log::error!(
-                    "Audit post dropped (attempt {}/{}): {}",
+                    "Audit post dropped (attempt {}/{}, {:?} elapsed): {}",
                     attempt,
                     ATTEMPTS,
+                    elapsed,
                     err
                 );
                 bail!("{}", err);
