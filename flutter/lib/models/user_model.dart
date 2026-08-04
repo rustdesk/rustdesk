@@ -234,8 +234,9 @@ class UserModel {
     return loginResponse;
   }
 
-  /// Throws on network failure so callers can surface the error and offer a
-  /// retry; returns an empty list when the server has no third-party login.
+  /// Throws on network failures, non-success responses, and invalid response
+  /// data. Returns an empty list when no API server is configured or a
+  /// successful response contains no third-party login options.
   static Future<List<dynamic>> queryOidcLoginOptions() async {
     final url = await bind.mainGetApiServer();
     if (url.trim().isEmpty) return [];

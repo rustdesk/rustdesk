@@ -735,7 +735,7 @@ Future<bool?> _openLoginDialog() async {
   bool isCloseHovered = false;
 
   final loginOptions = [].obs;
-  final loginOptionsError = Rxn<String>();
+  final loginOptionsError = Rxn<Object>();
   final loginOptionsInProgress = false.obs;
   fetchLoginOptions() async {
     loginOptionsInProgress.value = true;
@@ -744,7 +744,7 @@ Future<bool?> _openLoginDialog() async {
       loginOptionsError.value = null;
     } catch (e) {
       debugPrint("queryOidcLoginOptions failed: $e");
-      loginOptionsError.value = e.toString();
+      loginOptionsError.value = e;
     } finally {
       loginOptionsInProgress.value = false;
     }
@@ -865,7 +865,7 @@ Future<bool?> _openLoginDialog() async {
                 const SizedBox(height: 8.0),
                 // NOT use Offstage to wrap LinearProgressIndicator
                 if (inProgress) const LinearProgressIndicator(),
-                if (!inProgress)
+                if (!inProgress && error is! RequestException)
                   Text(
                     translate('network_error_tip'),
                     style: const TextStyle(fontSize: 12),
@@ -880,7 +880,7 @@ Future<bool?> _openLoginDialog() async {
                 ),
                 if (!inProgress)
                   SelectableText(
-                    error,
+                    error.toString(),
                     style: const TextStyle(fontSize: 11, color: Colors.red),
                     textAlign: TextAlign.center,
                   ),
