@@ -1,0 +1,71 @@
+name: Update webpki-roots
+
+# Weekly refresh of the compiled-in TLS root certificates (the webpki-roots
+# crate, a snapshot of the Mozilla root store). Roots are otherwise frozen at
+# whatever Cargo.lock pins, so old builds miss newly added CAs and keep
+# removed (distrusted) ones. Changes go through a PR on purpose: added or
+# removed roots should be reviewed, not silently baked into releases.
+#
+# Note: PRs created with the default GITHUB_TOKEN do not trigger other
+# workflows (GitHub limitation). Close and reopen the PR, or push to its
+# branch, to run CI on it.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+# A manual dispatch overlapping the weekly run would race it force-pushing
+# the same branch; queue instead of overlapping, and never cancel a run
+# that may have already pushed.
+concurrency:
+  group: update-webpki-roots
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BRANCH: auto-update-webpki-roots
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Update webpki-roots in all lockfiles
+        id: update
+        run: |
+          set -e
+          git ls-files -z '*Cargo.lock' | while IFS= read -r -d '' lock; do
+            dir=$(dirname "$lock")
+            for v in $(sed -n '/name = "webpki-roots"/{n;s/.*version = "\(.*\)"/\1/p;}' "$lock" | sort -u); do
+              echo "updating webpki-roots@$v in $dir"
+              (cd "$dir" && cargo update -p "webpki-roots@$v")
+            done
+          done
+          if git diff --quiet -- '*Cargo.lock'; then
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=1" >> "$GITHUB_OUTPUT"
+            git --no-pager diff -- '*Cargo.lock'
+          fi
+
+      - name: Create pull request
+        if: steps.update.outputs.changed == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -- '*Cargo.lock'
+          git commit -m "chore: update webpki-roots to latest Mozilla root store"
+          git push -f origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create \
+              --title "chore: update webpki-roots to latest Mozilla root store" \
+              --body "Automated weekly refresh of the compiled-in TLS root certificates (webpki-roots). Please review the added/removed roots. CI does not run automatically on PRs created by GITHUB_TOKEN; close and reopen this PR to trigger it."
+          fi
