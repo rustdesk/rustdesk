@@ -267,8 +267,7 @@ class _WidgetOPState extends State<WidgetOP> {
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Builder(builder: (context) {
-                      final errorColor =
-                          Theme.of(context).colorScheme.error;
+                      final errorColor = Theme.of(context).colorScheme.error;
                       final bgColor = Theme.of(context)
                           .colorScheme
                           .errorContainer
@@ -289,12 +288,11 @@ class _WidgetOPState extends State<WidgetOP> {
                             Flexible(
                               child: SelectableText(
                                 translate(_failedMsg),
-                                style: DefaultTextStyle.of(context)
-                                    .style
-                                    .copyWith(
-                                      fontSize: 13,
-                                      color: errorColor,
-                                    ),
+                                style:
+                                    DefaultTextStyle.of(context).style.copyWith(
+                                          fontSize: 13,
+                                          color: errorColor,
+                                        ),
                               ),
                             ),
                           ],
@@ -468,9 +466,22 @@ Future<bool?> loginDialog() async {
   bool isCloseHovered = false;
 
   final loginOptions = [].obs;
-  Future.delayed(Duration.zero, () async {
-    loginOptions.value = await UserModel.queryOidcLoginOptions();
-  });
+  final loginOptionsError = Rxn<String>();
+  final loginOptionsInProgress = false.obs;
+  fetchLoginOptions() async {
+    loginOptionsInProgress.value = true;
+    try {
+      loginOptions.value = await UserModel.queryOidcLoginOptions();
+      loginOptionsError.value = null;
+    } catch (e) {
+      debugPrint("queryOidcLoginOptions failed: $e");
+      loginOptionsError.value = e.toString();
+    } finally {
+      loginOptionsInProgress.value = false;
+    }
+  }
+
+  Future.delayed(Duration.zero, fetchLoginOptions);
 
   final res = await gFFI.dialogManager.show<bool>((setState, close, context) {
     username.addListener(() {
@@ -574,6 +585,36 @@ Future<bool?> loginDialog() async {
     }
 
     thirdAuthWidget() => Obx(() {
+          final error = loginOptionsError.value;
+          final inProgress = loginOptionsInProgress.value;
+          if (error != null) {
+            return Column(
+              children: [
+                const SizedBox(height: 8.0),
+                // NOT use Offstage to wrap LinearProgressIndicator
+                if (inProgress) const LinearProgressIndicator(),
+                if (!inProgress)
+                  Text(
+                    translate('network_error_tip'),
+                    style: const TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  onPressed: inProgress ? null : fetchLoginOptions,
+                  child: Text(translate('Retry')),
+                ),
+                if (!inProgress)
+                  SelectableText(
+                    error,
+                    style: const TextStyle(fontSize: 11, color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+              ],
+            );
+          }
           return Offstage(
             offstage: loginOptions.isEmpty,
             child: Column(
