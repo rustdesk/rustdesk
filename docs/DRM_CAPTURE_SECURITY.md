@@ -49,9 +49,10 @@ presents) but reuses RustDesk's own hardened IPC.
   caller falls back to the PipeWire/portal path.
 - The loader also **refuses a library that cannot do the split** — and, more
   broadly, any version outside the vetted window. Accepted is exactly the pinned
-  minor with a patch floor (currently `0.4.x`, `x >= 10`): an older minor
-  predates the split entry points, and a **newer minor is refused too** (`0.5.x`
-  included), because the loader mirrors C struct layouts that are only
+  minor with a patch floor (currently `0.5.x`, `x >= 0`): an older minor is
+  refused (`0.4.x` included, even though it carries the split entry points, because
+  it decodes a padded scanout pitch at the wrong stride), and a **newer minor is
+  refused too** (`0.6.x` onward), because the loader mirrors C struct layouts that are only
   field-by-field verified against the pinned minor; widening the window is a
   deliberate act done together with re-verifying the layouts and moving the
   build pin. Independently of the version report, a library that does not

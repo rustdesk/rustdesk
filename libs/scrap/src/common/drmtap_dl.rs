@@ -162,13 +162,14 @@ unsafe impl Sync for DrmtapLib {}
 
 const DRMTAP_ABI_MAJOR: c_int = 0;
 
-// Lowest (minor, patch) accepted: 0.4.10 is the oldest release with the WHOLE split API
-// (`drmtap_open_render`/`drmtap_convert_dmabuf` in 0.4.9, `drmtap_grab_desc` in 0.4.10).
-const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (4, 10);
+// Lowest (minor, patch) accepted. 0.5.0 is the floor because it fixes the padded-framebuffer read
+// (a scanout whose pitch exceeds width*bpp was decoded at the wrong stride); the whole split API
+// has been present since 0.4.10.
+const DRMTAP_MIN_MINOR_PATCH: (c_int, c_int) = (5, 0);
 
 // The MINOR series this build's mirrored structs were verified against: libdrmtap's header freezes
 // only `drmtap_device` and `drmtap_dmabuf_desc`, so an unverified minor could be read at wrong offsets.
-const DRMTAP_ABI_MINOR: c_int = 4;
+const DRMTAP_ABI_MINOR: c_int = 5;
 
 /// Whether a library reporting `major.minor.patch` may be loaded (major and minor exact, patch at or above the floor).
 fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
@@ -325,7 +326,7 @@ pub fn get() -> Option<&'static DrmtapLib> {
 
 #[cfg(test)]
 mod tests {
-    use super::{abi_accepted, DRMTAP_ABI_MAJOR, DRMTAP_MIN_MINOR_PATCH};
+    use super::{abi_accepted, DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, DRMTAP_MIN_MINOR_PATCH};
 
     #[test]
     fn abi_gate_rejects_a_library_from_before_the_split() {
@@ -342,7 +343,7 @@ mod tests {
     fn abi_gate_accepts_the_floor_and_later_patches_of_the_same_minor() {
         let (min_minor, min_patch) = DRMTAP_MIN_MINOR_PATCH;
         assert!(abi_accepted(DRMTAP_ABI_MAJOR, min_minor, min_patch));
-        for (minor, patch) in [(4, 15), (4, 200)] {
+        for (minor, patch) in [(DRMTAP_ABI_MINOR, min_patch + 15), (DRMTAP_ABI_MINOR, 200)] {
             assert!(
                 abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
                 "v0.{minor}.{patch} is a patch of the verified minor and must be accepted"
@@ -352,7 +353,15 @@ mod tests {
 
     #[test]
     fn abi_gate_rejects_an_unknown_newer_minor() {
-        for (minor, patch) in [(5, 0), (5, 99), (9, 9)] {
+        // Relative to DRMTAP_ABI_MINOR, so the next bump cannot leave this test asserting that the
+        // NEW verified minor must be refused -- which is what a hardcoded list did before.
+        let verified = DRMTAP_ABI_MINOR;
+        for (minor, patch) in [
+            (verified - 1, 99),
+            (verified + 1, 0),
+            (verified + 1, 99),
+            (verified + 4, 9),
+        ] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
                 "v0.{minor}.{patch} is an unverified minor and must be refused"
