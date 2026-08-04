@@ -27,6 +27,7 @@
 
 #include <ole2.h>
 #include <shlobj.h>
+#include <wchar.h>
 #include <windows.h>
 #include <winuser.h>
 #include <tchar.h>
@@ -49,6 +50,9 @@
 #define WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS 255u
 /* Bound the peer-provided UTF-8 scan separately from the converted Windows name. */
 #define WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES (WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS * 4u)
+#define WF_CLIPRDR_COM_LPT_PREFIX_LENGTH 3u
+static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
+static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
 
 /* Validates the remote descriptor array size after cItems has been read safely. */
 static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
@@ -67,6 +71,119 @@ static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
 
 	descriptors_size = header_size + (SIZE_T)count * sizeof(FILEDESCRIPTORW);
 	return size >= descriptors_size;
+}
+
+static BOOL wf_cliprdr_file_name_equals(const WCHAR *component, SIZE_T length,
+										const WCHAR *expected)
+{
+	SIZE_T expected_length = wcslen(expected);
+	SIZE_T i;
+
+	if (length != expected_length)
+		return FALSE;
+	for (i = 0; i < length; i++)
+	{
+		WCHAR value = component[i];
+		if (value >= L'a' && value <= L'z')
+			value -= L'a' - L'A';
+		if (value != expected[i])
+			return FALSE;
+	}
+	return TRUE;
+}
+
+/* Windows reserves COM/LPT followed by ASCII 1-9 or superscript 1, 2, and 3.
+ * https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file */
+static BOOL wf_cliprdr_file_name_numbered_device(const WCHAR *component, SIZE_T length)
+{
+	SIZE_T prefix_length = WF_CLIPRDR_COM_LPT_PREFIX_LENGTH;
+	return length == prefix_length + 1 &&
+		   (wf_cliprdr_file_name_equals(component, prefix_length, L"COM") ||
+			wf_cliprdr_file_name_equals(component, prefix_length, L"LPT")) &&
+		   ((component[prefix_length] >= L'1' && component[prefix_length] <= L'9') ||
+			wcschr(WF_CLIPRDR_SUPERSCRIPT_DIGITS, component[prefix_length]) != NULL);
+}
+
+/* CON/PRN/AUX/NUL/COM/LPT remain reserved when followed by an extension, so
+ * compare their portion before the first dot.
+ * https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+ * CONIN$/CONOUT$ console device names:
+ * https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew#consoles
+ * CLOCK$ reserved device name:
+ * https://learn.microsoft.com/en-us/biztalk/core/restrictions-when-configuring-the-file-adapter */
+static BOOL wf_cliprdr_file_name_reserved_device(const WCHAR *component, SIZE_T length)
+{
+	const WCHAR *dot = wmemchr(component, L'.', length);
+	SIZE_T base_length = dot ? (SIZE_T)(dot - component) : length;
+	return wf_cliprdr_file_name_equals(component, length, L"CONIN$") ||
+		   wf_cliprdr_file_name_equals(component, length, L"CONOUT$") ||
+		   wf_cliprdr_file_name_equals(component, length, L"CLOCK$") ||
+		   wf_cliprdr_file_name_equals(component, base_length, L"CON") ||
+		   wf_cliprdr_file_name_equals(component, base_length, L"PRN") ||
+		   wf_cliprdr_file_name_equals(component, base_length, L"AUX") ||
+		   wf_cliprdr_file_name_equals(component, base_length, L"NUL") ||
+		   wf_cliprdr_file_name_numbered_device(component, base_length);
+}
+
+static BOOL wf_cliprdr_file_name_component_valid(const WCHAR *component, SIZE_T length)
+{
+	SIZE_T i;
+
+	/* Windows removes leading/trailing ASCII spaces and trailing periods.
+	 * Reject them so a validated remote name cannot become a different local name.
+	 * https://learn.microsoft.com/en-us/troubleshoot/windows-client/shell-experience/file-folder-name-whitespace-characters */
+	if (length == 0 || component[0] == L' ' || component[length - 1] == L'.' ||
+		component[length - 1] == L' ')
+		return FALSE;
+	/* Path separators are parsed by the caller; reject other Win32-reserved
+	 * punctuation and control characters here.
+	 * https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file */
+	for (i = 0; i < length; i++)
+	{
+		if (component[i] < L' ' ||
+			wcschr(WF_CLIPRDR_INVALID_FILE_NAME_CHARS, component[i]) != NULL)
+			return FALSE;
+	}
+	return !wf_cliprdr_file_name_reserved_device(component, length);
+}
+
+BOOL wf_cliprdr_file_descriptor_name_valid(const WCHAR *name)
+{
+	SIZE_T component_start = 0;
+	SIZE_T i;
+
+	if (!name || name[0] == L'\\' || name[0] == L'/')
+		return FALSE;
+
+	/* FILEDESCRIPTORW::cFileName is WCHAR[MAX_PATH]; reject names without a
+	 * terminator within that fixed field. */
+	for (i = 0; i < MAX_PATH; i++)
+	{
+		WCHAR value = name[i];
+		if (value != L'\0' && value != L'\\' && value != L'/')
+			continue;
+		if (!wf_cliprdr_file_name_component_valid(&name[component_start], i - component_start))
+			return FALSE;
+		if (value == L'\0')
+			return TRUE;
+		component_start = i + 1;
+	}
+
+	return FALSE;
+}
+
+static BOOL wf_cliprdr_file_group_descriptor_names_valid(
+	const FILEGROUPDESCRIPTORW *group, UINT count)
+{
+	UINT i;
+
+	for (i = 0; i < count; i++)
+	{
+		if (!wf_cliprdr_file_descriptor_name_valid(group->fgd[i].cFileName))
+			return FALSE;
+	}
+
+	return TRUE;
 }
 
 static BOOL wf_cliprdr_bounded_strlen(const char *value, size_t max_len, size_t *len)
@@ -907,6 +1024,9 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 
 		stream_count = dsc->cItems;
 		if (!wf_cliprdr_file_group_descriptor_size_valid(hmem_size, stream_count))
+			return wf_cliprdr_fail_locked_file_descriptor_data(
+			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
+		if (!wf_cliprdr_file_group_descriptor_names_valid(dsc, stream_count))
 			return wf_cliprdr_fail_locked_file_descriptor_data(
 			    clipboard, pMedium, instance, NULL, 0, E_UNEXPECTED);
 
