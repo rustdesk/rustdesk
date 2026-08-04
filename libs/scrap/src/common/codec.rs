@@ -1176,6 +1176,8 @@ pub fn test_av1() {
                     height,
                     quality,
                     keyframe_interval,
+                    qp_range: None,
+                    preset: None,
                 }),
                 i444,
             )

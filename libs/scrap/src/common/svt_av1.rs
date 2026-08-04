@@ -30,6 +30,13 @@ pub struct SvtAv1EncoderConfig {
     pub height: u32,
     pub quality: f32,
     pub keyframe_interval: Option<usize>,
+    // SVT cannot update min/max QP on the fly. Product callers leave this
+    // unset so dynamic quality changes retain the full project QP envelope;
+    // controlled comparisons can pin the same range used by another encoder.
+    pub qp_range: Option<(u32, u32)>,
+    // RTC supports M7 through M13. Product callers use the screen-content
+    // default; benchmarks can override it to measure the speed/quality curve.
+    pub preset: Option<i8>,
 }
 
 pub struct SvtAv1Encoder {
@@ -67,6 +74,16 @@ impl EncoderApi for SvtAv1Encoder {
                         config.width,
                         config.height
                     );
+                }
+                if let Some((min_qp, max_qp)) = config.qp_range {
+                    if min_qp > max_qp || max_qp > 63 {
+                        bail!("invalid svt-av1 QP range {min_qp}..{max_qp}");
+                    }
+                }
+                if let Some(preset) = config.preset {
+                    if !(7..=13).contains(&preset) {
+                        bail!("invalid svt-av1 RTC preset M{preset}; expected M7..M13");
+                    }
                 }
                 let mut handle: *mut EbComponentType = ptr::null_mut();
                 let mut c: MaybeUninit<EbSvtAv1EncConfiguration> = MaybeUninit::zeroed();
@@ -176,7 +193,9 @@ impl SvtAv1Encoder {
     }
 
     fn apply_config(c: &mut EbSvtAv1EncConfiguration, cfg: &SvtAv1EncoderConfig, bitrate: u32) {
-        c.enc_mode = Self::preset(cfg.width, cfg.height);
+        c.enc_mode = cfg
+            .preset
+            .unwrap_or_else(|| Self::preset(cfg.width, cfg.height));
         c.source_width = cfg.width;
         c.source_height = cfg.height;
         // CBR budgets bits per frame from this rate, set_fps adjusts it on the
@@ -190,18 +209,35 @@ impl SvtAv1Encoder {
         // blocks until the packet for the sent picture is ready, and rate/keyframe
         // changes on the fly are allowed.
         c.pred_structure = PredStructure::LOW_DELAY;
+        // A four-picture temporal hierarchy improves reference efficiency without
+        // introducing B-frame reordering. Two is also the highest hierarchy SVT
+        // validates for low-delay CBR, and still preserves one packet per input.
+        c.hierarchical_levels = 2;
         c.rtc = true;
         c.rate_control_mode = SvtAv1RcMode::SVT_AV1_RC_MODE_CBR as _;
         c.target_bit_rate = bitrate.min(MAX_TARGET_BITRATE_KBPS) * 1000;
-        // Full envelope of aom's calc_q_values so later bitrate changes are not clipped.
-        c.min_qp_allowed = 5;
-        c.max_qp_allowed = 45;
-        let (q_min, q_max) = Self::calc_q_values(cfg.quality);
-        c.qp = (q_min + q_max) / 2;
+        let initial_qp_range = Self::quality_qp_range(cfg.quality);
+        let (min_qp, max_qp) = cfg.qp_range.unwrap_or((5, 45));
+        c.min_qp_allowed = min_qp;
+        c.max_qp_allowed = max_qp;
+        c.qp = ((initial_qp_range.0 + initial_qp_range.1) / 2).clamp(min_qp, max_qp);
         c.look_ahead_distance = 0;
-        c.recode_loop = 0; // DISALLOW_RECODE
+        // SVT 4.2's RTC CBR path only re-runs mode decision once when an inter
+        // frame would overflow the virtual buffer. This keeps network bursts
+        // bounded without enabling unrestricted multi-pass re-encoding.
+        c.recode_loop = 1; // ALLOW_RECODE_KFMAXBW / one RTC VBV recode
         c.scene_change_detection = 0;
-        c.screen_content_mode = 1;
+        // Temporal filtering is primarily useful for camera/video content. It
+        // costs CPU and can soften text, while low-delay screen sharing cannot
+        // benefit from future-frame filtering.
+        c.enable_tf = 0;
+        c.enable_tf_key = false;
+        c.enable_overlays = false;
+        // Use SVT's anti-alias-aware adaptive screen detection: UI/text can use
+        // Palette and IntraBC while camera/video regions stay on the natural-
+        // content path. RTC only supports these tools at M8 or slower.
+        c.screen_content_mode = 3;
+        c.enable_intrabc = true;
         c.tune = 1; // PSNR, low delay does not support tune 0
         c.level_of_parallelism = Self::parallelism();
         c.intra_refresh_type = SvtAv1IntraRefreshType::SVT_AV1_KF_REFRESH; // closed GOP
@@ -215,15 +251,11 @@ impl SvtAv1Encoder {
         c.force_key_frames = false;
     }
 
-    fn preset(width: u32, height: u32) -> i8 {
-        // Mirrors aom's get_cpu_speed buckets, M9-M13 are the rtc presets.
-        if width * height <= 320 * 180 {
-            9
-        } else if width * height <= 640 * 360 {
-            10
-        } else {
-            11
-        }
+    fn preset(_width: u32, _height: u32) -> i8 {
+        // SVT-AV1 forces screen_content_mode to 0 for RTC presets M9 and faster,
+        // so use M8 to keep the screen-content path enabled.
+        // TODO: After benchmarking, select a quality-dependent preset in M0..=M8.
+        8
     }
 
     fn parallelism() -> u32 {
@@ -353,9 +385,9 @@ impl SvtAv1Encoder {
         (bitrate * ratio) as u32
     }
 
-    // Same mapping as AomEncoder::calc_q_values, only used to seed the start qp.
+    // Same mapping as AomEncoder::calc_q_values.
     #[inline]
-    fn calc_q_values(ratio: f32) -> (u32, u32) {
+    pub fn quality_qp_range(ratio: f32) -> (u32, u32) {
         let b = (ratio * 100.0) as u32;
         let b = std::cmp::min(b, 200);
         let q_min1 = 24;
@@ -447,6 +479,8 @@ mod tests {
                 height,
                 quality: 1.0,
                 keyframe_interval: None,
+                qp_range: None,
+                preset: None,
             }),
             false,
         )
@@ -480,7 +514,7 @@ mod tests {
                 assert_eq!(img.width(), width as usize);
                 decoded += 1;
             }
-            assert!(decoded >= 1, "aom failed to decode svt-av1 frame {i}");
+            assert!(decoded >= 1, "aom failed to decode svt-av1 frame {}", i);
         }
     }
 
@@ -492,6 +526,8 @@ mod tests {
                 height: 62,
                 quality: 1.0,
                 keyframe_interval: None,
+                qp_range: None,
+                preset: None,
             }),
             false,
         )
