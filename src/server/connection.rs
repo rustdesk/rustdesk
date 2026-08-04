@@ -1639,24 +1639,30 @@ impl Connection {
                 match crate::post_request_with_status(url.clone(), body.clone(), "").await {
                     Ok((status, text)) => {
                         if (200..300).contains(&status) {
-                            // hbbs reports handler failures (e.g. a db write
-                            // error) as 200 with an {"error": ...} body;
-                            // success is an empty body. Retryable: the server
+                            // Success is an empty body. hbbs reports handler
+                            // failures (e.g. a db write error) as 200 with an
+                            // {"error": ...} body - retryable: the server
                             // releases the record's nonce when its write fails,
                             // and answers a post whose earlier attempt is still
                             // being written with an error too, so in both cases
-                            // trying again is what stores the record.
+                            // trying again is what stores the record. Any other
+                            // nonempty body did not come from the audit handler
+                            // (a proxy interposing a 2xx maintenance page, a
+                            // malformed error) and must not be mistaken for
+                            // storage, so it is retried rather than dropped.
+                            if text.trim().is_empty() {
+                                return Ok(text);
+                            }
                             let server_err = serde_json::from_str::<Value>(&text)
                                 .ok()
                                 .and_then(|v| v.get("error")?.as_str().map(|s| s.to_owned()))
                                 .filter(|e| !e.is_empty());
-                            match server_err {
-                                Some(e) => {
-                                    let brief: String = e.chars().take(128).collect();
-                                    (true, format!("server error: {}", brief))
-                                }
-                                None => return Ok(text),
-                            }
+                            let (label, detail) = match &server_err {
+                                Some(e) => ("server error", e.as_str()),
+                                None => ("unexpected response body", text.as_str()),
+                            };
+                            let brief: String = detail.chars().take(128).collect();
+                            (true, format!("{}: {}", label, brief))
                         } else {
                             let brief: String = text.chars().take(128).collect();
                             // 408 and 429 are the transient 4xx: the request timed
