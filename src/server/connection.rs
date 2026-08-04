@@ -1612,9 +1612,22 @@ impl Connection {
         // 5xx (e.g. a reverse proxy answering while the api server restarts)
         // so transient failures don't silently drop them. A 4xx is a
         // deterministic rejection and fails immediately.
-        const ATTEMPTS: u32 = 3;
+        //
+        // The delays, not the attempt count, are what cover the case this exists
+        // for: a proxy answering 502 during a restart fails fast, so without them
+        // every attempt lands within a few seconds and none outlives the restart.
+        //
+        // The window is bounded on the other side: the api server dedups by nonce
+        // for five minutes, and a retry arriving after that expired would be
+        // stored a second time. Worst case here is ATTEMPTS * (12s HTTP timeout +
+        // 36s TCP-proxy fallback) plus these delays, a little over three minutes.
+        //
+        // One delay per retry, so the attempt count follows from the table and the
+        // two cannot drift apart.
+        const RETRY_BACKOFF_SECS: [u64; 2] = [10, 30];
+        const ATTEMPTS: usize = RETRY_BACKOFF_SECS.len() + 1;
         let body = v.to_string();
-        let mut attempt = 0;
+        let mut attempt = 0usize;
         loop {
             attempt += 1;
             let (retryable, err) =
@@ -1659,7 +1672,8 @@ impl Connection {
                 ATTEMPTS,
                 err
             );
-            time::sleep(Duration::from_secs(1 << (attempt - 1))).await;
+            // In range by construction: the guard above returns at ATTEMPTS.
+            time::sleep(Duration::from_secs(RETRY_BACKOFF_SECS[attempt - 1])).await;
         }
     }
 
