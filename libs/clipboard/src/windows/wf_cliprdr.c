@@ -2824,6 +2824,8 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 				*p_conn_id = formatList->connID;
 				if (PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, OLE_SETCLIPBOARD, p_conn_id))
 					rc = CHANNEL_RC_OK;
+				else
+					free(p_conn_id);
 			}
 		}
 		else
@@ -2862,11 +2864,14 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 						}
 						else
 						{
+							free(format_ids->formats);
+							free(format_ids);
 							rc = ERROR_INTERNAL_ERROR;
 						}
 					}
 					else
 					{
+						free(format_ids);
 						rc = ERROR_INTERNAL_ERROR;
 					}
 				}
