@@ -536,6 +536,9 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 		return E_INVALIDARG;
 
 	clipboard = (wfClipboard *)instance->m_pData;
+	if (!clipboard)
+		return E_UNEXPECTED;
+
 	*pcbRead = 0;
 
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
@@ -2981,7 +2984,8 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 	clipboard = (wfClipboard *)context->Custom;
 
-	if (!clipboard)
+	if (!clipboard || !clipboard->context ||
+		!clipboard->context->ClientFormatDataResponse)
 	{
 		return ERROR_INTERNAL_ERROR;
 	}
@@ -3021,6 +3025,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 		if (FAILED(result))
 		{
+			IDataObject_Release(dataObj);
 			rc = ERROR_INTERNAL_ERROR;
 			goto exit;
 		}
@@ -3029,10 +3034,11 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 		if (!dropFiles)
 		{
-			GlobalUnlock(stg_medium.hGlobal);
+			clear_file_array(clipboard);
 			ReleaseStgMedium(&stg_medium);
-			clipboard->nFiles = 0;
-			goto resp;
+			IDataObject_Release(dataObj);
+			rc = ERROR_INTERNAL_ERROR;
+			goto exit;
 		}
 
 		clear_file_array(clipboard);
@@ -3112,7 +3118,6 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 			rc = ERROR_INTERNAL_ERROR;
 			goto exit;
 		}
-	resp:
 		if (clipboard->nFiles == 0 ||
 			clipboard->nFiles > WF_CLIPRDR_MAX_STREAMS)
 		{
@@ -3192,6 +3197,9 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 	}
 
 exit:
+	if (rc != ERROR_SUCCESS)
+		size = 0;
+
 	if (rc == ERROR_SUCCESS)
 	{
 		response.msgFlags = CB_RESPONSE_OK;
@@ -3251,6 +3259,13 @@ wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
 			// (void)emptyRes;
 			rc = E_FAIL;
+			break;
+		}
+
+		if (formatDataResponse->dataLen > 0 &&
+			!formatDataResponse->requestedFormatData)
+		{
+			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
 
@@ -3326,7 +3341,8 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 
 	clipboard = (wfClipboard *)context->Custom;
 
-	if (!clipboard)
+	if (!clipboard || !clipboard->context ||
+		!clipboard->context->ClientFileContentsResponse)
 	{
 		return ERROR_INTERNAL_ERROR;
 	}
@@ -3448,7 +3464,7 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 			LARGE_INTEGER dlibMove;
 			ULARGE_INTEGER dlibNewPosition;
 
-			if (clipboard->nFiles > 0 &&
+			if (clipboard->context->HandleClipboardFiles && clipboard->nFiles > 0 &&
 				fileContentsRequest->listIndex == (UINT32)clipboard->first_file_index &&
 				fileContentsRequest->nPositionLow == 0 &&
 				fileContentsRequest->nPositionHigh == 0) {
@@ -3491,7 +3507,7 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 				goto exit;
 			}
 
-			if (clipboard->nFiles > 0 &&
+			if (clipboard->context->HandleClipboardFiles && clipboard->nFiles > 0 &&
 				fileContentsRequest->listIndex == (UINT32)clipboard->first_file_index &&
 				fileContentsRequest->nPositionLow == 0 &&
 				fileContentsRequest->nPositionHigh == 0) {
@@ -3594,6 +3610,12 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 		if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
 		{
 			rc = E_FAIL;
+			break;
+		}
+		if (fileContentsResponse->cbRequested > 0 &&
+			!fileContentsResponse->requestedData)
+		{
+			rc = ERROR_INTERNAL_ERROR;
 			break;
 		}
 		if (fileContentsResponse->cbRequested > clipboard->req_fsize_expected)
