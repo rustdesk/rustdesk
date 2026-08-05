@@ -1,3 +1,29 @@
+def legacyPluginNamespaces = [
+    external_path: 'com.pinciat.external_path',
+    flutter_keyboard_visibility: 'com.jrai.flutter_keyboard_visibility',
+    qr_code_scanner: 'net.touchcapture.qr.flutterqr',
+    sqflite: 'com.tekartik.sqflite',
+    uni_links: 'name.avioli.unilinks',
+]
+
+def java8JvmTarget = JavaVersion.VERSION_1_8.toString()
+def java8KotlinJvmTargets = [
+    app: java8JvmTarget,
+    external_path: java8JvmTarget,
+    qr_code_scanner: java8JvmTarget,
+]
+
+def configureKotlinJvmTarget = { Project project, String kotlinJvmTarget ->
+    project.plugins.withId('kotlin-android') {
+        project.tasks.configureEach { task ->
+            if (!task.hasProperty('kotlinOptions')) {
+                return
+            }
+            task.kotlinOptions.jvmTarget = kotlinJvmTarget
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -9,6 +35,16 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    def legacyNamespace = legacyPluginNamespaces[project.name]
+    if (legacyNamespace != null) {
+        project.plugins.withId('com.android.library') {
+            project.android.namespace = legacyNamespace
+        }
+    }
+    def kotlinJvmTarget = java8KotlinJvmTargets[project.name]
+    if (kotlinJvmTarget != null) {
+        configureKotlinJvmTarget(project, kotlinJvmTarget)
+    }
 }
 subprojects {
     project.evaluationDependsOn(':app')
