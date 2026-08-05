@@ -137,6 +137,33 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     }
 }
 
+/// Whether the linker will be able to resolve `-l<stem>` from a default search
+/// path. Checks for the `.so`/`.a` the linker needs (the versioned `.so.N` that
+/// runtime-only installs ship is not enough), so we can decline to name a library
+/// that is not there instead of failing the build.
+///
+/// These are host paths, so the answer is only meaningful for a native build.
+/// A cross build gets `false`: the target sysroot is not searched here, and
+/// naming a library that exists only on the build machine would break the target
+/// link. That leaves cross builds exactly as they were before this check existed.
+fn has_system_lib(stem: &str) -> bool {
+    if env::var("HOST").ok() != env::var("TARGET").ok() {
+        return false;
+    }
+    [
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/local/lib",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+    ]
+    .iter()
+    .any(|dir| {
+        let dir = Path::new(dir);
+        dir.join(format!("lib{stem}.so")).exists() || dir.join(format!("lib{stem}.a")).exists()
+    })
+}
+
 fn generate_bindings(
     ffi_header: &Path,
     include_paths: &[PathBuf],
@@ -244,11 +271,54 @@ fn main() {
     env::remove_var("CARGO_CFG_TARGET_FEATURE");
     env::set_var("CARGO_CFG_TARGET_FEATURE", "crt-static");
 
-    find_package("libyuv");
+    let vcpkg_includes = find_package("libyuv");
     gen_vcpkg_package("libvpx", "vpx_ffi.h", "vpx_ffi.rs", "^[vV].*");
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
     // ffmpeg();
+
+    // hwcodec offers `h264_vaapi` as a Linux encoder, but its build script links
+    // only drm/X11/stdc++ — never libva. That is harmless as long as ffmpeg is
+    // built without the `vaapi` feature, as this tree's vcpkg manifest does: the
+    // encoder is dead code and nothing calls into libva. Build ffmpeg as
+    // `ffmpeg[vaapi]` and the vaapi objects link in with undefined `va*` symbols;
+    // a cdylib links anyway, so the failure only appears when the encoder is first
+    // used. See the commented-out `ffmpeg()` above, which lists these same libs and
+    // notes "Linux require link in hwcodec". Only `va` and `va-drm` are needed —
+    // nothing references the X11 or VDPAU entry points.
+    //
+    // Both libs are named only when actually present. Naming a missing `static`
+    // lib is a hard rustc error and a missing dylib breaks the final link, so an
+    // unconditional directive would turn a host that needs neither into a build
+    // failure.
+    if target_os == "linux" && std::env::var("CARGO_FEATURE_HWCODEC").is_ok() {
+        if has_system_lib("va") && has_system_lib("va-drm") {
+            println!("cargo:rustc-link-lib=va");
+            println!("cargo:rustc-link-lib=va-drm");
+        } else {
+            println!("cargo:warning=libva/libva-drm not found on the host, skipping VAAPI link; h264_vaapi and hevc_vaapi will be unavailable");
+        }
+        // hwcodec links only avcodec/avutil/avformat, but those reference
+        // libswresample internally, leaving swr_* unresolved. Harmless until an
+        // audio-resampling path is hit, then it is a load/call-time failure.
+        //
+        // Located via the libyuv include paths because vcpkg installs every port
+        // into one prefix per triplet, so libyuv's prefix is also ffmpeg's, and it
+        // is already resolved for the *target* triplet. Only the static archive is
+        // looked for: a shared ffmpeg needs nothing here, since libavcodec.so
+        // carries a DT_NEEDED on libswresample.so and the loader resolves swr_*.
+        let swresample_dir = vcpkg_includes
+            .iter()
+            .filter_map(|include| include.parent())
+            .map(|prefix| prefix.join("lib"))
+            .find(|lib_dir| lib_dir.join("libswresample.a").exists());
+        if let Some(lib_dir) = swresample_dir {
+            println!("cargo:rustc-link-search={}", lib_dir.display());
+            println!("cargo:rustc-link-lib=static=swresample");
+        } else {
+            println!("cargo:warning=libswresample.a not found, skipping; hwcodec audio resampling paths would fail if reached");
+        }
+    }
 
     if target_os == "ios" {
         // nothing
