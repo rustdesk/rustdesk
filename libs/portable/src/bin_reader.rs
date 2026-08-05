@@ -33,12 +33,23 @@ pub(crate) struct BinaryData {
 pub(crate) struct BinaryReader {
     pub files: Vec<BinaryData>,
     pub exe: String,
+    // Paths supplied by the per-customer package. Recorded so that a file dropped
+    // from a later package -- a logo the customer removed, say -- can be deleted
+    // from an existing extraction, which the timestamp wipe no longer covers now
+    // that the packer is built once per release rather than once per customer.
+    pub package_paths: Vec<String>,
 }
 
 impl Default for BinaryReader {
     fn default() -> Self {
-        let (files, exe) = merge(read_embedded(), read_package());
-        Self { files, exe }
+        let package = read_package();
+        let package_paths = package.0.iter().map(|f| f.path.clone()).collect();
+        let (files, exe) = merge(read_embedded(), package);
+        Self {
+            files,
+            exe,
+            package_paths,
+        }
     }
 }
 
@@ -345,6 +356,23 @@ mod tests {
             1
         );
         assert_eq!(entry(&files, "./librustdesk.dll").unwrap().raw, b"core");
+    }
+
+    #[test]
+    fn package_paths_are_recorded_for_the_dropped_file_sweep() {
+        let package = parse(blob(
+            &[("./custom.txt", b"cfg"), ("./data/logo.png", b"img")],
+            "./acme.exe",
+        ))
+        .unwrap();
+        let mut paths: Vec<String> = package.0.iter().map(|f| f.path.clone()).collect();
+        paths.sort();
+        assert_eq!(paths, vec!["./custom.txt", "./data/logo.png"]);
+
+        // Merging must not disturb them: the generic payload contributes none.
+        let embedded = parse(blob(&[("./librustdesk.dll", b"core")], "./rustdesk.exe")).unwrap();
+        let (files, _) = merge(embedded, package);
+        assert!(entry(&files, "./data/logo.png").is_some());
     }
 
     #[test]

@@ -17,6 +17,7 @@ const APP_METADATA: &[u8] = include_bytes!("../app_metadata.toml");
 const APP_METADATA: &[u8] = &[];
 const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
+const META_LINE_PREFIX_FILE: &str = "file = ";
 const APP_PREFIX: &str = "rustdesk";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
@@ -62,12 +63,47 @@ fn is_timestamp_matches(dir: &Path, ts: &mut u64) -> bool {
     false
 }
 
-fn write_meta(dir: &Path, ts: u64) {
+fn write_meta(dir: &Path, ts: u64, package_paths: &[String]) {
     let meta_file = dir.join(APP_METADATA_CONFIG);
-    if ts != 0 {
-        let content = format!("{}{}", META_LINE_PREFIX_TIMESTAMP, ts);
-        // Ignore is ok here
-        let _ = std::fs::write(meta_file, content);
+    let mut content = format!("{}{}\n", META_LINE_PREFIX_TIMESTAMP, ts);
+    for path in package_paths {
+        content.push_str(&format!("{}{}\n", META_LINE_PREFIX_FILE, path));
+    }
+    // Ignore is ok here
+    let _ = std::fs::write(meta_file, content);
+}
+
+fn previous_package_files(dir: &Path) -> Vec<String> {
+    let Ok(content) = std::fs::read_to_string(dir.join(APP_METADATA_CONFIG)) else {
+        return Vec::new();
+    };
+    content
+        .lines()
+        .filter_map(|line| line.strip_prefix(META_LINE_PREFIX_FILE))
+        .map(|path| path.trim().to_owned())
+        .collect()
+}
+
+fn normalized(path: &str) -> String {
+    path.replace('\\', "/").trim_start_matches("./").to_lowercase()
+}
+
+// A customer who drops a branding asset gets a package without it, and the file
+// would otherwise linger in an existing extraction and keep being used. The wipe
+// cannot cover this: it is keyed on the packer's build timestamp, which is now the
+// same for every customer of a release.
+fn remove_dropped_package_files(dir: &Path, current: &[String]) {
+    let keep: std::collections::HashSet<String> = current.iter().map(|p| normalized(p)).collect();
+    for previous in previous_package_files(dir) {
+        let normalized_previous = normalized(&previous);
+        if keep.contains(&normalized_previous) || normalized_previous.contains("..") {
+            continue;
+        }
+        let path = dir.join(&previous);
+        if path.is_file() {
+            println!("removing dropped {}", previous);
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
@@ -99,10 +135,11 @@ fn setup(
         }
         std::fs::remove_dir_all(&dir).ok();
     }
+    remove_dropped_package_files(&dir, &reader.package_paths);
     for file in reader.files.iter() {
         file.write_to_file(&dir);
     }
-    write_meta(&dir, ts);
+    write_meta(&dir, ts, &reader.package_paths);
     #[cfg(windows)]
     win::copy_runtime_broker(&dir);
     #[cfg(linux)]
