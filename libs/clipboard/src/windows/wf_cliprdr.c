@@ -26,6 +26,7 @@
 #define COBJMACROS
 
 #include <ole2.h>
+#include <stdint.h>
 #include <shlobj.h>
 #include <wchar.h>
 #include <windows.h>
@@ -55,6 +56,11 @@
 #define WF_CLIPRDR_COM_LPT_PREFIX_LENGTH 3u
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
+
+BOOL wf_cliprdr_format_data_size_valid(SIZE_T size)
+{
+	return size <= UINT32_MAX;
+}
 
 /* Validates the remote descriptor array size after cItems has been read safely. */
 static BOOL wf_cliprdr_file_group_descriptor_size_valid(SIZE_T size, UINT count)
@@ -1698,15 +1704,6 @@ static BOOL clear_format_map(wfClipboard *clipboard)
 	return TRUE;
 }
 
-/* Called only while format_map_lock is held exclusively. */
-static UINT wf_cliprdr_server_format_list_fail(wfClipboard *clipboard)
-{
-	clear_format_map(clipboard);
-	clipboard->copied = FALSE;
-	ReleaseSRWLockExclusive(&clipboard->format_map_lock);
-	return ERROR_INTERNAL_ERROR;
-}
-
 static UINT cliprdr_send_tempdir(wfClipboard *clipboard)
 {
 	CLIPRDR_TEMP_DIRECTORY tempDirectory;
@@ -2736,20 +2733,17 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 
 	AcquireSRWLockExclusive(&clipboard->format_map_lock);
 	if (!clear_format_map(clipboard))
-	{
-		ReleaseSRWLockExclusive(&clipboard->format_map_lock);
-		return ERROR_INTERNAL_ERROR;
-	}
+		goto unlock_fail;
 	clipboard->copied = FALSE;
 
 	if (formatList->numFormats > WF_CLIPRDR_MAX_FORMATS)
-		return wf_cliprdr_server_format_list_fail(clipboard);
+		goto fail;
 
 	if (formatList->numFormats > 0 && !formatList->formats)
-		return wf_cliprdr_server_format_list_fail(clipboard);
+		goto fail;
 
 	if (!map_ensure_capacity(clipboard, formatList->numFormats))
-		return wf_cliprdr_server_format_list_fail(clipboard);
+		goto fail;
 
 	clipboard->copied = TRUE;
 
@@ -2771,30 +2765,30 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 			if (!wf_cliprdr_bounded_strlen(format->formatName,
 			                               WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES, &name_len))
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			if (name_len == 0)
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			size = MultiByteToWideChar(CP_UTF8, 0, format->formatName, (int)name_len,
 			                           NULL, 0);
 			if (size <= 0)
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			if ((UINT)size > WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS)
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			mapping->name = calloc((size_t)size + 1, sizeof(WCHAR));
 			if (!mapping->name)
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			if (MultiByteToWideChar(CP_UTF8, 0, format->formatName, (int)name_len,
@@ -2802,13 +2796,13 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 			{
 				free(mapping->name);
 				mapping->name = NULL;
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 
 			mapping->local_format_id = RegisterClipboardFormatW((LPWSTR)mapping->name);
 			if (mapping->local_format_id == 0)
 			{
-				return wf_cliprdr_server_format_list_fail(clipboard);
+				goto fail;
 			}
 		}
 		else
@@ -2892,6 +2886,13 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 	}
 
 	return rc;
+
+fail:
+	clear_format_map(clipboard);
+unlock_fail:
+	clipboard->copied = FALSE;
+	ReleaseSRWLockExclusive(&clipboard->format_map_lock);
+	return ERROR_INTERNAL_ERROR;
 }
 
 /**
@@ -3192,6 +3193,13 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 					goto exit;
 				}
 				size = GlobalSize(hClipdata);
+				if (!wf_cliprdr_format_data_size_valid(size))
+				{
+					GlobalUnlock(hClipdata);
+					CloseClipboard();
+					rc = ERROR_INTERNAL_ERROR;
+					goto exit;
+				}
 				buff = malloc(size);
 				if (buff)
 				{
@@ -3225,7 +3233,7 @@ exit:
 		response.msgFlags = CB_RESPONSE_FAIL;
 	}
 	response.connID = formatDataRequest->connID;
-	response.dataLen = size;
+	response.dataLen = (UINT32)size;
 	response.requestedFormatData = (BYTE *)buff;
 	if (ERROR_SUCCESS != clipboard->context->ClientFormatDataResponse(clipboard->context, &response))
 	{
