@@ -3922,6 +3922,7 @@ static BOOL wf_empty_cliprdr_on_sta(wfClipboard *clipboard_ctx, UINT32 connID)
 		return FALSE;
 
 	instance = (CliprdrDataObject *)clipboard_ctx->data_obj;
+	/* Without a tracked object, continue so stale remote file formats can still be cleared. */
 	if (connID != 0 && instance && instance->m_connID != connID)
 		return ReleaseMutex(clipboard_ctx->data_obj_mutex);
 
