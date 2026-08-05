@@ -15,15 +15,27 @@ encoding = 'utf-8'
 # output: {path: (compressed_data, file_md5)}
 
 
-def generate_md5_table(folder: str, level) -> dict:
+def normalize(path: str) -> str:
+    path = path.replace('\\', '/')
+    while path.startswith('./'):
+        path = path[2:]
+    return path.lower()
+
+
+def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
     res: dict = dict()
-    curdir = os.curdir
+    skip = normalize(exclude) if exclude else None
+    # os.curdir is the literal ".", so restoring it left us inside `folder`.
+    curdir = os.getcwd()
     os.chdir(folder)
     for root, _, files in os.walk('.'):
         # remove ./
         for f in files:
             md5_generator = md5()
             full_path = os.path.join(root, f)
+            if skip and normalize(full_path) == skip:
+                print(f"Excluding {full_path}...")
+                continue
             print(f"Processing {full_path}...")
             f = open(full_path, "rb")
             content = f.read()
@@ -37,7 +49,10 @@ def generate_md5_table(folder: str, level) -> dict:
 
 
 def write_package_metadata(md5_table: dict, output_folder: str, exe: str):
-    output_path = os.path.join(output_folder, "data.bin")
+    write_blob(md5_table, os.path.join(output_folder, "data.bin"), exe)
+
+
+def write_blob(md5_table: dict, output_path: str, exe: str):
     with open(output_path, "wb") as f:
         f.write("rustdesk".encode(encoding=encoding))
         for path in md5_table.keys():
@@ -92,6 +107,14 @@ if __name__ == '__main__':
                       help="the target used by cargo")
     parser.add_option("-l", "--level", dest="level", type="int",
                       help="compression level, default is 11, highest", default=11)
+    parser.add_option("--package", dest="package",
+                      help="write the per-customer blob to this path instead of "
+                           "data.bin, and skip the cargo build. Injected into the "
+                           "template's RDPKG resource so customizing needs no rebuild")
+    parser.add_option("--exclude-exe", dest="exclude_exe", action="store_true",
+                      default=False,
+                      help="omit the executable from the blob, for a template whose "
+                           "executable ships in the package instead")
     (options, args) = parser.parse_args()
     folder = options.folder or './rustdesk'
     output_folder = os.path.abspath(options.output_folder or './')
@@ -107,7 +130,11 @@ if __name__ == '__main__':
     exe = '.' + exe[len(os.path.abspath(folder)):]
     print("Executable path: " + exe)
     print("Compression level: " + str(options.level))
-    md5_table = generate_md5_table(folder, options.level)
-    write_package_metadata(md5_table, output_folder, exe)
-    write_app_metadata(output_folder)
-    build_portable(output_folder, options.target)
+    md5_table = generate_md5_table(
+        folder, options.level, exe if options.exclude_exe else None)
+    if options.package:
+        write_blob(md5_table, os.path.abspath(options.package), exe)
+    else:
+        write_package_metadata(md5_table, output_folder, exe)
+        write_app_metadata(output_folder)
+        build_portable(output_folder, options.target)

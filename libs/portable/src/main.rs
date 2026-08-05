@@ -22,6 +22,18 @@ const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
 const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";
 
+// The extraction directory follows whatever executable the payload asks for, so a
+// custom client gets its own directory instead of sharing RustDesk's. Falls back to
+// APP_PREFIX when no package is injected, which keeps stock builds unchanged.
+fn app_dir_name(exe: &str) -> String {
+    Path::new(&exe.replace('\\', "/"))
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| stem.trim().to_lowercase())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or_else(|| APP_PREFIX.to_owned())
+}
+
 fn is_timestamp_matches(dir: &Path, ts: &mut u64) -> bool {
     let Ok(app_metadata) = std::str::from_utf8(APP_METADATA) else {
         return true;
@@ -71,7 +83,7 @@ fn setup(
     } else {
         // home dir
         if let Some(dir) = dirs::data_local_dir() {
-            dir.join(APP_PREFIX)
+            dir.join(app_dir_name(&reader.exe))
         } else {
             eprintln!("not found data local dir");
             return None;
