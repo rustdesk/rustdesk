@@ -30,6 +30,15 @@ fn make_tray() -> hbb_common::ResultType<()> {
         menu::{Menu, MenuEvent, MenuItem},
         TrayIcon, TrayIconBuilder, TrayIconEvent as TrayEvent,
     };
+
+    // Duplicated tray icons kept piling up through the blind spots of
+    // `check_process("--tray", ..)`. https://github.com/rustdesk/rustdesk/issues/15689
+    #[cfg(windows)]
+    if !crate::platform::windows::try_lock_tray_single_instance() {
+        log::info!("Another tray process is already running in this session, exit");
+        return Ok(());
+    }
+
     let icon;
     #[cfg(target_os = "macos")]
     {
@@ -185,9 +194,26 @@ fn make_tray() -> hbb_common::ResultType<()> {
                         return;
                     }
                     */
+                    // Remove the icon first: on success `uninstall_service()` ends
+                    // this process with `std::process::exit`, which skips the
+                    // destructor that would remove it, leaving a ghost icon behind.
+                    #[cfg(windows)]
+                    let _ = _tray_icon
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|t| t.set_visible(false));
                     if !crate::platform::uninstall_service(false, false) {
                         *control_flow = ControlFlow::Exit;
                     }
+                    // Still alive, so stopping the service failed or was cancelled
+                    // in the UAC prompt. Show the icon again.
+                    #[cfg(windows)]
+                    let _ = _tray_icon
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|t| t.set_visible(true));
                 } else if event.id == open_i.id() {
                     open_func();
                 }

@@ -44,32 +44,51 @@ class HttpService {
     return _parseHttpResponse(resJson);
   }
 
+  // Bounds only the pure-Dart branch below, which the OS would otherwise
+  // let hang forever (e.g. a black-holed TLS handshake), see #15700.
+  // The Rust branch has its own 12s-per-attempt timeouts and must be
+  // awaited to completion: a Dart-side timeout there would race the
+  // URL-keyed ASYNC_HTTP_STATUS entry of the abandoned request.
+  static const _requestTimeout = Duration(seconds: 30);
+
   Future<http.Response> _pollFlutterHttp(
     Uri url,
     HttpMethod method, {
     Map<String, String>? headers,
     dynamic body,
   }) async {
-    var response = http.Response('', 400);
+    final client = http.Client();
+    try {
+      var response = http.Response('', 400);
 
-    switch (method) {
-      case HttpMethod.get:
-        response = await http.get(url, headers: headers);
-        break;
-      case HttpMethod.post:
-        response = await http.post(url, headers: headers, body: body);
-        break;
-      case HttpMethod.put:
-        response = await http.put(url, headers: headers, body: body);
-        break;
-      case HttpMethod.delete:
-        response = await http.delete(url, headers: headers, body: body);
-        break;
-      default:
-        throw Exception('Unsupported HTTP method');
+      switch (method) {
+        case HttpMethod.get:
+          response =
+              await client.get(url, headers: headers).timeout(_requestTimeout);
+          break;
+        case HttpMethod.post:
+          response = await client
+              .post(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        case HttpMethod.put:
+          response = await client
+              .put(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        case HttpMethod.delete:
+          response = await client
+              .delete(url, headers: headers, body: body)
+              .timeout(_requestTimeout);
+          break;
+        default:
+          throw Exception('Unsupported HTTP method');
+      }
+
+      return response;
+    } finally {
+      client.close();
     }
-
-    return response;
   }
 
   Future<String> _pollForResponse(String url) async {

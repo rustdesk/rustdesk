@@ -95,6 +95,7 @@ const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
 const String kOptionWhitelist = "whitelist";
+const String kOptionIdWhitelist = "id-whitelist";
 const String kOptionEnableAbr = "enable-abr";
 const String kOptionEnableRecordSession = "enable-record-session";
 const String kOptionDirectServer = "direct-server";
