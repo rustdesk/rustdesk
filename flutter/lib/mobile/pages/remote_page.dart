@@ -986,11 +986,30 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       return Offstage();
     }
     final size = MediaQuery.of(context).size;
+    // On wide screens (foldables, tablets, phones in landscape) the key groups
+    // fit in one or two flowing rows, so keep them on the same row instead of
+    // forcing a line break before each group. Narrow (portrait phone) screens
+    // keep the forced breaks so each group starts on its own row.
+    final isWideScreen = size.width >= kMobilePageConstraints.maxWidth;
+    // A zero-height box wider than any screen makes `Wrap` start a new run.
+    final groupBreak =
+        isWideScreen ? const SizedBox.shrink() : const SizedBox(width: 9999);
 
     final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == kPeerPlatformMacOS;
     final isWin = pi.platform == kPeerPlatformWindows;
     final isLinux = pi.platform == kPeerPlatformLinux;
+    final moreButton = wrap(
+        ' ... ',
+        () => setState(
+              () {
+                _more = !_more;
+                if (_more) {
+                  _fn = false;
+                }
+              },
+            ),
+        active: _more);
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
         setState(() => inputModel.ctrl = !inputModel.ctrl);
@@ -1024,20 +1043,10 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
               ),
           active: _pin,
           icon: Icons.push_pin),
-      wrap(
-          ' ... ',
-          () => setState(
-                () {
-                  _more = !_more;
-                  if (_more) {
-                    _fn = false;
-                  }
-                },
-              ),
-          active: _more),
+      if (!isWideScreen) moreButton,
     ];
     final fn = <Widget>[
-      SizedBox(width: 9999),
+      groupBreak,
     ];
     for (var i = 1; i <= 12; ++i) {
       final name = 'F$i';
@@ -1046,7 +1055,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }));
     }
     final more = <Widget>[
-      SizedBox(width: 9999),
+      groupBreak,
       wrap('Esc', () {
         inputModel.inputKey('VK_ESCAPE');
       }),
@@ -1093,7 +1102,7 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap('Enter', () {
         inputModel.inputKey('VK_ENTER');
       }),
-      SizedBox(width: 9999),
+      groupBreak,
       wrap('', () {
         inputModel.inputKey('VK_LEFT');
       }, icon: Icons.keyboard_arrow_left),
@@ -1121,20 +1130,33 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
     Future.delayed(Duration(milliseconds: 500), () {
       _updateRect();
     });
+    final keyGroups = Wrap(
+      spacing: space,
+      runSpacing: space,
+      children: <Widget>[SizedBox(width: 9999)] +
+          modifiers +
+          keys +
+          (_fn ? fn : []) +
+          (_more ? more : []),
+    );
     return Container(
         key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
             top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
-        child: Wrap(
-          spacing: space,
-          runSpacing: space,
-          children: <Widget>[SizedBox(width: 9999)] +
-              modifiers +
-              keys +
-              (_fn ? fn : []) +
-              (_more ? more : []),
-        ));
+        child: isWideScreen
+            ? Stack(
+                children: [
+                  // Keep the overflow toggle at the far right instead of
+                  // allowing it to flow between the modifier and extra keys.
+                  Padding(
+                    padding: EdgeInsets.only(right: 52),
+                    child: keyGroups,
+                  ),
+                  Positioned(top: space, right: 0, child: moreButton),
+                ],
+              )
+            : keyGroups);
   }
 }
 
