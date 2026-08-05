@@ -429,7 +429,9 @@ jobs:
             Set-Content -Path "$assets/$a" -Value 'placeholder' -NoNewline
           }
           pushd ./res/msi
-          python preprocess.py --arp --template -d ../../rustdesk-msi-template --app-name RDAPPNAM
+          # revision 0 is a sentinel: the patcher replaces the fourth version field
+          # with a fresh build number per customer, as building per customer did.
+          python preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
