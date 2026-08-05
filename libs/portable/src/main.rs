@@ -88,6 +88,37 @@ fn normalized(path: &str) -> String {
     path.replace('\\', "/").trim_start_matches("./").to_lowercase()
 }
 
+// meta.toml is plain text in a user-writable directory, and it now drives deletion,
+// so the path is rebuilt from plain components rather than joined as written. A
+// prefix, root or parent component would otherwise escape the extraction directory:
+// Path::join replaces the base entirely when given an absolute path.
+fn resolve_within(dir: &Path, relative: &str) -> Option<PathBuf> {
+    use std::path::Component;
+    let mut path = dir.to_path_buf();
+    let mut any = false;
+    for component in Path::new(&relative.replace('\\', "/")).components() {
+        match component {
+            Component::Normal(part) => {
+                // A drive-relative name like "C:x" parses as Normal, and only a
+                // Windows host would classify "C:/..." as a Prefix, so the colon is
+                // rejected outright rather than relying on the host's parser.
+                if part.to_string_lossy().contains(':') {
+                    return None;
+                }
+                path.push(part);
+                any = true;
+            }
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    if any {
+        Some(path)
+    } else {
+        None
+    }
+}
+
 // A customer who drops a branding asset gets a package without it, and the file
 // would otherwise linger in an existing extraction and keep being used. The wipe
 // cannot cover this: it is keyed on the packer's build timestamp, which is now the
@@ -95,11 +126,12 @@ fn normalized(path: &str) -> String {
 fn remove_dropped_package_files(dir: &Path, current: &[String]) {
     let keep: std::collections::HashSet<String> = current.iter().map(|p| normalized(p)).collect();
     for previous in previous_package_files(dir) {
-        let normalized_previous = normalized(&previous);
-        if keep.contains(&normalized_previous) || normalized_previous.contains("..") {
+        if keep.contains(&normalized(&previous)) {
             continue;
         }
-        let path = dir.join(&previous);
+        let Some(path) = resolve_within(dir, &previous) else {
+            continue;
+        };
         if path.is_file() {
             println!("removing dropped {}", previous);
             let _ = std::fs::remove_file(path);
@@ -295,3 +327,28 @@ mod win {
         exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
     }
 }
+
+#[cfg(test)]
+mod meta_tests {
+    use super::*;
+
+    #[test]
+    fn resolve_within_rejects_paths_that_escape() {
+        let base = Path::new("/base");
+        assert_eq!(
+            resolve_within(base, "./data/logo.png"),
+            Some(base.join("data").join("logo.png"))
+        );
+        assert_eq!(
+            resolve_within(base, ".\\data\\logo.png"),
+            Some(base.join("data").join("logo.png"))
+        );
+        // meta.toml is user-writable, so these must not reach remove_file.
+        assert_eq!(resolve_within(base, "../../etc/passwd"), None);
+        assert_eq!(resolve_within(base, "/etc/passwd"), None);
+        assert_eq!(resolve_within(base, "C:\\Windows\\System32\\x.dll"), None);
+        assert_eq!(resolve_within(base, "."), None);
+        assert_eq!(resolve_within(base, ""), None);
+    }
+}
+
