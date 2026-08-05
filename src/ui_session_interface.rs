@@ -792,7 +792,37 @@ impl<T: InvokeUiSession> Session<T> {
         msg_out.set_misc(misc);
         self.send(Data::Message(msg_out));
     }
+}
 
+#[cfg(test)]
+mod terminal_input_tests {
+    use super::*;
+
+    #[test]
+    fn terminal_input_message_preserves_non_utf8_bytes() {
+        let payload = vec![0x00, 0x03, 0x1b, 0xff];
+        let message = terminal_input_message(7, payload.clone());
+        let action = message.terminal_action();
+        let data = action.data();
+
+        assert_eq!(data.terminal_id, 7);
+        assert_eq!(data.data.as_ref(), payload.as_slice());
+    }
+}
+
+fn terminal_input_message(terminal_id: i32, data: Vec<u8>) -> Message {
+    let mut action = TerminalAction::new();
+    action.set_data(TerminalData {
+        terminal_id,
+        data: bytes::Bytes::from(data),
+        ..Default::default()
+    });
+    let mut message = Message::new();
+    message.set_terminal_action(action);
+    message
+}
+
+impl<T: InvokeUiSession> Session<T> {
     // Terminal methods
     pub fn open_terminal(&self, terminal_id: i32, rows: u32, cols: u32) {
         let mut action = TerminalAction::new();
@@ -808,15 +838,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send_terminal_input(&self, terminal_id: i32, data: String) {
-        let mut action = TerminalAction::new();
-        action.set_data(TerminalData {
-            terminal_id,
-            data: bytes::Bytes::from(data.into_bytes()),
-            ..Default::default()
-        });
-        let mut msg_out = Message::new();
-        msg_out.set_terminal_action(action);
-        self.send(Data::Message(msg_out));
+        self.send_terminal_input_bytes(terminal_id, data.into_bytes());
+    }
+
+    pub fn send_terminal_input_bytes(&self, terminal_id: i32, data: Vec<u8>) {
+        self.send(Data::Message(terminal_input_message(terminal_id, data)));
     }
 
     pub fn resize_terminal(&self, terminal_id: i32, rows: u32, cols: u32) {
