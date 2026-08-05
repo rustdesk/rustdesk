@@ -1643,13 +1643,11 @@ impl Connection {
                             // failures (e.g. a db write error) as 200 with an
                             // {"error": ...} body - retryable: the server
                             // releases the record's nonce when its write fails,
-                            // and answers a post whose earlier attempt is still
-                            // being written with an error too, so in both cases
-                            // trying again is what stores the record. Any other
-                            // nonempty body did not come from the audit handler
-                            // (a proxy interposing a 2xx maintenance page, a
-                            // malformed error) and must not be mistaken for
-                            // storage, so it is retried rather than dropped.
+                            // so trying again is what stores the record. Any
+                            // other nonempty body did not come from the audit
+                            // handler (a proxy interposing a 2xx maintenance
+                            // page, a malformed error) and must not be mistaken
+                            // for storage, so it is retried rather than dropped.
                             if text.trim().is_empty() {
                                 return Ok(text);
                             }
