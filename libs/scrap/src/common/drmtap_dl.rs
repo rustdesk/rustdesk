@@ -181,15 +181,24 @@ fn abi_accepted(major: c_int, minor: c_int, patch: c_int) -> bool {
 impl DrmtapLib {
     fn load() -> Option<Self> {
         // Absolute path FIRST: the deb bundles the .so privately under /usr/lib/rustdesk and does NOT register that dir with ld.so.
-        const LIB_NAMES: [&str; 3] = [
-            "/usr/lib/rustdesk/libdrmtap.so.0",
-            "libdrmtap.so.0",
-            "libdrmtap.so",
-        ];
+        const INSTALLED: &str = "/usr/lib/rustdesk/libdrmtap.so.0";
+        // Bare sonames exist so an unpackaged development build can load a locally built .so from
+        // the normal ld.so search path. They are NOT offered when running as root: this is the one
+        // place where which file happens to be on the load path decides what gets mapped into the
+        // CAP_SYS_ADMIN process, and the packaged service always finds the absolute path first
+        // anyway. A root process that reaches the fallback has no bundled library, which is the
+        // PipeWire-fallback case, not a reason to search.
+        const DEV_ONLY: [&str; 2] = ["libdrmtap.so.0", "libdrmtap.so"];
+        let is_root = unsafe { hbb_common::libc::geteuid() } == 0;
+        let candidates: Vec<&str> = if is_root {
+            vec![INSTALLED]
+        } else {
+            std::iter::once(INSTALLED).chain(DEV_ONLY).collect()
+        };
         unsafe {
-            let (lib, name) = LIB_NAMES
+            let (lib, name) = candidates
                 .iter()
-                .find_map(|n| Library::new(n).ok().map(|l| (l, *n)))?;
+                .find_map(|n| Library::new(*n).ok().map(|l| (l, *n)))?;
             // Canonicalize the absolute candidate only: `dlopen` does not search the CWD for a bare
             // soname, while `canonicalize` resolves a relative name against it.
             let real = std::path::Path::new(name)
@@ -330,12 +339,36 @@ mod tests {
 
     #[test]
     fn abi_gate_rejects_a_library_from_before_the_split() {
-        // 0.4.9 is in the list on purpose: it has the convert half of the split, not the export half.
+        // These are refused because their MINOR differs from the verified one, which is the only
+        // reason the gate needs. Naming the pre-split releases keeps the intent readable, but do
+        // not read this as the floor doing the work: see the test below.
         for (minor, patch) in [(3, 3), (4, 0), (4, 8), (4, 9)] {
             assert!(
                 !abi_accepted(DRMTAP_ABI_MAJOR, minor, patch),
-                "v0.{minor}.{patch} predates the split-capture API and must be refused"
+                "v0.{minor}.{patch} is not the verified minor and must be refused"
             );
+        }
+    }
+
+    #[test]
+    fn the_patch_floor_is_currently_vacuous_and_that_is_deliberate() {
+        // With MIN_MINOR_PATCH.0 == DRMTAP_ABI_MINOR the floor can never reject anything: the
+        // minor equality already forces `(minor, patch) >= (minor, 0)`. It is kept because it is
+        // the mechanism that WOULD do the work the next time a floor lands mid-minor, as (4, 10)
+        // did for the split API. This test exists so nobody reads the pre-split test above as
+        // evidence that the floor is live -- if that ever matters, this assert is the tripwire.
+        let (floor_minor, floor_patch) = DRMTAP_MIN_MINOR_PATCH;
+        assert_eq!(
+            floor_minor, DRMTAP_ABI_MINOR,
+            "the floor is inside the verified minor; a floor in a DIFFERENT minor is unreachable"
+        );
+        if floor_patch == 0 {
+            assert!(
+                abi_accepted(DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, 0),
+                "patch 0 of the verified minor must be accepted while the floor is 0"
+            );
+        } else {
+            assert!(!abi_accepted(DRMTAP_ABI_MAJOR, DRMTAP_ABI_MINOR, floor_patch - 1));
         }
     }
 

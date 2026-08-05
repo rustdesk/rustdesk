@@ -289,6 +289,24 @@ def external_resources(flutter, args, res_dir):
                 shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
 
 
+def linux_packaging_branch():
+    """Which packaging path `main()` will take on THIS host.
+
+    MUST mirror the elif chain in main() (pacman / yum / zypper / else), and exists so `--drm` can
+    refuse a branch that is not drm-aware instead of silently producing a stock-named package with
+    the capture backend compiled in. Only the final `deb` branch reaches `build_flutter_deb`, which
+    is what bundles libdrmtap, renames the package, adds Conflicts/Provides and asserts the staged
+    binary really is a drm build.
+    """
+    if os.path.isfile('/usr/bin/pacman'):
+        return 'pacman'
+    if os.path.isfile('/usr/bin/yum'):
+        return 'yum'
+    if os.path.isfile('/usr/bin/zypper'):
+        return 'zypper'
+    return 'deb'
+
+
 def get_features(args):
     features = ['inline'] if not args.flutter else []
     if args.hwcodec:
@@ -305,6 +323,17 @@ def get_features(args):
         # DRM build without being one.
         if windows or osx:
             raise Exception('--drm is Linux only')
+        # And only on the deb branch. The other three Linux paths (pacman/yum/zypper) package
+        # straight from `target/release` without bundling libdrmtap, without the rename, without
+        # Conflicts/Provides and without assert_staged_binary_is_drm() -- so they would emit a
+        # package NAMED `rustdesk` carrying the consent-bypass backend and the root-side uinput
+        # injection. The separate package name is the informed consent this feature rests on (see
+        # docs/DRM_CAPTURE_SECURITY.md), so refuse rather than ship a stock-named build of it.
+        branch = linux_packaging_branch()
+        if branch != 'deb':
+            raise Exception(
+                f'--drm is only supported on the deb packaging path; this host would package via '
+                f'{branch}, which cannot bundle libdrmtap or name the package distinctly')
         features.append('drm')
         # The display wake is its own compile gate on top of `drm`, and the unattended package is
         # exactly where it belongs: that variant exists to reach a machine nobody is sitting at,
@@ -789,7 +818,7 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
             # without a word.
             _assert_so_has_egl(so)
             stage_libdrmtap_into_deb(so)
-            system2(f'rm -f {so}')
+            system2(f'rm -f "{so}"')
             system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
         else:
             # Build it here, exactly as the flutter deb path does (build_libdrmtap_so asserts the

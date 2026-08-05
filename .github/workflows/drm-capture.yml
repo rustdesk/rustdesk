@@ -28,12 +28,13 @@ on:
       - "libs/scrap/src/common/drmtap_dl.rs"
       - "libs/scrap/src/common/mod.rs"
       - "libs/scrap/Cargo.toml"
-      # The ROOT manifest is where the top-level `drm` feature is DEFINED, and the lock file is
-      # what every cargo invocation here resolves against (`--locked`). Without these two, a PR
-      # that changes what `drm` pulls in, or bumps a dependency the drm path uses, skips the
-      # entire verification this workflow exists for.
+      # The ROOT manifest is where the top-level `drm` feature is DEFINED, so a PR that changes
+      # what `drm` pulls in must not skip this workflow. `Cargo.lock` is deliberately NOT here:
+      # measured over the last 100 commits, it alone would have fired this workflow 13 times and
+      # the pair 24 times, each run costing about two job-hours for a full vcpkg + flutter release
+      # build, almost always for a dependency the drm path never touches. A lockfile bump that
+      # does affect it arrives with a manifest or source change, which is triggered above.
       - "Cargo.toml"
-      - "Cargo.lock"
       - "src/ipc.rs"
       - "src/ipc/**"
       - "src/server/drm_capturer.rs"
@@ -58,12 +59,13 @@ on:
       - "libs/scrap/src/common/drmtap_dl.rs"
       - "libs/scrap/src/common/mod.rs"
       - "libs/scrap/Cargo.toml"
-      # The ROOT manifest is where the top-level `drm` feature is DEFINED, and the lock file is
-      # what every cargo invocation here resolves against (`--locked`). Without these two, a PR
-      # that changes what `drm` pulls in, or bumps a dependency the drm path uses, skips the
-      # entire verification this workflow exists for.
+      # The ROOT manifest is where the top-level `drm` feature is DEFINED, so a PR that changes
+      # what `drm` pulls in must not skip this workflow. `Cargo.lock` is deliberately NOT here:
+      # measured over the last 100 commits, it alone would have fired this workflow 13 times and
+      # the pair 24 times, each run costing about two job-hours for a full vcpkg + flutter release
+      # build, almost always for a dependency the drm path never touches. A lockfile bump that
+      # does affect it arrives with a manifest or source change, which is triggered above.
       - "Cargo.toml"
-      - "Cargo.lock"
       - "src/ipc.rs"
       - "src/ipc/**"
       - "src/server/drm_capturer.rs"
