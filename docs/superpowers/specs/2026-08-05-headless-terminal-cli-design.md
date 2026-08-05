@@ -1,7 +1,7 @@
 # RDH Headless Terminal CLI Design
 
 Date: 2026-08-05
-Status: Approved in conversation; awaiting written-spec review
+Status: Approved by the user on 2026-08-05
 
 ## Objective
 
