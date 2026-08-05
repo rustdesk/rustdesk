@@ -101,6 +101,13 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 
 /// FFI for rustdesk core's main entry.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
+#[cfg(target_os = "macos")]
+#[no_mangle]
+pub extern "C" fn rustdesk_headless_terminal_is_requested() -> bool {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    crate::headless_terminal::is_requested(&args)
+}
+
 #[cfg(not(windows))]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {

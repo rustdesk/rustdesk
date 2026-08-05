@@ -156,6 +156,11 @@ jobs:
           codesign --verify --deep --strict --verbose=4 "$APP"
           rm -f "$ENTITLEMENTS"
 
+      - name: Test macOS headless launcher before AppKit
+        run: |
+          python3 tests/test_macos_headless_launcher.py \
+            ./flutter/build/macos/Build/Products/Release/RustDesk-Herbin.app
+
       - name: Create ad-hoc DMG
         run: |
           CREATE_DMG="$(command -v create-dmg)"
