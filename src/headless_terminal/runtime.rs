@@ -213,7 +213,7 @@ trait RuntimeBackend {
     fn write_stdout(&mut self, data: &[u8]) -> Result<(), HeadlessTerminalError>;
     fn write_stderr(&mut self, message: &str);
     fn prompt_secret(&mut self) -> Result<Option<String>, HeadlessTerminalError>;
-    fn prompt_confirmation(&mut self) -> Result<bool, HeadlessTerminalError>;
+    fn prompt_confirmation(&mut self) -> Result<Option<bool>, HeadlessTerminalError>;
     fn prompt_line(&mut self) -> Result<Option<String>, HeadlessTerminalError>;
     fn login(&mut self, password: String, remember: bool);
     fn send_two_factor(&mut self, code: String);
@@ -394,7 +394,12 @@ impl RuntimeCoordinator {
                         "password prompt reached EOF".to_owned(),
                     ));
                 };
-                let remember = backend.prompt_confirmation()?;
+                let Some(remember) = backend.prompt_confirmation()? else {
+                    backend.session_action(SessionAction::CloseTransport);
+                    return Err(HeadlessTerminalError::Authentication(
+                        "confirmation prompt reached EOF".to_owned(),
+                    ));
+                };
                 backend.login(password, remember);
                 self.password_submission_pending = true;
             }
@@ -602,7 +607,7 @@ impl RuntimeBackend for SystemRuntimeBackend {
         prompt_secret("Password: ").map_err(|error| HeadlessTerminalError::Tty(error.to_string()))
     }
 
-    fn prompt_confirmation(&mut self) -> Result<bool, HeadlessTerminalError> {
+    fn prompt_confirmation(&mut self) -> Result<Option<bool>, HeadlessTerminalError> {
         prompt_confirmation("Save password for this peer? [y/N] ")
             .map_err(|error| HeadlessTerminalError::Tty(error.to_string()))
     }
@@ -768,7 +773,7 @@ mod tests {
     struct FakeRuntimeBackend {
         sizes: VecDeque<Result<TtySize, HeadlessTerminalError>>,
         secrets: VecDeque<Option<String>>,
-        confirmations: VecDeque<bool>,
+        confirmations: VecDeque<Option<bool>>,
         lines: VecDeque<Option<String>>,
         observations: Vec<Observation>,
     }
@@ -825,9 +830,9 @@ mod tests {
             Ok(self.secrets.pop_front().flatten())
         }
 
-        fn prompt_confirmation(&mut self) -> Result<bool, HeadlessTerminalError> {
+        fn prompt_confirmation(&mut self) -> Result<Option<bool>, HeadlessTerminalError> {
             self.observations.push(Observation::PromptRemember);
-            Ok(self.confirmations.pop_front().unwrap_or(false))
+            Ok(self.confirmations.pop_front().unwrap_or(Some(false)))
         }
 
         fn prompt_line(&mut self) -> Result<Option<String>, HeadlessTerminalError> {
@@ -1324,7 +1329,7 @@ mod tests {
             Some("first-password".to_owned()),
             Some("retry-password".to_owned()),
         ]);
-        backend.confirmations = VecDeque::from([true, false]);
+        backend.confirmations = VecDeque::from([Some(true), Some(false)]);
         let first =
             RuntimeEvent::Remote(HeadlessEvent::Auth(AuthPrompt::Password { retry: false }));
         let duplicate = first.clone();
@@ -1403,6 +1408,34 @@ mod tests {
             backend.observations.as_slice(),
             [
                 Observation::PromptSecret,
+                Observation::Session(SessionAction::CloseTransport),
+                Observation::RestoreTty,
+                Observation::Stderr(_),
+                Observation::Exit(4)
+            ]
+        ));
+    }
+
+    #[test]
+    fn confirmation_prompt_eof_closes_transport_before_status_four() {
+        let mut coordinator = RuntimeCoordinator::new(false);
+        let mut backend = FakeRuntimeBackend::new();
+        backend.secrets = VecDeque::from([Some("password".to_owned())]);
+        backend.confirmations = VecDeque::from([None]);
+
+        assert_eq!(
+            handle_and_record_exit(
+                &mut coordinator,
+                &mut backend,
+                RuntimeEvent::Remote(HeadlessEvent::Auth(AuthPrompt::Password { retry: false })),
+            ),
+            Some(4)
+        );
+        assert!(matches!(
+            backend.observations.as_slice(),
+            [
+                Observation::PromptSecret,
+                Observation::PromptRemember,
                 Observation::Session(SessionAction::CloseTransport),
                 Observation::RestoreTty,
                 Observation::Stderr(_),

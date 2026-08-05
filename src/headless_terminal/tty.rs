@@ -215,8 +215,8 @@ fn secret_from_line(line: Option<String>) -> Option<String> {
     line.filter(|line| line.as_bytes() != [DETACH_BYTE].as_slice())
 }
 
-fn confirmation_from_line(line: Option<&str>) -> bool {
-    matches!(line, Some(value) if value.eq_ignore_ascii_case("y") || value.eq_ignore_ascii_case("yes"))
+fn confirmation_from_line(line: Option<&str>) -> Option<bool> {
+    line.map(|value| value.eq_ignore_ascii_case("y") || value.eq_ignore_ascii_case("yes"))
 }
 
 fn read_prompt_line(prompt: &str) -> io::Result<Option<String>> {
@@ -253,7 +253,7 @@ pub(crate) fn prompt_secret(prompt: &str) -> io::Result<Option<String>> {
     Ok(secret_from_line(line))
 }
 
-pub(crate) fn prompt_confirmation(prompt: &str) -> io::Result<bool> {
+pub(crate) fn prompt_confirmation(prompt: &str) -> io::Result<Option<bool>> {
     let line = prompt_line(prompt)?;
     Ok(confirmation_from_line(line.as_deref()))
 }
@@ -453,13 +453,13 @@ mod tests {
     }
 
     #[test]
-    fn confirmation_accepts_only_y_or_yes_case_insensitively() {
-        assert!(confirmation_from_line(Some("y")));
-        assert!(confirmation_from_line(Some("YES")));
-        assert!(!confirmation_from_line(Some(" yes ")));
-        assert!(!confirmation_from_line(Some("yeah")));
-        assert!(!confirmation_from_line(Some("")));
-        assert!(!confirmation_from_line(None));
+    fn confirmation_preserves_explicit_no_and_eof() {
+        assert_eq!(confirmation_from_line(Some("y")), Some(true));
+        assert_eq!(confirmation_from_line(Some("YES")), Some(true));
+        assert_eq!(confirmation_from_line(Some(" yes ")), Some(false));
+        assert_eq!(confirmation_from_line(Some("yeah")), Some(false));
+        assert_eq!(confirmation_from_line(Some("")), Some(false));
+        assert_eq!(confirmation_from_line(None), None);
     }
 
     #[test]
