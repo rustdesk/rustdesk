@@ -1070,6 +1070,7 @@ impl Client {
                                     &key,
                                     &token,
                                     conn_type,
+                                    &interface.get_switch_code(),
                                 )
                                 .await
                                 .map_err(|relay_e| {
@@ -1405,6 +1406,7 @@ impl Client {
                     key,
                     token,
                     conn_type,
+                    &interface.get_switch_code(),
                 )
                 .await
                 {
