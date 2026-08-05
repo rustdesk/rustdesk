@@ -2552,7 +2552,7 @@ static BOOL wf_cliprdr_traverse_directory(wfClipboard *clipboard, WCHAR *Dir, si
 {
 	HANDLE hFind;
 	WCHAR DirSpec[MAX_PATH];
-	WIN32_FIND_DATA FindFileData;
+	WIN32_FIND_DATAW FindFileData;
 
 	if (!clipboard || !Dir)
 		return FALSE;
