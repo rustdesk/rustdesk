@@ -763,24 +763,6 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.12.1",
- "proc-macro2 1.0.93",
- "quote 1.0.36",
- "regex",
- "rustc-hash 2.1.1",
- "shlex",
- "syn 2.0.98",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.72.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
-dependencies = [
- "bitflags 2.9.1",
- "cexpr",
- "clang-sys",
- "itertools 0.12.1",
  "log",
  "prettyplease",
  "proc-macro2 1.0.93",
