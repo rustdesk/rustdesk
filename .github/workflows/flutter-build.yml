@@ -405,6 +405,11 @@ jobs:
         # it also names payload that must never be renamed, such as librustdesk.dll
         # and drivers\RustDeskPrinterDriver.
         #
+        # --template also puts the files a custom client replaces in their own
+        # cabinet, so rebranding rebuilds a few hundred KB rather than recompressing
+        # the whole payload. The shipped msi above is built without it and is
+        # unaffected.
+        #
         # Building the arm64 template on the native arm64 runner is what makes ARM
         # custom clients possible at all: the build agents are x64 and cannot run
         # preprocess.py against an ARM exe.
@@ -413,8 +418,18 @@ jobs:
           git checkout -- res/msi
           cp -r ./rustdesk ./rustdesk-msi-template
           mv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe
+          # A stock build ships none of the files a custom client replaces, so the
+          # template needs a placeholder for each to have a File row to patch. The
+          # branding assets install only when the patcher says the customer supplied
+          # one, so an unused placeholder is never installed.
+          Set-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline
+          $assets = './rustdesk-msi-template/data/flutter_assets/assets'
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          foreach ($a in 'icon.ico','icon.png','logo.png','logo_light.png','logo_dark.png') {
+            Set-Content -Path "$assets/$a" -Value 'placeholder' -NoNewline
+          }
           pushd ./res/msi
-          python preprocess.py --arp -d ../../rustdesk-msi-template --app-name RDAPPNAM
+          python preprocess.py --arp --template -d ../../rustdesk-msi-template --app-name RDAPPNAM
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
