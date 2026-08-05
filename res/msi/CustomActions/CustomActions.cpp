@@ -1022,6 +1022,7 @@ UINT __stdcall InstallPrinter(
 
     int nResult = 0;
     LPWSTR installFolder = NULL;
+    LPWSTR appName = NULL;
     LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
 
@@ -1035,11 +1036,21 @@ UINT __stdcall InstallPrinter(
     hr = WcaReadStringFromCaData(&pwz, &installFolder);
     ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
 
+    // Names the printer. Optional, so that a package built before this was passed in
+    // still installs, keeping the stock printer name.
+    if (FAILED(WcaReadStringFromCaData(&pwz, &appName)))
+    {
+        ReleaseNullStr(appName);
+    }
+
     WcaLog(LOGMSG_STANDARD, "Try to install RD printer in : %ls", installFolder);
-    RemotePrinter::installUpdatePrinter(installFolder);
+    RemotePrinter::installUpdatePrinter(installFolder, appName ? appName : L"");
     WcaLog(LOGMSG_STANDARD, "Install RD printer done");
 
 LExit:
+    if (appName) {
+        ReleaseStr(appName);
+    }
     if (pwzData) {
         ReleaseStr(pwzData);
     }
@@ -1054,14 +1065,36 @@ UINT __stdcall UninstallPrinter(
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
+    LPWSTR appName = NULL;
+    LPWSTR pwz = NULL;
+    LPWSTR pwzData = NULL;
+
     hr = WcaInitialize(hInstall, "UninstallPrinter");
     ExitOnFailure(hr, "Failed to initialize");
 
+    // Must match the name install used, otherwise the printer is left behind. Absent
+    // on packages built before this was passed in, where it was the stock name.
+    if (SUCCEEDED(WcaGetProperty(L"CustomActionData", &pwzData)))
+    {
+        pwz = pwzData;
+        if (FAILED(WcaReadStringFromCaData(&pwz, &appName)))
+        {
+            ReleaseNullStr(appName);
+        }
+    }
+
     WcaLog(LOGMSG_STANDARD, "Try to uninstall RD printer");
-    RemotePrinter::uninstallPrinter();
+    RemotePrinter::uninstallPrinter(appName ? appName : L"");
     WcaLog(LOGMSG_STANDARD, "Uninstall RD printer done");
 
 LExit:
+    if (appName) {
+        ReleaseStr(appName);
+    }
+    if (pwzData) {
+        ReleaseStr(pwzData);
+    }
+
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }
