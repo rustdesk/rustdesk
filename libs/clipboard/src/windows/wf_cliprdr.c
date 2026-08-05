@@ -1389,11 +1389,13 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Next(IEnumFORMATETC *This,
 {
 	HRESULT result = S_OK;
 	ULONG copied = 0;
+	LONG start_index;
 	CliprdrEnumFORMATETC *instance = (CliprdrEnumFORMATETC *)This;
 
 	if (!instance || !celt || !rgelt)
 		return E_INVALIDARG;
 
+	start_index = instance->m_nIndex;
 	while ((instance->m_nIndex < instance->m_nNumFormats) && (copied < celt))
 	{
 		result = cliprdr_format_deep_copy(&rgelt[copied],
@@ -1404,11 +1406,25 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Next(IEnumFORMATETC *This,
 		instance->m_nIndex++;
 	}
 
+	if (FAILED(result))
+	{
+		while (copied > 0)
+		{
+			copied--;
+			if (rgelt[copied].ptd)
+			{
+				CoTaskMemFree(rgelt[copied].ptd);
+				rgelt[copied].ptd = NULL;
+			}
+		}
+		instance->m_nIndex = start_index;
+		if (pceltFetched != 0)
+			*pceltFetched = 0;
+		return result;
+	}
+
 	if (pceltFetched != 0)
 		*pceltFetched = copied;
-
-	if (FAILED(result))
-		return result;
 
 	return (copied == celt) ? S_OK : E_FAIL;
 }
@@ -1462,7 +1478,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrEnumFORMATETC_Clone(IEnumFORMATETC *This
 	return S_OK;
 }
 
-HRESULT CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc,
+static HRESULT CliprdrEnumFORMATETC_New(ULONG nFormats, FORMATETC *pFormatEtc,
 									CliprdrEnumFORMATETC **ppInstance)
 {
 	ULONG i;
@@ -3475,12 +3491,11 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 			dlibMove.LowPart = fileContentsRequest->nPositionLow;
 			hRet = IStream_Seek(pStreamStc, dlibMove, STREAM_SEEK_SET, &dlibNewPosition);
 
-			if (SUCCEEDED(hRet))
-			{
-				hRet = IStream_Read(pStreamStc, pData, cbRequested, (PULONG)&uSize);
-				if (uSize > cbRequested)
-					goto exit;
-			}
+			if (FAILED(hRet))
+				goto exit;
+			hRet = IStream_Read(pStreamStc, pData, cbRequested, (PULONG)&uSize);
+			if (FAILED(hRet) || uSize > cbRequested)
+				goto exit;
 		}
 	}
 	else
