@@ -10,6 +10,10 @@ use hbb_common::{config, log};
 #[cfg(windows)]
 use tauri_winrt_notification::{Duration, Sound, Toast};
 
+fn should_dispatch_flutter_connection(args: &[String], requested: bool) -> bool {
+    requested && !crate::headless_terminal::is_requested(args)
+}
+
 #[macro_export]
 macro_rules! my_println{
     ($($arg:tt)*) => {
@@ -117,7 +121,7 @@ pub fn core_main() -> Option<Vec<String>> {
         hbb_common::platform::windows::start_cpu_performance_monitor();
     }
     #[cfg(feature = "flutter")]
-    if _is_flutter_invoke_new_connection {
+    if should_dispatch_flutter_connection(&args, _is_flutter_invoke_new_connection) {
         return core_main_invoke_new_connection(std::env::args());
     }
     let click_setup = cfg!(windows) && args.is_empty() && crate::common::is_setup(&arg_exe);
@@ -160,6 +164,14 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+
+    if crate::headless_terminal::is_requested(&args) {
+        let exit_code = crate::headless_terminal::run_cli(&args);
+        if exit_code != 0 {
+            std::process::exit(exit_code);
+        }
+        return None;
+    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]
@@ -1017,6 +1029,33 @@ mod tests {
             &args(&["--connect"]),
             true
         ));
+    }
+
+    #[test]
+    fn headless_terminal_is_not_dispatched_to_flutter() {
+        assert!(should_dispatch_flutter_connection(
+            &args(&["--terminal", "175116438"]),
+            true
+        ));
+        assert!(!should_dispatch_flutter_connection(
+            &args(&["--terminal", "--headless", "175116438"]),
+            true
+        ));
+        assert!(!should_dispatch_flutter_connection(
+            &args(&["--terminal", "175116438", "--headless"]),
+            true
+        ));
+    }
+
+    #[test]
+    fn terminal_admin_headless_is_claimed_for_a_usage_error() {
+        let command = args(&["--terminal-admin", "--headless", "175116438"]);
+        assert!(crate::headless_terminal::is_requested(&command));
+        assert!(matches!(
+            crate::headless_terminal::classify(&command, true),
+            crate::headless_terminal::HeadlessTerminalDispatch::Invalid(_)
+        ));
+        assert!(!should_dispatch_flutter_connection(&command, true));
     }
 }
 
