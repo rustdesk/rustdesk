@@ -30,6 +30,47 @@ preprocessing and must not add file watching or private window APIs.
 
 Custom keyboard mapping and high-volume mouse diagnostics must remain absent.
 
+## Headless terminal CLI
+
+On macOS, run an interactive remote terminal without opening Flutter or creating
+a window:
+
+```bash
+/Applications/RustDesk-Herbin.app/Contents/MacOS/RustDesk-Herbin \
+  --terminal --headless 175116438
+```
+
+The peer ID is required. Add `--relay` to force relay transport. Add
+`--persistent` to detach without closing the remote terminal service, so a later
+headless connection can reuse it; the CLI does not reconnect automatically.
+Press `Ctrl+]` to detach. Without `--persistent`, detaching also closes the
+remote terminal. A normal remote `exit` always closes it.
+
+Both stdin and stdout must be interactive TTYs; Terminal.app and Codex PTY
+sessions satisfy this requirement. Pipe mode is not supported. Remote terminal
+bytes are written only to stdout. Local prompts, connection diagnostics, and
+usage errors are written only to stderr.
+
+The command uses the existing saved peer credentials. When no usable stored
+credential is available, it prompts securely with echo disabled and asks whether
+to save the successfully derived peer credential. Supplying a password on the
+command line is forbidden: `--password` is rejected as a usage error. Ordinary
+`--terminal <peer-id>` without `--headless` keeps the upstream behavior and opens
+the Flutter terminal window.
+
+The exit statuses are:
+
+- `0`: clean remote shell exit or intentional local detach;
+- `1`: an unrepresentable or otherwise non-zero remote exit status outside the
+  pass-through range;
+- `2`: command-line usage error, including `--password`;
+- `3`: missing stdin/stdout TTY prerequisite;
+- `4`: authentication cancellation or unrecoverable authentication failure;
+- `5`: connection, transport, or terminal protocol failure.
+
+A representable remote exit status from `1` through `125` is returned unchanged;
+therefore a remote command may also produce a numeric status in that range.
+
 ## Built-in memory recovery
 
 RDH does not need a Codex or cron automation to recover its leaking user server.

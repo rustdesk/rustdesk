@@ -404,6 +404,11 @@ def main() -> None:
     flutter_rs = read("src/flutter.rs")
     flutter_ffi_rs = read("src/flutter_ffi.rs")
     lib_rs = read("src/lib.rs")
+    headless_root_rs = read("src/headless_terminal.rs")
+    headless_args_rs = read("src/headless_terminal/args.rs")
+    headless_tty_rs = read("src/headless_terminal/tty.rs")
+    headless_handler_rs = read("src/headless_terminal/handler.rs")
+    headless_runtime_rs = read("src/headless_terminal/runtime.rs")
     service_rs = read("src/service.rs")
     keyboard_rs = read("src/keyboard.rs")
     input_service_rs = read("src/server/input_service.rs")
@@ -452,6 +457,29 @@ def main() -> None:
     assert "crate::common::apply_fork_identity();" in flutter_rs
     assert "crate::common::apply_fork_identity();" in flutter_ffi_rs
     assert "crate::common::apply_fork_identity();" in service_rs
+
+    assert 'mod headless_terminal;' in lib_rs
+    assert '"--headless"' in headless_args_rs
+    assert '"--persistent"' in headless_args_rs
+    assert '"--password"' in headless_args_rs
+    assert "send_terminal_input_bytes" in headless_runtime_rs
+    assert "LocalTtyGuard" in headless_tty_rs
+    assert "SignalKind::window_change" in headless_tty_rs
+    assert "HeadlessTerminalHandler" in headless_handler_rs
+    assert "core_main_invoke_new_connection" in core_main_rs
+    assert "terminal_persistent" in headless_runtime_rs
+    assert "toggle_option" not in headless_runtime_rs
+    assert "PeerConfig::store" not in headless_runtime_rs
+    assert_in_order(
+        core_main_rs,
+        "should_dispatch_flutter_connection(&args",
+        "core_main_invoke_new_connection",
+    )
+    assert_in_order(
+        core_main_rs,
+        "hbb_common::init_log",
+        "headless_terminal::run_cli(&args)",
+    )
 
     assert "if is_custom_client() {\n        return;\n    }" in common_rs
 
@@ -601,6 +629,7 @@ def main() -> None:
     assert "ref: ${{ inputs.source_ref }}" in macos_workflow
     assert "RDH_REVISION" in macos_workflow
     assert "shasum -a 256" in macos_workflow
+    assert "cargo test --locked --lib headless_terminal" in macos_workflow
 
 
 if __name__ == "__main__":

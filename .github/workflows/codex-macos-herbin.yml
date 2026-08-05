@@ -115,6 +115,13 @@ jobs:
             exit 1
           fi
 
+      - name: Test RDH headless terminal CLI
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=10.14 \
+            cargo test --locked --lib headless_terminal \
+              --features flutter,hwcodec,unix-file-copy-paste,screencapturekit \
+              -- --nocapture
+
       - name: Build RustDesk-Herbin for macOS
         run: |
           MIN_MACOS_VERSION="12.3"
