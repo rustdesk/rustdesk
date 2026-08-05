@@ -75,6 +75,15 @@ class _FileManagerPageState extends State<FileManagerPage> {
   DirectoryOptions get currentOptions => currentFileController.options.value;
   final _uniqueKey = UniqueKey();
 
+  Future<T> _runAndroidDocumentPicker<T>(Future<T> Function() action) async {
+    gFFI.ffiModel.beginAndroidDocumentPicker();
+    try {
+      return await action();
+    } finally {
+      gFFI.ffiModel.endAndroidDocumentPicker();
+    }
+  }
+
   Future<void> _importFiles() async {
     var imported = 0;
     var failed = false;
@@ -82,8 +91,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final importDirectory = currentDir.path;
     final importIsWindows = currentOptions.isWindows;
     try {
-      final selectedFiles = await gFFI.invokeMethodWithResult<List<dynamic>>(
-          AndroidChannel.kPickImportFiles);
+      final selectedFiles = await _runAndroidDocumentPicker(() =>
+          gFFI.invokeMethodWithResult<List<dynamic>>(
+              AndroidChannel.kPickImportFiles));
       if (selectedFiles == null || selectedFiles.isEmpty) return;
 
       for (final selected in selectedFiles) {
@@ -134,13 +144,102 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   Future<void> _exportFile(Entry entry) async {
     try {
-      final exported = await gFFI
-          .invokeMethod(AndroidChannel.kExportFile, {'path': entry.path});
+      final exported = await _runAndroidDocumentPicker(() => gFFI
+          .invokeMethod(AndroidChannel.kExportFile, {'path': entry.path}));
       if (exported == true) {
         showToast(translate('Successful'));
       }
     } catch (e) {
       debugPrint('Failed to export ${entry.name}: $e');
+      showToast(translate('Failed'));
+    }
+  }
+
+  Future<void> _importFolder() async {
+    final importController = currentFileController;
+    final importDirectory = currentDir.path;
+    final importIsWindows = currentOptions.isWindows;
+    try {
+      final picked = await _runAndroidDocumentPicker(() =>
+          gFFI.invokeMethodWithResult<Map<dynamic, dynamic>>(
+              AndroidChannel.kPickImportDirectory));
+      if (picked == null || picked.isEmpty) return;
+      final uri = picked['uri'] as String?;
+      final name =
+          (picked['name'] as String?)?.replaceAll('\\', '/').split('/').last;
+      if (uri == null ||
+          name == null ||
+          !PathUtil.validName(name, importIsWindows)) {
+        showToast(translate('Failed'));
+        return;
+      }
+      final destination = PathUtil.join(importDirectory, name, importIsWindows);
+      final destinationType = await FileSystemEntity.type(destination);
+      var overwrite = false;
+      if (destinationType == FileSystemEntityType.directory) {
+        final overwriteResult = await model.showFileConfirmDialog(
+            translate('Overwrite'), destination, false, false);
+        if (overwriteResult == false) return;
+        if (overwriteResult != true) {
+          showToast(translate('Failed'));
+          return;
+        }
+        overwrite = true;
+      } else if (destinationType != FileSystemEntityType.notFound) {
+        showToast(translate('Failed'));
+        return;
+      }
+      final success = await gFFI.invokeMethod(AndroidChannel.kImportDirectory,
+          {'uri': uri, 'path': destination, 'overwrite': overwrite});
+      if (success == true) {
+        showToast(translate('Successful'));
+      } else {
+        showToast(translate('Failed'));
+      }
+    } catch (e) {
+      debugPrint('Failed to import folder: $e');
+      showToast(translate('Failed'));
+    }
+    await importController.refresh();
+  }
+
+  Future<void> _exportItems(SelectedItems items) async {
+    await _exportPaths(items.items.map((e) => e.path));
+  }
+
+  Future<void> _exportLogs() async {
+    final home = currentFileController.homePath;
+    if (home.isEmpty) {
+      showToast(translate('Failed'));
+      return;
+    }
+    final rustDeskDir = PathUtil.join(home, 'RustDesk', false);
+    final paths = [
+      PathUtil.join(rustDeskDir, 'Logs', false),
+      PathUtil.join(rustDeskDir, 'ScreenRecord', false),
+    ].where((p) => File(p).existsSync() || Directory(p).existsSync()).toList();
+    if (paths.isEmpty) {
+      showToast(translate('Failed'));
+      return;
+    }
+    await _exportPaths(paths);
+  }
+
+  Future<void> _exportPaths(Iterable<String> paths) async {
+    try {
+      final result = await _runAndroidDocumentPicker(() =>
+          gFFI.invokeMethodWithResult<Map<dynamic, dynamic>>(
+              AndroidChannel.kExportFiles, {'paths': paths.toList()}));
+      if (result == null) return;
+      final exported = result['exported'] as int? ?? 0;
+      final failed = result['failed'] as int? ?? 0;
+      if (failed > 0) {
+        showToast(translate('Failed'));
+      } else if (exported > 0) {
+        showToast(translate('Successful'));
+      }
+    } catch (e) {
+      debugPrint('Failed to export paths: $e');
       showToast(translate('Failed'));
     }
   }
@@ -244,6 +343,32 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           ],
                         ),
                       ),
+                    if (isAndroid)
+                      PopupMenuItem(
+                        enabled: showLocal && currentDir.path.isNotEmpty,
+                        value: "import_folder",
+                        child: Row(
+                          children: [
+                            Icon(Icons.create_new_folder_outlined,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text(translate("Import Folder"))
+                          ],
+                        ),
+                      ),
+                    if (isAndroid)
+                      PopupMenuItem(
+                        enabled: showLocal && currentDir.path.isNotEmpty,
+                        value: "export_logs",
+                        child: Row(
+                          children: [
+                            Icon(Icons.article_outlined,
+                                color: Theme.of(context).iconTheme.color),
+                            SizedBox(width: 5),
+                            Text(translate("Export Logs"))
+                          ],
+                        ),
+                      ),
                     PopupMenuItem(
                       enabled: currentDir.path != "/",
                       child: Row(
@@ -290,6 +415,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     currentFileController.refresh();
                   } else if (v == "import") {
                     _importFiles();
+                  } else if (v == "import_folder") {
+                    _importFolder();
+                  } else if (v == "export_logs") {
+                    _exportLogs();
                   } else if (v == "select") {
                     model.localController.selectedItems.clear();
                     model.remoteController.selectedItems.clear();
@@ -389,13 +518,22 @@ class _FileManagerPageState extends State<FileManagerPage> {
               actions: [
                 if (isAndroid &&
                     selectedItems?.isLocal == true &&
-                    selectedItems?.items.length == 1 &&
-                    selectedItems?.items.single.isFile == true)
-                  IconButton(
-                    tooltip: translate("Save as"),
-                    icon: Icon(Icons.save_alt),
-                    onPressed: () => _exportFile(selectedItems!.items.single),
-                  ),
+                    selectedItems?.items.isNotEmpty == true) ...[
+                  if (selectedItems!.items.length == 1 &&
+                      selectedItems!.items.single.isFile)
+                    IconButton(
+                      tooltip: translate("Save as"),
+                      icon: Icon(Icons.save_alt),
+                      onPressed: () =>
+                          _exportFile(selectedItems!.items.single),
+                    )
+                  else
+                    IconButton(
+                      tooltip: translate("Export"),
+                      icon: Icon(Icons.drive_folder_upload),
+                      onPressed: () => _exportItems(selectedItems!),
+                    ),
+                ],
                 IconButton(
                   icon: Icon(Icons.compare_arrows),
                   onPressed: () => setState(() => showLocal = !showLocal),

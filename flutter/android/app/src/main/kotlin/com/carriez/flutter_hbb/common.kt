@@ -40,6 +40,8 @@ const val REQ_INVOKE_PERMISSION_ACTIVITY_MEDIA_PROJECTION = 101
 const val REQ_REQUEST_MEDIA_PROJECTION = 201
 const val REQ_EXPORT_FILE = 301
 const val REQ_IMPORT_FILES = 302
+const val REQ_IMPORT_DIRECTORY = 303
+const val REQ_EXPORT_FILES = 304
 
 // Activity responseCode
 const val RES_FAILED = -100
@@ -52,6 +54,9 @@ const val SYNC_APP_DIR_CONFIG_PATH = "sync_app_dir"
 const val PICK_IMPORT_FILES = "pick_import_files"
 const val IMPORT_FILE = "import_file"
 const val EXPORT_FILE = "export_file"
+const val PICK_IMPORT_DIRECTORY = "pick_import_directory"
+const val IMPORT_DIRECTORY = "import_directory"
+const val EXPORT_FILES = "export_files"
 const val GET_VALUE = "get_value"
 
 const val KEY_IS_SUPPORT_VOICE_CALL = "KEY_IS_SUPPORT_VOICE_CALL"
