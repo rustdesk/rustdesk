@@ -1294,7 +1294,11 @@ impl<T: InvokeUiSession> Session<T> {
 
         // override only if true
         if true == force_relay {
-            self.lc.write().unwrap().force_relay = true;
+            let mut lc = self.lc.write().unwrap();
+            lc.force_relay = true;
+            // An explicit retry-via-relay is user policy, not transport necessity: keep
+            // WebRTC on Relay-only ICE for this round like any force-always-relay session.
+            lc.policy_relay = true;
         }
         self.lc.write().unwrap().peer_info = None;
         self.reconnect_count.fetch_add(1, Ordering::SeqCst);

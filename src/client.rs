@@ -499,7 +499,10 @@ impl Client {
         // When this request carries an offer, `_start_inner` keeps its rendezvous socket solely
         // for trickle signaling; a separate offer-less request owns any TCP punch attempt.
         let webrtc_offerer = if Self::should_create_webrtc_offerer(&interface) {
-            match WebRTCStream::new("", interface.is_force_relay(), CONNECT_TIMEOUT).await {
+            // ICE policy follows relay-by-POLICY, not force_relay: under WebSocket the
+            // latter is set for the classic paths, but ICE opens its own sockets and may
+            // still go direct - that is the only P2P path ws deployments have.
+            match WebRTCStream::new("", interface.is_policy_relay(), CONNECT_TIMEOUT).await {
                 Ok(stream) => Some(stream),
                 Err(err) => {
                     log::warn!("webrtc offerer setup failed: {}", err);
@@ -604,10 +607,13 @@ impl Client {
     /// ws deployments where classic punching is forced to relay. Independent of the udp-punch
     /// option too — the offer rides any request, and a server or peer without WebRTC support
     /// drops the field, so the race simply proceeds without it.
-    /// Under force_relay the pc uses Relay-only ICE, which gathers nothing and can never connect
-    /// unless a TURN server is configured, so skip building a guaranteed-dead pc + STUN/TURN
-    /// gathering + answerer signaling in that case too.
-    /// When force_relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
+    /// Under relay-by-POLICY (force-always-relay option or an explicit relay request) the pc
+    /// uses Relay-only ICE, which gathers nothing and can never connect unless a TURN server
+    /// is configured, so skip building a guaranteed-dead pc + STUN/TURN gathering + answerer
+    /// signaling in that case. WebSocket-forced relay is deliberately NOT policy: ws only
+    /// tunnels the signaling/relay legs, so the offer keeps full ICE and may land a direct
+    /// connection - the flagship path for ws deployments (`webrtc_all_ice` tells the peer).
+    /// When policy relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
     /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
     /// RelayResponse path races it without a P2P preference delay. Any request carrying an offer
     /// keeps its rendezvous socket for trickle signaling and never reuses it for TCP punching; a
@@ -616,7 +622,7 @@ impl Client {
         if Config::is_proxy() {
             return false;
         }
-        if interface.is_force_relay() && !WebRTCStream::has_turn_server() {
+        if interface.is_policy_relay() && !WebRTCStream::has_turn_server() {
             return false;
         }
         true
@@ -883,6 +889,9 @@ impl Client {
             socket_addr_v6: ipv6.1.unwrap_or_default(),
             switch_code,
             webrtc_sdp_offer: webrtc_sdp_offer.clone(),
+            // Full-ICE offer despite force_relay (ws transport): tells the controlled side
+            // its answer may gather every candidate type instead of requiring TURN.
+            webrtc_all_ice: !webrtc_sdp_offer.is_empty() && !interface.is_policy_relay(),
             ..Default::default()
         });
         let webrtc_session_key = webrtc_offerer
@@ -1064,10 +1073,12 @@ impl Client {
                                 Ok((Stream::WebRTC(raced), None, "WebRTC"))
                             }
                             .boxed();
-                            if interface.is_force_relay() {
+                            if interface.is_policy_relay() {
                                 // Relay-only WebRTC can use only TURN, so it has no P2P advantage
                                 // over the RustDesk relay. Take the first successful relay instead
                                 // of delaying an already-ready result for the preference window.
+                                // Policy, not force_relay: under ws the offer is full ICE and a
+                                // direct path is exactly what the preference window exists for.
                                 connect_futures.push(webrtc_fut);
                                 select_ok(connect_futures).await.map(|r| r.0)
                             } else {
@@ -1415,9 +1426,10 @@ impl Client {
         // disarmed only at the successful return when WebRTC is the kept transport.
 
         let mut direct = !conn.is_err();
-        // A WebRTC win under force_relay only happens when the pc was built with Relay-only ICE
-        // (TURN configured), which already honors the relay requirement — keep it instead of
-        // replacing it with the RustDesk relay.
+        // Keep a WebRTC win instead of replacing it with the RustDesk relay: under relay-by-
+        // policy the pc was built with Relay-only ICE (TURN configured), which already honors
+        // the relay requirement, and under ws-forced relay a direct full-ICE connection is the
+        // preferred outcome, not a violation.
         if (interface.is_force_relay() && typ != "WebRTC") || conn.is_err() {
             if !relay_server.is_empty() {
                 let switch_code = interface.get_switch_code();
@@ -2580,6 +2592,13 @@ pub struct LoginConfigHandler {
     // reconnect before the real reboot disconnect.
     restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
+    // The policy component of force_relay: the user's relay choice (option or explicit
+    // request) plus proxy, WITHOUT the WebSocket-transport component. ws kills classic
+    // TCP/UDP punching (force_relay stays set for those paths) but says nothing about
+    // ICE, so WebRTC decisions - offer ICE policy, prefer-P2P racing - key off this
+    // instead: relay-by-policy must stay Relay-only ICE, relay-by-transport may go
+    // direct over full ICE.
+    pub policy_relay: bool,
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
@@ -2688,11 +2707,11 @@ impl LoginConfigHandler {
         self.session_id = sid;
         self.supported_encoding = Default::default();
         self.clear_restarting_remote_device();
-        self.force_relay =
+        self.policy_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
                 || force_relay
-                || use_ws()
                 || Config::is_proxy();
+        self.force_relay = self.policy_relay || use_ws();
         if let Some((real_id, server, key)) = &self.other_server {
             let other_server_key = self.get_option("other-server-key");
             if !other_server_key.is_empty() && key.is_empty() {
@@ -4582,6 +4601,10 @@ pub trait Interface: Send + Clone + 'static + Sized {
 
     fn is_force_relay(&self) -> bool {
         self.get_lch().read().unwrap().force_relay
+    }
+
+    fn is_policy_relay(&self) -> bool {
+        self.get_lch().read().unwrap().policy_relay
     }
 
     fn get_switch_code(&self) -> String {
