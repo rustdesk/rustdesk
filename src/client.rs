@@ -326,6 +326,15 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
     }
 }
 
+// A peer decides how many ICE candidates it sends, and the rendezvous route that carries them is
+// reachable without a prior punch, so these sites would otherwise let someone else set how much
+// this machine writes to its log file. One line a minute each, carrying the suppressed count.
+use hbb_common::log_throttle::LogThrottle;
+const ICE_LOG_INTERVAL: Duration = Duration::from_secs(60);
+static REJECTED_ICE_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
+static UNEXPECTED_ICE_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
+static PENDING_ICE_FULL_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
+
 fn request_allows_tcp_punch(webrtc_sdp_offer: &str) -> bool {
     // WebRTC trickle ICE retains the rendezvous socket as its signaling bridge. Only a request
     // without an offer may close that socket and reuse its local address for TCP punching.
@@ -728,7 +737,13 @@ impl Client {
                                     if let Err(err) =
                                         webrtc.add_remote_ice_candidate(&ice.candidate).await
                                     {
-                                        log::warn!("failed to add WebRTC ICE candidate: {}", err);
+                                        if let Some(n) = REJECTED_ICE_LOG.due() {
+                                            log::warn!(
+                                                "failed to add {} WebRTC ICE candidate(s), last: {}",
+                                                n,
+                                                err
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -1157,16 +1172,20 @@ impl Client {
                             // would discard exactly the ones that traverse NAT and keep the
                             // host ones that only work on a shared LAN.
                             if pending_webrtc_ice.len() >= Self::MAX_PENDING_WEBRTC_ICE {
-                                log::warn!(
-                                    "WebRTC ICE pending buffer full ({}), dropping oldest candidate",
-                                    Self::MAX_PENDING_WEBRTC_ICE
-                                );
+                                if let Some(n) = PENDING_ICE_FULL_LOG.due() {
+                                    log::warn!(
+                                        "WebRTC ICE pending buffer full ({}), evicted {} oldest",
+                                        Self::MAX_PENDING_WEBRTC_ICE,
+                                        n
+                                    );
+                                }
                                 pending_webrtc_ice.remove(0);
                             }
                             pending_webrtc_ice.push(ice.candidate);
-                        } else {
+                        } else if let Some(n) = UNEXPECTED_ICE_LOG.due() {
                             log::debug!(
-                                "dropping ICE candidate for unexpected WebRTC session key {}",
+                                "dropped {} ICE candidate(s) for unexpected WebRTC session key, last: {}",
+                                n,
                                 ice.session_key,
                             );
                         }

@@ -55,6 +55,15 @@ lazy_static::lazy_static! {
     static ref LAST_RELAY_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
     static ref WEBRTC_ICE_TXS: Mutex<HashMap<String, mpsc::UnboundedSender<String>>> = Default::default();
 }
+// The rendezvous ICE route is reachable without a prior punch and the peer decides how many
+// candidates it sends, so these sites would let someone else set how much this machine writes to
+// its log file. One line a minute each, carrying the suppressed count.
+const ICE_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+static UNKNOWN_ICE_SESSION_LOG: hbb_common::log_throttle::LogThrottle =
+    hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
+static REJECTED_REMOTE_ICE_LOG: hbb_common::log_throttle::LogThrottle =
+    hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
+
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 static MANUAL_RESTARTED: AtomicBool = AtomicBool::new(false);
 static SENT_REGISTER_PK: AtomicBool = AtomicBool::new(false);
@@ -410,9 +419,10 @@ impl RendezvousMediator {
                 let tx = WEBRTC_ICE_TXS.lock().await.get(&ice.session_key).cloned();
                 if let Some(tx) = tx {
                     let _ = tx.send(ice.candidate);
-                } else {
+                } else if let Some(n) = UNKNOWN_ICE_SESSION_LOG.due() {
                     log::debug!(
-                        "dropping ICE candidate for unknown WebRTC session key {}",
+                        "dropped {} ICE candidate(s) for unknown WebRTC session key, last: {}",
+                        n,
                         ice.session_key
                     );
                 }
@@ -718,7 +728,13 @@ impl RendezvousMediator {
             while let Some(candidate) = remote_ice_rx.recv().await {
                 if let Err(err) = stream_for_remote_ice.add_remote_ice_candidate(&candidate).await
                 {
-                    log::warn!("failed to add remote WebRTC ICE candidate: {}", err);
+                    if let Some(n) = REJECTED_REMOTE_ICE_LOG.due() {
+                        log::warn!(
+                            "failed to add {} remote WebRTC ICE candidate(s), last: {}",
+                            n,
+                            err
+                        );
+                    }
                 }
             }
         });
