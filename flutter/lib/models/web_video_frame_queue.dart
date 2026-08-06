@@ -71,13 +71,6 @@ class WebVideoFrameQueue<Frame, Image> {
     return true;
   }
 
-  // Test hook for synchronizing with an in-flight frame import.
-  Future<void> waitForImport() =>
-      _importStarted?.future ?? Future<void>.value();
-
-  // Test hook for synchronizing with queue processing completion.
-  Future<void> waitUntilIdle() => _idle?.future ?? Future<void>.value();
-
   void _startProcessing() {
     if (_processing) return;
     _processing = true;
