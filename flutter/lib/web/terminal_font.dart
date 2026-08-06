@@ -27,6 +27,7 @@ Future<void> loadLocalTerminalFontIfNeeded() async {
       ..addFont(Future.value(data));
     await loader.load();
   } catch (e) {
+    _loadRequested = false;
     debugPrint('Failed to load bundled Roboto Mono: $e');
   }
 }

@@ -1969,7 +1969,10 @@ class ImageModel with ChangeNotifier {
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,
     );
-    if (parent.target?.id != pid) return;
+    if (parent.target?.id != pid) {
+      image?.dispose();
+      return;
+    }
     await update(image);
   }
 
