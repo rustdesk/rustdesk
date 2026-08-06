@@ -689,13 +689,13 @@ impl RendezvousMediator {
     async fn spawn_webrtc_answerer(
         &self,
         ph: &PunchHole,
-        force_relay: bool,
+        relay_only_ice: bool,
         server: ServerPtr,
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
         let mut stream =
-            WebRTCStream::new(&ph.webrtc_sdp_offer, force_relay, CONNECT_TIMEOUT).await?;
+            WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
         let answer = match stream.get_local_endpoint_trickle().await {
             Ok(answer) => answer,
             Err(e) => {
@@ -849,14 +849,18 @@ impl RendezvousMediator {
         // and STUN bypass the proxy and leak the real IP. WebSocket mode does NOT disable it —
         // ws only tunnels the signaling/relay legs to the server, classic punching stays forced
         // to relay (`relay` above), and the answer rides the RelayResponse, leaving ICE as the
-        // only P2P path there. force_relay is different: relay-only ICE is viable with TURN.
+        // only P2P path there. force_relay depends on why it was set: with webrtc_all_ice the
+        // controller's relay is transport-forced (ws) and its offer carries every candidate
+        // type, so answer with full ICE and let a direct pair form; without it the offer is
+        // Relay-only ICE by policy, viable (and answerable) only through TURN.
+        let webrtc_relay_only = ph.force_relay && !ph.webrtc_all_ice;
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
             && !Config::is_proxy()
-            && (!ph.force_relay || WebRTCStream::has_turn_server());
+            && (!webrtc_relay_only || WebRTCStream::has_turn_server());
         let webrtc_sdp_answer = if webrtc_viable {
             self.spawn_webrtc_answerer(
                 &ph,
-                ph.force_relay,
+                webrtc_relay_only,
                 server.clone(),
                 peer_addr,
                 meta.clone(),
