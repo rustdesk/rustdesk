@@ -61,6 +61,14 @@
 * Do not make formatting-only changes.
 * Keep naming/style consistent with nearby code.
 
+### Comments
+
+* Keep them short: one line by default, three at most.
+* Say **why**, never what. If the code already says it, delete the comment.
+* Do not document rejected alternatives, past bugs, measurements, or how you arrived at the code. That belongs in the commit message or the PR.
+* A comment must never be longer than the code it describes.
+* Applies to YAML, shell and Python too, not just Rust.
+
 ### Be minimally invasive
 
 * Prefer purely additive changes: layer new (`#[cfg]`-gated) blocks or new functions around existing code instead of restructuring it. The ideal diff for a fix adds lines and modifies/deletes none.
