@@ -634,6 +634,37 @@ def stage_libdrmtap_into_deb(so_path):
     system2(f'ln -sf "{so_basename}" tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
 
 
+def _max_glibc_minor(path):
+    # Read from .dynstr rather than via objdump so packaging needs no binutils; chunked because
+    # librustdesk.so is ~45 MB.
+    best = 0
+    with open(path, 'rb') as f:
+        tail = b''
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return best
+            for m in re.finditer(rb'GLIBC_2\.(\d+)', tail + chunk):
+                best = max(best, int(m.group(1)))
+            tail = chunk[-16:]
+
+
+def measured_glibc_floor():
+    # libdrmtap is built on a newer base than the rest of the deb, so the floor is whichever staged
+    # object is higher -- and it moves whenever either base does.
+    paths = [p for p in glob.glob('tmpdeb/usr/lib/rustdesk/libdrmtap.so.0.*')
+             + glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
+             + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk')
+             if os.path.isfile(p) and not os.path.islink(p)]
+    minor = max((_max_glibc_minor(p) for p in paths), default=0)
+    if not minor:
+        raise Exception(
+            f'could not measure a GLIBC_2.x floor from any staged object ({paths or "none found"}); '
+            'refusing to ship the unattended-wayland variant with an undeclared libc6 floor, which '
+            'is what lets it install on a host where libdrmtap can never load')
+    return f'2.{minor}'
+
+
 def retarget_control_to_drm_variant():
     # Rewrite the control file that generate_control_file just produced, instead of parameterizing that
     # function: the stock packaging path stays exactly as upstream wrote it, and everything specific to
@@ -641,6 +672,8 @@ def retarget_control_to_drm_variant():
     # conflict with and replace it: you install one or the other, never both. It also needs libdrmtap's
     # own runtime deps, which the stock package has no reason to carry.
     path = '../res/DEBIAN/control'
+    floor = measured_glibc_floor()
+    print(f'[drm] {DRM_PACKAGE_NAME} libc6 floor measured at {floor}')
     with open(path) as f:
         lines = f.readlines()
     out = []
@@ -649,8 +682,9 @@ def retarget_control_to_drm_variant():
             out.append(f'Package: {DRM_PACKAGE_NAME}\n')
             out.append('Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n')
         elif line.startswith('Depends:'):
-            # 2.4.95 is where drmModeGetFB2 landed; below it libdrmtap loads and can never capture.
-            out.append(line.rstrip('\n') + ', libdrm2 (>= 2.4.95), libegl1, libgles2\n')
+            # 2.4.101 is where drmModeGetFB2 landed; below it libdrmtap loads and can never capture.
+            out.append(line.rstrip('\n') + ', libdrm2 (>= 2.4.101), libegl1, libgles2, '
+                       f'libc6 (>= {floor})\n')
         else:
             out.append(line)
     body = ''.join(out)
