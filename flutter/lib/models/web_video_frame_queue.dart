@@ -30,8 +30,6 @@ class WebVideoFrameQueue<Frame, Image> {
   final Map<int, _QueuedFrame<Frame>> _pending = {};
 
   VideoImageCallback<Image>? _callback;
-  Completer<void>? _idle;
-  Completer<void>? _importStarted;
   int _generation = 0;
   bool _processing = false;
   bool _enabled = true;
@@ -74,8 +72,6 @@ class WebVideoFrameQueue<Frame, Image> {
   void _startProcessing() {
     if (_processing) return;
     _processing = true;
-    _idle = Completer<void>();
-    _importStarted = Completer<void>();
     unawaited(Future<void>(_process));
   }
 
@@ -90,14 +86,11 @@ class WebVideoFrameQueue<Frame, Image> {
       await _importAndDeliver(queued);
     }
     _processing = false;
-    _idle?.complete();
   }
 
   Future<void> _importAndDeliver(_QueuedFrame<Frame> queued) async {
     Image? image;
     try {
-      _importStarted?.complete();
-      _importStarted = null;
       image = await _importFrame(queued.frame);
     } catch (error, stackTrace) {
       if (queued.generation == _generation) {
