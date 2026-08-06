@@ -112,6 +112,24 @@ fn refresh_wayland_uinput_rect_if_changed() {
     let Some((rect, live_rects)) = scrap::wayland::display::get_layout_for_uinput_live() else {
         return;
     };
+    // When a single output is shared but the compositor has more, the range must follow the
+    // captured display rather than the whole desktop: the client maps against the shared
+    // stream, so a root-sized range makes injected coordinates drift by the ratio of the
+    // two bounding boxes and drops the capture origin. The captured display is matched to
+    // the live layout by its origin, the same correlation `try_fix_logical_size` uses.
+    // https://github.com/rustdesk/rustdesk/issues/15731
+    let rect = if live_rects.len() > 1 {
+        match super::wayland::captured_single_display_origin() {
+            Some((ox, oy)) => live_rects
+                .iter()
+                .find(|r| r.x == ox && r.y == oy)
+                .map(|r| (r.x, r.x + r.w, r.y, r.y + r.h))
+                .unwrap_or(rect),
+            None => rect,
+        }
+    } else {
+        rect
+    };
     // Refresh the per-display layout every poll: monitor origins can shift (e.g. two
     // displays swap positions) without changing the overall desktop rect, and the mouse
     // path needs the current per-display geometry to correct coordinates.

@@ -27,6 +27,53 @@ pub fn init() {
     set_map_err(map_err_scrap);
 }
 
+/// The uinput ABS range that matches what the client sees. When exactly one display is
+/// shared but the compositor has more (e.g. a rotated secondary monitor makes the root
+/// larger than the shared output), the whole-desktop rect makes injected coordinates
+/// drift: the client maps against the shared stream while the device spans the full
+/// layout, and the capture origin is dropped too. In that case the range must derive from
+/// the captured display's rect, origin and size included.
+/// https://github.com/rustdesk/rustdesk/issues/15731
+pub(super) fn captured_uinput_rect() -> Option<(i32, i32, i32, i32)> {
+    let lock = CAP_DISPLAY_INFO.read().unwrap();
+    if lock.len() != 1 {
+        return None;
+    }
+    let addr: &u64 = lock.values().next()?;
+    let cap = unsafe { &*(*addr as *const CapDisplayInfo) };
+    if cap.num != 1 || cap.rects.is_empty() {
+        return None;
+    }
+    // The whole-desktop range is only wrong when the compositor has outputs that are not
+    // being shared. When every output is captured it already spans exactly the shared
+    // layout, and a single-output compositor has no root larger than the stream, so the
+    // desktop rect is correct there too. Only re-derive the range in between.
+    if scrap::wayland::display::get_displays().displays.len() <= 1 {
+        return None;
+    }
+    let ((x, y), w, h) = cap.rects[0];
+    Some((x, x + w as i32, y, y + h as i32))
+}
+
+/// Origin of the single captured display when exactly one output is shared, used to match
+/// its live rect when the compositor layout changes mid-session. `None` when multiple
+/// displays are shared or capture has not started. Matched by origin rather than name:
+/// the captured display's name is a PipeWire stream path while the compositor layout uses
+/// connector names, so geometry is the only stable key (same correlation `try_fix_logical_size`
+/// uses).
+pub(super) fn captured_single_display_origin() -> Option<(i32, i32)> {
+    let lock = CAP_DISPLAY_INFO.read().unwrap();
+    if lock.len() != 1 {
+        return None;
+    }
+    let addr: &u64 = lock.values().next()?;
+    let cap = unsafe { &*(*addr as *const CapDisplayInfo) };
+    if cap.num != 1 || cap.rects.is_empty() {
+        return None;
+    }
+    Some(cap.rects[0].0)
+}
+
 pub(super) fn increment_active_display_count() -> usize {
     let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
     *count += 1;
@@ -311,6 +358,38 @@ pub(super) async fn check_init() -> ResultType<()> {
                     }));
 
                     lock.insert(idx, cap_display_info as u64);
+                }
+            }
+            drop(lock);
+            if crate::input_service::wayland_use_uinput() {
+                // When a single output is shared but the compositor has more, the range set
+                // above spans the whole desktop while the client maps against the shared
+                // stream, so injected coordinates drift by the ratio of the two bounding
+                // boxes and the capture origin is lost. Re-derive the range from the
+                // captured rect now that the capture layout is known.
+                // https://github.com/rustdesk/rustdesk/issues/15731
+                if let Some((minx, maxx, miny, maxy)) = captured_uinput_rect() {
+                    log::info!(
+                        "update mouse resolution (captured rect): ({}, {}), ({}, {})",
+                        minx,
+                        maxx,
+                        miny,
+                        maxy
+                    );
+                    match timeout(
+                        3_000,
+                        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            super::display_service::set_wayland_uinput_rect((
+                                minx, maxx, miny, maxy,
+                            ));
+                        }
+                        Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
+                        Err(err) => log::error!("Failed to update mouse resolution: {}", err),
+                    }
                 }
             }
         }
