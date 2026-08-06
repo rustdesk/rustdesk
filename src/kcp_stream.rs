@@ -36,6 +36,33 @@ impl KcpStream {
         }
     }
 
+    // One line per run of socket failures rather than per failure: these are absorbed as packet
+    // loss and can repeat every 10ms, and debug output is written to the log file.
+    const KCP_IO_FAIL_PERSIST: u64 = 500; // ~5s at the 10ms retry interval
+
+    fn note_io_err(fail_run: &mut u64, what: &str, e: &std::io::Error) {
+        *fail_run += 1;
+        if *fail_run == 1 {
+            log::debug!("KCP {} error (treated as loss): {:?}", what, e);
+        } else if *fail_run % Self::KCP_IO_FAIL_PERSIST == 0 {
+            // Still failing well past a transient ICMP: say so once per run length, else a
+            // socket that never recovers is silent until KCP reaps it 60s later.
+            log::warn!(
+                "KCP {} failing persistently: {} consecutive errors, last: {:?}",
+                what,
+                fail_run,
+                e
+            );
+        }
+    }
+
+    fn note_io_ok(fail_run: &mut u64) {
+        if *fail_run >= Self::KCP_IO_FAIL_PERSIST {
+            log::info!("KCP socket recovered after {} failed operations", fail_run);
+        }
+        *fail_run = 0;
+    }
+
     fn create_framed(stream: stream::KcpStream, local_addr: Option<SocketAddr>) -> Stream {
         Stream::Tcp(FramedStream(
             tokio_util::codec::Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
@@ -129,6 +156,13 @@ impl KcpStream {
             // Treat socket errors as packet loss instead of tearing the session down;
             // a truly dead link is reaped by the KCP pong timeout / app-level timeouts.
             // The short sleep prevents a persistently failing socket from busy-spinning.
+            //
+            // Log by run, not per occurrence: the 10ms sleep means a persistently failing
+            // socket would otherwise write ~100 lines a second into the log file. One line
+            // when a run starts, one per PERSIST run length so a stuck socket stays visible
+            // (the pong timeout takes 60s to reap it, and the session is frozen meanwhile),
+            // and one when it recovers carrying the total.
+            let mut fail_run = 0u64;
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
@@ -136,14 +170,18 @@ impl KcpStream {
                         break;
                     }
                     Some(data) = output.recv() => {
-                        if let Err(e) = udp.send(&data.inner()).await {
-                            log::debug!("KCP send error (treated as loss): {:?}", e);
-                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                        match udp.send(&data.inner()).await {
+                            Ok(_) => Self::note_io_ok(&mut fail_run),
+                            Err(e) => {
+                                Self::note_io_err(&mut fail_run, "send", &e);
+                                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            }
                         }
                     }
                     result = udp.recv_from(&mut buf) => {
                         match result {
                             Ok((size, _)) => {
+                                Self::note_io_ok(&mut fail_run);
                                 if size < std::mem::size_of::<KcpPacketHeader>() {
                                     continue;
                                 }
@@ -152,7 +190,7 @@ impl KcpStream {
                                     .await.ok();
                             }
                             Err(e) => {
-                                log::debug!("KCP recv_from error (treated as loss): {:?}", e);
+                                Self::note_io_err(&mut fail_run, "recv", &e);
                                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                             }
                         }
