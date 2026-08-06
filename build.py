@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
 import os
+import glob
+import contextlib
 import pathlib
 import platform
 import zipfile
 import urllib.request
 import shutil
 import hashlib
+import re
+import subprocess
 import argparse
 import sys
 from pathlib import Path
@@ -129,6 +133,19 @@ def make_parser():
         '--unix-file-copy-paste',
         action='store_true',
         help='Build with unix file copy paste feature'
+    )
+    parser.add_argument(
+        '--drm',
+        action='store_true',
+        help='Linux only: build the DRM/KMS capture backend (bundles libdrmtap.so, '
+             'dlopen-ed in-process by the root service). Off by default.'
+    )
+    parser.add_argument(
+        '--print-features',
+        action='store_true',
+        help='Print the cargo feature list these flags select, and exit without building. For a '
+             'caller that runs its own cargo line and then packages with --skip-cargo: it can ask '
+             'for the list rather than repeat it, so the two cannot drift.'
     )
     parser.add_argument(
         '--skip-cargo',
@@ -272,6 +289,24 @@ def external_resources(flutter, args, res_dir):
                 shutil.copytree(f, f'{flutter_build_dir_2}{f.stem}')
 
 
+def linux_packaging_branch():
+    """Which packaging path `main()` will take on THIS host.
+
+    MUST mirror the elif chain in main() (pacman / yum / zypper / else), and exists so `--drm` can
+    refuse a branch that is not drm-aware instead of silently producing a stock-named package with
+    the capture backend compiled in. Only the final `deb` branch reaches `build_flutter_deb`, which
+    is what bundles libdrmtap, renames the package, adds Conflicts/Provides and asserts the staged
+    binary really is a drm build.
+    """
+    if os.path.isfile('/usr/bin/pacman'):
+        return 'pacman'
+    if os.path.isfile('/usr/bin/yum'):
+        return 'yum'
+    if os.path.isfile('/usr/bin/zypper'):
+        return 'zypper'
+    return 'deb'
+
+
 def get_features(args):
     features = ['inline'] if not args.flutter else []
     if args.hwcodec:
@@ -282,6 +317,30 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if args.drm:
+        # Say so rather than quietly handing back a stock build: the backend is Linux-only, so on
+        # any other host the flag cannot be honoured and the resulting binary would look like a
+        # DRM build without being one.
+        if windows or osx:
+            raise Exception('--drm is Linux only')
+        # And only on the deb branch. The other three Linux paths (pacman/yum/zypper) package
+        # straight from `target/release` without bundling libdrmtap, without the rename, without
+        # Conflicts/Provides and without assert_staged_binary_is_drm() -- so they would emit a
+        # package NAMED `rustdesk` carrying the consent-bypass backend and the root-side uinput
+        # injection. The separate package name is the informed consent this feature rests on (see
+        # docs/DRM_CAPTURE_SECURITY.md), so refuse rather than ship a stock-named build of it.
+        branch = linux_packaging_branch()
+        if branch != 'deb':
+            raise Exception(
+                f'--drm is only supported on the deb packaging path; this host would package via '
+                f'{branch}, which cannot bundle libdrmtap or name the package distinctly')
+        features.append('drm')
+        # The display wake is its own compile gate on top of `drm`, and the unattended package is
+        # exactly where it belongs: that variant exists to reach a machine nobody is sitting at,
+        # and a machine whose screen went dark is the case it is for. Dropping `drm-wake` from
+        # this line builds the same capture backend with no wake code in the binary at all.
+        # It is ALSO switchable at runtime; see OPTION_ENABLE_DRM_DISPLAY_WAKE.
+        features.append('drm-wake')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
@@ -314,6 +373,271 @@ def ffi_bindgen_function_refactor():
     # workaround ffigen
     system2(
         'sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart')
+
+
+# libdrmtap is fetched at build time from the rustdesk-org fork at a pinned
+# commit — the same way rustdesk sources its other native build deps (vcpkg,
+# flutter_rust_bridge, ...), rather than carrying a git submodule. It is the ONLY
+# pin for the drm backend: rustdesk dlopens this .so at runtime and does not depend on
+# the libdrmtap-sys crate (whose build.rs would statically link the C tree, a helper and
+# libdrm/seccomp/cap). DRMTAP_REPO, DRMTAP_SHA and DRMTAP_PREBUILT_DIR override it for local testing
+# or another fork, and each requires DRMTAP_ALLOW_UNPINNED=1 alongside it (see below).
+# The commit is fetched directly by sha, so no branch or tag name takes part in the build: see
+# build_libdrmtap_so(). This is the SINGLE source of truth for the pin, deliberately not duplicated in
+# any workflow, so a bump is one edit here (plus the informational version comment in
+# libs/scrap/Cargo.toml). This commit is libdrmtap v0.5.2.
+LIBDRMTAP_REPO_PINNED = 'https://github.com/rustdesk-org/libdrmtap'
+LIBDRMTAP_SHA_PINNED = '653de8c774bc245eaf960611ca7a136f7a544d21'
+LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', LIBDRMTAP_REPO_PINNED)
+LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
+# Every way of getting a different .so than the pin needs the same explicit opt-in. Otherwise the
+# claim this feature rests on -- that the privileged capture library is the reviewed object at
+# LIBDRMTAP_SHA_PINNED -- would hold only as long as nobody happened to have one of these set, and a
+# build that silently used something else would be indistinguishable from one that did not.
+# DRMTAP_PREBUILT_DIR is in the list because it is the widest of the three: it skips both the fetch
+# and the sha verification and hands over an object built from nothing this script can see.
+DRMTAP_UNPINNED_OK = os.environ.get('DRMTAP_ALLOW_UNPINNED') == '1'
+
+
+def _validate_libdrmtap_pin():
+    # Called from build_libdrmtap_so(), NOT at import: a stock (non --drm) build must stay
+    # byte-identical to upstream in behaviour too, and leftover DRMTAP_* variables in the
+    # environment (or a malformed sha) must not be able to fail a build that never touches
+    # libdrmtap.
+    overridden = [
+        name
+        for name, value, pinned in (
+            ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
+            ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
+            # `or None` so an empty value reads as unset here exactly as it does in
+            # build_libdrmtap_so(), which tests it for truthiness. Otherwise `DRMTAP_PREBUILT_DIR=`
+            # would demand the opt-in for an override that is not going to happen.
+            ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR') or None, None),
+        )
+        if value != pinned
+    ]
+    if overridden and not DRMTAP_UNPINNED_OK:
+        raise Exception(
+            f'{", ".join(overridden)} would build libdrmtap from something other than the pinned '
+            f'{LIBDRMTAP_REPO_PINNED} at {LIBDRMTAP_SHA_PINNED}. That is supported for local work and '
+            'cross-builds, but it has to be deliberate: set DRMTAP_ALLOW_UNPINNED=1 as well.')
+    if overridden:
+        print(f'WARNING: libdrmtap is NOT the pinned build ({", ".join(overridden)} set)')
+    # Both are interpolated into shell commands below, and both are env-overridable, so validate
+    # their SHAPE before they get there. This is not only about a hostile environment: a truncated
+    # or abbreviated sha would otherwise reach `git fetch` and fail with something far less obvious
+    # than saying so here, and an abbreviated one would defeat the point of pinning.
+    if not re.fullmatch(r'[0-9a-f]{40}', LIBDRMTAP_SHA):
+        raise Exception(
+            f'DRMTAP_SHA must be a full 40-character commit sha, got {LIBDRMTAP_SHA!r}')
+    if not re.fullmatch(r'(https://|git@)[A-Za-z0-9._~:/@-]+', LIBDRMTAP_REPO):
+        raise Exception(f'DRMTAP_REPO does not look like a git remote url: {LIBDRMTAP_REPO!r}')
+
+
+def _single_real_so(paths, where):
+    # Return the one real libdrmtap.so.0.* object among `paths`, failing if there are zero or several.
+    # glob order is arbitrary, so silently taking [0] could ship a stale or wrong-arch object left
+    # over from an earlier build; a mismatch should fail the build loudly instead.
+    real = sorted(p for p in paths if os.path.isfile(p) and not os.path.islink(p))
+    if len(real) != 1:
+        raise Exception(
+            f'expected exactly one real libdrmtap.so.0.* in {where}, found {len(real)}: {real}')
+    return real[0]
+
+
+def build_libdrmtap_so():
+    # Build libdrmtap.so from the rustdesk-org fork, fetched at the pinned LIBDRMTAP_SHA. The
+    # pivot dlopen-s this .so in-process in the root service (which already holds
+    # CAP_SYS_ADMIN) — no setcap helper, no privileged child. Only the shared
+    # library target is built (the source also carries a helper binary we do not
+    # ship). Returns the path to the built versioned .so (e.g. libdrmtap.so.0.4.x).
+    _validate_libdrmtap_pin()
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    # Allow a caller (e.g. CI) to build the .so ahead of time and hand it in via
+    # DRMTAP_PREBUILT_DIR (must contain the real libdrmtap.so.0.* object).
+    prebuilt_dir = os.environ.get('DRMTAP_PREBUILT_DIR')
+    if prebuilt_dir:
+        # DRMTAP_PREBUILT_DIR explicitly names the artifact source, so honor it strictly: fail
+        # (rather than silently falling back to a source build) if it holds no single real .so.
+        prebuilt = glob.glob(os.path.join(prebuilt_dir, 'libdrmtap.so.0.*'))
+        so = _single_real_so(prebuilt, f'DRMTAP_PREBUILT_DIR={prebuilt_dir}')
+        # Check the stub case HERE too, not only on the source path below. This is the widest
+        # override of the three -- no fetch, no sha verification, an object built by something this
+        # script cannot see -- so it is the likeliest to hand over a CPU-only build, and skipping the
+        # assertion on exactly this path would leave the check guarding only the case that was
+        # already trustworthy.
+        _assert_so_has_egl(so)
+        return so
+    # Fetch the pinned source if it is not already present. third_party/libdrmtap is not a submodule
+    # anymore; it is git-ignored. The commit is fetched BY SHA rather than by cloning a branch:
+    # `clone --depth 1 --branch main` only ever fetches the tip, so the moment upstream pushes to
+    # `main` the pinned commit is not in the shallow clone at all and the build fails on an unreachable
+    # object. Fetching the sha needs no branch name, so it keeps working across every upstream push and
+    # is immune to a ref being moved or repointed.
+    src = os.path.join(repo_root, 'third_party', 'libdrmtap')
+    if not os.path.exists(os.path.join(src, 'meson.build')):
+        if os.path.isdir(src):
+            shutil.rmtree(src)
+        os.makedirs(src, exist_ok=True)
+        system2(f'git -C "{src}" init -q')
+        system2(f'git -C "{src}" remote add origin {LIBDRMTAP_REPO}')
+        system2(f'git -C "{src}" fetch --depth 1 origin {LIBDRMTAP_SHA}')
+        system2(f'git -C "{src}" checkout -q FETCH_HEAD')
+    # Verify the pin whenever the source is a GIT checkout. A fetch by sha cannot resolve to anything
+    # else, so this now guards the OTHER case: a reused checkout left by an earlier build at a
+    # different pin, which is what a bump leaves behind. Reject and remove it so the next run re-fetches
+    # cleanly. A NON-git tree placed here on purpose (a developer building unreleased local libdrmtap
+    # source) has nothing to verify and is used as-is.
+    if os.path.isdir(os.path.join(src, '.git')):
+        got_sha = subprocess.check_output(
+            ['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
+        if got_sha != LIBDRMTAP_SHA:
+            shutil.rmtree(src, ignore_errors=True)
+            raise Exception(
+                f'libdrmtap at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
+                f'(stale checkout from a different pin; removed, re-run to re-fetch)')
+    build_dir = os.path.join(src, 'build-pkg')
+    if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
+        system2(f'meson setup "{build_dir}" "{src}" --buildtype=release')
+    # Build only the shared library, not the bundled helper binary or the static archive. Since
+    # libdrmtap 0.4.11 the project is `both_libraries` (a version-scripted .so + a static .a), so the
+    # bare `drmtap` target is ambiguous ("drmtap:shared_library" vs "drmtap:static_library"); ask for
+    # the shared one explicitly (rustdesk dlopens the .so and never needs the archive).
+    system2(f'meson compile -C "{build_dir}" drmtap:shared_library')
+    sos = glob.glob(os.path.join(build_dir, 'libdrmtap.so.0.*'))
+    # keep the real object (libdrmtap.so.0.4.x), not the .so/.so.0 symlinks or meson's .p dir, and
+    # require exactly one so a stale object from an earlier build is never silently picked.
+    so = _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
+    _assert_so_has_egl(so)
+    return so
+
+
+def _assert_so_has_egl(so_path):
+    # libdrmtap treats egl/glesv2 as OPTIONAL dependencies: without their headers and pkg-config
+    # files, meson silently builds a CPU-only stub. That stub still exports every symbol the loader
+    # checks for, so nothing downstream notices -- and the split architecture depends entirely on the
+    # unprivileged side EGL-detiling the scanout it receives. The result is a build where DRM capture
+    # quietly degrades to PipeWire on every tiled-scanout host, which is most of them.
+    #
+    # Assert on the ARTIFACT rather than passing an option that demands it: `-Degl=enabled` exists
+    # only in libdrmtap past 0.4.15, and checking what was actually produced also catches a stale or
+    # hand-substituted object, which a build flag cannot.
+    #
+    # EGL is reached by lazy dlopen, on purpose, so that the privileged service never links the GPU
+    # stack. That means there is no DT_NEEDED to look for and an ELF-level check reports "no EGL" on a
+    # perfectly good library; the dlopen name and an extension symbol are what a CPU-only stub really
+    # lacks. Same two markers the drm-capture workflow asserts in CI.
+    try:
+        with open(so_path, 'rb') as f:
+            blob = f.read()
+    except OSError as err:
+        raise Exception(f'cannot read the built libdrmtap at {so_path}: {err}') from err
+    missing = [m for m in (b'libEGL.so.1', b'eglCreateImageKHR') if m not in blob]
+    if missing:
+        raise Exception(
+            f'{so_path} looks like a CPU-only libdrmtap stub (missing '
+            f'{", ".join(m.decode() for m in missing)}): the EGL detile path the split capture '
+            'depends on is not in it, and DRM capture would silently fall back to PipeWire. '
+            'Install the EGL development packages and rebuild (Debian/Ubuntu: libegl-dev '
+            'libgles2-mesa-dev; Arch: mesa libglvnd).')
+
+
+DRM_PACKAGE_NAME = 'rustdesk-unattended-wayland'
+
+
+def assert_so_satisfies_the_runtime_abi_gate(so_path):
+    """The .so we are about to ship must be one the RUNTIME will actually accept.
+
+    `abi_accepted` in libs/scrap/src/common/drmtap_dl.rs is the only place the pinned library's
+    version is ever validated, and it runs at dlopen time on the USER's machine. Nothing in the
+    build or in CI compared the two, so the pin and the gate could drift apart and every existing
+    assertion would still pass: the EGL check does not look at the version, the CI symbol contract
+    does not call drmtap_version(), and the deb-contents regex matches any `libdrmtap.so.0.X.Y`.
+    A green pipeline could therefore produce a deb in which DRM capture can never start, and the
+    only symptom on the host is one log line before it falls back to the portal.
+
+    So parse the gate out of the Rust and apply it here, to the object being staged. This is the
+    same rule, not a copy of the numbers: if someone bumps the constants, this reads the new ones.
+    """
+    m = re.search(r'libdrmtap\.so\.(\d+)\.(\d+)\.(\d+)', os.path.basename(so_path))
+    if not m:
+        # Not a versioned soname (a local dev build, say). The gate cannot be evaluated, and
+        # inventing a verdict would be worse than saying so.
+        print(f'[drm] cannot read a version out of {so_path}; skipping the ABI-gate cross-check')
+        return
+    so_ver = tuple(int(g) for g in m.groups())
+    # Anchored on THIS file, not on the cwd: both callers of stage_libdrmtap_into_deb have already
+    # chdir'd into flutter/ by the time they get here, so a cwd-relative path raises FileNotFoundError
+    # and fails every --drm packaging run. (It did; CI caught it.)
+    gate_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'libs', 'scrap', 'src', 'common', 'drmtap_dl.rs')
+    with open(gate_path) as f:
+        gate_src = f.read()
+
+    def _const(name):
+        mm = re.search(rf'const {name}: c_int = (\d+);', gate_src)
+        return int(mm.group(1)) if mm else None
+
+    major, minor = _const('DRMTAP_ABI_MAJOR'), _const('DRMTAP_ABI_MINOR')
+    mm = re.search(r'const DRMTAP_MIN_MINOR_PATCH: \(c_int, c_int\) = \((\d+), (\d+)\);', gate_src)
+    floor = (int(mm.group(1)), int(mm.group(2))) if mm else None
+    if major is None or minor is None or floor is None:
+        raise Exception(
+            'could not parse the libdrmtap ABI gate out of drmtap_dl.rs (DRMTAP_ABI_MAJOR / '
+            'DRMTAP_ABI_MINOR / DRMTAP_MIN_MINOR_PATCH). The gate moved and this check did not; '
+            'fix the check rather than removing it, or the pin and the gate can drift silently.')
+    accepted = so_ver[0] == major and so_ver[1] == minor and (so_ver[1], so_ver[2]) >= floor
+    if not accepted:
+        raise Exception(
+            f'the libdrmtap being packaged is {so_ver[0]}.{so_ver[1]}.{so_ver[2]}, which the '
+            f'runtime loader would REFUSE: drmtap_dl.rs accepts exactly major {major}, minor '
+            f'{minor}, patch >= {floor[1]}. Shipping it produces a deb whose DRM capture can never '
+            'start. Move the build pin and the gate together, or fix whichever one is wrong.')
+    print(f'[drm] libdrmtap {so_ver[0]}.{so_ver[1]}.{so_ver[2]} satisfies the runtime ABI gate '
+          f'(major {major}, minor {minor}, patch >= {floor[1]})')
+
+
+def stage_libdrmtap_into_deb(so_path):
+    # Put the built libdrmtap object plus its soname symlink into the staged deb. Only the soname
+    # symlink is needed: libdrmtap is resolved by ABSOLUTE path (/usr/lib/rustdesk/libdrmtap.so.0) at
+    # the in-process dlopen site (drmtap_dl.rs), so the deb does NOT drop /usr/lib/rustdesk into the
+    # system-wide /etc/ld.so.conf.d search path, which would let this private library shadow a system
+    # library for every binary on the host (Debian Policy 10.2 forbids that). No ld.so.conf.d drop-in
+    # and no ldconfig trigger are shipped, so the stock postinst is used unchanged.
+    assert_so_satisfies_the_runtime_abi_gate(so_path)
+    so_basename = os.path.basename(so_path)
+    system2('mkdir -p tmpdeb/usr/lib/rustdesk')
+    # Quoted: so_path comes from the repo root or from DRMTAP_PREBUILT_DIR, either of which can
+    # contain a space, and an unquoted interpolation would split the argument and fail obscurely.
+    system2(f'cp "{so_path}" tmpdeb/usr/lib/rustdesk/')
+    system2(f'ln -sf "{so_basename}" tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
+
+
+def retarget_control_to_drm_variant():
+    # Rewrite the control file that generate_control_file just produced, instead of parameterizing that
+    # function: the stock packaging path stays exactly as upstream wrote it, and everything specific to
+    # this variant lives here. The variant installs the same files as the stock package, so it must
+    # conflict with and replace it: you install one or the other, never both. It also needs libdrmtap's
+    # own runtime deps, which the stock package has no reason to carry.
+    path = '../res/DEBIAN/control'
+    with open(path) as f:
+        lines = f.readlines()
+    out = []
+    for line in lines:
+        if line.startswith('Package: rustdesk'):
+            out.append(f'Package: {DRM_PACKAGE_NAME}\n')
+            out.append('Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n')
+        elif line.startswith('Depends:'):
+            out.append(line.rstrip('\n') + ', libdrm2, libegl1, libgles2\n')
+        else:
+            out.append(line)
+    body = ''.join(out)
+    # Fail loudly rather than silently shipping a package that says `rustdesk`: a stock control file
+    # that stopped matching either anchor would otherwise produce a variant deb wearing the stock name.
+    if f'Package: {DRM_PACKAGE_NAME}\n' not in body or 'libegl1' not in body:
+        raise Exception(f'could not retarget {path} to the drm variant; upstream control layout changed')
+    with open(path, 'w') as f:
+        f.write(body)
 
 
 def build_flutter_deb(version, features):
@@ -352,9 +676,22 @@ def build_flutter_deb(version, features):
         'cp ../res/pam.d/rustdesk.debian tmpdeb/etc/pam.d/rustdesk')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+    # Bundle libdrmtap.so only when this build actually enabled the `drm` feature, so stock packages
+    # stay exactly what they were. The root service dlopens it in-process by absolute path.
+    # `features` is the comma-joined string, so split it: a bare substring test would also match any
+    # future feature merely containing "drm" (drm-lease, vaapi-drm) and rename the deb to the
+    # consent-bypass variant without --drm ever being passed.
+    ships_so = 'drm' in features.split(',')
+    if ships_so:
+        # Same artifact assertion as the --package path. Under --skip-cargo nothing here rebuilt the
+        # binary, so `features` says what was ASKED for while the staged bundle can be anything.
+        assert_staged_binary_is_drm()
+        stage_libdrmtap_into_deb(build_libdrmtap_so())
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
+    if ships_so:
+        retarget_control_to_drm_variant()
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file_folder("tmpdeb/")
     system2('dpkg-deb -b tmpdeb rustdesk.deb;')
@@ -362,10 +699,68 @@ def build_flutter_deb(version, features):
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    if ships_so:
+        # Named apart from the stock package so installing the consent-free variant is a deliberate act.
+        os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
 
 
-def build_deb_from_folder(version, binary_folder):
+DRMTAP_DLOPEN_MARKER = b'/usr/lib/rustdesk/libdrmtap.so.0'
+# Present only when `drm-wake` is compiled in: the runtime option constant is itself
+# #[cfg(feature = "drm-wake")] (src/ipc/drm.rs). The dlopen marker above cannot stand in for it -
+# `--features drm` alone produces a binary that carries the dlopen path and NO wake code, and that
+# is exactly the deb this assertion is here to refuse.
+DRMTAP_WAKE_MARKER = b'enable-drm-display-wake'
+
+
+def _carries_drmtap_marker(path, marker=DRMTAP_DLOPEN_MARKER):
+    # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk boundary:
+    # librustdesk.so is ~45 MB and there is no reason to hold it all in memory, and the `with`
+    # closes deterministically instead of relying on refcounting.
+    with open(path, 'rb') as f:
+        tail = b''
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return False
+            if marker in tail + chunk:
+                return True
+            tail = chunk[-(len(marker) - 1):]
+
+
+def assert_staged_binary_is_drm():
+    """The staged BINARY must really be a drm build before it is named the unattended-wayland
+    variant. That package conflicts with and replaces the stock one, so shipping a stock binary
+    under that name produces something that can never capture and cannot be installed alongside
+    what it replaced. The marker is the absolute dlopen path from drmtap_dl.rs, present only when
+    the feature is compiled in -- assert what was produced, not what was asked for.
+
+    Called from BOTH packaging paths. It used to guard only one of them, and `--skip-cargo` (which
+    is how CI packages) reaches the other, where nothing had rebuilt the binary at all.
+    """
+    binaries = [p for p in glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
+                + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk') if os.path.isfile(p)]
+    if not any(_carries_drmtap_marker(p) for p in binaries):
+        raise Exception(
+            f'--drm was requested but the staged bundle does not look like a drm build (no '
+            f'{DRMTAP_DLOPEN_MARKER.decode()} dlopen path in {binaries or "any staged binary"}); '
+            'refusing to package it as the unattended-wayland variant, which conflicts with and '
+            'replaces the stock package but could never capture')
+    # And the WAKE half. `--drm` enables `drm-wake` too (see get_features), and the deb is named and
+    # documented as the variant that can reach a machine whose screen has gone dark. The dlopen
+    # marker above does not distinguish them: `--features drm` alone carries it and has no wake code
+    # at all. Asserting only the first half is how a deb can be named for a feature it does not have.
+    if not any(_carries_drmtap_marker(p, DRMTAP_WAKE_MARKER) for p in binaries):
+        raise Exception(
+            f'--drm was requested but the staged binary has no {DRMTAP_WAKE_MARKER.decode()} '
+            f'marker in {binaries or "any staged binary"}, so it was built without `drm-wake`; '
+            'refusing to package it as the unattended-wayland variant, which is named and '
+            'documented as the build that can wake an idle-disabled display. If this fired under '
+            '--skip-cargo, the cargo line that produced the bundle is missing the feature: '
+            '--features ...,drm,drm-wake')
+
+
+def build_deb_from_folder(version, binary_folder, want_drm=False):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
     system2('mkdir -p tmpdeb/usr/share/rustdesk')
@@ -389,9 +784,53 @@ def build_deb_from_folder(version, binary_folder):
         'cp ../res/rustdesk-link.desktop tmpdeb/usr/share/applications/rustdesk-link.desktop')
     system2(
         "echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+    # Where the capture library comes from for a `--package <folder> --drm` build. Two shapes are
+    # supported, because two exist in practice: a bundle that already carries libdrmtap.so.0.*
+    # (someone staged it, e.g. a CI artifact), and a plain bundle, which is what every build path
+    # here actually produces -- the flutter deb builds the library straight into the staged deb, so
+    # nothing ever puts it inside the bundle folder. Demanding it in the bundle made this flag
+    # combination impossible to satisfy.
+    bundled_glob = glob.glob('tmpdeb/usr/share/rustdesk/libdrmtap.so.0.*')
+    bundle_carries_so = any(os.path.isfile(p) and not os.path.islink(p) for p in bundled_glob)
+    # The variant must be decided by the EXPLICIT --drm request, not merely by what happens to be
+    # staged: a bundle that carries the .so must NOT be shipped as the consent-bypass variant when
+    # --drm was never passed.
+    if bundle_carries_so and not want_drm:
+        raise Exception(
+            'the staged bundle carries libdrmtap.so.0.* but --drm was not passed; refusing '
+            'to silently ship the consent-bypass unattended-wayland variant (pass --drm to '
+            'build it deliberately)')
+    if want_drm:
+        # Whichever shape we are in, the staged BINARY must really be a drm build. This is the
+        # property the old presence-of-the-.so test stood in for, badly: a stock binary packaged as
+        # the unattended-wayland variant would carry the consent-bypass name, conflict with and
+        # replace the stock package, and never be able to capture. The marker is the absolute
+        # dlopen path from drmtap_dl.rs, present only when the feature is compiled in -- the same
+        # kind of artifact assertion as _assert_so_has_egl, and for the same reason: assert what
+        # was produced, not what was asked for.
+        assert_staged_binary_is_drm()
+        if bundle_carries_so:
+            so = _single_real_so(bundled_glob, 'the staged --drm bundle')
+            # The THIRD artifact source, and the last one that was missing the check: --package
+            # takes the .so straight out of a bundle somebody else produced, so it has the same
+            # exposure as DRMTAP_PREBUILT_DIR (see the comment on that branch). A CPU-only stub
+            # would ship, the loader would accept it, and capture would degrade to PipeWire
+            # without a word.
+            _assert_so_has_egl(so)
+            stage_libdrmtap_into_deb(so)
+            system2(f'rm -f "{so}"')
+            system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')
+        else:
+            # Build it here, exactly as the flutter deb path does (build_libdrmtap_so asserts the
+            # EGL backend itself). The library is independent of the staged binary.
+            stage_libdrmtap_into_deb(build_libdrmtap_so())
 
     system2('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
+    # Keyed on the EXPLICIT request, not on what happened to be staged: by here a --drm build has
+    # its library in tmpdeb whichever of the two shapes it came from.
+    if want_drm:
+        retarget_control_to_drm_variant()
     system2('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file_folder("tmpdeb/")
     system2('dpkg-deb -b tmpdeb rustdesk.deb;')
@@ -399,6 +838,8 @@ def build_deb_from_folder(version, binary_folder):
     system2('/bin/rm -rf tmpdeb/')
     system2('/bin/rm -rf ../res/DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    if want_drm:
+        os.rename('../rustdesk-%s.deb' % version, f'../{DRM_PACKAGE_NAME}-{version}.deb')
     os.chdir("..")
 
 
@@ -473,6 +914,19 @@ def main():
     parser = make_parser()
     args = parser.parse_args()
 
+    # Before anything with a side effect: this is a query, and a caller uses it to build the very
+    # binary it will then package. `get_features` stays the single definition of what a flag
+    # combination means; a caller that hardcodes the list instead is one edit away from compiling
+    # something other than what it ships.
+    if args.print_features:
+        # stdout carries the list and nothing else, so a caller can use it directly in a command
+        # substitution. `get_features` prints a human-readable line of its own; send that to stderr
+        # for this call rather than silencing it, which would change what every other path prints.
+        with contextlib.redirect_stdout(sys.stderr):
+            feats = ','.join(get_features(args))
+        print(feats)
+        return
+
     if os.path.exists(exe_path):
         os.unlink(exe_path)
     if os.path.isfile('/usr/bin/pacman'):
@@ -488,7 +942,7 @@ def main():
     portable = args.portable
     package = args.package
     if package:
-        build_deb_from_folder(version, package)
+        build_deb_from_folder(version, package, args.drm)
         return
     res_dir = 'resources'
     external_resources(flutter, args, res_dir)

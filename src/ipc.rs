@@ -3,6 +3,21 @@ mod ipc_auth;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
+// The DRM/KMS capture producer, the `_drm` channel and its SCM_RIGHTS framing live in their own
+// module, declared the same way as the other pieces of this file, so the opt-in feature adds a
+// bounded, self-contained surface here instead of ~1800 lines in the middle of the shared IPC.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[path = "ipc/drm.rs"]
+mod ipc_drm;
+// Re-exported so the paths callers already use (`crate::ipc::start_drm`, `crate::ipc::connect_drm`,
+// `crate::ipc::DrmDisplayInfo`) keep working, and so the `Data` variants can name the two
+// payload types.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::DrmConn;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::connect_drm;
 
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -60,6 +75,9 @@ use ipc_fs::{
     check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
     should_scrub_parent_entries_after_check_pid, write_pid,
 };
+// Gated with the module that uses it, so a `drm`-less build does not carry an unused import.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use ipc_fs::remove_ipc_entry_via_secure_parent_fd;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
@@ -481,6 +499,51 @@ pub enum Data {
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
+    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
+    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
+    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
+    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
+    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
+    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
+    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service: begin streaming the chosen display.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
+    // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
+    // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
+    // detile, so a render-node-less seat still captures instead of losing the stream.
+    DrmStart { display: i32, need_cpu: bool },
+    /// Service -> client: the enumerated DRM displays (sent once, before frames).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplayList(Vec<DrmDisplayInfo>),
+    /// Service -> client: the connector topology changed mid-stream (a monitor hotplug/unplug/modeset,
+    /// observed by the service's udev DRM-uevent listener). Carries the freshly-enumerated list so the
+    /// consumer can swap its sticky positive availability cache off the hot path, WITHOUT re-probing
+    /// `_drm` (which would trip the enumeration restart loop). Interleaved with frames on the same
+    /// stream; carries no `send_raw()` body and no fd.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplaysChanged(Vec<DrmDisplayInfo>),
+    /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
+    /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrame { width: u32, height: u32 },
+    /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
+    /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
+    /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
+    /// the EGL detile/convert itself (see `DmabufDesc`).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrameDmabuf(DmabufDesc),
+    /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmCursor {
+        id: u64,
+        width: u32,
+        height: u32,
+        hotx: i32,
+        hoty: i32,
+    },
 }
 
 #[tokio::main(flavor = "current_thread")]
