@@ -332,6 +332,7 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
 use hbb_common::log_throttle::LogThrottle;
 const ICE_LOG_INTERVAL: Duration = Duration::from_secs(60);
 static REJECTED_ICE_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
+static UDP_UAT_ERR_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
 static UNEXPECTED_ICE_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
 static PENDING_ICE_FULL_LOG: LogThrottle = LogThrottle::new(ICE_LOG_INTERVAL);
 
@@ -5165,7 +5166,12 @@ async fn test_udp_uat(
                         }
                     }
                     Err(e) => {
-                        log::warn!("UDP NAT test socket error: {}", e);
+                        // Same ICMP-driven errors as punch_udp sees. Without a pause this arm
+                        // re-arms recv immediately and spins the loop at CPU speed.
+                        if let Some(n) = UDP_UAT_ERR_LOG.due() {
+                            log::warn!("UDP NAT test socket error x{n}, last: {e}");
+                        }
+                        hbb_common::sleep(0.01).await;
                     }
                 }
             }
