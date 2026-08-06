@@ -2653,7 +2653,7 @@ pub async fn punch_udp(
         tokio::select! {
             _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
                 if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, stop sending packets after {packets_sent:?} packets, {recv_errors} recv errors absorbed");
+                    bail!("UDP punch is timed out, stop sending packets after {:?} packets, {} recv errors absorbed", packets_sent, recv_errors);
                 }
                 let elapsed = last_send_time.elapsed();
 

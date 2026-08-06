@@ -19,6 +19,12 @@ pub struct KcpStream {
     stop_sender: Option<oneshot::Sender<()>>,
 }
 
+const KCP_IO_ERR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+static KCP_SEND_ERR_LOG: hbb_common::log_throttle::LogThrottle =
+    hbb_common::log_throttle::LogThrottle::new(KCP_IO_ERR_LOG_INTERVAL);
+static KCP_RECV_ERR_LOG: hbb_common::log_throttle::LogThrottle =
+    hbb_common::log_throttle::LogThrottle::new(KCP_IO_ERR_LOG_INTERVAL);
+
 impl KcpStream {
     // Engage KCP's built-in congestion control (nc=0) unless disabled by option: pure turbo
     // (nc=1) keeps blasting a full 1024-segment window through loss, which on constrained
@@ -34,33 +40,6 @@ impl KcpStream {
                 config
             }));
         }
-    }
-
-    // One line per run of socket failures rather than per failure: these are absorbed as packet
-    // loss and can repeat every 10ms, and debug output is written to the log file.
-    const KCP_IO_FAIL_PERSIST: u64 = 500; // ~5s at the 10ms retry interval
-
-    fn note_io_err(fail_run: &mut u64, what: &str, e: &std::io::Error) {
-        *fail_run += 1;
-        if *fail_run == 1 {
-            log::debug!("KCP {} error (treated as loss): {:?}", what, e);
-        } else if *fail_run % Self::KCP_IO_FAIL_PERSIST == 0 {
-            // Still failing well past a transient ICMP: say so once per run length, else a
-            // socket that never recovers is silent until KCP reaps it 60s later.
-            log::warn!(
-                "KCP {} failing persistently: {} consecutive errors, last: {:?}",
-                what,
-                fail_run,
-                e
-            );
-        }
-    }
-
-    fn note_io_ok(fail_run: &mut u64) {
-        if *fail_run >= Self::KCP_IO_FAIL_PERSIST {
-            log::info!("KCP socket recovered after {} failed operations", fail_run);
-        }
-        *fail_run = 0;
     }
 
     fn create_framed(stream: stream::KcpStream, local_addr: Option<SocketAddr>) -> Stream {
@@ -157,12 +136,11 @@ impl KcpStream {
             // a truly dead link is reaped by the KCP pong timeout / app-level timeouts.
             // The short sleep prevents a persistently failing socket from busy-spinning.
             //
-            // Log by run, not per occurrence: the 10ms sleep means a persistently failing
-            // socket would otherwise write ~100 lines a second into the log file. One line
-            // when a run starts, one per PERSIST run length so a stuck socket stays visible
-            // (the pong timeout takes 60s to reap it, and the session is frozen meanwhile),
-            // and one when it recovers carrying the total.
-            let mut fail_run = 0u64;
+            // These repeat every 10ms while the socket stays broken, so throttle the line —
+            // debug output is written to the log file. One throttle per direction: an ICMP
+            // error on a connected socket is reported once and cleared, so the steady state is
+            // an alternation (send succeeds, the next recv reports the error), and a shared
+            // counter would be reset by the succeeding direction on every cycle.
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
@@ -170,18 +148,16 @@ impl KcpStream {
                         break;
                     }
                     Some(data) = output.recv() => {
-                        match udp.send(&data.inner()).await {
-                            Ok(_) => Self::note_io_ok(&mut fail_run),
-                            Err(e) => {
-                                Self::note_io_err(&mut fail_run, "send", &e);
-                                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                        if let Err(e) = udp.send(&data.inner()).await {
+                            if let Some(n) = KCP_SEND_ERR_LOG.due() {
+                                log::debug!("KCP send error x{n} (treated as loss), last: {e}");
                             }
+                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                         }
                     }
                     result = udp.recv_from(&mut buf) => {
                         match result {
                             Ok((size, _)) => {
-                                Self::note_io_ok(&mut fail_run);
                                 if size < std::mem::size_of::<KcpPacketHeader>() {
                                     continue;
                                 }
@@ -190,7 +166,9 @@ impl KcpStream {
                                     .await.ok();
                             }
                             Err(e) => {
-                                Self::note_io_err(&mut fail_run, "recv", &e);
+                                if let Some(n) = KCP_RECV_ERR_LOG.due() {
+                                    log::debug!("KCP recv error x{n} (treated as loss), last: {e}");
+                                }
                                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                             }
                         }
