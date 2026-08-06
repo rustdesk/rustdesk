@@ -2642,6 +2642,7 @@ pub async fn punch_udp(
     const MAX_INTERVAL: Duration = Duration::from_millis(200);
     const MAX_TIME: Duration = Duration::from_secs(20);
     let mut packets_sent = 0;
+    let mut recv_errors = 0u32;
     socket.send(&[]).await.ok();
     packets_sent += 1;
     let mut last_send_time = Instant::now();
@@ -2652,7 +2653,7 @@ pub async fn punch_udp(
         tokio::select! {
             _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
                 if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, stop sending packets after {:?} packets", packets_sent);
+                    bail!("UDP punch is timed out, stop sending packets after {packets_sent:?} packets, {recv_errors} recv errors absorbed");
                 }
                 let elapsed = last_send_time.elapsed();
 
@@ -2674,7 +2675,13 @@ pub async fn punch_udp(
                     // is expected and surfaces as ConnectionReset/Refused on a connected
                     // socket (notably 10054 on Windows). Treat it as loss and keep punching;
                     // MAX_TIME above still bounds the whole attempt.
-                    log::debug!("UDP punch recv error (treated as loss): {e}");
+                    // Log only the first: this retries every 10ms for up to MAX_TIME, so one
+                    // line per occurrence would write thousands into the log file per punch.
+                    // The count is reported once at the end.
+                    recv_errors += 1;
+                    if recv_errors == 1 {
+                        log::debug!("UDP punch recv error (treated as loss): {e}");
+                    }
                     hbb_common::sleep(0.01).await;
                 }
                 Ok(n) => {
