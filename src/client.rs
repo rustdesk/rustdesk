@@ -613,7 +613,9 @@ impl Client {
     }
 
     /// Max ICE candidates buffered during the punch window before the answer is applied.
-    /// Bounds memory if a misbehaving rendezvous floods candidates.
+    /// Bounds memory if a misbehaving rendezvous floods candidates. On overflow the oldest is
+    /// evicted: gathering order is host, then srflx, then relay, so the newest arrivals are the
+    /// ones that traverse NAT.
     const MAX_PENDING_WEBRTC_ICE: usize = 64;
 
     /// Prefer-P2P window: how long a WebRTC attempt outranks an already-established relay
@@ -627,6 +629,16 @@ impl Client {
     /// flight; the remote ICE agent dedups repeats, so the second copy is free.
     const WEBRTC_ICE_RESEND_DELAY: Duration = Duration::from_millis(400);
 
+    /// Bridge local ICE candidates to the peer over the punch socket, and feed the peer's back
+    /// into the pc.
+    ///
+    /// This socket must not be reconnected on error, unlike the controlled side's sender which
+    /// dials a fresh connection per candidate. Its address *is* the return route: the server
+    /// mangles it into `PunchHole.socket_addr`, the peer echoes it back as
+    /// `IceCandidate.socket_addr`, and the server resolves it through `tcp_punch`. A reconnect
+    /// would arrive from a new address that no route points at, and the server drops the old
+    /// entry when this connection closes — so once it dies, both directions are dead and
+    /// abandoning WebRTC for another transport is the correct response, not retrying.
     fn spawn_webrtc_ice_bridge(
         mut socket: Stream,
         mut local_ice_rx: Option<UnboundedReceiver<String>>,
@@ -1140,14 +1152,18 @@ impl Client {
                     }
                     Some(rendezvous_message::Union::IceCandidate(ice)) => {
                         if Self::is_expected_webrtc_ice_candidate(&ice, &webrtc_session_key) {
-                            if pending_webrtc_ice.len() < Self::MAX_PENDING_WEBRTC_ICE {
-                                pending_webrtc_ice.push(ice.candidate);
-                            } else {
+                            // Evict the oldest, not the newest. Candidates arrive in gathering
+                            // order — host first, then srflx, then relay — so dropping arrivals
+                            // would discard exactly the ones that traverse NAT and keep the
+                            // host ones that only work on a shared LAN.
+                            if pending_webrtc_ice.len() >= Self::MAX_PENDING_WEBRTC_ICE {
                                 log::warn!(
-                                    "dropping WebRTC ICE candidate: pending buffer full ({})",
+                                    "WebRTC ICE pending buffer full ({}), dropping oldest candidate",
                                     Self::MAX_PENDING_WEBRTC_ICE
                                 );
+                                pending_webrtc_ice.remove(0);
                             }
+                            pending_webrtc_ice.push(ice.candidate);
                         } else {
                             log::debug!(
                                 "dropping ICE candidate for unexpected WebRTC session key {}",
