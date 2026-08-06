@@ -196,9 +196,20 @@ impl DrmtapLib {
             std::iter::once(INSTALLED).chain(DEV_ONLY).collect()
         };
         unsafe {
-            let (lib, name) = candidates
-                .iter()
-                .find_map(|n| Library::new(*n).ok().map(|l| (l, *n)))?;
+            let mut errs = Vec::new();
+            let found = candidates.iter().find_map(|n| match Library::new(*n) {
+                Ok(l) => Some((l, *n)),
+                Err(e) => {
+                    errs.push(format!("{n}: {e}"));
+                    None
+                }
+            });
+            let Some((lib, name)) = found else {
+                // The dlerror names the real cause (a missing soname, a glibc too old for the
+                // bundled build); the caller only reports that DRM capture is off.
+                log::warn!("libdrmtap dlopen failed: {}", errs.join("; "));
+                return None;
+            };
             // Canonicalize the absolute candidate only: `dlopen` does not search the CWD for a bare
             // soname, while `canonicalize` resolves a relative name against it.
             let real = std::path::Path::new(name)
