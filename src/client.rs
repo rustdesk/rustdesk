@@ -223,13 +223,16 @@ impl Drop for OffererGuard {
 ///
 /// A plain `select_ok` would almost always pick the relay: its TCP connect completes in one
 /// round trip while WebRTC needs candidate trickle + ICE checks + DTLS + SCTP. Instead:
-/// - a WebRTC success is committed immediately;
-/// - an `is_p2p` result from `others` (e.g. IPv6 direct) is committed immediately;
-/// - a relayed result inside the preference window is *held*, giving WebRTC until the window
-///   expires to connect and take priority. The window starts when the first relay is ready, not
-///   when setup begins, so rendezvous latency cannot consume the preference budget. Unfinished
-///   `others` keep racing so a slower direct transport can still win; when the window ends (or
-///   WebRTC fails) the held connection is committed;
+/// - an `is_p2p` result from either side (WebRTC, or e.g. IPv6 direct from `others`) is committed
+///   immediately;
+/// - a relayed result from *either* side inside the preference window is *held*, giving the other
+///   side until the window expires to land something direct. `webrtc_fut` is a whole punch
+///   attempt, not just the WebRTC connect, so it too can end in a relay, and committing that
+///   immediately would preempt a direct punch still in flight on the other branch. The window
+///   starts when the first relay is ready, not when setup begins, so rendezvous latency cannot
+///   consume the preference budget. Unfinished `others` keep racing so a slower direct transport
+///   can still win; when the window ends (or the other side fails) the held connection is
+///   committed;
 /// - a failure on one side commits the survivor as soon as it succeeds; two failures compose
 ///   into one error.
 ///
@@ -258,8 +261,22 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
             }, if webrtc_fut.is_some() => {
                 webrtc_fut = None;
                 match res {
-                    // WebRTC connected: preferred outright; a held relay conn just drops.
-                    Ok(conn) => return Ok(conn),
+                    // A direct connection is the outcome this race exists to protect: commit it
+                    // outright, and a held relay conn just drops.
+                    Ok(conn) if is_p2p(&conn) || others_fut.is_none() => return Ok(conn),
+                    // `webrtc_fut` is a whole punch attempt, not just the WebRTC connect, so it
+                    // can end in a relay of its own. Committing that immediately would preempt a
+                    // direct punch still in flight on the other branch — the exact inversion this
+                    // function exists to prevent — so hold it on the same terms as any relay.
+                    Ok(conn) => {
+                        if held.is_none() {
+                            held = Some(conn);
+                            window.as_mut().reset(
+                                Instant::now() + Duration::from_millis(window_ms),
+                            );
+                            window_started = true;
+                        }
+                    }
                     Err(e) => {
                         if let Some(conn) = held.take() {
                             return Ok(conn);
@@ -299,7 +316,14 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                     }
                     Err(e) => match webrtc_err.take() {
                         Some(we) => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
-                        None if webrtc_fut.is_none() => return Err(e),
+                        None if webrtc_fut.is_none() => {
+                            // The preferred branch may have parked a relay here; nothing else can
+                            // win now, so commit it rather than failing the connection.
+                            match held.take() {
+                                Some(conn) => return Ok(conn),
+                                None => return Err(e),
+                            }
+                        }
                         None => others_err = Some(e),
                     },
                 }
@@ -5168,6 +5192,48 @@ mod webrtc_race_tests {
         .await
         .unwrap();
         assert_eq!(got, "webrtc");
+    }
+
+    // The preferred branch runs a whole punch attempt, so it can itself end in a relay. That must
+    // not preempt a direct punch still in flight on the fallback branch.
+    #[tokio::test]
+    async fn relay_from_preferred_branch_does_not_preempt_a_direct_fallback() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(10, "preferred-relay"),
+            vec![ok_after(120, "direct")],
+            60_000,
+            |tag| *tag == "direct",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "direct");
+    }
+
+    // ...but it is still committed once nothing direct can arrive.
+    #[tokio::test]
+    async fn relay_from_preferred_branch_committed_when_fallback_fails() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(10, "preferred-relay"),
+            vec![err_after(50, "punch failed")],
+            60_000,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "preferred-relay");
+    }
+
+    #[tokio::test]
+    async fn relay_from_preferred_branch_committed_when_window_expires() {
+        let got = race_transports_prefer_webrtc(
+            ok_after(10, "preferred-relay"),
+            vec![ok_after(60_000, "too-slow")],
+            100,
+            NOT_P2P,
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "preferred-relay");
     }
 
     #[tokio::test]
