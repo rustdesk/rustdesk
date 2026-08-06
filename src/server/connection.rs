@@ -1506,6 +1506,8 @@ impl Connection {
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         v["session_id"] = json!(self.lr.session_id);
+        // Unique per record; the api server dedups retried posts by it.
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         allow_err!(self.tx_post_seq.send((url, v)));
     }
 
@@ -1555,6 +1557,7 @@ impl Connection {
             "path":path,
             "is_file":is_file,
             "info":json!(info).to_string(),
+            "nonce": uuid::Uuid::new_v4().to_string(),
         });
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -1576,6 +1579,7 @@ impl Connection {
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         if typ == AlarmAuditType::IpWhitelist || typ == AlarmAuditType::IdWhitelist {
             if let Some(audit_ref) = self.conn_audit_ref() {
                 v["conn_audit_ref"] = json!(audit_ref);
@@ -1603,9 +1607,103 @@ impl Connection {
         );
     }
 
-    #[inline]
     async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
-        crate::post_request(url, v.to_string(), "").await
+        // Audit records are compliance evidence; retry transport errors and
+        // 5xx (e.g. a reverse proxy answering while the api server restarts)
+        // so transient failures don't silently drop them. A 4xx is a
+        // deterministic rejection and fails immediately.
+        //
+        // The delays, not the attempt count, are what cover the case this exists
+        // for: a proxy answering 502 during a restart fails fast, so without them
+        // every attempt lands within a few seconds and none outlives the restart.
+        //
+        // The window is bounded on the other side: the api server only remembers a
+        // record's nonce for five minutes, so a retry arriving after that expired
+        // would be stored a second time. Counting attempts cannot bound it - one
+        // attempt is already up to 84s (post_request_ retries the TLS handshake up
+        // to four times at 12s each, then the TCP-proxy fallback adds 36s), and a
+        // suspend between attempts stretches the wall clock without limit. So stop
+        // by elapsed time instead, early enough that the last attempt still lands
+        // inside the server's window.
+        const RETRY_DEADLINE: Duration = Duration::from_secs(120);
+        // One delay per retry, so the attempt count follows from the table and the
+        // two cannot drift apart.
+        const RETRY_BACKOFF_SECS: [u64; 2] = [10, 30];
+        const ATTEMPTS: usize = RETRY_BACKOFF_SECS.len() + 1;
+        let body = v.to_string();
+        let started = Instant::now();
+        let mut attempt = 0usize;
+        loop {
+            attempt += 1;
+            let (retryable, err) =
+                match crate::post_request_with_status(url.clone(), body.clone(), "").await {
+                    Ok((status, text)) => {
+                        if (200..300).contains(&status) {
+                            // Success is an empty body. hbbs reports handler
+                            // failures (e.g. a db write error) as 200 with an
+                            // {"error": ...} body - retryable: the server
+                            // releases the record's nonce when its write fails,
+                            // so trying again is what stores the record. Any
+                            // other nonempty body did not come from the audit
+                            // handler (a proxy interposing a 2xx maintenance
+                            // page, a malformed error) and must not be mistaken
+                            // for storage, so it is retried rather than dropped.
+                            if text.trim().is_empty() {
+                                return Ok(text);
+                            }
+                            let server_err = serde_json::from_str::<Value>(&text)
+                                .ok()
+                                .and_then(|v| v.get("error")?.as_str().map(|s| s.to_owned()))
+                                .filter(|e| !e.is_empty());
+                            let (label, detail) = match &server_err {
+                                Some(e) => ("server error", e.as_str()),
+                                None => ("unexpected response body", text.as_str()),
+                            };
+                            let brief: String = detail.chars().take(128).collect();
+                            (true, format!("{}: {}", label, brief))
+                        } else {
+                            let brief: String = text.chars().take(128).collect();
+                            // 408 and 429 are the transient 4xx: the request timed
+                            // out upstream, or a proxy is shedding load. Every other
+                            // 4xx is a deterministic rejection and retrying it would
+                            // only delay the log line.
+                            let transient = status >= 500 || status == 408 || status == 429;
+                            (transient, format!("status {}: {}", status, brief))
+                        }
+                    }
+                    Err(e) => (true, e.to_string()),
+                };
+            let elapsed = started.elapsed();
+            if !retryable || attempt >= ATTEMPTS || elapsed >= RETRY_DEADLINE {
+                log::error!(
+                    "Audit post dropped (attempt {}/{}, {:?} elapsed): {}",
+                    attempt,
+                    ATTEMPTS,
+                    elapsed,
+                    err
+                );
+                bail!("{}", err);
+            }
+            log::warn!(
+                "Audit post failed (attempt {}/{}): {}",
+                attempt,
+                ATTEMPTS,
+                err
+            );
+            // In range by construction: the guard above returns at ATTEMPTS.
+            time::sleep(Duration::from_secs(RETRY_BACKOFF_SECS[attempt - 1])).await;
+            // Re-checked after the delay so no attempt starts past the deadline;
+            // the check above alone would let one begin up to a backoff later.
+            if started.elapsed() >= RETRY_DEADLINE {
+                log::error!(
+                    "Audit post dropped (attempt {}/{}, deadline passed during backoff): {}",
+                    attempt,
+                    ATTEMPTS,
+                    err
+                );
+                bail!("{}", err);
+            }
+        }
     }
 
     fn set_conn_audit_primary_auth(&mut self, method: ConnAuditPrimaryAuth) {
