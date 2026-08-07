@@ -849,11 +849,13 @@ impl RendezvousMediator {
         // and STUN bypass the proxy and leak the real IP. WebSocket mode does NOT disable it —
         // ws only tunnels the signaling/relay legs to the server, classic punching stays forced
         // to relay (`relay` above), and the answer rides the RelayResponse, leaving ICE as the
-        // only P2P path there. force_relay depends on why it was set: with webrtc_all_ice the
-        // controller's relay is transport-forced (ws) and its offer carries every candidate
-        // type, so answer with full ICE and let a direct pair form; without it the offer is
-        // Relay-only ICE by policy, viable (and answerable) only through TURN.
-        let webrtc_relay_only = ph.force_relay && !ph.webrtc_all_ice;
+        // only P2P path there. force_relay depends on why it was set, and the offer's envelope
+        // says which: an `ice_policy: "all"` declaration means the controller's relay is
+        // transport-forced (ws) and its offer carries every candidate type, so answer with
+        // full ICE and let a direct pair form; without it the offer is Relay-only ICE by
+        // policy, viable (and answerable) only through TURN.
+        let webrtc_relay_only = ph.force_relay
+            && !WebRTCStream::endpoint_declares_all_ice(&ph.webrtc_sdp_offer);
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
             && !Config::is_proxy()
             && (!webrtc_relay_only || WebRTCStream::has_turn_server());
