@@ -43,8 +43,37 @@ const TERM_XTERM_256COLOR: &str = "xterm-256color";
 const TERM_SCREEN_256COLOR: &str = "screen-256color";
 const TERM_XTERM: &str = "xterm";
 
+#[cfg(feature = "drm")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    /// Only for per-frame callers; see `is_login_screen_wayland_cached`.
+    /// Own block because `#[cfg]` on one item inside a shared one breaks the macro.
+    static ref IS_LOGIN_SCREEN_WAYLAND: bool = is_login_screen_wayland();
+}
+
+lazy_static::lazy_static! {
+    /// `is_x11_or_headless()` answers x11 at a Wayland greeter, which the portal could not
+    /// serve but the DRM path can. Unmemoised lookup on purpose: this may run mid-boot, and
+    /// a "no" cached that early would be wrong for the rest of the process.
+    pub static ref IS_X11: bool = {
+        let x11 = hbb_common::platform::linux::is_x11_or_headless();
+        #[cfg(feature = "drm")]
+        {
+            if x11 && is_login_screen_wayland() {
+                log::info!(
+                    "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
+                     treating it as Wayland so the DRM path is not disabled at the one \
+                     screen it exists for"
+                );
+                false
+            } else {
+                x11
+            }
+        }
+        #[cfg(not(feature = "drm"))]
+        {
+            x11
+        }
+    };
     // Cache for TERM value - once TERM_XTERM_256COLOR is found, reuse it directly
     static ref CACHED_TERM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     static ref DATABASE_XTERM_256COLOR: Option<Database> = {
@@ -206,6 +235,24 @@ pub fn is_headless_allowed() -> bool {
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+}
+
+/// X11 as far as the DRM path is concerned: a Wayland greeter is not.
+///
+/// Both halves unmemoised, for the retry loops that must keep asking until seat0 can be named.
+#[cfg(feature = "drm")]
+pub fn is_x11_for_drm() -> bool {
+    scrap::is_x11() && !is_login_screen_wayland()
+}
+
+/// Memoised `is_login_screen_wayland`, for per-frame callers that must not run `loginctl`.
+///
+/// Only from the per-session `--server`: it is spawned after the session is identified, so the
+/// answer is settled. Anything that can run mid-boot must use the uncached form.
+#[cfg(feature = "drm")]
+#[inline]
+pub fn is_login_screen_wayland_cached() -> bool {
+    *IS_LOGIN_SCREEN_WAYLAND
 }
 
 #[inline]

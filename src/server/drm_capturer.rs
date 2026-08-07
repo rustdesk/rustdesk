@@ -963,9 +963,10 @@ fn refresh_available_async() {
 
 pub(super) fn warm_availability() {
     // The gate is INSIDE the loop because `get_display_server()` answers "x11" whenever loginctl
-    // cannot yet name the seat0 session. `scrap::is_x11()` is the UNMEMOISED form.
+    // cannot yet name the seat0 session. `is_x11_for_drm()` is that form minus the greeter
+    // blind spot, where plain `is_x11()` is permanently true.
     for _ in 0..10 {
-        if scrap::is_x11() {
+        if crate::platform::linux::is_x11_for_drm() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
@@ -1093,6 +1094,9 @@ pub(super) fn get_primary_index() -> usize {
         ProbeState::Available(_, list) => list.clone(),
         _ => return 0,
     };
+    if !wayland_outputs_askable() {
+        return 0;
+    }
     let wl = scrap::wayland::display::get_displays();
     if wl.displays.is_empty() {
         return 0;
@@ -1103,11 +1107,22 @@ pub(super) fn get_primary_index() -> usize {
         .unwrap_or(0)
 }
 
+/// Whether the compositor can be asked for its outputs here. A login screen has none, and
+/// `get_displays()` does not cache that failure, so it reopens a connection every call. Both
+/// callers treat an empty list as "no augmentation", so skipping cannot change either answer.
+fn wayland_outputs_askable() -> bool {
+    !crate::platform::linux::is_login_screen_wayland_cached()
+}
+
 /// DRM reports every monitor at physical size and origin (0,0), stacking a multi-monitor client.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
-    let wl = scrap::wayland::display::get_displays();
     let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
-    if drm.len() < 2 || wl.displays.len() < 2 {
+    // Below two displays there is nothing to augment, compositor or not.
+    if drm.len() < 2 || !wayland_outputs_askable() {
+        return infos;
+    }
+    let wl = scrap::wayland::display::get_displays();
+    if wl.displays.len() < 2 {
         return infos;
     }
     let matched = assign_wayland_outputs(drm, &wl.displays);
