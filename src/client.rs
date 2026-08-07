@@ -612,7 +612,8 @@ impl Client {
     /// is configured, so skip building a guaranteed-dead pc + STUN/TURN gathering + answerer
     /// signaling in that case. WebSocket-forced relay is deliberately NOT policy: ws only
     /// tunnels the signaling/relay legs, so the offer keeps full ICE and may land a direct
-    /// connection - the flagship path for ws deployments (`webrtc_all_ice` tells the peer).
+    /// connection - the flagship path for ws deployments (the offer envelope's `ice_policy`
+    /// key tells the peer).
     /// When policy relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
     /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
     /// RelayResponse path races it without a P2P preference delay. Any request carrying an offer
@@ -888,10 +889,10 @@ impl Client {
             force_relay: interface.is_force_relay(),
             socket_addr_v6: ipv6.1.unwrap_or_default(),
             switch_code,
+            // The offer's envelope itself declares its ICE policy (`ice_policy: "all"` under
+            // pure ws), telling the controlled side its answer may gather every candidate
+            // type despite force_relay instead of requiring TURN.
             webrtc_sdp_offer: webrtc_sdp_offer.clone(),
-            // Full-ICE offer despite force_relay (ws transport): tells the controlled side
-            // its answer may gather every candidate type instead of requiring TURN.
-            webrtc_all_ice: !webrtc_sdp_offer.is_empty() && !interface.is_policy_relay(),
             ..Default::default()
         });
         let webrtc_session_key = webrtc_offerer
