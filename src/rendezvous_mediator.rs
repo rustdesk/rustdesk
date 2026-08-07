@@ -856,7 +856,11 @@ impl RendezvousMediator {
         // policy, viable (and answerable) only through TURN.
         let webrtc_relay_only = ph.force_relay
             && !WebRTCStream::endpoint_declares_all_ice(&ph.webrtc_sdp_offer);
+        // Unlike the udp/ipv6 legs - which deliberately just follow the request - WebRTC is
+        // gated on this machine's own option too: answering builds a pc that gathers ICE
+        // from this host, so a machine with WebRTC off must not be pulled into it.
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
+            && crate::get_webrtc_enabled()
             && !Config::is_proxy()
             && (!webrtc_relay_only || WebRTCStream::has_turn_server());
         let webrtc_sdp_answer = if webrtc_viable {
