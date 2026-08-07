@@ -500,9 +500,13 @@ impl TransferCoordinator {
         completion: super::completion::TransferCompletion,
         backend: &mut impl TransferBackend,
     ) {
+        let expected_file_num = match self.args.direction {
+            TransferDirection::Push => 1,
+            TransferDirection::Pull => 0,
+        };
         if self.phase != TransferPhase::Transferring
             || completion.id != self.expected_job_id
-            || completion.file_num != 1
+            || completion.file_num != expected_file_num
             || !completion.done
             || !completion.error.is_empty()
             || completion.finished_size != completion.total_size
@@ -739,15 +743,30 @@ mod tests {
         })
     }
 
-    fn completion(id: i32, size: u64) -> RuntimeEvent {
+    fn completion_event(
+        id: i32,
+        file_num: i32,
+        total_size: u64,
+        finished_size: u64,
+        done: bool,
+        error: &str,
+    ) -> RuntimeEvent {
         RuntimeEvent::Session(HeadlessFileTransferEvent::Completed(TransferCompletion {
             id,
-            file_num: 1,
-            total_size: size,
-            finished_size: size,
-            done: true,
-            error: String::new(),
+            file_num,
+            total_size,
+            finished_size,
+            done,
+            error: error.into(),
         }))
+    }
+
+    fn push_completion(id: i32, size: u64) -> RuntimeEvent {
+        completion_event(id, 1, size, size, true, "")
+    }
+
+    fn pull_completion(id: i32, size: u64) -> RuntimeEvent {
+        completion_event(id, 0, size, size, true, "")
     }
 
     fn regular_file(name: &str, size: u64) -> FileEntry {
@@ -794,6 +813,37 @@ mod tests {
         coordinator
             .handle(RuntimeEvent::TransportClosed, backend)
             .unwrap()
+    }
+
+    fn assert_completion_rejected_in_transfer(
+        direction: TransferDirection,
+        completion: RuntimeEvent,
+    ) {
+        let mut coordinator = match direction {
+            TransferDirection::Push => push_coordinator(false, 7, 42),
+            TransferDirection::Pull => pull_coordinator(false, 7),
+        };
+        let mut backend = FakeBackend::default();
+        match direction {
+            TransferDirection::Push => {
+                coordinator.handle(peer_platform("Windows"), &mut backend);
+                coordinator.handle(connected(), &mut backend);
+            }
+            TransferDirection::Pull => {
+                start_pull(&mut coordinator, &mut backend);
+                coordinator.handle(pull_metadata(7, 42), &mut backend);
+            }
+        }
+
+        coordinator.handle(completion, &mut backend);
+
+        assert!(backend.pull_destination_sizes.is_empty());
+        assert!(backend.stdout.is_empty());
+        assert_eq!(
+            backend.stderr,
+            vec!["transfer completion was incomplete or unexpected"]
+        );
+        assert_eq!(close_status(&mut coordinator, &mut backend), 5);
     }
 
     #[test]
@@ -1006,7 +1056,10 @@ mod tests {
                 is_upload: true,
             })
         );
-        assert_eq!(coordinator.handle(completion(7, 42), &mut backend), None);
+        assert_eq!(
+            coordinator.handle(push_completion(7, 42), &mut backend),
+            None
+        );
         assert_eq!(
             backend.actions.last(),
             Some(&TransferAction::CloseTransport)
@@ -1056,9 +1109,43 @@ mod tests {
         start_pull(&mut coordinator, &mut backend);
 
         assert_eq!(coordinator.handle(pull_metadata(7, 42), &mut backend), None);
-        assert_eq!(coordinator.handle(completion(7, 42), &mut backend), None);
+        assert_eq!(
+            coordinator.handle(pull_completion(7, 42), &mut backend),
+            None
+        );
         assert_eq!(backend.pull_destination_sizes, vec![42]);
         assert_eq!(backend.stdout, vec!["/tmp/target.bin"]);
+        assert_eq!(
+            backend.actions.last(),
+            Some(&TransferAction::CloseTransport)
+        );
+        assert_eq!(close_status(&mut coordinator, &mut backend), 0);
+    }
+
+    #[test]
+    fn native_pull_completion_file_index_zero_succeeds() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+        coordinator.handle(pull_metadata(7, 42), &mut backend);
+
+        assert_eq!(
+            coordinator.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::Completed(TransferCompletion {
+                    id: 7,
+                    file_num: 0,
+                    total_size: 42,
+                    finished_size: 42,
+                    done: true,
+                    error: String::new(),
+                },)),
+                &mut backend,
+            ),
+            None
+        );
+        assert_eq!(backend.pull_destination_sizes, vec![42]);
+        assert_eq!(backend.stdout, vec!["/tmp/target.bin"]);
+        assert!(backend.stderr.is_empty());
         assert_eq!(
             backend.actions.last(),
             Some(&TransferAction::CloseTransport)
@@ -1213,7 +1300,10 @@ mod tests {
         coordinator.handle(peer_platform("Windows"), &mut backend);
         coordinator.handle(connected(), &mut backend);
 
-        assert_eq!(coordinator.handle(completion(7, 42), &mut backend), None);
+        assert_eq!(
+            coordinator.handle(push_completion(7, 42), &mut backend),
+            None
+        );
         assert_eq!(
             backend.actions.last(),
             Some(&TransferAction::ReadRemoteDir {
@@ -1242,7 +1332,7 @@ mod tests {
         let mut changed_source_backend = FakeBackend::default();
         changed_source.handle(peer_platform("Windows"), &mut changed_source_backend);
         changed_source.handle(connected(), &mut changed_source_backend);
-        changed_source.handle(completion(7, 42), &mut changed_source_backend);
+        changed_source.handle(push_completion(7, 42), &mut changed_source_backend);
         assert_eq!(
             changed_source_backend.actions.last(),
             Some(&TransferAction::CloseTransport)
@@ -1277,7 +1367,7 @@ mod tests {
             };
             coordinator.handle(peer_platform("Windows"), &mut backend);
             coordinator.handle(connected(), &mut backend);
-            coordinator.handle(completion(7, 42), &mut backend);
+            coordinator.handle(push_completion(7, 42), &mut backend);
             coordinator.handle(remote_files(id, path, vec![entry]), &mut backend);
 
             assert!(backend.stdout.is_empty());
@@ -1312,7 +1402,23 @@ mod tests {
                 id: 7,
                 file_num: 1,
                 total_size: 42,
+                finished_size: 42,
+                done: true,
+                error: "remote write failed".into(),
+            },
+            TransferCompletion {
+                id: 7,
+                file_num: 1,
+                total_size: 42,
                 finished_size: 41,
+                done: true,
+                error: String::new(),
+            },
+            TransferCompletion {
+                id: 7,
+                file_num: 1,
+                total_size: 43,
+                finished_size: 43,
                 done: true,
                 error: String::new(),
             },
@@ -1339,6 +1445,50 @@ mod tests {
             assert!(backend.stdout.is_empty());
             assert_eq!(close_status(&mut coordinator, &mut backend), 5);
         }
+    }
+
+    #[test]
+    fn completion_rejects_cross_direction_file_indices() {
+        assert_completion_rejected_in_transfer(
+            TransferDirection::Push,
+            completion_event(7, 0, 42, 42, true, ""),
+        );
+        assert_completion_rejected_in_transfer(
+            TransferDirection::Pull,
+            completion_event(7, 1, 42, 42, true, ""),
+        );
+    }
+
+    #[test]
+    fn completion_rejects_out_of_range_file_indices() {
+        for (direction, file_num) in [
+            (TransferDirection::Push, -1),
+            (TransferDirection::Push, 2),
+            (TransferDirection::Pull, -1),
+            (TransferDirection::Pull, 2),
+        ] {
+            assert_completion_rejected_in_transfer(
+                direction,
+                completion_event(7, file_num, 42, 42, true, ""),
+            );
+        }
+    }
+
+    #[test]
+    fn completion_in_wrong_phase_is_protocol_status_five() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+
+        coordinator.handle(pull_completion(7, 42), &mut backend);
+
+        assert!(backend.pull_destination_sizes.is_empty());
+        assert!(backend.stdout.is_empty());
+        assert_eq!(
+            backend.stderr,
+            vec!["transfer completion was incomplete or unexpected"]
+        );
+        assert_eq!(close_status(&mut coordinator, &mut backend), 5);
     }
 
     #[test]
@@ -1432,7 +1582,7 @@ mod tests {
         let mut success_backend = FakeBackend::default();
         start_pull(&mut success, &mut success_backend);
         success.handle(pull_metadata(7, 42), &mut success_backend);
-        success.handle(completion(7, 42), &mut success_backend);
+        success.handle(pull_completion(7, 42), &mut success_backend);
         assert_eq!(success_backend.stdout, vec!["/tmp/target.bin"]);
 
         let mut failure = pull_coordinator(false, 7);
@@ -1449,7 +1599,7 @@ mod tests {
         let mut backend = FakeBackend::default();
         start_pull(&mut coordinator, &mut backend);
         coordinator.handle(pull_metadata(7, 42), &mut backend);
-        coordinator.handle(completion(7, 42), &mut backend);
+        coordinator.handle(pull_completion(7, 42), &mut backend);
 
         assert_eq!(
             coordinator.handle(
