@@ -114,6 +114,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         default:
           break;
       }
+      _currentState = GestureState.none;
       _debounceTimer = Timer(Duration(milliseconds: 200), () {
         _currentState = GestureState.none;
       });
