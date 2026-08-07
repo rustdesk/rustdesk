@@ -10,6 +10,8 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/mobile/terminal_keyboard_utils.dart';
+import 'package:flutter_hbb/web/dummy.dart'
+    if (dart.library.html) 'package:flutter_hbb/web/terminal_font.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../../desktop/pages/terminal_connection_manager.dart';
@@ -66,6 +68,10 @@ class _TerminalPageState extends State<TerminalPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    if (isWeb) {
+      loadLocalTerminalFontIfNeeded();
+    }
 
     debugPrint(
         '[TerminalPage] Initializing terminal ${widget.terminalId} for peer ${widget.id}');

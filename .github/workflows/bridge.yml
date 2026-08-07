@@ -30,7 +30,7 @@ jobs:
               target: x86_64-unknown-linux-gnu,
               os: ubuntu-22.04,
               extra-build-args: "",
-              flutter-version: "3.44.0",
+              flutter-version: "3.44.8",
               artifact-name: "bridge-artifact-flutter-3.44",
             }
     steps:
