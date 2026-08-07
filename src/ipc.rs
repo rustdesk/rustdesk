@@ -544,6 +544,9 @@ pub enum Data {
         hotx: i32,
         hoty: i32,
     },
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    CheckSwitchSidesUuid(String, String, Option<bool>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -1058,6 +1061,19 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(
                 stream
                     .send(&Data::SwitchSidesUuid(uuid, id, Some(allowed)))
+                    .await
+            );
+        }
+        #[cfg(feature = "flutter")]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        Data::CheckSwitchSidesUuid(uuid, id, None) => {
+            let allowed = uuid
+                .parse::<uuid::Uuid>()
+                .map(|uuid| crate::server::has_pending_switch_sides_uuid(&id, &uuid))
+                .unwrap_or(false);
+            allow_err!(
+                stream
+                    .send(&Data::CheckSwitchSidesUuid(uuid, id, Some(allowed)))
                     .await
             );
         }

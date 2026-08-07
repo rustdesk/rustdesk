@@ -252,7 +252,7 @@ impl Client {
         (i32, String),
         bool,
     )> {
-        if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface) {
+        if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface).await {
             bail!("Incoming only mode");
         }
         // to-do: remember the port for each peer, so that we can retry easier
@@ -3456,17 +3456,58 @@ pub fn handle_login_error(
 }
 
 // "Switch sides" requires the incoming-only client to connect back to its
-// controlling peer; the uuid is verified in `handle_hash()` before any login.
+// controlling peer; check the local pending uuid before opening the connection.
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -> bool {
-    conn_type == ConnType::DEFAULT_CONN
-        && interface.get_lch().read().unwrap().switch_uuid.is_some()
+async fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -> bool {
+    if conn_type != ConnType::DEFAULT_CONN {
+        return false;
+    }
+    let (id, uuid) = {
+        let lch = interface.get_lch();
+        let lc = lch.read().unwrap();
+        let Some(uuid) = lc.switch_uuid.as_deref() else {
+            return false;
+        };
+        let Ok(uuid) = Uuid::parse_str(uuid) else {
+            return false;
+        };
+        (lc.id.clone(), uuid)
+    };
+    check_local_switch_sides_uuid(&id, &uuid).await
 }
 
 #[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
-fn is_switch_sides_back(_conn_type: ConnType, _interface: &impl Interface) -> bool {
+async fn is_switch_sides_back(_conn_type: ConnType, _interface: &impl Interface) -> bool {
     false
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn check_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
+    let Ok(mut conn) = crate::ipc::connect(1000, "").await else {
+        return false;
+    };
+    let uuid = uuid.to_string();
+    if conn
+        .send(&crate::ipc::Data::CheckSwitchSidesUuid(
+            uuid.clone(),
+            id.to_owned(),
+            None,
+        ))
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    match conn.next_timeout(1000).await {
+        Ok(Some(crate::ipc::Data::CheckSwitchSidesUuid(
+            returned_uuid,
+            returned_id,
+            Some(true),
+        ))) => returned_uuid == uuid && returned_id == id,
+        _ => false,
+    }
 }
 
 #[cfg(feature = "flutter")]
@@ -3539,6 +3580,13 @@ pub async fn handle_hash(
             // never fall through to password login.
             if config::is_incoming_only() {
                 interface.msgbox("error", "Connection Error", "Incoming only mode", "");
+                let mut misc = Misc::new();
+                misc.set_close_reason(
+                    "Connection not allowed in incoming-only mode".to_owned(),
+                );
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
                 return;
             }
         }
@@ -4051,7 +4099,23 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
                 && !text.to_lowercase().contains("restricted")
+                && !text.to_lowercase().contains("incoming only")
                 && !text.to_lowercase().contains("not allowed")))
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::check_if_retry;
+
+    #[test]
+    fn incoming_only_error_is_not_retryable() {
+        assert!(!check_if_retry(
+            "error",
+            "Connection Error",
+            "Incoming only mode",
+            false,
+        ));
+    }
 }
 
 pub async fn hc_connection(
