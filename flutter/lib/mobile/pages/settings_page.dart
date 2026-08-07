@@ -101,6 +101,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _allowInsecureTlsFallback = false;
   var _disableUdp = false;
   var _enableIpv6Punch = false;
+  var _enableWebrtc = false;
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
@@ -143,6 +144,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
     _enableUdpPunch = mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+    _enableWebrtc = mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
     _preventSleepWhileConnected =
@@ -838,6 +840,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                     mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
                 setState(() {
                   _enableIpv6Punch = newValue;
+                });
+              },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Enable WebRTC P2P connection')),
+              initialValue: _enableWebrtc,
+              onToggle: (v) async {
+                await mainSetLocalBoolOption(kOptionEnableWebrtc, v);
+                final newValue = mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
+                setState(() {
+                  _enableWebrtc = newValue;
                 });
               },
             ),
