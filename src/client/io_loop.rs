@@ -286,9 +286,16 @@ impl<T: InvokeUiSession> Remote<T> {
                                 break;
                             }
                             if !self.read_jobs.is_empty() {
-                                if let Err(err) = fs::handle_read_jobs(&mut self.read_jobs, &mut peer).await {
-                                    self.handler.msgbox("error", "Connection Error", &err.to_string(), "");
-                                    break;
+                                match fs::handle_read_jobs(&mut self.read_jobs, &mut peer).await {
+                                    Ok(job_json) => {
+                                        if !job_json.is_empty() {
+                                            self.handler.file_transfer_job_completed(&job_json);
+                                        }
+                                    }
+                                    Err(err) => {
+                                        self.handler.msgbox("error", "Connection Error", &err.to_string(), "");
+                                        break;
+                                    }
                                 }
                                 self.update_jobs_status();
                             } else {
@@ -1715,11 +1722,20 @@ impl<T: InvokeUiSession> Remote<T> {
                         Some(file_response::Union::Done(d)) => {
                             let mut err: Option<String> = None;
                             let mut job_type = fs::JobType::Generic;
+                            let mut completion_job_json = None;
                             let mut printer_data = None;
                             if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
                                 job.modify_time();
                                 err = job.job_error();
                                 job_type = job.r#type;
+                                if job_type == fs::JobType::Generic {
+                                    completion_job_json = Some(fs::serialize_transfer_job(
+                                        &job,
+                                        err.is_none(),
+                                        false,
+                                        err.as_deref().unwrap_or(""),
+                                    ));
+                                }
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
                                     Err(e) => {
@@ -1730,6 +1746,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                             match job_type {
                                 fs::JobType::Generic => {
+                                    if let Some(job_json) = completion_job_json {
+                                        self.handler.file_transfer_job_completed(&job_json);
+                                    }
                                     self.handle_job_status(d.id, d.file_num, err);
                                 }
                                 fs::JobType::Printer => {
@@ -1766,12 +1785,23 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         Some(file_response::Union::Error(e)) => {
+                            let mut completion_job_json = None;
                             let job_type = fs::remove_job(e.id, &mut self.write_jobs)
                                 .or_else(|| fs::remove_job(e.id, &mut self.read_jobs))
-                                .map(|j| j.r#type)
+                                .map(|job| {
+                                    if job.r#type == fs::JobType::Generic {
+                                        completion_job_json = Some(fs::serialize_transfer_job(
+                                            &job, false, false, &e.error,
+                                        ));
+                                    }
+                                    job.r#type
+                                })
                                 .unwrap_or(fs::JobType::Generic);
                             match job_type {
                                 fs::JobType::Generic => {
+                                    if let Some(job_json) = completion_job_json {
+                                        self.handler.file_transfer_job_completed(&job_json);
+                                    }
                                     self.handle_job_status(e.id, e.file_num, Some(e.error));
                                 }
                                 fs::JobType::Printer => {

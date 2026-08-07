@@ -1,4 +1,5 @@
 mod args;
+mod completion;
 mod error;
 mod paths;
 
