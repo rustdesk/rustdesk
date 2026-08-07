@@ -11,7 +11,9 @@ use hbb_common::{config, log};
 use tauri_winrt_notification::{Duration, Sound, Toast};
 
 fn should_dispatch_flutter_connection(args: &[String], requested: bool) -> bool {
-    requested && !crate::headless_terminal::is_requested(args)
+    requested
+        && !crate::headless_terminal::is_requested(args)
+        && !crate::headless_file_transfer::is_requested(args)
 }
 
 #[macro_export]
@@ -164,6 +166,14 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+
+    if crate::headless_file_transfer::is_requested(&args) {
+        let exit_code = crate::headless_file_transfer::run_cli(&args);
+        if exit_code != 0 {
+            std::process::exit(exit_code);
+        }
+        return None;
+    }
 
     if crate::headless_terminal::is_requested(&args) {
         let exit_code = crate::headless_terminal::run_cli(&args);
@@ -1045,6 +1055,50 @@ mod tests {
             &args(&["--terminal", "175116438", "--headless"]),
             true
         ));
+    }
+
+    #[test]
+    fn headless_file_transfer_is_not_dispatched_to_flutter() {
+        assert!(should_dispatch_flutter_connection(
+            &args(&["--file-transfer", "175116438"]),
+            true
+        ));
+        assert!(!should_dispatch_flutter_connection(
+            &args(&[
+                "--file-transfer",
+                "--headless",
+                "175116438",
+                "push",
+                "a",
+                "b",
+            ]),
+            true
+        ));
+        assert!(should_dispatch_flutter_connection(
+            &args(&["--terminal", "175116438"]),
+            true
+        ));
+    }
+
+    #[test]
+    fn headless_file_transfer_hook_follows_logging_and_precedes_terminal_dispatch() {
+        let source = include_str!("core_main.rs");
+        let flutter_return = ["core_main_invoke_new_connection", "(std::env::args())"].concat();
+        let file_transfer_exclusion =
+            ["!crate::headless_file_transfer", "::is_requested(args)"].concat();
+        let file_transfer_hook = ["crate::headless_file_transfer", "::run_cli(&args)"].concat();
+        let terminal_hook = ["crate::headless_terminal", "::run_cli(&args)"].concat();
+
+        assert!(
+            source.find(&file_transfer_exclusion).unwrap() < source.find(&flutter_return).unwrap()
+        );
+        assert!(
+            source
+                .find("hbb_common::init_log(false, &log_name);")
+                .unwrap()
+                < source.find(&file_transfer_hook).unwrap()
+        );
+        assert!(source.find(&file_transfer_hook).unwrap() < source.find(&terminal_hook).unwrap());
     }
 
     #[test]
