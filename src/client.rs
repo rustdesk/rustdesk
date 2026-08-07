@@ -252,7 +252,7 @@ impl Client {
         (i32, String),
         bool,
     )> {
-        if config::is_incoming_only() {
+        if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface) {
             bail!("Incoming only mode");
         }
         // to-do: remember the port for each peer, so that we can retry easier
@@ -3455,6 +3455,20 @@ pub fn handle_login_error(
     }
 }
 
+// "Switch sides" requires the incoming-only client to connect back to its
+// controlling peer; the uuid is verified in `handle_hash()` before any login.
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -> bool {
+    conn_type == ConnType::DEFAULT_CONN
+        && interface.get_lch().read().unwrap().switch_uuid.is_some()
+}
+
+#[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
+fn is_switch_sides_back(_conn_type: ConnType, _interface: &impl Interface) -> bool {
+    false
+}
+
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
@@ -3520,6 +3534,12 @@ pub async fn handle_hash(
                     lc.write().unwrap().password_source = Default::default();
                     return;
                 }
+            }
+            // Incoming-only may connect out solely for a verified switch-back;
+            // never fall through to password login.
+            if config::is_incoming_only() {
+                interface.msgbox("error", "Connection Error", "Incoming only mode", "");
+                return;
             }
         }
     }
