@@ -968,6 +968,57 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
+    // Android is scoped-storage only, so every peer supplied path has to stay inside the
+    // app workspace. This is the filesystem boundary, keep it enforced here even though
+    // `Connection` rejects out-of-workspace requests earlier as well.
+    #[cfg(target_os = "android")]
+    {
+        // (path, job id, file num) of the peer supplied path this message acts on.
+        let checked: Option<(&str, i32, i32)> = match &fs {
+            ipc::FS::ReadEmptyDirs { dir, .. } | ipc::FS::ReadDir { dir, .. } => {
+                Some((dir.as_str(), -1, -1))
+            }
+            ipc::FS::RemoveDir { path, id, .. } | ipc::FS::CreateDir { path, id } => {
+                Some((path.as_str(), *id, 0))
+            }
+            ipc::FS::Rename { path, id, .. } => Some((path.as_str(), *id, 0)),
+            ipc::FS::RemoveFile { path, id, file_num } => Some((path.as_str(), *id, *file_num)),
+            ipc::FS::ReadAllFiles { path, id, .. } => Some((path.as_str(), *id, -1)),
+            ipc::FS::NewWrite {
+                path, id, file_num, ..
+            }
+            | ipc::FS::ReadFile {
+                path, id, file_num, ..
+            } => Some((path.as_str(), *id, *file_num)),
+            _ => None,
+        };
+        if let Some((path, id, file_num)) = checked {
+            if !crate::common::is_peer_path_allowed(path) {
+                log::warn!("Reject file operation outside the app workspace: {}", path);
+                if id >= 0 {
+                    send_raw(fs::new_error(id, "Permission denied", file_num), tx);
+                }
+                return;
+            }
+        }
+        if let ipc::FS::Rename { path, new_name, id } = &fs {
+            let destination = std::path::Path::new(path)
+                .parent()
+                .map(|parent| parent.join(new_name));
+            let allowed = destination
+                .as_deref()
+                .and_then(std::path::Path::to_str)
+                .map_or(false, crate::common::is_peer_path_allowed);
+            if !allowed {
+                log::warn!(
+                    "Reject rename destination outside the app workspace: {:?}",
+                    destination
+                );
+                send_raw(fs::new_error(*id, "Permission denied", 0), tx);
+                return;
+            }
+        }
+    }
     match fs {
         ipc::FS::ReadEmptyDirs {
             dir,
