@@ -1,4 +1,6 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod headless_file_transfer;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod headless_terminal;
 mod keyboard;
 #[cfg(target_os = "macos")]
