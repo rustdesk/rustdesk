@@ -676,6 +676,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "מהירות ברירת מחדל של משטח מגע"),
         ("Numeric one-time password", "סיסמה חד-פעמית מספרית"),
         ("Enable IPv6 P2P connection", "אפשר חיבור IPv6 P2P"),
+        ("Enable WebRTC P2P connection", "אפשר חיבור WebRTC P2P"),
         ("Enable UDP hole punching", "אפשר UDP hole punching"),
         ("View camera", "הצג מצלמה"),
         ("Enable camera", "הפעל מצלמה"),

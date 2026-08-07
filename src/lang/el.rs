@@ -676,6 +676,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Προεπιλεγμένη ταχύτητα trackpad"),
         ("Numeric one-time password", "Αριθμητικός κωδικός πρόσβασης μίας χρήσης"),
         ("Enable IPv6 P2P connection", "Ενεργοποίηση σύνδεσης IPv6 P2P"),
+        ("Enable WebRTC P2P connection", "Ενεργοποίηση σύνδεσης WebRTC P2P"),
         ("Enable UDP hole punching", "Ενεργοποίηση διάτρησης οπών UDP"),
         ("View camera", "Προβολή κάμερας"),
         ("Enable camera", "Ενεργοποίηση κάμερας"),

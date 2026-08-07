@@ -676,6 +676,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Әдепкі трекпад жылдамдығы"),
         ("Numeric one-time password", "Сандық бір-реттік құпия сөз"),
         ("Enable IPv6 P2P connection", "IPv6 P2P қосылымын іске қосу"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P қосылымын іске қосу"),
         ("Enable UDP hole punching", "UDP hole punching'ті іске қосу"),
         ("View camera", "Камераны Көру"),
         ("Enable camera", "Камераны қосу"),

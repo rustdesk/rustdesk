@@ -676,6 +676,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Výchozí rychlost trackpadu"),
         ("Numeric one-time password", "Číselné jednorázové heslo"),
         ("Enable IPv6 P2P connection", "Povolit připojení IPv6 P2P"),
+        ("Enable WebRTC P2P connection", "Povolit připojení WebRTC P2P"),
         ("Enable UDP hole punching", "Povolit UDP hole punching"),
         ("View camera", "Zobrazit kameru"),
         ("Enable camera", "Povolit kameru"),

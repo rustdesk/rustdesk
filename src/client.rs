@@ -464,7 +464,9 @@ impl Client {
             }
         };
 
-        if crate::get_ipv6_punch_enabled() {
+        // Same relay gate as the v6 socket below: under any forced relay the v6 punch cannot
+        // be used, so probing v6 reachability is wasted work on every such connection.
+        if crate::get_ipv6_punch_enabled() && !interface.is_force_relay() {
             crate::test_ipv6().await;
         }
 
@@ -600,6 +602,9 @@ impl Client {
 
     /// Whether to build a WebRTC offerer for this connection.
     ///
+    /// Off by default against a private rendezvous server, like the UDP/IPv6 punch options:
+    /// a self-hosted deployment opts in once its server (and TURN, if any) is ready.
+    ///
     /// Skips it when a SOCKS proxy is configured: WebRTC's ICE binds its own UDP sockets and
     /// speaks STUN directly, which would bypass the proxy policy and can leak the real IP.
     /// WebSocket mode does NOT skip it: ws only tunnels the signaling/relay legs to the server
@@ -620,6 +625,9 @@ impl Client {
     /// keeps its rendezvous socket for trickle signaling and never reuses it for TCP punching; a
     /// separate offer-less request provides the TCP fallback when force-relay is not requested.
     fn should_create_webrtc_offerer(interface: &impl Interface) -> bool {
+        if !crate::get_webrtc_enabled() {
+            return false;
+        }
         if Config::is_proxy() {
             return false;
         }

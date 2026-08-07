@@ -676,6 +676,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "既定のトラックパッドの速度"),
         ("Numeric one-time password", "数字のワンタイムパスワード"),
         ("Enable IPv6 P2P connection", "IPv6 P2P 接続を有効化する"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P 接続を有効化する"),
         ("Enable UDP hole punching", "UDP ホールパンチを有効化する"),
         ("View camera", "カメラを表示"),
         ("Enable camera", "カメラを有効化する"),
