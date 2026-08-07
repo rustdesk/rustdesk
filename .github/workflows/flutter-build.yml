@@ -1749,6 +1749,276 @@ jobs:
           files: |
             res/rustdesk-${{ env.VERSION }}*.zst
 
+  # Same build as build-rustdesk-linux x86_64 -- same vcpkg/ffmpeg, same ubuntu18.04 container, same
+  # rust and flutter -- only with the drm feature on, so it ships as the separate
+  # rustdesk-unattended-wayland deb. libdrmtap is built on the runner because bionic's meson is too
+  # old for it. A separate job rather than a matrix entry of build-rustdesk-linux: appimage and
+  # flatpak need that job, and a failure here must not skip them.
+  build-rustdesk-linux-drm:
+    needs: [generate-bridge]
+    name: build rustdesk linux drm x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo apt-get update -y
+          sudo apt-get install -y nasm
+          sudo apt-get install -y qemu-user-static
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
+        with:
+          swap-size-gb: 12
+
+      - name: Free Space
+        run: |
+          df -h
+          free -m
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: "rustfmt"
+
+      - name: Save Rust toolchain version
+        run: |
+          RUST_TOOLCHAIN_VERSION=$(cargo --version | awk '{print $2}')
+          echo "RUST_TOOLCHAIN_VERSION=$RUST_TOOLCHAIN_VERSION" >> $GITHUB_ENV
+
+      - name: Disable rust bridge build
+        run: |
+          # only build cdylib
+          sed -i  "s/\[\"cdylib\", \"staticlib\", \"rlib\"\]/\[\"cdylib\"\]/g" Cargo.toml
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          sudo apt install -y libva-dev && apt show libva-dev
+          if ! $VCPKG_ROOT/vcpkg \
+            install \
+            --triplet x64-linux \
+            --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"
+              echo "======"
+              cat "$_1"
+              echo "======"
+              echo ""
+            done
+            exit 1
+          fi
+          head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-x64-linux-rel-out.log" || true
+        shell: bash
+
+      # The container's meson is too old to build libdrmtap, so build it here from the pin in
+      # build.py and hand the .so to the container below via DRMTAP_PREBUILT_DIR.
+      - name: Build libdrmtap
+        run: |
+          sudo apt-get install -y meson ninja-build pkg-config \
+            libdrm-dev libegl1-mesa-dev libgles2-mesa-dev
+          python3 - <<'PY'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("b", "build.py")
+          b = importlib.util.module_from_spec(spec)
+          sys.argv = ["build.py"]
+          spec.loader.exec_module(b)
+          print(f"::notice::built {b.build_libdrmtap_so()}")
+          PY
+        shell: bash
+
+      - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8 # no release tag; commit 2026-05-26
+        name: Build rustdesk
+        id: vcpkg
+        with:
+          arch: x86_64
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          setup: |
+            ls -l "${PWD}"
+            ls -l /opt/artifacts/vcpkg/installed
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+          shell: /bin/bash
+          install: |
+            apt-get update -y
+            echo -e "installing deps"
+            apt-get install -y \
+               build-essential \
+               clang \
+               cmake \
+               curl \
+               gcc \
+               git \
+               g++ \
+               libayatana-appindicator3-dev \
+               libasound2-dev \
+               libclang-10-dev \
+               libgstreamer1.0-dev \
+               libgstreamer-plugins-base1.0-dev \
+               libgtk-3-dev \
+               libpam0g-dev \
+               libpulse-dev \
+               libva-dev \
+               libxcb-randr0-dev \
+               libxcb-shape0-dev \
+               libxcb-xfixes0-dev \
+               libxdo-dev \
+               libxfixes-dev \
+               llvm-10-dev \
+               nasm \
+               ninja-build \
+               pkg-config \
+               tree \
+               python3 \
+               rpm \
+               unzip \
+               wget \
+               xz-utils \
+               libssl-dev
+            # we have libopus compiled by us.
+            apt-get remove -y libopus-dev || true
+            # output devs
+            ls -l ./
+            tree -L 3 /opt/artifacts/vcpkg/installed
+          run: |
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            # rust
+            pushd /opt
+            # do not use rustup, because memory overflow in qemu
+            wget -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu.tar.gz
+            tar -zxvf rust.tar.gz > /dev/null && rm rust.tar.gz
+            cd rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu && ./install.sh
+            rm -rf rust-${{env.RUST_TOOLCHAIN_VERSION}}-x86_64-unknown-linux-gnu
+            # edit config
+            mkdir -p ~/.cargo/
+            echo """
+              [source.crates-io]
+              registry = 'https://github.com/rust-lang/crates.io-index'
+            """ > ~/.cargo/config
+            cat ~/.cargo/config
+            # start build
+            pushd /workspace
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            # use the .so built on the runner; build.py checks it is the pinned checkout
+            export DRMTAP_PREBUILT_DIR=/workspace/third_party/libdrmtap/build-pkg
+            # ask build.py for the features so this line and the packaging line cannot drift
+            FEATURES=$(python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --print-features)
+            # an empty or error-shaped value would silently build a stock binary
+            for want in drm drm-wake; do
+              case ",$FEATURES," in
+                *",$want,"*) ;;
+                *) echo "::error::build.py returned no '$want' feature: $FEATURES"; exit 1 ;;
+              esac
+            done
+            cargo build --locked --lib --features "$FEATURES" --release
+            rm -rf target/release/deps target/release/build
+            rm -rf ~/.cargo
+
+            # Setup Flutter
+            # disable git safe.directory
+            git config --global --add safe.directory "*"
+            export PATH=/opt/flutter/bin:$PATH
+            pushd /opt
+            wget https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            flutter doctor -v
+
+            if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+              pushd /opt/flutter
+              git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+              popd
+            fi
+
+            # build flutter
+            pushd /workspace
+            export CARGO_INCREMENTAL=0
+            export DEB_ARCH=amd64
+            python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --skip-cargo
+            for name in rustdesk*??.deb; do
+              mv "$name" "${name%%.deb}-x86_64.deb"
+            done
+
+      # build.py can exit 0 on some inner failures, so check the artifact rather than the status.
+      # The package name is the informed consent for consent-free capture, so a stock binary must
+      # never ship under it: assert the bundled library AND the dlopen path in the binary.
+      - name: Check the deb is a drm build
+        run: |
+          set -euo pipefail
+          # Resolve by glob, not from env.VERSION: build.py names the deb from Cargo.toml, so a
+          # hardcoded name fails with a bare exit 1 the first time those two drift.
+          shopt -s nullglob
+          debs=(rustdesk-unattended-wayland-*-x86_64.deb)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "::error::expected one rustdesk-unattended-wayland-*-x86_64.deb, found ${#debs[@]}: ${debs[*]-none}"
+            exit 1
+          fi
+          deb="${debs[0]}"
+          echo "DRM_DEB=$deb" >> "$GITHUB_ENV"
+          contents="$(dpkg -c "$deb")"
+          if [[ ! "$contents" =~ usr/lib/rustdesk/libdrmtap\.so\.0\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::$deb has no versioned libdrmtap.so.0.x.y"
+            exit 1
+          fi
+          if [[ "$contents" != *"usr/lib/rustdesk/libdrmtap.so.0 ->"* ]]; then
+            echo "::error::$deb has no libdrmtap.so.0 soname symlink"
+            exit 1
+          fi
+          rm -rf /tmp/deb && dpkg-deb -R "$deb" /tmp/deb
+          if ! grep -qF /usr/lib/rustdesk/libdrmtap.so.0 /tmp/deb/usr/share/rustdesk/lib/librustdesk.so; then
+            echo "::error::$deb was not built with the drm feature"
+            exit 1
+          fi
+        shell: bash
+
+      - name: Publish debian package
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          files: |
+            ${{ env.DRM_DEB }}
+
+      # No UPLOAD_ARTIFACT gate: on a PR this is the only way to get at the deb that was just built.
+      # always(), because a deb that failed the check above is the one most worth downloading.
+      - name: Upload deb
+        if: always() && env.DRM_DEB != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.DRM_DEB }}
+          path: ${{ env.DRM_DEB }}
+
   build-rustdesk-linux-sciter:
     if: ${{ inputs.upload-artifact }}
     runs-on: ${{ matrix.job.on }}

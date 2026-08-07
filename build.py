@@ -15,6 +15,11 @@ import argparse
 import sys
 from pathlib import Path
 
+# Captured at import, while cwd is still the repo root: before Python 3.9 the main script's __file__
+# stays relative (bpo-20443), so abspath() re-resolves it against the cwd -- and the ubuntu18.04
+# packaging container runs 3.6 and chdir's into flutter/ before it reaches the libdrmtap code.
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith(
     'Darwin') or platform.platform().startswith("macOS")
@@ -327,8 +332,8 @@ def get_features(args):
         # straight from `target/release` without bundling libdrmtap, without the rename, without
         # Conflicts/Provides and without assert_staged_binary_is_drm() -- so they would emit a
         # package NAMED `rustdesk` carrying the consent-bypass backend and the root-side uinput
-        # injection. The separate package name is the informed consent this feature rests on (see
-        # docs/DRM_CAPTURE_SECURITY.md), so refuse rather than ship a stock-named build of it.
+        # injection. The separate package name is the informed consent this feature rests on, so
+        # refuse rather than ship a stock-named build of it.
         branch = linux_packaging_branch()
         if branch != 'deb':
             raise Exception(
@@ -399,20 +404,40 @@ LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
 DRMTAP_UNPINNED_OK = os.environ.get('DRMTAP_ALLOW_UNPINNED') == '1'
 
 
+def _prebuilt_dir_is_the_pinned_checkout(prebuilt_dir):
+    # A .so built from this repo's own third_party/libdrmtap at the pinned sha is the pinned object,
+    # not an override, so it must not need the opt-in. This is how CI hands the library from a step
+    # that has meson to a packaging container that does not.
+    src = os.path.join(REPO_ROOT, 'third_party', 'libdrmtap')
+    try:
+        inside = os.path.commonpath([os.path.abspath(prebuilt_dir), src]) == src
+    except ValueError:
+        return False
+    if not inside or not os.path.isdir(os.path.join(src, '.git')):
+        return False
+    try:
+        head = subprocess.check_output(['git', '-C', src, 'rev-parse', 'HEAD']).decode().strip()
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return head == LIBDRMTAP_SHA
+
+
 def _validate_libdrmtap_pin():
     # Called from build_libdrmtap_so(), NOT at import: a stock (non --drm) build must stay
     # byte-identical to upstream in behaviour too, and leftover DRMTAP_* variables in the
     # environment (or a malformed sha) must not be able to fail a build that never touches
     # libdrmtap.
+    # `or None` so an empty value reads as unset here exactly as it does in build_libdrmtap_so(),
+    # which tests it for truthiness.
+    prebuilt = os.environ.get('DRMTAP_PREBUILT_DIR') or None
+    if prebuilt and _prebuilt_dir_is_the_pinned_checkout(prebuilt):
+        prebuilt = None
     overridden = [
         name
         for name, value, pinned in (
             ('DRMTAP_REPO', LIBDRMTAP_REPO, LIBDRMTAP_REPO_PINNED),
             ('DRMTAP_SHA', LIBDRMTAP_SHA, LIBDRMTAP_SHA_PINNED),
-            # `or None` so an empty value reads as unset here exactly as it does in
-            # build_libdrmtap_so(), which tests it for truthiness. Otherwise `DRMTAP_PREBUILT_DIR=`
-            # would demand the opt-in for an override that is not going to happen.
-            ('DRMTAP_PREBUILT_DIR', os.environ.get('DRMTAP_PREBUILT_DIR') or None, None),
+            ('DRMTAP_PREBUILT_DIR', prebuilt, None),
         )
         if value != pinned
     ]
@@ -452,7 +477,6 @@ def build_libdrmtap_so():
     # library target is built (the source also carries a helper binary we do not
     # ship). Returns the path to the built versioned .so (e.g. libdrmtap.so.0.4.x).
     _validate_libdrmtap_pin()
-    repo_root = os.path.dirname(os.path.abspath(__file__))
     # Allow a caller (e.g. CI) to build the .so ahead of time and hand it in via
     # DRMTAP_PREBUILT_DIR (must contain the real libdrmtap.so.0.* object).
     prebuilt_dir = os.environ.get('DRMTAP_PREBUILT_DIR')
@@ -474,7 +498,7 @@ def build_libdrmtap_so():
     # `main` the pinned commit is not in the shallow clone at all and the build fails on an unreachable
     # object. Fetching the sha needs no branch name, so it keeps working across every upstream push and
     # is immune to a ref being moved or repointed.
-    src = os.path.join(repo_root, 'third_party', 'libdrmtap')
+    src = os.path.join(REPO_ROOT, 'third_party', 'libdrmtap')
     if not os.path.exists(os.path.join(src, 'meson.build')):
         if os.path.isdir(src):
             shutil.rmtree(src)
@@ -526,7 +550,7 @@ def _assert_so_has_egl(so_path):
     # EGL is reached by lazy dlopen, on purpose, so that the privileged service never links the GPU
     # stack. That means there is no DT_NEEDED to look for and an ELF-level check reports "no EGL" on a
     # perfectly good library; the dlopen name and an extension symbol are what a CPU-only stub really
-    # lacks. Same two markers the drm-capture workflow asserts in CI.
+    # lacks.
     try:
         with open(so_path, 'rb') as f:
             blob = f.read()
@@ -566,11 +590,8 @@ def assert_so_satisfies_the_runtime_abi_gate(so_path):
         print(f'[drm] cannot read a version out of {so_path}; skipping the ABI-gate cross-check')
         return
     so_ver = tuple(int(g) for g in m.groups())
-    # Anchored on THIS file, not on the cwd: both callers of stage_libdrmtap_into_deb have already
-    # chdir'd into flutter/ by the time they get here, so a cwd-relative path raises FileNotFoundError
-    # and fails every --drm packaging run. (It did; CI caught it.)
-    gate_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             'libs', 'scrap', 'src', 'common', 'drmtap_dl.rs')
+    # REPO_ROOT, not abspath(__file__): both callers have chdir'd into flutter/ by now.
+    gate_path = os.path.join(REPO_ROOT, 'libs', 'scrap', 'src', 'common', 'drmtap_dl.rs')
     with open(gate_path) as f:
         gate_src = f.read()
 
@@ -613,6 +634,37 @@ def stage_libdrmtap_into_deb(so_path):
     system2(f'ln -sf "{so_basename}" tmpdeb/usr/lib/rustdesk/libdrmtap.so.0')
 
 
+def _max_glibc_minor(path):
+    # Read from .dynstr rather than via objdump so packaging needs no binutils; chunked because
+    # librustdesk.so is ~45 MB.
+    best = 0
+    with open(path, 'rb') as f:
+        tail = b''
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                return best
+            for m in re.finditer(rb'GLIBC_2\.(\d+)', tail + chunk):
+                best = max(best, int(m.group(1)))
+            tail = chunk[-16:]
+
+
+def measured_glibc_floor():
+    # libdrmtap is built on a newer base than the rest of the deb, so the floor is whichever staged
+    # object is higher -- and it moves whenever either base does.
+    paths = [p for p in glob.glob('tmpdeb/usr/lib/rustdesk/libdrmtap.so.0.*')
+             + glob.glob('tmpdeb/usr/share/rustdesk/lib/librustdesk.so')
+             + glob.glob('tmpdeb/usr/share/rustdesk/rustdesk')
+             if os.path.isfile(p) and not os.path.islink(p)]
+    minor = max((_max_glibc_minor(p) for p in paths), default=0)
+    if not minor:
+        raise Exception(
+            f'could not measure a GLIBC_2.x floor from any staged object ({paths or "none found"}); '
+            'refusing to ship the unattended-wayland variant with an undeclared libc6 floor, which '
+            'is what lets it install on a host where libdrmtap can never load')
+    return f'2.{minor}'
+
+
 def retarget_control_to_drm_variant():
     # Rewrite the control file that generate_control_file just produced, instead of parameterizing that
     # function: the stock packaging path stays exactly as upstream wrote it, and everything specific to
@@ -620,6 +672,8 @@ def retarget_control_to_drm_variant():
     # conflict with and replace it: you install one or the other, never both. It also needs libdrmtap's
     # own runtime deps, which the stock package has no reason to carry.
     path = '../res/DEBIAN/control'
+    floor = measured_glibc_floor()
+    print(f'[drm] {DRM_PACKAGE_NAME} libc6 floor measured at {floor}')
     with open(path) as f:
         lines = f.readlines()
     out = []
@@ -628,7 +682,9 @@ def retarget_control_to_drm_variant():
             out.append(f'Package: {DRM_PACKAGE_NAME}\n')
             out.append('Conflicts: rustdesk\nReplaces: rustdesk\nProvides: rustdesk\n')
         elif line.startswith('Depends:'):
-            out.append(line.rstrip('\n') + ', libdrm2, libegl1, libgles2\n')
+            # 2.4.101 is where drmModeGetFB2 landed; below it libdrmtap loads and can never capture.
+            out.append(line.rstrip('\n') + ', libdrm2 (>= 2.4.101), libegl1, libgles2, '
+                       f'libc6 (>= {floor})\n')
         else:
             out.append(line)
     body = ''.join(out)
