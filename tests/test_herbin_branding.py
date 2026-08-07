@@ -297,9 +297,154 @@ def assert_replacements_rejected(
         assert_rejected(check, replace_first(source, old, replacement), *extra)
 
 
+def assert_headless_file_transfer_contract(
+    lib_rs: str,
+    core_main_rs: str,
+    file_root_rs: str,
+    file_args_rs: str,
+    file_handler_rs: str,
+    file_runtime_rs: str,
+    file_state_rs: str,
+    ui_session_interface_rs: str,
+    message_proto: str,
+) -> None:
+    feature_sources = "\n".join(
+        (file_root_rs, file_args_rs, file_handler_rs, file_runtime_rs, file_state_rs)
+    )
+
+    assert "mod headless_file_transfer;" in lib_rs
+    assert "&& !crate::headless_file_transfer::is_requested(args)" in core_main_rs
+    assert "crate::headless_file_transfer::run_cli(&args)" in core_main_rs
+    assert_in_order(
+        core_main_rs,
+        "crate::headless_file_transfer::run_cli(&args)",
+        "crate::headless_terminal::run_cli(&args)",
+    )
+    for module in ("args", "completion", "error", "handler", "paths", "runtime", "signals", "state"):
+        assert f"mod {module};" in file_root_rs
+
+    assert '"--password"' in file_args_rs
+    assert "value if value.starts_with('-')" in file_args_rs
+    assert not re.search(r'"--password"\s*=>', sanitized_source(file_args_rs))
+    assert "ConnType::FILE_TRANSFER" in file_runtime_rs
+    assert "FileManager::send_files(" in file_runtime_rs
+    assert "Data::SendFiles" not in file_runtime_rs
+    assert "FileManager::read_remote_dir" in file_runtime_rs
+    assert "file_transfer_job_completed" in file_handler_rs
+    assert "file_transfer_job_completed" in ui_session_interface_rs
+
+    assert "stdin_is_tty" in file_state_rs
+    assert "TransferAction::RejectInsecureConnection" in file_state_rs
+    assert "backend.action(TransferAction::RejectInsecureConnection);" in file_state_rs
+    assert "session.continue_insecure_connection(false)" in file_runtime_rs
+    assert "if !self.args.overwrite {" in file_state_rs
+    assert "overwrite: self.args.overwrite," in file_state_rs
+    assert "TransferAction::ReadRemoteDir" in file_state_rs
+    assert "backend.action(TransferAction::ReadRemoteDir {" in file_state_rs
+    assert "self.push_postflight_path = Some(postflight);" in file_state_rs
+    assert "remote destination did not match push postflight metadata" in file_state_rs
+
+    assert "base64" not in feature_sources.lower()
+    assert not re.search(r"\b(?:resume|reconnect)\s*\(", feature_sources, re.IGNORECASE)
+    assert "TransferAction::Reconnect" not in feature_sources
+    assert "TransferAction::Resume" not in feature_sources
+    assert "protobuf::" not in feature_sources
+    assert "headless_file_transfer" not in message_proto
+    assert "crate::flutter::" not in feature_sources
+    assert "crate::flutter_ffi" not in feature_sources
+
+
+def assert_headless_file_transfer_ci_and_docs_contract(
+    macos_workflow: str, upgrade_runbook: str, implementation_notes: str
+) -> None:
+    assert macos_workflow.count("- name: Test RDH headless CLIs") == 1
+    for command in (
+        "cargo test --locked --lib headless_file_transfer",
+        "cargo test --locked --lib headless_terminal",
+        "--features flutter,hwcodec,unix-file-copy-paste,screencapturekit",
+    ):
+        assert command in macos_workflow
+    assert macos_workflow.index("headless_file_transfer") < macos_workflow.index(
+        "headless_terminal"
+    )
+
+    assert "## Headless file transfer CLI" in upgrade_runbook
+    for marker in (
+        "--file-transfer --headless",
+        "push <local-file> <remote-file>",
+        "<peer-id> pull",
+        "<remote-file> <local-file>",
+        "--relay",
+        "--overwrite",
+        "--password",
+        "stdout",
+        "stderr",
+        "saved credential",
+        "TTY",
+        "Ctrl+C",
+        "SIGTERM",
+        "SHA-256",
+        "no retry, reconnect, or resume",
+    ):
+        assert marker in upgrade_runbook
+    for status in ("`0`", "`1`", "`2`", "`3`", "`4`", "`5`", "`6`", "`7`", "`130`", "`143`"):
+        assert status in upgrade_runbook
+
+    assert "## macOS headless file transfer CLI" in implementation_notes
+    assert "Open questions: none" in implementation_notes
+
+
+def assert_headless_file_transfer_modules_contract(
+    file_completion_rs: str,
+    file_error_rs: str,
+    file_paths_rs: str,
+    file_signals_rs: str,
+    headless_auth_rs: str,
+) -> None:
+    assert "TransferCompletion::parse" in file_completion_rs
+    assert "HeadlessFileTransferError::Protocol" in file_completion_rs
+    assert "HeadlessFileTransferError::DestinationExists" in file_error_rs
+    assert "Self::Interrupted => 130" in file_error_rs
+    assert "Self::Terminated => 143" in file_error_rs
+    assert "inspect_push_source" in file_paths_rs
+    assert "inspect_pull_destination" in file_paths_rs
+    assert "metadata.file_type().is_symlink()" in file_paths_rs
+    assert "single_regular_file_size" in file_paths_rs
+    assert "SignalKind::interrupt" in file_signals_rs
+    assert "SignalKind::terminate" in file_signals_rs
+    assert "TransferSignal::Interrupt" in file_signals_rs
+    assert "TransferSignal::Terminate" in file_signals_rs
+    assert "pub(crate) fn stdin_is_tty" in headless_auth_rs
+    assert "prompt_secret" in headless_auth_rs
+    assert "libc::ECHO" in headless_auth_rs
+
+    all_new_modules = "\n".join(
+        (
+            file_completion_rs,
+            file_error_rs,
+            file_paths_rs,
+            file_signals_rs,
+            headless_auth_rs,
+        )
+    )
+    assert "base64" not in all_new_modules.lower()
+    assert not re.search(r"\b(?:resume|reconnect)\s*\(", all_new_modules, re.IGNORECASE)
+    assert "protobuf::" not in all_new_modules
+    assert "crate::flutter::" not in all_new_modules
+    assert "crate::flutter_ffi" not in all_new_modules
+
+
 def run_contract_mutation_regressions(
     cargo_toml: str,
     lib_rs: str,
+    core_main_rs: str,
+    file_root_rs: str,
+    file_args_rs: str,
+    file_handler_rs: str,
+    file_runtime_rs: str,
+    file_state_rs: str,
+    ui_session_interface_rs: str,
+    message_proto: str,
     input_service_rs: str,
     window_targeting_rs: str,
     window_targeting_config_rs: str,
@@ -395,6 +540,61 @@ def run_contract_mutation_regressions(
             window_targeting_rules_rs,
         )
 
+    assert_rejected(
+        assert_headless_file_transfer_contract,
+        lib_rs,
+        core_main_rs.replace(
+            " && !crate::headless_file_transfer::is_requested(args)", "", 1
+        ),
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs,
+        ui_session_interface_rs,
+        message_proto,
+    )
+    assert_rejected(
+        assert_headless_file_transfer_contract,
+        lib_rs,
+        core_main_rs,
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs.replace(
+            "backend.action(TransferAction::RejectInsecureConnection);", "return;", 1
+        ),
+        ui_session_interface_rs,
+        message_proto,
+    )
+    assert_rejected(
+        assert_headless_file_transfer_contract,
+        lib_rs,
+        core_main_rs,
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs.replace("if !self.args.overwrite {", "if false {", 1),
+        ui_session_interface_rs,
+        message_proto,
+    )
+    assert_rejected(
+        assert_headless_file_transfer_contract,
+        lib_rs,
+        core_main_rs,
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs.replace(
+            "backend.action(TransferAction::ReadRemoteDir {", "backend.action(TransferAction::CloseTransport {", 1
+        ),
+        ui_session_interface_rs,
+        message_proto,
+    )
+
 
 def main() -> None:
     cargo_toml = read("Cargo.toml")
@@ -409,6 +609,18 @@ def main() -> None:
     headless_tty_rs = read("src/headless_terminal/tty.rs")
     headless_handler_rs = read("src/headless_terminal/handler.rs")
     headless_runtime_rs = read("src/headless_terminal/runtime.rs")
+    file_root_rs = read("src/headless_file_transfer.rs")
+    file_args_rs = read("src/headless_file_transfer/args.rs")
+    file_handler_rs = read("src/headless_file_transfer/handler.rs")
+    file_completion_rs = read("src/headless_file_transfer/completion.rs")
+    file_error_rs = read("src/headless_file_transfer/error.rs")
+    file_paths_rs = read("src/headless_file_transfer/paths.rs")
+    file_runtime_rs = read("src/headless_file_transfer/runtime.rs")
+    file_signals_rs = read("src/headless_file_transfer/signals.rs")
+    file_state_rs = read("src/headless_file_transfer/state.rs")
+    headless_auth_rs = read("src/headless_auth.rs")
+    ui_session_interface_rs = read("src/ui_session_interface.rs")
+    message_proto = read("libs/hbb_common/protos/message.proto")
     service_rs = read("src/service.rs")
     keyboard_rs = read("src/keyboard.rs")
     input_service_rs = read("src/server/input_service.rs")
@@ -433,16 +645,47 @@ def main() -> None:
     build_py = read("build.py")
     osx_dist = read("res/osx-dist.sh")
     macos_workflow = read(".github/workflows/codex-macos-herbin.yml")
+    upgrade_runbook = read("docs/rdh-upgrade-runbook.md")
+    implementation_notes = read("implementation-notes.md")
 
     assert_source_sanitizer_contract()
     run_contract_mutation_regressions(
         cargo_toml,
         lib_rs,
+        core_main_rs,
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs,
+        ui_session_interface_rs,
+        message_proto,
         input_service_rs,
         window_targeting_rs,
         window_targeting_config_rs,
         window_targeting_rules_rs,
         macos_mm,
+    )
+    assert_headless_file_transfer_contract(
+        lib_rs,
+        core_main_rs,
+        file_root_rs,
+        file_args_rs,
+        file_handler_rs,
+        file_runtime_rs,
+        file_state_rs,
+        ui_session_interface_rs,
+        message_proto,
+    )
+    assert_headless_file_transfer_ci_and_docs_contract(
+        macos_workflow, upgrade_runbook, implementation_notes
+    )
+    assert_headless_file_transfer_modules_contract(
+        file_completion_rs,
+        file_error_rs,
+        file_paths_rs,
+        file_signals_rs,
+        headless_auth_rs,
     )
 
     assert 'ProductName = "RustDesk-Herbin"' in cargo_toml

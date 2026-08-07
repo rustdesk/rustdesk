@@ -71,6 +71,65 @@ The exit statuses are:
 A representable remote exit status from `1` through `125` is returned unchanged;
 therefore a remote command may also produce a numeric status in that range.
 
+## Headless file transfer CLI
+
+On macOS, transfer exactly one regular file through the native RustDesk
+file-transfer channel without starting Flutter or opening a window:
+
+```bash
+/Applications/RustDesk-Herbin.app/Contents/MacOS/RustDesk-Herbin \
+  --file-transfer --headless 175116438 push ./probe.bin 'C:\Users\82520\probe.bin'
+
+/Applications/RustDesk-Herbin.app/Contents/MacOS/RustDesk-Herbin \
+  --file-transfer --headless 175116438 pull 'C:\Users\82520\probe.bin' ./received.bin
+```
+
+The exact push form is `--file-transfer --headless [--relay] [--overwrite]
+<peer-id> push <local-file> <remote-file>`; the exact pull form is
+`--file-transfer --headless [--relay] [--overwrite] <peer-id> pull
+<remote-file> <local-file>`. Add `--relay` to force relay transport. `push`
+accepts one local regular, non-symlink source file; `pull` requires an existing
+local destination parent. Remote paths are opaque protocol fields, not shell
+input.
+
+An existing destination is refused by default with status 7. `--overwrite` is
+the only opt-in: it replaces from offset block 0 and never resumes a partial
+transfer. There is no retry, reconnect, or resume behavior. The command rejects
+`--password`; plaintext credentials must never be supplied in argv or the
+environment.
+
+Saved credentials permit non-interactive operation. The command prompts only
+when authentication actually requires a password or 2FA code, and only when
+stdin is a TTY; otherwise it exits 4. Secure prompts and any confirmation to
+save a credential use stderr. stdout is empty during transfer and on every
+failure; on success it contains only the destination path followed by one
+newline. Progress, diagnostics, and errors use stderr. A saved credential never
+requires stdin or stdout to be a TTY by itself.
+
+The exit statuses are:
+
+- `0`: native completion and all local completion checks passed.
+- `1`: unclassified internal failure.
+- `2`: usage or parser failure.
+- `3`: local file or path precondition failure.
+- `4`: authentication cancellation or failure, including a required non-TTY prompt.
+- `5`: connection, transport-security, transport, or protocol-state failure.
+- `6`: transfer-job, filesystem, permission, one-way-policy, or remote-file failure.
+- `7`: destination exists without `--overwrite`.
+- `130`: `Ctrl+C` / SIGINT cancellation.
+- `143`: SIGTERM cancellation.
+
+`Ctrl+C` and SIGTERM request the existing file-transfer cancellation path, close
+the transport, and return their respective status. An abrupt transport loss
+returns 5 and may leave a peer-side partial; the CLI does not claim unobserved
+cleanup. A successful push performs a remote directory postflight and accepts
+only the exact regular destination file with the expected size.
+
+The CLI success contract is native transfer completion plus completion checks,
+not an end-to-end digest. During real acceptance, independently compare external
+SHA-256 values after push and pull; that external SHA-256 check is an acceptance
+boundary, not a new protocol response or routine command prerequisite.
+
 ## Built-in memory recovery
 
 RDH does not need a Codex or cron automation to recover its leaking user server.

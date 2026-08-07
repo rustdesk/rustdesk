@@ -51,3 +51,19 @@
   source; heap profiling remains a separate follow-up.
 
 No public compatibility layer is retained for the removed shortcut mapping.
+
+## macOS headless file transfer CLI
+
+- `--file-transfer --headless` owns only the combined form before Flutter
+  dispatch and transfers one regular file by `push` or `pull` through the native
+  `FILE_TRANSFER` session and `FileManager` path.
+- The CLI preserves saved-credential operation without a TTY, prompts securely
+  only for an actual password or 2FA requirement with stdin TTY, rejects
+  `--password` and insecure transport, and keeps stdout limited to the success
+  destination while prompts, progress, and diagnostics use stderr.
+- Existing destinations fail with status 7 unless `--overwrite` is explicit;
+  overwrite starts at offset block 0. There is no retry, reconnect, or resume.
+  Push success requires native completion plus a remote regular-file/size
+  postflight; real acceptance independently compares external SHA-256 values.
+
+Open questions: none

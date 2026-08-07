@@ -115,8 +115,12 @@ jobs:
             exit 1
           fi
 
-      - name: Test RDH headless terminal CLI
+      - name: Test RDH headless CLIs
         run: |
+          MACOSX_DEPLOYMENT_TARGET=10.14 \
+            cargo test --locked --lib headless_file_transfer \
+              --features flutter,hwcodec,unix-file-copy-paste,screencapturekit \
+              -- --nocapture
           MACOSX_DEPLOYMENT_TARGET=10.14 \
             cargo test --locked --lib headless_terminal \
               --features flutter,hwcodec,unix-file-copy-paste,screencapturekit \
