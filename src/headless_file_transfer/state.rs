@@ -74,6 +74,7 @@ enum TransferPhase {
 pub(crate) struct TransferCoordinator {
     args: HeadlessFileTransferArgs,
     expected_job_id: i32,
+    initial_remote_dir_seen: bool,
     phase: TransferPhase,
     peer_platform: Option<String>,
     expected_size: Option<u64>,
@@ -97,6 +98,7 @@ impl TransferCoordinator {
         Self {
             args,
             expected_job_id,
+            initial_remote_dir_seen: false,
             phase: TransferPhase::Authenticating,
             peer_platform: None,
             expected_size,
@@ -367,6 +369,15 @@ impl TransferCoordinator {
     ) {
         match self.phase {
             TransferPhase::Transferring => {
+                if id == 0 {
+                    if !self.initial_remote_dir_seen && !path.is_empty() && !is_local && !only_count
+                    {
+                        self.initial_remote_dir_seen = true;
+                        return;
+                    }
+                    self.protocol_failure("file metadata used an unexpected job ID", backend);
+                    return;
+                }
                 if id != self.expected_job_id {
                     self.protocol_failure("file metadata used an unexpected job ID", backend);
                     return;
@@ -1051,6 +1062,143 @@ mod tests {
             Some(&TransferAction::CloseTransport)
         );
         assert_eq!(close_status(&mut coordinator, &mut backend), 0);
+    }
+
+    #[test]
+    fn initial_remote_directory_before_job_metadata_has_no_transfer_side_effects() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+        let expected_actions = backend.actions.clone();
+
+        assert_eq!(
+            coordinator.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::Files {
+                    id: 0,
+                    entries: vec![FileEntry {
+                        entry_type: FileType::Dir.into(),
+                        name: "Downloads".into(),
+                        ..Default::default()
+                    }],
+                    path: r"C:\Users\82520".into(),
+                    is_local: false,
+                    only_count: false,
+                }),
+                &mut backend,
+            ),
+            None
+        );
+        assert_eq!(coordinator.handle(pull_metadata(7, 42), &mut backend), None);
+        assert_eq!(backend.actions, expected_actions);
+        assert!(backend.stdout.is_empty());
+        assert!(backend.stderr.is_empty());
+    }
+
+    #[test]
+    fn initial_remote_directory_after_job_metadata_has_no_transfer_side_effects() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+        assert_eq!(coordinator.handle(pull_metadata(7, 42), &mut backend), None);
+        let expected_actions = backend.actions.clone();
+
+        assert_eq!(
+            coordinator.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::Files {
+                    id: 0,
+                    entries: vec![FileEntry {
+                        entry_type: FileType::Dir.into(),
+                        name: "Downloads".into(),
+                        ..Default::default()
+                    }],
+                    path: r"C:\Users\82520".into(),
+                    is_local: false,
+                    only_count: false,
+                }),
+                &mut backend,
+            ),
+            None
+        );
+        assert_eq!(backend.actions, expected_actions);
+        assert!(backend.stdout.is_empty());
+        assert!(backend.stderr.is_empty());
+    }
+
+    #[test]
+    fn duplicate_initial_remote_directory_is_a_protocol_failure() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+        let initial_remote_directory = RuntimeEvent::Session(HeadlessFileTransferEvent::Files {
+            id: 0,
+            entries: vec![FileEntry {
+                entry_type: FileType::Dir.into(),
+                name: "Downloads".into(),
+                ..Default::default()
+            }],
+            path: r"C:\Users\82520".into(),
+            is_local: false,
+            only_count: false,
+        });
+
+        assert_eq!(
+            coordinator.handle(initial_remote_directory.clone(), &mut backend),
+            None
+        );
+        assert_eq!(
+            coordinator.handle(initial_remote_directory, &mut backend),
+            None
+        );
+        assert_eq!(backend.stdout, Vec::<String>::new());
+        assert_eq!(
+            backend.stderr,
+            vec!["file metadata used an unexpected job ID"]
+        );
+        assert_eq!(close_status(&mut coordinator, &mut backend), 5);
+    }
+
+    #[test]
+    fn malformed_initial_remote_directory_is_a_protocol_failure() {
+        let malformed_events = [
+            HeadlessFileTransferEvent::Files {
+                id: 0,
+                entries: vec![],
+                path: r"C:\Users\82520".into(),
+                is_local: true,
+                only_count: false,
+            },
+            HeadlessFileTransferEvent::Files {
+                id: 0,
+                entries: vec![],
+                path: r"C:\Users\82520".into(),
+                is_local: false,
+                only_count: true,
+            },
+            HeadlessFileTransferEvent::Files {
+                id: 0,
+                entries: vec![],
+                path: String::new(),
+                is_local: false,
+                only_count: false,
+            },
+        ];
+
+        for malformed_event in malformed_events {
+            let mut coordinator = pull_coordinator(false, 7);
+            let mut backend = FakeBackend::default();
+            start_pull(&mut coordinator, &mut backend);
+
+            assert_eq!(
+                coordinator.handle(RuntimeEvent::Session(malformed_event), &mut backend),
+                None
+            );
+            assert!(backend.stdout.is_empty());
+            assert_eq!(
+                backend.stderr,
+                vec!["file metadata used an unexpected job ID"]
+            );
+            assert_eq!(close_status(&mut coordinator, &mut backend), 5);
+        }
     }
 
     #[test]
