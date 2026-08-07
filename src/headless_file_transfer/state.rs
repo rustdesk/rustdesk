@@ -79,7 +79,6 @@ pub(crate) struct TransferCoordinator {
     peer_platform: Option<String>,
     expected_size: Option<u64>,
     maximum_finished_size: u64,
-    conflict_selected: bool,
     password_submission_pending: bool,
     final_status: Option<i32>,
     push_postflight_path: Option<RemoteFilePath>,
@@ -103,7 +102,6 @@ impl TransferCoordinator {
             peer_platform: None,
             expected_size,
             maximum_finished_size: 0,
-            conflict_selected: false,
             password_submission_pending: false,
             final_status: None,
             push_postflight_path: None,
@@ -448,15 +446,16 @@ impl TransferCoordinator {
             self.protocol_failure("overwrite conflict used an unexpected job shape", backend);
             return;
         }
-        if !self.args.overwrite {
-            self.conflict_selected = true;
-        }
         backend.action(TransferAction::ConfirmOverwrite {
             id,
             file_num: 0,
             overwrite: self.args.overwrite,
             is_upload,
         });
+        if !self.args.overwrite {
+            backend.action(TransferAction::CancelJob { id });
+            self.begin_close(7, backend);
+        }
     }
 
     fn handle_progress(
@@ -515,11 +514,6 @@ impl TransferCoordinator {
             self.protocol_failure("transfer completion was incomplete or unexpected", backend);
             return;
         }
-        if self.conflict_selected {
-            self.begin_close(7, backend);
-            return;
-        }
-
         match self.args.direction {
             TransferDirection::Pull => {
                 if let Err(error) = backend.verify_pull_destination(completion.total_size) {
@@ -815,6 +809,37 @@ mod tests {
             .unwrap()
     }
 
+    fn assert_conflict_protocol_failure(
+        coordinator: &mut TransferCoordinator,
+        backend: &mut FakeBackend,
+        event: RuntimeEvent,
+    ) {
+        coordinator.handle(event, backend);
+
+        assert_eq!(
+            backend
+                .actions
+                .iter()
+                .filter(|action| matches!(action, TransferAction::CancelJob { .. }))
+                .count(),
+            0
+        );
+        assert_eq!(
+            backend
+                .actions
+                .iter()
+                .filter(|action| **action == TransferAction::CloseTransport)
+                .count(),
+            1
+        );
+        assert!(backend.stdout.is_empty());
+        assert_eq!(
+            backend.stderr,
+            vec!["overwrite conflict used an unexpected job shape"]
+        );
+        assert_eq!(close_status(coordinator, backend), 5);
+    }
+
     fn assert_completion_rejected_in_transfer(
         direction: TransferDirection,
         completion: RuntimeEvent,
@@ -1040,7 +1065,7 @@ mod tests {
     }
 
     #[test]
-    fn conflict_defaults_to_skip_and_finishes_with_status_seven() {
+    fn push_conflict_defaults_to_immediate_terminal_skip() {
         let mut coordinator = push_coordinator(false, 7, 42);
         let mut backend = FakeBackend::default();
         coordinator.handle(peer_platform("Windows"), &mut backend);
@@ -1048,30 +1073,115 @@ mod tests {
 
         assert_eq!(coordinator.handle(conflict(7, 0, true), &mut backend), None);
         assert_eq!(
-            backend.actions.last(),
-            Some(&TransferAction::ConfirmOverwrite {
-                id: 7,
-                file_num: 0,
-                overwrite: false,
-                is_upload: true,
-            })
-        );
-        assert_eq!(
-            coordinator.handle(push_completion(7, 42), &mut backend),
-            None
-        );
-        assert_eq!(
-            backend.actions.last(),
-            Some(&TransferAction::CloseTransport)
+            &backend.actions[1..],
+            &[
+                TransferAction::ConfirmOverwrite {
+                    id: 7,
+                    file_num: 0,
+                    overwrite: false,
+                    is_upload: true,
+                },
+                TransferAction::CancelJob { id: 7 },
+                TransferAction::CloseTransport,
+            ]
         );
         assert_eq!(close_status(&mut coordinator, &mut backend), 7);
         assert!(backend.stdout.is_empty());
+        assert!(backend.stderr.is_empty());
     }
 
     #[test]
-    fn overwrite_confirms_offset_zero_and_does_not_resume() {
+    fn pull_conflict_defaults_to_immediate_terminal_skip() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+
+        assert_eq!(
+            coordinator.handle(conflict(7, 0, false), &mut backend),
+            None
+        );
+        assert_eq!(
+            &backend.actions[1..],
+            &[
+                TransferAction::ConfirmOverwrite {
+                    id: 7,
+                    file_num: 0,
+                    overwrite: false,
+                    is_upload: false,
+                },
+                TransferAction::CancelJob { id: 7 },
+                TransferAction::CloseTransport,
+            ]
+        );
+        assert_eq!(close_status(&mut coordinator, &mut backend), 7);
+        assert!(backend.stdout.is_empty());
+        assert!(backend.stderr.is_empty());
+    }
+
+    #[test]
+    fn late_session_events_do_not_override_terminal_conflict_skip() {
+        let mut coordinator = push_coordinator(false, 7, 42);
+        let mut backend = FakeBackend::default();
+        coordinator.handle(peer_platform("Windows"), &mut backend);
+        coordinator.handle(connected(), &mut backend);
+        coordinator.handle(conflict(7, 0, true), &mut backend);
+        let committed_actions = backend.actions.clone();
+
+        for event in [
+            push_completion(7, 42),
+            job_failed(7),
+            RuntimeEvent::Session(HeadlessFileTransferEvent::ConnectionFailed(
+                "deadline has elapsed".into(),
+            )),
+        ] {
+            assert_eq!(coordinator.handle(event, &mut backend), None);
+        }
+
+        assert_eq!(backend.actions, committed_actions);
+        assert!(backend.stdout.is_empty());
+        assert!(backend.stderr.is_empty());
+        assert_eq!(close_status(&mut coordinator, &mut backend), 7);
+    }
+
+    #[test]
+    fn invalid_conflicts_are_protocol_failures_without_cancel() {
+        for event in [
+            conflict(8, 0, true),
+            conflict(7, 1, true),
+            conflict(7, 0, false),
+        ] {
+            let mut coordinator = push_coordinator(false, 7, 42);
+            let mut backend = FakeBackend::default();
+            coordinator.handle(peer_platform("Windows"), &mut backend);
+            coordinator.handle(connected(), &mut backend);
+            assert_conflict_protocol_failure(&mut coordinator, &mut backend, event);
+        }
+
+        let mut wrong_direction = pull_coordinator(false, 7);
+        let mut wrong_direction_backend = FakeBackend::default();
+        start_pull(&mut wrong_direction, &mut wrong_direction_backend);
+        assert_conflict_protocol_failure(
+            &mut wrong_direction,
+            &mut wrong_direction_backend,
+            conflict(7, 0, true),
+        );
+
+        let mut wrong_phase = push_coordinator(false, 7, 42);
+        let mut wrong_phase_backend = FakeBackend::default();
+        assert_conflict_protocol_failure(
+            &mut wrong_phase,
+            &mut wrong_phase_backend,
+            conflict(7, 0, true),
+        );
+    }
+
+    #[test]
+    fn overwrite_confirms_then_requires_directional_native_success() {
         let mut push = push_coordinator(true, 7, 42);
-        let mut push_backend = FakeBackend::default();
+        let mut push_backend = FakeBackend {
+            push_source_valid: true,
+            ..Default::default()
+        };
         push.handle(peer_platform("Windows"), &mut push_backend);
         push.handle(connected(), &mut push_backend);
         push.handle(conflict(7, 0, true), &mut push_backend);
@@ -1084,10 +1194,25 @@ mod tests {
                 is_upload: true,
             })
         );
+        assert_eq!(push_backend.actions.len(), 2);
+        push.handle(push_completion(7, 42), &mut push_backend);
+        assert_eq!(
+            push_backend.actions.last(),
+            Some(&TransferAction::ReadRemoteDir {
+                path: r"C:\Users\82520".into(),
+                include_hidden: true,
+            })
+        );
+        push.handle(
+            remote_files(0, r"C:\Users\82520", vec![regular_file("target.bin", 42)]),
+            &mut push_backend,
+        );
+        assert_eq!(close_status(&mut push, &mut push_backend), 0);
 
         let mut pull = pull_coordinator(true, 7);
         let mut pull_backend = FakeBackend::default();
         start_pull(&mut pull, &mut pull_backend);
+        pull.handle(pull_metadata(7, 42), &mut pull_backend);
         pull.handle(conflict(7, 0, false), &mut pull_backend);
         assert_eq!(
             pull_backend.actions.last(),
@@ -1098,8 +1223,9 @@ mod tests {
                 is_upload: false,
             })
         );
-        assert_eq!(push_backend.actions.len(), 2);
         assert_eq!(pull_backend.actions.len(), 2);
+        pull.handle(pull_completion(7, 42), &mut pull_backend);
+        assert_eq!(close_status(&mut pull, &mut pull_backend), 0);
     }
 
     #[test]
