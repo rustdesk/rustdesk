@@ -2454,14 +2454,26 @@ pub fn is_udp_disabled() -> bool {
 
 pub const OPTION_ENABLE_KCP_CC: &str = "enable-kcp-congestion-control";
 
-// Default ON ("enable-" option2bool semantics); set "N" to fall back to the pure
-// turbo profile (nc=1, no congestion window).
+/// Whether to run KCP with its built-in congestion window (nc=0) instead of the pure turbo
+/// profile (nc=1) it has always shipped with.
+///
+/// Opt-in, deliberately: switching it on is a transport-behavior change for every session, and
+/// which profile wins depends on why packets are being lost.
+///
+/// - nc=1 never shrinks the send window. On a link that is genuinely congested it keeps pushing,
+///   deepening the loss it is reacting to and crowding out other traffic on the same uplink.
+/// - nc=0 adds KCP's congestion window, whose backoff is blunt: a fast retransmit halves it, but
+///   an RTO sets `cwnd = 1` outright (ikcp.c) and the recovery slow-starts from one packet. On a
+///   link with random loss but no congestion — Wi-Fi interference, a long-haul path — that reads
+///   loss as congestion and can stall an interactive video stream for seconds.
+///
+/// Neither is safely decidable from reasoning, and a loopback benchmark cannot settle it: with
+/// no bottleneck queue there is no congestion to control, so it would flatter nc=1 by
+/// construction. Until there is evidence from a shaped link or the field, keep the profile users
+/// already run and let anyone who wants the other one ask for it.
 #[inline]
 pub fn get_kcp_cc_enabled() -> bool {
-    config::option2bool(
-        OPTION_ENABLE_KCP_CC,
-        &Config::get_option(OPTION_ENABLE_KCP_CC),
-    )
+    Config::get_option(OPTION_ENABLE_KCP_CC) == "Y"
 }
 
 // this crate https://github.com/yoshd/stun-client supports nat type
