@@ -157,7 +157,10 @@ mod tests {
             secret_from_line(Some("\u{1d}secret".into()), Some(0x1d)),
             Some("\u{1d}secret".into())
         );
-        assert_eq!(secret_from_line(Some(String::new()), Some(0x1d)), Some(String::new()));
+        assert_eq!(
+            secret_from_line(Some(String::new()), Some(0x1d)),
+            Some(String::new())
+        );
         assert_eq!(secret_from_line(None, Some(0x1d)), None);
     }
 
