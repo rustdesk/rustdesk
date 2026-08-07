@@ -26,12 +26,11 @@ static KCP_RECV_ERR_LOG: hbb_common::log_throttle::LogThrottle =
     hbb_common::log_throttle::LogThrottle::new(KCP_IO_ERR_LOG_INTERVAL);
 
 impl KcpStream {
-    // Engage KCP's built-in congestion control (nc=0) unless disabled by option: pure turbo
-    // (nc=1) keeps blasting a full 1024-segment window through loss, which on constrained
-    // links amplifies brief loss into a spiral users experience as stalls or drops. This is
-    // sender-side only, so no wire negotiation is needed and either peer may run either
-    // profile. Requires kcp-sys from the `rustdesk-patches` branch, which wires the config
-    // factory into connection setup (on older revs the factory was stored but never consulted).
+    // Opt in to KCP's built-in congestion window (nc=0) instead of the pure turbo profile
+    // (nc=1) that has always shipped; see `get_kcp_cc_enabled` for why this is not the default.
+    // Sender-side only, so no wire negotiation is needed and either peer may run either profile.
+    // Requires kcp-sys from the `rustdesk-patches` branch, which wires the config factory into
+    // connection setup (on older revs the factory was stored but never consulted).
     fn apply_kcp_config(endpoint: &mut KcpEndpoint) {
         if crate::get_kcp_cc_enabled() {
             endpoint.set_kcp_config_factory(Box::new(|conv| {
