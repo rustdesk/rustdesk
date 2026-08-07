@@ -467,7 +467,9 @@ impl TransferCoordinator {
         finished_size: u64,
         backend: &mut impl TransferBackend,
     ) {
-        if self.phase != TransferPhase::Transferring || id != self.expected_job_id || file_num != 0
+        if self.phase != TransferPhase::Transferring
+            || id != self.expected_job_id
+            || (file_num != -1 && file_num != 0)
         {
             self.protocol_failure("progress used an unexpected job shape", backend);
             return;
@@ -1491,6 +1493,159 @@ mod tests {
                 "direction=push transferred=46964366 total=46964366 percent=100.00 speed_bps=1048576",
             ]
         );
+    }
+
+    #[test]
+    fn native_progress_index_minus_one_is_accepted_for_push() {
+        let mut coordinator = push_coordinator(false, 7, 100);
+        let mut backend = FakeBackend::default();
+        coordinator.handle(peer_platform("Windows"), &mut backend);
+        coordinator.handle(connected(), &mut backend);
+        let expected_actions = backend.actions.clone();
+
+        for (finished_size, expected_line) in [
+            (
+                40,
+                "direction=push transferred=40 total=100 percent=40.00 speed_bps=25",
+            ),
+            (
+                u64::MAX,
+                "direction=push transferred=100 total=100 percent=100.00 speed_bps=25",
+            ),
+            (
+                1,
+                "direction=push transferred=100 total=100 percent=100.00 speed_bps=25",
+            ),
+        ] {
+            assert_eq!(
+                coordinator.handle(
+                    RuntimeEvent::Session(HeadlessFileTransferEvent::Progress {
+                        id: 7,
+                        file_num: -1,
+                        speed: 25,
+                        finished_size,
+                    }),
+                    &mut backend,
+                ),
+                None
+            );
+            assert_eq!(
+                backend.stderr.last().map(String::as_str),
+                Some(expected_line)
+            );
+        }
+
+        assert_eq!(backend.actions, expected_actions);
+        assert!(backend.stdout.is_empty());
+    }
+
+    #[test]
+    fn native_progress_index_minus_one_is_accepted_for_pull_after_metadata() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+        assert_eq!(
+            coordinator.handle(pull_metadata(7, 100), &mut backend),
+            None
+        );
+        let expected_actions = backend.actions.clone();
+
+        for (finished_size, expected_line) in [
+            (
+                40,
+                "direction=pull transferred=40 total=100 percent=40.00 speed_bps=25",
+            ),
+            (
+                u64::MAX,
+                "direction=pull transferred=100 total=100 percent=100.00 speed_bps=25",
+            ),
+            (
+                1,
+                "direction=pull transferred=100 total=100 percent=100.00 speed_bps=25",
+            ),
+        ] {
+            assert_eq!(
+                coordinator.handle(
+                    RuntimeEvent::Session(HeadlessFileTransferEvent::Progress {
+                        id: 7,
+                        file_num: -1,
+                        speed: 25,
+                        finished_size,
+                    }),
+                    &mut backend,
+                ),
+                None
+            );
+            assert_eq!(
+                backend.stderr.last().map(String::as_str),
+                Some(expected_line)
+            );
+        }
+
+        assert_eq!(backend.actions, expected_actions);
+        assert!(backend.stdout.is_empty());
+    }
+
+    #[test]
+    fn progress_rejects_unrelated_indices_wrong_job_and_wrong_phase() {
+        for progress in [
+            HeadlessFileTransferEvent::Progress {
+                id: 7,
+                file_num: -2,
+                speed: 25,
+                finished_size: 40,
+            },
+            HeadlessFileTransferEvent::Progress {
+                id: 7,
+                file_num: 1,
+                speed: 25,
+                finished_size: 40,
+            },
+            HeadlessFileTransferEvent::Progress {
+                id: 8,
+                file_num: -1,
+                speed: 25,
+                finished_size: 40,
+            },
+        ] {
+            let mut coordinator = push_coordinator(false, 7, 100);
+            let mut backend = FakeBackend::default();
+            coordinator.handle(peer_platform("Windows"), &mut backend);
+            coordinator.handle(connected(), &mut backend);
+
+            assert_eq!(
+                coordinator.handle(RuntimeEvent::Session(progress), &mut backend),
+                None
+            );
+            assert_eq!(
+                backend.stderr,
+                vec!["progress used an unexpected job shape"]
+            );
+            assert_eq!(close_status(&mut coordinator, &mut backend), 5);
+            assert!(backend.stdout.is_empty());
+        }
+
+        let mut wrong_phase = push_coordinator(false, 7, 100);
+        let mut wrong_phase_backend = FakeBackend::default();
+        wrong_phase.handle(peer_platform("Windows"), &mut wrong_phase_backend);
+        assert_eq!(
+            wrong_phase.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::Progress {
+                    id: 7,
+                    file_num: -1,
+                    speed: 25,
+                    finished_size: 40,
+                }),
+                &mut wrong_phase_backend,
+            ),
+            None
+        );
+        assert_eq!(
+            wrong_phase_backend.stderr,
+            vec!["progress used an unexpected job shape"]
+        );
+        assert_eq!(close_status(&mut wrong_phase, &mut wrong_phase_backend), 5);
+        assert!(wrong_phase_backend.stdout.is_empty());
     }
 
     #[test]
