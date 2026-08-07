@@ -262,6 +262,60 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
 #[cfg(feature = "drm-wake")]
 static DRM_WAKE_HOPELESS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
+/// DRM connector TYPE of `id` (bare name or `device:name`): the whole prefix before the trailing
+/// instance index, so `HDMI-A-1` is `HDMI-A`, not `HDMI`.
+#[cfg(feature = "drm-wake")]
+fn connector_type(id: &str) -> &str {
+    let name = id.rsplit(':').next().unwrap_or(id);
+    name.rsplit_once('-').map_or(name, |(ty, _)| ty)
+}
+
+/// Whether a connector is the machine's built-in panel.
+#[cfg(feature = "drm-wake")]
+fn is_builtin_panel(id: &str) -> bool {
+    matches!(connector_type(id), "eDP" | "LVDS" | "DSI")
+}
+
+/// Whether a connector is an external monitor. A whitelist, not "not built-in": measured on a T2
+/// MacBook the Touch Bar strip is a `USB` connector on its own card, lit whenever the machine is
+/// awake, so counting it would veto the panel on a closed laptop that has no other output.
+#[cfg(feature = "drm-wake")]
+fn is_external_monitor(id: &str) -> bool {
+    matches!(
+        connector_type(id),
+        "DP" | "HDMI-A" | "HDMI-B" | "DVI-I" | "DVI-D" | "DVI-A" | "VGA"
+    )
+}
+
+/// `Some(true)` if a lid switch reports CLOSED, `Some(false)` open, `None` if this machine has no
+/// lid switch or the state cannot be read.
+///
+/// Measured on four hosts: only the laptop has `SW_LID`, and `EVIOCGSW` answered on all four, so the
+/// absence on the desktops is real and not a broken probe. The node is not opened exclusively
+/// (logind and the compositor hold it too), which is safe for one more reader that never
+/// `EVIOCGRAB`s. This does not.
+#[cfg(feature = "drm-wake")]
+fn lid_is_closed() -> Option<bool> {
+    use evdev::SwitchType;
+    for (_, dev) in evdev::enumerate() {
+        let has_lid = dev
+            .supported_switches()
+            .is_some_and(|s| s.contains(SwitchType::SW_LID));
+        if !has_lid {
+            continue;
+        }
+        // evdev documents a SET bit as "switch enabled", which for SW_LID means CLOSED.
+        match dev.get_switch_state() {
+            Ok(state) => return Some(state.contains(SwitchType::SW_LID)),
+            Err(err) => {
+                log::debug!("drm: lid switch found but its state is unreadable ({err})");
+                return None;
+            }
+        }
+    }
+    None
+}
+
 #[cfg(feature = "drm-wake")]
 fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Vec<String> {
     let mut hopeless = DRM_WAKE_HOPELESS
@@ -278,11 +332,63 @@ fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Ve
             !driven_now
         });
     }
-    undriven
+    let wakeable: Vec<String> = undriven
         .iter()
         .filter(|id| !hopeless.iter().any(|h| h == *id))
         .cloned()
-        .collect()
+        .collect();
+    drop(hopeless);
+    veto_builtin_panel_with_lid_shut(displays, wakeable)
+}
+
+/// Drop the built-in panel from the wake list when the lid is shut AND a driven EXTERNAL monitor is
+/// already lit.
+///
+/// Both halves are load-bearing: a clamshell user docked to a monitor wants the closed panel dark,
+/// but a closed laptop used as a headless server has that panel as its ONLY output, and vetoing
+/// there would leave nothing to capture at all. Requiring an external monitor separates the two.
+///
+/// This does not chase the panel back down: anything that re-enables it makes it driven, so it never
+/// enters `undriven` for the veto to act on.
+#[cfg(feature = "drm-wake")]
+fn veto_builtin_panel_with_lid_shut(
+    displays: &[DrmDisplayInfo],
+    wakeable: Vec<String>,
+) -> Vec<String> {
+    // Cheapest checks first, so the evdev scan stays off every handshake that cannot be vetoed: no
+    // built-in panel in the wake list, or no EXTERNAL monitor already lit, and the lid is not read.
+    let externals = count_external_monitors(displays);
+    if externals == 0 || !wakeable.iter().any(|id| is_builtin_panel(id)) {
+        return wakeable;
+    }
+    veto_decision(externals, wakeable, lid_is_closed())
+}
+
+/// Driven external monitors. Pure, so it is testable on a host with no lid switch.
+#[cfg(feature = "drm-wake")]
+fn count_external_monitors(displays: &[DrmDisplayInfo]) -> usize {
+    displays
+        .iter()
+        .filter(|d| d.active && is_external_monitor(&d.name))
+        .count()
+}
+
+/// The decision itself. The lid state is a PARAMETER, not a read: inlined, every test on a host
+/// without a lid switch returns through the `None` arm and asserts nothing.
+#[cfg(feature = "drm-wake")]
+fn veto_decision(externals: usize, wakeable: Vec<String>, lid_closed: Option<bool>) -> Vec<String> {
+    if externals == 0 || lid_closed != Some(true) {
+        return wakeable;
+    }
+    let (vetoed, keep): (Vec<String>, Vec<String>) =
+        wakeable.into_iter().partition(|id| is_builtin_panel(id));
+    if !vetoed.is_empty() {
+        log::info!(
+            "drm: lid is shut and {externals} external monitor(s) are scanning out; not waking {}",
+            vetoed.join(", ")
+        );
+    }
+    keep
 }
 
 #[cfg(feature = "drm-wake")]
@@ -1795,5 +1901,103 @@ mod drm_conn_tests {
             MAX_DRM_AUTH_IN_FLIGHT <= MAX_DRM_CONNS,
             "the pre-auth bound must not be looser than the connection cap"
         );
+    }
+
+    // The two halves pull in opposite directions on purpose, so each is pinned separately.
+    #[cfg(feature = "drm-wake")]
+    mod lid_veto {
+        use super::super::{
+            connector_type, count_external_monitors, is_builtin_panel, is_external_monitor,
+            veto_builtin_panel_with_lid_shut, veto_decision, DrmDisplayInfo,
+        };
+
+        fn lit(name: &str) -> DrmDisplayInfo {
+            DrmDisplayInfo {
+                name: name.to_owned(),
+                crtc_id: 42,
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                active: true,
+                render_node: String::new(),
+                device: "/dev/dri/card0".to_owned(),
+            }
+        }
+
+        fn panel() -> Vec<String> {
+            vec!["/dev/dri/card2:eDP-1".to_owned()]
+        }
+
+        #[test]
+        fn connector_type_is_the_whole_prefix_before_the_instance_index() {
+            assert_eq!(connector_type("/dev/dri/card1:HDMI-A-1"), "HDMI-A");
+            assert_eq!(connector_type("/dev/dri/card2:eDP-1"), "eDP");
+            assert_eq!(connector_type("DP-6"), "DP");
+            assert_eq!(connector_type("USB-1"), "USB");
+        }
+
+        #[test]
+        fn builtin_and_external_are_disjoint_and_neither_matches_by_substring() {
+            for id in ["/dev/dri/card2:eDP-1", ":LVDS-1", "DSI-1"] {
+                assert!(is_builtin_panel(id) && !is_external_monitor(id), "{id}");
+            }
+            for id in [":DP-6", ":HDMI-A-1", ":DVI-D-1", ":VGA-1"] {
+                assert!(is_external_monitor(id) && !is_builtin_panel(id), "{id}");
+            }
+            // The T2 touch strip is NEITHER: not a panel to protect, not a monitor to license a veto.
+            for id in [":USB-1", ":Virtual-1", ":Writeback-1", ":eDPX-1"] {
+                assert!(!is_builtin_panel(id) || id == ":eDPX-1", "{id}");
+                assert!(!is_external_monitor(id), "{id}");
+            }
+            assert!(!is_builtin_panel(":eDPX-1"), "eDPX is not eDP");
+        }
+
+        // Pure, so these assert something on a host with no lid switch.
+        #[test]
+        fn vetoes_only_with_the_lid_shut_and_an_external_lit() {
+            assert_eq!(veto_decision(1, panel(), Some(true)), Vec::<String>::new());
+            // every other combination keeps the panel wakeable
+            assert_eq!(veto_decision(1, panel(), Some(false)), panel());
+            assert_eq!(veto_decision(1, panel(), None), panel(), "no lid switch, no veto");
+            assert_eq!(veto_decision(0, panel(), Some(true)), panel(), "headless: nothing else lit");
+        }
+
+        #[test]
+        fn only_the_builtin_panel_is_dropped() {
+            let mixed = vec![
+                "/dev/dri/card2:eDP-1".to_owned(),
+                "/dev/dri/card2:DP-6".to_owned(),
+                "/dev/dri/card0:USB-1".to_owned(),
+            ];
+            assert_eq!(
+                veto_decision(1, mixed, Some(true)),
+                vec!["/dev/dri/card2:DP-6".to_owned(), "/dev/dri/card0:USB-1".to_owned()]
+            );
+        }
+
+        #[test]
+        fn a_touch_bar_strip_does_not_count_as_an_external_monitor() {
+            // Measured on a T2 MacBook: the Touch Bar is a `USB` connector on its own card, lit
+            // whenever the machine is awake, so it must not license vetoing the only usable panel.
+            // Asserted on the pure counter; through the wrapper this passes on any host with no lid
+            // switch whatever the counter does.
+            assert_eq!(count_external_monitors(&[lit("USB-1")]), 0);
+            assert_eq!(count_external_monitors(&[lit("USB-1"), lit("DP-6")]), 1);
+        }
+
+        #[test]
+        fn a_dark_external_does_not_license_a_veto() {
+            // A connected-but-dark external is the exact state the wake exists to fix.
+            let mut dark = lit("DP-1");
+            dark.active = false;
+            assert_eq!(count_external_monitors(&[dark]), 0);
+        }
+
+        #[test]
+        fn a_host_with_no_builtin_panel_is_untouched() {
+            let w = vec!["/dev/dri/card1:DP-1".to_owned()];
+            assert_eq!(veto_builtin_panel_with_lid_shut(&[lit("HDMI-A-1")], w.clone()), w);
+        }
     }
 }
