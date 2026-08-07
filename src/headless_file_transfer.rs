@@ -1,6 +1,7 @@
 mod args;
 mod completion;
 mod error;
+mod handler;
 mod paths;
 
 pub(crate) use args::{
