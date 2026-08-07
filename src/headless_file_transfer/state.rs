@@ -499,13 +499,30 @@ impl TransferCoordinator {
         completion: super::completion::TransferCompletion,
         backend: &mut impl TransferBackend,
     ) {
+        if self.phase != TransferPhase::Transferring || completion.id != self.expected_job_id {
+            self.protocol_failure("transfer completion was incomplete or unexpected", backend);
+            return;
+        }
+        if !completion.done && !completion.error.is_empty() {
+            let valid_file_num = match self.args.direction {
+                TransferDirection::Push => completion.file_num == 0 || completion.file_num == 1,
+                TransferDirection::Pull => completion.file_num == 0,
+            };
+            if valid_file_num {
+                self.fail(
+                    HeadlessFileTransferError::Transfer(completion.error),
+                    backend,
+                );
+            } else {
+                self.protocol_failure("transfer completion was incomplete or unexpected", backend);
+            }
+            return;
+        }
         let expected_file_num = match self.args.direction {
             TransferDirection::Push => 1,
             TransferDirection::Pull => 0,
         };
-        if self.phase != TransferPhase::Transferring
-            || completion.id != self.expected_job_id
-            || completion.file_num != expected_file_num
+        if completion.file_num != expected_file_num
             || !completion.done
             || !completion.error.is_empty()
             || completion.finished_size != completion.total_size
@@ -1129,6 +1146,7 @@ mod tests {
 
         for event in [
             push_completion(7, 42),
+            completion_event(7, 1, 0, 0, false, "skipped"),
             job_failed(7),
             RuntimeEvent::Session(HeadlessFileTransferEvent::ConnectionFailed(
                 "deadline has elapsed".into(),
@@ -1503,6 +1521,145 @@ mod tests {
             );
             assert_eq!(close_status(&mut coordinator, &mut backend), 5);
         }
+    }
+
+    #[test]
+    fn native_pull_missing_source_completion_is_transfer_status_six() {
+        let mut coordinator = pull_coordinator(false, 7);
+        let mut backend = FakeBackend::default();
+        start_pull(&mut coordinator, &mut backend);
+
+        assert_eq!(
+            coordinator.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::Completed(TransferCompletion {
+                    id: 7,
+                    file_num: 0,
+                    total_size: 0,
+                    finished_size: 0,
+                    done: false,
+                    error: "remote source does not exist".into(),
+                })),
+                &mut backend,
+            ),
+            None
+        );
+        assert_eq!(
+            backend.actions,
+            vec![
+                TransferAction::StartJob {
+                    id: 7,
+                    source: r"C:\Users\82520\source.bin".into(),
+                    destination: "/tmp/target.bin".into(),
+                    is_remote: true,
+                },
+                TransferAction::CloseTransport,
+            ]
+        );
+        assert!(backend.stdout.is_empty());
+        assert_eq!(backend.stderr, vec!["remote source does not exist"]);
+
+        let committed_actions = backend.actions.clone();
+        let committed_stderr = backend.stderr.clone();
+        assert_eq!(
+            coordinator.handle(
+                RuntimeEvent::Session(HeadlessFileTransferEvent::JobFailed {
+                    id: 7,
+                    file_num: 0,
+                    message: "remote source does not exist".into(),
+                }),
+                &mut backend,
+            ),
+            None
+        );
+        assert_eq!(backend.actions, committed_actions);
+        assert!(backend.stdout.is_empty());
+        assert_eq!(backend.stderr, committed_stderr);
+        assert_eq!(close_status(&mut coordinator, &mut backend), 6);
+    }
+
+    #[test]
+    fn native_push_failure_accepts_single_file_raw_indices() {
+        for file_num in [0, 1] {
+            let mut coordinator = push_coordinator(false, 7, 42);
+            let mut backend = FakeBackend::default();
+            coordinator.handle(peer_platform("Windows"), &mut backend);
+            coordinator.handle(connected(), &mut backend);
+
+            coordinator.handle(
+                completion_event(7, file_num, 0, 0, false, "remote write failed"),
+                &mut backend,
+            );
+
+            assert!(backend.stdout.is_empty());
+            assert_eq!(backend.stderr, vec!["remote write failed"]);
+            assert_eq!(
+                backend
+                    .actions
+                    .iter()
+                    .filter(|action| **action == TransferAction::CloseTransport)
+                    .count(),
+                1
+            );
+            assert_eq!(close_status(&mut coordinator, &mut backend), 6);
+        }
+    }
+
+    #[test]
+    fn native_failure_completion_rejects_wrong_context_and_shape() {
+        for (direction, completion) in [
+            (
+                TransferDirection::Push,
+                completion_event(8, 0, 0, 0, false, "remote write failed"),
+            ),
+            (
+                TransferDirection::Push,
+                completion_event(7, -1, 0, 0, false, "remote write failed"),
+            ),
+            (
+                TransferDirection::Push,
+                completion_event(7, 2, 0, 0, false, "remote write failed"),
+            ),
+            (
+                TransferDirection::Pull,
+                completion_event(7, -1, 0, 0, false, "remote read failed"),
+            ),
+            (
+                TransferDirection::Pull,
+                completion_event(7, 1, 0, 0, false, "remote read failed"),
+            ),
+            (
+                TransferDirection::Push,
+                completion_event(7, 1, 42, 42, true, "remote write failed"),
+            ),
+            (
+                TransferDirection::Push,
+                completion_event(7, 1, 42, 42, false, ""),
+            ),
+        ] {
+            assert_completion_rejected_in_transfer(direction, completion);
+        }
+
+        let mut wrong_phase = pull_coordinator(false, 7);
+        let mut wrong_phase_backend = FakeBackend::default();
+        wrong_phase.handle(
+            completion_event(7, 0, 0, 0, false, "remote source does not exist"),
+            &mut wrong_phase_backend,
+        );
+
+        assert!(wrong_phase_backend.stdout.is_empty());
+        assert_eq!(
+            wrong_phase_backend.stderr,
+            vec!["transfer completion was incomplete or unexpected"]
+        );
+        assert_eq!(
+            wrong_phase_backend
+                .actions
+                .iter()
+                .filter(|action| **action == TransferAction::CloseTransport)
+                .count(),
+            1
+        );
+        assert_eq!(close_status(&mut wrong_phase, &mut wrong_phase_backend), 5);
     }
 
     #[test]
