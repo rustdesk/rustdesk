@@ -139,9 +139,11 @@ pub(crate) fn split_remote_file_path(
         ));
     }
     let parent = &path[..separator_index];
+    let is_windows_drive_root =
+        peer_platform == "Windows" && parent.len() == 2 && parent.as_bytes()[1] == b':';
 
     Ok(RemoteFilePath {
-        parent: if parent.is_empty() {
+        parent: if parent.is_empty() || is_windows_drive_root {
             path[..=separator_index].into()
         } else {
             parent.into()
@@ -276,6 +278,20 @@ mod tests {
             split_remote_file_path(r"C:\Users\82520\probe.bin", "Windows").unwrap(),
             RemoteFilePath {
                 parent: r"C:\Users\82520".into(),
+                name: "probe.bin".into(),
+            }
+        );
+        assert_eq!(
+            split_remote_file_path(r"C:\probe.bin", "Windows").unwrap(),
+            RemoteFilePath {
+                parent: r"C:\".into(),
+                name: "probe.bin".into(),
+            }
+        );
+        assert_eq!(
+            split_remote_file_path("C:/probe.bin", "Windows").unwrap(),
+            RemoteFilePath {
+                parent: "C:/".into(),
                 name: "probe.bin".into(),
             }
         );
