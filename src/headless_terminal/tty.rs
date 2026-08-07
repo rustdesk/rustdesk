@@ -1,10 +1,12 @@
 use std::{
-    io::{self, IsTerminal, Write},
+    io::{self, IsTerminal},
     mem::MaybeUninit,
     sync::Arc,
 };
 
 use hbb_common::libc;
+
+use crate::headless_auth::{get_stdin_attributes, set_stdin_attributes, stdin_is_tty};
 
 pub(crate) const DETACH_BYTE: u8 = 0x1d;
 
@@ -50,41 +52,11 @@ pub(crate) trait TtyBackend: Send + Sync + 'static {
 
 pub(crate) struct SystemTtyBackend;
 
-impl SystemTtyBackend {
-    fn get_attributes() -> io::Result<libc::termios> {
-        let mut attributes = MaybeUninit::<libc::termios>::uninit();
-        // SAFETY: `attributes` points to writable storage for a termios value, and
-        // `STDIN_FILENO` remains owned by the process for the duration of the call.
-        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, attributes.as_mut_ptr()) } == -1 {
-            return Err(last_tty_error("failed to capture stdin TTY attributes"));
-        }
-
-        // SAFETY: tcgetattr returned success and initialized the termios value.
-        Ok(unsafe { attributes.assume_init() })
-    }
-
-    fn set_attributes(attributes: &libc::termios) -> io::Result<()> {
-        // SAFETY: `attributes` is a valid termios value and remains borrowed for
-        // the duration of the tcsetattr call.
-        if unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, attributes) } == -1 {
-            Err(last_tty_error("failed to update stdin TTY attributes"))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn disable_echo(snapshot: &libc::termios) -> io::Result<()> {
-        let mut attributes = *snapshot;
-        attributes.c_lflag &= !libc::ECHO;
-        Self::set_attributes(&attributes)
-    }
-}
-
 impl TtyBackend for SystemTtyBackend {
     type Snapshot = libc::termios;
 
     fn stdin_is_tty(&self) -> bool {
-        io::stdin().is_terminal()
+        stdin_is_tty()
     }
 
     fn stdout_is_tty(&self) -> bool {
@@ -92,7 +64,7 @@ impl TtyBackend for SystemTtyBackend {
     }
 
     fn capture(&self) -> io::Result<Self::Snapshot> {
-        Self::get_attributes()
+        get_stdin_attributes()
     }
 
     fn enter_raw(&self, snapshot: &Self::Snapshot) -> io::Result<()> {
@@ -100,11 +72,11 @@ impl TtyBackend for SystemTtyBackend {
         // SAFETY: `attributes` is an initialized termios value owned by this
         // function, so cfmakeraw may mutate it in place.
         unsafe { libc::cfmakeraw(&mut attributes) };
-        Self::set_attributes(&attributes)
+        set_stdin_attributes(&attributes)
     }
 
     fn restore(&self, snapshot: &Self::Snapshot) -> io::Result<()> {
-        Self::set_attributes(snapshot)
+        set_stdin_attributes(snapshot)
     }
 
     fn size(&self) -> io::Result<TtySize> {
@@ -174,88 +146,6 @@ impl<B: TtyBackend> Drop for LocalTtyGuard<B> {
             eprintln!("RDH headless terminal failed to restore local TTY: {error}");
         }
     }
-}
-
-struct EchoGuard {
-    snapshot: Option<libc::termios>,
-}
-
-impl EchoGuard {
-    fn disable() -> io::Result<Self> {
-        let snapshot = SystemTtyBackend::get_attributes()?;
-        SystemTtyBackend::disable_echo(&snapshot)?;
-        Ok(Self {
-            snapshot: Some(snapshot),
-        })
-    }
-
-    fn restore(&mut self) -> io::Result<()> {
-        let Some(snapshot) = self.snapshot.as_ref() else {
-            return Ok(());
-        };
-        SystemTtyBackend::set_attributes(snapshot)?;
-        self.snapshot.take();
-        Ok(())
-    }
-}
-
-impl Drop for EchoGuard {
-    fn drop(&mut self) {
-        if let Err(error) = self.restore() {
-            eprintln!("RDH headless terminal failed to restore stdin echo: {error}");
-        }
-    }
-}
-
-fn trim_line_endings(line: String) -> String {
-    line.trim_end_matches(['\r', '\n']).to_owned()
-}
-
-fn secret_from_line(line: Option<String>) -> Option<String> {
-    line.filter(|line| line.as_bytes() != [DETACH_BYTE].as_slice())
-}
-
-fn confirmation_from_line(line: Option<&str>) -> Option<bool> {
-    line.map(|value| value.eq_ignore_ascii_case("y") || value.eq_ignore_ascii_case("yes"))
-}
-
-fn read_prompt_line(prompt: &str) -> io::Result<Option<String>> {
-    {
-        let mut stderr = io::stderr().lock();
-        stderr.write_all(prompt.as_bytes())?;
-        stderr.flush()?;
-    }
-
-    let mut line = String::new();
-    if io::stdin().read_line(&mut line)? == 0 {
-        Ok(None)
-    } else {
-        Ok(Some(trim_line_endings(line)))
-    }
-}
-
-pub(crate) fn prompt_line(prompt: &str) -> io::Result<Option<String>> {
-    read_prompt_line(prompt)
-}
-
-pub(crate) fn prompt_secret(prompt: &str) -> io::Result<Option<String>> {
-    let mut echo_guard = EchoGuard::disable()?;
-    let line_result = read_prompt_line(prompt);
-    let restore_result = echo_guard.restore();
-    let newline_result = {
-        let mut stderr = io::stderr().lock();
-        stderr.write_all(b"\n").and_then(|()| stderr.flush())
-    };
-
-    let line = line_result?;
-    restore_result?;
-    newline_result?;
-    Ok(secret_from_line(line))
-}
-
-pub(crate) fn prompt_confirmation(prompt: &str) -> io::Result<Option<bool>> {
-    let line = prompt_line(prompt)?;
-    Ok(confirmation_from_line(line.as_deref()))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -445,32 +335,6 @@ mod tests {
             assert_eq!(backend.counts(), (1, 1, 1));
         }
         assert_eq!(backend.counts(), (1, 1, 1));
-    }
-
-    #[test]
-    fn prompt_line_trims_only_trailing_cr_and_lf() {
-        assert_eq!(trim_line_endings(" value \t\r\n".to_owned()), " value \t");
-    }
-
-    #[test]
-    fn confirmation_preserves_explicit_no_and_eof() {
-        assert_eq!(confirmation_from_line(Some("y")), Some(true));
-        assert_eq!(confirmation_from_line(Some("YES")), Some(true));
-        assert_eq!(confirmation_from_line(Some(" yes ")), Some(false));
-        assert_eq!(confirmation_from_line(Some("yeah")), Some(false));
-        assert_eq!(confirmation_from_line(Some("")), Some(false));
-        assert_eq!(confirmation_from_line(None), None);
-    }
-
-    #[test]
-    fn secret_maps_only_single_detach_byte_to_none() {
-        assert_eq!(secret_from_line(Some("\u{1d}".to_owned())), None);
-        assert_eq!(
-            secret_from_line(Some("\u{1d}secret".to_owned())),
-            Some("\u{1d}secret".to_owned())
-        );
-        assert_eq!(secret_from_line(Some(String::new())), Some(String::new()));
-        assert_eq!(secret_from_line(None), None);
     }
 
     #[test]

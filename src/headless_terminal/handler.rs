@@ -1,15 +1,10 @@
-use crate::{client::QualityStatus, ui_session_interface::InvokeUiSession};
+use crate::{
+    client::QualityStatus, headless_auth::AuthPrompt, ui_session_interface::InvokeUiSession,
+};
 use hbb_common::{log, message_proto::*, rendezvous_proto::ConnType};
 #[cfg(all(feature = "vram", feature = "flutter"))]
 use std::ffi::c_void;
 use std::sync::{mpsc::Sender, Arc, Mutex};
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum AuthPrompt {
-    Password { retry: bool },
-    TwoFactor,
-    InsecureConnection,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum HeadlessEvent {

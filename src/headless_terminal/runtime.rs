@@ -1,15 +1,16 @@
-use super::{
-    handler::{AuthPrompt, HeadlessEvent, HeadlessTerminalHandler},
-    tty::{
-        prompt_confirmation, prompt_line, prompt_secret, spawn_signal_forwarder, split_input,
-        InputChunk, LocalTtyGuard, SignalEvent, SignalForwarder, SystemTtyBackend, TtyBackend,
-        TtySize,
-    },
-    HeadlessTerminalArgs,
-};
 use crate::{
     client::LoginConfigHandler,
+    headless_auth::{prompt_confirmation, prompt_line, prompt_secret_with_cancel, AuthPrompt},
     ui_session_interface::{io_loop, Session},
+};
+
+use super::{
+    handler::{HeadlessEvent, HeadlessTerminalHandler},
+    tty::{
+        spawn_signal_forwarder, split_input, InputChunk, LocalTtyGuard, SignalEvent,
+        SignalForwarder, SystemTtyBackend, TtyBackend, TtySize, DETACH_BYTE,
+    },
+    HeadlessTerminalArgs,
 };
 use hbb_common::rendezvous_proto::ConnType;
 use std::{
@@ -604,7 +605,8 @@ impl RuntimeBackend for SystemRuntimeBackend {
     }
 
     fn prompt_secret(&mut self) -> Result<Option<String>, HeadlessTerminalError> {
-        prompt_secret("Password: ").map_err(|error| HeadlessTerminalError::Tty(error.to_string()))
+        prompt_secret_with_cancel("Password: ", Some(DETACH_BYTE))
+            .map_err(|error| HeadlessTerminalError::Tty(error.to_string()))
     }
 
     fn prompt_confirmation(&mut self) -> Result<Option<bool>, HeadlessTerminalError> {
@@ -744,9 +746,12 @@ fn spawn_network_thread(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::headless_terminal::{
-        handler::{AuthPrompt, HeadlessEvent},
-        tty::{InputChunk, SignalEvent, TtyBackend, TtySize},
+    use crate::{
+        headless_auth::AuthPrompt,
+        headless_terminal::{
+            handler::HeadlessEvent,
+            tty::{InputChunk, SignalEvent, TtyBackend, TtySize},
+        },
     };
     use std::{
         collections::VecDeque,
