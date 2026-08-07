@@ -10,6 +10,9 @@ enum GestureState {
   threeFingerVerticalDrag
 }
 
+// What the pending-start debounce timer is currently pending for.
+enum _PendingStart { none, oneFinger, twoFinger }
+
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
     Object? debugOwner,
@@ -38,28 +41,38 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragEndCallback? onThreeFingerVerticalDragEnd;
 
   var _currentState = GestureState.none;
+  // Pending lower-finger start only; the post-end reset uses _resetTimer.
   Timer? _debounceTimer;
+  Timer? _resetTimer;
+  bool _ended = false;
+  _PendingStart _pendingStart = _PendingStart.none;
+  ScaleUpdateDetails? _pendingDetails;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
     // onStart = (d) {};
     onUpdate = (d) {
-      _debounceTimer?.cancel();
-      if (d.pointerCount == 1 && _currentState != GestureState.oneFingerPan) {
-        onOneFingerStartDebounce(d);
-      } else if (d.pointerCount == 2 &&
-          _currentState != GestureState.twoFingerScale) {
-        onTwoFingerStartDebounce(d);
-      } else if (d.pointerCount == 3 &&
-          _currentState != GestureState.threeFingerVerticalDrag) {
-        _currentState = GestureState.threeFingerVerticalDrag;
-        if (onThreeFingerVerticalDragStart != null) {
-          onThreeFingerVerticalDragStart!(
-              DragStartDetails(globalPosition: d.localFocalPoint));
+      final count = d.pointerCount;
+      if (count >= 3) {
+        // Three or more fingers are always the three-finger drag.
+        _cancelPendingStart();
+        if (_currentState != GestureState.threeFingerVerticalDrag || _ended) {
+          _startThreeFinger(d);
         }
-        debugPrint("start threeFingerScale");
+      } else if (count == 2) {
+        if (_currentState == GestureState.twoFingerScale && !_ended) {
+          _cancelPendingStart();
+        } else {
+          _armPendingStart(_PendingStart.twoFinger, d);
+        }
+      } else if (count == 1) {
+        if (_currentState == GestureState.oneFingerPan && !_ended) {
+          _cancelPendingStart();
+        } else {
+          _armPendingStart(_PendingStart.oneFinger, d);
+        }
       }
-      if (_currentState != GestureState.none) {
+      if (_currentState != GestureState.none && !_ended) {
         switch (_currentState) {
           case GestureState.oneFingerPan:
             if (onOneFingerPanUpdate != null) {
@@ -84,82 +97,130 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     };
     onEnd = (d) {
       debugPrint("ScaleGestureRecognizer onEnd");
-      _debounceTimer?.cancel();
-      // end
-      switch (_currentState) {
-        case GestureState.oneFingerPan:
-          debugPrint("OneFingerState.pan onEnd");
-          if (onOneFingerPanEnd != null) {
-            onOneFingerPanEnd!(_getDragEndDetails(d));
-          }
-          break;
-        case GestureState.twoFingerScale:
-          debugPrint("TwoFingerState.scale onEnd");
-          if (onTwoFingerScaleEnd != null) {
-            onTwoFingerScaleEnd!(d);
-          }
-          if (isSpecialHoldDragActive) {
-            // If we are in special drag mode, we need to reset the state.
-            // Otherwise, the next `onTwoFingerScaleUpdate()` will handle a wrong `focalPoint`.
-            _currentState = GestureState.none;
-            return;
-          }
-          break;
-        case GestureState.threeFingerVerticalDrag:
-          debugPrint("ThreeFingerState.vertical onEnd");
-          if (onThreeFingerVerticalDragEnd != null) {
-            onThreeFingerVerticalDragEnd!(_getDragEndDetails(d));
-          }
-          break;
-        default:
-          break;
+      // A pending lower-finger start must not fire once the pointers changed.
+      _cancelPendingStart();
+      // A second onEnd before a restart must not fire the end callback again.
+      if (!_ended) {
+        switch (_currentState) {
+          case GestureState.oneFingerPan:
+            debugPrint("OneFingerState.pan onEnd");
+            if (onOneFingerPanEnd != null) {
+              onOneFingerPanEnd!(_getDragEndDetails(d));
+            }
+            break;
+          case GestureState.twoFingerScale:
+            debugPrint("TwoFingerState.scale onEnd");
+            if (onTwoFingerScaleEnd != null) {
+              onTwoFingerScaleEnd!(d);
+            }
+            if (isSpecialHoldDragActive) {
+              // If we are in special drag mode, we need to reset the state.
+              // Otherwise, the next `onTwoFingerScaleUpdate()` will handle a wrong `focalPoint`.
+              _currentState = GestureState.none;
+              return;
+            }
+            break;
+          case GestureState.threeFingerVerticalDrag:
+            debugPrint("ThreeFingerState.vertical onEnd");
+            if (onThreeFingerVerticalDragEnd != null) {
+              onThreeFingerVerticalDragEnd!(_getDragEndDetails(d));
+            }
+            break;
+          default:
+            break;
+        }
       }
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
+      _ended = true;
+      // Cancel the previous reset timer so it cannot fire into a new gesture.
+      _resetTimer?.cancel();
+      _resetTimer = Timer(Duration(milliseconds: 200), () {
+        _resetTimer = null;
         _currentState = GestureState.none;
+        _ended = false;
       });
     };
   }
 
-  // FIXME: This debounce logic is not working properly.
-  // If we move our finger very fast, we won't be able to detect the "oneFingerPan" event sometimes.
-  void onOneFingerStartDebounce(ScaleUpdateDetails d) {
-    start(ScaleUpdateDetails d) {
-      _currentState = GestureState.oneFingerPan;
-      if (onOneFingerPanStart != null) {
-        onOneFingerPanStart!(DragStartDetails(
-            localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
-      }
+  // Debounce downward transitions (twoFingerScale -> oneFingerPan,
+  // threeFingerVerticalDrag -> twoFingerScale); refreshes of the same pending
+  // target keep the original deadline instead of extending it.
+  void _armPendingStart(_PendingStart pending, ScaleUpdateDetails d) {
+    final bool immediate = pending == _PendingStart.oneFinger
+        ? _currentState == GestureState.none ||
+            (_ended && _currentState == GestureState.oneFingerPan)
+        : _currentState != GestureState.threeFingerVerticalDrag;
+    if (immediate) {
+      _cancelPendingStart();
+      _startPending(pending, d);
+      return;
     }
+    if (_pendingStart == pending) {
+      _pendingDetails = d;
+      return;
+    }
+    _cancelPendingStart();
+    _pendingStart = pending;
+    _pendingDetails = d;
+    _debounceTimer = Timer(Duration(milliseconds: 200), _firePendingStart);
+  }
 
-    if (_currentState != GestureState.none) {
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
-        start(d);
-        debugPrint("debounce start oneFingerPan");
-      });
-    } else {
-      start(d);
-      debugPrint("start oneFingerPan");
+  void _firePendingStart() {
+    _debounceTimer = null;
+    final _PendingStart pending = _pendingStart;
+    final ScaleUpdateDetails? details = _pendingDetails;
+    _pendingStart = _PendingStart.none;
+    _pendingDetails = null;
+    if (details == null) {
+      return;
+    }
+    _startPending(pending, details);
+  }
+
+  void _startPending(_PendingStart pending, ScaleUpdateDetails d) {
+    _cancelReset();
+    switch (pending) {
+      case _PendingStart.oneFinger:
+        _currentState = GestureState.oneFingerPan;
+        if (onOneFingerPanStart != null) {
+          onOneFingerPanStart!(DragStartDetails(
+              localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
+        }
+        debugPrint("start oneFingerPan");
+        break;
+      case _PendingStart.twoFinger:
+        _currentState = GestureState.twoFingerScale;
+        if (onTwoFingerScaleStart != null) {
+          onTwoFingerScaleStart!(ScaleStartDetails(
+              localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
+        }
+        debugPrint("start twoFingerScale");
+        break;
+      case _PendingStart.none:
+        break;
     }
   }
 
-  void onTwoFingerStartDebounce(ScaleUpdateDetails d) {
-    start(ScaleUpdateDetails d) {
-      _currentState = GestureState.twoFingerScale;
-      if (onTwoFingerScaleStart != null) {
-        onTwoFingerScaleStart!(ScaleStartDetails(
-            localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
-      }
+  void _startThreeFinger(ScaleUpdateDetails d) {
+    _cancelReset();
+    _currentState = GestureState.threeFingerVerticalDrag;
+    if (onThreeFingerVerticalDragStart != null) {
+      onThreeFingerVerticalDragStart!(
+          DragStartDetails(globalPosition: d.localFocalPoint));
     }
+    debugPrint("start threeFingerScale");
+  }
 
-    if (_currentState == GestureState.threeFingerVerticalDrag) {
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
-        start(d);
-        debugPrint("debounce start twoFingerScale");
-      });
-    } else {
-      start(d);
-      debugPrint("start twoFingerScale");
-    }
+  void _cancelPendingStart() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _pendingStart = _PendingStart.none;
+    _pendingDetails = null;
+  }
+
+  void _cancelReset() {
+    _resetTimer?.cancel();
+    _resetTimer = null;
+    _ended = false;
   }
 
   DragUpdateDetails _getDragUpdateDetails(ScaleUpdateDetails d) =>
@@ -174,6 +235,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   @override
   void rejectGesture(int pointer) {
     super.rejectGesture(pointer);
+    _cancelPendingStart();
+    _cancelReset();
     switch (_currentState) {
       case GestureState.oneFingerPan:
         if (onOneFingerPanCancel != null) {
@@ -190,6 +253,13 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         break;
     }
     _currentState = GestureState.none;
+  }
+
+  @override
+  void dispose() {
+    _cancelPendingStart();
+    _cancelReset();
+    super.dispose();
   }
 }
 
