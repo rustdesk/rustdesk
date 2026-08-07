@@ -153,12 +153,16 @@ the first version has no bypass flag.
    - without `--overwrite`, send the existing skip confirmation, retain a
      destination-conflict result, and exit 7 after job cleanup;
    - with `--overwrite`, confirm offset block 0 and continue from the beginning.
-7. Accept success only after the expected native done event, complete source
-   byte count, and unchanged local source metadata.
+7. After the expected native done event, complete source byte count, and
+   unchanged local source metadata, issue the existing `ReadDir` request for
+   the destination parent.
+8. Accept success only when that directory response contains the exact target
+   name as one regular file with the expected size.
 
 The receiver retains its existing temporary-download and finalization behavior.
-The CLI introduces no separate remote directory-management operation; any
-parent handling remains the current RDO receiver behavior.
+The post-transfer `ReadDir` is verification only. The CLI introduces no remote
+directory creation or other directory-management operation; any parent handling
+remains the current RDO receiver behavior.
 
 ## Pull Data Flow
 
