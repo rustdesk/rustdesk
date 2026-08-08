@@ -229,6 +229,24 @@ pub fn is_headless() -> bool {
         })
 }
 
+/// The Wayland greeter on seat0, if the DRM backend can capture and inject into it.
+///
+/// The cached probe, to match the routing gate in `Connection`: not yet settled answers false,
+/// which is what upstream does today.
+#[cfg(feature = "drm")]
+fn drm_login_screen_seat0_username() -> Option<String> {
+    if !crate::server::drm_capturer::is_available_cached() {
+        return None;
+    }
+    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
+    if !is_gdm_user(&values[1])
+        || get_display_server_of_session(&values[0]) != DISPLAY_SERVER_WAYLAND
+    {
+        return None;
+    }
+    Some(values[1].clone())
+}
+
 pub fn get_username() -> String {
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
@@ -275,6 +293,15 @@ impl DesktopManager {
     }
 
     fn get_supported_display_seat0_username(&self) -> Option<String> {
+        // A Wayland greeter the DRM backend can serve is a supported display. Asked here and not in
+        // `new()` because the seat0 read there hides greeters, and because the DRM probe has not
+        // settled at startup.
+        #[cfg(feature = "drm")]
+        if self.seat0_username.is_empty() || is_gdm_user(&self.seat0_username) {
+            if let Some(username) = drm_login_screen_seat0_username() {
+                return Some(username);
+            }
+        }
         if is_gdm_user(&self.seat0_username) && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
         {
             None

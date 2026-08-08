@@ -100,6 +100,11 @@ fn refresh_wayland_uinput_rect_if_changed() {
     if is_x11() || !crate::input_service::wayland_use_uinput() {
         return;
     }
+    // Nothing to poll at a login screen; the DRM path owns the rect there.
+    #[cfg(feature = "drm")]
+    if crate::platform::linux::is_login_screen_wayland_cached() {
+        return;
+    }
     {
         let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
         if let Some(last_check) = lock.last_check {
@@ -484,6 +489,22 @@ pub(super) fn check_update_displays(all: &Vec<Display>) {
     let _ = update_sync_displays(all);
 }
 
+/// Whether there is a compositor on this seat worth asking. `get_displays()` does not cache
+/// its failure, so where there is none it re-probes every call for an answer that cannot
+/// change any caller's outcome. Last in the `&&` chain, so it never runs first on a poll.
+#[inline]
+#[cfg(target_os = "linux")]
+fn wayland_has_compositor() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        !crate::platform::linux::is_login_screen_wayland_cached()
+    }
+    #[cfg(not(feature = "drm"))]
+    {
+        true
+    }
+}
+
 // Return the converted input snapshot while updating the shared display cache.
 pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     // For compatibility: if only one display, scale remains 1.0 and we use the physical size for `uinput`.
@@ -491,6 +512,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     #[cfg(target_os = "linux")]
     let use_logical_scale = !is_x11()
         && crate::is_server()
+        && wayland_has_compositor()
         && scrap::wayland::display::get_displays().displays.len() > 1;
     let displays = all
         .iter()

@@ -663,17 +663,22 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
     let mouse = super::uinput::client::UInputMouse::new().await?;
     log::info!("UInput mouse created");
 
-    ENIGO
-        .lock()
-        .unwrap()
-        .set_custom_keyboard(Box::new(keyboard));
-    ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
+    let mut en = ENIGO.lock().unwrap();
+    // enigo guessed x11 once at construction, which is what a Wayland greeter reads as, and
+    // then routes the devices installed below to a null xdo that drops everything silently.
+    // Reaching here means `wayland_use_uinput()` was true, so this states a fact.
+    en.set_is_x11(false);
+    // One lock for both, so there is no window where the keyboard is custom and the mouse is not.
+    en.set_custom_keyboard(Box::new(keyboard));
+    en.set_custom_mouse(Box::new(mouse));
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     let mut en = ENIGO.lock()?;
+    // Same as `setup_uinput`: the caller is gated on `wayland_use_rdp_input()`.
+    en.set_is_x11(false);
     let rdp_info_lock = RDP_SESSION_INFO.lock()?;
     let rdp_info = rdp_info_lock.as_ref().ok_or("RDP session is None")?;
 
