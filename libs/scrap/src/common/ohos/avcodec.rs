@@ -9,8 +9,8 @@ use std::{
     ffi::{CStr, CString},
     ptr,
     sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+        Arc, Condvar, Mutex, MutexGuard,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -20,6 +20,9 @@ lazy_static::lazy_static! {
     static ref LAST_DECODER_INIT_ERROR: Mutex<String> = Mutex::new(String::new());
     static ref DECODER_SUPPORT_CACHE: Mutex<Vec<(CodecFormat, bool)>> = Mutex::new(Vec::new());
 }
+
+static MEDIA_LOCK_POISON_REPORTED: AtomicBool = AtomicBool::new(false);
+static INPUT_SHUTDOWN_DROP_REPORTED: AtomicBool = AtomicBool::new(false);
 
 const AV_ERR_OK: i32 = 0;
 const AV_ERR_INVALID_STATE: i32 = 8;
@@ -36,9 +39,22 @@ const OH_SCALING_MODE_SCALE_FIT_V2: i32 = 4;
 const HILOG_DOMAIN: u32 = 0xFF01;
 const HILOG_TAG: &[u8] = b"RustDeskNative\0";
 const LOG_APP: i32 = 0;
+const LOG_DEBUG: i32 = 3;
 const LOG_INFO: i32 = 4;
 const LOG_WARN: i32 = 5;
 const LOG_ERROR: i32 = 6;
+
+fn lock_media_state<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            if !MEDIA_LOCK_POISON_REPORTED.swap(true, Ordering::Relaxed) {
+                hilog_error("recovering poisoned OHOS video state mutex");
+            }
+            poisoned.into_inner()
+        }
+    }
+}
 
 #[repr(C)]
 struct OH_AVCodec {
@@ -350,7 +366,7 @@ unsafe extern "C" fn on_decoder_error(
     userData: *mut c_void,
 ) {
     if let Some(state) = callback_state_from_user_data(userData) {
-        let mut queues = state.queues.lock().unwrap();
+        let mut queues = lock_media_state(&state.queues);
         queues.last_error = Some(format!("decoder error {}", errorCode));
         queues.running = false;
         drop(queues);
@@ -384,7 +400,7 @@ unsafe extern "C" fn on_decoder_stream_changed(
             ));
         }
     }
-    let queues = state.queues.lock().unwrap();
+    let queues = lock_media_state(&state.queues);
     drop(queues);
     state.output_ready.notify_all();
 }
@@ -398,8 +414,12 @@ unsafe extern "C" fn on_decoder_need_input_buffer(
     let Some(state) = callback_state_from_user_data(userData) else {
         return;
     };
-    let mut queues = state.queues.lock().unwrap();
+    let mut queues = lock_media_state(&state.queues);
     if !queues.running {
+        drop(queues);
+        if !INPUT_SHUTDOWN_DROP_REPORTED.swap(true, Ordering::Relaxed) {
+            hilog_debug("dropping OHOS decoder input buffer during shutdown");
+        }
         return;
     }
     queues.input_buffers.push_back(BufferItem {
@@ -426,7 +446,7 @@ unsafe extern "C" fn on_decoder_new_output_buffer(
     let Some(state) = callback_state_from_user_data(userData) else {
         return;
     };
-    let mut queues = state.queues.lock().unwrap();
+    let mut queues = lock_media_state(&state.queues);
     if !queues.running {
         return;
     }
@@ -453,7 +473,7 @@ fn record_surface_output_latency(
     attr: &OH_AVCodecBufferAttr,
     output_queue_depth: usize,
 ) -> Option<SurfaceOutputTrace> {
-    let mut input_pts_at = state.input_pts_at.lock().unwrap();
+    let mut input_pts_at = lock_media_state(&state.input_pts_at);
     let trace = input_pts_at.remove(&attr.pts)?;
     let pending_inputs = input_pts_at.len();
     drop(input_pts_at);
@@ -472,10 +492,15 @@ fn surface_output_worker(codec: usize, state: Arc<SurfaceCallbackState>) {
     let codec = codec as *mut OH_AVCodec;
     loop {
         let item = {
-            let mut queues = state.queues.lock().unwrap();
+            let mut queues = lock_media_state(&state.queues);
             while queues.running && queues.last_error.is_none() && queues.output_buffers.is_empty()
             {
-                queues = state.output_ready.wait(queues).unwrap();
+                queues = state.output_ready.wait(queues).unwrap_or_else(|poisoned| {
+                    if !MEDIA_LOCK_POISON_REPORTED.swap(true, Ordering::Relaxed) {
+                        hilog_error("recovering poisoned OHOS video state mutex");
+                    }
+                    poisoned.into_inner()
+                });
             }
             if !queues.running || queues.last_error.is_some() {
                 return;
@@ -527,7 +552,7 @@ fn surface_output_worker(codec: usize, state: Arc<SurfaceCallbackState>) {
             let latency = output_trace
                 .as_ref()
                 .map(|trace| trace.submit_to_worker.as_millis() as u64);
-            *state.last_decode_latency_ms.lock().unwrap() = latency;
+            *lock_media_state(&state.last_decode_latency_ms) = latency;
             super::direct_render::notify_frame_rendered(
                 state.session_id.as_deref(),
                 state.display,
@@ -595,7 +620,7 @@ unsafe impl Send for OhosVideoDecoder {}
 impl Drop for OhosVideoDecoder {
     fn drop(&mut self) {
         if let Some(state) = self.callback_state.as_ref() {
-            let mut queues = state.queues.lock().unwrap();
+            let mut queues = lock_media_state(&state.queues);
             queues.running = false;
             drop(queues);
             state.input_ready.notify_all();
@@ -649,7 +674,7 @@ impl OhosVideoDecoder {
         session_id: Option<String>,
         display: usize,
     ) -> ResultType<Self> {
-        *LAST_DECODER_INIT_ERROR.lock().unwrap() = String::new();
+        *lock_media_state(&LAST_DECODER_INIT_ERROR) = String::new();
         let width_i32 = i32::try_from(width)
             .map_err(|_| anyhow!("OHOS decoder width is out of range: {}", width))?;
         let height_i32 = i32::try_from(height)
@@ -663,7 +688,7 @@ impl OhosVideoDecoder {
         unsafe { log_video_size_support(mime, width_i32, height_i32) };
         let codec = unsafe { create_decoder(mime) };
         if codec.is_null() {
-            *LAST_DECODER_INIT_ERROR.lock().unwrap() =
+            *lock_media_state(&LAST_DECODER_INIT_ERROR) =
                 format!("CreateByMime returned null for {}", unsafe {
                     CStr::from_ptr(mime).to_string_lossy()
                 });
@@ -676,7 +701,7 @@ impl OhosVideoDecoder {
                     unsafe {
                         let _ = OH_VideoDecoder_Destroy(codec);
                     }
-                    *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+                    *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
                     return Err(err);
                 }
             },
@@ -696,7 +721,7 @@ impl OhosVideoDecoder {
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
             }
-            *LAST_DECODER_INIT_ERROR.lock().unwrap() =
+            *lock_media_state(&LAST_DECODER_INIT_ERROR) =
                 "OH_AVFormat_Create returned null".to_owned();
             bail!("failed to create decoder format")
         }
@@ -746,7 +771,7 @@ impl OhosVideoDecoder {
                     let _ = OH_VideoDecoder_Destroy(codec);
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
-                *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+                *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
                 return Err(err);
             }
         }
@@ -765,7 +790,7 @@ impl OhosVideoDecoder {
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
             }
-            *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+            *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
             return Err(err);
         }
         if !window.is_null() {
@@ -780,7 +805,7 @@ impl OhosVideoDecoder {
                     }
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
-                *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+                *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
                 return Err(err);
             }
         }
@@ -794,7 +819,7 @@ impl OhosVideoDecoder {
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
             }
-            *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+            *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
             return Err(err);
         }
         if let Err(err) = ensure_ok(unsafe { OH_VideoDecoder_Start(codec) }, "Start") {
@@ -807,7 +832,7 @@ impl OhosVideoDecoder {
                     OH_NativeWindow_DestroyNativeWindow(window);
                 }
             }
-            *LAST_DECODER_INIT_ERROR.lock().unwrap() = err.to_string();
+            *lock_media_state(&LAST_DECODER_INIT_ERROR) = err.to_string();
             return Err(err);
         }
         let surface_output_thread = if let Some(state) = callback_state.as_ref() {
@@ -830,7 +855,7 @@ impl OhosVideoDecoder {
                             OH_NativeWindow_DestroyNativeWindow(window);
                         }
                     }
-                    *LAST_DECODER_INIT_ERROR.lock().unwrap() = message.clone();
+                    *lock_media_state(&LAST_DECODER_INIT_ERROR) = message.clone();
                     return Err(anyhow!(message));
                 }
             }
@@ -978,7 +1003,7 @@ impl OhosVideoDecoder {
 
     pub fn last_decode_latency_ms(&self) -> Option<u64> {
         if let Some(state) = self.callback_state.as_ref() {
-            *state.last_decode_latency_ms.lock().unwrap()
+            *lock_media_state(&state.last_decode_latency_ms)
         } else {
             self.last_decode_latency_ms
         }
@@ -998,13 +1023,18 @@ impl OhosVideoDecoder {
         let Some(state) = self.callback_state.as_ref() else {
             bail!("OHOS decoder surface callback state missing")
         };
-        let mut guard = state.queues.lock().unwrap();
+        let mut guard = lock_media_state(&state.queues);
         let timeout_result = state
             .input_ready
             .wait_timeout_while(guard, timeout, |queues| {
                 queues.running && queues.last_error.is_none() && queues.input_buffers.is_empty()
             })
-            .unwrap();
+            .unwrap_or_else(|poisoned| {
+                if !MEDIA_LOCK_POISON_REPORTED.swap(true, Ordering::Relaxed) {
+                    hilog_error("recovering poisoned OHOS video state mutex");
+                }
+                poisoned.into_inner()
+            });
         guard = timeout_result.0;
         if let Some(err) = &guard.last_error {
             bail!("OHOS decoder callback error: {}", err)
@@ -1040,7 +1070,7 @@ impl OhosVideoDecoder {
             },
         };
         if let Some(state) = self.callback_state.as_ref() {
-            state.input_pts_at.lock().unwrap().insert(
+            lock_media_state(&state.input_pts_at).insert(
                 attr.pts,
                 SurfaceInputTrace {
                     submitted_at: Instant::now(),
@@ -1191,19 +1221,14 @@ pub fn handle_h26x_video_frames(
 }
 
 pub fn supports_decoder(format: CodecFormat) -> bool {
-    if let Some((_, available)) = DECODER_SUPPORT_CACHE
-        .lock()
-        .unwrap()
+    if let Some((_, available)) = lock_media_state(&DECODER_SUPPORT_CACHE)
         .iter()
         .find(|(cached_format, _)| *cached_format == format)
     {
         return *available;
     }
     let available = probe_decoder_support(format);
-    DECODER_SUPPORT_CACHE
-        .lock()
-        .unwrap()
-        .push((format, available));
+    lock_media_state(&DECODER_SUPPORT_CACHE).push((format, available));
     available
 }
 
@@ -1310,6 +1335,10 @@ fn hilog_info(message: &str) {
     hilog_print(LOG_INFO, message);
 }
 
+fn hilog_debug(message: &str) {
+    hilog_print(LOG_DEBUG, message);
+}
+
 fn hilog_warn(message: &str) {
     hilog_print(LOG_WARN, message);
 }
@@ -1319,7 +1348,7 @@ fn hilog_error(message: &str) {
 }
 
 pub fn last_decoder_init_error() -> String {
-    LAST_DECODER_INIT_ERROR.lock().unwrap().clone()
+    lock_media_state(&LAST_DECODER_INIT_ERROR).clone()
 }
 
 pub struct OhosDecodeFrames<'a> {

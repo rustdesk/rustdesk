@@ -4,7 +4,7 @@ use std::{
     ptr,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex, OnceLock,
+        Arc, Mutex, MutexGuard, OnceLock, TryLockError,
     },
 };
 
@@ -18,6 +18,19 @@ const AUDIOSTREAM_USAGE_MOVIE: i32 = 10;
 const AUDIO_DATA_CALLBACK_RESULT_INVALID: i32 = -1;
 const AUDIO_DATA_CALLBACK_RESULT_VALID: i32 = 0;
 const PCM_BUFFER_SECONDS: usize = 1;
+static AUDIO_LOCK_POISON_REPORTED: AtomicBool = AtomicBool::new(false);
+
+fn lock_audio_state<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            if !AUDIO_LOCK_POISON_REPORTED.swap(true, Ordering::Relaxed) {
+                log::error!("recovering poisoned OHOS audio state mutex");
+            }
+            poisoned.into_inner()
+        }
+    }
+}
 
 #[repr(C)]
 pub struct OH_AudioStreamBuilder {
@@ -141,20 +154,18 @@ fn status_store() -> &'static Mutex<HashMap<String, OhosAudioStatus>> {
 }
 
 pub fn status(session_id: &str) -> OhosAudioStatus {
-    status_store()
-        .lock()
-        .unwrap()
+    lock_audio_state(status_store())
         .get(session_id)
         .cloned()
         .unwrap_or_default()
 }
 
 pub fn clear_status(session_id: &str) {
-    status_store().lock().unwrap().remove(session_id);
+    lock_audio_state(status_store()).remove(session_id);
 }
 
 fn mark_active(session_id: &str) {
-    status_store().lock().unwrap().insert(
+    lock_audio_state(status_store()).insert(
         session_id.to_string(),
         OhosAudioStatus {
             available: true,
@@ -165,7 +176,7 @@ fn mark_active(session_id: &str) {
 }
 
 fn mark_inactive(session_id: &str) {
-    status_store().lock().unwrap().insert(
+    lock_audio_state(status_store()).insert(
         session_id.to_string(),
         OhosAudioStatus {
             available: false,
@@ -176,7 +187,7 @@ fn mark_inactive(session_id: &str) {
 }
 
 fn mark_error(session_id: &str, error_text: String) {
-    status_store().lock().unwrap().insert(
+    lock_audio_state(status_store()).insert(
         session_id.to_string(),
         OhosAudioStatus {
             available: false,
@@ -207,7 +218,7 @@ fn register_callback_context(queue: Arc<Mutex<PcmQueue>>) -> usize {
         if id == 0 {
             continue;
         }
-        let mut contexts = callback_contexts().lock().unwrap();
+        let mut contexts = lock_audio_state(callback_contexts());
         if let std::collections::hash_map::Entry::Vacant(entry) = contexts.entry(id) {
             entry.insert(context);
             return id;
@@ -216,12 +227,12 @@ fn register_callback_context(queue: Arc<Mutex<PcmQueue>>) -> usize {
 }
 
 fn get_callback_context(id: usize) -> Option<Arc<CallbackContext>> {
-    callback_contexts().lock().unwrap().get(&id).cloned()
+    lock_audio_state(callback_contexts()).get(&id).cloned()
 }
 
 fn unregister_callback_context(id: usize) {
     if id != 0 {
-        callback_contexts().lock().unwrap().remove(&id);
+        lock_audio_state(callback_contexts()).remove(&id);
     }
 }
 
@@ -244,8 +255,15 @@ unsafe extern "C" fn write_pcm(
     if !context.active.load(Ordering::Acquire) {
         return AUDIO_DATA_CALLBACK_RESULT_INVALID;
     }
-    let Ok(mut queue) = context.queue.try_lock() else {
-        return AUDIO_DATA_CALLBACK_RESULT_INVALID;
+    let mut queue = match context.queue.try_lock() {
+        Ok(queue) => queue,
+        Err(TryLockError::Poisoned(poisoned)) => {
+            if !AUDIO_LOCK_POISON_REPORTED.swap(true, Ordering::Relaxed) {
+                log::error!("recovering poisoned OHOS audio state mutex");
+            }
+            poisoned.into_inner()
+        }
+        Err(TryLockError::WouldBlock) => return AUDIO_DATA_CALLBACK_RESULT_INVALID,
     };
     if !context.active.load(Ordering::Acquire) {
         return AUDIO_DATA_CALLBACK_RESULT_INVALID;
@@ -389,7 +407,7 @@ impl OhosAudioOutput {
         if self.renderer.is_null() || pcm.is_empty() {
             return;
         }
-        self.queue.lock().unwrap().push(pcm);
+        lock_audio_state(&self.queue).push(pcm);
     }
 
     pub fn fail(&mut self, message: &str) -> Result<(), String> {
@@ -414,7 +432,7 @@ impl OhosAudioOutput {
         message: &str,
     ) -> Result<(), String> {
         Self::deactivate_callback_context(callback_context_id);
-        self.queue.lock().unwrap().clear();
+        lock_audio_state(&self.queue).clear();
         let release_result = Self::release_native_renderer(renderer);
         if release_result != AUDIOSTREAM_SUCCESS {
             let error = format!(
@@ -456,7 +474,7 @@ impl OhosAudioOutput {
         }
         let callback_context_id = self.callback_context_id;
         Self::deactivate_callback_context(callback_context_id);
-        self.queue.lock().unwrap().clear();
+        lock_audio_state(&self.queue).clear();
         let release_result = Self::release_native_renderer(self.renderer);
         if release_result != AUDIOSTREAM_SUCCESS {
             let error = format!("OH_AudioRenderer_Release failed: {}", release_result);

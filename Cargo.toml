@@ -88,7 +88,7 @@ kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
-rdev_ohos = { package = "rdev", git = "https://github.com/FrankHan052176/rdev", branch = "ohos/exclude-linux-backend-on-ohos" }
+rdev_ohos = { package = "rdev", git = "https://github.com/FrankHan052176/rdev", rev = "f15c2046cf9ed8e7cfd8ceb7379e4559274b732d" }
 
 [target.'cfg(not(target_env = "ohos"))'.dependencies]
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }

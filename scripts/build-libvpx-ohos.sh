@@ -3,7 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [[ -z "${OHOS_NDK_HOME:-}" || -z "${OHOS_LIBVPX_ROOT:-}" ]]; then
+if [[ -z "${OHOS_NDK_HOME:-}" || -z "${OHOS_LIBVPX_ROOT:-}" ]] \
+  || ! declare -F ohos_build_jobs >/dev/null; then
   source "$repo_root/scripts/ohos-env.sh"
 fi
 
@@ -94,15 +95,7 @@ if [[ ! -f "$build_root/Makefile" ]]; then
   )
 fi
 
-task_jobs=4
-if command -v sysctl >/dev/null 2>&1; then
-  task_jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
-elif command -v getconf >/dev/null 2>&1; then
-  task_jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
-fi
-if (( task_jobs > 8 )); then
-  task_jobs=8
-fi
+task_jobs="$(ohos_build_jobs)"
 
 echo "Building upstream libvpx for OHOS arm64..."
 "$task_make" -C "$build_root" -j"$task_jobs"
@@ -114,4 +107,3 @@ if [[ ! -f "$codec_header" || ! -f "$static_library" ]]; then
 fi
 
 echo "Done: $OHOS_LIBVPX_ROOT"
-

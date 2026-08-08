@@ -47,6 +47,26 @@ find_tool() {
   return 1
 }
 
+ohos_build_jobs() {
+  local jobs="${CARGO_BUILD_JOBS:-}"
+  if [[ -z "$jobs" ]] && command -v nproc >/dev/null 2>&1; then
+    jobs="$(nproc 2>/dev/null || true)"
+  fi
+  if [[ -z "$jobs" ]] && command -v getconf >/dev/null 2>&1; then
+    jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  fi
+  if [[ -z "$jobs" ]] && command -v sysctl >/dev/null 2>&1; then
+    jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+  fi
+  if [[ ! "$jobs" =~ ^[1-9][0-9]*$ ]]; then
+    jobs=4
+  fi
+  if (( jobs > 8 )); then
+    jobs=8
+  fi
+  printf '%s\n' "$jobs"
+}
+
 OHOS_NDK_HOME="$(find_ohos_ndk_home || true)"
 if [[ -z "$OHOS_NDK_HOME" ]]; then
   cat >&2 <<'EOF'
@@ -102,4 +122,3 @@ echo "OHOS target=$target_triple"
 echo "OHOS linker=$CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER"
 echo "OHOS vcpkg prefix=$OHOS_VCPKG_PREFIX"
 echo "Repository=$repo_root"
-
