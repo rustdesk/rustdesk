@@ -1109,6 +1109,11 @@ pub fn get_active_userid() -> String {
 #[inline]
 /// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
 pub fn get_active_userid_fresh() -> String {
+    // A Wayland greeter owns seat0 while it is up and the DRM backend serves it, so a uid gate that
+    // cannot see it rejects the greeter's own `--server`. `Desktop::refresh` reads it the same way.
+    #[cfg(feature = "drm")]
+    return get_values_of_seat0_with_gdm_wayland(&[1])[0].clone();
+    #[cfg(not(feature = "drm"))]
     get_values_of_seat0(&[1])[0].clone()
 }
 
