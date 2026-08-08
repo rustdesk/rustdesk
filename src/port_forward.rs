@@ -15,7 +15,7 @@ use hbb_common::{
     ResultType, Stream,
 };
 
-fn run_rdp(port: u16) {
+fn run_rdp(port: u16, name: &str) {
     std::process::Command::new("cmdkey")
         .arg("/delete:localhost")
         .output()
@@ -35,10 +35,62 @@ fn run_rdp(port: u16) {
             .output()
             .ok();
     }
-    std::process::Command::new("mstsc")
-        .arg(format!("/v:localhost:{}", port))
-        .spawn()
-        .ok();
+    match write_rdp_file(port, name) {
+        Some(rdp_file) => {
+            std::process::Command::new("mstsc")
+                .arg(rdp_file)
+                .spawn()
+                .ok();
+        }
+        None => {
+            std::process::Command::new("mstsc")
+                .arg(format!("/v:localhost:{}", port))
+                .spawn()
+                .ok();
+        }
+    }
+}
+
+// mstsc titles the session window after the launched .rdp file's base name;
+// naming the file after the peer replaces the meaningless "localhost" title.
+fn write_rdp_file(port: u16, name: &str) -> Option<std::path::PathBuf> {
+    let name: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"\/:*?"<>|"#.contains(c) {
+                '-'
+            } else {
+                c
+            }
+        })
+        .take(60)
+        .collect();
+    // Windows rejects file names that end with a dot or space.
+    let name = name.trim_matches(|c| c == ' ' || c == '.');
+    if name.is_empty() {
+        return None;
+    }
+    let path = std::env::temp_dir().join(format!("{}.rdp", name));
+    std::fs::write(&path, format!("full address:s:localhost:{}\r\n", port)).ok()?;
+    Some(path)
+}
+
+// Prefer the name the user knows the peer by: alias, then cached hostname.
+fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
+    let lc = lc.read().unwrap();
+    let alias = lc
+        .options
+        .get("alias")
+        .map(|s| s.trim())
+        .unwrap_or_default();
+    if !alias.is_empty() {
+        return alias.to_owned();
+    }
+    let hostname = lc.info.hostname.trim();
+    if !hostname.is_empty() {
+        return hostname.to_owned();
+    }
+    id.to_owned()
 }
 
 pub async fn listen(
@@ -58,7 +110,7 @@ pub async fn listen(
     log::info!("listening on port {:?}", addr);
     let is_rdp = port == 0;
     if is_rdp {
-        run_rdp(addr.port());
+        run_rdp(addr.port(), &rdp_display_name(&lc, &id));
     }
     let mut ui_receiver = ui_receiver;
     loop {
@@ -96,7 +148,7 @@ pub async fn listen(
                     }
                     Some(Data::NewRDP) => {
                         println!("receive run_rdp from ui_receiver");
-                        run_rdp(addr.port());
+                        run_rdp(addr.port(), &rdp_display_name(&lc, &id));
                     }
                     _ => {}
                 }
