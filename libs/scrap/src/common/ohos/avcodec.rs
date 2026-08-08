@@ -947,14 +947,17 @@ impl OhosVideoDecoder {
         Ok(PushInputState::Submitted)
     }
 
-    pub fn submit_to_surface_with_key(&mut self, data: &[u8], key: bool) -> ResultType<()> {
+    pub fn submit_to_surface_with_key(&mut self, data: &[u8], key: bool) -> ResultType<bool> {
         if self.window.is_null() {
             bail!("OHOS decoder surface output requested without a bound NativeWindow")
         }
         let input_wait_started_at = Instant::now();
-        let item = self.wait_for_input_buffer(Duration::from_millis(30))?;
+        let Some(item) = self.wait_for_input_buffer(Duration::from_millis(30))? else {
+            // Surface callbacks can lag input delivery during decoder warmup.
+            return Ok(false);
+        };
         self.submit_callback_input(item, data, key, input_wait_started_at.elapsed())?;
-        Ok(())
+        Ok(true)
     }
 
     fn drain_outputs(&mut self, wait_first: bool) -> ResultType<Vec<OhosImage>> {
@@ -1019,7 +1022,7 @@ impl OhosVideoDecoder {
         rendered
     }
 
-    fn wait_for_input_buffer(&self, timeout: Duration) -> ResultType<BufferItem> {
+    fn wait_for_input_buffer(&self, timeout: Duration) -> ResultType<Option<BufferItem>> {
         let Some(state) = self.callback_state.as_ref() else {
             bail!("OHOS decoder surface callback state missing")
         };
@@ -1042,10 +1045,7 @@ impl OhosVideoDecoder {
         if !guard.running {
             bail!("OHOS decoder callback loop stopped")
         }
-        guard
-            .input_buffers
-            .pop_front()
-            .ok_or_else(|| anyhow!("OHOS decoder timed out waiting for input buffer").into())
+        Ok(guard.input_buffers.pop_front())
     }
 
     fn submit_callback_input(
@@ -1201,7 +1201,9 @@ pub fn handle_h26x_video_frames(
     if decoder.is_surface_mode() {
         *pixelbuffer = false;
         for frame in frames.frames.iter() {
-            decoder.submit_to_surface_with_key(&frame.data, frame.key)?;
+            if !decoder.submit_to_surface_with_key(&frame.data, frame.key)? {
+                return Ok(false);
+            }
         }
         return Ok(decoder.take_surface_rendered_frame());
     }
