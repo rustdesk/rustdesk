@@ -93,9 +93,13 @@ lazy_static::lazy_static! {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+const SWITCH_SIDES_UUID_TTL: Duration = Duration::from_secs(10);
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
-    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid, bool)>>> = Default::default();
 }
 
 #[cfg(target_os = "windows")]
@@ -2994,7 +2998,7 @@ impl Connection {
                 SWITCH_SIDES_UUID
                     .lock()
                     .unwrap()
-                    .retain(|_, v| v.0.elapsed() < Duration::from_secs(10));
+                    .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_UUID_TTL);
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
                     if let Some((_instant, uuid_old)) = uuid_old {
@@ -3734,17 +3738,18 @@ impl Connection {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
-                            crate::server::insert_pending_switch_sides_uuid(
+                            if crate::server::insert_pending_switch_sides_uuid(
                                 self.lr.my_id.clone(),
                                 uuid.clone(),
-                            );
-                            crate::run_me(vec![
-                                "--connect",
-                                &self.lr.my_id,
-                                "--switch_uuid",
-                                uuid.to_string().as_ref(),
-                            ])
-                            .ok();
+                            ) {
+                                crate::run_me(vec![
+                                    "--connect",
+                                    &self.lr.my_id,
+                                    "--switch_uuid",
+                                    uuid.to_string().as_ref(),
+                                ])
+                                .ok();
+                            }
                             self.on_close("switch sides", false).await;
                             return false;
                         }
@@ -6048,31 +6053,29 @@ pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
+pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) -> bool {
     let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
-    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
-    uuids.insert(id, (tokio::time::Instant::now(), uuid));
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn has_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
-    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
-    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
-    uuids.get(id).map(|(_, stored_uuid)| stored_uuid == uuid) == Some(true)
-}
-
-#[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn remove_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
-    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
-    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
-    if uuids.get(id).map(|(_, stored_uuid)| stored_uuid == uuid) == Some(true) {
-        uuids.remove(id);
-        true
-    } else {
-        false
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    if uuids.get(&id).map(|(_, stored_uuid, _)| stored_uuid) == Some(&uuid) {
+        return false;
     }
+    uuids.insert(id, (tokio::time::Instant::now(), uuid, false));
+    true
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn claim_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    // Keep claimed entries until expiry so replaying a request cannot launch another connection.
+    if let Some((_, stored_uuid, claimed)) = uuids.get_mut(id) {
+        if stored_uuid == uuid && !*claimed {
+            *claimed = true;
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -7014,18 +7017,18 @@ mod test {
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[test]
-    fn test_pending_switch_sides_uuid_check_does_not_consume() {
+    fn test_pending_switch_sides_uuid_is_claimed_once() {
         let id = uuid::Uuid::new_v4().to_string();
         let uuid = uuid::Uuid::new_v4();
         let other_uuid = uuid::Uuid::new_v4();
-        insert_pending_switch_sides_uuid(id.clone(), uuid.clone());
+        assert!(insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
 
-        assert!(has_pending_switch_sides_uuid(&id, &uuid));
-        assert!(has_pending_switch_sides_uuid(&id, &uuid));
-        assert!(!has_pending_switch_sides_uuid("other-peer", &uuid));
-        assert!(!has_pending_switch_sides_uuid(&id, &other_uuid));
-        assert!(remove_pending_switch_sides_uuid(&id, &uuid));
-        assert!(!has_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
+        assert!(!claim_pending_switch_sides_uuid("other-peer", &uuid));
+        assert!(!claim_pending_switch_sides_uuid(&id, &other_uuid));
+        assert!(claim_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!claim_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!insert_pending_switch_sides_uuid(id, uuid));
     }
 
     #[test]
