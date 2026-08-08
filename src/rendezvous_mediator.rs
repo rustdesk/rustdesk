@@ -53,8 +53,12 @@ lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Mutex<String> = Default::default();
     static ref LAST_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
     static ref LAST_RELAY_MSG: Mutex<(SocketAddr, Instant)> = Mutex::new((SocketAddr::new([0; 4].into(), 0), Instant::now()));
-    static ref WEBRTC_ICE_TXS: Mutex<HashMap<String, mpsc::UnboundedSender<String>>> = Default::default();
+    static ref WEBRTC_ICE_TXS: Mutex<HashMap<String, mpsc::Sender<String>>> = Default::default();
 }
+/// Remote ICE candidates buffered per session while the answerer applies them. Mirrors the
+/// controller's own cap: gathering yields host, then srflx, then relay, so a real peer sends
+/// well under this, and anything past it is someone deciding how much memory this process holds.
+const MAX_PENDING_REMOTE_ICE: usize = 64;
 // The rendezvous ICE route is reachable without a prior punch and the peer decides how many
 // candidates it sends, so these sites would let someone else set how much this machine writes to
 // its log file. One line a minute each, carrying the suppressed count.
@@ -62,6 +66,8 @@ const ICE_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60)
 static UNKNOWN_ICE_SESSION_LOG: hbb_common::log_throttle::LogThrottle =
     hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
 static REJECTED_REMOTE_ICE_LOG: hbb_common::log_throttle::LogThrottle =
+    hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
+static FULL_ICE_QUEUE_LOG: hbb_common::log_throttle::LogThrottle =
     hbb_common::log_throttle::LogThrottle::new(ICE_LOG_INTERVAL);
 
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
@@ -418,7 +424,11 @@ impl RendezvousMediator {
             Some(rendezvous_message::Union::IceCandidate(ice)) => {
                 let tx = WEBRTC_ICE_TXS.lock().await.get(&ice.session_key).cloned();
                 if let Some(tx) = tx {
-                    let _ = tx.send(ice.candidate);
+                    if tx.try_send(ice.candidate).is_err() {
+                        if let Some(n) = FULL_ICE_QUEUE_LOG.due() {
+                            log::debug!("dropped {} ICE candidate(s): queue full or closed", n);
+                        }
+                    }
                 } else if let Some(n) = UNKNOWN_ICE_SESSION_LOG.due() {
                     log::debug!(
                         "dropped {} ICE candidate(s) for unknown WebRTC session key, last: {}",
@@ -717,7 +727,13 @@ impl RendezvousMediator {
             return Ok(answer);
         };
 
-        let (remote_ice_tx, mut remote_ice_rx) = mpsc::unbounded_channel::<String>();
+        // Bounded, like the controller's own candidate buffer: how many candidates arrive is the
+        // sender's choice, while draining one costs a JSON parse and the ICE agent's lock, so an
+        // unbounded queue lets whoever can reach this session's route grow it without limit inside
+        // a long-lived service process. A full queue drops the newest candidate, which costs at
+        // most one path; ICE keeps whatever pairs it already has.
+        let (remote_ice_tx, mut remote_ice_rx) = mpsc::channel::<String>(MAX_PENDING_REMOTE_ICE);
+        let own_ice_tx = remote_ice_tx.clone();
         WEBRTC_ICE_TXS
             .lock()
             .await
@@ -795,10 +811,19 @@ impl RendezvousMediator {
         let session_key_for_cleanup = session_key.clone();
         tokio::spawn(async move {
             let result = stream.wait_connected(CONNECT_TIMEOUT).await;
-            WEBRTC_ICE_TXS
-                .lock()
-                .await
-                .remove(&session_key_for_cleanup);
+            // Only evict our own route. The key is the offer's DTLS fingerprint, identical across
+            // the controller's punch retries, so a retry that built a fresh answerer has already
+            // replaced this entry — removing it blindly would delete the live session's sender and
+            // leave it receiving no candidates at all.
+            {
+                let mut txs = WEBRTC_ICE_TXS.lock().await;
+                if txs
+                    .get(&session_key_for_cleanup)
+                    .is_some_and(|tx| tx.same_channel(&own_ice_tx))
+                {
+                    txs.remove(&session_key_for_cleanup);
+                }
+            }
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
                 // Release the pc now rather than waiting for the ICE agent to time out into a
