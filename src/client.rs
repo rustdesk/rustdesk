@@ -225,6 +225,15 @@ impl Drop for OffererGuard {
 ///   into one error.
 ///
 /// `others` must be non-empty (`select_ok` requires it).
+/// Whether a transport label names a peer-to-peer path rather than the RustDesk relay.
+///
+/// The preference window exists to let one of these beat a relay that connects sooner, so a
+/// label misclassified here inverts the race: a direct connection is parked as if it were a
+/// relay, and the relay is then committed the moment it arrives.
+fn is_direct_transport(typ: &str) -> bool {
+    !matches!(typ, "Relay" | "WebSocket")
+}
+
 async fn race_transports_prefer_webrtc<'a, T: 'a>(
     webrtc_fut: BoxFuture<'a, ResultType<T>>,
     others: Vec<BoxFuture<'a, ResultType<T>>>,
@@ -1098,7 +1107,7 @@ impl Client {
                                     webrtc_fut,
                                     connect_futures,
                                     Self::WEBRTC_PREFER_WINDOW_MS,
-                                    |result| result.2 == "IPv6",
+                                    |result| is_direct_transport(result.2),
                                 )
                                 .await
                             }
@@ -3437,7 +3446,12 @@ impl LoginConfigHandler {
                     .insert("other-server-key".to_owned(), c.clone());
             }
         }
-        if self.force_relay {
+        // policy_relay, not force_relay: this writes the user's relay CHOICE back into the peer's
+        // saved config, and force_relay also carries the WebSocket transport, which is a property
+        // of this client's current setup rather than of the peer. Persisting that turned one ws
+        // session into a permanent relay-by-policy peer — and since relay-by-policy means
+        // Relay-only ICE, WebRTC could never go direct to it again.
+        if self.policy_relay {
             config
                 .options
                 .insert("force-always-relay".to_owned(), "Y".to_owned());
@@ -5245,7 +5259,7 @@ async fn udp_nat_connect(
 
 #[cfg(test)]
 mod webrtc_race_tests {
-    use super::{race_transports_prefer_webrtc, request_allows_tcp_punch};
+    use super::{is_direct_transport, race_transports_prefer_webrtc, request_allows_tcp_punch};
     use hbb_common::{
         anyhow::anyhow,
         futures::future::{BoxFuture, FutureExt},
@@ -5276,6 +5290,37 @@ mod webrtc_race_tests {
     fn webrtc_request_never_reuses_its_signaling_socket_for_tcp_punch() {
         assert!(request_allows_tcp_punch(""));
         assert!(!request_allows_tcp_punch("webrtc://offer"));
+    }
+
+    // The transport labels the RelayResponse race actually runs on. Its predicate has to
+    // recognise the WebRTC branch's own label as direct, or a WebRTC connection that completes
+    // BEFORE the relay is parked as if it were a relay and the relay is committed on arrival —
+    // inverting the race exactly on the fast networks where ICE beats a TCP relay connect.
+    #[test]
+    fn transport_labels_are_classified_as_direct_or_relayed() {
+        for direct in ["WebRTC", "TCP", "UDP", "IPv6"] {
+            assert!(is_direct_transport(direct), "{direct} is a direct path");
+        }
+        for relayed in ["Relay", "WebSocket"] {
+            assert!(
+                !is_direct_transport(relayed),
+                "{relayed} goes via the relay"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn direct_result_wins_even_when_it_arrives_first() {
+        // Same ordering as a LAN: the preferred branch connects before the relay does.
+        let got = race_transports_prefer_webrtc(
+            ok_after(10, "WebRTC"),
+            vec![ok_after(120, "Relay")],
+            60_000,
+            |result| is_direct_transport(result),
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "WebRTC");
     }
 
     #[tokio::test]

@@ -854,13 +854,16 @@ impl RendezvousMediator {
         // transport-forced (ws) and its offer carries every candidate type, so answer with
         // full ICE and let a direct pair form; without it the offer is Relay-only ICE by
         // policy, viable (and answerable) only through TURN.
-        let webrtc_relay_only = ph.force_relay
-            && !WebRTCStream::endpoint_declares_all_ice(&ph.webrtc_sdp_offer);
-        // Unlike the udp/ipv6 legs - which deliberately just follow the request - WebRTC is
-        // gated on this machine's own option too: answering builds a pc that gathers ICE
-        // from this host, so a machine with WebRTC off must not be pulled into it.
+        let webrtc_relay_only =
+            ph.force_relay && !WebRTCStream::endpoint_declares_all_ice(&ph.webrtc_sdp_offer);
+        // Like the udp/ipv6 legs, the answerer follows the request and does not consult this
+        // machine's own enable-webrtc option. That option is LocalConfig, which the UI process
+        // writes and never syncs over IPC — this code runs in the server process, which on
+        // Windows resolves LocalConfig under a different profile entirely and would read the
+        // private-server default of "N", silently refusing to answer in exactly the self-hosted
+        // deployments the transport is for. The option still gates the feature where it can:
+        // an offer only exists because a controller had it enabled.
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
-            && crate::get_webrtc_enabled()
             && !Config::is_proxy()
             && (!webrtc_relay_only || WebRTCStream::has_turn_server());
         let webrtc_sdp_answer = if webrtc_viable {
