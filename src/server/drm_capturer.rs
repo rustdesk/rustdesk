@@ -823,7 +823,7 @@ impl Drop for UinputRefreshGuard {
 
 /// Never probes, never blocks: the form the ROUTING gates must use. Seconds of IPC inside
 /// `wayland::clear()`, `is_inited()` or the display enumeration trips "deadline has elapsed".
-pub(super) fn is_available_cached() -> bool {
+pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
