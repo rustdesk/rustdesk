@@ -356,7 +356,7 @@ jobs:
           # on the order get_features happens to append them (failing a correct build the day they
           # are reordered) and would also match a future feature that merely contains "drm", the same
           # trap build.py avoids by splitting on commas rather than testing a substring.
-          for want in drm drm-wake; do
+          for want in drm; do
             case ",$FEATURES," in
               *",$want,"*) ;;
               *) echo "::error::build.py --print-features returned no '$want' feature: $FEATURES"; exit 1 ;;

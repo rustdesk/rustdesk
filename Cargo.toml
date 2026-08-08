@@ -36,7 +36,6 @@ drm = ["scrap/drm"]
 # root service so a compositor that idle-disabled its outputs re-enables them. That is a different
 # kind of operation and deserves a switch that can remove it from the binary entirely, without
 # giving up DRM capture: `--features drm` builds the capture path with no wake code compiled in.
-drm-wake = ["drm"]
 plugin_framework = []
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [

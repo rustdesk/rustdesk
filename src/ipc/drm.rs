@@ -259,19 +259,16 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
 }
 
 /// Connectors a wake did NOT bring back. SELF-REFUTING: an entry later seen DRIVEN is removed.
-#[cfg(feature = "drm-wake")]
 static DRM_WAKE_HOPELESS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// DRM connector TYPE of `id` (bare name or `device:name`): the whole prefix before the trailing
 /// instance index, so `HDMI-A-1` is `HDMI-A`, not `HDMI`.
-#[cfg(feature = "drm-wake")]
 fn connector_type(id: &str) -> &str {
     let name = id.rsplit(':').next().unwrap_or(id);
     name.rsplit_once('-').map_or(name, |(ty, _)| ty)
 }
 
 /// Whether a connector is the machine's built-in panel.
-#[cfg(feature = "drm-wake")]
 fn is_builtin_panel(id: &str) -> bool {
     matches!(connector_type(id), "eDP" | "LVDS" | "DSI")
 }
@@ -279,7 +276,6 @@ fn is_builtin_panel(id: &str) -> bool {
 /// Whether a connector is an external monitor. A whitelist, not "not built-in": measured on a T2
 /// MacBook the Touch Bar strip is a `USB` connector on its own card, lit whenever the machine is
 /// awake, so counting it would veto the panel on a closed laptop that has no other output.
-#[cfg(feature = "drm-wake")]
 fn is_external_monitor(id: &str) -> bool {
     matches!(
         connector_type(id),
@@ -294,7 +290,6 @@ fn is_external_monitor(id: &str) -> bool {
 /// absence on the desktops is real and not a broken probe. The node is not opened exclusively
 /// (logind and the compositor hold it too), which is safe for one more reader that never
 /// `EVIOCGRAB`s. This does not.
-#[cfg(feature = "drm-wake")]
 fn lid_is_closed() -> Option<bool> {
     use evdev::SwitchType;
     for (_, dev) in evdev::enumerate() {
@@ -316,7 +311,6 @@ fn lid_is_closed() -> Option<bool> {
     None
 }
 
-#[cfg(feature = "drm-wake")]
 fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Vec<String> {
     let mut hopeless = DRM_WAKE_HOPELESS
         .lock()
@@ -350,7 +344,6 @@ fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Ve
 ///
 /// This does not chase the panel back down: anything that re-enables it makes it driven, so it never
 /// enters `undriven` for the veto to act on.
-#[cfg(feature = "drm-wake")]
 fn veto_builtin_panel_with_lid_shut(
     displays: &[DrmDisplayInfo],
     wakeable: Vec<String>,
@@ -365,7 +358,6 @@ fn veto_builtin_panel_with_lid_shut(
 }
 
 /// Driven external monitors. Pure, so it is testable on a host with no lid switch.
-#[cfg(feature = "drm-wake")]
 fn count_external_monitors(displays: &[DrmDisplayInfo]) -> usize {
     displays
         .iter()
@@ -375,7 +367,6 @@ fn count_external_monitors(displays: &[DrmDisplayInfo]) -> usize {
 
 /// The decision itself. The lid state is a PARAMETER, not a read: inlined, every test on a host
 /// without a lid switch returns through the `None` arm and asserts nothing.
-#[cfg(feature = "drm-wake")]
 fn veto_decision(externals: usize, wakeable: Vec<String>, lid_closed: Option<bool>) -> Vec<String> {
     if externals == 0 || lid_closed != Some(true) {
         return wakeable;
@@ -391,26 +382,18 @@ fn veto_decision(externals: usize, wakeable: Vec<String>, lid_closed: Option<boo
     keep
 }
 
-#[cfg(feature = "drm-wake")]
 static DRM_LAST_WAKE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-#[cfg(feature = "drm-wake")]
 static DRM_WAKE_UNAVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Wake config key; `enable-` is load-bearing: an absent value reads as `!= "N"`, so it defaults ON.
-#[cfg(feature = "drm-wake")]
 const OPTION_ENABLE_DRM_DISPLAY_WAKE: &str = "enable-drm-display-wake";
 
-#[cfg(feature = "drm-wake")]
 const DRM_WAKE_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(20);
-#[cfg(feature = "drm-wake")]
 const DRM_WAKE_DEVICE_SETTLE: std::time::Duration = std::time::Duration::from_millis(400);
-#[cfg(feature = "drm-wake")]
 const DRM_WAKE_RECHECK_TOTAL: std::time::Duration = std::time::Duration::from_secs(3);
-#[cfg(feature = "drm-wake")]
 const DRM_WAKE_SETTLE_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Seconds since service start, monotonic: SystemTime would let a clock step re-open the wake gate.
-#[cfg(feature = "drm-wake")]
 fn drm_wake_clock_secs() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs()
@@ -418,7 +401,6 @@ fn drm_wake_clock_secs() -> u64 {
 
 /// Look like user activity so the compositor re-enables an idle-DISABLED connector (until it does,
 /// nothing scans out). Measured on a T2 greeter: one relative move restored a 2880x1800 scanout.
-#[cfg(feature = "drm-wake")]
 fn drm_wake_displays(reason: &str) -> bool {
     use std::sync::atomic::Ordering;
 
@@ -492,21 +474,9 @@ fn drm_wake_displays(reason: &str) -> bool {
     true
 }
 
-#[cfg(not(feature = "drm-wake"))]
-fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
-    let (displays, undriven) = drm_enumerate_all_displays();
-    if !undriven.is_empty() {
-        log::debug!(
-            "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
-            undriven.len()
-        );
-    }
-    displays
-}
-
-/// Wake build: wake an undriven display and WAIT for the settled topology. The wait applies to every
-/// handshake whose wake may still be in flight, not only the one whose attempt won the rate limit.
-#[cfg(feature = "drm-wake")]
+/// Wake an undriven display and WAIT for the settled topology, when the runtime option asks for it.
+/// The wait applies to every handshake whose wake may still be in flight, not only the one whose
+/// attempt won the rate limit.
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
@@ -1904,7 +1874,6 @@ mod drm_conn_tests {
     }
 
     // The two halves pull in opposite directions on purpose, so each is pinned separately.
-    #[cfg(feature = "drm-wake")]
     mod lid_veto {
         use super::super::{
             connector_type, count_external_monitors, is_builtin_panel, is_external_monitor,
