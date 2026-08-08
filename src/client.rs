@@ -977,8 +977,14 @@ impl Client {
                             let addr = AddrMangle::decode(&rr.socket_addr_v6);
                             if addr.port() > 0 {
                                 if s.connect(addr).await.is_ok() {
-                                    connect_futures
-                                        .push(udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).boxed());
+                                    connect_futures.push(
+                                        async move {
+                                            let (conn, kcp, typ) =
+                                                udp_nat_connect(s, "IPv6", CONNECT_TIMEOUT).await?;
+                                            Ok((conn, kcp, typ, true))
+                                        }
+                                        .boxed(),
+                                    );
                                 }
                             }
                         }
@@ -1046,7 +1052,12 @@ impl Client {
                         connect_futures.push(
                             async move {
                                 let conn = fut.await?;
-                                Ok((conn, None, if use_ws() { "WebSocket" } else { "Relay" }))
+                                Ok((
+                                    conn,
+                                    None,
+                                    if use_ws() { "WebSocket" } else { "Relay" },
+                                    false,
+                                ))
                             }
                             .boxed(),
                         );
@@ -1060,7 +1071,13 @@ impl Client {
                             let mut raced = webrtc;
                             let webrtc_fut = async move {
                                 raced.wait_connected(CONNECT_TIMEOUT).await?;
-                                Ok((Stream::WebRTC(raced), None, "WebRTC"))
+                                // Resolve relayed-ness here, not from the label: WebRTC is only a
+                                // P2P path when ICE nominated a non-TURN pair, and the race has to
+                                // know which it got. Committing a TURN pair as if it were direct
+                                // cancels a genuine direct attempt still in flight — the same
+                                // inversion the preference window exists to prevent, one level up.
+                                let relayed = raced.is_relayed().await.unwrap_or(true);
+                                Ok((Stream::WebRTC(raced), None, "WebRTC", !relayed))
                             }
                             .boxed();
                             if interface.is_policy_relay() {
@@ -1079,7 +1096,7 @@ impl Client {
                                     webrtc_fut,
                                     connect_futures,
                                     Self::WEBRTC_PREFER_WINDOW_MS,
-                                    |result| is_direct_transport(result.2),
+                                    |result| result.3,
                                 )
                                 .await
                             }
@@ -1092,7 +1109,7 @@ impl Client {
                         }
                         // The ? / secure_connection failures below return early; webrtc_guard stays
                         // in scope and closes the offerer on any such exit (loss, error, cancellation).
-                        let (mut conn, kcp, mut typ) = race_result?;
+                        let (mut conn, kcp, mut typ, direct) = race_result?;
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
                         let pk = match Self::secure_connection(
@@ -1146,18 +1163,8 @@ impl Client {
                             }
                             Err(e) => return Err(e),
                         };
-                        // Compute the direct/relayed flag (an await) BEFORE disarming the guard, so
-                        // a cancellation of this future during webrtc_relayed() still closes the pc
-                        // via the guard's drop. Matches connect()'s ordering.
-                        let direct = match typ {
-                            "IPv6" => true,
-                            // WebRTC through a TURN server is relayed traffic; report it as such.
-                            // An unknown answer (no selected pair yet, or the pc closed under a
-                            // concurrent teardown) must not be read as "direct": claiming a P2P
-                            // path needs evidence of one.
-                            "WebRTC" => !conn.webrtc_relayed().await.unwrap_or(true),
-                            _ => false,
-                        };
+                        // `direct` came from the winning future, which resolved it while the pc was
+                        // definitely alive — the race needed it to pick a winner at all.
                         // Secured and WebRTC won: disarm so the returned conn keeps the pc alive.
                         if typ == "WebRTC" {
                             if let Some(guard) = webrtc_guard.take() {
@@ -2586,13 +2593,15 @@ pub struct LoginConfigHandler {
     // reconnect before the real reboot disconnect.
     restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
-    // The policy component of force_relay: the user's relay choice (option or explicit
-    // request) plus proxy, WITHOUT the WebSocket-transport component. ws kills classic
-    // TCP/UDP punching (force_relay stays set for those paths) but says nothing about
-    // ICE, so WebRTC decisions - offer ICE policy, prefer-P2P racing - key off this
-    // instead: relay-by-policy must stay Relay-only ICE, relay-by-transport may go
-    // direct over full ICE.
+    // The policy component of force_relay: peer_relay plus proxy, WITHOUT the WebSocket
+    // transport. ws kills classic TCP/UDP punching (force_relay stays set for those paths)
+    // but says nothing about ICE, so the WebRTC decisions - offer ICE policy, prefer-P2P
+    // racing - key off this instead: relay-by-policy must stay Relay-only ICE, while
+    // relay-by-transport may still go direct over full ICE.
     pub policy_relay: bool,
+    // The peer-scoped component: this peer's saved force-always-relay option, or an explicit
+    // relay request for it. The only part that may be written back into the peer's config.
+    pub peer_relay: bool,
     pub direct: Option<bool>,
     pub received: bool,
     switch_uuid: Option<String>,
@@ -2701,10 +2710,16 @@ impl LoginConfigHandler {
         self.session_id = sid;
         self.supported_encoding = Default::default();
         self.clear_restarting_remote_device();
-        self.policy_relay =
+        // Three scopes, and only the first belongs in the peer's saved config: what was decided
+        // about THIS PEER (its saved option, or an explicit relay request such as an `/r` id or
+        // a retry-via-relay), versus what is true of this client right now (a proxy, WebSocket).
+        // Persisting either of the latter turns a transient local setup into a permanent property
+        // of the peer — and relay-by-policy means Relay-only ICE, so WebRTC never goes direct to
+        // it again.
+        self.peer_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
-                || force_relay
-                || Config::is_proxy();
+                || force_relay;
+        self.policy_relay = self.peer_relay || Config::is_proxy();
         self.force_relay = self.policy_relay || use_ws();
         if let Some((real_id, server, key)) = &self.other_server {
             let other_server_key = self.get_option("other-server-key");
@@ -3422,12 +3437,9 @@ impl LoginConfigHandler {
                     .insert("other-server-key".to_owned(), c.clone());
             }
         }
-        // policy_relay, not force_relay: this writes the user's relay CHOICE back into the peer's
-        // saved config, and force_relay also carries the WebSocket transport, which is a property
-        // of this client's current setup rather than of the peer. Persisting that turned one ws
-        // session into a permanent relay-by-policy peer — and since relay-by-policy means
-        // Relay-only ICE, WebRTC could never go direct to it again.
-        if self.policy_relay {
+        // peer_relay only — see `initialize`: neither the proxy nor the WebSocket transport is a
+        // fact about this peer, and writing one here makes it permanent.
+        if self.peer_relay {
             config
                 .options
                 .insert("force-always-relay".to_owned(), "Y".to_owned());
