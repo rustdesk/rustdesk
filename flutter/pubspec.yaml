@@ -1,4 +1,7 @@
-name: Aureum Technology GmbH Fernwartung
+# 'name' is the Dart package identifier, not a display name. It must stay a valid
+# Dart identifier (lowercase, no spaces) and match the 'package:flutter_hbb/...'
+# imports used throughout flutter/lib. Rebrand via the app name, not here.
+name: flutter_hbb
 description: Deine Remote-Desktop-Fernwartungssoftware!
 
 # The following line prevents the package from being accidentally published to
