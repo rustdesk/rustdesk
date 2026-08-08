@@ -130,7 +130,7 @@ async fn connect_and_login(
             *close_port_forward = true;
             // Close the WebRTC pc on this decline path too (no-op for TCP/WS), matching every
             // other exit in this function; a bare drop leaks it in the global session cache.
-            stream.close_webrtc().await;
+            stream.close_webrtc();
             return Ok(None);
         }
     }
@@ -143,7 +143,7 @@ async fn connect_and_login(
         tokio::select! {
             res = timeout(READ_TIMEOUT, stream.next()) => match res {
                 Err(_) => {
-                    stream.close_webrtc().await;
+                    stream.close_webrtc();
                     bail!("Timeout");
                 }
                 Ok(Some(Ok(bytes))) => {
@@ -154,7 +154,7 @@ async fn connect_and_login(
                     let msg_in = match Message::parse_from_bytes(&bytes) {
                         Ok(msg) => msg,
                         Err(err) => {
-                            stream.close_webrtc().await;
+                            stream.close_webrtc();
                             return Err(err.into());
                         }
                     };
@@ -165,7 +165,7 @@ async fn connect_and_login(
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {
                                 if !interface.handle_login_error(&err) {
-                                    stream.close_webrtc().await;
+                                    stream.close_webrtc();
                                     return Ok(None);
                                 }
                             }
@@ -182,11 +182,11 @@ async fn connect_and_login(
                     }
                 }
                 Ok(Some(Err(err))) => {
-                    stream.close_webrtc().await;
+                    stream.close_webrtc();
                     bail!("Connection closed: {}", err);
                 }
                 _ => {
-                    stream.close_webrtc().await;
+                    stream.close_webrtc();
                     bail!("Reset by the peer");
                 }
             },
@@ -205,7 +205,7 @@ async fn connect_and_login(
                 if let Some(Ok(bytes)) = res {
                     buffer.extend(bytes);
                 } else {
-                    stream.close_webrtc().await;
+                    stream.close_webrtc();
                     return Ok(None);
                 }
             },
@@ -240,6 +240,6 @@ async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> 
             },
         }
     }
-    stream.close_webrtc().await;
+    stream.close_webrtc();
     Ok(())
 }
