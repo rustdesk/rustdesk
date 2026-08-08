@@ -34,6 +34,10 @@ pub const FILECONTENTS_FORMAT_NAME: &str = "FileContents";
 /// block size for fuse, align to our asynchronic request size over FileContentsRequest.
 pub(crate) const BLOCK_SIZE: u32 = 4 * 1024 * 1024;
 
+/// `FILEDESCRIPTORW::cFileName` capacity, including the trailing NUL code unit.
+pub(super) const FILE_NAME_CODE_UNITS: usize = 260;
+pub(super) const FILE_NAME_FIELD_SIZE: usize = FILE_NAME_CODE_UNITS * std::mem::size_of::<u16>();
+
 // begin of epoch used by microsoft
 // 1601-01-01 00:00:00 + LDAP_EPOCH_DELTA*(100 ns) = 1970-01-01 00:00:00
 const LDAP_EPOCH_DELTA: u64 = 116444772610000000;

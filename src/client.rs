@@ -430,8 +430,8 @@ impl Client {
             NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
         };
 
-        if !key.is_empty() && !token.is_empty() {
-            // mainly for the security of token
+        let switch_code = interface.get_switch_code();
+        if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
             secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
@@ -473,6 +473,7 @@ impl Client {
             udp_port: udp_nat_port as _,
             force_relay: interface.is_force_relay(),
             socket_addr_v6: ipv6.1.unwrap_or_default(),
+            switch_code,
             ..Default::default()
         });
         for i in 1..=3 {
@@ -720,6 +721,7 @@ impl Client {
         let mut direct = !conn.is_err();
         if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
+                let switch_code = interface.get_switch_code();
                 conn = Self::request_relay(
                     peer_id,
                     relay_server.to_owned(),
@@ -728,6 +730,7 @@ impl Client {
                     key,
                     token,
                     conn_type,
+                    &switch_code,
                 )
                 .await;
                 if let Err(e) = conn {
@@ -848,6 +851,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        switch_code: &str,
     ) -> ResultType<Stream> {
         let mut succeed = false;
         let mut uuid = "".to_owned();
@@ -859,8 +863,7 @@ impl Client {
                 .await
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
-            if !key.is_empty() && !token.is_empty() {
-                // mainly for the security of token
+            if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
                 secure_tcp(&mut socket, key).await?;
             }
 
@@ -881,6 +884,7 @@ impl Client {
                 uuid: uuid.clone(),
                 relay_server: relay_server.clone(),
                 secure,
+                switch_code: switch_code.to_owned(),
                 ..Default::default()
             });
             socket.send(&msg_out).await?;
@@ -3921,6 +3925,16 @@ pub trait Interface: Send + Clone + 'static + Sized {
 
     fn is_force_relay(&self) -> bool {
         self.get_lch().read().unwrap().force_relay
+    }
+
+    fn get_switch_code(&self) -> String {
+        match self.get_lch().read().unwrap().switch_uuid.clone() {
+            Some(u) if !u.is_empty() => {
+                use hbb_common::sodiumoxide::crypto::hash::sha256;
+                crate::encode64(sha256::hash(u.as_bytes()).0)
+            }
+            _ => String::new(),
+        }
     }
 
     fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}

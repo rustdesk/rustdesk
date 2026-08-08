@@ -361,6 +361,30 @@ pub fn get_focused_display(displays: Vec<DisplayInfo>) -> Option<usize> {
 }
 
 pub fn get_cursor() -> ResultType<Option<u64>> {
+    // DRM/KMS capture: the hardware cursor arrives over the `_drm` stream, not from XFixes.
+    //
+    // The MEMOISED `is_x11()` here, deliberately, unlike the capture-path callers that take the
+    // unmemoised `scrap::is_x11()` because this one latches on first use. The tradeoff is the other
+    // way round at cursor cadence: the unmemoised form forks `loginctl` per call, and this runs on
+    // every cursor poll. A latch that guessed wrong costs a cursor served by the wrong source until
+    // the process restarts, not a capture that cannot start -- and by the time a cursor is being
+    // polled there is a live session, which is the case the latch reads correctly.
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
+            // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
+            // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
+            // sentinel. Returning that sentinel here would hide the cursor globally, including on the
+            // PipeWire display where it is still visible, so only report a hidden DRM cursor when it
+            // is authoritative -- a pure-DRM session. A visible DRM cursor is always authoritative;
+            // otherwise fall through to the normal cursor path.
+            if id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                return Ok(Some(id));
+            }
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(d) = conn.try_borrow_mut() {
@@ -379,6 +403,32 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 }
 
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
+    // DRM/KMS capture: return the latest hardware-cursor snapshot from the `_drm` stream. Its id may
+    // have advanced past `hcursor` between get_cursor() and here, so return the latest rather than
+    // bailing (which would trigger a MouseCursorService backoff).
+    //
+    // Memoised `is_x11()` on purpose, for the reason spelled out in `get_cursor()`; the two must
+    // agree anyway, since a caller that took the DRM branch there has to take it here.
+    #[cfg(feature = "drm")]
+    if !is_x11() {
+        if let Some(c) = crate::server::drm_capturer::drm_cursor() {
+            // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
+            // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
+            // by the normal path instead of being hidden everywhere.
+            if c.id != scrap::drm_reader::HIDDEN_CURSOR_ID
+                || !crate::server::display_service::has_non_drm_backed_display()
+            {
+                let mut cd: CursorData = Default::default();
+                cd.id = c.id;
+                cd.width = c.width;
+                cd.height = c.height;
+                cd.hotx = c.hotx;
+                cd.hoty = c.hoty;
+                cd.colors = c.colors.into();
+                return Ok(cd);
+            }
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(ref mut d) = conn.try_borrow_mut() {
@@ -680,6 +730,40 @@ fn start_server(desktop: Option<&Desktop>, server: &mut Option<Child>) {
     }
 }
 
+/// Whether a just-spawned `--server` is still running after a short grace period, taking ownership of
+/// the corpse (clearing `server`) when it is not. `start_server` reports only whether the SPAWN
+/// succeeded, which is not the same question: a child that execs and exits immediately still leaves
+/// `Some(child)` behind.
+///
+/// A child that exits is detected as soon as it does; a healthy one costs the full grace, once per
+/// start. A server that dies LATER than this is a different (transient) failure, and the restart
+/// throttle in `should_start_server` already bounds that case.
+#[cfg(feature = "drm")]
+fn server_survived_grace(server: &mut Option<Child>) -> bool {
+    const GRACE: Duration = Duration::from_millis(1000);
+    const STEP_MS: u64 = 100;
+    let Some(ps) = server.as_mut() else {
+        return false; // spawn itself failed
+    };
+    let deadline = Instant::now() + GRACE;
+    while Instant::now() < deadline {
+        match ps.try_wait() {
+            Ok(Some(status)) => {
+                log::warn!("--server exited {status} within {GRACE:?} of starting");
+                *server = None;
+                return false;
+            }
+            Ok(None) => sleep_millis(STEP_MS),
+            // We cannot tell; treat it as alive rather than tearing down a possibly healthy child.
+            Err(err) => {
+                log::error!("error waiting on the just-started --server: {err}");
+                return true;
+            }
+        }
+    }
+    true
+}
+
 fn stop_server(server: &mut Option<Child>) {
     if let Some(mut ps) = server.take() {
         allow_err!(ps.kill());
@@ -810,6 +894,29 @@ pub fn start_os_service() {
         allow_err!(crate::ipc::start(crate::POSTFIX_SERVICE));
     });
 
+    // DRM/KMS capture producer (opt-in `drm` feature): a dedicated thread + runtime that streams
+    // scanout frames to the user `--server` over the `_drm` service-scoped channel. Runs here
+    // because this process is the root service that already holds CAP_SYS_ADMIN for the in-process
+    // (direct-mode) libdrmtap read.
+    //
+    // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the thread
+    // cannot be created (EAGAIN under a thread-count or memory limit), and here that panic would
+    // unwind out of `start_os_service` -- taking down the root service itself, for a feature whose
+    // failure should only cost DRM capture. Losing the producer leaves the consumer to fall back to
+    // PipeWire/X11, which is the same path a host without the feature takes.
+    #[cfg(feature = "drm")]
+    if let Err(err) = std::thread::Builder::new()
+        .name("drm-producer".into())
+        .spawn(|| {
+            crate::ipc::start_drm();
+        })
+    {
+        log::warn!(
+            "failed to spawn the drm capture producer thread: {err}; DRM capture is off for \
+             this boot and the consumer falls back to PipeWire/X11"
+        );
+    }
+
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let (mut display, mut xauth): (String, String) = ("".to_owned(), "".to_owned());
@@ -848,7 +955,38 @@ pub fn start_os_service() {
             ) {
                 stop_subprocess();
                 force_stop_server();
+                // Run the login-screen --server as the active seat0 session user (the greeter
+                // account) rather than root, so the DRM capture GPU/EGL convert never loads the
+                // vendor GPU userspace in a privileged process. is_login_wayland() matches a GDM or
+                // SDDM Wayland greeter (is_gdm_user covers both), and desktop.uid is that greeter's
+                // uid, so this drops to whichever greeter owns seat0. A greeter is_gdm_user does not
+                // recognize (e.g. LightDM) never reaches this branch -- it takes the unprivileged
+                // else-branch below already. A genuine root graphical session (username=="root")
+                // has no lower uid to drop to, so it stays root. The whole branch is gated on the drm
+                // feature, so the drm-off build is upstream's single `start_server(None, ..)` line.
+                #[cfg(not(feature = "drm"))]
                 start_server(None, &mut server);
+                #[cfg(feature = "drm")]
+                if desktop.username != "root" && !desktop.uid.is_empty() {
+                    start_server(Some(&desktop), &mut server);
+                    // If dropping to the greeter uid did not produce a RUNNING server, fall back to a
+                    // root --server so the login screen stays remotable instead of looping on a
+                    // failing greeter spawn. This pays the GPU-in-root tradeoff only on that failure
+                    // path, never in the normal greeter case. Liveness, not just spawn success: a
+                    // greeter account that cannot actually run it (a nologin shell, a hardened home,
+                    // no writable config dir) leaves a child that exits at once, and the loop above
+                    // notices only that the child is gone and respawns it, forever, without ever
+                    // reaching this fallback -- so the login screen becomes permanently un-remotable
+                    // on a host where it used to work.
+                    if !server_survived_grace(&mut server) {
+                        log::warn!(
+                            "greeter --server did not stay up; falling back to a root --server"
+                        );
+                        start_server(None, &mut server);
+                    }
+                } else {
+                    start_server(None, &mut server);
+                }
             }
         } else if desktop.username != "" {
             // try kill subprocess "--server"
@@ -925,6 +1063,15 @@ pub fn get_active_userid() -> String {
 /// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
 pub fn get_active_userid_fresh() -> String {
     get_values_of_seat0(&[1])[0].clone()
+}
+
+#[inline]
+/// The cached active uid as a number, or `None` when the cache is empty. Unlike `get_active_userid`
+/// this NEVER falls back to a blocking `loginctl` seat0 lookup, so it is safe to call on an async
+/// runtime thread and on a hot path (e.g. per-frame re-auth): a cache miss returns `None` for the
+/// caller to treat as "active session momentarily unknown" rather than stalling on a subprocess.
+pub fn get_active_userid_cached() -> Option<u32> {
+    get_active_user_id_name_from_cache().and_then(|(uid, _)| uid.parse::<u32>().ok())
 }
 
 fn get_cm() -> bool {
@@ -1939,6 +2086,22 @@ mod desktop {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
                 self.is_rustdesk_subprocess = false;
+                // Resolve HOME even on this path. Upstream returned without it because nothing then
+                // consumed a login-Wayland Desktop, but the drm build starts a `--server` as the
+                // greeter uid here, and a child with no HOME has nowhere to put its config. The
+                // compositor variables (WAYLAND_DISPLAY, DBUS, DISPLAY, XAUTHORITY) are left blank
+                // on purpose and are NOT an oversight: the drm capture path talks to the root
+                // service over `_drm` and to a render node, never to the compositor or the portal,
+                // which is the entire reason it works at a login screen. `try_start_server_` skips
+                // empty entries, so the greeter child simply does not get them.
+                //
+                // `is_login_wayland` needs `is_gdm_user(username)`, and a current GDM runs its
+                // greeter as `gdm-greeter`, which that helper does not match -- measured on the
+                // test host, where the greeter server therefore takes the branch below and gets a
+                // fully populated environment. This is for the display managers whose greeter user
+                // does match.
+                #[cfg(feature = "drm")]
+                self.get_home();
                 return;
             }
 
@@ -1982,18 +2145,167 @@ mod desktop {
     }
 }
 
-pub struct WakeLock(Option<keepawake::AwakeHandle>);
+/// A session-bus idle-inhibit interface, tried in order; the first that answers wins.
+/// `org.freedesktop.ScreenSaver` is absent on purpose: that is the one `keepawake` already tried.
+struct SessionInhibitTarget {
+    dest: &'static str,
+    path: &'static str,
+    iface: &'static str,
+    /// GNOME takes `(app_id, xid, reason, flags)`; PowerManagement takes `(app, reason)`.
+    gnome_shape: bool,
+    uninhibit: &'static str,
+}
+
+/// `org.gnome.SessionManager.Inhibit` flag 8 = idle only; logout/switch-user/suspend would take
+/// away actions the person at the machine should keep.
+const GNOME_INHIBIT_IDLE: u32 = 8;
+
+const SESSION_INHIBIT_TARGETS: &[SessionInhibitTarget] = &[
+    // Measured on a GDM greeter: output held 129.9 s with the inhibit, 30.3 s without.
+    SessionInhibitTarget {
+        dest: "org.gnome.SessionManager",
+        path: "/org/gnome/SessionManager",
+        iface: "org.gnome.SessionManager",
+        gnome_shape: true,
+        uninhibit: "Uninhibit",
+    },
+    // What powerdevil and xfce4-power-manager implement. NOT tested here; costs one failed call
+    // where absent, and the log below names every interface tried.
+    SessionInhibitTarget {
+        dest: "org.freedesktop.PowerManagement",
+        path: "/org/freedesktop/PowerManagement/Inhibit",
+        iface: "org.freedesktop.PowerManagement.Inhibit",
+        gnome_shape: false,
+        uninhibit: "UnInhibit",
+    },
+];
+
+/// Idle inhibit for the case `keepawake` cannot serve: it inhibits `org.freedesktop.ScreenSaver`,
+/// which a GDM greeter bus neither provides nor can activate, so its `create()` fails outright.
+/// The connection is kept because the inhibit is bound to it: dropping it releases the inhibit.
+struct SessionIdleInhibit {
+    conn: dbus::blocking::Connection,
+    target: &'static SessionInhibitTarget,
+    cookie: u32,
+}
+
+impl SessionIdleInhibit {
+    fn new(reason: &str) -> Option<Self> {
+        let conn = match dbus::blocking::Connection::new_session() {
+            Ok(conn) => conn,
+            Err(err) => {
+                log::info!("wakelock: no session bus for the idle inhibit fallback ({err})");
+                return None;
+            }
+        };
+        let app = crate::get_app_name();
+        let mut refused = Vec::new();
+        for target in SESSION_INHIBIT_TARGETS {
+            let res: Result<(u32,), dbus::Error> = {
+                let proxy = conn.with_proxy(
+                    target.dest,
+                    target.path,
+                    std::time::Duration::from_secs(3),
+                );
+                if target.gnome_shape {
+                    // Inhibit(s app_id, u xid, s reason, u flags) -> u cookie; xid 0 = no window.
+                    proxy.method_call(
+                        target.iface,
+                        "Inhibit",
+                        (app.clone(), 0u32, reason.to_owned(), GNOME_INHIBIT_IDLE),
+                    )
+                } else {
+                    proxy.method_call(target.iface, "Inhibit", (app.clone(), reason.to_owned()))
+                }
+            };
+            match res {
+                Ok((cookie,)) => {
+                    log::info!(
+                        "wakelock: holding a {} idle inhibit (cookie {cookie})",
+                        target.dest
+                    );
+                    return Some(Self {
+                        conn,
+                        target,
+                        cookie,
+                    });
+                }
+                Err(err) => refused.push(format!("{}: {err}", target.dest)),
+            }
+        }
+        // Name every interface tried and why it failed: on an untested desktop this log is what
+        // turns "the screen still blanks" into a report naming the missing interface.
+        log::info!(
+            "wakelock: no session idle inhibitor answered, so the compositor may still blank this \
+             screen ({})",
+            refused.join("; ")
+        );
+        None
+    }
+}
+
+impl Drop for SessionIdleInhibit {
+    fn drop(&mut self) {
+        let proxy = self.conn.with_proxy(
+            self.target.dest,
+            self.target.path,
+            std::time::Duration::from_secs(3),
+        );
+        // Best effort: the session manager ties the inhibit to the caller's bus name, so dropping
+        // `conn` below releases it even if this call does not get through.
+        let res: Result<(), dbus::Error> =
+            proxy.method_call(self.target.iface, self.target.uninhibit, (self.cookie,));
+        if let Err(err) = res {
+            log::debug!("wakelock: releasing the idle inhibit by closing the bus instead ({err})");
+        }
+    }
+}
+
+pub struct WakeLock(Option<keepawake::AwakeHandle>, Option<SessionIdleInhibit>);
 
 impl WakeLock {
     pub fn new(display: bool, idle: bool, sleep: bool) -> Self {
-        WakeLock(
-            keepawake::Builder::new()
-                .display(display)
-                .idle(idle)
-                .sleep(sleep)
-                .create()
-                .ok(),
-        )
+        match keepawake::Builder::new()
+            .display(display)
+            .idle(idle)
+            .sleep(sleep)
+            .create()
+        {
+            Ok(handle) => WakeLock(Some(handle), None),
+            Err(err) => {
+                // Not `.ok()`: a discarded error is how a login screen ran with no inhibitor at
+                // all and nobody noticed.
+                log::info!("wakelock: keepawake could not take the inhibit ({err})");
+                // keepawake asks for the ScreenSaver inhibit first and abandons the whole request
+                // if it fails, losing the logind idle/sleep inhibits that stop the HOST suspending
+                // mid-session. Re-ask without the display part: those are on the system bus.
+                let system = if idle || sleep {
+                    match keepawake::Builder::new()
+                        .display(false)
+                        .idle(idle)
+                        .sleep(sleep)
+                        .create()
+                    {
+                        Ok(handle) => Some(handle),
+                        Err(err) => {
+                            log::info!(
+                                "wakelock: the logind idle/sleep inhibit did not come back \
+                                 either ({err})"
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                let session = if display {
+                    SessionIdleInhibit::new("incoming session")
+                } else {
+                    None
+                };
+                WakeLock(system, session)
+            }
+        }
     }
 }
 

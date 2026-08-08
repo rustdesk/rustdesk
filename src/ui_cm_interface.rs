@@ -1686,6 +1686,19 @@ pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");
     CLIENTS.write().unwrap().clear();
+    // `quit_gui()` ends the process on Windows and macOS, but on Linux it calls
+    // `gtk_main_quit()`, which has no effect in the Flutter connection manager:
+    // `flutter/linux/main.cc` runs `g_application_run()` (GtkApplication), so
+    // `gtk_main()` is never called. Exit directly instead, otherwise this
+    // process keeps running while no longer serving the `_cm` ipc endpoint, so
+    // the server can't reuse it and spawns one more connection manager.
+    //
+    // NOTE: a client merely disconnecting does not come here, the Flutter side
+    // closes the window then, so this is a fallback rather than an explanation
+    // for the stale processes of #15698.
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    std::process::exit(0);
+    #[cfg(not(all(target_os = "linux", feature = "flutter")))]
     crate::platform::quit_gui();
 }
 

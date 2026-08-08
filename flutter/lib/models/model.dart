@@ -1952,6 +1952,12 @@ class ImageModel with ChangeNotifier {
     platformFFI.nextRgba(sessionId, display);
   }
 
+  // web only: image already created from a decoded WebCodecs frame
+  Future<void> onImage(
+      int display, ui.Image image, bool Function() isCurrentSession) async {
+    await update(image, isCurrentSession: isCurrentSession);
+  }
+
   decodeAndUpdate(int display, Uint8List rgba) async {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
@@ -1963,11 +1969,16 @@ class ImageModel with ChangeNotifier {
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,
     );
-    if (parent.target?.id != pid) return;
+    if (parent.target?.id != pid) {
+      image?.dispose();
+      return;
+    }
     await update(image);
   }
 
-  update(ui.Image? image) async {
+  Future<void> update(ui.Image? image,
+      {bool Function()? isCurrentSession}) async {
+    if (_disposeIfStale(image, isCurrentSession)) return;
     if (_image == null && image != null) {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
@@ -1978,9 +1989,17 @@ class ImageModel with ChangeNotifier {
         await initializeCursorAndCanvas(parent.target!);
       }
     }
+    if (_disposeIfStale(image, isCurrentSession)) return;
     _image?.dispose();
     _image = image;
     if (image != null) notifyListeners();
+  }
+
+  bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
+    if (image == null || isCurrentSession == null) return false;
+    if (isCurrentSession()) return false;
+    image.dispose();
+    return true;
   }
 
   // mobile only
@@ -3853,6 +3872,15 @@ class FFI {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
       });
+      platformFFI.setVideoFrameCallback((int display, ui.Image image,
+          bool Function() isCurrentSession) async {
+        if (!isCurrentSession()) {
+          image.dispose();
+          return;
+        }
+        await onEvent2UIRgba();
+        await imageModel.onImage(display, image, isCurrentSession);
+      });
       this.id = id;
       return;
     }
@@ -3940,7 +3968,7 @@ class FFI {
     this.id = id;
   }
 
-  void onEvent2UIRgba() async {
+  Future<void> onEvent2UIRgba() async {
     if (ffiModel.waitForImageDialogShow.isTrue) {
       ffiModel.waitForImageDialogShow.value = false;
       ffiModel.waitForImageTimer?.cancel();
@@ -3996,6 +4024,9 @@ class FFI {
   /// Close the remote session.
   Future<void> close({bool closeSession = true}) async {
     closed = true;
+    if (isWeb) {
+      platformFFI.clearVideoFrameCallback();
+    }
     chatModel.close();
     // Close all terminal models
     for (final model in _terminalModels.values) {
