@@ -202,7 +202,7 @@ impl OffererGuard {
 impl Drop for OffererGuard {
     fn drop(&mut self) {
         if let Some(stream) = self.0.take() {
-            Client::spawn_close_webrtc(stream);
+            stream.close_detached();
         }
     }
 }
@@ -579,34 +579,6 @@ impl Client {
 
     fn is_expected_webrtc_ice_candidate(ice: &IceCandidate, session_key: &str) -> bool {
         !session_key.is_empty() && ice.session_key == session_key && !ice.candidate.is_empty()
-    }
-
-    /// Tear down an abandoned WebRTC offerer off the connection hot path.
-    ///
-    /// The pc must be closed explicitly (a dropped handle leaves the `SESSIONS` clone alive),
-    /// but `close()` awaits internal ICE/DTLS shutdown and the result is pure cleanup with no
-    /// downstream dependency, so it must not block session establishment.
-    fn spawn_close_webrtc(webrtc: WebRTCStream) {
-        // Use the current runtime handle explicitly: this is also called from OffererGuard::drop,
-        // which can run during runtime teardown where a bare tokio::spawn would panic. If no
-        // runtime is available the pc cannot be closed here (it is released at process exit).
-        // Handle::spawn can also panic when the runtime is shutting down; catch that so Drop
-        // never panics (prefer a brief leak until process exit over aborting the process).
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                let spawn_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    handle.spawn(async move {
-                        webrtc.close().await;
-                    });
-                }));
-                if spawn_result.is_err() {
-                    log::warn!("failed to spawn WebRTC close (runtime shutting down)");
-                }
-            }
-            Err(_) => {
-                log::warn!("no tokio runtime available to close WebRTC peer connection");
-            }
-        }
     }
 
     /// Whether to build a WebRTC offerer for this connection.
@@ -1180,7 +1152,10 @@ impl Client {
                         let direct = match typ {
                             "IPv6" => true,
                             // WebRTC through a TURN server is relayed traffic; report it as such.
-                            "WebRTC" => !conn.webrtc_relayed().await.unwrap_or(false),
+                            // An unknown answer (no selected pair yet, or the pc closed under a
+                            // concurrent teardown) must not be read as "direct": claiming a P2P
+                            // path needs evidence of one.
+                            "WebRTC" => !conn.webrtc_relayed().await.unwrap_or(true),
                             _ => false,
                         };
                         // Secured and WebRTC won: disarm so the returned conn keeps the pc alive.
@@ -1276,7 +1251,7 @@ impl Client {
             // Bailing before connect(): an offerer already adopted into webrtc_for_connect was
             // disarmed out of its guard, so close it (and stop its bridge) explicitly here.
             if let Some(webrtc) = webrtc_for_connect.take() {
-                Self::spawn_close_webrtc(webrtc);
+                webrtc.close_detached();
             }
             if let Some(stop) = webrtc_bridge_stop.take() {
                 let _ = stop.send(());
@@ -1536,8 +1511,9 @@ impl Client {
         };
         if typ == "WebRTC" {
             // WebRTC through a TURN server (force_relay, or a TURN pair winning under All
-            // policy) is relayed traffic; report the direct flag accordingly.
-            if conn.webrtc_relayed().await.unwrap_or(false) {
+            // policy) is relayed traffic; report the direct flag accordingly. An unknown answer
+            // counts as relayed — claiming a P2P path needs evidence of one.
+            if conn.webrtc_relayed().await.unwrap_or(true) {
                 direct = false;
             }
             // Secured: disarm so the returned conn keeps the pc alive.
