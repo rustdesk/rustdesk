@@ -76,7 +76,9 @@ fn run_with_timeout(
 // 2. The distro may not have xrandr installed by default.
 // 3. xrandr may not report "primary" in its output. eg. openSUSE Leap 15.6 KDE Plasma.
 fn try_xrandr_primary() -> Option<String> {
-    let output = Command::new("xrandr").output().ok()?;
+    // Bounded like its two siblings below: this runs inside the held `DISPLAYS` guard, and from a
+    // service with no DISPLAY and no session bus, where an X client can block indefinitely.
+    let output = run_with_timeout("xrandr", &[], COMMAND_TIMEOUT, "xrandr")?;
     if !output.status.success() {
         return None;
     }
