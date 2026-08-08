@@ -724,6 +724,20 @@ fn run(vs: VideoService) -> ResultType<()> {
         let res = match c.frame(spf) {
             Ok(frame) => {
                 repeat_encode_counter = 0;
+                // Rebuild when a mode change hands back a frame that no longer matches the size
+                // this capturer/encoder pair was built with: convert_to_yuv only refuses LARGER
+                // sources, and a smaller one lands in the old canvas leaving stale edges.
+                if let scrap::Frame::PixelBuffer(f) = &frame {
+                    if f.width() != capture_width || f.height() != capture_height {
+                        bail!(
+                            "frame {}x{} is not the {}x{} this capturer was built with; rebuilding",
+                            f.width(),
+                            f.height(),
+                            capture_width,
+                            capture_height
+                        );
+                    }
+                }
                 if frame.valid() {
                     let screenshot_key = (vs.source, display_idx);
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
