@@ -62,6 +62,10 @@ pub const PLATFORM_ANDROID: &str = "Android";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
+// A server that supports key exchange sends KeyExchange right after accept, so
+// the reply arrives within one RTT. One second is a generous bound for that,
+// while a server that never sends it no longer costs a full READ_TIMEOUT.
+const SECURE_TCP_TIMEOUT: u64 = 1_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
 
@@ -1185,7 +1189,7 @@ fn get_tcp_proxy_addr() -> String {
 }
 
 /// Send an HTTP request via the rendezvous server's TCP proxy using protobuf.
-/// Connects with `connect_tcp` + `secure_tcp`, sends `HttpProxyRequest`,
+/// Connects with `connect_tcp` + `secure_tcp_silent`, sends `HttpProxyRequest`,
 /// receives `HttpProxyResponse`.
 ///
 /// The entire operation (connect + handshake + send + receive) is wrapped in
@@ -2033,8 +2037,22 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
     Ok(())
 }
 
-pub async fn secure_tcp(conn: &mut Stream, key: &str) -> ResultType<()> {
-    secure_tcp_impl(conn, key, true).await
+// Only hbbs from rustdesk-server-pro initiates the key exchange. The
+// open-source rustdesk-server replies to client messages but stays silent on a
+// bare connection, so secure_tcp_impl waits out READ_TIMEOUT and the caller
+// aborts: with an account logged in (token is not empty) no outgoing connection
+// can be established at all against a self-hosted server.
+//
+// Give the server a short window and, if it stays silent, continue over the
+// plain channel the way the client did before key exchange existed. On servers
+// that do implement it nothing changes: the exchange completes within one RTT
+// and the token keeps its confidentiality.
+pub async fn secure_tcp_optional(conn: &mut Stream, key: &str) {
+    match timeout(SECURE_TCP_TIMEOUT, secure_tcp_impl(conn, key, true)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => log::warn!("Failed to secure tcp: {err}"),
+        Err(_) => log::info!("Rendezvous server offers no key exchange, continuing unencrypted"),
+    }
 }
 
 async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {

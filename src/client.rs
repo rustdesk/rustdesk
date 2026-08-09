@@ -32,7 +32,7 @@ use crate::{
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     create_symmetric_key_msg, decode_id_pk, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
-    secure_tcp,
+    secure_tcp_optional,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
@@ -428,9 +428,8 @@ impl Client {
 
         let switch_code = interface.get_switch_code();
         if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
-            secure_tcp(&mut socket, &key)
-                .await
-                .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
+            // mainly for the security of token
+            secure_tcp_optional(&mut socket, &key).await;
         } else if let Some(udp) = udp.1.as_ref() {
             let tm = Instant::now();
             loop {
@@ -860,7 +859,8 @@ impl Client {
                 .with_context(|| "Failed to connect to rendezvous server")?;
 
             if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
-                secure_tcp(&mut socket, key).await?;
+                // mainly for the security of token
+                secure_tcp_optional(&mut socket, key).await;
             }
 
             ipv4 = socket.local_addr().is_ipv4();
@@ -4062,7 +4062,7 @@ async fn hc_connection_(
     let host = check_port(&rendezvous_server, RENDEZVOUS_PORT);
     let mut conn = connect_tcp(host.clone(), CONNECT_TIMEOUT).await?;
     let key = crate::get_key(true).await;
-    crate::secure_tcp(&mut conn, &key).await?;
+    crate::secure_tcp_optional(&mut conn, &key).await;
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_hc(HealthCheck {
         token,
