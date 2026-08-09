@@ -3575,19 +3575,19 @@ pub async fn handle_hash(
                     return;
                 }
             }
-            // Incoming-only may connect out solely for a verified switch-back;
-            // never fall through to password login.
-            if config::is_incoming_only() {
-                interface.msgbox("error", "Connection Error", "Incoming only mode", "");
-                let mut misc = Misc::new();
-                misc.set_close_reason(
-                    "Connection not allowed in incoming-only mode".to_owned(),
-                );
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                allow_err!(peer.send(&msg).await);
-                return;
-            }
+        }
+        // Incoming-only may connect out solely for a verified switch-back;
+        // never fall through to password login, including on repeated hashes.
+        if config::is_incoming_only() {
+            interface.msgbox("error", "Connection Error", "Incoming only mode", "");
+            let mut misc = Misc::new();
+            misc.set_close_reason(
+                "Connection not allowed in incoming-only mode".to_owned(),
+            );
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            allow_err!(peer.send(&msg).await);
+            return;
         }
     }
     // last password
