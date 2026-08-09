@@ -127,19 +127,10 @@ impl KcpStream {
         let udp = udp_socket.clone();
         tokio::spawn(async move {
             let mut buf = vec![0; 1500];
-            // A connected UDP socket surfaces ICMP port-unreachable as an error on
-            // send/recv (WSAECONNRESET 10054 on Windows, ECONNREFUSED on Linux). For UDP
-            // these are advisory: a stray ICMP from a NAT rebind glitch or a momentary
-            // peer hiccup does not mean the path is dead, and KCP retransmits through it.
-            // Treat socket errors as packet loss instead of tearing the session down;
-            // a truly dead link is reaped by the KCP pong timeout / app-level timeouts.
-            // The short sleep prevents a persistently failing socket from busy-spinning.
-            //
-            // These repeat every 10ms while the socket stays broken, so throttle the line —
-            // debug output is written to the log file. One throttle per direction: an ICMP
-            // error on a connected socket is reported once and cleared, so the steady state is
-            // an alternation (send succeeds, the next recv reports the error), and a shared
-            // counter would be reset by the succeeding direction on every cycle.
+            // Socket errors are ICMP unreachable on a connected UDP socket — advisory, and
+            // routine while a hole forms — so treat them as loss and let KCP's pong timeout reap
+            // a link that is really dead. One throttle PER DIRECTION: the error is reported once
+            // and cleared, so send-ok/recv-err alternates and a shared counter never fires.
             loop {
                 tokio::select! {
                     _ = &mut stop_receiver => {
