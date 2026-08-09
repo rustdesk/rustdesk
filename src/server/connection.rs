@@ -6065,6 +6065,17 @@ pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) -> bool {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn has_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    uuids
+        .get(id)
+        .map(|(_, stored_uuid, claimed)| stored_uuid == uuid && !*claimed)
+        == Some(true)
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn claim_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
     let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
     uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
@@ -7024,9 +7035,12 @@ mod test {
         assert!(insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
 
         assert!(!insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
+        assert!(has_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!has_pending_switch_sides_uuid(&id, &other_uuid));
         assert!(!claim_pending_switch_sides_uuid("other-peer", &uuid));
         assert!(!claim_pending_switch_sides_uuid(&id, &other_uuid));
         assert!(claim_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!has_pending_switch_sides_uuid(&id, &uuid));
         assert!(!claim_pending_switch_sides_uuid(&id, &uuid));
         assert!(!insert_pending_switch_sides_uuid(id, uuid));
     }

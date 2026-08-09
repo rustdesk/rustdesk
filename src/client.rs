@@ -1779,9 +1779,6 @@ pub struct LoginConfigHandler {
     switch_uuid: Option<String>,
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    authorized_switch_uuid: Option<(String, Uuid)>,
-    #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     switch_back_allowed: bool,
     pub save_ab_password_to_recent: bool, // true: connected with ab password
     pub other_server: Option<(String, String, String)>,
@@ -1902,7 +1899,6 @@ impl LoginConfigHandler {
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
-            self.authorized_switch_uuid = None;
             self.switch_back_allowed = false;
         }
         self.switch_uuid = switch_uuid;
@@ -3460,7 +3456,7 @@ pub fn handle_login_error(
 }
 
 // "Switch sides" requires the incoming-only client to connect back to its
-// controlling peer; claim the local pending uuid before opening the connection.
+// controlling peer; verify the local pending uuid before opening the connection.
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -> bool {
@@ -3478,20 +3474,22 @@ async fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -
         };
         (lc.id.clone(), uuid)
     };
-    if !consume_local_switch_sides_uuid(&id, &uuid).await {
+    if !request_local_switch_sides_uuid(
+        &id,
+        &uuid,
+        crate::ipc::SwitchSidesUuidAction::Check,
+    )
+    .await
+    {
         return false;
     }
     let lch = interface.get_lch();
-    let mut lc = lch.write().unwrap();
+    let lc = lch.read().unwrap();
     let current_uuid = lc
         .switch_uuid
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
-    if lc.id != id || current_uuid.as_ref() != Some(&uuid) {
-        return false;
-    }
-    lc.authorized_switch_uuid = Some((id, uuid));
-    true
+    lc.id == id && current_uuid.as_ref() == Some(&uuid)
 }
 
 #[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
@@ -3501,7 +3499,11 @@ async fn is_switch_sides_back(_conn_type: ConnType, _interface: &impl Interface)
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
+async fn request_local_switch_sides_uuid(
+    id: &str,
+    uuid: &Uuid,
+    action: crate::ipc::SwitchSidesUuidAction,
+) -> bool {
     let Ok(mut conn) = crate::ipc::connect(1000, "").await else {
         return false;
     };
@@ -3510,6 +3512,7 @@ async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
         .send(&crate::ipc::Data::SwitchSidesUuid(
             uuid.clone(),
             id.to_owned(),
+            action,
             None,
         ))
         .await
@@ -3521,9 +3524,10 @@ async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
         Ok(Some(crate::ipc::Data::SwitchSidesUuid(
             returned_uuid,
             returned_id,
+            returned_action,
             Some(true),
         ))) => {
-            returned_uuid == uuid && returned_id == id
+            returned_uuid == uuid && returned_id == id && returned_action == action
         }
         _ => false,
     }
@@ -3556,15 +3560,13 @@ pub async fn handle_hash(
         if let Some(uuid) = uuid {
             if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
                 let id = lc.read().unwrap().id.clone();
-                let authorized = lc
-                    .write()
-                    .unwrap()
-                    .authorized_switch_uuid
-                    .take()
-                    .map_or(false, |(authorized_id, authorized_uuid)| {
-                        authorized_id == id && authorized_uuid == uuid
-                    });
-                if !authorized && !consume_local_switch_sides_uuid(&id, &uuid).await {
+                if !request_local_switch_sides_uuid(
+                    &id,
+                    &uuid,
+                    crate::ipc::SwitchSidesUuidAction::Consume,
+                )
+                .await
+                {
                     log::warn!("Ignored untrusted switch_uuid");
                 } else {
                     lc.write().unwrap().allow_switch_back_once();
