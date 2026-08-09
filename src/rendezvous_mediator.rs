@@ -687,15 +687,9 @@ impl RendezvousMediator {
     /// Build the WebRTC answerer for a punch-hole offer and return the SDP answer that rides in
     /// the punch reply (PunchHoleSent / RelayResponse).
     ///
-    /// This is awaited inline on the punch-reply critical path (handle_punch_hole runs as its own
-    /// spawned task, so only this reply is delayed), acceptable only because everything awaited
-    /// here is local-only —
-    /// pc construction + DTLS cert keygen + SDP answer, sub-millisecond in practice. Trickle ICE
-    /// makes that possible: the answer carries no candidates; STUN/TURN gathering runs afterward
-    /// and trickles via IceCandidate messages. Keep network I/O out of this path — actual
-    /// connection setup (wait_connected + create_tcp_connection) belongs in the detached task
-    /// below. On error the caller degrades to an empty answer and the punch proceeds without
-    /// WebRTC.
+    /// Awaited inline on the punch-reply path, which only holds because everything here is local
+    /// (pc + keygen + SDP; trickle means the answer carries no candidates). Keep network I/O out
+    /// — connection setup belongs in the detached task below.
     async fn spawn_webrtc_answerer(
         &self,
         ph: &PunchHole,
@@ -870,24 +864,15 @@ impl RendezvousMediator {
             ph.control_permissions.clone().into_option(),
             ph.controlled_context.clone().into_option(),
         );
-        // WebRTC opens its own ICE sockets, so it must not run under a SOCKS proxy: candidates
-        // and STUN bypass the proxy and leak the real IP. WebSocket mode does NOT disable it —
-        // ws only tunnels the signaling/relay legs to the server, classic punching stays forced
-        // to relay (`relay` above), and the answer rides the RelayResponse, leaving ICE as the
-        // only P2P path there. force_relay depends on why it was set, and the offer's envelope
-        // says which: an `ice_policy: "all"` declaration means the controller's relay is
-        // transport-forced (ws) and its offer carries every candidate type, so answer with
-        // full ICE and let a direct pair form; without it the offer is Relay-only ICE by
-        // policy, viable (and answerable) only through TURN.
+        // The controller's force_relay alone does not say whether ICE must be Relay-only; its
+        // offer envelope does. `ice_policy: "all"` means the relay was forced by the transport
+        // (ws), so answer with full ICE and let a direct pair form.
         let webrtc_relay_only =
             ph.force_relay && !WebRTCStream::endpoint_declares_all_ice(&ph.webrtc_sdp_offer);
-        // Like the udp/ipv6 legs, the answerer follows the request and does not consult this
-        // machine's own enable-webrtc option. That option is LocalConfig, which the UI process
-        // writes and never syncs over IPC — this code runs in the server process, which on
-        // Windows resolves LocalConfig under a different profile entirely and would read the
-        // private-server default of "N", silently refusing to answer in exactly the self-hosted
-        // deployments the transport is for. The option still gates the feature where it can:
-        // an offer only exists because a controller had it enabled.
+        // No enable-webrtc check here: it is LocalConfig, which the UI process writes and never
+        // syncs over IPC, so this (server) process would read the private-server default of "N"
+        // and refuse to answer in exactly the self-hosted deployments the transport is for.
+        // A proxy still rules it out — ICE would bypass it and leak the real IP.
         let webrtc_viable = !ph.webrtc_sdp_offer.is_empty()
             && !Config::is_proxy()
             && (!webrtc_relay_only || WebRTCStream::has_turn_server());
@@ -952,16 +937,10 @@ impl RendezvousMediator {
             return Ok(());
         }
         if !ph.webrtc_sdp_offer.is_empty() {
-            // WebRTC-only request (udp_port <= 0): return the answer over a short-lived TCP
-            // connection to the rendezvous server, like create_relay does. It must NOT ride
-            // the mediator channel: that channel is UDP in the default setup, and the answer
-            // is the largest message of the punch exchange — a single lost or fragmented
-            // datagram costs a whole 3s retry round; hbbs also applies UDP-punch semantics
-            // (source-address observation / is_udp) to PunchHoleSent received over UDP,
-            // which this request never asked for.
-            // No TCP punch connection is created or accepted; the controller retains its
-            // request socket for trickled ICE signaling. IPv6, when present, was started
-            // above and its address is carried in this same response.
+            // Return the answer over its own short-lived TCP connection rather than the mediator
+            // channel: that channel is UDP by default, and hbbs applies UDP-punch semantics
+            // (source-address observation) to a PunchHoleSent that arrives on it. No TCP punch
+            // is made — the controller keeps its request socket for trickled ICE.
             let mut msg_out = Message::new();
             msg_out.set_punch_hole_sent(msg_punch);
             let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;

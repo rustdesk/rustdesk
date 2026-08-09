@@ -207,33 +207,12 @@ impl Drop for OffererGuard {
     }
 }
 
-/// Race the WebRTC connect attempt against the other transport futures, preferring P2P.
-///
-/// A plain `select_ok` would almost always pick the relay: its TCP connect completes in one
-/// round trip while WebRTC needs candidate trickle + ICE checks + DTLS + SCTP. Instead:
-/// - an `is_p2p` result from either side (WebRTC, or e.g. IPv6 direct from `others`) is committed
-///   immediately;
-/// - a relayed result from *either* side inside the preference window is *held*, giving the other
-///   side until the window expires to land something direct. `webrtc_fut` is a whole punch
-///   attempt, not just the WebRTC connect, so it too can end in a relay, and committing that
-///   immediately would preempt a direct punch still in flight on the other branch. The window
-///   starts when the first relay is ready, not when setup begins, so rendezvous latency cannot
-///   consume the preference budget. Unfinished `others` keep racing so a slower direct transport
-///   can still win; when the window ends (or the other side fails) the held connection is
-///   committed;
-/// - a failure on one side commits the survivor as soon as it succeeds; two failures compose
-///   into one error.
+/// Race WebRTC against the other transports, preferring P2P: `select_ok` would always pick the
+/// relay, whose TCP connect beats ICE + DTLS + SCTP by an order of magnitude. An `is_p2p` result
+/// wins outright; a relayed one — from either side, since `webrtc_fut` is a whole punch attempt
+/// that can also end in a relay — is held for `window_ms` to give the other side a chance.
 ///
 /// `others` must be non-empty (`select_ok` requires it).
-/// Whether a transport label names a peer-to-peer path rather than the RustDesk relay.
-///
-/// The preference window exists to let one of these beat a relay that connects sooner, so a
-/// label misclassified here inverts the race: a direct connection is parked as if it were a
-/// relay, and the relay is then committed the moment it arrives.
-fn is_direct_transport(typ: &str) -> bool {
-    !matches!(typ, "Relay" | "WebSocket")
-}
-
 async fn race_transports_prefer_webrtc<'a, T: 'a>(
     webrtc_fut: BoxFuture<'a, ResultType<T>>,
     others: Vec<BoxFuture<'a, ResultType<T>>>,
@@ -583,28 +562,10 @@ impl Client {
 
     /// Whether to build a WebRTC offerer for this connection.
     ///
-    /// Off by default against a private rendezvous server, like the UDP/IPv6 punch options:
-    /// a self-hosted deployment opts in once its server (and TURN, if any) is ready.
-    ///
-    /// Skips it when a SOCKS proxy is configured: WebRTC's ICE binds its own UDP sockets and
-    /// speaks STUN directly, which would bypass the proxy policy and can leak the real IP.
-    /// WebSocket mode does NOT skip it: ws only tunnels the signaling/relay legs to the server
-    /// (and `connect_tcp` is ws-aware for them), while ICE remains the only viable P2P path in
-    /// ws deployments where classic punching is forced to relay. Independent of the udp-punch
-    /// option too — the offer rides any request, and a server or peer without WebRTC support
-    /// drops the field, so the race simply proceeds without it.
-    /// Under relay-by-POLICY (force-always-relay option or an explicit relay request) the pc
-    /// uses Relay-only ICE, which gathers nothing and can never connect unless a TURN server
-    /// is configured, so skip building a guaranteed-dead pc + STUN/TURN gathering + answerer
-    /// signaling in that case. WebSocket-forced relay is deliberately NOT policy: ws only
-    /// tunnels the signaling/relay legs, so the offer keeps full ICE and may land a direct
-    /// connection - the flagship path for ws deployments (the offer envelope's `ice_policy`
-    /// key tells the peer).
-    /// When policy relay *and* TURN are configured, WebRTC via TURN is a valid "relayed" path:
-    /// `connect` keeps a WebRTC win instead of replacing it with the RustDesk relay, and the
-    /// RelayResponse path races it without a P2P preference delay. Any request carrying an offer
-    /// keeps its rendezvous socket for trickle signaling and never reuses it for TCP punching; a
-    /// separate offer-less request provides the TCP fallback when force-relay is not requested.
+    /// A SOCKS proxy rules it out: ICE binds its own UDP sockets and speaks STUN directly, past
+    /// the proxy and with the real IP. Relay-by-policy without TURN rules it out too, since
+    /// Relay-only ICE can then gather nothing. WebSocket does not: it tunnels only the signaling
+    /// and relay legs, so the offer keeps full ICE and direct is exactly what it is there for.
     fn should_create_webrtc_offerer(interface: &impl Interface) -> bool {
         if !crate::get_webrtc_enabled() {
             return false;
@@ -638,13 +599,9 @@ impl Client {
     /// Bridge local ICE candidates to the peer over the punch socket, and feed the peer's back
     /// into the pc.
     ///
-    /// This socket must not be reconnected on error, unlike the controlled side's sender which
-    /// dials a fresh connection per candidate. Its address *is* the return route: the server
-    /// mangles it into `PunchHole.socket_addr`, the peer echoes it back as
-    /// `IceCandidate.socket_addr`, and the server resolves it through `tcp_punch`. A reconnect
-    /// would arrive from a new address that no route points at, and the server drops the old
-    /// entry when this connection closes — so once it dies, both directions are dead and
-    /// abandoning WebRTC for another transport is the correct response, not retrying.
+    /// Never reconnect this socket: its address *is* the return route (the server mangles it into
+    /// `PunchHole.socket_addr` and resolves the echo through `tcp_punch`), so a new address is one
+    /// nothing points at. Once it dies, both directions are dead — abandon WebRTC, do not retry.
     fn spawn_webrtc_ice_bridge(
         mut socket: Stream,
         mut local_ice_rx: Option<UnboundedReceiver<String>>,
@@ -1571,17 +1528,10 @@ impl Client {
         let sign_pk = match sign_pk {
             Some(v) => v,
             None => {
-                // No trusted peer identity: either the deployment provides none (empty
-                // signed_id_pk, key-less) or the blob does not verify under our configured root
-                // (typical benign cause: self-hosted server with the client not configured with
-                // its key, so verification runs against the built-in RS_PUB_KEY). Either way no
-                // fingerprint binding is possible, which is the same cryptographic state as
-                // key-less: DTLS-encrypted to an unauthenticated peer. Proceed like TCP's
-                // non-secure fallback with is_secured() left false. Bailing here instead would
-                // only push the session onto a relay where the same blob fails verification
-                // again and the payload then runs in plaintext — strictly worse than
-                // unauthenticated DTLS, while an active attacker reaches the same warned,
-                // unauthenticated endpoint either way.
+                // No trusted peer identity (key-less deployment, or a blob that does not verify
+                // under our root), so no fingerprint binding is possible. Fall through like TCP's
+                // non-secure path with is_secured() false: bailing would only move the session to
+                // a relay that fails the same check and then runs in plaintext.
                 // send an empty message out in case server is setting up secure and waiting for first message
                 conn.send(&Message::new()).await?;
                 return Ok(option_pk);
@@ -1595,11 +1545,9 @@ impl Client {
                         if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk) {
                             if id == peer_id {
                                 // WebRTC only: bind the DTLS channel to the verified peer identity.
-                                // webrtc-rs already verified the peer certificate matches the remote
-                                // SDP fingerprint, so requiring the peer to have signed that same
-                                // fingerprint defeats a rendezvous/relay MITM that swaps SDPs. Fail
-                                // closed: an unreadable/empty/mismatched fingerprint aborts the
-                                // WebRTC connection rather than silently accepting it.
+                                // webrtc-rs already bound the certificate to the remote SDP, so
+                                // requiring the peer to have SIGNED that fingerprint defeats a
+                                // rendezvous/relay MITM that swaps SDPs. Fail closed.
                                 if is_webrtc {
                                     let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
                                         || anyhow!("WebRTC DTLS fingerprint unavailable"),
@@ -2593,14 +2541,11 @@ pub struct LoginConfigHandler {
     // reconnect before the real reboot disconnect.
     restart_remote_device_at: Option<Instant>,
     pub force_relay: bool,
-    // The policy component of force_relay: peer_relay plus proxy, WITHOUT the WebSocket
-    // transport. ws kills classic TCP/UDP punching (force_relay stays set for those paths)
-    // but says nothing about ICE, so the WebRTC decisions - offer ICE policy, prefer-P2P
-    // racing - key off this instead: relay-by-policy must stay Relay-only ICE, while
-    // relay-by-transport may still go direct over full ICE.
+    // force_relay minus the WebSocket transport. ws forces relay for classic punching but says
+    // nothing about ICE, so every WebRTC decision keys off this: policy means Relay-only ICE,
+    // transport may still go direct.
     pub policy_relay: bool,
-    // The peer-scoped component: this peer's saved force-always-relay option, or an explicit
-    // relay request for it. The only part that may be written back into the peer's config.
+    // The peer-scoped part of it, and the only part that may be written back to the peer.
     pub peer_relay: bool,
     pub direct: Option<bool>,
     pub received: bool,
@@ -2710,12 +2655,9 @@ impl LoginConfigHandler {
         self.session_id = sid;
         self.supported_encoding = Default::default();
         self.clear_restarting_remote_device();
-        // Three scopes, and only the first belongs in the peer's saved config: what was decided
-        // about THIS PEER (its saved option, or an explicit relay request such as an `/r` id or
-        // a retry-via-relay), versus what is true of this client right now (a proxy, WebSocket).
-        // Persisting either of the latter turns a transient local setup into a permanent property
-        // of the peer — and relay-by-policy means Relay-only ICE, so WebRTC never goes direct to
-        // it again.
+        // Three scopes: what was decided about this PEER, what this CLIENT is set up as (proxy),
+        // and what its TRANSPORT forces (ws). Only the first may be written back to the peer's
+        // config — persisting the others would make a local setup a permanent peer property.
         self.peer_relay =
             config::option2bool("force-always-relay", &self.get_option("force-always-relay"))
                 || force_relay;
@@ -5247,7 +5189,7 @@ async fn udp_nat_connect(
 
 #[cfg(test)]
 mod webrtc_race_tests {
-    use super::{is_direct_transport, race_transports_prefer_webrtc, request_allows_tcp_punch};
+    use super::{race_transports_prefer_webrtc, request_allows_tcp_punch};
     use hbb_common::{
         anyhow::anyhow,
         futures::future::{BoxFuture, FutureExt},
@@ -5280,35 +5222,19 @@ mod webrtc_race_tests {
         assert!(!request_allows_tcp_punch("webrtc://offer"));
     }
 
-    // The transport labels the RelayResponse race actually runs on. Its predicate has to
-    // recognise the WebRTC branch's own label as direct, or a WebRTC connection that completes
-    // BEFORE the relay is parked as if it were a relay and the relay is committed on arrival —
-    // inverting the race exactly on the fast networks where ICE beats a TCP relay connect.
-    #[test]
-    fn transport_labels_are_classified_as_direct_or_relayed() {
-        for direct in ["WebRTC", "TCP", "UDP", "IPv6"] {
-            assert!(is_direct_transport(direct), "{direct} is a direct path");
-        }
-        for relayed in ["Relay", "WebSocket"] {
-            assert!(
-                !is_direct_transport(relayed),
-                "{relayed} goes via the relay"
-            );
-        }
-    }
-
+    // A direct result must win even when it lands first — the LAN ordering, where ICE beats the
+    // relay's TCP connect. Parking it as if it were a relay commits the relay on arrival.
     #[tokio::test]
     async fn direct_result_wins_even_when_it_arrives_first() {
-        // Same ordering as a LAN: the preferred branch connects before the relay does.
         let got = race_transports_prefer_webrtc(
-            ok_after(10, "WebRTC"),
-            vec![ok_after(120, "Relay")],
+            ok_after(10, "direct"),
+            vec![ok_after(120, "relay")],
             60_000,
-            |result| is_direct_transport(result),
+            |result| *result == "direct",
         )
         .await
         .unwrap();
-        assert_eq!(got, "WebRTC");
+        assert_eq!(got, "direct");
     }
 
     #[tokio::test]
