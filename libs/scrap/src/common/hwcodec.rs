@@ -503,6 +503,51 @@ pub struct HwCodecConfig {
     pub vram_decode: Vec<hwcodec::vram::DecodeContext>,
 }
 
+#[cfg(any(target_os = "ios", test))]
+fn ios_videotoolbox_config(h264: bool, h265: bool) -> HwCodecConfig {
+    use hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX;
+
+    let mut ram_decode = Vec::new();
+    if h264 {
+        ram_decode.push(CodecInfo {
+            name: "h264".to_owned(),
+            format: DataFormat::H264,
+            hwdevice: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            ..Default::default()
+        });
+    }
+    if h265 {
+        ram_decode.push(CodecInfo {
+            name: "hevc".to_owned(),
+            format: DataFormat::H265,
+            hwdevice: AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            ..Default::default()
+        });
+    }
+    HwCodecConfig {
+        ram_decode,
+        ..Default::default()
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ios_videotoolbox_support() -> (bool, bool) {
+    const H264: u32 = u32::from_be_bytes(*b"avc1");
+    const H265: u32 = u32::from_be_bytes(*b"hvc1");
+
+    #[link(name = "VideoToolbox", kind = "framework")]
+    extern "C" {
+        fn VTIsHardwareDecodeSupported(codec_type: u32) -> u8;
+    }
+
+    unsafe {
+        (
+            VTIsHardwareDecodeSupported(H264) != 0,
+            VTIsHardwareDecodeSupported(H265) != 0,
+        )
+    }
+}
+
 // HwCodecConfig2 is used to store the config in json format,
 // confy can't serde HwCodecConfig successfully if the non-first struct Vec is empty due to old toml version.
 // struct T { a: Vec<A>, b: Vec<String>} will fail if b is empty, but struct T { a: Vec<String>, b: Vec<String>} is ok.
@@ -630,7 +675,9 @@ impl HwCodecConfig {
         }
         #[cfg(target_os = "ios")]
         {
-            HwCodecConfig::default()
+            let (h264, h265) = ios_videotoolbox_support();
+            log::info!("VideoToolbox decode support - H264: {h264}, H265: {h265}");
+            ios_videotoolbox_config(h264, h265)
         }
     }
 
@@ -760,4 +807,27 @@ pub fn start_check_process() {
     ONCE.call_once(|| {
         std::thread::spawn(f);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ios_videotoolbox_config_matches_decoder_support() {
+        assert!(ios_videotoolbox_config(false, false).ram_decode.is_empty());
+
+        let config = ios_videotoolbox_config(true, false);
+        assert_eq!(config.ram_decode.len(), 1);
+        assert_eq!(config.ram_decode[0].format, DataFormat::H264);
+
+        let config = ios_videotoolbox_config(false, true);
+        assert_eq!(config.ram_decode.len(), 1);
+        assert_eq!(config.ram_decode[0].format, DataFormat::H265);
+
+        let config = ios_videotoolbox_config(true, true);
+        assert_eq!(config.ram_decode.len(), 2);
+        assert!(config.ram_decode.iter().all(|codec| codec.hwdevice
+            == hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX));
+    }
 }

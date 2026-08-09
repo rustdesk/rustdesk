@@ -851,13 +851,13 @@ impl Decoder {
 pub fn enable_hwcodec_option() -> bool {
     use hbb_common::config::keys::OPTION_ENABLE_HWCODEC;
 
-    if !cfg!(target_os = "ios") {
-        return option2bool(
-            OPTION_ENABLE_HWCODEC,
-            &Config::get_option(OPTION_ENABLE_HWCODEC),
-        );
+    if cfg!(target_os = "ios") {
+        return true;
     }
-    false
+    option2bool(
+        OPTION_ENABLE_HWCODEC,
+        &Config::get_option(OPTION_ENABLE_HWCODEC),
+    )
 }
 #[cfg(feature = "vram")]
 pub fn enable_vram_option(encode: bool) -> bool {

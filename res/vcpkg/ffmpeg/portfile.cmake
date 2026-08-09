@@ -176,9 +176,9 @@ elseif(VCPKG_TARGET_IS_IOS)
     string(APPEND OPTIONS "\
 --arch=arm64 \
 --disable-autodetect \
---disable-hwaccels \
 --disable-encoders \
---disable-videotoolbox \
+--enable-videotoolbox \
+--enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
 --extra-cflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
 --extra-ldflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
 ")
