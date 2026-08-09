@@ -1916,6 +1916,7 @@ pub struct LoginConfigHandler {
     pub peer_info: Option<PeerInfo>,
     password_source: PasswordSource, // where the sent password comes from
     shared_password: Option<String>, // Store the shared password
+    password_ephemeral: bool,
     pub enable_trusted_devices: bool,
     pub record_state: bool,
     pub record_permission: bool,
@@ -2031,6 +2032,7 @@ impl LoginConfigHandler {
         self.adapter_luid = adapter_luid;
         self.selected_windows_session_id = None;
         self.shared_password = shared_password;
+        self.password_ephemeral = false;
         self.record_state = false;
         self.record_permission = true;
 
@@ -2038,6 +2040,13 @@ impl LoginConfigHandler {
         let is_terminal_admin = conn_type == ConnType::TERMINAL
             && std::env::var("IS_TERMINAL_ADMIN").map_or(false, |v| v == "Y");
         self.is_terminal_admin = is_terminal_admin;
+    }
+
+    pub fn set_password_ephemeral(&mut self, enabled: bool) {
+        self.password_ephemeral = enabled;
+        if enabled {
+            self.remember = false;
+        }
     }
 
     #[cfg(feature = "flutter")]
@@ -2702,24 +2711,26 @@ impl LoginConfigHandler {
         let password0 = config.password.clone();
         let remember = self.remember;
         let hash = self.hash.clone();
-        if remember {
-            // remember is true: use PeerConfig password or ui login
-            // not sync shared password to recent
-            if !password.is_empty()
-                && password != password0
-                && !self.password_source.is_shared_ab(&password, &hash)
-            {
-                config.password = password.clone();
-                log::debug!("remember password of {}", self.id);
-            }
-        } else {
-            if self.password_source.is_personal_ab(&password) {
-                // sync personal ab password to recent automatically
-                config.password = password.clone();
-                log::debug!("save ab password of {} to recent", self.id);
-            } else if !password0.is_empty() {
-                config.password = Default::default();
-                log::debug!("remove password of {}", self.id);
+        if !self.password_ephemeral {
+            if remember {
+                // remember is true: use PeerConfig password or ui login
+                // not sync shared password to recent
+                if !password.is_empty()
+                    && password != password0
+                    && !self.password_source.is_shared_ab(&password, &hash)
+                {
+                    config.password = password.clone();
+                    log::debug!("remember password of {}", self.id);
+                }
+            } else {
+                if self.password_source.is_personal_ab(&password) {
+                    // sync personal ab password to recent automatically
+                    config.password = password.clone();
+                    log::debug!("save ab password of {} to recent", self.id);
+                } else if !password0.is_empty() {
+                    config.password = Default::default();
+                    log::debug!("remove password of {}", self.id);
+                }
             }
         }
         if let Some((_, b, c)) = self.other_server.as_ref() {
@@ -2737,7 +2748,8 @@ impl LoginConfigHandler {
         #[cfg(feature = "flutter")]
         {
             // sync connected password to personal ab automatically if it is not shared password
-            if !config.password.is_empty()
+            if !self.password_ephemeral
+                && !config.password.is_empty()
                 && !self.password_source.is_shared_ab(&password, &hash)
                 && !self.password_source.is_personal_ab(&password)
             {
@@ -3847,6 +3859,7 @@ pub async fn handle_login_from_ui(
     remember: bool,
     peer: &mut Stream,
 ) {
+    let remember = remember && !lc.read().unwrap().password_ephemeral;
     let mut hash_password = if password.is_empty() {
         let mut password2 = lc.read().unwrap().password.clone();
         if password2.is_empty() {
