@@ -1,4 +1,4 @@
-import Connection from "./connection";
+import Connection, { loadConfig, getConfigKey, getConfigHost, getConfigRelay } from "./connection";
 import _sodium from "libsodium-wrappers";
 import { CursorData } from "./message";
 import { loadVp9 } from "./codec";
@@ -20,14 +20,20 @@ export function msgbox(type, title, text) {
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
-  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, hasRetry }));
+  window.onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, link: '', hasRetry }));
 }
 
 function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    if (value instanceof Uint8Array) {
+      tmp[key] = '[' + value.toString() + ']';
+    } else if (typeof value === 'string') {
+      tmp[key] = value;
+    } else {
+      tmp[key] = JSON.stringify(value);
+    }
   }
   return tmp;
 }
@@ -35,7 +41,7 @@ function jsonfyForDart(payload) {
 export function pushEvent(name, payload) {
   payload = jsonfyForDart(payload);
   payload.name = name;
-  onGlobalEvent(JSON.stringify(payload));
+  window.onGlobalEvent(JSON.stringify(payload));
 }
 
 let yuvWorker;
@@ -74,7 +80,7 @@ export function draw(frame) {
     for (let i = 0; i < size; i += row) {
       flipPixels.set(pixels.subarray(i, i + row), end - i);
     }
-    onRgba(flipPixels);
+    window.onRgba(0, flipPixels);
     testSpeed[1] += new Date().getTime() - tm0;
     testSpeed[0] += 1;
     if (testSpeed[0] > 30) {
@@ -186,6 +192,15 @@ window.setByName = (name, value) => {
       newConn();
       startConn(value);
       break;
+    case 'session_add_sync':
+      return '';
+    case 'session_start': {
+      const si = JSON.parse(value);
+      console.log('session_start: creating connection for ' + si.id);
+      newConn();
+      startConn(si.id).catch(e => console.error('startConn error:', e));
+      break;
+    }
     case 'login':
       value = JSON.parse(value);
       curConn.setRemember(value.remember == 'true');
@@ -254,7 +269,10 @@ window.setByName = (name, value) => {
       curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
     case 'option':
+    case 'option:local':
+    case 'option:user:default':
       value = JSON.parse(value);
+      if (['custom-rendezvous-server', 'relay-server', 'key'].includes(value.name)) break;
       localStorage.setItem(value.name, value.value);
       break;
     case 'peer_option':
@@ -299,7 +317,30 @@ function _getByName(name, arg) {
     case 'toggle_option':
       return curConn.getOption(arg) || false;
     case 'option':
+      if (arg === 'key') return getConfigKey();
       return localStorage.getItem(arg);
+    case 'option:local':
+      return localStorage.getItem(arg) || '';
+    case 'option:session':
+      return '';
+    case 'option:user:default': {
+      const v = localStorage.getItem(arg);
+      if (v) return v;
+      const defaults = { 'view_style': 'adaptive', 'scroll_style': 'scrollauto', 'image_quality': 'balanced', 'codec-preference': 'auto' };
+      return defaults[arg] || '';
+    }
+    case 'option:flutter:peer':
+    case 'option:flutter:local':
+    case 'envvar':
+      return '';
+    case 'options':
+      return JSON.stringify({
+        'custom-rendezvous-server': getConfigHost(),
+        'relay-server': getConfigRelay(),
+        'key': getConfigKey(),
+      });
+    case 'alternative_codecs':
+      return '{}';
     case 'image_quality':
       return curConn.getImageQuality();
     case 'translate':
@@ -311,6 +352,10 @@ function _getByName(name, arg) {
       break;
     case 'version':
       return version;
+    case 'get_conn_status':
+      return JSON.stringify({"status_num": 1});
+    case 'is_using_public_server':
+      return 'false';
   }
   return '';
 }
@@ -330,15 +375,17 @@ export function playAudio(packet) {
 window.init = async () => {
   if (yuvWorker) {
     yuvWorker.onmessage = (e) => {
-      onRgba(e.data);
+      window.onRgba(0, e.data);
     }
   }
   opusWorker.onmessage = (e) => {
     pcmPlayer.feed(e.data);
   }
+  await loadConfig();
   loadVp9(() => { });
   await initZstd();
   console.log('init done');
+  if (window.onInitFinished) window.onInitFinished();
 }
 
 export function getPeers() {

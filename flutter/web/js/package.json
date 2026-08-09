@@ -3,19 +3,20 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "./gen_js_from_hbb.py > src/gen_js_from_hbb.ts && ./ts_proto.py && tsc && vite build",
+    "build": "python3 ./gen_js_from_hbb.py > src/gen_js_from_hbb.ts && python3 ./ts_proto.py && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
     "typescript": "^4.4.4",
-    "vite": "^2.7.2"
+    "vite": "2.8"
   },
   "dependencies": {
+    "@types/node": "^18.19.130",
     "fast-sha256": "^1.3.0",
     "libsodium": "^0.7.9",
     "libsodium-wrappers": "^0.7.9",
     "pcm-player": "^0.0.11",
-    "ts-proto": "^1.101.0",
+    "ts-proto": "^1.181.2",
     "wasm-feature-detect": "^1.2.11",
     "zstddec": "^0.0.2"
   }

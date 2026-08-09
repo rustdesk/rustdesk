@@ -7,13 +7,37 @@ import * as globals from "./globals";
 import { decompress, mapKey, sleep } from "./common";
 
 const PORT = 21116;
-const HOSTS = [
-  "rs-sg.rustdesk.com",
-  "rs-cn.rustdesk.com",
-  "rs-us.rustdesk.com",
-];
-let HOST = localStorage.getItem("rendezvous-server") || HOSTS[0];
+let HOST = window.location.hostname;
+let RELAY_HOST = "";
+let CONFIG_KEY = "";
 const SCHEMA = "ws://";
+
+export async function loadConfig(): Promise<void> {
+  try {
+    const resp = await fetch("config.json");
+    if (resp.ok) {
+      const config = await resp.json();
+      if (config.host) HOST = config.host;
+      if (config.relay) RELAY_HOST = config.relay;
+      if (config.key) CONFIG_KEY = config.key;
+      console.log("Loaded config: host=" + HOST + ", relay=" + (RELAY_HOST || HOST));
+    }
+  } catch (e) {
+    console.log("No config.json found, using defaults (host=" + HOST + ")");
+  }
+}
+
+export function getConfigKey(): string {
+  return CONFIG_KEY;
+}
+
+export function getConfigHost(): string {
+  return HOST;
+}
+
+export function getConfigRelay(): string {
+  return RELAY_HOST;
+}
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
 type DrawCallback = (data: Uint8Array) => void;
@@ -90,7 +114,7 @@ export default class Connection {
     const nat_type = rendezvous.NatType.SYMMETRIC;
     const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licence_key: localStorage.getItem("key") || undefined,
+      licence_key: CONFIG_KEY || undefined,
       conn_type,
       nat_type,
       token: localStorage.getItem("access_token") || undefined,
@@ -133,9 +157,11 @@ export default class Connection {
 
   async connectRelay(rr: rendezvous.RelayResponse) {
     const pk = rr.pk;
-    let uri = rr.relay_server;
-    if (uri) {
-      uri = getrUriFromRs(uri, true, 2);
+    let uri: string;
+    if (RELAY_HOST) {
+      uri = getrUriFromRs(RELAY_HOST, true);
+    } else if (rr.relay_server) {
+      uri = getrUriFromRs(rr.relay_server, true, 2);
     } else {
       uri = getDefaultUri(true);
     }
@@ -146,7 +172,7 @@ export default class Connection {
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
     const request_relay = rendezvous.RequestRelay.fromPartial({
-      licence_key: localStorage.getItem("key") || undefined,
+      licence_key: CONFIG_KEY || undefined,
       uuid,
     });
     ws.sendRendezvous({ request_relay });
@@ -159,7 +185,7 @@ export default class Connection {
     if (pk) {
       const RS_PK = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
       try {
-        pk = await globals.verify(pk, localStorage.getItem("key") || RS_PK);
+        pk = await globals.verify(pk, CONFIG_KEY || RS_PK);
         if (pk) {
           const idpk = message.IdPk.decode(pk);
           if (idpk.id == this._id) {
@@ -725,25 +751,9 @@ export default class Connection {
   }
 }
 
-function testDelay() {
-  var nearest = "";
-  HOSTS.forEach((host) => {
-    const now = new Date().getTime();
-    new Websock(getrUriFromRs(host), true).open().then(() => {
-      console.log("latency of " + host + ": " + (new Date().getTime() - now));
-      if (!nearest) {
-        HOST = host;
-        localStorage.setItem("rendezvous-server", host);
-      }
-    });
-  });
-}
-
-testDelay();
 
 function getDefaultUri(isRelay: Boolean = false): string {
-  const host = localStorage.getItem("custom-rendezvous-server");
-  return getrUriFromRs(host || HOST, isRelay);
+  return getrUriFromRs(HOST, isRelay);
 }
 
 function getrUriFromRs(

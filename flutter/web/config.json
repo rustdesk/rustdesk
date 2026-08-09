@@ -1,0 +1,6 @@
+{
+  "host": "localhost",
+  "relay": "",
+  "key": "",
+  "_comment": "Deploy: copy this file alongside the web assets and fill in your server details"
+}

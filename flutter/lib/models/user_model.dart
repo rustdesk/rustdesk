@@ -61,6 +61,10 @@ class UserModel {
     }
     _updateLocalUserInfo();
     final url = await bind.mainGetApiServer();
+    if (url.trim().isEmpty) {
+      await updateOtherModels();
+      return;
+    }
     final body = {
       'id': await bind.mainGetMyId(),
       'uuid': await bind.mainGetUuid()

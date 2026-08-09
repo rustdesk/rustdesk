@@ -60,7 +60,7 @@ def main():
          KEY_MAP[0] += '  "%s": "%s",\n'%(a, b)
    print()
    print('export function checkIfRetry(msgtype: string, title: string, text: string,  retry_for_relay: boolean) {')
-   print('  return %s'%check_if_retry[0].replace('to_lowercase', 'toLowerCase').replace('contains', 'indexOf').replace('!', '').replace('")', '") < 0'))
+   print('  return %s'%check_if_retry[0].replace('to_lowercase', 'toLowerCase').replace('contains', 'indexOf').replace('!', '').replace('")', '") < 0').replace('use_ws()', 'true'))
    print(';}')
    print()
    print('export const KEY_MAP: any = {')

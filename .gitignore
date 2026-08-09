@@ -57,3 +57,4 @@ flutter/lib/generated_plugin_registrant.dart
 libsciter.dylib
 # libdrmtap is cloned at build time by build.py (not a submodule)
 /third_party/libdrmtap/
+rustdesk-data/

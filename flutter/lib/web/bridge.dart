@@ -257,8 +257,10 @@ class RustdeskImpl {
 
   Future<String?> sessionGetViewStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:session', 'view_style']));
+    return Future(() {
+      final v = js.context.callMethod('getByName', ['option:session', 'view_style']);
+      return (v == null || v == '') ? 'adaptive' : v;
+    });
   }
 
   Future<void> sessionSetViewStyle(
@@ -281,8 +283,10 @@ class RustdeskImpl {
 
   Future<String?> sessionGetScrollStyle(
       {required UuidValue sessionId, dynamic hint}) {
-    return Future(() =>
-        js.context.callMethod('getByName', ['option:session', 'scroll_style']));
+    return Future(() {
+      final v = js.context.callMethod('getByName', ['option:session', 'scroll_style']);
+      return (v == null || v == '') ? 'scrollauto' : v;
+    });
   }
 
   Future<void> sessionSetScrollStyle(
@@ -847,12 +851,11 @@ class RustdeskImpl {
   }
 
   String mainGetPeerSync({required String id, dynamic hint}) {
-    // TODO:
-    throw UnimplementedError("mainGetPeerSync");
+    return '{}';
   }
 
   Future<String> mainGetLanPeers({dynamic hint}) {
-    throw UnimplementedError("mainGetLanPeers");
+    return Future.value('[]');
   }
 
   Future<String> mainGetConnectStatus({dynamic hint}) {
@@ -861,7 +864,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainCheckConnectStatus({dynamic hint}) {
-    throw UnimplementedError("mainCheckConnectStatus");
+    return Future.value();
   }
 
   Future<bool> mainIsUsingPublicServer({dynamic hint}) {
@@ -871,7 +874,7 @@ class RustdeskImpl {
   }
 
   Future<void> mainDiscover({dynamic hint}) {
-    throw UnimplementedError("mainDiscover");
+    return Future.value();
   }
 
   Future<String> mainGetApiServer({dynamic hint}) {
@@ -883,7 +886,7 @@ class RustdeskImpl {
       required String body,
       required String header,
       dynamic hint}) {
-    throw UnimplementedError("mainPostRequest");
+    return Future.value();
   }
 
   Future<bool> mainGetProxyStatus({dynamic hint}) {
@@ -897,11 +900,11 @@ class RustdeskImpl {
     required String header,
     dynamic hint,
   }) {
-    throw UnimplementedError("mainHttpRequest");
+    return Future.value();
   }
 
   Future<String?> mainGetHttpStatus({required String url, dynamic hint}) {
-    throw UnimplementedError("mainGetHttpStatus");
+    return Future.value(null);
   }
 
   String mainGetLocalOption({required String key, dynamic hint}) {
@@ -1054,19 +1057,19 @@ class RustdeskImpl {
   }
 
   Future<void> mainLoadLanPeers({dynamic hint}) {
-    throw UnimplementedError("mainLoadLanPeers");
+    return Future.value();
   }
 
   Future<void> mainRemoveDiscovered({required String id, dynamic hint}) {
-    throw UnimplementedError("mainRemoveDiscovered");
+    return Future.value();
   }
 
   Future<void> mainChangeTheme({required String dark, dynamic hint}) {
-    throw UnimplementedError("mainChangeTheme");
+    return Future.value();
   }
 
   Future<void> mainChangeLanguage({required String lang, dynamic hint}) {
-    throw UnimplementedError("mainChangeLanguage");
+    return Future.value();
   }
 
   String mainVideoSaveDirectory({required bool root, dynamic hint}) {

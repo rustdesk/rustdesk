@@ -899,10 +899,10 @@ class FfiModel with ChangeNotifier {
   handleMsgBox(Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
-    final type = evt['type'];
-    final title = evt['title'];
-    final text = evt['text'];
-    final link = evt['link'];
+    final type = evt['type'] ?? '';
+    final title = evt['title'] ?? '';
+    final text = evt['text'] ?? '';
+    final link = evt['link'] ?? '';
 
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
