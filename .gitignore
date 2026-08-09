@@ -58,3 +58,6 @@ libsciter.dylib
 # libdrmtap is cloned at build time by build.py (not a submodule)
 /third_party/libdrmtap/
 rustdesk-data/
+# web client build artifacts
+flutter/web/ogvjs*/
+flutter/web/web_deps.tar.gz
