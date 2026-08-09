@@ -20,7 +20,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
+pub const ASIO_INPUT_PREFIX: &str = "[ASIO] ";
 static RESTARTING: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AsioInputChoice {
+    display: String,
+    channels: Vec<usize>,
+}
 
 lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
@@ -65,6 +72,66 @@ fn get_audio_input() -> String {
         .unwrap()
         .clone()
         .unwrap_or(Config::get_option("audio-input"))
+}
+
+fn asio_input_choices(device_name: &str, channel_count: u16) -> Vec<AsioInputChoice> {
+    let channel_count = channel_count as usize;
+    let mut choices = Vec::with_capacity((channel_count + 1) / 2);
+    for first in (0..channel_count).step_by(2) {
+        let channels = if first + 1 < channel_count {
+            vec![first, first + 1]
+        } else {
+            vec![first]
+        };
+        let display = if channels.len() == 2 {
+            format!(
+                "{ASIO_INPUT_PREFIX}{device_name} - Inputs {}-{}",
+                first + 1,
+                first + 2
+            )
+        } else {
+            format!("{ASIO_INPUT_PREFIX}{device_name} - Input {}", first + 1)
+        };
+        choices.push(AsioInputChoice { display, channels });
+    }
+    choices
+}
+
+fn select_interleaved_channels(
+    data: &[f32],
+    source_channels: usize,
+    selected_channels: &[usize],
+) -> Option<Vec<f32>> {
+    if source_channels == 0
+        || selected_channels.is_empty()
+        || selected_channels
+            .iter()
+            .any(|channel| *channel >= source_channels)
+    {
+        return None;
+    }
+    let frame_count = data.len() / source_channels;
+    let mut out = Vec::with_capacity(frame_count * selected_channels.len());
+    for frame in data.chunks_exact(source_channels) {
+        for channel in selected_channels {
+            out.push(frame[*channel]);
+        }
+    }
+    Some(out)
+}
+
+#[cfg(all(windows, feature = "asio"))]
+pub fn get_asio_input_devices() -> Vec<String> {
+    cpal_impl::get_asio_input_devices()
+}
+
+#[cfg(not(all(windows, feature = "asio")))]
+pub fn get_asio_input_devices() -> Vec<String> {
+    Vec::new()
+}
+
+pub fn append_asio_input_devices(out: &mut Vec<String>) {
+    out.extend(get_asio_input_devices());
 }
 
 pub fn restart() {
@@ -180,6 +247,8 @@ mod cpal_impl {
         BufferSize, Device, Host, InputCallbackInfo, StreamConfig, SupportedStreamConfig,
     };
 
+    type CaptureDevice = (Device, SupportedStreamConfig, Option<Vec<usize>>);
+
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
         static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
@@ -267,7 +336,7 @@ mod cpal_impl {
     }
 
     #[cfg(feature = "screencapturekit")]
-    fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+    fn get_device() -> ResultType<CaptureDevice> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);
@@ -284,13 +353,17 @@ mod cpal_impl {
             .map_err(|e| anyhow!(e))
             .with_context(|| "Failed to get input output format")?;
         log::info!("Default input format: {:?}", format);
-        Ok((device, format))
+        Ok((device, format, None))
     }
 
     #[cfg(windows)]
-    fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+    fn get_device() -> ResultType<CaptureDevice> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
+            #[cfg(feature = "asio")]
+            if audio_input.starts_with(super::ASIO_INPUT_PREFIX) {
+                return get_asio_audio_input(&audio_input);
+            }
             return get_audio_input(&audio_input);
         }
         let device = HOST
@@ -305,16 +378,100 @@ mod cpal_impl {
             .map_err(|e| anyhow!(e))
             .with_context(|| "Failed to get default output format")?;
         log::info!("Default output format: {:?}", format);
-        Ok((device, format))
+        Ok((device, format, None))
+    }
+
+    #[cfg(all(windows, feature = "asio"))]
+    pub(super) fn get_asio_input_devices() -> Vec<String> {
+        let mut out = Vec::new();
+        let host = match cpal::host_from_id(cpal::HostId::Asio) {
+            Ok(host) => host,
+            Err(err) => {
+                log::debug!("Failed to initialize ASIO host: {:?}", err);
+                return out;
+            }
+        };
+        let devices = match host.devices() {
+            Ok(devices) => devices,
+            Err(err) => {
+                log::debug!("Failed to enumerate ASIO devices: {:?}", err);
+                return out;
+            }
+        };
+        for device in devices {
+            let device_name = match device.name() {
+                Ok(name) => name,
+                Err(err) => {
+                    log::debug!("Failed to get ASIO device name: {:?}", err);
+                    continue;
+                }
+            };
+            let format = match device.default_input_config() {
+                Ok(format) => format,
+                Err(err) => {
+                    log::debug!(
+                        "Failed to get ASIO input config for {}: {:?}",
+                        device_name,
+                        err
+                    );
+                    continue;
+                }
+            };
+            out.extend(
+                super::asio_input_choices(&device_name, format.channels())
+                    .into_iter()
+                    .map(|choice| choice.display),
+            );
+        }
+        out
+    }
+
+    #[cfg(all(windows, feature = "asio"))]
+    fn get_asio_audio_input(audio_input: &str) -> ResultType<CaptureDevice> {
+        let host = cpal::host_from_id(cpal::HostId::Asio)
+            .map_err(|e| anyhow!("{:?}", e))
+            .with_context(|| "Failed to initialize ASIO host")?;
+        for device in host
+            .devices()
+            .with_context(|| "Failed to enumerate ASIO devices")?
+        {
+            let device_name = match device.name() {
+                Ok(name) => name,
+                Err(err) => {
+                    log::debug!("Failed to get ASIO device name: {:?}", err);
+                    continue;
+                }
+            };
+            let format = match device.default_input_config() {
+                Ok(format) => format,
+                Err(err) => {
+                    log::debug!(
+                        "Failed to get ASIO input config for {}: {:?}",
+                        device_name,
+                        err
+                    );
+                    continue;
+                }
+            };
+            if let Some(choice) = super::asio_input_choices(&device_name, format.channels())
+                .into_iter()
+                .find(|choice| choice.display == audio_input)
+            {
+                log::info!("ASIO input route: {}", choice.display);
+                log::info!("ASIO input format: {:?}", format);
+                return Ok((device, format, Some(choice.channels)));
+            }
+        }
+        bail!("Failed to get ASIO input route: {}", audio_input);
     }
 
     #[cfg(not(any(windows, feature = "screencapturekit")))]
-    fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+    fn get_device() -> ResultType<CaptureDevice> {
         let audio_input = super::get_audio_input();
         get_audio_input(&audio_input)
     }
 
-    fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
+    fn get_audio_input(audio_input: &str) -> ResultType<CaptureDevice> {
         let mut device = None;
         #[cfg(feature = "screencapturekit")]
         if !audio_input.is_empty() && is_screen_capture_kit_available() {
@@ -350,12 +507,12 @@ mod cpal_impl {
             .map_err(|e| anyhow!(e))
             .with_context(|| "Failed to get default input format")?;
         log::info!("Default input format: {:?}", format);
-        Ok((device, format))
+        Ok((device, format, None))
     }
 
     fn play(sp: &GenericService) -> ResultType<(Box<dyn StreamTrait>, Arc<Message>)> {
         use cpal::SampleFormat::*;
-        let (device, config) = get_device()?;
+        let (device, config, selected_channels) = get_device()?;
         let sp = sp.clone();
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.
         let sample_rate_0 = config.sample_rate().0;
@@ -370,18 +527,46 @@ mod cpal_impl {
         } else {
             48000
         };
-        let ch = if config.channels() > 1 { Stereo } else { Mono };
+        let capture_channel_count = selected_channels
+            .as_ref()
+            .map(|channels| channels.len() as u16)
+            .unwrap_or_else(|| config.channels());
+        let ch = if capture_channel_count > 1 {
+            Stereo
+        } else {
+            Mono
+        };
         let stream = match config.sample_format() {
-            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
-            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
-            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
-            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate, ch)?,
-            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate, ch)?,
-            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate, ch)?,
-            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate, ch)?,
-            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate, ch)?,
-            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate, ch)?,
-            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate, ch)?,
+            I8 => {
+                build_input_stream::<i8>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            I16 => {
+                build_input_stream::<i16>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            I32 => {
+                build_input_stream::<i32>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            I64 => {
+                build_input_stream::<i64>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            U8 => {
+                build_input_stream::<u8>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            U16 => {
+                build_input_stream::<u16>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            U32 => {
+                build_input_stream::<u32>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            U64 => {
+                build_input_stream::<u64>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            F32 => {
+                build_input_stream::<f32>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
+            F64 => {
+                build_input_stream::<f64>(device, &config, sp, sample_rate, ch, selected_channels)?
+            }
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
@@ -397,6 +582,7 @@ mod cpal_impl {
         sp: GenericService,
         sample_rate: u32,
         encode_channel: magnum_opus::Channels,
+        selected_channels: Option<Vec<usize>>,
     ) -> ResultType<cpal::Stream>
     where
         T: cpal::SizedSample + dasp::sample::ToSample<f32>,
@@ -410,7 +596,20 @@ mod cpal_impl {
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
-        let device_channel = config.channels();
+        let source_channel = config.channels();
+        if let Some(channels) = selected_channels.as_ref() {
+            if channels.is_empty()
+                || channels
+                    .iter()
+                    .any(|channel| *channel >= source_channel as usize)
+            {
+                bail!("Invalid ASIO channel selection: {:?}", channels);
+            }
+        }
+        let device_channel = selected_channels
+            .as_ref()
+            .map(|channels| channels.len() as u16)
+            .unwrap_or(source_channel);
         let mut encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
         // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
         // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
@@ -423,14 +622,24 @@ mod cpal_impl {
         INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
         let stream_config = StreamConfig {
-            channels: device_channel,
+            channels: source_channel,
             sample_rate: config.sample_rate(),
             buffer_size: BufferSize::Default,
         };
         let stream = device.build_input_stream(
             &stream_config,
             move |data: &[T], _: &InputCallbackInfo| {
-                let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                let source_buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                let buffer = if let Some(channels) = selected_channels.as_deref() {
+                    super::select_interleaved_channels(
+                        &source_buffer,
+                        source_channel as usize,
+                        channels,
+                    )
+                    .unwrap_or_default()
+                } else {
+                    source_buffer
+                };
                 let mut lock = INPUT_BUFFER.lock().unwrap();
                 lock.extend(buffer);
                 while lock.len() >= rechannel_len {
@@ -530,5 +739,53 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             sp.send(msg_out);
         }
         Err(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn asio_input_choices_are_stereo_pairs_with_a_mono_tail() {
+        let choices = asio_input_choices("Example Driver", 5);
+        assert_eq!(choices.len(), 3);
+        assert_eq!(
+            choices[0],
+            AsioInputChoice {
+                display: "[ASIO] Example Driver - Inputs 1-2".to_owned(),
+                channels: vec![0, 1],
+            }
+        );
+        assert_eq!(
+            choices[1],
+            AsioInputChoice {
+                display: "[ASIO] Example Driver - Inputs 3-4".to_owned(),
+                channels: vec![2, 3],
+            }
+        );
+        assert_eq!(
+            choices[2],
+            AsioInputChoice {
+                display: "[ASIO] Example Driver - Input 5".to_owned(),
+                channels: vec![4],
+            }
+        );
+    }
+
+    #[test]
+    fn selects_an_asio_pair_from_interleaved_frames() {
+        let source = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        assert_eq!(
+            select_interleaved_channels(&source, 4, &[2, 3]),
+            Some(vec![3.0, 4.0, 7.0, 8.0])
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_asio_channel_selection() {
+        assert_eq!(select_interleaved_channels(&[1.0, 2.0], 2, &[2]), None);
+        assert_eq!(select_interleaved_channels(&[1.0, 2.0], 0, &[0]), None);
+        assert_eq!(select_interleaved_channels(&[1.0, 2.0], 2, &[]), None);
     }
 }

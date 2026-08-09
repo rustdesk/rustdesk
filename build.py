@@ -140,6 +140,11 @@ def make_parser():
         help='Build with unix file copy paste feature'
     )
     parser.add_argument(
+        '--asio',
+        action='store_true',
+        help='Enable ASIO audio support on Windows'
+    )
+    parser.add_argument(
         '--drm',
         action='store_true',
         help='Linux only: build the DRM/KMS capture backend (bundles libdrmtap.so, '
@@ -322,6 +327,10 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if args.asio:
+        if not windows:
+            raise Exception('--asio is Windows only')
+        features.append('asio')
     if args.drm:
         # Say so rather than quietly handing back a stock build: the backend is Linux-only, so on
         # any other host the flag cannot be honoured and the resulting binary would look like a
