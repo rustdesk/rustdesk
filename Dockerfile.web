@@ -1,0 +1,30 @@
+FROM ubuntu:22.04
+
+ARG FLUTTER_VERSION=3.24.5
+ARG NODE_MAJOR=18
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget curl git unzip xz-utils ca-certificates python3 gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz \
+    && tar xf flutter_linux_${FLUTTER_VERSION}-stable.tar.xz -C /opt \
+    && rm flutter_linux_${FLUTTER_VERSION}-stable.tar.xz
+
+ENV PATH="/opt/flutter/bin:${PATH}"
+
+RUN flutter config --no-analytics && flutter precache --web
+
+RUN npm install -g yarn typescript protoc
+
+COPY .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff /tmp/flutter.diff
+RUN cd /opt/flutter && git apply /tmp/flutter.diff && rm /tmp/flutter.diff
+
+RUN git config --global --add safe.directory /opt/flutter \
+    && git config --global --add safe.directory /app
+
+WORKDIR /app/flutter

@@ -126,6 +126,7 @@ void showServerSettingsWithValue(
                 showLabelText: false,
                 validator: validator,
                 autofocus: autofocus,
+                readOnly: isWeb,
               ).workaroundFreezeLinuxMint(),
             ),
           ],
@@ -144,7 +145,7 @@ void showServerSettingsWithValue(
       title: Row(
         children: [
           Expanded(child: Text(translate('ID/Relay Server'))),
-          ...ServerConfigImportExportWidgets(controllers, errMsgs),
+          if (!isWeb) ...ServerConfigImportExportWidgets(controllers, errMsgs),
         ],
       ),
       content: ConstrainedBox(
@@ -186,23 +187,29 @@ void showServerSettingsWithValue(
               )),
         ),
       ),
-      actions: [
-        dialogButton('Cancel', onPressed: () {
-          close();
-        }, isOutline: true),
-        dialogButton(
-          'OK',
-          onPressed: () async {
-            if (await submit()) {
-              close();
-              showToast(translate('Successful'));
-              upSetState?.call(() {});
-            } else {
-              showToast(translate('Failed'));
-            }
-          },
-        ),
-      ],
+      actions: isWeb
+          ? [
+              dialogButton('Close', onPressed: () {
+                close();
+              }),
+            ]
+          : [
+              dialogButton('Cancel', onPressed: () {
+                close();
+              }, isOutline: true),
+              dialogButton(
+                'OK',
+                onPressed: () async {
+                  if (await submit()) {
+                    close();
+                    showToast(translate('Successful'));
+                    upSetState?.call(() {});
+                  } else {
+                    showToast(translate('Failed'));
+                  }
+                },
+              ),
+            ],
     );
   });
 }
@@ -214,17 +221,19 @@ TextFormField serverSettingsTextFormField({
   String? Function(String?)? validator,
   bool autofocus = false,
   bool showLabelText = true,
+  bool readOnly = false,
   EdgeInsetsGeometry? contentPadding,
 }) {
   return TextFormField(
     controller: controller,
+    readOnly: readOnly,
     decoration: InputDecoration(
       labelText: showLabelText ? label : null,
       errorText: errorMsg.isEmpty ? null : errorMsg,
       contentPadding: contentPadding,
     ),
     validator: validator,
-    autofocus: autofocus,
+    autofocus: readOnly ? false : autofocus,
     keyboardType: TextInputType.visiblePassword,
     textCapitalization: TextCapitalization.none,
     autocorrect: false,

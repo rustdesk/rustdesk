@@ -1,0 +1,34 @@
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server
+    command: hbbs
+    network_mode: host
+    volumes:
+      - ./rustdesk-data:/root
+    restart: unless-stopped
+
+  hbbr:
+    image: rustdesk/rustdesk-server
+    command: hbbr
+    network_mode: host
+    volumes:
+      - ./rustdesk-data:/root
+    restart: unless-stopped
+
+  web-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+    command: sleep infinity
+
+  web-server:
+    image: nginx:alpine
+    ports:
+      - "8181:80"
+    volumes:
+      - ./flutter/build/web:/usr/share/nginx/html:ro
+    restart: unless-stopped
