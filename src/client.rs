@@ -252,7 +252,7 @@ impl Client {
         (i32, String),
         bool,
     )> {
-        if config::is_incoming_only() {
+        if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface).await {
             bail!("Incoming only mode");
         }
         // to-do: remember the port for each peer, so that we can retry easier
@@ -3455,9 +3455,55 @@ pub fn handle_login_error(
     }
 }
 
+// "Switch sides" requires the incoming-only client to connect back to its
+// controlling peer; verify the local pending uuid before opening the connection.
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
+async fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -> bool {
+    if conn_type != ConnType::DEFAULT_CONN {
+        return false;
+    }
+    let (id, uuid) = {
+        let lch = interface.get_lch();
+        let lc = lch.read().unwrap();
+        let Some(uuid) = lc.switch_uuid.as_deref() else {
+            return false;
+        };
+        let Ok(uuid) = Uuid::parse_str(uuid) else {
+            return false;
+        };
+        (lc.id.clone(), uuid)
+    };
+    if !request_local_switch_sides_uuid(
+        &id,
+        &uuid,
+        crate::ipc::SwitchSidesUuidAction::Check,
+    )
+    .await
+    {
+        return false;
+    }
+    let lch = interface.get_lch();
+    let lc = lch.read().unwrap();
+    let current_uuid = lc
+        .switch_uuid
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok());
+    lc.id == id && current_uuid.as_ref() == Some(&uuid)
+}
+
+#[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
+async fn is_switch_sides_back(_conn_type: ConnType, _interface: &impl Interface) -> bool {
+    false
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn request_local_switch_sides_uuid(
+    id: &str,
+    uuid: &Uuid,
+    action: crate::ipc::SwitchSidesUuidAction,
+) -> bool {
     let Ok(mut conn) = crate::ipc::connect(1000, "").await else {
         return false;
     };
@@ -3466,6 +3512,7 @@ async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
         .send(&crate::ipc::Data::SwitchSidesUuid(
             uuid.clone(),
             id.to_owned(),
+            action,
             None,
         ))
         .await
@@ -3477,9 +3524,10 @@ async fn consume_local_switch_sides_uuid(id: &str, uuid: &Uuid) -> bool {
         Ok(Some(crate::ipc::Data::SwitchSidesUuid(
             returned_uuid,
             returned_id,
+            returned_action,
             Some(true),
         ))) => {
-            returned_uuid == uuid && returned_id == id
+            returned_uuid == uuid && returned_id == id && returned_action == action
         }
         _ => false,
     }
@@ -3512,7 +3560,13 @@ pub async fn handle_hash(
         if let Some(uuid) = uuid {
             if let Ok(uuid) = uuid::Uuid::from_str(&uuid) {
                 let id = lc.read().unwrap().id.clone();
-                if !consume_local_switch_sides_uuid(&id, &uuid).await {
+                if !request_local_switch_sides_uuid(
+                    &id,
+                    &uuid,
+                    crate::ipc::SwitchSidesUuidAction::Consume,
+                )
+                .await
+                {
                     log::warn!("Ignored untrusted switch_uuid");
                 } else {
                     lc.write().unwrap().allow_switch_back_once();
@@ -3521,6 +3575,19 @@ pub async fn handle_hash(
                     return;
                 }
             }
+        }
+        // Incoming-only may connect out solely for a verified switch-back;
+        // never fall through to password login, including on repeated hashes.
+        if config::is_incoming_only() {
+            interface.msgbox("error", "Connection Error", "Incoming only mode", "");
+            let mut misc = Misc::new();
+            misc.set_close_reason(
+                "Connection not allowed in incoming-only mode".to_owned(),
+            );
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            allow_err!(peer.send(&msg).await);
+            return;
         }
     }
     // last password
@@ -4031,7 +4098,23 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
                 && !text.to_lowercase().contains("mismatch")
                 && !text.to_lowercase().contains("manually")
                 && !text.to_lowercase().contains("restricted")
+                && !text.to_lowercase().contains("incoming only")
                 && !text.to_lowercase().contains("not allowed")))
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::check_if_retry;
+
+    #[test]
+    fn incoming_only_error_is_not_retryable() {
+        assert!(!check_if_retry(
+            "error",
+            "Connection Error",
+            "Incoming only mode",
+            false,
+        ));
+    }
 }
 
 pub async fn hc_connection(
