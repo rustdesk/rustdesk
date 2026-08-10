@@ -8,15 +8,21 @@ class WheelButtonFixMouseHandler implements TerminalMouseHandler {
 
   @override
   String? call(TerminalMouseEvent event) {
-    final report = defaultMouseHandler(event);
-    if (report == null || !event.button.isWheel) {
-      return report;
+    if (!event.button.isWheel) {
+      return defaultMouseHandler(event);
+    }
+    // Same gate as UpDownMouseHandler: only the scroll modes report a wheel,
+    // and a wheel release is never reported, so the report is always a press.
+    if (!event.state.mouseMode.reportScroll ||
+        event.buttonState == TerminalMouseButtonState.up) {
+      return null;
     }
     return _reportWheel(event);
   }
 
   String _reportWheel(TerminalMouseEvent event) {
-    final button = _wheelButtonId(event.button);
+    // Wheel buttons 4..7 go on the wire as 64..67, but `id` is 64 + 4..7.
+    final button = event.button.id - 4;
     final x = event.position.x + 1;
     final y = event.position.y + 1;
     switch (event.state.mouseReportMode) {
@@ -25,27 +31,12 @@ class WheelButtonFixMouseHandler implements TerminalMouseHandler {
         final limit =
             event.state.mouseReportMode == MouseReportMode.normal ? 223 : 2015;
         final col = x > limit ? '\x00' : String.fromCharCode(32 + x);
-        final row = y > limit ? '\x00' : String.fromCharCode(32 + y + 1);
+        final row = y > limit ? '\x00' : String.fromCharCode(32 + y);
         return '\x1b[M${String.fromCharCode(32 + button)}$col$row';
       case MouseReportMode.sgr:
         return '\x1b[<$button;$x;${y}M';
       case MouseReportMode.urxvt:
         return '\x1b[${32 + button};$x;${y}M';
-    }
-  }
-
-  int _wheelButtonId(TerminalMouseButton button) {
-    switch (button) {
-      case TerminalMouseButton.wheelUp:
-        return 64;
-      case TerminalMouseButton.wheelDown:
-        return 65;
-      case TerminalMouseButton.wheelLeft:
-        return 66;
-      case TerminalMouseButton.wheelRight:
-        return 67;
-      default:
-        return button.id;
     }
   }
 }

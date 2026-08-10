@@ -129,10 +129,8 @@ class TerminalModel with ChangeNotifier {
   }
 
   TerminalModel(this.parent, [this.terminalId = 0]) : id = parent.id {
-    terminal = Terminal(
-      maxLines: 10000,
-      mouseHandler: const WheelButtonFixMouseHandler(),
-    );
+    terminal = Terminal(maxLines: 10000);
+    terminal.mouseHandler = const WheelButtonFixMouseHandler();
     terminalController = TerminalController();
 
     // Setup terminal callbacks
