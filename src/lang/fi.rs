@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Oletusnopeus kosketuslevylle"),
         ("Numeric one-time password", "Numeerinen kertakäyttösalasana"),
         ("Enable IPv6 P2P connection", "Ota IPv6 P2P yhteys käyttöön"),
-        ("Enable WebRTC P2P connection", "Ota WebRTC P2P yhteys käyttöön"),
         ("Enable UDP hole punching", "Ota käyttöön UDP hole punching  tekniikka"),
         ("View camera", "Näytä kamera"),
         ("Enable camera", "Ota kamera käyttöön"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Jatka"),
         ("Browser didn't open? Use the url below to sign in.", "Eikö selain avautunut? Kirjaudu sisään alla olevan osoitteen kautta."),
         ("Lock canvas", "Lukitse näkymä"),
+        ("Enable WebRTC P2P connection", "Ota WebRTC P2P yhteys käyttöön"),
     ].iter().cloned().collect();
 }

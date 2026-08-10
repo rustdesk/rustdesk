@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "מהירות ברירת מחדל של משטח מגע"),
         ("Numeric one-time password", "סיסמה חד-פעמית מספרית"),
         ("Enable IPv6 P2P connection", "אפשר חיבור IPv6 P2P"),
-        ("Enable WebRTC P2P connection", "אפשר חיבור WebRTC P2P"),
         ("Enable UDP hole punching", "אפשר UDP hole punching"),
         ("View camera", "הצג מצלמה"),
         ("Enable camera", "הפעל מצלמה"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "המשך"),
         ("Browser didn't open? Use the url below to sign in.", "הדפדפן לא נפתח? השתמש בכתובת שלמטה כדי להתחבר."),
         ("Lock canvas", "נעל לוח ציור"),
+        ("Enable WebRTC P2P connection", "אפשר חיבור WebRTC P2P"),
     ].iter().cloned().collect();
 }

@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Predvolená rýchlosť touchpadu"),
         ("Numeric one-time password", "Číselné jednorazové heslo"),
         ("Enable IPv6 P2P connection", "Povoliť pripojenie IPv6 P2P"),
-        ("Enable WebRTC P2P connection", "Povoliť pripojenie WebRTC P2P"),
         ("Enable UDP hole punching", "Povoliť UDP hole punching"),
         ("View camera", "Zobraziť kameru"),
         ("Enable camera", "Povoliť kameru"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Pokračovať"),
         ("Browser didn't open? Use the url below to sign in.", "Neotvoril sa prehliadač? Na prihlásenie použite URL nižšie."),
         ("Lock canvas", "Uzamknúť zobrazenie"),
+        ("Enable WebRTC P2P connection", "Povoliť pripojenie WebRTC P2P"),
     ].iter().cloned().collect();
 }

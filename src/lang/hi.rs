@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "डिफ़ॉल्ट ट्रैकपैड गति"),
         ("Numeric one-time password", "संख्यात्मक वन-टाइम पासवर्ड"),
         ("Enable IPv6 P2P connection", "IPv6 P2P कनेक्शन सक्षम करें"),
-        ("Enable WebRTC P2P connection", "WebRTC P2P कनेक्शन सक्षम करें"),
         ("Enable UDP hole punching", "UDP होल पंचिंग सक्षम करें"),
         ("View camera", "कैमरा देखें"),
         ("Enable camera", "कैमरा सक्षम करें"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "जारी रखें"),
         ("Browser didn't open? Use the url below to sign in.", "ब्राउज़र नहीं खुला? लॉगिन करने के लिए नीचे दिए गए URL का उपयोग करें।"),
         ("Lock canvas", "कैनवास लॉक करें"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P कनेक्शन सक्षम करें"),
     ].iter().cloned().collect();
 }

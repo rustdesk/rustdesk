@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "இயல்புநிலை டிராக்பேட் வேகம்"),
         ("Numeric one-time password", "எண் ஒருமுறை கடவுச்சொல்"),
         ("Enable IPv6 P2P connection", "IPv6 P2P இணைப்பு இயக்கு"),
-        ("Enable WebRTC P2P connection", "WebRTC P2P இணைப்பு இயக்கு"),
         ("Enable UDP hole punching", "UDP hole punching இயக்கு"),
         ("View camera", "கேமரா பார்"),
         ("Enable camera", "கேமரா இயக்கு"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "தொடர்க"),
         ("Browser didn't open? Use the url below to sign in.", "உலாவி திறக்கவில்லையா? உள்நுழைய கீழே உள்ள URL ஐப் பயன்படுத்தவும்."),
         ("Lock canvas", "கேன்வாஸைப் பூட்டு"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P இணைப்பு இயக்கு"),
     ].iter().cloned().collect();
 }

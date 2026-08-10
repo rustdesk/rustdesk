@@ -673,7 +673,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "ტაჩპადის ნაგულისხმევი სიჩქარე"),
         ("Numeric one-time password", "ციფრული ერთჯერადი პაროლი"),
         ("Enable IPv6 P2P connection", "IPv6 P2P კავშირის ჩართვა"),
-        ("Enable WebRTC P2P connection", "WebRTC P2P კავშირის ჩართვა"),
         ("Enable UDP hole punching", "UDP hole punching-ის ჩართვა"),
         ("View camera", "კამერის ნახვა"),
         ("Enable camera", "კამერის ჩართვა"),
@@ -759,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "გაგრძელება"),
         ("Browser didn't open? Use the url below to sign in.", "ბრაუზერი არ გაიხსნა? შესასვლელად გამოიყენეთ ქვემოთ მოცემული ბმული."),
         ("Lock canvas", "ტილოს დაბლოკვა"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P კავშირის ჩართვა"),
     ].iter().cloned().collect();
 }

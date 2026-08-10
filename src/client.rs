@@ -175,14 +175,9 @@ pub fn get_key_state(key: enigo::Key) -> bool {
     ENIGO.lock().unwrap().get_key_state(key)
 }
 
-/// RAII guard for a WebRTC offerer that has not yet been adopted into a connection.
-///
-/// The offerer's `RTCPeerConnection` is created eagerly in `Client::start` and inserted into the
-/// global `SESSIONS` map; if it never receives a remote answer it stays in ICE state `New`
-/// forever, so its state-change handler never fires and it never self-removes. This guard closes
-/// the pc on drop, covering the paths that would otherwise leak it: early `?`/`bail!` returns in
-/// `_start_inner`, and `select_ok` cancelling the racing attempt that holds the offerer. Call
-/// [`OffererGuard::into_inner`] to disarm when the stream is adopted into a live connection.
+/// Closes an unadopted WebRTC offerer's pc on drop. Without an answer it stays in ICE `New`
+/// forever, so its state handler never fires to self-remove it from `SESSIONS`; this covers the
+/// early returns and cancelled races that would leak it. `into_inner` disarms on adoption.
 struct OffererGuard(Option<WebRTCStream>);
 
 impl OffererGuard {
@@ -254,8 +249,12 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                         }
                     }
                     Err(e) => {
-                        if let Some(conn) = held.take() {
-                            return Ok(conn);
+                        // Commit a held relay only when nothing direct is still racing; otherwise
+                        // keep it and let the survivor (or the window) decide.
+                        if others_fut.is_none() {
+                            if let Some(conn) = held.take() {
+                                return Ok(conn);
+                            }
                         }
                         match others_err.take() {
                             Some(oe) => bail!("WebRTC failed: {}; fallback failed: {}", e, oe),
@@ -274,11 +273,15 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                 others_fut = None;
                 match res {
                     Ok((conn, unfinished)) => {
-                        if is_p2p(&conn) || webrtc_fut.is_none() {
+                        if is_p2p(&conn) {
                             return Ok(conn);
                         }
-                        // Hold the first relay, but keep polling unfinished alternatives: an IPv6
-                        // direct attempt may complete inside the same WebRTC preference window.
+                        // Relayed: commit now only if nothing direct can still arrive. If a
+                        // direct attempt is still in flight (here or in `unfinished`), hold it
+                        // and keep racing for the preference window instead of discarding them.
+                        if webrtc_fut.is_none() && unfinished.is_empty() {
+                            return Ok(conn);
+                        }
                         if held.is_none() {
                             held = Some(conn);
                             window.as_mut().reset(
@@ -291,15 +294,16 @@ async fn race_transports_prefer_webrtc<'a, T: 'a>(
                         }
                     }
                     Err(e) => match webrtc_err.take() {
-                        Some(we) => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
-                        None if webrtc_fut.is_none() => {
-                            // The preferred branch may have parked a relay here; nothing else can
-                            // win now, so commit it rather than failing the connection.
-                            match held.take() {
-                                Some(conn) => return Ok(conn),
-                                None => return Err(e),
-                            }
-                        }
+                        // Nothing more can win, but a parked relay is still a valid outcome — take
+                        // it before failing the connection.
+                        Some(we) => match held.take() {
+                            Some(conn) => return Ok(conn),
+                            None => bail!("WebRTC failed: {}; fallback failed: {}", we, e),
+                        },
+                        None if webrtc_fut.is_none() => match held.take() {
+                            Some(conn) => return Ok(conn),
+                            None => return Err(e),
+                        },
                         None => others_err = Some(e),
                     },
                 }
@@ -1066,7 +1070,7 @@ impl Client {
                         }
                         // The ? / secure_connection failures below return early; webrtc_guard stays
                         // in scope and closes the offerer on any such exit (loss, error, cancellation).
-                        let (mut conn, kcp, mut typ, direct) = race_result?;
+                        let (mut conn, kcp, mut typ, mut direct) = race_result?;
                         feedback = rr.feedback;
                         log::info!("{:?} used to establish {typ} connection", start.elapsed());
                         let pk = match Self::secure_connection(
@@ -1116,6 +1120,10 @@ impl Client {
                                 .await?;
                                 conn = relay_conn;
                                 typ = if use_ws() { "WebSocket" } else { "Relay" };
+                                // The transport is now a relay: the WebRTC win it replaced must
+                                // not carry its direct flag into the return, or the relay is
+                                // reported P2P and the outer race treats it as one.
+                                direct = false;
                                 pk
                             }
                             Err(e) => return Err(e),
@@ -1331,50 +1339,81 @@ impl Client {
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
 
-        let mut connect_futures = Vec::new();
+        // Each attempt carries whether its path is direct (4th field). TCP/UDP/IPv6 punch are
+        // always direct; WebRTC is direct only when ICE nominated a non-TURN pair.
+        let mut direct_futures = Vec::new();
         if allow_tcp_punch {
             let fut = connect_tcp_local(peer, Some(local_addr), connect_timeout);
-            connect_futures.push(
+            direct_futures.push(
                 async move {
                     let conn = fut.await?;
-                    Ok((conn, None, "TCP"))
+                    Ok((conn, None, "TCP", true))
                 }
                 .boxed(),
             );
         }
         if let Some(udp_socket_nat) = udp_socket_nat {
-            connect_futures.push(udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).boxed());
-        }
-        if let Some(udp_socket_v6) = udp_socket_v6 {
-            connect_futures.push(udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).boxed());
-        }
-        // Race a clone of the offerer; the guard retains its own clone so a losing/cancelled race
-        // still closes the pc (select_ok drops the future's clone without closing).
-        if let Some(stream) = webrtc_guard.as_ref().and_then(|g| g.stream()) {
-            let mut raced = stream.clone();
-            // The punch-tuned timeout can be as low as 1s — enough for a raw TCP SYN but not for
-            // candidate trickle + ICE checks + DTLS. Give WebRTC its own floor (prefer-P2P) so a
-            // viable P2P path is not abandoned before it can complete; TCP/UDP keep the tighter
-            // timeout, so a working direct connection still wins the race immediately, and the
-            // relay fallback below only waits the extra time when direct attempts all failed.
-            let webrtc_timeout = connect_timeout.max(Self::WEBRTC_PREFER_WINDOW_MS);
-            connect_futures.push(
+            direct_futures.push(
                 async move {
-                    raced.wait_connected(webrtc_timeout).await?;
-                    Ok((Stream::WebRTC(raced), None, "WebRTC"))
+                    let (conn, kcp, typ) =
+                        udp_nat_connect(udp_socket_nat, "UDP", connect_timeout).await?;
+                    Ok((conn, kcp, typ, true))
                 }
                 .boxed(),
             );
         }
-        // Run all connection attempts concurrently, return the first successful one
-        let direct_result = if connect_futures.is_empty() {
-            Err(anyhow!("No direct transport available"))
-        } else {
-            select_ok(connect_futures).await.map(|conn| conn.0)
+        if let Some(udp_socket_v6) = udp_socket_v6 {
+            direct_futures.push(
+                async move {
+                    let (conn, kcp, typ) =
+                        udp_nat_connect(udp_socket_v6, "IPv6", connect_timeout).await?;
+                    Ok((conn, kcp, typ, true))
+                }
+                .boxed(),
+            );
+        }
+        // Race a clone of the offerer; the guard retains its own clone so a losing/cancelled race
+        // still closes the pc (select_ok drops the future's clone without closing).
+        let webrtc_fut = webrtc_guard
+            .as_ref()
+            .and_then(|g| g.stream())
+            .map(|stream| {
+                let mut raced = stream.clone();
+                // The punch-tuned timeout can be as low as 1s — enough for a raw TCP SYN but not
+                // for candidate trickle + ICE checks + DTLS. Give WebRTC its own floor (prefer-P2P)
+                // so a viable P2P path is not abandoned before it can complete; TCP/UDP keep the
+                // tighter timeout, so a working direct connection still wins immediately, and the
+                // relay fallback only waits the extra time when direct attempts all failed.
+                let webrtc_timeout = connect_timeout.max(Self::WEBRTC_PREFER_WINDOW_MS);
+                async move {
+                    raced.wait_connected(webrtc_timeout).await?;
+                    // Resolve the pair here: a TURN win is relayed, not direct, and must be held
+                    // behind still-racing direct attempts rather than committed as P2P.
+                    let relayed = raced.is_relayed().await.unwrap_or(true);
+                    Ok((Stream::WebRTC(raced), None, "WebRTC", !relayed))
+                }
+                .boxed()
+            });
+        // Prefer P2P: a direct result wins outright, a relayed WebRTC (TURN) is held for the
+        // window so a direct punch can still land. Falls back to plain select_ok when only one
+        // kind is present.
+        let direct_result = match (webrtc_fut, direct_futures.is_empty()) {
+            (Some(webrtc_fut), false) => {
+                race_transports_prefer_webrtc(
+                    webrtc_fut,
+                    direct_futures,
+                    Self::WEBRTC_PREFER_WINDOW_MS,
+                    |r| r.3,
+                )
+                .await
+            }
+            (Some(webrtc_fut), true) => webrtc_fut.await,
+            (None, false) => select_ok(direct_futures).await.map(|c| c.0),
+            (None, true) => Err(anyhow!("No direct transport available")),
         };
-        let (mut conn, kcp, mut typ) = match direct_result {
-            Ok(conn) => (Ok(conn.0), conn.1, conn.2),
-            Err(e) => (Err(e), None, ""),
+        let (mut conn, kcp, mut typ, mut direct) = match direct_result {
+            Ok((conn, kcp, typ, direct)) => (Ok(conn), kcp, typ, direct),
+            Err(e) => (Err(e), None, "", false),
         };
         if let Some(stop) = webrtc_bridge_stop {
             let _ = stop.send(());
@@ -1382,7 +1421,6 @@ impl Client {
         // webrtc_guard stays armed across the relay override and secure_connection below; it is
         // disarmed only at the successful return when WebRTC is the kept transport.
 
-        let mut direct = !conn.is_err();
         // Keep a WebRTC win instead of replacing it with the RustDesk relay: under relay-by-
         // policy the pc was built with Relay-only ICE (TURN configured), which already honors
         // the relay requirement, and under ws-forced relay a direct full-ICE connection is the
@@ -5318,6 +5356,51 @@ mod webrtc_race_tests {
         .unwrap();
         assert_eq!(got, "ipv6");
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    // WebRTC fails first (others still racing), then a relay arrives with a direct attempt still
+    // unfinished behind it. The relay must not be committed while that direct attempt can win.
+    #[tokio::test]
+    async fn relay_does_not_preempt_unfinished_direct_after_webrtc_fails() {
+        let got = race_transports_prefer_webrtc(
+            err_after(5, "webrtc dead"),
+            vec![ok_after(10, "relay"), ok_after(100, "ipv6")],
+            60_000,
+            |t| *t == "ipv6",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "ipv6");
+    }
+
+    // A relay is held with a direct attempt racing behind it, then WebRTC fails. The held relay
+    // must not be committed while the direct attempt is still in flight.
+    #[tokio::test]
+    async fn held_relay_waits_for_racing_direct_when_webrtc_fails() {
+        let got = race_transports_prefer_webrtc(
+            err_after(50, "webrtc dead"),
+            vec![ok_after(10, "relay"), ok_after(100, "ipv6")],
+            60_000,
+            |t| *t == "ipv6",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "ipv6");
+    }
+
+    // Both attempts error, but a relay was parked before they did — it is the outcome, not a
+    // composed error.
+    #[tokio::test]
+    async fn held_relay_survives_both_errors() {
+        let got = race_transports_prefer_webrtc(
+            err_after(50, "webrtc dead"),
+            vec![ok_after(10, "relay"), err_after(100, "ipv6 dead")],
+            60_000,
+            |t| *t == "ipv6",
+        )
+        .await
+        .unwrap();
+        assert_eq!(got, "relay");
     }
 
     #[tokio::test]
