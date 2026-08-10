@@ -2452,8 +2452,6 @@ pub fn is_udp_disabled() -> bool {
     Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
-pub const OPTION_ENABLE_KCP_CC: &str = "enable-kcp-congestion-control";
-
 /// Run KCP with its congestion window (nc=0) instead of the turbo profile it has always shipped.
 ///
 /// Opt-in: which profile wins depends on why packets are lost — nc=1 deepens real congestion,
@@ -2461,7 +2459,7 @@ pub const OPTION_ENABLE_KCP_CC: &str = "enable-kcp-congestion-control";
 /// without a shaped link, so keep what users run today.
 #[inline]
 pub fn get_kcp_cc_enabled() -> bool {
-    Config::get_option(OPTION_ENABLE_KCP_CC) == "Y"
+    Config::get_option(keys::OPTION_ENABLE_KCP_CC) == "Y"
 }
 
 // this crate https://github.com/yoshd/stun-client supports nat type

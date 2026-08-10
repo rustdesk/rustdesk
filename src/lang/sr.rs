@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Podrazumevana brzina dodirne table"),
         ("Numeric one-time password", "Numerička jednokratna lozinka"),
         ("Enable IPv6 P2P connection", "Omogući IPv6 P2P konekciju"),
-        ("Enable WebRTC P2P connection", "Omogući WebRTC P2P konekciju"),
         ("Enable UDP hole punching", "Omogući UDP hole punching"),
         ("View camera", "Pregled kamere"),
         ("Enable camera", "Omogući kameru"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Omogući"),
         ("Reuse one connection for port forwarding", "Ponovo koristi jednu vezu za prosleđivanje portova"),
         ("port-forward-mux-tip", "Sve veze jednog prosleđivanja portova idu kroz jednu vezu ka drugoj strani, umesto povezivanja i prijavljivanja iznova za svaku od njih."),
+        ("Enable WebRTC P2P connection", "Omogući WebRTC P2P konekciju"),
     ].iter().cloned().collect();
 }

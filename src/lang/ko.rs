@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "기본 트랙패드 속도"),
         ("Numeric one-time password", "숫자 일회용 비밀번호"),
         ("Enable IPv6 P2P connection", "IPv6 P2P 연결 사용"),
-        ("Enable WebRTC P2P connection", "WebRTC P2P 연결 사용"),
         ("Enable UDP hole punching", "UDP 홀 펀칭 사용"),
         ("View camera", "카메라 보기"),
         ("Enable camera", "카메라 허용"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "활성화"),
         ("Reuse one connection for port forwarding", "포트 포워딩에 연결 하나를 재사용"),
         ("port-forward-mux-tip", "포트 포워딩 하나의 모든 연결을 상대방과의 단일 연결로 전달합니다. 연결마다 다시 접속하고 로그인하지 않습니다."),
+        ("Enable WebRTC P2P connection", "WebRTC P2P 연결 사용"),
     ].iter().cloned().collect();
 }

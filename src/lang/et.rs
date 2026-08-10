@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Vaikimisi puuteplaadi kiirus"),
         ("Numeric one-time password", "Numbriline ühekordne parool"),
         ("Enable IPv6 P2P connection", "Luba IPv6 P2P-ühendus"),
-        ("Enable WebRTC P2P connection", "Luba WebRTC P2P-ühendus"),
         ("Enable UDP hole punching", "Luba UDP-augustamine"),
         ("View camera", "Vaata kaamerat"),
         ("Enable camera", "Luba kaamera"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Luba"),
         ("Reuse one connection for port forwarding", "Kasuta pordi suunamiseks üht ühendust"),
         ("port-forward-mux-tip", "Juhib ühe pordisuunamise kõik ühendused ühe teise arvutiga loodud ühenduse kaudu, selle asemel et iga ühenduse jaoks uuesti ühenduda ja sisse logida."),
+        ("Enable WebRTC P2P connection", "Luba WebRTC P2P-ühendus"),
     ].iter().cloned().collect();
 }

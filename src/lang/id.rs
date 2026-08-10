@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Kecepatan default trackpad"),
         ("Numeric one-time password", "Kata sandi sekali pakai numerik"),
         ("Enable IPv6 P2P connection", "Aktifkan koneksi P2P IPv6"),
-        ("Enable WebRTC P2P connection", "Aktifkan koneksi P2P WebRTC"),
         ("Enable UDP hole punching", "Aktifkan UDP hole punching"),
         ("View camera", "Lihat Kamera"),
         ("Enable camera", "Aktifkan kamera"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Aktifkan"),
         ("Reuse one connection for port forwarding", "Gunakan ulang satu koneksi untuk penerusan port"),
         ("port-forward-mux-tip", "Menyalurkan semua koneksi dari satu penerusan port melalui satu koneksi ke perangkat lain, alih-alih menyambung dan masuk lagi untuk setiap koneksi."),
+        ("Enable WebRTC P2P connection", "Aktifkan koneksi P2P WebRTC"),
     ].iter().cloned().collect();
 }

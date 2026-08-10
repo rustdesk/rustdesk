@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Alapértelmezett érintőpad sebessége"),
         ("Numeric one-time password", "Numerikus, egyszer használatos jelszó"),
         ("Enable IPv6 P2P connection", "IPv6 P2P kapcsolat engedélyezése"),
-        ("Enable WebRTC P2P connection", "WebRTC P2P kapcsolat engedélyezése"),
         ("Enable UDP hole punching", "UDP résszűrés engedélyezése"),
         ("View camera", "Kamera nézet"),
         ("Enable camera", "Kamera engedélyezése"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Engedélyezés"),
         ("Reuse one connection for port forwarding", "Egyetlen kapcsolat újrafelhasználása a portátirányításhoz"),
         ("port-forward-mux-tip", "Egy portátirányítás összes kapcsolatát egyetlen, a másik géppel létesített kapcsolaton vezeti át, ahelyett hogy mindegyikhez újra csatlakozna és bejelentkezne."),
+        ("Enable WebRTC P2P connection", "WebRTC P2P kapcsolat engedélyezése"),
     ].iter().cloned().collect();
 }

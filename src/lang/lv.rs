@@ -676,7 +676,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Default trackpad speed", "Noklusējuma skārienpaliktņa ātrums"),
         ("Numeric one-time password", "Vienreiz lietojama ciparu parole"),
         ("Enable IPv6 P2P connection", "Iespējot IPv6 P2P savienojumu"),
-        ("Enable WebRTC P2P connection", "Iespējot WebRTC P2P savienojumu"),
         ("Enable UDP hole punching", "Iespējot UDP caurumu veidošanu"),
         ("View camera", "Skatīt kameru"),
         ("Enable camera", "Iespējot kameru"),
@@ -769,5 +768,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Iespējot"),
         ("Reuse one connection for port forwarding", "Atkārtoti izmantot vienu savienojumu portu pārsūtīšanai"),
         ("port-forward-mux-tip", "Visi viena portu pārsūtījuma savienojumi tiek novadīti pa vienu savienojumu ar otru datoru, nevis katram no tiem izveidojot jaunu savienojumu un pieteikšanos."),
+        ("Enable WebRTC P2P connection", "Iespējot WebRTC P2P savienojumu"),
     ].iter().cloned().collect();
 }
