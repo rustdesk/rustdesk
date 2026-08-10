@@ -8,6 +8,10 @@ on:
 
 jobs:
   run-flutter-nightly-build:
+    # Caller must grant at least what nested jobs request (e.g. generate-sbom).
+    # Forks default GITHUB_TOKEN to read-only, which otherwise fails validation.
+    permissions:
+      contents: write
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
