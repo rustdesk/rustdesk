@@ -1088,8 +1088,9 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 }
 
 /// Index of the compositor's PRIMARY output; 0 when unknown. Asking `assign_wayland_outputs` makes
-/// the advertised primary and geometry agree, but not below two connectors or two outputs, where
-/// `augment_with_wayland_geometry` declines to run the assignment.
+/// the advertised primary and geometry agree. `augment_with_wayland_geometry` runs the assignment
+/// down to a single connector or output now; only an empty compositor list leaves everything
+/// unaugmented, and there 0 is all there is to say.
 pub(super) fn get_primary_index() -> usize {
     let list = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
@@ -1119,7 +1120,16 @@ fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
         return infos;
     }
     let wl = scrap::wayland::display::get_displays();
-    if wl.displays.len() < 2 {
+    if wl.displays.is_empty() {
+        return infos;
+    }
+    // One connector against one output is the origin-only case: the lone output can still sit at
+    // a non-zero origin this side cannot see, but it keeps the scale-1 convention — a single
+    // display is advertised at physical size (see `logical_rects_of`), so its logical size must
+    // not be adopted. More connectors than the one output is an inconsistent snapshot, and the
+    // layout-order fallback in `assign_wayland_outputs` would plant that origin on a guess.
+    let origin_only = wl.displays.len() == 1;
+    if origin_only && drm.len() > 1 {
         return infos;
     }
     let matched = assign_wayland_outputs(drm, &wl.displays);
@@ -1129,6 +1139,9 @@ fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
         };
         info.x = w.x;
         info.y = w.y;
+        if origin_only {
+            continue;
+        }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
                 info.scale = drm[i].width as f64 / lw as f64;

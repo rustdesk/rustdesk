@@ -159,14 +159,22 @@ pub(super) async fn update_uinput_resolution() {
     // mis-maps the pointer whenever the compositor arranged the outputs side by side.
     //
     // Off the executor: the compositor query can block for the socket probe deadline, and this
-    // runs on current-thread runtimes (session init and the hotplug worker).
-    let rect = match hbb_common::tokio::task::spawn_blocking(|| {
+    // runs on current-thread runtimes (session init and the hotplug worker). The layout baseline
+    // is computed in the SAME task: a failed lookup is not cached, so asking for the rects
+    // afterwards would rerun the whole socket probe synchronously.
+    let (rect, layout) = match hbb_common::tokio::task::spawn_blocking(|| {
         scrap::wayland::display::clear_wayland_displays_cache();
-        scrap::wayland::display::get_desktop_rect_for_uinput().or_else(drm_desktop_rect_for_uinput)
+        match scrap::wayland::display::get_desktop_rect_for_uinput() {
+            // The lookup above just cached the displays, so the rects come from that snapshot.
+            Some(rect) => Some((rect, scrap::wayland::display::get_display_rects_for_uinput())),
+            // Raw DRM union: there is no compositor layout to baseline. Empty keeps the #15601
+            // remap inactive, which is right when the origins are unknown anyway.
+            None => drm_desktop_rect_for_uinput().map(|rect| (rect, Vec::new())),
+        }
     })
     .await
     {
-        Ok(Some(rect)) => rect,
+        Ok(Some(pair)) => pair,
         Ok(None) => {
             log::warn!("Failed to get desktop rect for uinput");
             return;
@@ -179,9 +187,7 @@ pub(super) async fn update_uinput_resolution() {
     // Re-snapshot the baseline on every call: this runs at session init and after every hotplug, and
     // the baseline is what the client's coordinates are measured against.
     let snapshot_layout = || {
-        super::display_service::set_wayland_layout_baseline(
-            scrap::wayland::display::get_display_rects_for_uinput(),
-        );
+        super::display_service::set_wayland_layout_baseline(layout.clone());
     };
     // Reprogram the device only when the range actually changes. A display stuck in a rebuild loop
     // calls this about once a second, and reapplying an identical range is an IPC roundtrip plus a
