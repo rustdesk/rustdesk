@@ -153,29 +153,18 @@ pub(super) async fn update_uinput_resolution() {
     if !crate::input_service::wayland_use_uinput() {
         return;
     }
-    // A greeter's `--server` gets no compositor variables, so the enumerator cannot answer and
-    // the device would keep its default range. The DRM displays are the ones being captured, so
-    // their coordinate space matches by construction; ask them first rather than after a failure.
-    let rect = if crate::platform::linux::is_login_screen_wayland_cached() {
-        let Some(rect) = drm_desktop_rect_for_uinput() else {
+    // Compositor first at a login screen too: a greeter runs one, and the hbb_common socket
+    // fallback reaches it with no environment variables. The DRM union is the fallback, and it is
+    // a real loss to land there on a multi-monitor host: DRM has no origins, so its union rect
+    // mis-maps the pointer whenever the compositor arranged the outputs side by side.
+    scrap::wayland::display::clear_wayland_displays_cache();
+    let rect = match scrap::wayland::display::get_desktop_rect_for_uinput()
+        .or_else(drm_desktop_rect_for_uinput)
+    {
+        Some(rect) => rect,
+        None => {
             log::warn!("Failed to get desktop rect for uinput");
             return;
-        };
-        log::info!(
-            "uinput desktop rect taken from the DRM display list (no compositor here): {rect:?}"
-        );
-        rect
-    } else {
-        scrap::wayland::display::clear_wayland_displays_cache();
-        // Also for a compositor that answers late: the DRM list beats no answer.
-        match scrap::wayland::display::get_desktop_rect_for_uinput()
-            .or_else(drm_desktop_rect_for_uinput)
-        {
-            Some(rect) => rect,
-            None => {
-                log::warn!("Failed to get desktop rect for uinput");
-                return;
-            }
         }
     };
     // Re-snapshot the baseline on every call: this runs at session init and after every hotplug, and

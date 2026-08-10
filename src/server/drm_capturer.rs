@@ -1095,9 +1095,6 @@ pub(super) fn get_primary_index() -> usize {
         ProbeState::Available(_, list) => list.clone(),
         _ => return 0,
     };
-    if !wayland_outputs_askable() {
-        return 0;
-    }
     let wl = scrap::wayland::display::get_displays();
     if wl.displays.is_empty() {
         return 0;
@@ -1108,18 +1105,16 @@ pub(super) fn get_primary_index() -> usize {
         .unwrap_or(0)
 }
 
-/// Whether the compositor can be asked for its outputs here. A login screen has none, and
-/// `get_displays()` does not cache that failure, so it reopens a connection every call. Both
-/// callers treat an empty list as "no augmentation", so skipping cannot change either answer.
-fn wayland_outputs_askable() -> bool {
-    !crate::platform::linux::is_login_screen_wayland_cached()
-}
-
 /// DRM reports every monitor at physical size and origin (0,0), stacking a multi-monitor client.
+///
+/// Asked at login screens too, on purpose: a greeter runs a compositor, and the socket fallback in
+/// hbb_common lets the enumerator reach it with no environment variables. Where that fallback
+/// cannot answer, the list comes back empty and everything stays unaugmented, which is what the
+/// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
     // Below two displays there is nothing to augment, compositor or not.
-    if drm.len() < 2 || !wayland_outputs_askable() {
+    if drm.len() < 2 {
         return infos;
     }
     let wl = scrap::wayland::display::get_displays();
