@@ -157,13 +157,22 @@ pub(super) async fn update_uinput_resolution() {
     // fallback reaches it with no environment variables. The DRM union is the fallback, and it is
     // a real loss to land there on a multi-monitor host: DRM has no origins, so its union rect
     // mis-maps the pointer whenever the compositor arranged the outputs side by side.
-    scrap::wayland::display::clear_wayland_displays_cache();
-    let rect = match scrap::wayland::display::get_desktop_rect_for_uinput()
-        .or_else(drm_desktop_rect_for_uinput)
+    //
+    // Off the executor: the compositor query can block for the socket probe deadline, and this
+    // runs on current-thread runtimes (session init and the hotplug worker).
+    let rect = match hbb_common::tokio::task::spawn_blocking(|| {
+        scrap::wayland::display::clear_wayland_displays_cache();
+        scrap::wayland::display::get_desktop_rect_for_uinput().or_else(drm_desktop_rect_for_uinput)
+    })
+    .await
     {
-        Some(rect) => rect,
-        None => {
+        Ok(Some(rect)) => rect,
+        Ok(None) => {
             log::warn!("Failed to get desktop rect for uinput");
+            return;
+        }
+        Err(err) => {
+            log::warn!("The desktop rect probe task failed: {err}");
             return;
         }
     };

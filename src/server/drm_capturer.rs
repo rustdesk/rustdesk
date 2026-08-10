@@ -1113,8 +1113,9 @@ pub(super) fn get_primary_index() -> usize {
 /// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
-    // Below two displays there is nothing to augment, compositor or not.
-    if drm.len() < 2 {
+    // A single display is still augmented: on a multi-GPU host the one connector this service can
+    // open may sit at a non-zero origin in the compositor layout, and DRM alone reports (0,0).
+    if drm.is_empty() {
         return infos;
     }
     let wl = scrap::wayland::display::get_displays();
