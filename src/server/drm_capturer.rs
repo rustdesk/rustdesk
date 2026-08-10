@@ -827,8 +827,9 @@ pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
-/// MAY BLOCK for seconds: never a routing gate.
-pub(super) fn is_available() -> bool {
+/// MAY BLOCK for seconds: never a routing gate. The one cross-module caller is the login-screen
+/// headless decision, where an unsettled "no" would start Xorg over a live Wayland greeter.
+pub(crate) fn is_available() -> bool {
     let verdict = {
         let mut st = DRM_STATE.lock().unwrap();
         if let ProbeState::Unavailable(since) = &*st {

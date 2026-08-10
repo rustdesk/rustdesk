@@ -230,18 +230,18 @@ pub fn is_headless() -> bool {
 }
 
 /// The Wayland greeter on seat0, if the DRM backend can capture and inject into it.
-///
-/// The cached probe, to match the routing gate in `Connection`: not yet settled answers false,
-/// which is what upstream does today.
 #[cfg(feature = "drm")]
 fn drm_login_screen_seat0_username() -> Option<String> {
-    if !crate::server::drm_capturer::is_available_cached() {
-        return None;
-    }
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
     if !is_gdm_user(&values[1])
         || get_display_server_of_session(&values[0]) != DISPLAY_SERVER_WAYLAND
     {
+        return None;
+    }
+    // The probing form, asked only once a Wayland greeter is on seat0: the cached probe answers
+    // false while the warm-up is unsettled, and that would let try_start_x_session put Xorg over
+    // a live greeter. This is a login-time path, so a bounded definitive verdict is affordable.
+    if !crate::server::drm_capturer::is_available() {
         return None;
     }
     Some(values[1].clone())
@@ -293,22 +293,25 @@ impl DesktopManager {
     }
 
     fn get_supported_display_seat0_username(&self) -> Option<String> {
-        // A Wayland greeter the DRM backend can serve is a supported display. Asked here and not in
-        // `new()` because the seat0 read there hides greeters, and because the DRM probe has not
-        // settled at startup.
+        // Read seat0 fresh on every query: the values cached in `new()` go stale across a logout
+        // or fast-user-switch, which would skip the greeter probe below and hand back the previous
+        // session owner. Queried here and not in `new()` also because the read there hides greeters.
+        let seat0_values = get_values_of_seat0(&[0, 2]);
+        let seat0_username = seat0_values[1].clone();
         #[cfg(feature = "drm")]
-        if self.seat0_username.is_empty() || is_gdm_user(&self.seat0_username) {
+        if seat0_username.is_empty() || is_gdm_user(&seat0_username) {
             if let Some(username) = drm_login_screen_seat0_username() {
                 return Some(username);
             }
         }
-        if is_gdm_user(&self.seat0_username) && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
+        if seat0_username.is_empty() {
+            None
+        } else if is_gdm_user(&seat0_username)
+            && get_display_server_of_session(&seat0_values[0]) == DISPLAY_SERVER_WAYLAND
         {
             None
-        } else if self.seat0_username.is_empty() {
-            None
         } else {
-            Some(self.seat0_username.clone())
+            Some(seat0_username)
         }
     }
 
