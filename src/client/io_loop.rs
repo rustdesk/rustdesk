@@ -1353,9 +1353,13 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
-                    self.handler
+                    if !self
+                        .handler
                         .handle_hash(&self.handler.password.clone(), hash, peer)
-                        .await;
+                        .await
+                    {
+                        return false;
+                    }
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {

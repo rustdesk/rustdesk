@@ -3548,7 +3548,7 @@ pub async fn handle_hash(
     hash: Hash,
     interface: &impl Interface,
     peer: &mut Stream,
-) {
+) -> bool {
     lc.write().unwrap().hash = hash.clone();
     // Take care of password application order
 
@@ -3572,7 +3572,7 @@ pub async fn handle_hash(
                     lc.write().unwrap().allow_switch_back_once();
                     send_switch_login_request(lc.clone(), peer, uuid).await;
                     lc.write().unwrap().password_source = Default::default();
-                    return;
+                    return true;
                 }
             }
         }
@@ -3587,7 +3587,7 @@ pub async fn handle_hash(
             let mut msg = Message::new();
             msg.set_misc(misc);
             allow_err!(peer.send(&msg).await);
-            return;
+            return false;
         }
     }
     // last password
@@ -3651,7 +3651,7 @@ pub async fn handle_hash(
             interface.msgbox("terminal-admin-login", "", "", "");
         }
         lc.write().unwrap().hash = hash;
-        return;
+        return true;
     }
 
     let password = if password.is_empty() {
@@ -3677,6 +3677,7 @@ pub async fn handle_hash(
 
     send_login(lc.clone(), os_username, os_password, password, peer).await;
     lc.write().unwrap().hash = hash;
+    true
 }
 
 #[inline]
@@ -3804,7 +3805,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err, "");
     }
-    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream);
+    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool;
     async fn handle_login_from_ui(
         &self,
         os_username: String,
