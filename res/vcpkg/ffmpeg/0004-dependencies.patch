@@ -50,8 +50,8 @@ index a8b74e0..c99f41c 100755
                                 die "ERROR: opencl not found"; } &&
                               { test_cpp_condition "OpenCL/cl.h" "defined(CL_VERSION_1_2)" ||
                                 test_cpp_condition "CL/cl.h" "defined(CL_VERSION_1_2)" ||
-@@ -7204,10 +7207,10 @@ enabled amf &&
-         "(AMF_VERSION_MAJOR << 48 | AMF_VERSION_MINOR << 32 | AMF_VERSION_RELEASE << 16 | AMF_VERSION_BUILD_NUM) >= 0x0001000400210000"
+@@ -7566,10 +7569,10 @@ enabled amf &&
+        "(AMF_VERSION_MAJOR << 48 | AMF_VERSION_MINOR << 32 | AMF_VERSION_RELEASE << 16 | AMF_VERSION_BUILD_NUM) >= 0x0001000400240000"
  
  # Funny iconv installations are not unusual, so check it after all flags have been set
 -if enabled libc_iconv; then

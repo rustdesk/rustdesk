@@ -29,10 +29,10 @@ index 65c9fad..5ad73f3 100644
  
  SECTION_RODATA
  
-diff --git a/libavcodec/x86/vvc/vvc_mc.asm b/libavcodec/x86/vvc/vvc_mc.asm
+diff --git a/libavcodec/x86/vvc/mc.asm b/libavcodec/x86/vvc/mc.asm
 index 30aa97c..3975f98 100644
---- a/libavcodec/x86/vvc/vvc_mc.asm
-+++ b/libavcodec/x86/vvc/vvc_mc.asm
+--- a/libavcodec/x86/vvc/mc.asm
++++ b/libavcodec/x86/vvc/mc.asm
 @@ -31,7 +31,9 @@
  
  SECTION_RODATA 32

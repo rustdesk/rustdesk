@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO ffmpeg/ffmpeg
     REF "n${VERSION}"
-    SHA512 3b273769ef1a1b63aed0691eef317a760f8c83b1d0e1c232b67bbee26db60b4864aafbc88df0e86d6bebf07185bbd057f33e2d5258fde6d97763b9994cd48b6f
+    SHA512 dc727b10f2ae3f3569b9f3a573a9acafa7010e264669bce619e71c2f33f212424e9f04118c24fb6cfbf4e027c9857dc4ec37b954e82bc1046df6cfbb6cff768c
     HEAD_REF master
     PATCHES
     0001-create-lib-libraries.patch
@@ -15,8 +15,6 @@ vcpkg_from_github(
     0020-fix-aarch64-libswscale.patch
     0024-fix-osx-host-c11.patch
     0040-ffmpeg-add-av_stream_get_first_dts-for-chromium.patch # Do not remove this patch. It is required by chromium
-    0041-add-const-for-opengl-definition.patch
-    0043-fix-miss-head.patch
     patch/0001-avcodec-amfenc-add-query_timeout-option-for-h264-hev.patch
     patch/0002-libavcodec-amfenc-reconfig-when-bitrate-change.patch
     patch/0004-videotoolbox-changing-bitrate.patch
@@ -70,7 +68,6 @@ set(OPTIONS "\
 --disable-avfilter \
 --disable-swresample \
 --disable-swscale \
---disable-postproc \
 --enable-decoder=h264 \
 --enable-decoder=hevc \
 --enable-parser=h264 \

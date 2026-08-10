@@ -1,64 +1,47 @@
-From 7323bd68c1b34e9298ea557ff7a3e1883b653957 Mon Sep 17 00:00:00 2001
-From: 21pages <sunboeasy@gmail.com>
-Date: Tue, 10 Dec 2024 14:28:16 +0800
-Subject: [PATCH 4/5] mediacodec changing bitrate
-
-Signed-off-by: 21pages <sunboeasy@gmail.com>
----
- libavcodec/mediacodec_wrapper.c | 98 +++++++++++++++++++++++++++++++++
- libavcodec/mediacodec_wrapper.h |  7 +++
- libavcodec/mediacodecenc.c      | 18 ++++++
- 3 files changed, 123 insertions(+)
-
 diff --git a/libavcodec/mediacodec_wrapper.c b/libavcodec/mediacodec_wrapper.c
-index 96c886666a..06b8504304 100644
+index 283bbe72..11625ff7 100644
 --- a/libavcodec/mediacodec_wrapper.c
 +++ b/libavcodec/mediacodec_wrapper.c
 @@ -35,6 +35,8 @@
  #include "ffjni.h"
  #include "mediacodec_wrapper.h"
- 
+
 +#define PARAMETER_KEY_VIDEO_BITRATE "video-bitrate"
 +
  struct JNIAMediaCodecListFields {
- 
+
      jclass mediacodec_list_class;
-@@ -195,6 +197,8 @@ struct JNIAMediaCodecFields {
+@@ -194,6 +196,7 @@ struct JNIAMediaCodecFields {
+
      jmethodID set_input_surface_id;
      jmethodID signal_end_of_input_stream_id;
- 
 +    jmethodID set_parameters_id;
-+
+
      jclass mediainfo_class;
- 
-     jmethodID init_id;
-@@ -248,6 +252,8 @@ static const struct FFJniField jni_amediacodec_mapping[] = {
+
+@@ -247,6 +250,7 @@ static const struct FFJniField jni_amediacodec_mapping[] = {
+
          { "android/media/MediaCodec", "setInputSurface", "(Landroid/view/Surface;)V", FF_JNI_METHOD, OFFSET(set_input_surface_id), 0 },
          { "android/media/MediaCodec", "signalEndOfInputStream", "()V", FF_JNI_METHOD, OFFSET(signal_end_of_input_stream_id), 0 },
- 
 +        { "android/media/MediaCodec", "setParameters", "(Landroid/os/Bundle;)V", FF_JNI_METHOD, OFFSET(set_parameters_id), 0 },
-+
+
      { "android/media/MediaCodec$BufferInfo", NULL, NULL, FF_JNI_CLASS, OFFSET(mediainfo_class), 1 },
- 
-         { "android/media/MediaCodec.BufferInfo", "<init>", "()V", FF_JNI_METHOD, OFFSET(init_id), 1 },
-@@ -292,6 +298,24 @@ typedef struct FFAMediaCodecJni {
- 
+
+@@ -292,6 +296,21 @@ typedef struct FFAMediaCodecJni {
+
  static const FFAMediaCodec media_codec_jni;
- 
-+struct JNIABundleFields
-+{
-+  jclass bundle_class;
-+  jmethodID init_id;
-+  jmethodID put_int_id;
+
++struct JNIABundleFields {
++    jclass bundle_class;
++    jmethodID init_id;
++    jmethodID put_int_id;
 +};
 +
 +#define OFFSET(x) offsetof(struct JNIABundleFields, x)
 +static const struct FFJniField jni_abundle_mapping[] = {
 +    { "android/os/Bundle", NULL, NULL, FF_JNI_CLASS, OFFSET(bundle_class), 1 },
-+
-+        { "android/os/Bundle", "<init>", "()V", FF_JNI_METHOD, OFFSET(init_id), 1 },
-+        { "android/os/Bundle", "putInt", "(Ljava/lang/String;I)V", FF_JNI_METHOD, OFFSET(put_int_id), 1 },
-+
++    { "android/os/Bundle", "<init>", "()V", FF_JNI_METHOD, OFFSET(init_id), 1 },
++    { "android/os/Bundle", "putInt", "(Ljava/lang/String;I)V", FF_JNI_METHOD, OFFSET(put_int_id), 1 },
 +    { NULL }
 +};
 +#undef OFFSET
@@ -66,12 +49,11 @@ index 96c886666a..06b8504304 100644
  #define JNI_GET_ENV_OR_RETURN(env, log_ctx, ret) do {              \
      (env) = ff_jni_get_env(log_ctx);                               \
      if (!(env)) {                                                  \
-@@ -1762,6 +1786,70 @@ static int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
+@@ -1762,6 +1781,59 @@ static int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
      return 0;
  }
- 
-+
-+static int mediacodec_jni_setParameter(FFAMediaCodec *ctx, const char* name, int value)
+
++static int mediacodec_jni_setParameter(FFAMediaCodec *ctx, const char *name, int value)
 +{
 +    JNIEnv *env = NULL;
 +    struct JNIABundleFields jfields = { 0 };
@@ -79,7 +61,7 @@ index 96c886666a..06b8504304 100644
 +    jstring key = NULL;
 +    FFAMediaCodecJni *codec = (FFAMediaCodecJni *)ctx;
 +    void *log_ctx = codec;
-+    int ret = -1;
++    int ret = AVERROR_EXTERNAL;
 +
 +    JNI_GET_ENV_OR_RETURN(env, codec, AVERROR_EXTERNAL);
 +
@@ -87,45 +69,35 @@ index 96c886666a..06b8504304 100644
 +        av_log(log_ctx, AV_LOG_ERROR, "Failed to init jfields\n");
 +        goto fail;
 +    }
-+
 +    object = (*env)->NewObject(env, jfields.bundle_class, jfields.init_id);
 +    if (!object) {
 +        av_log(log_ctx, AV_LOG_ERROR, "Failed to create bundle object\n");
 +        goto fail;
 +    }
-+
 +    key = ff_jni_utf_chars_to_jstring(env, name, log_ctx);
 +    if (!key) {
 +        av_log(log_ctx, AV_LOG_ERROR, "Failed to convert key to jstring\n");
 +        goto fail;
 +    }
-+
 +    (*env)->CallVoidMethod(env, object, jfields.put_int_id, key, value);
-+    if (ff_jni_exception_check(env, 1, log_ctx) < 0) {
++    if (ff_jni_exception_check(env, 1, log_ctx) < 0)
 +        goto fail;
-+    }
 +
 +    if (!codec->jfields.set_parameters_id) {
 +        av_log(log_ctx, AV_LOG_ERROR, "System doesn't support setParameters\n");
 +        goto fail;
 +    }
-+
 +    (*env)->CallVoidMethod(env, codec->object, codec->jfields.set_parameters_id, object);
-+    if (ff_jni_exception_check(env, 1, log_ctx) < 0) {
++    if (ff_jni_exception_check(env, 1, log_ctx) < 0)
 +        goto fail;
-+    }
-+
 +    ret = 0;
 +
 +fail:
-+    if (key) {
++    if (key)
 +        (*env)->DeleteLocalRef(env, key);
-+    }
-+    if (object) {
++    if (object)
 +        (*env)->DeleteLocalRef(env, object);
-+    }
 +    ff_jni_reset_jfields(env, &jfields, jni_abundle_mapping, 0, log_ctx);
-+
 +    return ret;
 +}
 +
@@ -134,113 +106,97 @@ index 96c886666a..06b8504304 100644
 +    return mediacodec_jni_setParameter(ctx, PARAMETER_KEY_VIDEO_BITRATE, bitrate);
 +}
 +
- static const FFAMediaFormat media_format_jni = {
-     .class = &amediaformat_class,
- 
-@@ -1821,6 +1909,8 @@ static const FFAMediaCodec media_codec_jni = {
+ static int mediacodec_jni_setAsyncNotifyCallback(FFAMediaCodec *codec,
+                                                  const FFAMediaCodecOnAsyncNotifyCallback *callback,
+                                                  void *userdata)
+@@ -1829,6 +1901,7 @@ static const FFAMediaCodec media_codec_jni = {
      .getConfigureFlagEncode = mediacodec_jni_getConfigureFlagEncode,
      .cleanOutputBuffers = mediacodec_jni_cleanOutputBuffers,
      .signalEndOfInputStream = mediacodec_jni_signalEndOfInputStream,
-+
 +    .setDynamicBitrate = mediacodec_jni_setDynamicBitrate,
+     .setAsyncNotifyCallback = mediacodec_jni_setAsyncNotifyCallback,
  };
- 
- typedef struct FFAMediaFormatNdk {
-@@ -2335,6 +2425,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
+
+@@ -2376,6 +2449,12 @@ static int mediacodec_ndk_signalEndOfInputStream(FFAMediaCodec *ctx)
      return 0;
  }
- 
+
 +static int mediacodec_ndk_setDynamicBitrate(FFAMediaCodec *ctx, int bitrate)
 +{
 +    av_log(ctx, AV_LOG_ERROR, "ndk setDynamicBitrate unavailable\n");
-+    return -1;
++    return AVERROR(ENOSYS);
 +}
 +
- static const FFAMediaFormat media_format_ndk = {
-     .class = &amediaformat_ndk_class,
- 
-@@ -2396,6 +2492,8 @@ static const FFAMediaCodec media_codec_ndk = {
+ static void mediacodec_ndk_onInputAvailable(AMediaCodec *impl, void *userdata,
+                                             int32_t index)
+ {
+@@ -2525,6 +2604,7 @@ static const FFAMediaCodec media_codec_ndk = {
      .getConfigureFlagEncode = mediacodec_ndk_getConfigureFlagEncode,
      .cleanOutputBuffers = mediacodec_ndk_cleanOutputBuffers,
      .signalEndOfInputStream = mediacodec_ndk_signalEndOfInputStream,
-+
 +    .setDynamicBitrate = mediacodec_ndk_setDynamicBitrate,
+     .setAsyncNotifyCallback = mediacodec_ndk_setAsyncNotifyCallback,
  };
- 
- FFAMediaFormat *ff_AMediaFormat_new(int ndk)
+
 diff --git a/libavcodec/mediacodec_wrapper.h b/libavcodec/mediacodec_wrapper.h
-index 11a4260497..86c64556ad 100644
+index 18d07964..97b744a7 100644
 --- a/libavcodec/mediacodec_wrapper.h
 +++ b/libavcodec/mediacodec_wrapper.h
-@@ -219,6 +219,8 @@ struct FFAMediaCodec {
- 
+@@ -235,6 +235,7 @@ struct FFAMediaCodec {
+
      // For encoder with FFANativeWindow as input.
      int (*signalEndOfInputStream)(FFAMediaCodec *);
-+
 +    int (*setDynamicBitrate)(FFAMediaCodec *codec, int bitrate);
- };
- 
- static inline char *ff_AMediaCodec_getName(FFAMediaCodec *codec)
-@@ -343,6 +345,11 @@ static inline int ff_AMediaCodec_signalEndOfInputStream(FFAMediaCodec *codec)
+
+     // Introduced in Android API 28
+     int (*setAsyncNotifyCallback)(FFAMediaCodec *codec,
+@@ -364,6 +365,11 @@ static inline int ff_AMediaCodec_signalEndOfInputStream(FFAMediaCodec *codec)
      return codec->signalEndOfInputStream(codec);
  }
- 
+
 +static inline int ff_AMediaCodec_setDynamicBitrate(FFAMediaCodec *codec, int bitrate)
 +{
 +    return codec->setDynamicBitrate(codec, bitrate);
 +}
 +
- int ff_Build_SDK_INT(AVCodecContext *avctx);
- 
- enum FFAMediaFormatColorRange {
+ static inline int ff_AMediaCodec_setAsyncNotifyCallback(FFAMediaCodec *codec,
+         const FFAMediaCodecOnAsyncNotifyCallback *callback,
+         void *userdata)
 diff --git a/libavcodec/mediacodecenc.c b/libavcodec/mediacodecenc.c
-index 6ca3968a24..221f7360f4 100644
+index 507c48df..f96dc1ca 100644
 --- a/libavcodec/mediacodecenc.c
 +++ b/libavcodec/mediacodecenc.c
-@@ -76,6 +76,8 @@ typedef struct MediaCodecEncContext {
-     int level;
-     int pts_as_dts;
-     int extract_extradata;
-+
-+    int last_bit_rate;
- } MediaCodecEncContext;
- 
- enum {
-@@ -193,6 +195,8 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
+@@ -86,6 +86,7 @@ typedef struct MediaCodecEncContext {
+     // Ref. MediaFormat KEY_OPERATING_RATE
+     int operating_rate;
+     int async_mode;
++    int64_t last_bit_rate;
+
+     AVMutex input_mutex;
+     AVCond input_cond;
+@@ -399,6 +400,8 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
      int ret;
      int gop;
- 
+
 +    s->last_bit_rate = avctx->bit_rate;
 +
-     if (s->use_ndk_codec < 0)
-         s->use_ndk_codec = !av_jni_get_java_vm(avctx);
- 
-@@ -542,11 +546,25 @@ static int mediacodec_send(AVCodecContext *avctx,
-     return 0;
- }
- 
-+static void update_config(AVCodecContext *avctx)
-+{
-+    MediaCodecEncContext *s = avctx->priv_data;
-+    if (avctx->bit_rate != s->last_bit_rate) {
-+        s->last_bit_rate = avctx->bit_rate;
-+        if (0 != ff_AMediaCodec_setDynamicBitrate(s->codec, avctx->bit_rate)) {
-+            av_log(avctx, AV_LOG_ERROR, "Failed to set bitrate to %d\n", avctx->bit_rate);
-+        } else {
-+            av_log(avctx, AV_LOG_INFO, "Set bitrate to %d\n", avctx->bit_rate);
-+        }
-+    }
-+}
-+
- static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
- {
+     // Init async state first, so we can do cleanup safely on error path.
+     ret = mediacodec_init_async_state(avctx);
+     if (ret < 0)
+@@ -841,6 +844,15 @@ static int mediacodec_encode(AVCodecContext *avctx, AVPacket *pkt)
      MediaCodecEncContext *s = avctx->priv_data;
      int ret;
- 
-+    update_config(avctx);
+
++    if (avctx->bit_rate != s->last_bit_rate) {
++        s->last_bit_rate = avctx->bit_rate;
++        ret = ff_AMediaCodec_setDynamicBitrate(s->codec, avctx->bit_rate);
++        if (ret)
++            av_log(avctx, AV_LOG_ERROR, "Failed to set bitrate to %" PRId64 "\n", avctx->bit_rate);
++        else
++            av_log(avctx, AV_LOG_INFO, "Set bitrate to %" PRId64 "\n", avctx->bit_rate);
++    }
++
      // Return on three case:
      // 1. Serious error
      // 2. Got a packet success
--- 
-2.43.0.windows.1
 
