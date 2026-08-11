@@ -226,6 +226,10 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--update" {
+                // The elevated updater cannot delete its running verified copy.
+                if let Err(err) = platform::schedule_current_verified_update_file_cleanup() {
+                    log::warn!("Failed to schedule verified update file cleanup: {}", err);
+                }
                 if config::is_disable_installation() {
                     return None;
                 }

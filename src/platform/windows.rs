@@ -100,6 +100,7 @@ use winreg::{enums::*, RegKey};
 mod acl;
 mod installer_handoff;
 mod installer_shell;
+mod verified_update;
 pub(crate) use acl::current_process_user_sid_string;
 pub use acl::{
     set_path_permission, set_path_permission_for_portable_service_shmem_dir,
@@ -110,6 +111,10 @@ use installer_handoff::run_cmds;
 use installer_shell::{
     embedded_shortcut_commands, embedded_tray_shortcut_commands, escape_nested_cmd_ampersands,
     shortcut_bytes, validate_install_value,
+};
+pub use verified_update::{
+    copy_and_verify_update_file_sha256, finish_verified_update_launch,
+    schedule_current_verified_update_file_cleanup, update_to_verified, VerifiedUpdateFile,
 };
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
