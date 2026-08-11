@@ -2279,8 +2279,6 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.update_privacy_mode(impl_key, false);
             }
             back_notification::PrivacyModeState::PrvOnSucceeded => {
-                self.handler
-                    .msgbox("custom-nocancel", "Privacy mode", "Enter privacy mode", "");
                 self.update_privacy_mode(impl_key, true);
             }
             back_notification::PrivacyModeState::PrvOnFailedDenied => {

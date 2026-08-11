@@ -712,6 +712,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ffi: gFFI,
             ));
           }
+          paints.add(Positioned(
+            top: 10,
+            left: 10,
+            child: privacyModeIndicator(widget.id),
+          ));
           return paints;
         }()));
   }
@@ -726,6 +731,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         paints.add(CursorPaint(widget.id));
       }
     }
+    paints.add(Positioned(
+      top: 10,
+      left: 10,
+      child: privacyModeIndicator(widget.id),
+    ));
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
   }

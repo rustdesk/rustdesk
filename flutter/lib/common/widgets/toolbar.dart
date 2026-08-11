@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/login.dart';
+import 'package:flutter_hbb/common/widgets/privacy_mode_indicator.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -69,6 +70,15 @@ Widget waylandKeyboardScopeChip(BuildContext context, String text) {
         context,
       ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
     ),
+  );
+}
+
+// Keep the status non-interactive so remote keyboard focus is unaffected.
+Widget privacyModeIndicator(String id) {
+  return PrivacyModeIndicator(
+    state: PrivacyModeState.find(id),
+    color: MyTheme.accent,
+    semanticsLabel: translate('Privacy mode'),
   );
 }
 

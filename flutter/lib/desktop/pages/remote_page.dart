@@ -974,6 +974,13 @@ class _RemotePageState extends State<RemotePage>
             QualityMonitor(_ffi.qualityMonitorModel), null, null),
       ),
     );
+    paints.add(
+      Positioned(
+        top: 10,
+        left: 10,
+        child: privacyModeIndicator(widget.id),
+      ),
+    );
     return Stack(
       children: paints,
     );
