@@ -837,10 +837,10 @@ pub(crate) enum Availability {
     Unsettled,
 }
 
-/// MAY BLOCK for seconds: never a routing gate. The one cross-module caller is the login-screen
-/// headless decision, which needs the tri-state: only a definitive `Unavailable` may route a
-/// login toward Xorg over what could still be a live Wayland greeter.
-pub(crate) fn availability() -> Availability {
+/// MAY BLOCK for seconds: never a routing gate, and never on the login request path — that path
+/// reads `availability_cached`. This blocking form serves the capture-side callers through
+/// `is_available`, where waiting out a settle is acceptable.
+fn availability() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         // A settled "no" STAYS the answer while it re-verifies off-thread. Flipping to Unknown
@@ -876,6 +876,54 @@ pub(crate) fn availability() -> Availability {
         };
     }
     let _in_flight = ProbeInFlightGuard;
+    probe_and_publish()
+}
+
+/// The non-blocking tri-state, for decisions on the LOGIN REQUEST path that must never wait: an
+/// unauthenticated peer reaches that path, so a probe there would let it park a worker for the
+/// probe deadline. Unknown kicks the probe off-thread and answers Unsettled, which the login
+/// decision treats as a possibly servable greeter (no Xorg) until the state settles.
+pub(crate) fn availability_cached() -> Availability {
+    let (verdict, stale_no) = {
+        let st = DRM_STATE.lock().unwrap();
+        let stale_no =
+            matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
+        let verdict = match &*st {
+            ProbeState::Available(since, _) => {
+                Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
+            }
+            ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
+            ProbeState::Unknown => None,
+        };
+        (verdict, stale_no)
+    };
+    if let Some((answer, stale)) = verdict {
+        if stale {
+            refresh_available_async();
+        }
+        if stale_no {
+            refresh_unavailable_async();
+        }
+        return answer;
+    }
+    if !DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        let in_flight = ProbeInFlightGuard;
+        let spawned = std::thread::Builder::new()
+            .name("drm-avail-probe".into())
+            .spawn(move || {
+                let _in_flight = in_flight;
+                probe_and_publish();
+            });
+        // On error the guard moved into the dropped closure and released the flag already.
+        if let Err(err) = spawned {
+            log::warn!("drm: could not spawn the availability probe thread: {err}");
+        }
+    }
+    Availability::Unsettled
+}
+
+/// Probe synchronously and publish the outcome. The caller must hold DRM_PROBE_IN_FLIGHT.
+fn probe_and_publish() -> Availability {
     let t = Instant::now();
     let result = query_displays();
     let mut st = DRM_STATE.lock().unwrap();

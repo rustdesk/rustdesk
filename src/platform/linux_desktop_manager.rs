@@ -305,12 +305,14 @@ fn drm_login_screen_seat0_username() -> Option<String> {
     {
         return None;
     }
-    // The probing form, asked only once a Wayland greeter is on seat0, and read as a tri-state:
-    // ONLY a definitive unavailable may hand this seat to the X11 path. An unsettled result (a
-    // probe in flight elsewhere, or a failure still below the disable threshold) means the live
-    // greeter may yet be servable, and answering "no greeter" inside that window is exactly what
-    // would let try_start_x_session put Xorg over it.
-    if crate::server::drm_capturer::availability()
+    // The cached tri-state, never the probing form: this runs on the login request path, which
+    // an unauthenticated peer reaches, so it must not wait out a probe deadline. ONLY a
+    // definitive unavailable may hand this seat to the X11 path — an unsettled result (probe
+    // still in flight, or failures below the disable threshold) means the live greeter may yet
+    // be servable, and answering "no greeter" inside that window is exactly what would let
+    // try_start_x_session put Xorg over it. Settling happens off-thread: the warm-up at server
+    // start, the kick inside availability_cached, and the TTL re-verifiers.
+    if crate::server::drm_capturer::availability_cached()
         == crate::server::drm_capturer::Availability::Unavailable
     {
         return None;
