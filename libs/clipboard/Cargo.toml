@@ -43,7 +43,7 @@ once_cell = {version = "1.18", optional = true}
 percent-encoding = {version  ="2.3", optional = true}
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
-fuser = {version = "0.15", default-features = false, optional = true}
+fuser = {version = "0.16", default-features = false, optional = true}
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cacao = {git="https://github.com/clslaid/cacao", branch = "feat/set-file-urls", optional = true}
