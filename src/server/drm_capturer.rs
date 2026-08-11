@@ -841,25 +841,29 @@ pub(crate) enum Availability {
 /// headless decision, which needs the tri-state: only a definitive `Unavailable` may route a
 /// login toward Xorg over what could still be a live Wayland greeter.
 pub(crate) fn availability() -> Availability {
-    let verdict = {
-        let mut st = DRM_STATE.lock().unwrap();
-        if let ProbeState::Unavailable(since) = &*st {
-            if since.elapsed() >= NEGATIVE_TTL {
-                publish_probe_state(&mut st, ProbeState::Unknown);
-                DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
-            }
-        }
-        match &*st {
+    let (verdict, stale_no) = {
+        let st = DRM_STATE.lock().unwrap();
+        // A settled "no" STAYS the answer while it re-verifies off-thread. Flipping to Unknown
+        // here (and zeroing the failure counter, as this used to do) reopened an Unsettled
+        // window every TTL on a permanently helper-less box, and the login decision reads
+        // Unsettled as a possible greeter — misrouting a headless login forever.
+        let stale_no =
+            matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
+        let verdict = match &*st {
             ProbeState::Available(since, _) => {
                 Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
             }
             ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
             ProbeState::Unknown => None, // fall through and probe with the lock released
-        }
+        };
+        (verdict, stale_no)
     };
     if let Some((answer, stale)) = verdict {
         if stale {
             refresh_available_async();
+        }
+        if stale_no {
+            refresh_unavailable_async();
         }
         return answer;
     }
@@ -914,6 +918,54 @@ pub(crate) fn availability() -> Availability {
 /// route the same way (into the non-DRM fallback).
 pub(crate) fn is_available() -> bool {
     availability() == Availability::Available
+}
+
+/// The negative mirror of `refresh_available_async`: re-verify a stale Unavailable without ever
+/// answering Unknown in the meantime. A failed or empty re-probe re-confirms the "no" with a
+/// fresh timestamp; only a non-empty display list flips the verdict.
+fn refresh_unavailable_async() {
+    if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let in_flight = ProbeInFlightGuard;
+    let sampled_gen = {
+        let st = DRM_STATE.lock().unwrap();
+        match &*st {
+            ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL => {}
+            _ => return,
+        }
+        DRM_STATE_GEN.load(Ordering::Acquire)
+    };
+    let spawned = std::thread::Builder::new()
+        .name("drm-unavail-refresh".into())
+        .spawn(move || {
+            let _in_flight = in_flight;
+            let result = query_displays();
+            let mut st = DRM_STATE.lock().unwrap();
+            if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
+                return;
+            }
+            match result {
+                Ok(list) if !list.is_empty() => {
+                    log::info!(
+                        "drm: availability re-probe -> available ({} displays)",
+                        list.len()
+                    );
+                    DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                    drop(st);
+                    scrap::wayland::display::clear_wayland_displays_cache();
+                }
+                _ => {
+                    // Restamp: a failed or empty re-probe is a fresh confirmation of "no".
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                }
+            }
+        });
+    // Nothing to release on error: the guard moved into the closure and drops with it either way.
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the unavailability re-probe thread: {err}");
+    }
 }
 
 fn refresh_available_async() {

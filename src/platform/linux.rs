@@ -242,7 +242,7 @@ pub fn is_login_screen_wayland() -> bool {
 /// AUTO-detected answer, never argue with the operator — a half-applied override would leave
 /// `get_display_server()` and the DRM routing gates disagreeing with each other.
 #[cfg(feature = "drm")]
-fn display_server_forced() -> bool {
+pub(crate) fn display_server_forced() -> bool {
     std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").is_ok()
 }
 

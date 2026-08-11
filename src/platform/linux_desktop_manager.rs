@@ -35,7 +35,6 @@ static SEAT0_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct DesktopManager {
-    seat0_username: String,
     child_username: String,
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
@@ -56,6 +55,9 @@ pub fn start_xdesktop() {
     std::thread::spawn(|| {
         DesktopManager::recover_orphaned_session();
         *DESKTOP_MANAGER.lock().unwrap() = Some(DesktopManager::new());
+        // Seed the pre-auth snapshot now, off the connection path: without this the first
+        // connection of every server process would read no snapshot at all.
+        kick_seat0_refresh();
 
         let interval = time::Duration::from_millis(super::SERVICE_INTERVAL);
         DESKTOP_RUNNING.store(true, Ordering::SeqCst);
@@ -234,7 +236,13 @@ pub fn is_headless() -> bool {
     if DESKTOP_MANAGER.lock().unwrap().is_none() {
         return false;
     }
-    seat0_username_snapshot().is_none()
+    let cached = SEAT0_SNAPSHOT.lock().unwrap().clone();
+    kick_seat0_refresh();
+    // No snapshot yet answers NOT headless: guessing in the headless direction would show the
+    // OS-login flow over a live Wayland greeter, which reads as an empty seat0 too. A false
+    // only delays the headless flow until the first refresh lands, and the snapshot is seeded
+    // from `start_xdesktop`, so the empty window is server start, not every connection.
+    cached.map_or(false, |answer| answer.is_none())
 }
 
 /// A free function on purpose: it runs loginctl (and at a greeter the DRM probe), so no caller
@@ -264,40 +272,33 @@ fn supported_display_seat0_username() -> Option<String> {
     }
 }
 
-/// The snapshot behind `is_headless`, kicked to refresh on every read (single-flight).
-fn seat0_username_snapshot() -> Option<String> {
-    let cached = SEAT0_SNAPSHOT.lock().unwrap().clone();
-    if !SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-        if std::thread::Builder::new()
-            .name("seat0-snapshot".into())
-            .spawn(|| {
-                let fresh = supported_display_seat0_username();
-                *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh);
-                SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
-            })
-            .is_err()
-        {
-            SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
-        }
+/// Refresh the snapshot behind `is_headless` off-thread, single-flight.
+fn kick_seat0_refresh() {
+    if SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
     }
-    match cached {
-        Some(answer) => answer,
-        // No refresh has landed yet: fall back to the values the manager read at start. Blind to
-        // the DRM greeter probe on purpose — a conservative not-headless answer here only delays
-        // the headless flow until the first refresh, and the enforcing paths re-ask fresh.
-        None => DESKTOP_MANAGER.lock().unwrap().as_ref().and_then(|m| {
-            if m.seat0_username.is_empty() {
-                None
-            } else {
-                Some(m.seat0_username.clone())
-            }
-        }),
+    if std::thread::Builder::new()
+        .name("seat0-snapshot".into())
+        .spawn(|| {
+            let fresh = supported_display_seat0_username();
+            *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh);
+            SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+        })
+        .is_err()
+    {
+        SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
     }
 }
 
 /// The Wayland greeter on seat0, if the DRM backend can capture and inject into it.
 #[cfg(feature = "drm")]
 fn drm_login_screen_seat0_username() -> Option<String> {
+    // An operator-forced X11 wins over greeter adoption: adopting would rebuild exactly the
+    // inconsistency the forced gate exists to prevent — a session admitted for DRM serving
+    // while capture and input route down the X11 path.
+    if crate::platform::linux::display_server_forced() && crate::platform::linux::is_x11() {
+        return None;
+    }
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
     if !is_gdm_user(&values[1])
         || get_display_server_of_session(&values[0]) != DISPLAY_SERVER_WAYLAND
@@ -351,13 +352,7 @@ impl DesktopManager {
     }
 
     pub fn new() -> Self {
-        let mut seat0_username = "".to_owned();
-        let seat0_values = get_values_of_seat0(&[0, 2]);
-        if !seat0_values[0].is_empty() {
-            seat0_username = seat0_values[1].clone();
-        }
         Self {
-            seat0_username,
             child_username: "".to_owned(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),

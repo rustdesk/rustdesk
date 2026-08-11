@@ -6558,7 +6558,6 @@ impl Drop for Connection {
 #[cfg(target_os = "linux")]
 struct LinuxHeadlessHandle {
     pub is_headless_allowed: bool,
-    pub is_headless: bool,
     pub wait_ipc_timeout: u64,
     pub rx_cm_stream_ready: mpsc::Receiver<()>,
     pub tx_desktop_ready: mpsc::Sender<()>,
@@ -6568,10 +6567,8 @@ struct LinuxHeadlessHandle {
 impl LinuxHeadlessHandle {
     pub fn new(rx_cm_stream_ready: mpsc::Receiver<()>, tx_desktop_ready: mpsc::Sender<()>) -> Self {
         let is_headless_allowed = crate::is_server() && crate::platform::is_headless_allowed();
-        let is_headless = is_headless_allowed && linux_desktop_manager::is_headless();
         Self {
             is_headless_allowed,
-            is_headless,
             wait_ipc_timeout: 10_000,
             rx_cm_stream_ready,
             tx_desktop_ready,
@@ -6592,7 +6589,11 @@ impl LinuxHeadlessHandle {
     }
 
     pub async fn wait_desktop_cm_ready(&mut self) {
-        if self.is_headless {
+        // Asked NOW, not stored at construction: a bool captured pre-auth can lag one seat0
+        // transition behind, and skipping this gate on a stale "not headless" races the just
+        // started session. The snapshot is seeded at server start and re-kicked by the earlier
+        // is_headless() reads in this login flow, so by now it is cheap and current.
+        if self.is_headless_allowed && linux_desktop_manager::is_headless() {
             self.tx_desktop_ready.send(()).await.ok();
             let _res = timeout(self.wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
         }
