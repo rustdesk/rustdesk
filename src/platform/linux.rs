@@ -58,7 +58,7 @@ lazy_static::lazy_static! {
         let x11 = hbb_common::platform::linux::is_x11_or_headless();
         #[cfg(feature = "drm")]
         {
-            if x11 && is_login_screen_wayland() {
+            if x11 && !display_server_forced() && is_login_screen_wayland() {
                 log::info!(
                     "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
                      treating it as Wayland so the DRM path is not disabled at the one \
@@ -237,12 +237,22 @@ pub fn is_login_screen_wayland() -> bool {
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
 }
 
-/// X11 as far as the DRM path is concerned: a Wayland greeter is not.
+/// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
+/// forwards it to the per-user server on purpose: the greeter correction may only fix an
+/// AUTO-detected answer, never argue with the operator — a half-applied override would leave
+/// `get_display_server()` and the DRM routing gates disagreeing with each other.
+#[cfg(feature = "drm")]
+fn display_server_forced() -> bool {
+    std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").is_ok()
+}
+
+/// X11 as far as the DRM path is concerned: a Wayland greeter is not, unless the operator
+/// forced the display server.
 ///
 /// Both halves unmemoised, for the retry loops that must keep asking until seat0 can be named.
 #[cfg(feature = "drm")]
 pub fn is_x11_for_drm() -> bool {
-    scrap::is_x11() && !is_login_screen_wayland()
+    scrap::is_x11() && (display_server_forced() || !is_login_screen_wayland())
 }
 
 /// Memoised `is_login_screen_wayland`, for per-frame callers that must not run `loginctl`.
