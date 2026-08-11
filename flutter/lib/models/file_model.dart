@@ -46,6 +46,8 @@ class JobID {
 
 typedef GetSessionID = SessionID Function();
 typedef GetDialogManager = OverlayDialogManager? Function();
+typedef ReadRemoteDirectory = Future<void> Function(
+    SessionID sessionId, String path, bool includeHidden);
 
 const _kRemoteReadDirTimeout = Duration(seconds: 30);
 
@@ -1373,9 +1375,15 @@ class FileFetcher {
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
 
   final GetSessionID getSessionID;
+  final ReadRemoteDirectory _readRemoteDirectory;
   SessionID get sessionId => getSessionID();
 
-  FileFetcher(this.getSessionID);
+  FileFetcher(this.getSessionID, {ReadRemoteDirectory? readRemoteDirectory})
+      : _readRemoteDirectory = readRemoteDirectory ??
+            ((sessionId, path, includeHidden) => bind.sessionReadRemoteDir(
+                sessionId: sessionId,
+                path: path,
+                includeHidden: includeHidden));
 
   Future<List<FileDirectory>> registerReadEmptyDirsTask(
       bool isLocal, String path) {
@@ -1513,13 +1521,13 @@ class FileFetcher {
     // Register before sending so a fast reply cannot be lost. This task's
     // 30-second timeout applies only to normal remote directory listings.
     final task = registerReadTask(isLocal, path);
+    // Path reuse must not let this request fail a newer task.
+    final completer = remoteTasks[path]!;
     try {
-      await bind.sessionReadRemoteDir(
-          sessionId: sessionId, path: path, includeHidden: showHidden);
+      await _readRemoteDirectory(sessionId, path, showHidden);
     } catch (error, stackTrace) {
-      final completer = remoteTasks.remove(path);
-      if (completer == null) {
-        rethrow;
+      if (identical(remoteTasks[path], completer)) {
+        remoteTasks.remove(path);
       }
       if (!completer.isCompleted) {
         completer.completeError(error, stackTrace);
