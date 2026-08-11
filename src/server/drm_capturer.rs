@@ -827,9 +827,20 @@ pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
+/// The three honest answers the availability machinery can give. `Unsettled` — another probe in
+/// flight, or a failure still below the disable threshold — is not a verdict, and the
+/// login-screen headless decision must not read it as one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Availability {
+    Available,
+    Unavailable,
+    Unsettled,
+}
+
 /// MAY BLOCK for seconds: never a routing gate. The one cross-module caller is the login-screen
-/// headless decision, where an unsettled "no" would start Xorg over a live Wayland greeter.
-pub(crate) fn is_available() -> bool {
+/// headless decision, which needs the tri-state: only a definitive `Unavailable` may route a
+/// login toward Xorg over what could still be a live Wayland greeter.
+pub(crate) fn availability() -> Availability {
     let verdict = {
         let mut st = DRM_STATE.lock().unwrap();
         if let ProbeState::Unavailable(since) = &*st {
@@ -839,25 +850,32 @@ pub(crate) fn is_available() -> bool {
             }
         }
         match &*st {
-            ProbeState::Available(since, _) => Some((true, since.elapsed() >= POSITIVE_TTL)),
-            ProbeState::Unavailable(_) => Some((false, false)),
+            ProbeState::Available(since, _) => {
+                Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
+            }
+            ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
             ProbeState::Unknown => None, // fall through and probe with the lock released
         }
     };
-    if let Some((available, stale)) = verdict {
+    if let Some((answer, stale)) = verdict {
         if stale {
             refresh_available_async();
         }
-        return available;
+        return answer;
     }
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-        return matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..));
+        // Someone else is mid-probe: their result is not in yet, and "not yet" is not "no".
+        return match &*DRM_STATE.lock().unwrap() {
+            ProbeState::Available(..) => Availability::Available,
+            ProbeState::Unavailable(_) => Availability::Unavailable,
+            ProbeState::Unknown => Availability::Unsettled,
+        };
     }
     let _in_flight = ProbeInFlightGuard;
     let t = Instant::now();
     let result = query_displays();
     let mut st = DRM_STATE.lock().unwrap();
-    let available = match result {
+    let answer = match result {
         Ok(list) if !list.is_empty() => {
             log::debug!(
                 "drm: availability probe -> available ({} displays) in {:?}",
@@ -866,28 +884,36 @@ pub(crate) fn is_available() -> bool {
             );
             DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
-            true
+            Availability::Available
         }
         Ok(_) => {
             log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
             publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-            false
+            Availability::Unavailable
         }
         Err(err) => {
             let n = DRM_PROBE_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
             if n >= DRM_PROBE_MAX_FAILURES {
                 log::info!("drm: availability probe failed {n}x ({err}); disabling DRM");
                 publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                Availability::Unavailable
             } else {
                 log::info!(
                     "drm: availability probe failed ({err}), attempt {n}/{DRM_PROBE_MAX_FAILURES}; will retry"
                 );
+                // Deliberately still Unknown in DRM_STATE: this is a retry window, not a verdict.
+                Availability::Unsettled
             }
-            false
         }
     };
     drop(st);
-    available
+    answer
+}
+
+/// The boolean form for capture-path callers, where an unsettled probe and a definitive "no"
+/// route the same way (into the non-DRM fallback).
+pub(crate) fn is_available() -> bool {
+    availability() == Availability::Available
 }
 
 fn refresh_available_async() {

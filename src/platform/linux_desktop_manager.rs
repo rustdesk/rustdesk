@@ -27,12 +27,15 @@ use std::{
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
     static ref DESKTOP_MANAGER: Arc<Mutex<Option<DesktopManager>>> = Arc::new(Mutex::new(None));
+    /// Last settled "who owns seat0" answer, for the PRE-AUTH path only; see `is_headless`.
+    static ref SEAT0_SNAPSHOT: Mutex<Option<Option<String>>> = Mutex::new(None);
 }
+
+static SEAT0_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct DesktopManager {
     seat0_username: String,
-    seat0_display_server: String,
     child_username: String,
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
@@ -195,9 +198,12 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
 }
 
 fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool), XSessionStartError> {
+    // Seat0 is read BEFORE the manager lock: the lookup runs loginctl, and at a greeter the DRM
+    // probe, and holding DESKTOP_MANAGER across those waits serializes every other caller.
+    let seat0_username = supported_display_seat0_username();
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
-        if let Some(seat0_username) = desktop_manager.get_supported_display_seat0_username() {
+        if let Some(seat0_username) = seat0_username {
             return Ok((seat0_username, true));
         }
 
@@ -219,14 +225,74 @@ fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool),
 }
 
 #[inline]
+/// The PRE-AUTH form: connection setup asks this before the peer has authenticated, so it must
+/// not run loginctl or wait on the DRM probe (an unauthenticated client would occupy a worker,
+/// and every connection would serialize behind the same lookup). It answers from the last
+/// settled snapshot and refreshes it off-thread; the decisions that ENFORCE — `get_username`,
+/// `try_start_x_session` — stay fresh.
 pub fn is_headless() -> bool {
-    DESKTOP_MANAGER
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map_or(false, |manager| {
-            manager.get_supported_display_seat0_username().is_none()
-        })
+    if DESKTOP_MANAGER.lock().unwrap().is_none() {
+        return false;
+    }
+    seat0_username_snapshot().is_none()
+}
+
+/// A free function on purpose: it runs loginctl (and at a greeter the DRM probe), so no caller
+/// may reach it while holding `DESKTOP_MANAGER` — that mutex held across subprocess or IPC waits
+/// serializes every connection behind one slow lookup.
+fn supported_display_seat0_username() -> Option<String> {
+    // Read seat0 fresh on every query: the values cached in `DesktopManager::new()` go stale
+    // across a logout or fast-user-switch, which would skip the greeter probe below and hand
+    // back the previous session owner. Queried here and not in `new()` also because the read
+    // there hides greeters.
+    let seat0_values = get_values_of_seat0(&[0, 2]);
+    let seat0_username = seat0_values[1].clone();
+    #[cfg(feature = "drm")]
+    if seat0_username.is_empty() || is_gdm_user(&seat0_username) {
+        if let Some(username) = drm_login_screen_seat0_username() {
+            return Some(username);
+        }
+    }
+    if seat0_username.is_empty() {
+        None
+    } else if is_gdm_user(&seat0_username)
+        && get_display_server_of_session(&seat0_values[0]) == DISPLAY_SERVER_WAYLAND
+    {
+        None
+    } else {
+        Some(seat0_username)
+    }
+}
+
+/// The snapshot behind `is_headless`, kicked to refresh on every read (single-flight).
+fn seat0_username_snapshot() -> Option<String> {
+    let cached = SEAT0_SNAPSHOT.lock().unwrap().clone();
+    if !SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        if std::thread::Builder::new()
+            .name("seat0-snapshot".into())
+            .spawn(|| {
+                let fresh = supported_display_seat0_username();
+                *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh);
+                SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+            })
+            .is_err()
+        {
+            SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+        }
+    }
+    match cached {
+        Some(answer) => answer,
+        // No refresh has landed yet: fall back to the values the manager read at start. Blind to
+        // the DRM greeter probe on purpose — a conservative not-headless answer here only delays
+        // the headless flow until the first refresh, and the enforcing paths re-ask fresh.
+        None => DESKTOP_MANAGER.lock().unwrap().as_ref().and_then(|m| {
+            if m.seat0_username.is_empty() {
+                None
+            } else {
+                Some(m.seat0_username.clone())
+            }
+        }),
+    }
 }
 
 /// The Wayland greeter on seat0, if the DRM backend can capture and inject into it.
@@ -238,26 +304,35 @@ fn drm_login_screen_seat0_username() -> Option<String> {
     {
         return None;
     }
-    // The probing form, asked only once a Wayland greeter is on seat0: the cached probe answers
-    // false while the warm-up is unsettled, and that would let try_start_x_session put Xorg over
-    // a live greeter. This is a login-time path, so a bounded definitive verdict is affordable.
-    if !crate::server::drm_capturer::is_available() {
+    // The probing form, asked only once a Wayland greeter is on seat0, and read as a tri-state:
+    // ONLY a definitive unavailable may hand this seat to the X11 path. An unsettled result (a
+    // probe in flight elsewhere, or a failure still below the disable threshold) means the live
+    // greeter may yet be servable, and answering "no greeter" inside that window is exactly what
+    // would let try_start_x_session put Xorg over it.
+    if crate::server::drm_capturer::availability()
+        == crate::server::drm_capturer::Availability::Unavailable
+    {
         return None;
     }
     Some(values[1].clone())
 }
 
 pub fn get_username() -> String {
+    if DESKTOP_MANAGER.lock().unwrap().is_none() {
+        return "".to_owned();
+    }
+    // Computed with the manager lock RELEASED: the lookup runs loginctl, and at a greeter the
+    // DRM probe, and holding DESKTOP_MANAGER across those waits serializes every caller behind
+    // one slow probe.
+    if let Some(seat0_username) = supported_display_seat0_username() {
+        return seat0_username;
+    }
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
-            if let Some(seat0_username) = manager.get_supported_display_seat0_username() {
-                seat0_username
+            if manager.is_running() && !manager.child_username.is_empty() {
+                manager.child_username.clone()
             } else {
-                if manager.is_running() && !manager.child_username.is_empty() {
-                    manager.child_username.clone()
-                } else {
-                    "".to_owned()
-                }
+                "".to_owned()
             }
         }
         None => "".to_owned(),
@@ -277,41 +352,15 @@ impl DesktopManager {
 
     pub fn new() -> Self {
         let mut seat0_username = "".to_owned();
-        let mut seat0_display_server = "".to_owned();
         let seat0_values = get_values_of_seat0(&[0, 2]);
         if !seat0_values[0].is_empty() {
             seat0_username = seat0_values[1].clone();
-            seat0_display_server = get_display_server_of_session(&seat0_values[0]);
         }
         Self {
             seat0_username,
-            seat0_display_server,
             child_username: "".to_owned(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    fn get_supported_display_seat0_username(&self) -> Option<String> {
-        // Read seat0 fresh on every query: the values cached in `new()` go stale across a logout
-        // or fast-user-switch, which would skip the greeter probe below and hand back the previous
-        // session owner. Queried here and not in `new()` also because the read there hides greeters.
-        let seat0_values = get_values_of_seat0(&[0, 2]);
-        let seat0_username = seat0_values[1].clone();
-        #[cfg(feature = "drm")]
-        if seat0_username.is_empty() || is_gdm_user(&seat0_username) {
-            if let Some(username) = drm_login_screen_seat0_username() {
-                return Some(username);
-            }
-        }
-        if seat0_username.is_empty() {
-            None
-        } else if is_gdm_user(&seat0_username)
-            && get_display_server_of_session(&seat0_values[0]) == DISPLAY_SERVER_WAYLAND
-        {
-            None
-        } else {
-            Some(seat0_username)
         }
     }
 
