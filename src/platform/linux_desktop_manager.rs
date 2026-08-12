@@ -272,21 +272,31 @@ fn supported_display_seat0_username() -> Option<String> {
     }
 }
 
+/// Clears the single-flight flag on every exit, including a panic in the refresh thread; without
+/// it a panic would freeze `is_headless` on a stale snapshot for the process lifetime.
+struct Seat0RefreshGuard;
+impl Drop for Seat0RefreshGuard {
+    fn drop(&mut self) {
+        SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
 /// Refresh the snapshot behind `is_headless` off-thread, single-flight.
 fn kick_seat0_refresh() {
     if SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
     }
+    let guard = Seat0RefreshGuard;
     if std::thread::Builder::new()
         .name("seat0-snapshot".into())
-        .spawn(|| {
+        .spawn(move || {
+            let _guard = guard;
             let fresh = supported_display_seat0_username();
             *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh);
-            SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
         })
         .is_err()
     {
-        SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+        // Spawn failed: the closure was dropped un-run, dropping the guard and clearing the flag.
     }
 }
 
@@ -305,13 +315,9 @@ fn drm_login_screen_seat0_username() -> Option<String> {
     {
         return None;
     }
-    // The cached tri-state, never the probing form: this runs on the login request path, which
-    // an unauthenticated peer reaches, so it must not wait out a probe deadline. ONLY a
-    // definitive unavailable may hand this seat to the X11 path — an unsettled result (probe
-    // still in flight, or failures below the disable threshold) means the live greeter may yet
-    // be servable, and answering "no greeter" inside that window is exactly what would let
-    // try_start_x_session put Xorg over it. Settling happens off-thread: the warm-up at server
-    // start, the kick inside availability_cached, and the TTL re-verifiers.
+    // The cached tri-state, never the probing form: this runs on the unauthenticated login path,
+    // so it must not wait out a probe deadline. Only a definitive unavailable hands the seat to
+    // X11; an unsettled result keeps the maybe-live greeter (settling happens off-thread).
     if crate::server::drm_capturer::availability_cached()
         == crate::server::drm_capturer::Availability::Unavailable
     {

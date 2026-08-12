@@ -459,8 +459,11 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
 ///
-/// The cached probe, not the blocking one: this is a routing gate. Not yet settled answers
-/// false, which refuses as today and clears on a retry.
+/// The cached probe, not the blocking one: this is a routing gate. Available-only ON PURPOSE, and
+/// deliberately NOT symmetric with the seat0 adoption gate: that one only starts Xorg on a
+/// definitive Unavailable (never over a maybe-live greeter), while admission only accepts on a
+/// definitive Available (never a greeter nothing can yet capture). Both err toward refuse-and-retry
+/// during an unsettled probe; admitting there would black-screen a client on a helper-less box.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_can_serve_login_screen() -> bool {
     super::drm_capturer::is_available_cached()
@@ -2823,7 +2826,8 @@ impl Connection {
             #[cfg(target_os = "linux")]
             let err_msg = self
                 .linux_headless_handle
-                .try_start_desktop(lr.os_login.as_ref());
+                .try_start_desktop(lr.os_login.as_ref())
+                .await;
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             if !err_msg.is_empty() && err_msg != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
@@ -6575,17 +6579,22 @@ impl LinuxHeadlessHandle {
         }
     }
 
-    pub fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
-        if self.is_headless_allowed {
-            match os_login {
-                Some(os_login) => {
-                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
-                }
-                None => linux_desktop_manager::try_start_desktop("", ""),
-            }
-        } else {
-            "".to_string()
+    pub async fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
+        if !self.is_headless_allowed {
+            return "".to_string();
         }
+        // Off the async executor: this runs loginctl (and PAM when a session must start) while
+        // handling a LoginRequest, before password validation, so a slow logind must not tie up
+        // a request worker. The blocking pool absorbs it instead.
+        let (username, password) = match os_login {
+            Some(os_login) => (os_login.username.clone(), os_login.password.clone()),
+            None => (String::new(), String::new()),
+        };
+        tokio::task::spawn_blocking(move || {
+            linux_desktop_manager::try_start_desktop(&username, &password)
+        })
+        .await
+        .unwrap_or_default()
     }
 
     pub async fn wait_desktop_cm_ready(&mut self) {

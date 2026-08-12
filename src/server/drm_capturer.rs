@@ -843,10 +843,9 @@ pub(crate) enum Availability {
 fn availability() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
-        // A settled "no" STAYS the answer while it re-verifies off-thread. Flipping to Unknown
-        // here (and zeroing the failure counter, as this used to do) reopened an Unsettled
-        // window every TTL on a permanently helper-less box, and the login decision reads
-        // Unsettled as a possible greeter — misrouting a headless login forever.
+        // A settled "no" STAYS the answer while an off-thread re-probe re-verifies it; going
+        // Unknown at expiry would reopen an Unsettled window every TTL on a helper-less box, and
+        // the login decision reads Unsettled as a possible greeter.
         let stale_no =
             matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
         let verdict = match &*st {
