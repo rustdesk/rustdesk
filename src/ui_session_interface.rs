@@ -1878,8 +1878,8 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
+    async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await
     }
 
     async fn handle_login_from_ui(

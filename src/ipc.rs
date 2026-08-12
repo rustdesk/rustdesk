@@ -312,6 +312,14 @@ pub enum DataPortableService {
     CmShowElevation(bool),
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum SwitchSidesUuidAction {
+    Check,
+    Consume,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum Data {
@@ -387,7 +395,7 @@ pub enum Data {
     SwitchSidesRequest(String),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    SwitchSidesUuid(String, String, Option<bool>),
+    SwitchSidesUuid(String, String, SwitchSidesUuidAction, Option<bool>),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     SwitchSidesBack,
@@ -1050,14 +1058,21 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::SwitchSidesUuid(uuid, id, None) => {
+        Data::SwitchSidesUuid(uuid, id, action, None) => {
             let allowed = uuid
                 .parse::<uuid::Uuid>()
-                .map(|uuid| crate::server::remove_pending_switch_sides_uuid(&id, &uuid))
+                .map(|uuid| match action {
+                    SwitchSidesUuidAction::Check => {
+                        crate::server::has_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                    SwitchSidesUuidAction::Consume => {
+                        crate::server::claim_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                })
                 .unwrap_or(false);
             allow_err!(
                 stream
-                    .send(&Data::SwitchSidesUuid(uuid, id, Some(allowed)))
+                    .send(&Data::SwitchSidesUuid(uuid, id, action, Some(allowed)))
                     .await
             );
         }

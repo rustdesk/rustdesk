@@ -588,7 +588,8 @@ _registerEventHandler() {
 
 Widget keyListenerBuilder(BuildContext context, Widget? child) {
   return RawKeyboardListener(
-    focusNode: FocusNode(),
+    // `skipTraversal: isWeb` is to fix "Bad state: RenderBox was not laid out: minified:aeL#c19e4"
+    focusNode: FocusNode(skipTraversal: isWeb),
     child: child ?? Container(),
     onKey: (RawKeyEvent event) {
       if (event.logicalKey == LogicalKeyboardKey.shiftLeft) {
