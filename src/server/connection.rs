@@ -385,7 +385,7 @@ pub struct Connection {
     file_remove_log_control: FileRemoveLogControl,
     last_supported_encoding: Option<SupportedEncoding>,
     services_subed: bool,
-    delayed_read_dir: Option<(String, bool)>,
+    delayed_read_dir: Option<(i32, String, bool)>,
     #[cfg(target_os = "macos")]
     retina: Retina,
     follow_remote_cursor: bool,
@@ -2015,9 +2015,9 @@ impl Connection {
                 ""
             };
             if !wait_session_id_confirm {
-                self.read_dir(dir, show_hidden);
+                self.read_dir(0, dir, show_hidden);
             } else {
-                self.delayed_read_dir = Some((dir.to_owned(), show_hidden));
+                self.delayed_read_dir = Some((0, dir.to_owned(), show_hidden));
             }
         } else if self.terminal {
             self.keyboard = false;
@@ -3255,7 +3255,17 @@ impl Connection {
                     if handle_fa {
                         if self.delayed_read_dir.is_some() {
                             if let Some(file_action::Union::ReadDir(rd)) = fa.union {
-                                self.delayed_read_dir = Some((rd.path, rd.include_hidden));
+                                let delayed = (rd.id, rd.path, rd.include_hidden);
+                                if let Some((id, _, _)) = self.delayed_read_dir.replace(delayed) {
+                                    if id != 0 {
+                                        self.send(fs::new_error(
+                                            id,
+                                            "Directory request superseded",
+                                            -1,
+                                        ))
+                                        .await;
+                                    }
+                                }
                             }
                             return true;
                         }
@@ -3290,7 +3300,7 @@ impl Connection {
                                 self.read_empty_dirs(&rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::ReadDir(rd)) => {
-                                self.read_dir(&rd.path, rd.include_hidden);
+                                self.read_dir(rd.id, &rd.path, rd.include_hidden);
                             }
                             Some(file_action::Union::AllFiles(f)) => {
                                 if crate::common::need_fs_cm_send_files() {
@@ -3697,8 +3707,8 @@ impl Connection {
                                 return false;
                             }
                             if self.file_transfer.is_some() {
-                                if let Some((dir, show_hidden)) = self.delayed_read_dir.take() {
-                                    self.read_dir(&dir, show_hidden);
+                                if let Some((id, dir, show_hidden)) = self.delayed_read_dir.take() {
+                                    self.read_dir(id, &dir, show_hidden);
                                 }
                             } else if self.view_camera {
                                 self.try_sub_camera_displays();
@@ -5201,9 +5211,10 @@ impl Connection {
         });
     }
 
-    fn read_dir(&mut self, dir: &str, include_hidden: bool) {
+    fn read_dir(&mut self, id: i32, dir: &str, include_hidden: bool) {
         let dir = dir.to_string();
         self.send_fs(ipc::FS::ReadDir {
+            id,
             dir,
             include_hidden,
         });

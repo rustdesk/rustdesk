@@ -46,8 +46,12 @@ class JobID {
 
 typedef GetSessionID = SessionID Function();
 typedef GetDialogManager = OverlayDialogManager? Function();
+typedef ReadRemoteDirectory = Future<void> Function(
+    SessionID sessionId, int requestId, String path, bool includeHidden);
 
 const _kRemoteReadDirTimeout = Duration(seconds: 30);
+const _kFirstRemoteReadRequestId = -1;
+const _kMinimumRemoteReadRequestId = -0x80000000;
 
 class FileModel {
   final WeakReference<FFI> parent;
@@ -104,11 +108,14 @@ class FileModel {
   }
 
   void receiveFileDir(Map<String, dynamic> evt) {
-    if (evt['is_local'] == "false") {
+    final isRemote = evt['is_local'] == "false";
+    final isHomeResponse = isRemote && fileFetcher.hasPendingRemoteRead("");
+    if (isRemote) {
       // init remote home, the remote connection will send one dir event when established. TODO opt
       remoteController.initDirAndHome(evt);
     }
-    fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
+    fileFetcher.tryCompleteTask(evt['value'], evt['is_local'],
+        isHomeResponse: isHomeResponse);
   }
 
   void receiveEmptyDirs(Map<String, dynamic> evt) {
@@ -135,6 +142,11 @@ class FileModel {
     final id = int.tryParse(evt['id']?.toString() ?? '');
     if (id != null) {
       final err = evt['err']?.toString() ?? 'Unknown error';
+      // Negative IDs are reserved for single-directory reads.
+      if (id < 0) {
+        fileFetcher.tryCompleteRemoteTaskWithError(id, err);
+        return;
+      }
       fileFetcher.tryCompleteRecursiveTaskWithError(id, err);
     }
     // Always call jobController.jobError(evt) to ensure all error events are processed,
@@ -353,6 +365,7 @@ class FileController {
   final sortBy = SortBy.name.obs;
   var sortAscending = true;
   String? _latestRequestedPath;
+  int _directoryRequestGeneration = 0;
   final JobController jobController;
   final WeakReference<FFI> rootState;
 
@@ -487,16 +500,21 @@ class FileController {
         path = "$path\\";
       }
     }
+    final requestGeneration = ++_directoryRequestGeneration;
     _latestRequestedPath = path;
     try {
-      final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden);
-      if (_latestRequestedPath != path) {
+      final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden,
+          shouldSend: () => requestGeneration == _directoryRequestGeneration);
+      if (requestGeneration != _directoryRequestGeneration) {
         return true;
       }
       fd.format(isWindows, sort: sortBy.value);
       directory.value = fd;
       return true;
     } catch (e) {
+      if (requestGeneration != _directoryRequestGeneration) {
+        return true;
+      }
       debugPrint("Failed to openDirectory $path: $e");
       return false;
     }
@@ -548,6 +566,13 @@ class FileController {
   void initDirAndHome(Map<String, dynamic> evt) {
     try {
       final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
+      final isCorrelatedRead = fd.id < 0;
+      if (isCorrelatedRead && !fileFetcher.hasPendingRemoteReadId(fd.id)) {
+        return;
+      }
+      final isHomeResponse = isCorrelatedRead
+          ? fileFetcher.isPendingRemoteHomeRead(fd.id)
+          : !fileFetcher.hasPendingRemoteRead(fd.path);
       fd.format(options.value.isWindows, sort: sortBy.value);
       if (fd.id > 0) {
         final jobIndex = jobController.getJob(fd.id);
@@ -563,10 +588,13 @@ class FileController {
           debugPrint("update receive details: ${fd.path}");
           jobController.jobTable.refresh();
         }
-      } else if (options.value.home.isEmpty) {
+      } else if (options.value.home.isEmpty && isHomeResponse) {
         options.value.home = fd.path;
         debugPrint("init remote home: ${fd.path}");
-        directory.value = fd;
+        if ((_latestRequestedPath?.isEmpty ?? true) &&
+            !fileFetcher.hasPendingRemoteRead("")) {
+          directory.value = fd;
+        }
       }
     } catch (e) {
       debugPrint("initDirAndHome err=$e");
@@ -1369,16 +1397,85 @@ class JobResultListener<T> {
   }
 }
 
+class _RemoteReadTask {
+  final int id;
+  final String path;
+  final Completer<FileDirectory> completer = Completer<FileDirectory>();
+  late final Timer timer;
+
+  _RemoteReadTask(this.id, this.path);
+}
+
 class FileFetcher {
   // Map<String,Completer<FileDirectory>> localTasks = {}; // now we only use read local dir sync
-  Map<String, Completer<FileDirectory>> remoteTasks = {};
+  final Map<int, _RemoteReadTask> _remoteReadTasks = {};
+  final Map<String, int> _remoteReadIdsByPath = {};
   Map<String, Completer<List<FileDirectory>>> remoteEmptyDirsTasks = {};
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
+  int _nextRemoteReadRequestId = _kFirstRemoteReadRequestId;
 
   final GetSessionID getSessionID;
+  final ReadRemoteDirectory _readRemoteDirectory;
   SessionID get sessionId => getSessionID();
 
-  FileFetcher(this.getSessionID);
+  FileFetcher(this.getSessionID, {ReadRemoteDirectory? readRemoteDirectory})
+      : _readRemoteDirectory = readRemoteDirectory ??
+            ((sessionId, requestId, path, includeHidden) =>
+                bind.sessionReadRemoteDir(
+                    sessionId: sessionId,
+                    path: path,
+                    includeHidden: includeHidden,
+                    requestId: requestId));
+
+  bool hasPendingRemoteRead(String path) =>
+      _remoteReadIdsByPath.containsKey(path);
+
+  bool hasPendingRemoteReadId(int id) => _remoteReadTasks.containsKey(id);
+
+  bool isPendingRemoteHomeRead(int id) =>
+      _remoteReadTasks[id]?.path.isEmpty ?? false;
+
+  int _takeRemoteReadRequestId() {
+    late int id;
+    do {
+      id = _nextRemoteReadRequestId;
+      _nextRemoteReadRequestId = id == _kMinimumRemoteReadRequestId
+          ? _kFirstRemoteReadRequestId
+          : id - 1;
+    } while (_remoteReadTasks.containsKey(id));
+    return id;
+  }
+
+  _RemoteReadTask _registerRemoteReadTask(String path) {
+    if (hasPendingRemoteRead(path)) {
+      throw "Failed to registerReadTask, already have same read job";
+    }
+    final task = _RemoteReadTask(_takeRemoteReadRequestId(), path);
+    _remoteReadTasks[task.id] = task;
+    _remoteReadIdsByPath[path] = task.id;
+    task.timer = Timer(_kRemoteReadDirTimeout, () {
+      if (!_removeRemoteReadTask(task)) return;
+      task.completer.completeError("Failed to read dir, timeout");
+    });
+    return task;
+  }
+
+  bool _removeRemoteReadTask(_RemoteReadTask task) {
+    if (!identical(_remoteReadTasks[task.id], task)) return false;
+    _remoteReadTasks.remove(task.id);
+    if (_remoteReadIdsByPath[task.path] == task.id) {
+      _remoteReadIdsByPath.remove(task.path);
+    }
+    task.timer.cancel();
+    return true;
+  }
+
+  bool _completeRemoteReadTask(int id, FileDirectory directory) {
+    final task = _remoteReadTasks[id];
+    if (task == null || !_removeRemoteReadTask(task)) return false;
+    task.completer.complete(directory);
+    return true;
+  }
 
   Future<List<FileDirectory>> registerReadEmptyDirsTask(
       bool isLocal, String path) {
@@ -1396,24 +1493,6 @@ class FileFetcher {
       c.completeError("Failed to read empty dirs, timeout");
     });
     return c.future;
-  }
-
-  Future<FileDirectory> registerReadTask(bool isLocal, String path) {
-    // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
-    final tasks = remoteTasks; // bypass now
-    if (tasks.containsKey(path)) {
-      throw "Failed to registerReadTask, already have same read job";
-    }
-    final c = Completer<FileDirectory>();
-    tasks[path] = c;
-
-    final timer = Timer(_kRemoteReadDirTimeout, () {
-      // An earlier timer must not remove a newer task for the same path.
-      if (tasks[path] == c) tasks.remove(path);
-      if (c.isCompleted) return;
-      c.completeError("Failed to read dir, timeout");
-    });
-    return c.future.whenComplete(timer.cancel);
   }
 
   Future<FileDirectory> registerReadRecursiveTask(int actID) {
@@ -1451,27 +1530,46 @@ class FileFetcher {
     }
   }
 
-  tryCompleteTask(String? msg, String? isLocalStr) {
+  tryCompleteTask(String? msg, String? isLocalStr,
+      {bool isHomeResponse = false}) {
     if (msg == null || isLocalStr == null) return;
-    late final Map<Object, Completer<FileDirectory>> tasks;
     try {
       final fd = FileDirectory.fromJson(jsonDecode(msg));
       if (fd.id > 0) {
         // fd.id > 0 is result for read recursive
-        // to-do later,will be better if every fetch use ID,so that there will only one task map for read and recursive read
-        tasks = readRecursiveTasks;
-        final completer = tasks.remove(fd.id);
+        final completer = readRecursiveTasks.remove(fd.id);
         completer?.complete(fd);
-      } else if (fd.path.isNotEmpty) {
-        // result for normal read dir
-        // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
-        tasks = remoteTasks; // bypass now
-        final completer = tasks.remove(fd.path);
-        completer?.complete(fd);
+        return;
+      }
+      if (fd.id < 0) {
+        _completeRemoteReadTask(fd.id, fd);
+        return;
+      }
+      if (fd.path.isNotEmpty) {
+        _completeLegacyRemoteReadTask(fd, isHomeResponse);
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
     }
+  }
+
+  void _completeLegacyRemoteReadTask(
+      FileDirectory directory, bool isHomeResponse) {
+    final exactId = _remoteReadIdsByPath[directory.path];
+    if (exactId != null && _completeRemoteReadTask(exactId, directory)) {
+      return;
+    }
+    final homeId = _remoteReadIdsByPath[""];
+    if (isHomeResponse && homeId != null) {
+      _completeRemoteReadTask(homeId, directory);
+    }
+  }
+
+  bool tryCompleteRemoteTaskWithError(int id, String error) {
+    final task = _remoteReadTasks[id];
+    if (task == null || !_removeRemoteReadTask(task)) return false;
+    task.completer.completeError(error);
+    return true;
   }
 
   // Complete a pending recursive read task with an error.
@@ -1506,20 +1604,43 @@ class FileFetcher {
   }
 
   Future<FileDirectory> fetchDirectory(
-      String path, bool isLocal, bool showHidden) async {
-    try {
-      if (isLocal) {
-        final res = await bind.sessionReadLocalDirSync(
-            sessionId: sessionId, path: path, showHidden: showHidden);
-        final fd = FileDirectory.fromJson(jsonDecode(res));
-        return fd;
-      } else {
-        await bind.sessionReadRemoteDir(
-            sessionId: sessionId, path: path, includeHidden: showHidden);
-        return registerReadTask(isLocal, path);
+      String path, bool isLocal, bool showHidden,
+      {bool Function()? shouldSend}) async {
+    if (isLocal) {
+      final res = await bind.sessionReadLocalDirSync(
+          sessionId: sessionId, path: path, showHidden: showHidden);
+      return FileDirectory.fromJson(jsonDecode(res));
+    }
+
+    if (hasPendingRemoteRead(path)) {
+      await _waitForRemoteReadPath(path);
+    }
+    if (shouldSend != null && !shouldSend()) {
+      throw "Directory request superseded";
+    }
+    final task = _registerRemoteReadTask(path);
+    unawaited(Future<void>.sync(
+            () => _readRemoteDirectory(sessionId, task.id, path, showHidden))
+        .catchError((Object error, StackTrace stackTrace) {
+      if (!_removeRemoteReadTask(task)) return;
+      task.completer.completeError(error, stackTrace);
+    }));
+    return task.completer.future;
+  }
+
+  Future<void> _waitForRemoteReadPath(String path) async {
+    while (hasPendingRemoteRead(path)) {
+      final id = _remoteReadIdsByPath[path]!;
+      final task = _remoteReadTasks[id];
+      if (task == null) {
+        _remoteReadIdsByPath.remove(path);
+        continue;
       }
-    } catch (e) {
-      return Future.error(e);
+      try {
+        await task.completer.future;
+      } catch (_) {
+        // The request owner receives the error; this request only waits.
+      }
     }
   }
 

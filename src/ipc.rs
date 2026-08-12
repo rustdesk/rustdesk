@@ -129,6 +129,7 @@ pub enum FS {
         include_hidden: bool,
     },
     ReadDir {
+        id: i32,
         dir: String,
         include_hidden: bool,
     },
