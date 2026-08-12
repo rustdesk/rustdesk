@@ -115,12 +115,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 #[cfg(target_os = "linux")]
 fn should_check_linux_headless_os_auth_before_desktop_start(
-    is_headless_allowed: bool,
+    should_start_desktop: bool,
     username: &str,
 ) -> bool {
-    is_headless_allowed
-        && !username.trim().is_empty()
-        && linux_desktop_manager::get_username().is_empty()
+    should_start_desktop && !username.trim().is_empty()
 }
 
 #[cfg(target_os = "linux")]
@@ -2811,8 +2809,11 @@ impl Connection {
             }
 
             #[cfg(target_os = "linux")]
+            let should_start_linux_desktop = self.linux_headless_handle.should_start_desktop();
+
+            #[cfg(target_os = "linux")]
             if should_check_linux_headless_os_auth_before_desktop_start(
-                self.linux_headless_handle.is_headless_allowed,
+                should_start_linux_desktop,
                 &lr.os_login.username,
             ) {
                 let (_failure, res) = self.check_failure(0).await;
@@ -2826,7 +2827,7 @@ impl Connection {
             #[cfg(target_os = "linux")]
             let err_msg = self
                 .linux_headless_handle
-                .try_start_desktop(lr.os_login.as_ref())
+                .try_start_desktop(lr.os_login.as_ref(), should_start_linux_desktop)
                 .await;
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
@@ -6559,6 +6560,21 @@ impl Drop for Connection {
     }
 }
 
+// Login requests are unauthenticated here, so only one may reach loginctl/PAM at a time.
+#[cfg(target_os = "linux")]
+static LINUX_DESKTOP_START_IN_FLIGHT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+struct LinuxDesktopStartGuard;
+
+#[cfg(target_os = "linux")]
+impl Drop for LinuxDesktopStartGuard {
+    fn drop(&mut self) {
+        LINUX_DESKTOP_START_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
 #[cfg(target_os = "linux")]
 struct LinuxHeadlessHandle {
     pub is_headless_allowed: bool,
@@ -6579,22 +6595,40 @@ impl LinuxHeadlessHandle {
         }
     }
 
-    pub async fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
-        if !self.is_headless_allowed {
-            return "".to_string();
+    fn should_start_desktop(&self) -> bool {
+        self.is_headless_allowed && linux_desktop_manager::is_headless()
+    }
+
+    pub async fn try_start_desktop(
+        &mut self,
+        os_login: Option<&OSLogin>,
+        should_start_desktop: bool,
+    ) -> String {
+        if !should_start_desktop {
+            return String::new();
         }
-        // Off the async executor: this runs loginctl (and PAM when a session must start) while
-        // handling a LoginRequest, before password validation, so a slow logind must not tie up
-        // a request worker. The blocking pool absorbs it instead.
-        let (username, password) = match os_login {
-            Some(os_login) => (os_login.username.clone(), os_login.password.clone()),
-            None => (String::new(), String::new()),
+        let Some(os_login) = os_login.filter(|os_login| !os_login.username.trim().is_empty())
+        else {
+            return crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned();
         };
-        tokio::task::spawn_blocking(move || {
+        if LINUX_DESKTOP_START_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+            return crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned();
+        }
+        let guard = LinuxDesktopStartGuard;
+        let username = os_login.username.clone();
+        let password = os_login.password.clone();
+        match tokio::task::spawn_blocking(move || {
+            let _guard = guard;
             linux_desktop_manager::try_start_desktop(&username, &password)
         })
         .await
-        .unwrap_or_default()
+        {
+            Ok(err_msg) => err_msg,
+            Err(err) => {
+                log::error!("Linux desktop start task failed: {err}");
+                crate::client::LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
+            }
+        }
     }
 
     pub async fn wait_desktop_cm_ready(&mut self) {
