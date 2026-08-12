@@ -123,8 +123,16 @@ fn resolve_within(dir: &Path, relative: &str) -> Option<PathBuf> {
 // would otherwise linger in an existing extraction and keep being used. The wipe
 // cannot cover this: it is keyed on the packer's build timestamp, which is now the
 // same for every customer of a release.
-fn remove_dropped_package_files(dir: &Path, current: &[String]) {
+fn remove_dropped_package_files_with<F>(
+    dir: &Path,
+    current: &[String],
+    mut remove_file: F,
+) -> Vec<String>
+where
+    F: FnMut(&Path) -> std::io::Result<()>,
+{
     let keep: std::collections::HashSet<String> = current.iter().map(|p| normalized(p)).collect();
+    let mut failed = Vec::new();
     for previous in previous_package_files(dir) {
         if keep.contains(&normalized(&previous)) {
             continue;
@@ -134,9 +142,17 @@ fn remove_dropped_package_files(dir: &Path, current: &[String]) {
         };
         if path.is_file() {
             println!("removing dropped {}", previous);
-            let _ = std::fs::remove_file(path);
+            if let Err(error) = remove_file(&path) {
+                eprintln!("failed to remove dropped {}: {}", previous, error);
+                failed.push(previous);
+            }
         }
     }
+    failed
+}
+
+fn remove_dropped_package_files(dir: &Path, current: &[String]) -> Vec<String> {
+    remove_dropped_package_files_with(dir, current, |path| std::fs::remove_file(path))
 }
 
 fn setup(
@@ -167,11 +183,12 @@ fn setup(
         }
         std::fs::remove_dir_all(&dir).ok();
     }
-    remove_dropped_package_files(&dir, &reader.package_paths);
+    let mut metadata_paths = reader.package_paths.clone();
+    metadata_paths.extend(remove_dropped_package_files(&dir, &reader.package_paths));
     for file in reader.files.iter() {
         file.write_to_file(&dir);
     }
-    write_meta(&dir, ts, &reader.package_paths);
+    write_meta(&dir, ts, &metadata_paths);
     #[cfg(windows)]
     win::copy_runtime_broker(&dir);
     #[cfg(linux)]
