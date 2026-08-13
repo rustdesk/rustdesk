@@ -35,44 +35,20 @@ fn run_rdp(port: u16, name: &str) {
             .output()
             .ok();
     }
-    match write_rdp_file(port, name) {
-        Some(rdp_file) => {
-            std::process::Command::new("mstsc")
-                .arg(rdp_file)
-                .spawn()
-                .ok();
+    // Keep using /v instead of a generated .rdp file: mstsc then preserves the
+    // user's Default.rdp settings and avoids unsigned-file warnings or policies.
+    match std::process::Command::new("mstsc")
+        .arg(format!("/v:localhost:{}", port))
+        .spawn()
+    {
+        Ok(child) => {
+            #[cfg(windows)]
+            crate::platform::set_rdp_window_title(child, name.to_owned());
+            #[cfg(not(windows))]
+            let _ = (child, name);
         }
-        None => {
-            std::process::Command::new("mstsc")
-                .arg(format!("/v:localhost:{}", port))
-                .spawn()
-                .ok();
-        }
+        Err(err) => log::warn!("Failed to launch mstsc: {}", err),
     }
-}
-
-// mstsc titles the session window after the launched .rdp file's base name;
-// naming the file after the peer replaces the meaningless "localhost" title.
-fn write_rdp_file(port: u16, name: &str) -> Option<std::path::PathBuf> {
-    let name: String = name
-        .chars()
-        .map(|c| {
-            if c.is_control() || r#"\/:*?"<>|"#.contains(c) {
-                '-'
-            } else {
-                c
-            }
-        })
-        .take(60)
-        .collect();
-    // Windows rejects file names that end with a dot or space.
-    let name = name.trim_matches(|c| c == ' ' || c == '.');
-    if name.is_empty() {
-        return None;
-    }
-    let path = std::env::temp_dir().join(format!("{}.rdp", name));
-    std::fs::write(&path, format!("full address:s:localhost:{}\r\n", port)).ok()?;
-    Some(path)
 }
 
 // Prefer the name the user knows the peer by: alias, then cached hostname.
