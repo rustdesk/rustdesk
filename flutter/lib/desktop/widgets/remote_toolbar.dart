@@ -1503,8 +1503,14 @@ class ScreenAdjustor {
     }
     final screenScale = screen.scaleFactor;
     if (isWayland && screenScale > 1) {
-      final fractionalScalingEnabled = await (_gnomeFractionalScalingEnabled ??=
-          bind.mainGetCommon(key: 'gnome-fractional-scaling-enabled'));
+      String fractionalScalingEnabled;
+      try {
+        fractionalScalingEnabled = await (_gnomeFractionalScalingEnabled ??=
+            bind.mainGetCommon(key: 'gnome-fractional-scaling-enabled'));
+      } catch (_) {
+        _gnomeFractionalScalingEnabled = Future.value('');
+        fractionalScalingEnabled = '';
+      }
       if (fractionalScalingEnabled == 'false') {
         frameRect = Rect.fromLTRB(
           frameRect.left / screenScale,
@@ -1564,7 +1570,7 @@ class ScreenAdjustor {
         // before resizing. Predict the restored normal-window edges when
         // deciding whether to show the menu item.
         final resizePadding =
-            isLinux && !kUseCompatibleUiMode ? kWindowResizeEdgeSize : 0.0;
+            isLinux && !kUseCompatibleUiMode ? windowResizeEdgeSize : 0.0;
         final windowEdge = kWindowBorderWidth + resizePadding;
         horizontalEdges = windowEdge * 2;
         verticalEdges = kDesktopRemoteTabBarHeight + windowEdge * 2;
@@ -1663,9 +1669,13 @@ class ScreenAdjustor {
         await updateScreen();
       }
       if (isLinux) {
-        if (await wc.isMaximized()) {
+        if (await isWindowMaximized()) {
           // setFrame may be ignored while the native window is maximized.
-          await wc.unmaximize();
+          try {
+            await wc.unmaximize();
+          } catch (_) {
+            return;
+          }
           stateGlobal.setMaximized(false);
           // Wait for the window manager and Flutter view metrics to reflect
           // the restored window before calculating and setting its frame.
@@ -1678,7 +1688,11 @@ class ScreenAdjustor {
       if (frame == null) {
         return;
       }
-      await wc.setFrame(frame);
+      try {
+        await wc.setFrame(frame);
+      } catch (_) {
+        return;
+      }
       stateGlobal.setMaximized(false);
     }
   }
