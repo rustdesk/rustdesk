@@ -1,6 +1,15 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
 pub use hbb_common::platform::linux::*;
+
+#[cfg(feature = "drm")]
+pub fn dispatch_wayland_display_probe() {
+    use std::ffi::OsStr;
+
+    if std::env::args_os().nth(1).as_deref() == Some(OsStr::new(WAYLAND_DISPLAY_PROBE_ARG)) {
+        wayland_display_probe_child_main();
+    }
+}
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
@@ -43,8 +52,37 @@ const TERM_XTERM_256COLOR: &str = "xterm-256color";
 const TERM_SCREEN_256COLOR: &str = "screen-256color";
 const TERM_XTERM: &str = "xterm";
 
+#[cfg(feature = "drm")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    /// Only for per-frame callers; see `is_login_screen_wayland_cached`.
+    /// Own block because `#[cfg]` on one item inside a shared one breaks the macro.
+    static ref IS_LOGIN_SCREEN_WAYLAND: bool = is_login_screen_wayland();
+}
+
+lazy_static::lazy_static! {
+    /// `is_x11_or_headless()` answers x11 at a Wayland greeter, which the portal could not
+    /// serve but the DRM path can. Unmemoised lookup on purpose: this may run mid-boot, and
+    /// a "no" cached that early would be wrong for the rest of the process.
+    pub static ref IS_X11: bool = {
+        let x11 = hbb_common::platform::linux::is_x11_or_headless();
+        #[cfg(feature = "drm")]
+        {
+            if x11 && !display_server_forced() && is_login_screen_wayland() {
+                log::info!(
+                    "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
+                     treating it as Wayland so the DRM path is not disabled at the one \
+                     screen it exists for"
+                );
+                false
+            } else {
+                x11
+            }
+        }
+        #[cfg(not(feature = "drm"))]
+        {
+            x11
+        }
+    };
     // Cache for TERM value - once TERM_XTERM_256COLOR is found, reuse it directly
     static ref CACHED_TERM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     static ref DATABASE_XTERM_256COLOR: Option<Database> = {
@@ -206,6 +244,34 @@ pub fn is_headless_allowed() -> bool {
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+}
+
+/// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
+/// forwards it to the per-user server on purpose: the greeter correction may only fix an
+/// AUTO-detected answer, never argue with the operator — a half-applied override would leave
+/// `get_display_server()` and the DRM routing gates disagreeing with each other.
+#[cfg(feature = "drm")]
+pub(crate) fn display_server_forced() -> bool {
+    std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").is_ok()
+}
+
+/// X11 as far as the DRM path is concerned: a Wayland greeter is not, unless the operator
+/// forced the display server.
+///
+/// Both halves unmemoised, for the retry loops that must keep asking until seat0 can be named.
+#[cfg(feature = "drm")]
+pub fn is_x11_for_drm() -> bool {
+    scrap::is_x11() && (display_server_forced() || !is_login_screen_wayland())
+}
+
+/// Memoised `is_login_screen_wayland`, for per-frame callers that must not run `loginctl`.
+///
+/// Only from the per-session `--server`: it is spawned after the session is identified, so the
+/// answer is settled. Anything that can run mid-boot must use the uncached form.
+#[cfg(feature = "drm")]
+#[inline]
+pub fn is_login_screen_wayland_cached() -> bool {
+    *IS_LOGIN_SCREEN_WAYLAND
 }
 
 #[inline]
@@ -1062,6 +1128,11 @@ pub fn get_active_userid() -> String {
 #[inline]
 /// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
 pub fn get_active_userid_fresh() -> String {
+    // A Wayland greeter owns seat0 while it is up and the DRM backend serves it, so a uid gate that
+    // cannot see it rejects the greeter's own `--server`. `Desktop::refresh` reads it the same way.
+    #[cfg(feature = "drm")]
+    return get_values_of_seat0_with_gdm_wayland(&[1])[0].clone();
+    #[cfg(not(feature = "drm"))]
     get_values_of_seat0(&[1])[0].clone()
 }
 

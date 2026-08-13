@@ -107,6 +107,25 @@ struct CapDisplayInfo {
     capturer: CapturerPtr,
 }
 
+/// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
+/// asked. `(minx, maxx, miny, maxy)`, in scanout pixels: no compositor here applied a scale, so
+/// unlike `desktop_rect_of` there is no logical size to handle.
+#[cfg(feature = "drm")]
+fn drm_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
+    let displays = super::drm_capturer::get_display_infos()?;
+    if displays.is_empty() {
+        return None;
+    }
+    let minx = displays.iter().map(|d| d.x).min()?;
+    let miny = displays.iter().map(|d| d.y).min()?;
+    let maxx = displays.iter().map(|d| d.x + d.width).max()?;
+    let maxy = displays.iter().map(|d| d.y + d.height).max()?;
+    if maxx <= minx || maxy <= miny {
+        return None;
+    }
+    Some((minx, maxx, miny, maxy))
+}
+
 /// Set the uinput absolute-pointer range to the whole logical desktop so the compositor maps
 /// injected coordinates 1:1 instead of stretching a single-monitor range across all outputs. The
 /// PipeWire path does this inline in `check_init`; the DRM path bypasses check_init so it must do it
@@ -134,17 +153,41 @@ pub(super) async fn update_uinput_resolution() {
     if !crate::input_service::wayland_use_uinput() {
         return;
     }
-    scrap::wayland::display::clear_wayland_displays_cache();
-    let Some(rect) = scrap::wayland::display::get_desktop_rect_for_uinput() else {
-        log::warn!("Failed to get desktop rect for uinput");
-        return;
+    // Compositor first at a login screen too: a greeter runs one, and the hbb_common socket
+    // fallback reaches it with no environment variables. The DRM union is the fallback, and it is
+    // a real loss to land there on a multi-monitor host: DRM has no origins, so its union rect
+    // mis-maps the pointer whenever the compositor arranged the outputs side by side.
+    //
+    // Off the executor: the compositor query can block for the socket probe deadline, and this
+    // runs on current-thread runtimes (session init and the hotplug worker). The layout baseline
+    // is computed in the SAME task: a failed lookup is not cached, so asking for the rects
+    // afterwards would rerun the whole socket probe synchronously.
+    let (rect, layout) = match hbb_common::tokio::task::spawn_blocking(|| {
+        scrap::wayland::display::clear_wayland_displays_cache();
+        match scrap::wayland::display::get_desktop_rect_for_uinput() {
+            // The lookup above just cached the displays, so the rects come from that snapshot.
+            Some(rect) => Some((rect, scrap::wayland::display::get_display_rects_for_uinput())),
+            // Raw DRM union: there is no compositor layout to baseline. Empty keeps the #15601
+            // remap inactive, which is right when the origins are unknown anyway.
+            None => drm_desktop_rect_for_uinput().map(|rect| (rect, Vec::new())),
+        }
+    })
+    .await
+    {
+        Ok(Some(pair)) => pair,
+        Ok(None) => {
+            log::warn!("Failed to get desktop rect for uinput");
+            return;
+        }
+        Err(err) => {
+            log::warn!("The desktop rect probe task failed: {err}");
+            return;
+        }
     };
     // Re-snapshot the baseline on every call: this runs at session init and after every hotplug, and
     // the baseline is what the client's coordinates are measured against.
     let snapshot_layout = || {
-        super::display_service::set_wayland_layout_baseline(
-            scrap::wayland::display::get_display_rects_for_uinput(),
-        );
+        super::display_service::set_wayland_layout_baseline(layout.clone());
     };
     // Reprogram the device only when the range actually changes. A display stuck in a rebuild loop
     // calls this about once a second, and reapplying an identical range is an IPC roundtrip plus a
@@ -331,10 +374,13 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
         // client had already been given. Properly async, so the executor is never blocked; on any
         // failure the cache serves as before.
         super::drm_capturer::refresh_displays_for_login().await;
-        if let Some(displays) = super::drm_capturer::get_display_infos() {
-            // DRM connector order is not the compositor's primary; resolve the real primary from
-            // the compositor layout (matched by normalized connector name), not a hardcoded index 0.
-            return Ok((displays, super::drm_capturer::get_primary_index()));
+        let snapshot = hbb_common::tokio::task::spawn_blocking(
+            super::drm_capturer::get_display_infos_and_primary,
+        )
+        .await
+        .map_err(|err| anyhow::anyhow!("Wayland display probe task failed: {err}"))?;
+        if let Some(snapshot) = snapshot {
+            return Ok(snapshot);
         }
     }
     check_init().await?;

@@ -122,6 +122,12 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    #[cfg(all(
+        target_os = "linux",
+        feature = "drm",
+        not(target_env = "ohos")
+    ))]
+    crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !crate::platform::linux::is_x11() {
