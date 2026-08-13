@@ -735,6 +735,11 @@ class FfiModel with ChangeNotifier {
   _handleUseTextureRender(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     parent.target?.imageModel.setUseTextureRender(evt['v'] == 'Y');
+    if (evt['reason'] == 'fallback') {
+      // The Rust watchdog detected that pushed frames were never rendered
+      // and switched this session to software rendering.
+      showToast(translate('texture-render-fallback-tip'));
+    }
     waitForFirstImage.value = true;
     isRefreshing = true;
     showConnectedWaitingForImage(parent.target!.dialogManager, sessionId,

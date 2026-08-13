@@ -24,8 +24,9 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, RwLock,
+        Arc, Mutex, RwLock,
     },
+    time::{Duration, Instant},
 };
 
 /// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
@@ -269,26 +270,96 @@ pub type FlutterGpuTextureRendererPluginCApiSetTexture =
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
+pub type FlutterRgbaRendererPluginGetConsumed = unsafe extern "C" fn(texture_rgba: *mut c_void) -> u64;
+
+#[cfg(feature = "vram")]
+pub type FlutterGpuTextureRendererPluginCApiGetConsumed =
+    unsafe extern "C" fn(output: *mut c_void) -> u64;
+
 pub(super) type TextureRgbaPtr = usize;
 
+#[derive(Default)]
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
     texture_rgba_ptr: TextureRgbaPtr,
     size: (usize, usize),
+    size_mismatch_count: u32,
     #[cfg(feature = "vram")]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
+    // Watchdog: frames pushed to a texture the engine never consumes mean
+    // texture rendering is broken on this machine (black view while the
+    // connection works). Armed until the first consumption is observed, so a
+    // later minimized window cannot false-positive.
+    pushed_count: u64,
+    watchdog_pushed_at_sample: u64,
+    watchdog_last_sample: Option<Instant>,
+    watchdog_stall_windows: u32,
+    watchdog_armed: bool,
+}
+
+impl DisplaySessionInfo {
+    fn reset_watchdog(&mut self) {
+        self.pushed_count = 0;
+        self.watchdog_pushed_at_sample = 0;
+        self.watchdog_last_sample = None;
+        self.watchdog_stall_windows = 0;
+        self.watchdog_armed = true;
+    }
+
+    // Returns true when texture rendering is deemed broken: >=3 sampled
+    // seconds in which frames kept being pushed but none was ever consumed.
+    fn check_watchdog(&mut self, consumed: u64) -> bool {
+        if consumed > 0 {
+            self.watchdog_armed = false;
+            return false;
+        }
+        let pushed_in_window = self.pushed_count - self.watchdog_pushed_at_sample;
+        self.watchdog_pushed_at_sample = self.pushed_count;
+        if pushed_in_window >= 10 {
+            self.watchdog_stall_windows += 1;
+        }
+        if self.watchdog_stall_windows >= 3 {
+            self.watchdog_armed = false;
+            return true;
+        }
+        false
+    }
+
+    fn watchdog_sample_due(&mut self) -> bool {
+        if !self.watchdog_armed {
+            return false;
+        }
+        let now = Instant::now();
+        match self.watchdog_last_sample {
+            Some(t) if now.duration_since(t) < Duration::from_secs(1) => false,
+            _ => {
+                self.watchdog_last_sample = Some(now);
+                true
+            }
+        }
+    }
 }
 
 // Video Texture Renderer in Flutter
+// Each display entry has its own mutex so the per-frame plugin call only ever
+// holds that display's lock; a stalled plugin/driver call must not back up
+// the session-level locks (which would freeze every window's UI thread).
 #[derive(Clone)]
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
-    map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
+    map_display_sessions: Arc<RwLock<HashMap<usize, Arc<Mutex<DisplaySessionInfo>>>>>,
+    // Latched by the watchdog; consumed once by the pushing caller to trigger
+    // the software-render fallback for this ui session.
+    texture_render_failed: Arc<AtomicBool>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    get_consumed_func: Option<Symbol<'static, FlutterRgbaRendererPluginGetConsumed>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
+    #[cfg(feature = "vram")]
+    get_gpu_consumed_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiGetConsumed>>,
 }
 
 impl Default for VideoRenderer {
@@ -312,6 +383,17 @@ impl Default for VideoRenderer {
                 None
             }
         };
+        // Absent in older plugin builds; the watchdog just stays disabled.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let get_consumed_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
+            Ok(lib) => unsafe {
+                lib.symbol::<FlutterRgbaRendererPluginGetConsumed>(
+                    "FlutterRgbaRendererPluginGetConsumed",
+                )
+                .ok()
+            },
+            Err(_) => None,
+        };
         #[cfg(feature = "vram")]
         let on_texture_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
             Ok(lib) => {
@@ -333,14 +415,29 @@ impl Default for VideoRenderer {
                 None
             }
         };
+        #[cfg(feature = "vram")]
+        let get_gpu_consumed_func = match &*TEXTURE_GPU_RENDERER_PLUGIN {
+            Ok(lib) => unsafe {
+                lib.symbol::<FlutterGpuTextureRendererPluginCApiGetConsumed>(
+                    "FlutterGpuTextureRendererPluginCApiGetConsumed",
+                )
+                .ok()
+            },
+            Err(_) => None,
+        };
 
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
+            texture_render_failed: Default::default(),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             on_rgba_func,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            get_consumed_func,
             #[cfg(feature = "vram")]
             on_texture_func,
+            #[cfg(feature = "vram")]
+            get_gpu_consumed_func,
         }
     }
 }
@@ -349,19 +446,18 @@ impl VideoRenderer {
     #[inline]
     fn set_size(&mut self, display: usize, width: usize, height: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
-        if let Some(info) = sessions_lock.get_mut(&display) {
+        if let Some(info) = sessions_lock.get(&display) {
+            let mut info = info.lock().unwrap();
             info.size = (width, height);
+            info.size_mismatch_count = 0;
             info.notify_render_type = None;
         } else {
             sessions_lock.insert(
                 display,
-                DisplaySessionInfo {
-                    texture_rgba_ptr: usize::default(),
+                Arc::new(Mutex::new(DisplaySessionInfo {
                     size: (width, height),
-                    #[cfg(feature = "vram")]
-                    gpu_output_ptr: usize::default(),
-                    notify_render_type: None,
-                },
+                    ..Default::default()
+                })),
             );
         }
     }
@@ -369,7 +465,8 @@ impl VideoRenderer {
     fn register_pixelbuffer_texture(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
-            if let Some(info) = sessions_lock.get_mut(&display) {
+            if let Some(info_arc) = sessions_lock.get(&display).cloned() {
+                let mut info = info_arc.lock().unwrap();
                 if info.texture_rgba_ptr != usize::default() {
                     info.texture_rgba_ptr = usize::default();
                 }
@@ -377,10 +474,12 @@ impl VideoRenderer {
                 if info.gpu_output_ptr != usize::default() {
                     return;
                 }
+                drop(info);
+                sessions_lock.remove(&display);
             }
-            sessions_lock.remove(&display);
         } else {
-            if let Some(info) = sessions_lock.get_mut(&display) {
+            if let Some(info) = sessions_lock.get(&display) {
+                let mut info = info.lock().unwrap();
                 if info.texture_rgba_ptr != usize::default()
                     && info.texture_rgba_ptr != ptr as TextureRgbaPtr
                 {
@@ -392,20 +491,40 @@ impl VideoRenderer {
                 }
                 info.texture_rgba_ptr = ptr as _;
                 info.notify_render_type = None;
+                info.reset_watchdog();
             } else {
-                if ptr != 0 {
-                    sessions_lock.insert(
-                        display,
-                        DisplaySessionInfo {
-                            texture_rgba_ptr: ptr as _,
-                            size: (0, 0),
-                            #[cfg(feature = "vram")]
-                            gpu_output_ptr: usize::default(),
-                            notify_render_type: None,
-                        },
-                    );
-                }
+                let mut info = DisplaySessionInfo {
+                    texture_rgba_ptr: ptr as _,
+                    ..Default::default()
+                };
+                info.reset_watchdog();
+                sessions_lock.insert(display, Arc::new(Mutex::new(info)));
             }
+        }
+    }
+
+    // Clear the pointer only if it still holds `ptr`. An unconditional clear
+    // could wipe out the registration a new window just made while a tab
+    // moves between windows (#8016); skipping the clear (the old behavior on
+    // move) left Rust pushing into a freed native texture. Waiting on the
+    // display mutex also drains an in-flight push through the old pointer.
+    fn unregister_pixelbuffer_texture(&self, display: usize, ptr: usize) {
+        if ptr == 0 {
+            return;
+        }
+        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+        if let Some(info_arc) = sessions_lock.get(&display).cloned() {
+            let mut info = info_arc.lock().unwrap();
+            if info.texture_rgba_ptr != ptr as TextureRgbaPtr {
+                return;
+            }
+            info.texture_rgba_ptr = usize::default();
+            #[cfg(feature = "vram")]
+            if info.gpu_output_ptr != usize::default() {
+                return;
+            }
+            drop(info);
+            sessions_lock.remove(&display);
         }
     }
 
@@ -413,17 +532,20 @@ impl VideoRenderer {
     pub fn register_gpu_output(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
-            if let Some(info) = sessions_lock.get_mut(&display) {
+            if let Some(info_arc) = sessions_lock.get(&display).cloned() {
+                let mut info = info_arc.lock().unwrap();
                 if info.gpu_output_ptr != usize::default() {
                     info.gpu_output_ptr = usize::default();
                 }
                 if info.texture_rgba_ptr != usize::default() {
                     return;
                 }
+                drop(info);
+                sessions_lock.remove(&display);
             }
-            sessions_lock.remove(&display);
         } else {
-            if let Some(info) = sessions_lock.get_mut(&display) {
+            if let Some(info) = sessions_lock.get(&display) {
+                let mut info = info.lock().unwrap();
                 if info.gpu_output_ptr != usize::default() && info.gpu_output_ptr != ptr {
                     log::error!(
                         "gpu_output_ptr is not null and not equal to ptr, relace {} to {}",
@@ -433,50 +555,90 @@ impl VideoRenderer {
                 }
                 info.gpu_output_ptr = ptr as _;
                 info.notify_render_type = None;
+                info.reset_watchdog();
             } else {
-                if ptr != usize::default() {
-                    sessions_lock.insert(
-                        display,
-                        DisplaySessionInfo {
-                            texture_rgba_ptr: usize::default(),
-                            size: (0, 0),
-                            gpu_output_ptr: ptr,
-                            notify_render_type: None,
-                        },
-                    );
-                }
+                let mut info = DisplaySessionInfo {
+                    gpu_output_ptr: ptr,
+                    ..Default::default()
+                };
+                info.reset_watchdog();
+                sessions_lock.insert(display, Arc::new(Mutex::new(info)));
             }
+        }
+    }
+
+    // See unregister_pixelbuffer_texture for why this is compare-and-clear.
+    #[cfg(feature = "vram")]
+    pub fn unregister_gpu_output(&self, display: usize, ptr: usize) {
+        if ptr == 0 {
+            return;
+        }
+        let mut sessions_lock = self.map_display_sessions.write().unwrap();
+        if let Some(info_arc) = sessions_lock.get(&display).cloned() {
+            let mut info = info_arc.lock().unwrap();
+            if info.gpu_output_ptr != ptr {
+                return;
+            }
+            info.gpu_output_ptr = usize::default();
+            if info.texture_rgba_ptr != usize::default() {
+                return;
+            }
+            drop(info);
+            sessions_lock.remove(&display);
+        }
+    }
+
+    #[inline]
+    fn display_session_info(&self, display: usize) -> Option<Arc<Mutex<DisplaySessionInfo>>> {
+        let read_lock = self.map_display_sessions.read().unwrap();
+        if !self.is_support_multi_ui_session {
+            read_lock.values().next().cloned()
+        } else {
+            read_lock.get(&display).cloned()
         }
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
-        let mut write_lock = self.map_display_sessions.write().unwrap();
-        let opt_info = if !self.is_support_multi_ui_session {
-            write_lock.values_mut().next()
-        } else {
-            write_lock.get_mut(&display)
-        };
-        let Some(info) = opt_info else {
+        let Some(info_arc) = self.display_session_info(display) else {
             return false;
         };
+        let mut info = info_arc.lock().unwrap();
         if info.texture_rgba_ptr == usize::default() {
             return false;
         }
 
         if info.size.0 != rgba.w || info.size.1 != rgba.h {
-            log::error!(
-                "width/height mismatch: ({},{}) != ({},{})",
-                info.size.0,
-                info.size.1,
-                rgba.w,
-                rgba.h
-            );
             // Peer info's handling is async and may be late than video frame's handling
             // Allow peer info not set, but not allow wrong width/height for correct local cursor position
             if info.size != (0, 0) {
-                return false;
+                info.size_mismatch_count += 1;
+                if info.size_mismatch_count == 1 {
+                    log::error!(
+                        "width/height mismatch: ({},{}) != ({},{})",
+                        info.size.0,
+                        info.size.1,
+                        rgba.w,
+                        rgba.h
+                    );
+                }
+                // The stream is the source of truth; if the sizes still
+                // disagree after this many frames the peer info is not
+                // coming, and dropping forever leaves a live session black.
+                if info.size_mismatch_count < 30 {
+                    return false;
+                }
+                log::warn!(
+                    "adopting frame size ({},{}) after {} mismatched frames",
+                    rgba.w,
+                    rgba.h,
+                    info.size_mismatch_count
+                );
+                info.size = (rgba.w, rgba.h);
+                info.size_mismatch_count = 0;
             }
+        } else {
+            info.size_mismatch_count = 0;
         }
         if let Some(func) = &self.on_rgba_func {
             unsafe {
@@ -490,6 +652,20 @@ impl VideoRenderer {
                 )
             };
         }
+        info.pushed_count += 1;
+        if let Some(get_consumed) = &self.get_consumed_func {
+            if info.watchdog_sample_due() {
+                let consumed = unsafe { get_consumed(info.texture_rgba_ptr as _) };
+                if info.check_watchdog(consumed) {
+                    log::error!(
+                        "texture rendering broken: {} frames pushed to display {}, none consumed",
+                        info.pushed_count,
+                        display
+                    );
+                    self.texture_render_failed.store(true, Ordering::SeqCst);
+                }
+            }
+        }
         if info.notify_render_type != Some(RenderType::PixelBuffer) {
             info.notify_render_type = Some(RenderType::PixelBuffer);
             true
@@ -500,20 +676,29 @@ impl VideoRenderer {
 
     #[cfg(feature = "vram")]
     pub fn on_texture(&self, display: usize, texture: *mut c_void) -> bool {
-        let mut write_lock = self.map_display_sessions.write().unwrap();
-        let opt_info = if !self.is_support_multi_ui_session {
-            write_lock.values_mut().next()
-        } else {
-            write_lock.get_mut(&display)
-        };
-        let Some(info) = opt_info else {
+        let Some(info_arc) = self.display_session_info(display) else {
             return false;
         };
+        let mut info = info_arc.lock().unwrap();
         if info.gpu_output_ptr == usize::default() {
             return false;
         }
         if let Some(func) = &self.on_texture_func {
             unsafe { func(info.gpu_output_ptr as _, texture) };
+        }
+        info.pushed_count += 1;
+        if let Some(get_consumed) = &self.get_gpu_consumed_func {
+            if info.watchdog_sample_due() {
+                let consumed = unsafe { get_consumed(info.gpu_output_ptr as _) };
+                if info.check_watchdog(consumed) {
+                    log::error!(
+                        "gpu texture rendering broken: {} frames pushed to display {}, none consumed",
+                        info.pushed_count,
+                        display
+                    );
+                    self.texture_render_failed.store(true, Ordering::SeqCst);
+                }
+            }
         }
         if info.notify_render_type != Some(RenderType::Texture) {
             info.notify_render_type = Some(RenderType::Texture);
@@ -524,11 +709,10 @@ impl VideoRenderer {
     }
 
     pub fn reset_all_display_render_type(&self) {
-        let mut write_lock = self.map_display_sessions.write().unwrap();
-        write_lock
-            .values_mut()
-            .map(|v| v.notify_render_type = None)
-            .count();
+        let read_lock = self.map_display_sessions.read().unwrap();
+        for info in read_lock.values() {
+            info.lock().unwrap().notify_render_type = None;
+        }
     }
 }
 
@@ -661,9 +845,24 @@ impl FlutterHandler {
     }
 
     pub fn update_use_texture_render(&self) {
-        self.use_texture_render
-            .store(crate::ui_interface::use_texture_render(), Ordering::Relaxed);
+        let v = crate::ui_interface::use_texture_render();
+        self.use_texture_render.store(v, Ordering::Relaxed);
         self.display_rgbas.write().unwrap().clear();
+        if v {
+            // Texture render was (re-)enabled; validate it afresh so a still
+            // broken environment fails over again instead of staying black.
+            for (_, session) in self.session_handlers.read().unwrap().iter() {
+                for info in session
+                    .renderer
+                    .map_display_sessions
+                    .read()
+                    .unwrap()
+                    .values()
+                {
+                    info.lock().unwrap().reset_watchdog();
+                }
+            }
+        }
     }
 }
 
@@ -887,12 +1086,13 @@ impl InvokeUiSession for FlutterHandler {
         if !self.use_texture_render.load(Ordering::Relaxed) {
             return;
         }
-        for (_, session) in self.session_handlers.read().unwrap().iter() {
+        for (session_id, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Texture(display, true));
                 }
             }
+            Self::check_texture_render_failed(session_id, session);
         }
     }
 
@@ -1262,14 +1462,29 @@ impl FlutterHandler {
         display: usize,
         rgba: &mut scrap::ImageRgb,
     ) {
-        for (_, session) in self.session_handlers.read().unwrap().iter() {
+        for (session_id, session) in self.session_handlers.read().unwrap().iter() {
             if use_texture_render || session.displays.len() > 1 {
                 if session.renderer.on_rgba(display, rgba) {
                     if let Some(stream) = &session.event_stream {
                         stream.add(EventToUI::Texture(display, false));
                     }
                 }
+                Self::check_texture_render_failed(session_id, session);
             }
+        }
+    }
+
+    // Consume the watchdog latch outside the per-frame hot path work; the
+    // actual fallback (config write, decoder reset) runs on its own thread.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn check_texture_render_failed(session_id: &SessionID, session: &SessionHandler) {
+        if session
+            .renderer
+            .texture_render_failed
+            .swap(false, Ordering::SeqCst)
+        {
+            let session_id = session_id.clone();
+            std::thread::spawn(move || on_texture_render_failed(session_id));
         }
     }
 }
@@ -1792,6 +2007,106 @@ pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _ou
             h.renderer.register_gpu_output(_display, _output_ptr);
             break;
         }
+    }
+}
+
+#[inline]
+pub fn session_unregister_pixelbuffer_texture(session_id: SessionID, display: usize, ptr: usize) {
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&session_id)
+        {
+            h.renderer.unregister_pixelbuffer_texture(display, ptr);
+            break;
+        }
+    }
+}
+
+#[inline]
+pub fn session_unregister_gpu_texture(_session_id: SessionID, _display: usize, _output_ptr: usize) {
+    #[cfg(feature = "vram")]
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&_session_id)
+        {
+            h.renderer.unregister_gpu_output(_display, _output_ptr);
+            break;
+        }
+    }
+}
+
+// Startup-probe plumbing: the main window pushes one frame into a throwaway
+// 1x1 texture and polls whether the engine consumed it, validating the
+// texture pipeline before any session depends on it.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn push_texture_probe_frame(ptr: usize) {
+    if ptr == 0 {
+        return;
+    }
+    let Ok(lib) = &*TEXTURE_RGBA_RENDERER_PLUGIN else {
+        return;
+    };
+    let Ok(func) = (unsafe {
+        lib.symbol::<FlutterRgbaRendererPluginOnRgba>("FlutterRgbaRendererPluginOnRgba")
+    }) else {
+        return;
+    };
+    let frame: [u8; 4] = [255, 255, 255, 255];
+    unsafe { func(ptr as _, frame.as_ptr(), 4, 1, 1, 1) };
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn get_texture_probe_consumed(ptr: usize) -> u64 {
+    if ptr == 0 {
+        return 0;
+    }
+    let Ok(lib) = &*TEXTURE_RGBA_RENDERER_PLUGIN else {
+        return 0;
+    };
+    let Ok(func) = (unsafe {
+        lib.symbol::<FlutterRgbaRendererPluginGetConsumed>("FlutterRgbaRendererPluginGetConsumed")
+    }) else {
+        return 0;
+    };
+    unsafe { func(ptr as _) }
+}
+
+// Frames are being pushed but the engine never consumes them: texture
+// rendering does not work in this environment (GPU/driver/engine breakage).
+// Fall back to software rendering for the live session and record it so the
+// default flips to opt-in; the startup probe re-validates on later launches.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn on_texture_render_failed(session_id: SessionID) {
+    log::error!(
+        "texture rendering failed for session {}, falling back to software rendering",
+        session_id
+    );
+    LocalConfig::set_option(
+        hbb_common::config::keys::OPTION_TEXTURE_RENDER_HEALTH.to_owned(),
+        format!(
+            "failed-watchdog@{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        ),
+    );
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.push_event(
+            "use_texture_render",
+            &[("v", "N"), ("reason", "fallback")],
+            &[],
+        );
+        session.use_texture_render_changed();
+        session.ui_handler.update_use_texture_render();
     }
 }
 

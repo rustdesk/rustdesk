@@ -156,6 +156,7 @@ class _RemotePageState extends State<RemotePage>
           widget.tabController?.state.listen(_onMacOSTabStateChanged);
     }
     Get.put<FFI>(_ffi, tag: widget.id);
+    _RasterStallMonitor.start();
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
@@ -1400,5 +1401,47 @@ class CursorPaint extends StatelessWidget {
         scale: scale,
       ),
     );
+  }
+}
+
+/// Detects a hung raster thread: the UI keeps scheduling frames but the
+/// engine never reports completed frame timings. Rendering cannot be rescued
+/// in-process (software rendering needs the same raster thread), so this only
+/// records the breakage — the next launch then defaults texture rendering to
+/// off and the startup probe re-validates the environment.
+class _RasterStallMonitor {
+  static bool _started = false;
+  static bool _reported = false;
+  static DateTime? _lastTimings;
+  static DateTime? _scheduledSince;
+
+  static void start() {
+    if (_started || isWeb) return;
+    _started = true;
+    SchedulerBinding.instance.addTimingsCallback((_) {
+      _lastTimings = DateTime.now();
+    });
+    Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_reported) return;
+      // A minimized window legitimately stops producing frame timings.
+      if (stateGlobal.isMinimized ||
+          !SchedulerBinding.instance.hasScheduledFrame) {
+        _scheduledSince = null;
+        return;
+      }
+      final now = DateTime.now();
+      _scheduledSince ??= now;
+      final lastTimings = _lastTimings;
+      final stalled =
+          now.difference(_scheduledSince!) > const Duration(seconds: 10) &&
+              (lastTimings == null || lastTimings.isBefore(_scheduledSince!));
+      if (stalled) {
+        _reported = true;
+        bind.mainSetLocalOption(
+            key: kOptionTextureRenderHealth, value: 'failed-raster-stall');
+        debugPrint(
+            'raster thread stall detected, texture rendering disabled for next launch');
+      }
+    });
   }
 }

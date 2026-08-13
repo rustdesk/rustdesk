@@ -538,8 +538,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
-      resolved-ref: "08a471bb8ceccdd50483c81cdfa8b81b07b14b87"
+      ref: "767bb9fe9dcd2c23e2664114bf33760842e872e7"
+      resolved-ref: "767bb9fe9dcd2c23e2664114bf33760842e872e7"
       url: "https://github.com/rustdesk-org/flutter_gpu_texture_renderer"
     source: git
     version: "0.0.1"
@@ -1298,8 +1298,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "42797e0f03141dc2b585f76c64a13974508058b4"
-      resolved-ref: "42797e0f03141dc2b585f76c64a13974508058b4"
+      ref: "ad4c37e414ee40853c0e9503b2da6486d4c1768d"
+      resolved-ref: "ad4c37e414ee40853c0e9503b2da6486d4c1768d"
       url: "https://github.com/rustdesk-org/flutter_texture_rgba_renderer"
     source: git
     version: "0.0.16"

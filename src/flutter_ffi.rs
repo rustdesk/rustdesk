@@ -1227,6 +1227,13 @@ pub fn main_set_local_option(key: String, value: String) {
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
     if is_texture_render_key {
+        // An explicit user toggle gives texture rendering a fresh chance; a
+        // stale failure record must not override it (the watchdog re-records
+        // if the environment is still broken).
+        set_local_option(
+            config::keys::OPTION_TEXTURE_RENDER_HEALTH.to_owned(),
+            "".to_owned(),
+        );
         let session_event = [("v", &value)];
         for session in sessions::get_sessions() {
             if !is_render_target(&session) {
@@ -2293,6 +2300,39 @@ pub fn session_register_gpu_texture(
     SyncReturn(super::flutter::session_register_gpu_texture(
         session_id, display, ptr,
     ))
+}
+
+pub fn session_unregister_pixelbuffer_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_unregister_pixelbuffer_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn session_unregister_gpu_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_unregister_gpu_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn main_push_texture_probe_frame(ptr: usize) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    super::flutter::push_texture_probe_frame(ptr);
+    SyncReturn(())
+}
+
+pub fn main_get_texture_probe_consumed(ptr: usize) -> SyncReturn<u64> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(super::flutter::get_texture_probe_consumed(ptr));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(0)
 }
 
 pub fn query_onlines(ids: Vec<String>) {
