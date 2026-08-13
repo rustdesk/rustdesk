@@ -119,10 +119,24 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 #[cfg(target_os = "linux")]
 fn should_check_linux_headless_os_auth_before_desktop_start(
-    should_start_desktop: bool,
+    is_headless_allowed: bool,
     username: &str,
 ) -> bool {
-    should_start_desktop && !username.trim().is_empty()
+    is_headless_allowed && !username.trim().is_empty()
+}
+
+#[cfg(target_os = "linux")]
+fn linux_desktop_start_credentials(
+    is_headless_allowed: bool,
+    os_login: Option<&OSLogin>,
+) -> Option<(String, String)> {
+    if !is_headless_allowed {
+        return None;
+    }
+    if let Some(os_login) = os_login.filter(|os_login| !os_login.username.trim().is_empty()) {
+        return Some((os_login.username.clone(), os_login.password.clone()));
+    }
+    Some((String::new(), String::new()))
 }
 
 #[cfg(target_os = "linux")]
@@ -2904,11 +2918,8 @@ impl Connection {
             }
 
             #[cfg(target_os = "linux")]
-            let should_start_linux_desktop = self.linux_headless_handle.should_start_desktop();
-
-            #[cfg(target_os = "linux")]
             if should_check_linux_headless_os_auth_before_desktop_start(
-                should_start_linux_desktop,
+                self.linux_headless_handle.is_headless_allowed,
                 &lr.os_login.username,
             ) {
                 let (_failure, res) = self.check_failure(0).await;
@@ -2922,7 +2933,7 @@ impl Connection {
             #[cfg(target_os = "linux")]
             let err_msg = self
                 .linux_headless_handle
-                .try_start_desktop(lr.os_login.as_ref(), should_start_linux_desktop)
+                .try_start_desktop(lr.os_login.as_ref())
                 .await;
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
@@ -6708,28 +6719,16 @@ impl LinuxHeadlessHandle {
         }
     }
 
-    fn should_start_desktop(&self) -> bool {
-        self.is_headless_allowed && linux_desktop_manager::is_headless()
-    }
-
-    pub async fn try_start_desktop(
-        &mut self,
-        os_login: Option<&OSLogin>,
-        should_start_desktop: bool,
-    ) -> String {
-        if !should_start_desktop {
-            return String::new();
-        }
-        let Some(os_login) = os_login.filter(|os_login| !os_login.username.trim().is_empty())
+    pub async fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
+        let Some((username, password)) =
+            linux_desktop_start_credentials(self.is_headless_allowed, os_login)
         else {
-            return crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned();
+            return String::new();
         };
         if LINUX_DESKTOP_START_IN_FLIGHT.swap(true, Ordering::AcqRel) {
             return crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned();
         }
         let guard = LinuxDesktopStartGuard;
-        let username = os_login.username.clone();
-        let password = os_login.password.clone();
         match tokio::task::spawn_blocking(move || {
             let _guard = guard;
             linux_desktop_manager::try_start_desktop(&username, &password)
@@ -6745,10 +6744,7 @@ impl LinuxHeadlessHandle {
     }
 
     pub async fn wait_desktop_cm_ready(&mut self) {
-        // Asked NOW, not stored at construction: a bool captured pre-auth can lag one seat0
-        // transition behind, and skipping this gate on a stale "not headless" races the just
-        // started session. The snapshot is seeded at server start and re-kicked by the earlier
-        // is_headless() reads in this login flow, so by now it is cheap and current.
+        // A value captured at construction can lag behind a seat0 transition.
         if self.is_headless_allowed && linux_desktop_manager::is_headless() {
             self.tx_desktop_ready.send(()).await.ok();
             let _res = timeout(self.wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;

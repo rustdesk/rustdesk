@@ -159,6 +159,7 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
         .to_owned()
     } else {
         let username = get_username();
+        log::debug!("try_start_desktop, username: {}, _username: {}", &username, &_username);
         if username == _username {
             // No need to verify password here.
             return "".to_owned();
@@ -202,7 +203,7 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
 fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool), XSessionStartError> {
     // Seat0 is read BEFORE the manager lock: the lookup runs loginctl, and at a greeter the DRM
     // probe, and holding DESKTOP_MANAGER across those waits serializes every other caller.
-    let seat0_username = supported_display_seat0_username();
+    let seat0_username = refresh_seat0_snapshot();
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
         if let Some(seat0_username) = seat0_username {
@@ -272,6 +273,12 @@ fn supported_display_seat0_username() -> Option<String> {
     }
 }
 
+fn refresh_seat0_snapshot() -> Option<String> {
+    let fresh = supported_display_seat0_username();
+    *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh.clone());
+    fresh
+}
+
 /// Clears the single-flight flag on every exit, including a panic in the refresh thread; without
 /// it a panic would freeze `is_headless` on a stale snapshot for the process lifetime.
 struct Seat0RefreshGuard;
@@ -291,8 +298,7 @@ fn kick_seat0_refresh() {
         .name("seat0-snapshot".into())
         .spawn(move || {
             let _guard = guard;
-            let fresh = supported_display_seat0_username();
-            *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh);
+            let _ = refresh_seat0_snapshot();
         })
         .is_err()
     {
@@ -333,7 +339,7 @@ pub fn get_username() -> String {
     // Computed with the manager lock RELEASED: the lookup runs loginctl, and at a greeter the
     // DRM probe, and holding DESKTOP_MANAGER across those waits serializes every caller behind
     // one slow probe.
-    if let Some(seat0_username) = supported_display_seat0_username() {
+    if let Some(seat0_username) = refresh_seat0_snapshot() {
         return seat0_username;
     }
     match &*DESKTOP_MANAGER.lock().unwrap() {
