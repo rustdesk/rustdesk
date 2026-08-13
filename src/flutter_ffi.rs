@@ -1222,10 +1222,24 @@ pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
 
 pub fn main_set_local_option(key: String, value: String) {
     let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
+    let is_texture_render_health_key = key.eq(config::keys::OPTION_TEXTURE_RENDER_HEALTH);
     let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
+    if is_texture_render_health_key && value.starts_with("failed") {
+        // Probe/raster-stall failures must also downgrade sessions that are
+        // already running (they snapshotted the old effective value, and the
+        // watchdog's own fallback no-ops once a record exists).
+        for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
+            session.push_event("use_texture_render", &[("v", "N")], &[]);
+            session.use_texture_render_changed();
+            session.ui_handler.update_use_texture_render();
+        }
+    }
     if is_texture_render_key {
         // An explicit user toggle gives texture rendering a fresh chance; a
         // stale failure record must not override it (the watchdog re-records
@@ -2319,6 +2333,12 @@ pub fn session_unregister_gpu_texture(
 ) -> SyncReturn<()> {
     SyncReturn(super::flutter::session_unregister_gpu_texture(
         session_id, display, ptr,
+    ))
+}
+
+pub fn session_set_render_visible(session_id: SessionID, visible: bool) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_set_render_visible(
+        session_id, visible,
     ))
 }
 

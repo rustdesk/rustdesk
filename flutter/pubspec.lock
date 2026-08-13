@@ -1298,8 +1298,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "7932bf9c7f64b34b3d136ff07acd7e30dd279c34"
-      resolved-ref: "7932bf9c7f64b34b3d136ff07acd7e30dd279c34"
+      ref: "883326ddd4fb2af1484bf873b4ea856a0ac440bc"
+      resolved-ref: "883326ddd4fb2af1484bf873b4ea856a0ac440bc"
       url: "https://github.com/rustdesk-org/flutter_texture_rgba_renderer"
     source: git
     version: "0.0.16"

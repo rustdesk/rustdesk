@@ -1462,6 +1462,9 @@ class RustdeskImpl {
       required int ptr,
       dynamic hint}) {}
 
+  void sessionSetRenderVisible(
+      {required UuidValue sessionId, required bool visible, dynamic hint}) {}
+
   bool mainTextureRenderProbeSupported({dynamic hint}) {
     return false;
   }

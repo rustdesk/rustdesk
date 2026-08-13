@@ -23,7 +23,7 @@ use std::{
     os::raw::{c_char, c_int, c_void},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
     time::{Duration, Instant},
@@ -278,6 +278,12 @@ pub type FlutterGpuTextureRendererPluginCApiGetConsumed =
 
 pub(super) type TextureRgbaPtr = usize;
 
+// Which texture backend the watchdog saw fail; the health record carries it
+// so the rgba-only startup probe never clears a gpu-path failure.
+pub(super) const WATCHDOG_FAILED_RGBA: u8 = 1;
+#[cfg(feature = "vram")]
+pub(super) const WATCHDOG_FAILED_GPU: u8 = 2;
+
 #[derive(Default)]
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
@@ -292,6 +298,7 @@ struct DisplaySessionInfo {
     // until a consumption is observed since arming.
     pushed_count: u64,
     watchdog_consumed_base: Option<u64>,
+    watchdog_pushed_base: u64,
     watchdog_since: Option<Instant>,
     watchdog_last_sample: Option<Instant>,
     watchdog_armed: bool,
@@ -301,18 +308,27 @@ impl DisplaySessionInfo {
     fn reset_watchdog(&mut self) {
         self.pushed_count = 0;
         self.watchdog_consumed_base = None;
+        self.watchdog_pushed_base = 0;
         self.watchdog_since = None;
         self.watchdog_last_sample = None;
         self.watchdog_armed = true;
     }
 
+    // Restart the observation window without disarming; used while the window
+    // is hidden, where the engine legitimately composites nothing.
+    fn pause_watchdog(&mut self) {
+        self.watchdog_consumed_base = None;
+        self.watchdog_since = None;
+    }
+
     // The plugin counter is cumulative and never resets, so compare against a
     // snapshot taken when arming; damage-driven streams can be sparse, so
-    // judge on cumulative pushes plus elapsed time, not per-second rate.
+    // judge on pushes within the observation window plus elapsed time.
     fn check_watchdog(&mut self, consumed: u64) -> bool {
         let now = Instant::now();
         let Some(base) = self.watchdog_consumed_base else {
             self.watchdog_consumed_base = Some(consumed);
+            self.watchdog_pushed_base = self.pushed_count;
             self.watchdog_since = Some(now);
             return false;
         };
@@ -320,7 +336,7 @@ impl DisplaySessionInfo {
             self.watchdog_armed = false;
             return false;
         }
-        if self.pushed_count >= 30
+        if self.pushed_count - self.watchdog_pushed_base >= 30
             && self
                 .watchdog_since
                 .map(|t| now.duration_since(t) >= Duration::from_secs(3))
@@ -354,9 +370,11 @@ impl DisplaySessionInfo {
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
     map_display_sessions: Arc<RwLock<HashMap<usize, Arc<Mutex<DisplaySessionInfo>>>>>,
-    // Latched by the watchdog; consumed once by the pushing caller to trigger
-    // the software-render fallback for this ui session.
-    texture_render_failed: Arc<AtomicBool>,
+    // Latched by the watchdog (WATCHDOG_FAILED_*); consumed once by the
+    // pushing caller to trigger the software-render fallback for this session.
+    texture_render_failed: Arc<AtomicU8>,
+    // Hidden windows legitimately composite nothing; the watchdog pauses.
+    render_visible: Arc<AtomicBool>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -435,6 +453,7 @@ impl Default for VideoRenderer {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
             texture_render_failed: Default::default(),
+            render_visible: Arc::new(AtomicBool::new(true)),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             on_rgba_func,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -658,7 +677,9 @@ impl VideoRenderer {
         }
         info.pushed_count += 1;
         if let Some(get_consumed) = &self.get_consumed_func {
-            if info.watchdog_sample_due() {
+            if !self.render_visible.load(Ordering::Relaxed) {
+                info.pause_watchdog();
+            } else if info.watchdog_sample_due() {
                 let consumed = unsafe { get_consumed(info.texture_rgba_ptr as _) };
                 if info.check_watchdog(consumed) {
                     log::error!(
@@ -666,7 +687,8 @@ impl VideoRenderer {
                         info.pushed_count,
                         display
                     );
-                    self.texture_render_failed.store(true, Ordering::SeqCst);
+                    self.texture_render_failed
+                        .store(WATCHDOG_FAILED_RGBA, Ordering::SeqCst);
                 }
             }
         }
@@ -695,7 +717,9 @@ impl VideoRenderer {
         // advances it), so this only detects never-composited outputs; the
         // rgba path and the startup probe cover bind-failure black screens.
         if let Some(get_consumed) = &self.get_gpu_consumed_func {
-            if info.watchdog_sample_due() {
+            if !self.render_visible.load(Ordering::Relaxed) {
+                info.pause_watchdog();
+            } else if info.watchdog_sample_due() {
                 let consumed = unsafe { get_consumed(info.gpu_output_ptr as _) };
                 if info.check_watchdog(consumed) {
                     log::error!(
@@ -703,7 +727,8 @@ impl VideoRenderer {
                         info.pushed_count,
                         display
                     );
-                    self.texture_render_failed.store(true, Ordering::SeqCst);
+                    self.texture_render_failed
+                        .store(WATCHDOG_FAILED_GPU, Ordering::SeqCst);
                 }
             }
         }
@@ -1485,13 +1510,13 @@ impl FlutterHandler {
     // actual fallback (config write, decoder reset) runs on its own thread.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn check_texture_render_failed(session_id: &SessionID, session: &SessionHandler) {
-        if session
+        let kind = session
             .renderer
             .texture_render_failed
-            .swap(false, Ordering::SeqCst)
-        {
+            .swap(0, Ordering::SeqCst);
+        if kind != 0 {
             let session_id = session_id.clone();
-            std::thread::spawn(move || on_texture_render_failed(session_id));
+            std::thread::spawn(move || on_texture_render_failed(session_id, kind));
         }
     }
 }
@@ -2033,6 +2058,26 @@ pub fn session_unregister_pixelbuffer_texture(session_id: SessionID, display: us
     }
 }
 
+// Hidden windows legitimately composite nothing; pausing the watchdog there
+// keeps a minimized/background window from recording a false failure.
+#[inline]
+pub fn session_set_render_visible(session_id: SessionID, visible: bool) {
+    for s in sessions::get_sessions() {
+        if let Some(h) = s
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&session_id)
+        {
+            h.renderer
+                .render_visible
+                .store(visible, Ordering::Relaxed);
+            break;
+        }
+    }
+}
+
 #[inline]
 pub fn session_unregister_gpu_texture(_session_id: SessionID, _display: usize, _output_ptr: usize) {
     #[cfg(feature = "vram")]
@@ -2104,8 +2149,9 @@ pub fn get_texture_probe_consumed(ptr: usize) -> u64 {
 // software rendering and record the breakage (health flips the default off;
 // a passing startup probe or an explicit option toggle clears it).
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn on_texture_render_failed(session_id: SessionID) {
+fn on_texture_render_failed(session_id: SessionID, kind: u8) {
     // One record per breakage; later fires (other displays/sessions) no-op.
+    // Sessions already running were downgraded when the record was written.
     if crate::ui_interface::texture_render_health_failed() {
         return;
     }
@@ -2113,10 +2159,16 @@ fn on_texture_render_failed(session_id: SessionID) {
         "texture rendering failed for session {}, falling back to software rendering",
         session_id
     );
+    let backend = if kind == WATCHDOG_FAILED_RGBA {
+        "rgba"
+    } else {
+        "gpu"
+    };
     LocalConfig::set_option(
         hbb_common::config::keys::OPTION_TEXTURE_RENDER_HEALTH.to_owned(),
         format!(
-            "failed-watchdog@{}",
+            "failed-watchdog-{}@{}",
+            backend,
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())

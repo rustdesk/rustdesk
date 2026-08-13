@@ -32,6 +32,7 @@ class _TextureRenderProbeState extends State<TextureRenderProbe> {
   bool _sawTimings = false;
   bool _wasEffectiveOn = false;
   DateTime? _lastTimings;
+  DateTime? _firstPush;
 
   @override
   void initState() {
@@ -82,15 +83,31 @@ class _TextureRenderProbeState extends State<TextureRenderProbe> {
     setState(() => _textureId = id);
     _timer = Timer.periodic(const Duration(milliseconds: 100), (_) {
       _ticks += 1;
+      _firstPush ??= DateTime.now();
       bind.mainPushTextureProbeFrame(ptr: _ptr);
-      if (bind.mainGetTextureProbeConsumed(ptr: _ptr) > 0) {
+      final consumed = bind.mainGetTextureProbeConsumed(ptr: _ptr) > 0;
+      // "Consumed" advances inside the plugin callback, before the GL/Metal
+      // upload; only a frame timing after the push proves a completed frame.
+      final frameCompleted = consumed &&
+          _lastTimings != null &&
+          _lastTimings!.isAfter(_firstPush!);
+      if (frameCompleted) {
         _finish(true);
       } else if (_ticks >= 10) {
+        if (consumed) {
+          _finish(null);
+          return;
+        }
         // Only a window that is visibly compositing can prove a failure.
+        final lifecycle = SchedulerBinding.instance.lifecycleState;
+        final active =
+            lifecycle == null || lifecycle == AppLifecycleState.resumed;
         final timingsFresh = _lastTimings != null &&
             DateTime.now().difference(_lastTimings!) <
                 const Duration(milliseconds: 1500);
-        _finish(!stateGlobal.isMinimized && timingsFresh ? false : null);
+        _finish(!stateGlobal.isMinimized && active && timingsFresh
+            ? false
+            : null);
       }
     });
   }
@@ -102,9 +119,12 @@ class _TextureRenderProbeState extends State<TextureRenderProbe> {
     if (ok != null) {
       final old = bind.mainGetLocalOption(key: kOptionTextureRenderHealth);
       if (ok) {
-        // A 1x1 probe pass disproves the black-texture class, not a
-        // raster-stall under load; that record only clears via the toggle.
-        if (old != 'ok' && !old.startsWith('failed-raster-stall')) {
+        // This rgba probe disproves only the rgba black-texture class: gpu
+        // failures and raster stalls clear via the option toggle alone.
+        final clearable = old.isEmpty ||
+            old.startsWith('failed-probe') ||
+            old.startsWith('failed-watchdog-rgba');
+        if (clearable) {
           bind.mainSetLocalOption(key: kOptionTextureRenderHealth, value: 'ok');
         }
       } else if (!old.startsWith('failed')) {
