@@ -1450,6 +1450,31 @@ class RustdeskImpl {
       required int ptr,
       dynamic hint}) {}
 
+  void sessionUnregisterPixelbufferTexture(
+      {required UuidValue sessionId,
+      required int display,
+      required int ptr,
+      dynamic hint}) {}
+
+  void sessionUnregisterGpuTexture(
+      {required UuidValue sessionId,
+      required int display,
+      required int ptr,
+      dynamic hint}) {}
+
+  void sessionSetRenderVisible(
+      {required UuidValue sessionId, required bool visible, dynamic hint}) {}
+
+  bool mainTextureRenderProbeSupported({dynamic hint}) {
+    return false;
+  }
+
+  void mainPushTextureProbeFrame({required int ptr, dynamic hint}) {}
+
+  int mainGetTextureProbeConsumed({required int ptr, dynamic hint}) {
+    return 0;
+  }
+
   Future<void> queryOnlines({required List<String> ids, dynamic hint}) {
     return Future(() =>
         js.context.callMethod('setByName', ['query_onlines', jsonEncode(ids)]));

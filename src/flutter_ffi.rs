@@ -1222,11 +1222,32 @@ pub fn main_set_env(key: String, value: Option<String>) -> SyncReturn<()> {
 
 pub fn main_set_local_option(key: String, value: String) {
     let is_texture_render_key = key.eq(config::keys::OPTION_TEXTURE_RENDER);
+    let is_texture_render_health_key = key.eq(config::keys::OPTION_TEXTURE_RENDER_HEALTH);
     let is_d3d_render_key = key.eq(config::keys::OPTION_ALLOW_D3D_RENDER);
     set_local_option(key, value.clone());
     let is_render_target =
         |session: &crate::flutter::FlutterSession| session.is_default() || session.is_view_camera();
+    if is_texture_render_health_key && value.starts_with("failed") {
+        // Probe/raster-stall failures must also downgrade sessions that are
+        // already running (they snapshotted the old effective value, and the
+        // watchdog's own fallback no-ops once a record exists).
+        for session in sessions::get_sessions() {
+            if !is_render_target(&session) {
+                continue;
+            }
+            session.push_event("use_texture_render", &[("v", "N")], &[]);
+            session.use_texture_render_changed();
+            session.ui_handler.update_use_texture_render();
+        }
+    }
     if is_texture_render_key {
+        // An explicit user toggle gives texture rendering a fresh chance; a
+        // stale failure record must not override it (the watchdog re-records
+        // if the environment is still broken).
+        set_local_option(
+            config::keys::OPTION_TEXTURE_RENDER_HEALTH.to_owned(),
+            "".to_owned(),
+        );
         let session_event = [("v", &value)];
         for session in sessions::get_sessions() {
             if !is_render_target(&session) {
@@ -2293,6 +2314,52 @@ pub fn session_register_gpu_texture(
     SyncReturn(super::flutter::session_register_gpu_texture(
         session_id, display, ptr,
     ))
+}
+
+pub fn session_unregister_pixelbuffer_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_unregister_pixelbuffer_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn session_unregister_gpu_texture(
+    session_id: SessionID,
+    display: usize,
+    ptr: usize,
+) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_unregister_gpu_texture(
+        session_id, display, ptr,
+    ))
+}
+
+pub fn session_set_render_visible(session_id: SessionID, visible: bool) -> SyncReturn<()> {
+    SyncReturn(super::flutter::session_set_render_visible(
+        session_id, visible,
+    ))
+}
+
+pub fn main_texture_render_probe_supported() -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(super::flutter::texture_render_probe_supported());
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(false)
+}
+
+pub fn main_push_texture_probe_frame(ptr: usize) -> SyncReturn<()> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    super::flutter::push_texture_probe_frame(ptr);
+    SyncReturn(())
+}
+
+pub fn main_get_texture_probe_consumed(ptr: usize) -> SyncReturn<u64> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(super::flutter::get_texture_probe_consumed(ptr));
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(0)
 }
 
 pub fn query_onlines(ids: Vec<String>) {

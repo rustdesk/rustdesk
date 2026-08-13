@@ -11,6 +11,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/pages/view_camera_page.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
@@ -388,6 +389,7 @@ class _DesktopTabState extends State<DesktopTab>
   void onWindowMinimize() {
     stateGlobal.setMinimized(true);
     stateGlobal.setMaximized(false);
+    _updateSessionsRenderVisible(false);
     super.onWindowMinimize();
   }
 
@@ -395,6 +397,7 @@ class _DesktopTabState extends State<DesktopTab>
   void onWindowMaximize() {
     stateGlobal.setMinimized(false);
     _setMaximized(true);
+    _updateSessionsRenderVisible(true);
     super.onWindowMaximize();
   }
 
@@ -402,7 +405,32 @@ class _DesktopTabState extends State<DesktopTab>
   void onWindowUnmaximize() {
     stateGlobal.setMinimized(false);
     _setMaximized(false);
+    _updateSessionsRenderVisible(true);
     super.onWindowUnmaximize();
+  }
+
+  @override
+  void onWindowRestore() {
+    // A plain restore (no maximize involved) must clear the minimized flag.
+    stateGlobal.setMinimized(false);
+    _updateSessionsRenderVisible(true);
+    super.onWindowRestore();
+  }
+
+  // A hidden window composites nothing; pause the Rust-side texture watchdog
+  // for its sessions so it cannot record a false failure.
+  void _updateSessionsRenderVisible(bool visible) {
+    if (tabType != DesktopTabType.remoteScreen &&
+        tabType != DesktopTabType.viewCamera) {
+      return;
+    }
+    for (final tab in controller.state.value.tabs) {
+      try {
+        final ffi = Get.find<FFI>(tag: tab.key);
+        bind.sessionSetRenderVisible(
+            sessionId: ffi.sessionId, visible: visible);
+      } catch (_) {}
+    }
   }
 
   _saveFrame({bool? flush}) async {

@@ -21,6 +21,7 @@ import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
+import '../widgets/raster_stall_monitor.dart';
 import '../widgets/tabbar_widget.dart';
 import 'macos_full_screen_focus_recovery.dart';
 
@@ -156,6 +157,7 @@ class _RemotePageState extends State<RemotePage>
           widget.tabController?.state.listen(_onMacOSTabStateChanged);
     }
     Get.put<FFI>(_ffi, tag: widget.id);
+    RasterStallMonitor.start();
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       _ffi.canvasModel.activateLocalCursor();
       showKBLayoutTypeChooserIfNeeded(
@@ -647,7 +649,7 @@ class _RemotePageState extends State<RemotePage>
     // Clear callback reference to prevent memory leaks and stale references
     _ffi.inputModel.onRelativeMouseModeDisabled = null;
     // Relative mouse mode cleanup is centralized in FFI.close(closeSession: ...).
-    _ffi.textureModel.onRemotePageDispose(closeSession);
+    _ffi.textureModel.onRemotePageDispose();
     if (closeSession && !isMacOS) {
       // ensure we leave this session, this is a double check
       // enterOrLeave() is already called previously in _releaseMacOSRemoteInput() for macOS.
@@ -1402,3 +1404,4 @@ class CursorPaint extends StatelessWidget {
     );
   }
 }
+

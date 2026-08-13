@@ -176,6 +176,15 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
     }
 }
 
+// Watchdog/probe breakage record: a failure forces texture render off on all
+// desktop platforms (even an explicit "Y") — the live fallback relies on it;
+// toggling the option or a passing probe clears it.
+#[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn texture_render_health_failed() -> bool {
+    LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER_HEALTH).starts_with("failed")
+}
+
 #[inline]
 pub fn use_texture_render() -> bool {
     #[cfg(target_os = "android")]
@@ -183,28 +192,33 @@ pub fn use_texture_render() -> bool {
     #[cfg(target_os = "ios")]
     return false;
 
-    #[cfg(target_os = "macos")]
-    return cfg!(feature = "flutter")
-        && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y";
-
-    #[cfg(target_os = "linux")]
-    return cfg!(feature = "flutter")
-        && LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N";
-
-    #[cfg(target_os = "windows")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         if !cfg!(feature = "flutter") {
             return false;
         }
-        // https://learn.microsoft.com/en-us/windows/win32/sysinfo/targeting-your-application-at-windows-8-1
-        #[cfg(debug_assertions)]
-        let default_texture = true;
-        #[cfg(not(debug_assertions))]
-        let default_texture = crate::platform::is_win_10_or_greater();
-        if default_texture {
-            LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N"
-        } else {
-            return LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y";
+        if texture_render_health_failed() {
+            return false;
+        }
+
+        #[cfg(target_os = "macos")]
+        return LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y";
+
+        #[cfg(target_os = "linux")]
+        return LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N";
+
+        #[cfg(target_os = "windows")]
+        {
+            // https://learn.microsoft.com/en-us/windows/win32/sysinfo/targeting-your-application-at-windows-8-1
+            #[cfg(debug_assertions)]
+            let default_texture = true;
+            #[cfg(not(debug_assertions))]
+            let default_texture = crate::platform::is_win_10_or_greater();
+            if default_texture {
+                LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) != "N"
+            } else {
+                return LocalConfig::get_option(config::keys::OPTION_TEXTURE_RENDER) == "Y";
+            }
         }
     }
 }
