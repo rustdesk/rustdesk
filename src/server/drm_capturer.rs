@@ -743,6 +743,16 @@ enum ProbeState {
 }
 
 static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
+/// When the compositor could not be enumerated, hold off before asking again: `get_displays()`
+/// does not cache that case, and the display service polls three times a second, so a greeter
+/// whose compositor stops answering would otherwise pay a probe per poll.
+static WAYLAND_GEOMETRY_FAILED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+/// The last layout the compositor actually gave, served during that hold-off. Deliberately never
+/// an empty list: `augment_with_wayland_geometry_from` reads empty as "no compositor here" and
+/// leaves every monitor at DRM's (0, 0), so answering empty would publish a stacked desktop.
+static WAYLAND_GEOMETRY_LAST_GOOD: Mutex<Option<std::sync::Arc<scrap::wayland::display::Displays>>> =
+    Mutex::new(None);
+const WAYLAND_GEOMETRY_BACKOFF: Duration = Duration::from_secs(5);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
@@ -1216,7 +1226,7 @@ pub(super) fn get_display_infos_and_primary() -> Option<(Vec<DisplayInfo>, usize
         ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
-    let wl = scrap::wayland::display::get_displays();
+    let wl = wayland_displays_for_geometry();
     let assignment = assign_wayland_outputs(&list, &wl.displays);
     let mut infos = augment_with_wayland_geometry_from(&list, &wl, &assignment);
     mark_demoted_displays(&list, &mut infos);
@@ -1242,9 +1252,36 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// cannot answer, the list comes back empty and everything stays unaugmented, which is what the
 /// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
-    let wl = scrap::wayland::display::get_displays();
+    let wl = wayland_displays_for_geometry();
     let assignment = assign_wayland_outputs(drm, &wl.displays);
     augment_with_wayland_geometry_from(drm, &wl, &assignment)
+}
+
+/// The compositor layout, without re-probing a failure on every call.
+///
+/// A failed lookup is not cached below, so the display-service poll paid one probe per turn where
+/// there is no answer to be had. While the hold-off runs, the last layout the compositor really
+/// gave is served instead: the poll only publishes CHANGES, so repeating the layout the client
+/// already has is the quiet answer, where an empty one would advertise the raw DRM stack. Until
+/// there is a layout to repeat, ask.
+fn wayland_displays_for_geometry() -> std::sync::Arc<scrap::wayland::display::Displays> {
+    let holding_off = matches!(
+        *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap(),
+        Some(failed_at) if failed_at.elapsed() < WAYLAND_GEOMETRY_BACKOFF
+    );
+    if holding_off {
+        if let Some(last_good) = WAYLAND_GEOMETRY_LAST_GOOD.lock().unwrap().clone() {
+            return last_good;
+        }
+    }
+    let wl = scrap::wayland::display::get_displays();
+    if wl.displays.is_empty() {
+        *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap() = Some(Instant::now());
+    } else {
+        *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap() = None;
+        *WAYLAND_GEOMETRY_LAST_GOOD.lock().unwrap() = Some(wl.clone());
+    }
+    wl
 }
 
 fn augment_with_wayland_geometry_from(
