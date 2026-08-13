@@ -17,22 +17,34 @@ use std::{
     path::Path,
     process::{Child, Command},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{sync_channel, SyncSender},
         Arc, Mutex,
     },
     time::{Duration, Instant},
 };
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Seat0Snapshot {
+    sequence: usize,
+    username: Option<Option<String>>,
+}
+
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
     static ref DESKTOP_MANAGER: Arc<Mutex<Option<DesktopManager>>> = Arc::new(Mutex::new(None));
+    /// Last settled "who owns seat0" answer, for the PRE-AUTH path only; see `is_headless`.
+    static ref SEAT0_SNAPSHOT: Mutex<Seat0Snapshot> = Mutex::new(Seat0Snapshot::default());
+    static ref SEAT0_NEXT_REFRESH: Mutex<Option<Instant>> = Mutex::new(None);
 }
+
+static SEAT0_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+const FIRST_SEAT0_QUERY_SEQUENCE: usize = 1;
+static SEAT0_QUERY_SEQUENCE: AtomicUsize = AtomicUsize::new(FIRST_SEAT0_QUERY_SEQUENCE);
+const SEAT0_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
 struct DesktopManager {
-    seat0_username: String,
-    seat0_display_server: String,
     child_username: String,
     child_exit: Arc<AtomicBool>,
     is_child_running: Arc<AtomicBool>,
@@ -53,6 +65,9 @@ pub fn start_xdesktop() {
     std::thread::spawn(|| {
         DesktopManager::recover_orphaned_session();
         *DESKTOP_MANAGER.lock().unwrap() = Some(DesktopManager::new());
+        // Seed the pre-auth snapshot now, off the connection path: without this the first
+        // connection of every server process would read no snapshot at all.
+        kick_seat0_refresh();
 
         let interval = time::Duration::from_millis(super::SERVICE_INTERVAL);
         DESKTOP_RUNNING.store(true, Ordering::SeqCst);
@@ -154,6 +169,7 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
         .to_owned()
     } else {
         let username = get_username();
+        log::debug!("try_start_desktop, username: {}, _username: {}", &username, &_username);
         if username == _username {
             // No need to verify password here.
             return "".to_owned();
@@ -195,9 +211,12 @@ pub fn try_start_desktop(_username: &str, _passsword: &str) -> String {
 }
 
 fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool), XSessionStartError> {
+    // Seat0 is read BEFORE the manager lock: the lookup runs loginctl, and at a greeter the DRM
+    // probe, and holding DESKTOP_MANAGER across those waits serializes every other caller.
+    let seat0_username = refresh_seat0_snapshot();
     let mut desktop_manager = DESKTOP_MANAGER.lock().unwrap();
     if let Some(desktop_manager) = &mut (*desktop_manager) {
-        if let Some(seat0_username) = desktop_manager.get_supported_display_seat0_username() {
+        if let Some(seat0_username) = seat0_username {
             return Ok((seat0_username, true));
         }
 
@@ -219,27 +238,188 @@ fn try_start_x_session(username: &str, password: &str) -> Result<(String, bool),
 }
 
 #[inline]
+/// The PRE-AUTH form: connection setup asks this before the peer has authenticated, so it must
+/// not run loginctl or wait on the DRM probe (an unauthenticated client would occupy a worker,
+/// and every connection would serialize behind the same lookup). It answers from the last
+/// settled snapshot and refreshes it off-thread; the decisions that ENFORCE — `get_username`,
+/// `try_start_x_session` — stay fresh.
 pub fn is_headless() -> bool {
-    DESKTOP_MANAGER
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map_or(false, |manager| {
-            manager.get_supported_display_seat0_username().is_none()
+    if DESKTOP_MANAGER.lock().unwrap().is_none() {
+        return false;
+    }
+    let cached = SEAT0_SNAPSHOT.lock().unwrap().username.clone();
+    kick_seat0_refresh();
+    // No snapshot yet answers NOT headless: guessing in the headless direction would show the
+    // OS-login flow over a live Wayland greeter, which reads as an empty seat0 too. A false
+    // only delays the headless flow until the first refresh lands, and the snapshot is seeded
+    // from `start_xdesktop`, so the empty window is server start, not every connection.
+    cached.map_or(false, |answer| answer.is_none())
+}
+
+/// A free function on purpose: it runs loginctl (and at a greeter the DRM probe), so no caller
+/// may reach it while holding `DESKTOP_MANAGER` — that mutex held across subprocess or IPC waits
+/// serializes every connection behind one slow lookup.
+fn supported_display_seat0_username() -> Option<String> {
+    // Read seat0 fresh on every query: the values cached in `DesktopManager::new()` go stale
+    // across a logout or fast-user-switch, which would skip the greeter probe below and hand
+    // back the previous session owner. Queried here and not in `new()` also because the read
+    // there hides greeters.
+    let seat0_values = get_values_of_seat0(&[0, 2]);
+    let seat0_username = seat0_values[1].clone();
+    #[cfg(feature = "drm")]
+    if seat0_username.is_empty() || is_gdm_user(&seat0_username) {
+        if let Some(username) = drm_login_screen_seat0_username() {
+            return Some(username);
+        }
+    }
+    if seat0_username.is_empty() {
+        None
+    } else if is_gdm_user(&seat0_username)
+        && get_display_server_of_session(&seat0_values[0]) == DISPLAY_SERVER_WAYLAND
+    {
+        None
+    } else {
+        Some(seat0_username)
+    }
+}
+
+fn select_newer_seat0_snapshot(current: Seat0Snapshot, candidate: Seat0Snapshot) -> Seat0Snapshot {
+    if candidate.sequence > current.sequence {
+        candidate
+    } else {
+        current
+    }
+}
+
+fn refresh_seat0_snapshot() -> Option<String> {
+    let sequence = SEAT0_QUERY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let fresh = supported_display_seat0_username();
+    let candidate = Seat0Snapshot {
+        sequence,
+        username: Some(fresh.clone()),
+    };
+    let mut snapshot = SEAT0_SNAPSHOT.lock().unwrap();
+    let current = std::mem::take(&mut *snapshot);
+    *snapshot = select_newer_seat0_snapshot(current, candidate);
+    fresh
+}
+
+/// Clears the single-flight flag on every exit, including a panic in the refresh thread; without
+/// it a panic would freeze `is_headless` on a stale snapshot for the process lifetime.
+struct Seat0RefreshGuard;
+impl Drop for Seat0RefreshGuard {
+    fn drop(&mut self) {
+        SEAT0_REFRESH_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
+/// Refresh the snapshot off-thread with a process-wide rate limit and single-flight.
+fn kick_seat0_refresh() {
+    let now = Instant::now();
+    {
+        let mut next_refresh = SEAT0_NEXT_REFRESH.lock().unwrap();
+        let (next, should_refresh) = schedule_seat0_refresh(*next_refresh, now);
+        *next_refresh = next;
+        if !should_refresh {
+            return;
+        }
+    }
+    if SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let guard = Seat0RefreshGuard;
+    if let Err(err) = std::thread::Builder::new()
+        .name("seat0-snapshot".into())
+        .spawn(move || {
+            let _guard = guard;
+            let _ = refresh_seat0_snapshot();
         })
+    {
+        log::warn!("Could not spawn the seat0 snapshot refresh thread: {err}");
+    }
+}
+
+/// The Wayland greeter on seat0, if the DRM backend can capture and inject into it.
+#[cfg(feature = "drm")]
+fn drm_login_screen_seat0_username() -> Option<String> {
+    // An operator-forced X11 wins over greeter adoption: adopting would rebuild exactly the
+    // inconsistency the forced gate exists to prevent — a session admitted for DRM serving
+    // while capture and input route down the X11 path.
+    if crate::platform::linux::display_server_forced() && crate::platform::linux::is_x11() {
+        return None;
+    }
+    let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
+    if !is_gdm_user(&values[1])
+        || get_display_server_of_session(&values[0]) != DISPLAY_SERVER_WAYLAND
+    {
+        return None;
+    }
+    // The cached tri-state, never the probing form: this runs on the unauthenticated login path,
+    // so it must not wait out a probe deadline. Only a definitive unavailable hands the seat to
+    // X11; an unsettled result keeps the maybe-live greeter (settling happens off-thread).
+    if crate::server::drm_capturer::availability_cached()
+        == crate::server::drm_capturer::Availability::Unavailable
+    {
+        return None;
+    }
+    Some(values[1].clone())
+}
+
+fn cached_username_from_state(
+    seat0_username: Option<String>,
+    managed_session: Option<(&str, bool)>,
+) -> String {
+    if let Some(username) = seat0_username {
+        return username;
+    }
+    match managed_session {
+        Some((username, true)) => username.to_owned(),
+        _ => String::new(),
+    }
+}
+
+fn schedule_seat0_refresh(next_refresh: Option<Instant>, now: Instant) -> (Option<Instant>, bool) {
+    if next_refresh.is_some_and(|deadline| now < deadline) {
+        return (next_refresh, false);
+    }
+    (Some(now + SEAT0_REFRESH_INTERVAL), true)
+}
+
+/// Returns the last settled username without running external commands.
+pub fn get_cached_username() -> String {
+    let seat0_username = SEAT0_SNAPSHOT.lock().unwrap().username.clone().flatten();
+    let username = {
+        let manager = DESKTOP_MANAGER.lock().unwrap();
+        let Some(manager) = manager.as_ref() else {
+            return String::new();
+        };
+        cached_username_from_state(
+            seat0_username,
+            Some((&manager.child_username, manager.is_running())),
+        )
+    };
+    if username.is_empty() {
+        kick_seat0_refresh();
+    }
+    username
 }
 
 pub fn get_username() -> String {
+    if DESKTOP_MANAGER.lock().unwrap().is_none() {
+        return "".to_owned();
+    }
+    // Computed with the manager lock RELEASED: the lookup runs loginctl, and at a greeter the
+    // DRM probe, and holding DESKTOP_MANAGER across those waits serializes every caller behind
+    // one slow probe.
+    if let Some(seat0_username) = refresh_seat0_snapshot() {
+        return seat0_username;
+    }
     match &*DESKTOP_MANAGER.lock().unwrap() {
         Some(manager) => {
-            if let Some(seat0_username) = manager.get_supported_display_seat0_username() {
-                seat0_username
+            if manager.is_running() && !manager.child_username.is_empty() {
+                manager.child_username.clone()
             } else {
-                if manager.is_running() && !manager.child_username.is_empty() {
-                    manager.child_username.clone()
-                } else {
-                    "".to_owned()
-                }
+                "".to_owned()
             }
         }
         None => "".to_owned(),
@@ -258,30 +438,10 @@ impl DesktopManager {
     }
 
     pub fn new() -> Self {
-        let mut seat0_username = "".to_owned();
-        let mut seat0_display_server = "".to_owned();
-        let seat0_values = get_values_of_seat0(&[0, 2]);
-        if !seat0_values[0].is_empty() {
-            seat0_username = seat0_values[1].clone();
-            seat0_display_server = get_display_server_of_session(&seat0_values[0]);
-        }
         Self {
-            seat0_username,
-            seat0_display_server,
             child_username: "".to_owned(),
             child_exit: Arc::new(AtomicBool::new(true)),
             is_child_running: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    fn get_supported_display_seat0_username(&self) -> Option<String> {
-        if is_gdm_user(&self.seat0_username) && self.seat0_display_server == DISPLAY_SERVER_WAYLAND
-        {
-            None
-        } else if self.seat0_username.is_empty() {
-            None
-        } else {
-            Some(self.seat0_username.clone())
         }
     }
 
@@ -1099,6 +1259,38 @@ fn pam_get_service_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_username_prefers_seat0_and_running_managed_session() {
+        assert_eq!(
+            cached_username_from_state(Some("seat0".to_owned()), Some(("managed", true))),
+            "seat0"
+        );
+        assert_eq!(
+            cached_username_from_state(None, Some(("managed", true))),
+            "managed"
+        );
+        assert_eq!(
+            cached_username_from_state(None, Some(("managed", false))),
+            ""
+        );
+        assert_eq!(cached_username_from_state(None, None), "");
+    }
+
+    #[test]
+    fn seat0_refresh_schedule_limits_process_wide_rate() {
+        let started = Instant::now();
+        let (next_refresh, should_refresh) = schedule_seat0_refresh(None, started);
+        assert!(should_refresh);
+
+        let (unchanged, should_refresh) = schedule_seat0_refresh(next_refresh, started);
+        assert!(!should_refresh);
+        assert_eq!(unchanged, next_refresh);
+
+        let (_, should_refresh) =
+            schedule_seat0_refresh(next_refresh, started + SEAT0_REFRESH_INTERVAL);
+        assert!(should_refresh);
+    }
 
     #[test]
     fn session_scope_truncates_at_first_scope() {
