@@ -2322,6 +2322,13 @@ pub fn session_unregister_gpu_texture(
     ))
 }
 
+pub fn main_texture_render_probe_supported() -> SyncReturn<bool> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return SyncReturn(super::flutter::texture_render_probe_supported());
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    SyncReturn(false)
+}
+
 pub fn main_push_texture_probe_frame(ptr: usize) -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     super::flutter::push_texture_probe_frame(ptr);

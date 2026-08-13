@@ -1462,6 +1462,10 @@ class RustdeskImpl {
       required int ptr,
       dynamic hint}) {}
 
+  bool mainTextureRenderProbeSupported({dynamic hint}) {
+    return false;
+  }
+
   void mainPushTextureProbeFrame({required int ptr, dynamic hint}) {}
 
   int mainGetTextureProbeConsumed({required int ptr, dynamic hint}) {

@@ -19,6 +19,7 @@ import '../../common/shared_state.dart';
 import '../../utils/image.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
+import '../widgets/raster_stall_monitor.dart';
 import '../widgets/tabbar_widget.dart';
 
 import 'package:flutter_hbb/native/custom_cursor.dart'
@@ -102,6 +103,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     super.initState();
     _ffi = FFI(widget.sessionId);
     Get.put<FFI>(_ffi, tag: widget.id);
+    RasterStallMonitor.start();
     _ffi.imageModel.addCallbackOnFirstImage((String peerId) {
       showKBLayoutTypeChooserIfNeeded(
           _ffi.ffiModel.pi.platform, _ffi.dialogManager);
@@ -222,7 +224,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     debugPrint("VIEW CAMERA PAGE dispose session $sessionId ${widget.id}");
-    _ffi.textureModel.onViewCameraPageDispose(closeSession);
+    _ffi.textureModel.onViewCameraPageDispose();
     if (closeSession) {
       // ensure we leave this session, this is a double check
       _ffi.inputModel.enterOrLeave(false);

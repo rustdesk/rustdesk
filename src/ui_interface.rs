@@ -176,10 +176,9 @@ pub fn get_option<T: AsRef<str>>(key: T) -> String {
     }
 }
 
-// The watchdog/startup probe records texture-render breakage (frames pushed
-// but never consumed by the engine). A failed record forces texture render
-// off on every desktop platform — even an explicit "Y" — because the live
-// fallback relies on it; toggling the option (or a passing probe) clears it.
+// Watchdog/probe breakage record: a failure forces texture render off on all
+// desktop platforms (even an explicit "Y") — the live fallback relies on it;
+// toggling the option or a passing probe clears it.
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn texture_render_health_failed() -> bool {

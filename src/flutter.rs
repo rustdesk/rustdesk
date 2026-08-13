@@ -288,38 +288,44 @@ struct DisplaySessionInfo {
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
     // Watchdog: frames pushed to a texture the engine never consumes mean
-    // texture rendering is broken on this machine (black view while the
-    // connection works). Armed until the first consumption is observed, so a
-    // later minimized window cannot false-positive.
+    // texture rendering is broken (black view on a live connection). Armed
+    // until a consumption is observed since arming.
     pushed_count: u64,
-    watchdog_pushed_at_sample: u64,
+    watchdog_consumed_base: Option<u64>,
+    watchdog_since: Option<Instant>,
     watchdog_last_sample: Option<Instant>,
-    watchdog_stall_windows: u32,
     watchdog_armed: bool,
 }
 
 impl DisplaySessionInfo {
     fn reset_watchdog(&mut self) {
         self.pushed_count = 0;
-        self.watchdog_pushed_at_sample = 0;
+        self.watchdog_consumed_base = None;
+        self.watchdog_since = None;
         self.watchdog_last_sample = None;
-        self.watchdog_stall_windows = 0;
         self.watchdog_armed = true;
     }
 
-    // Returns true when texture rendering is deemed broken: >=3 sampled
-    // seconds in which frames kept being pushed but none was ever consumed.
+    // The plugin counter is cumulative and never resets, so compare against a
+    // snapshot taken when arming; damage-driven streams can be sparse, so
+    // judge on cumulative pushes plus elapsed time, not per-second rate.
     fn check_watchdog(&mut self, consumed: u64) -> bool {
-        if consumed > 0 {
+        let now = Instant::now();
+        let Some(base) = self.watchdog_consumed_base else {
+            self.watchdog_consumed_base = Some(consumed);
+            self.watchdog_since = Some(now);
+            return false;
+        };
+        if consumed > base {
             self.watchdog_armed = false;
             return false;
         }
-        let pushed_in_window = self.pushed_count - self.watchdog_pushed_at_sample;
-        self.watchdog_pushed_at_sample = self.pushed_count;
-        if pushed_in_window >= 10 {
-            self.watchdog_stall_windows += 1;
-        }
-        if self.watchdog_stall_windows >= 3 {
+        if self.pushed_count >= 30
+            && self
+                .watchdog_since
+                .map(|t| now.duration_since(t) >= Duration::from_secs(3))
+                .unwrap_or(false)
+        {
             self.watchdog_armed = false;
             return true;
         }
@@ -342,9 +348,8 @@ impl DisplaySessionInfo {
 }
 
 // Video Texture Renderer in Flutter
-// Each display entry has its own mutex so the per-frame plugin call only ever
-// holds that display's lock; a stalled plugin/driver call must not back up
-// the session-level locks (which would freeze every window's UI thread).
+// Per-display mutexes: the per-frame plugin call must not hold session-level
+// locks, or a stalled plugin/driver call freezes every window's UI thread.
 #[derive(Clone)]
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
@@ -503,11 +508,9 @@ impl VideoRenderer {
         }
     }
 
-    // Clear the pointer only if it still holds `ptr`. An unconditional clear
-    // could wipe out the registration a new window just made while a tab
-    // moves between windows (#8016); skipping the clear (the old behavior on
-    // move) left Rust pushing into a freed native texture. Waiting on the
-    // display mutex also drains an in-flight push through the old pointer.
+    // Compare-and-clear: an unconditional clear could wipe the registration a
+    // new window just made when a tab moves between windows (#8016); waiting
+    // on the display mutex also drains an in-flight push via the old pointer.
     fn unregister_pixelbuffer_texture(&self, display: usize, ptr: usize) {
         if ptr == 0 {
             return;
@@ -622,10 +625,11 @@ impl VideoRenderer {
                         rgba.h
                     );
                 }
-                // The stream is the source of truth; if the sizes still
-                // disagree after this many frames the peer info is not
-                // coming, and dropping forever leaves a live session black.
-                if info.size_mismatch_count < 30 {
+                // If sizes still disagree after this many frames the peer info
+                // is not coming and dropping forever leaves a live session
+                // black. Legacy single-ui-session pairs frames loosely
+                // (values().next()), so only adopt where pairing is exact.
+                if !self.is_support_multi_ui_session || info.size_mismatch_count < 30 {
                     return false;
                 }
                 log::warn!(
@@ -2047,6 +2051,19 @@ pub fn session_unregister_gpu_texture(_session_id: SessionID, _display: usize, _
 // 1x1 texture and polls whether the engine consumed it, validating the
 // texture pipeline before any session depends on it.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn texture_render_probe_supported() -> bool {
+    match &*TEXTURE_RGBA_RENDERER_PLUGIN {
+        Ok(lib) => unsafe {
+            lib.symbol::<FlutterRgbaRendererPluginGetConsumed>(
+                "FlutterRgbaRendererPluginGetConsumed",
+            )
+            .is_ok()
+        },
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn push_texture_probe_frame(ptr: usize) {
     if ptr == 0 {
         return;
@@ -2059,7 +2076,8 @@ pub fn push_texture_probe_frame(ptr: usize) {
     }) else {
         return;
     };
-    let frame: [u8; 4] = [255, 255, 255, 255];
+    // Fully transparent so the 1x1 probe pixel is invisible on any theme.
+    let frame: [u8; 4] = [0, 0, 0, 0];
     unsafe { func(ptr as _, frame.as_ptr(), 4, 1, 1, 1) };
 }
 
@@ -2079,12 +2097,15 @@ pub fn get_texture_probe_consumed(ptr: usize) -> u64 {
     unsafe { func(ptr as _) }
 }
 
-// Frames are being pushed but the engine never consumes them: texture
-// rendering does not work in this environment (GPU/driver/engine breakage).
-// Fall back to software rendering for the live session and record it so the
-// default flips to opt-in; the startup probe re-validates on later launches.
+// Frames are being pushed but the engine never consumes them: fall back to
+// software rendering and record the breakage (health flips the default off;
+// a passing startup probe or an explicit option toggle clears it).
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn on_texture_render_failed(session_id: SessionID) {
+    // One record per breakage; later fires (other displays/sessions) no-op.
+    if crate::ui_interface::texture_render_health_failed() {
+        return;
+    }
     log::error!(
         "texture rendering failed for session {}, falling back to software rendering",
         session_id
@@ -2099,12 +2120,30 @@ fn on_texture_render_failed(session_id: SessionID) {
                 .unwrap_or(0)
         ),
     );
-    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.push_event(
-            "use_texture_render",
-            &[("v", "N"), ("reason", "fallback")],
-            &[],
-        );
+    // Mirror main_set_local_option: every render session must observe the
+    // new effective value, not only the failing one.
+    for session in sessions::get_sessions() {
+        if !(session.is_default() || session.is_view_camera()) {
+            continue;
+        }
+        // The soft path cannot rescue multi-display windows; don't claim it.
+        let fallback_rescues = session
+            .ui_handler
+            .session_handlers
+            .read()
+            .unwrap()
+            .get(&session_id)
+            .map(|h| h.displays.len() <= 1)
+            .unwrap_or(false);
+        if fallback_rescues {
+            session.push_event(
+                "use_texture_render",
+                &[("v", "N"), ("reason", "fallback")],
+                &[],
+            );
+        } else {
+            session.push_event("use_texture_render", &[("v", "N")], &[]);
+        }
         session.use_texture_render_changed();
         session.ui_handler.update_use_texture_render();
     }

@@ -405,6 +405,13 @@ class _DesktopTabState extends State<DesktopTab>
     super.onWindowUnmaximize();
   }
 
+  @override
+  void onWindowRestore() {
+    // A plain restore (no maximize involved) must clear the minimized flag.
+    stateGlobal.setMinimized(false);
+    super.onWindowRestore();
+  }
+
   _saveFrame({bool? flush}) async {
     try {
       if (tabType == DesktopTabType.main) {

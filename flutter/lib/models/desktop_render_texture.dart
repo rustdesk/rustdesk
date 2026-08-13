@@ -52,15 +52,14 @@ class _PixelbufferTexture {
     });
   }
 
-  destroy(bool closeSession, FFI ffi) async {
+  destroy(FFI ffi) async {
     _closed = true;
     if (!_destroying && _textureKey != -1 && _sessionId != null) {
       _destroying = true;
       if (_ptr != 0) {
-        // Compare-and-clear: clears only if Rust still holds this pointer, so
-        // a registration a new window has already made stays intact (#8016).
-        // Returning from this synchronous call also guarantees no push
-        // through the old pointer is still in flight.
+        // Compare-and-clear: only clears if Rust still holds this pointer
+        // (#8016-safe); returning from this synchronous call also means no
+        // push through the old pointer is still in flight.
         platformFFI.unregisterPixelbufferTexture(_sessionId!, display, _ptr);
         _ptr = 0;
       }
@@ -122,7 +121,7 @@ class _GpuTexture {
     }
   }
 
-  destroy(bool closeSession, FFI ffi) async {
+  destroy(FFI ffi) async {
     // must stop texture render, render unregistered texture cause crash
     _closed = true;
     if (!_destroying && support && _sessionId != null && _textureId != -1) {
@@ -229,11 +228,11 @@ class TextureModel {
     tryRemoveTexture(int idx) {
       _control.remove(idx);
       if (_pixelbufferRenderTextures.containsKey(idx)) {
-        _pixelbufferRenderTextures[idx]!.destroy(true, ffi);
+        _pixelbufferRenderTextures[idx]!.destroy(ffi);
         _pixelbufferRenderTextures.remove(idx);
       }
       if (_gpuRenderTextures.containsKey(idx)) {
-        _gpuRenderTextures[idx]!.destroy(true, ffi);
+        _gpuRenderTextures[idx]!.destroy(ffi);
         _gpuRenderTextures.remove(idx);
       }
     }
@@ -253,25 +252,25 @@ class TextureModel {
     }
   }
 
-  onRemotePageDispose(bool closeSession) async {
+  onRemotePageDispose() async {
     final ffi = parent.target;
     if (ffi == null) return;
     for (final texture in _pixelbufferRenderTextures.values) {
-      await texture.destroy(closeSession, ffi);
+      await texture.destroy(ffi);
     }
     for (final texture in _gpuRenderTextures.values) {
-      await texture.destroy(closeSession, ffi);
+      await texture.destroy(ffi);
     }
   }
 
-  onViewCameraPageDispose(bool closeSession) async {
+  onViewCameraPageDispose() async {
     final ffi = parent.target;
     if (ffi == null) return;
     for (final texture in _pixelbufferRenderTextures.values) {
-      await texture.destroy(closeSession, ffi);
+      await texture.destroy(ffi);
     }
     for (final texture in _gpuRenderTextures.values) {
-      await texture.destroy(closeSession, ffi);
+      await texture.destroy(ffi);
     }
   }
 
