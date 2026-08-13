@@ -691,6 +691,9 @@ impl VideoRenderer {
             unsafe { func(info.gpu_output_ptr as _, texture) };
         }
         info.pushed_count += 1;
+        // Gpu "consumed" counts descriptor fetches (an EGL bind failure still
+        // advances it), so this only detects never-composited outputs; the
+        // rgba path and the startup probe cover bind-failure black screens.
         if let Some(get_consumed) = &self.get_gpu_consumed_func {
             if info.watchdog_sample_due() {
                 let consumed = unsafe { get_consumed(info.gpu_output_ptr as _) };
