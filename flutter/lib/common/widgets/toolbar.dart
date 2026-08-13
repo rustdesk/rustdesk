@@ -349,12 +349,12 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               showRequestElevationDialog(sessionId, ffi.dialogManager)),
     );
   }
-  // osAccount / osPassword
+  // osPassword
   if (isDefaultConn && perms['keyboard'] != false) {
     v.add(
       TTextMenu(
         child: Row(children: [
-          Text(translate(pi.isHeadless ? 'OS Account' : 'OS Password')),
+          Text(translate('OS Password')),
         ]),
         trailingIcon: Transform.scale(
           scale: (isDesktop || isWebDesktop) ? 0.8 : 1,
@@ -363,18 +363,12 @@ List<TTextMenu> toolbarControls(BuildContext context, String id, FFI ffi) {
               if (isMobile && Navigator.canPop(context)) {
                 Navigator.pop(context);
               }
-              if (pi.isHeadless) {
-                showSetOSAccount(sessionId, ffi.dialogManager);
-              } else {
-                handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
-              }
+              handleOsPasswordEditIcon(sessionId, ffi.dialogManager);
             },
             icon: Icon(Icons.edit, color: isMobile ? MyTheme.accent : null),
           ),
         ),
-        onPressed: () => pi.isHeadless
-            ? showSetOSAccount(sessionId, ffi.dialogManager)
-            : handleOsPasswordAction(sessionId, ffi.dialogManager),
+        onPressed: () => handleOsPasswordAction(sessionId, ffi.dialogManager),
       ),
     );
   }

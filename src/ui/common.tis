@@ -272,30 +272,6 @@ function msgbox(type, title, content, link="", callback=null, height=180, width=
             handler.send2fa(res.code, res.trust_this_device || false); 
             msgbox("connecting", "Connecting...", "Logging in...");
         };
-    } else if (type == "session-login" || type == "session-re-login") {
-        callback = function (res) {
-            if (!res) {
-                view.close();
-                return;
-            }
-            handler.login(res.osusername, res.ospassword, "", false);
-            if (!is_port_forward) {
-              if (is_file_transfer) handler.msgbox("connecting", "Connecting...", "Logging in...");
-              else msgbox("connecting", "Connecting...", "Logging in...");
-            }
-        };
-    } else if (type.indexOf("session-login") >= 0) {
-        callback = function (res) {
-            if (!res) {
-                view.close();
-                return;
-            }
-            handler.login(res.osusername, res.ospassword, res.password, res.remember);
-            if (!is_port_forward) {
-              if (is_file_transfer) handler.msgbox("connecting", "Connecting...", "Logging in...");
-              else msgbox("connecting", "Connecting...", "Logging in...");
-            }
-        };
     } else if (type.indexOf("insecure-connection") >= 0) {
         callback = function (res) {
             if (!res) {
