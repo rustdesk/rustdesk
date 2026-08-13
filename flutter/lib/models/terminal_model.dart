@@ -10,6 +10,8 @@ import 'package:xterm/xterm.dart';
 import 'input_modifier_utils.dart';
 import 'model.dart';
 import 'platform_model.dart';
+import 'rustdesk_terminal.dart';
+import 'terminal_mouse_handler.dart';
 
 class TerminalModel with ChangeNotifier {
   final String id; // peer id
@@ -128,7 +130,8 @@ class TerminalModel with ChangeNotifier {
   }
 
   TerminalModel(this.parent, [this.terminalId = 0]) : id = parent.id {
-    terminal = Terminal(maxLines: 10000);
+    terminal = RustDeskTerminal(maxLines: 10000);
+    terminal.mouseHandler = const WheelButtonFixMouseHandler();
     terminalController = TerminalController();
 
     // Setup terminal callbacks

@@ -773,7 +773,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "你的 IP 已被對方封鎖"),
         ("id_whitelist_caveat_tip", "ID 由對端用戶端回報，白名單用於減少暴露面，不能取代密碼或 2FA"),
         ("whitelist_cidr_tip", "支援 CIDR 寫法，例如 192.168.1.0/24"),
-        ("Continue", ""),
-        ("Browser didn't open? Use the url below to sign in.", ""),
+        ("Continue", "繼續"),
+        ("Browser didn't open? Use the url below to sign in.", "瀏覽器未開啟？請使用下方網址登入。"),
     ].iter().cloned().collect();
 }

@@ -3074,9 +3074,8 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "fuser"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53274f494609e77794b627b1a3cddfe45d675a6b2e9ba9c0fdc8d8eee2184369"
+version = "0.16.0"
+source = "git+https://github.com/rustdesk-org/fuser?branch=refact/tag-0.16.0-cargo-1.75.0#a3c0babe4a533f8dbcff5bce59ae7f2424b8d877"
 dependencies = [
  "libc",
  "log",
