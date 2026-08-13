@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "χωρίς δακτυλικά αποτυπώματα"),
         ("Select a peer", "Επιλέξτε έναν σταθμό"),
         ("Select peers", "Επιλέξτε σταθμούς"),
-        ("Plugins", "Επεκτάσεις"),
         ("Uninstall", "Κατάργηση εγκατάστασης"),
         ("Update", "Ενημέρωση"),
         ("Enable", "Ενεργοποίηση"),

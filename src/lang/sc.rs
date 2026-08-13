@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "Peruna firma digitale"),
         ("Select a peer", "Seletziona su dispositivu remotu"),
         ("Select peers", "Seletziona sos dispositivos remotos"),
-        ("Plugins", "Cumplementos"),
         ("Uninstall", "Disinstalla"),
         ("Update", "Atualiza"),
         ("Enable", "Abìlita"),

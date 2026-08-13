@@ -569,16 +569,6 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg));
     }
 
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn send_plugin_request(&self, request: PluginRequest) {
-        let mut misc = Misc::new();
-        misc.set_plugin_request(request);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        self.send(Data::Message(msg_out));
-    }
-
     pub fn get_audit_server(&self, typ: String) -> String {
         if LocalConfig::get_option("access_token").is_empty() {
             return "".to_owned();

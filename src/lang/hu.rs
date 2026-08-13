@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "nincsenek ujjlenyomatok"),
         ("Select a peer", "Egy távoli állomás kiválasztása"),
         ("Select peers", "Távoli állomások kiválasztása"),
-        ("Plugins", "Beépülő modulok"),
         ("Uninstall", "Eltávolítás"),
         ("Update", "Frissítés"),
         ("Enable", "Engedélyezés"),

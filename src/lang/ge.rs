@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "ანაბეჭდები არ არის"),
         ("Select a peer", "აირჩიეთ დისტანციური კვანძი"),
         ("Select peers", "აირჩიეთ დისტანციური კვანძები"),
-        ("Plugins", "დანამატები"),
         ("Uninstall", "წაშლა"),
         ("Update", "განახლება"),
         ("Enable", "ჩართვა"),

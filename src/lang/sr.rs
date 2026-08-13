@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "Nema otisaka"),
         ("Select a peer", "Izaberi klijenta"),
         ("Select peers", "Izaberi klijente"),
-        ("Plugins", "Dodaci"),
         ("Uninstall", "Deinstaliraj"),
         ("Update", "Ažuriraj"),
         ("Enable", "Omogući"),

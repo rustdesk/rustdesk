@@ -485,7 +485,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "Nėra kontrolinių kodų"),
         ("Select a peer", "Pasirinkite įrenginį"),
         ("Select peers", "Pasirinkite įrenginius"),
-        ("Plugins", "Papildiniai"),
         ("Uninstall", "Pašalinti"),
         ("Update", "Atnaujinti"),
         ("Enable", "Įgalinti"),

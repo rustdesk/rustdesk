@@ -17,8 +17,6 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
-import 'package:flutter_hbb/plugin/manager.dart';
-import 'package:flutter_hbb/plugin/widgets/desktop_settings.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -55,7 +53,6 @@ enum SettingsTabKey {
   safety,
   network,
   display,
-  plugin,
   account,
   printer,
   about,
@@ -74,8 +71,6 @@ class DesktopSettingPage extends StatefulWidget {
         bind.mainGetBuildinOption(key: kOptionHideNetworkSetting) != 'Y')
       SettingsTabKey.network,
     if (!bind.isIncomingOnly()) SettingsTabKey.display,
-    if (!isWeb && !bind.isIncomingOnly() && bind.pluginFeatureIsEnabled())
-      SettingsTabKey.plugin,
     if (!bind.isDisableAccount()) SettingsTabKey.account,
     if (isWindows &&
         bind.mainGetBuildinOption(key: kOptionHideRemotePrinterSetting) != 'Y')
@@ -196,10 +191,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           settingTabs.add(_TabInfo(tab, 'Display',
               Icons.desktop_windows_outlined, Icons.desktop_windows));
           break;
-        case SettingsTabKey.plugin:
-          settingTabs.add(_TabInfo(
-              tab, 'Plugin', Icons.extension_outlined, Icons.extension));
-          break;
         case SettingsTabKey.account:
           settingTabs.add(
               _TabInfo(tab, 'Account', Icons.person_outline, Icons.person));
@@ -232,9 +223,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           break;
         case SettingsTabKey.display:
           children.add(const _Display());
-          break;
-        case SettingsTabKey.plugin:
-          children.add(const _Plugin());
           break;
         case SettingsTabKey.account:
           children.add(const _Account());
@@ -2252,51 +2240,6 @@ class _CheckboxState extends State<_Checkbox> {
       ).marginOnly(left: _kCheckBoxLeftMargin),
       onTap: () => onChanged(!value),
     );
-  }
-}
-
-class _Plugin extends StatefulWidget {
-  const _Plugin({Key? key}) : super(key: key);
-
-  @override
-  State<_Plugin> createState() => _PluginState();
-}
-
-class _PluginState extends State<_Plugin> {
-  @override
-  Widget build(BuildContext context) {
-    bind.pluginListReload();
-    final scrollController = ScrollController();
-    return ChangeNotifierProvider.value(
-      value: pluginManager,
-      child: Consumer<PluginManager>(builder: (context, model, child) {
-        return ListView(
-          controller: scrollController,
-          children: model.plugins.map((entry) => pluginCard(entry)).toList(),
-        ).marginOnly(bottom: _kListViewBottomMargin);
-      }),
-    );
-  }
-
-  Widget pluginCard(PluginInfo plugin) {
-    return ChangeNotifierProvider.value(
-      value: plugin,
-      child: Consumer<PluginInfo>(
-        builder: (context, model, child) => DesktopSettingsCard(plugin: model),
-      ),
-    );
-  }
-
-  Widget accountAction() {
-    return Obx(() => _Button(
-        gFFI.userModel.userName.value.isEmpty
-            ? 'Login'
-            : '${translate('Logout')} (${gFFI.userModel.accountLabelWithHandle})',
-        () => {
-              gFFI.userModel.userName.value.isEmpty
-                  ? loginDialog()
-                  : logOutConfirmDialog()
-            }));
   }
 }
 
