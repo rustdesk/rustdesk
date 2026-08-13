@@ -17,21 +17,31 @@ use std::{
     path::Path,
     process::{Child, Command},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc::{sync_channel, SyncSender},
         Arc, Mutex,
     },
     time::{Duration, Instant},
 };
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Seat0Snapshot {
+    sequence: usize,
+    username: Option<Option<String>>,
+}
+
 lazy_static::lazy_static! {
     static ref DESKTOP_RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
     static ref DESKTOP_MANAGER: Arc<Mutex<Option<DesktopManager>>> = Arc::new(Mutex::new(None));
     /// Last settled "who owns seat0" answer, for the PRE-AUTH path only; see `is_headless`.
-    static ref SEAT0_SNAPSHOT: Mutex<Option<Option<String>>> = Mutex::new(None);
+    static ref SEAT0_SNAPSHOT: Mutex<Seat0Snapshot> = Mutex::new(Seat0Snapshot::default());
+    static ref SEAT0_NEXT_REFRESH: Mutex<Option<Instant>> = Mutex::new(None);
 }
 
 static SEAT0_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+const FIRST_SEAT0_QUERY_SEQUENCE: usize = 1;
+static SEAT0_QUERY_SEQUENCE: AtomicUsize = AtomicUsize::new(FIRST_SEAT0_QUERY_SEQUENCE);
+const SEAT0_REFRESH_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug)]
 struct DesktopManager {
@@ -237,7 +247,7 @@ pub fn is_headless() -> bool {
     if DESKTOP_MANAGER.lock().unwrap().is_none() {
         return false;
     }
-    let cached = SEAT0_SNAPSHOT.lock().unwrap().clone();
+    let cached = SEAT0_SNAPSHOT.lock().unwrap().username.clone();
     kick_seat0_refresh();
     // No snapshot yet answers NOT headless: guessing in the headless direction would show the
     // OS-login flow over a live Wayland greeter, which reads as an empty seat0 too. A false
@@ -273,9 +283,24 @@ fn supported_display_seat0_username() -> Option<String> {
     }
 }
 
+fn select_newer_seat0_snapshot(current: Seat0Snapshot, candidate: Seat0Snapshot) -> Seat0Snapshot {
+    if candidate.sequence > current.sequence {
+        candidate
+    } else {
+        current
+    }
+}
+
 fn refresh_seat0_snapshot() -> Option<String> {
+    let sequence = SEAT0_QUERY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let fresh = supported_display_seat0_username();
-    *SEAT0_SNAPSHOT.lock().unwrap() = Some(fresh.clone());
+    let candidate = Seat0Snapshot {
+        sequence,
+        username: Some(fresh.clone()),
+    };
+    let mut snapshot = SEAT0_SNAPSHOT.lock().unwrap();
+    let current = std::mem::take(&mut *snapshot);
+    *snapshot = select_newer_seat0_snapshot(current, candidate);
     fresh
 }
 
@@ -288,21 +313,29 @@ impl Drop for Seat0RefreshGuard {
     }
 }
 
-/// Refresh the snapshot behind `is_headless` off-thread, single-flight.
+/// Refresh the snapshot off-thread with a process-wide rate limit and single-flight.
 fn kick_seat0_refresh() {
+    let now = Instant::now();
+    {
+        let mut next_refresh = SEAT0_NEXT_REFRESH.lock().unwrap();
+        let (next, should_refresh) = schedule_seat0_refresh(*next_refresh, now);
+        *next_refresh = next;
+        if !should_refresh {
+            return;
+        }
+    }
     if SEAT0_REFRESH_IN_FLIGHT.swap(true, Ordering::AcqRel) {
         return;
     }
     let guard = Seat0RefreshGuard;
-    if std::thread::Builder::new()
+    if let Err(err) = std::thread::Builder::new()
         .name("seat0-snapshot".into())
         .spawn(move || {
             let _guard = guard;
             let _ = refresh_seat0_snapshot();
         })
-        .is_err()
     {
-        // Spawn failed: the closure was dropped un-run, dropping the guard and clearing the flag.
+        log::warn!("Could not spawn the seat0 snapshot refresh thread: {err}");
     }
 }
 
@@ -330,6 +363,45 @@ fn drm_login_screen_seat0_username() -> Option<String> {
         return None;
     }
     Some(values[1].clone())
+}
+
+fn cached_username_from_state(
+    seat0_username: Option<String>,
+    managed_session: Option<(&str, bool)>,
+) -> String {
+    if let Some(username) = seat0_username {
+        return username;
+    }
+    match managed_session {
+        Some((username, true)) => username.to_owned(),
+        _ => String::new(),
+    }
+}
+
+fn schedule_seat0_refresh(next_refresh: Option<Instant>, now: Instant) -> (Option<Instant>, bool) {
+    if next_refresh.is_some_and(|deadline| now < deadline) {
+        return (next_refresh, false);
+    }
+    (Some(now + SEAT0_REFRESH_INTERVAL), true)
+}
+
+/// Returns the last settled username without running external commands.
+pub fn get_cached_username() -> String {
+    let seat0_username = SEAT0_SNAPSHOT.lock().unwrap().username.clone().flatten();
+    let username = {
+        let manager = DESKTOP_MANAGER.lock().unwrap();
+        let Some(manager) = manager.as_ref() else {
+            return String::new();
+        };
+        cached_username_from_state(
+            seat0_username,
+            Some((&manager.child_username, manager.is_running())),
+        )
+    };
+    if username.is_empty() {
+        kick_seat0_refresh();
+    }
+    username
 }
 
 pub fn get_username() -> String {
@@ -1187,6 +1259,38 @@ fn pam_get_service_name() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_username_prefers_seat0_and_running_managed_session() {
+        assert_eq!(
+            cached_username_from_state(Some("seat0".to_owned()), Some(("managed", true))),
+            "seat0"
+        );
+        assert_eq!(
+            cached_username_from_state(None, Some(("managed", true))),
+            "managed"
+        );
+        assert_eq!(
+            cached_username_from_state(None, Some(("managed", false))),
+            ""
+        );
+        assert_eq!(cached_username_from_state(None, None), "");
+    }
+
+    #[test]
+    fn seat0_refresh_schedule_limits_process_wide_rate() {
+        let started = Instant::now();
+        let (next_refresh, should_refresh) = schedule_seat0_refresh(None, started);
+        assert!(should_refresh);
+
+        let (unchanged, should_refresh) = schedule_seat0_refresh(next_refresh, started);
+        assert!(!should_refresh);
+        assert_eq!(unchanged, next_refresh);
+
+        let (_, should_refresh) =
+            schedule_seat0_refresh(next_refresh, started + SEAT0_REFRESH_INTERVAL);
+        assert!(should_refresh);
+    }
 
     #[test]
     fn session_scope_truncates_at_first_scope() {

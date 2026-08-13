@@ -374,10 +374,13 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
         // client had already been given. Properly async, so the executor is never blocked; on any
         // failure the cache serves as before.
         super::drm_capturer::refresh_displays_for_login().await;
-        if let Some(displays) = super::drm_capturer::get_display_infos() {
-            // DRM connector order is not the compositor's primary; resolve the real primary from
-            // the compositor layout (matched by normalized connector name), not a hardcoded index 0.
-            return Ok((displays, super::drm_capturer::get_primary_index()));
+        let snapshot = hbb_common::tokio::task::spawn_blocking(
+            super::drm_capturer::get_display_infos_and_primary,
+        )
+        .await
+        .map_err(|err| anyhow::anyhow!("Wayland display probe task failed: {err}"))?;
+        if let Some(snapshot) = snapshot {
+            return Ok(snapshot);
         }
     }
     check_init().await?;

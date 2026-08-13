@@ -2914,6 +2914,7 @@ impl Connection {
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if !should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
+                #[cfg(not(target_os = "linux"))]
                 self.try_start_cm_ipc();
             }
 
@@ -2931,10 +2932,18 @@ impl Connection {
             #[cfg(not(target_os = "linux"))]
             let err_msg = "".to_owned();
             #[cfg(target_os = "linux")]
-            let err_msg = self
+            let err_msg = match self
                 .linux_headless_handle
                 .try_start_desktop(lr.os_login.as_ref())
-                .await;
+                .await
+            {
+                LinuxDesktopStartOutcome::Finished(err_msg) => err_msg,
+                LinuxDesktopStartOutcome::Busy => {
+                    self.send_login_error(crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY)
+                        .await;
+                    return true;
+                }
+            };
 
             // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
             if !err_msg.is_empty() && err_msg != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
@@ -2953,6 +2962,12 @@ impl Connection {
                 }
                 self.send_login_error(err_msg).await;
                 return true;
+            }
+
+            #[cfg(target_os = "linux")]
+            if !should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
+                // In headless mode, the desktop check above settles the snapshot used by CM routing.
+                self.try_start_cm_ipc();
             }
 
             // https://github.com/rustdesk/rustdesk-server-pro/discussions/646
@@ -6253,20 +6268,20 @@ async fn start_ipc(
         // Cm run as user, wait until desktop session is ready.
         #[cfg(target_os = "linux")]
         if headless_cm {
-            let mut username = linux_desktop_manager::get_username();
+            let mut username = linux_desktop_manager::get_cached_username();
             loop {
                 if !username.is_empty() {
                     break;
                 }
                 // `_rx_desktop_ready` is used as a wake-up signal from desktop/session state changes
                 // (for example wait_desktop_cm_ready paths). It is not itself a proof of CM readiness.
-                // TODO:
-                // When `_rx_desktop_ready` is closed, `recv()` returns
-                // `None` immediately and this loop may spin if `username` remains empty.
-                // Keep behavior unchanged for now; if field reports appear, handle `Ok(None)` by
-                // breaking/returning to avoid hot-looping.
-                let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
-                username = linux_desktop_manager::get_username();
+                let wait_result = timeout(1_000, _rx_desktop_ready.recv()).await;
+                if matches!(wait_result, Ok(None)) {
+                    return Err(anyhow!(
+                        "Desktop-ready channel closed before a Linux session became available"
+                    ));
+                }
+                username = linux_desktop_manager::get_cached_username();
             }
             let uid = {
                 let username_for_cmd = username.clone();
@@ -6700,6 +6715,12 @@ impl Drop for LinuxDesktopStartGuard {
 }
 
 #[cfg(target_os = "linux")]
+enum LinuxDesktopStartOutcome {
+    Finished(String),
+    Busy,
+}
+
+#[cfg(target_os = "linux")]
 struct LinuxHeadlessHandle {
     pub is_headless_allowed: bool,
     pub wait_ipc_timeout: u64,
@@ -6719,17 +6740,20 @@ impl LinuxHeadlessHandle {
         }
     }
 
-    pub async fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
+    pub async fn try_start_desktop(
+        &mut self,
+        os_login: Option<&OSLogin>,
+    ) -> LinuxDesktopStartOutcome {
         let Some((username, password)) =
             linux_desktop_start_credentials(self.is_headless_allowed, os_login)
         else {
-            return String::new();
+            return LinuxDesktopStartOutcome::Finished(String::new());
         };
         if LINUX_DESKTOP_START_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-            return crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY.to_owned();
+            return LinuxDesktopStartOutcome::Busy;
         }
         let guard = LinuxDesktopStartGuard;
-        match tokio::task::spawn_blocking(move || {
+        let err_msg = match tokio::task::spawn_blocking(move || {
             let _guard = guard;
             linux_desktop_manager::try_start_desktop(&username, &password)
         })
@@ -6740,7 +6764,8 @@ impl LinuxHeadlessHandle {
                 log::error!("Linux desktop start task failed: {err}");
                 crate::client::LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
             }
-        }
+        };
+        LinuxDesktopStartOutcome::Finished(err_msg)
     }
 
     pub async fn wait_desktop_cm_ready(&mut self) {

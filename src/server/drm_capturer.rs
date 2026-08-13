@@ -1186,49 +1186,53 @@ pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
     Some((len, any_demoted))
 }
 
-/// Releases DRM_STATE before taking the health map: never hold it while taking a per-display map.
+// A multi-display portal stream cannot replace one demoted connector. Keep its index but mark it
+// offline; a single connector remains usable through the whole-desktop fallback.
+fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
+    if list.len() <= 1 {
+        return;
+    }
+    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
+    for (display, info) in list.iter().zip(infos.iter_mut()) {
+        if health
+            .get(&connector_key(display))
+            .is_some_and(|health| health.demoted())
+        {
+            info.online = false;
+        }
+    }
+}
+
+fn primary_index_from_assignment(assignment: &[Option<usize>], primary: usize) -> usize {
+    assignment
+        .iter()
+        .position(|assigned| *assigned == Some(primary))
+        .unwrap_or(0)
+}
+
+/// Releases DRM_STATE before taking the Wayland and health locks.
+pub(super) fn get_display_infos_and_primary() -> Option<(Vec<DisplayInfo>, usize)> {
+    let list = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => list.clone(),
+        _ => return None,
+    };
+    let wl = scrap::wayland::display::get_displays();
+    let assignment = assign_wayland_outputs(&list, &wl.displays);
+    let mut infos = augment_with_wayland_geometry_from(&list, &wl, &assignment);
+    mark_demoted_displays(&list, &mut infos);
+    // Primary and geometry must use the same connector assignment snapshot.
+    let primary = primary_index_from_assignment(&assignment, wl.primary);
+    Some((infos, primary))
+}
+
 pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     let list = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
-    let multi = list.len() > 1;
     let mut infos = augment_with_wayland_geometry(&list);
-    // The portal exposes one whole-desktop stream, so a demoted display on a multi-monitor host
-    // has nothing geometry-consistent to fall back to: OFFLINE but KEEPING its list position, so
-    // the index space stays aligned with get_capturer_info(). A single-display host stays online.
-    if multi {
-        let health = DRM_DISPLAY_HEALTH.lock().unwrap();
-        for (idx, info) in infos.iter_mut().enumerate() {
-            let key = match list.get(idx) {
-                Some(d) => connector_key(d),
-                None => continue,
-            };
-            if health.get(&key).is_some_and(|h| h.demoted()) {
-                info.online = false;
-            }
-        }
-    }
+    mark_demoted_displays(&list, &mut infos);
     Some(infos)
-}
-
-/// Index of the compositor's PRIMARY output; 0 when unknown. Asking `assign_wayland_outputs` makes
-/// the advertised primary and geometry agree. `augment_with_wayland_geometry` runs the assignment
-/// down to a single connector or output now; only an empty compositor list leaves everything
-/// unaugmented, and there 0 is all there is to say.
-pub(super) fn get_primary_index() -> usize {
-    let list = match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(_, list) => list.clone(),
-        _ => return 0,
-    };
-    let wl = scrap::wayland::display::get_displays();
-    if wl.displays.is_empty() {
-        return 0;
-    }
-    assign_wayland_outputs(&list, &wl.displays)
-        .iter()
-        .position(|assigned| *assigned == Some(wl.primary))
-        .unwrap_or(0)
 }
 
 /// DRM reports every monitor at physical size and origin (0,0), stacking a multi-monitor client.
@@ -1238,13 +1242,22 @@ pub(super) fn get_primary_index() -> usize {
 /// cannot answer, the list comes back empty and everything stays unaugmented, which is what the
 /// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
+    let wl = scrap::wayland::display::get_displays();
+    let assignment = assign_wayland_outputs(drm, &wl.displays);
+    augment_with_wayland_geometry_from(drm, &wl, &assignment)
+}
+
+fn augment_with_wayland_geometry_from(
+    drm: &[DrmDisplayInfo],
+    wl: &scrap::wayland::display::Displays,
+    matched: &[Option<usize>],
+) -> Vec<DisplayInfo> {
     let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
     // A single display is still augmented: on a multi-GPU host the one connector this service can
     // open may sit at a non-zero origin in the compositor layout, and DRM alone reports (0,0).
     if drm.is_empty() {
         return infos;
     }
-    let wl = scrap::wayland::display::get_displays();
     if wl.displays.is_empty() {
         return infos;
     }
@@ -1257,7 +1270,6 @@ fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     if origin_only && drm.len() > 1 {
         return infos;
     }
-    let matched = assign_wayland_outputs(drm, &wl.displays);
     for (i, info) in infos.iter_mut().enumerate() {
         let Some(w) = matched[i].map(|j| &wl.displays[j]) else {
             continue;
@@ -1635,6 +1647,26 @@ mod drm_capturer_tests {
             logical_size: Some((w, h)),
             refresh_rate: 60,
         }
+    }
+
+    #[test]
+    fn one_connector_assignment_drives_geometry_and_primary() {
+        let drm = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![
+                wl_display("DP-1", 1920, 0, 2560, 1440),
+                wl_display("HDMI-1", 0, 0, 1920, 1080),
+            ],
+        };
+
+        let assignment = assign_wayland_outputs(&drm, &wl.displays);
+        let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
+        assert_eq!((infos[0].x, infos[1].x), (0, 1920));
+        assert_eq!(primary_index_from_assignment(&assignment, wl.primary), 1);
     }
 
     #[test]
