@@ -132,7 +132,15 @@ impl Display {
             .map(Display)
             .collect::<Vec<_>>();
 
-        let displays_dxgi = Self::all_().unwrap_or(Default::default());
+        let mut displays_dxgi = match Self::all_() {
+            Ok(displays) => displays,
+            Err(e) => {
+                hbb_common::log::error!("DXGI display enumeration failed: {e}");
+                Vec::new()
+            }
+        };
+        // Win+P "Show only on 1/2" still enumerates detached DXGI outputs.
+        displays_dxgi.retain(|d| d.is_online() && d.width() > 0 && d.height() > 0);
 
         // Return gdi displays if dxgi is not supported
         if displays_dxgi.is_empty() {
@@ -155,7 +163,6 @@ impl Display {
         }
 
         // Reorder displays from dxgi
-        let mut displays_dxgi = displays_dxgi;
         let mut displays_dxgi_ordered = Vec::new();
         for name in names_gdi.iter() {
             let pos = match displays_dxgi.iter().position(|d| d.name() == *name) {
@@ -176,11 +183,11 @@ impl Display {
     }
 
     pub fn width(&self) -> usize {
-        self.0.width() as usize
+        self.0.width().max(0) as usize
     }
 
     pub fn height(&self) -> usize {
-        self.0.height() as usize
+        self.0.height().max(0) as usize
     }
 
     pub fn name(&self) -> String {
@@ -201,7 +208,8 @@ impl Display {
 
     pub fn is_primary(&self) -> bool {
         // https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-devmodea
-        self.origin() == (0, 0)
+        // Detached outputs can still report origin (0,0) with a zero size.
+        self.origin() == (0, 0) && self.width() > 0 && self.height() > 0
     }
 
     #[cfg(feature = "vram")]
