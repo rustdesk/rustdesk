@@ -1,8 +1,11 @@
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 use arboard::{ClipboardData, ClipboardFormat};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use arboard::{LinuxClipboardKind, SetExtLinux};
-use hbb_common::{bail, log, message_proto::*, ResultType};
+use hbb_common::message_proto::*;
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
+use hbb_common::{bail, log, ResultType};
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,7 +22,7 @@ const RUSTDESK_CLIPBOARD_OWNER_FORMAT: &'static str = "dyn.com.rustdesk.owner";
 // Add special format for Excel XML Spreadsheet
 const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
     // cache the clipboard msg
@@ -31,12 +34,12 @@ lazy_static::lazy_static! {
     static ref CLIPBOARD_CTX: Arc<Mutex<Option<ClipboardContext>>> = Arc::new(Mutex::new(None));
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 const CLIPBOARD_GET_MAX_RETRY: usize = 3;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 const CLIPBOARD_GET_RETRY_INTERVAL_DUR: Duration = Duration::from_millis(33);
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn valid_rgba_dimensions(width: i32, height: i32, data_len: usize) -> Option<(usize, usize)> {
     let width = usize::try_from(width).ok()?;
     let height = usize::try_from(height).ok()?;
@@ -47,7 +50,7 @@ fn valid_rgba_dimensions(width: i32, height: i32, data_len: usize) -> Option<(us
     (data_len == expected_len).then_some((width, height))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Text,
     ClipboardFormat::Html,
@@ -61,7 +64,7 @@ const SUPPORTED_FORMATS: &[ClipboardFormat] = &[
     ClipboardFormat::Special(RUSTDESK_CLIPBOARD_OWNER_FORMAT),
 ];
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub fn check_clipboard(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -72,7 +75,7 @@ pub fn check_clipboard(
     Some(msg)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn peek_clipboard(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -82,7 +85,7 @@ pub fn peek_clipboard(
     Some(msg)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn read_clipboard_message(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -126,7 +129,7 @@ pub fn is_file_url_set_by_rustdesk(url: &Vec<String>) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(all(feature = "unix-file-copy-paste", not(target_env = "ohos")))]
 pub fn check_clipboard_files(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -150,7 +153,11 @@ pub fn check_clipboard_files(
     None
 }
 
-#[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+#[cfg(all(
+    target_os = "linux",
+    feature = "unix-file-copy-paste",
+    not(target_env = "ohos")
+))]
 pub fn update_clipboard_files(files: Vec<String>, side: ClipboardSide) {
     if !files.is_empty() {
         std::thread::spawn(move || {
@@ -159,7 +166,7 @@ pub fn update_clipboard_files(files: Vec<String>, side: ClipboardSide) {
     }
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(all(feature = "unix-file-copy-paste", not(target_env = "ohos")))]
 pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
     std::thread::spawn(move || {
         if let Err(e) = try_empty_clipboard_files_sync(_side, _conn_id) {
@@ -168,7 +175,7 @@ pub fn try_empty_clipboard_files(_side: ClipboardSide, _conn_id: i32) {
     });
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(all(feature = "unix-file-copy-paste", not(target_env = "ohos")))]
 pub fn try_empty_clipboard_files_sync(_side: ClipboardSide, _conn_id: i32) -> ResultType<()> {
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
@@ -237,7 +244,7 @@ pub fn check_clipboard_cm() -> ResultType<MultiClipboards> {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     let to_update_data = proto::from_multi_clipboards(multi_clipboards);
     if to_update_data.is_empty() {
@@ -246,7 +253,7 @@ fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     do_update_clipboard_(to_update_data, side);
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn do_update_clipboard_(mut to_update_data: Vec<ClipboardData>, side: ClipboardSide) {
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
@@ -270,7 +277,7 @@ fn do_update_clipboard_(mut to_update_data: Vec<ClipboardData>, side: ClipboardS
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn append_owner_marker(mut data: Vec<ClipboardData>, side: ClipboardSide) -> Vec<ClipboardData> {
     data.push(ClipboardData::Special((
         RUSTDESK_CLIPBOARD_OWNER_FORMAT.to_owned(),
@@ -279,7 +286,7 @@ fn append_owner_marker(mut data: Vec<ClipboardData>, side: ClipboardSide) -> Vec
     data
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub fn set_text_clipboard_with_owner_sync(text: &str, side: ClipboardSide) -> ResultType<()> {
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
@@ -293,19 +300,19 @@ pub fn set_text_clipboard_with_owner_sync(text: &str, side: ClipboardSide) -> Re
     clipboard_ctx.set_with_owner_marker_for_linux(&data)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub fn update_clipboard(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
     std::thread::spawn(move || {
         update_clipboard_(multi_clipboards, side);
     });
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub struct ClipboardContext {
     inner: arboard::Clipboard,
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 #[allow(unreachable_code)]
 impl ClipboardContext {
     pub fn new() -> ResultType<ClipboardContext> {
@@ -546,7 +553,7 @@ pub fn is_support_multi_clipboard(peer_version: &str, peer_platform: &str) -> bo
     true
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub fn get_current_clipboard_msg(
     peer_version: &str,
     peer_platform: &str,
@@ -614,10 +621,12 @@ impl std::fmt::Display for ClipboardSide {
 
 pub use proto::get_msg_if_not_support_multi_clip;
 mod proto {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     use arboard::ClipboardData;
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
+    use hbb_common::compress::decompress;
     use hbb_common::{
-        compress::{compress as compress_func, decompress},
+        compress::compress as compress_func,
         message_proto::{Clipboard, ClipboardFormat, Message, MultiClipboards},
     };
 
@@ -637,7 +646,7 @@ mod proto {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     fn image_to_proto(a: arboard::ImageData) -> Clipboard {
         match &a {
             arboard::ImageData::Rgba(rgba) => {
@@ -698,7 +707,7 @@ mod proto {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     fn clipboard_data_to_proto(data: ClipboardData) -> Option<Clipboard> {
         let d = match data {
             ClipboardData::Text(s) => plain_to_proto(s, ClipboardFormat::Text),
@@ -711,7 +720,7 @@ mod proto {
         Some(d)
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     pub fn create_multi_clipboards(vec_data: Vec<ClipboardData>) -> MultiClipboards {
         MultiClipboards {
             clipboards: vec_data
@@ -722,7 +731,7 @@ mod proto {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     fn from_clipboard(clipboard: Clipboard) -> Option<ClipboardData> {
         let data = if clipboard.compress {
             decompress(&clipboard.content)
@@ -755,7 +764,7 @@ mod proto {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     pub fn from_multi_clipboards(multi_clipboards: Vec<Clipboard>) -> Vec<ClipboardData> {
         multi_clipboards
             .into_iter()
@@ -785,7 +794,7 @@ mod proto {
     }
 }
 
-#[cfg(all(test, not(target_os = "android")))]
+#[cfg(all(test, not(any(target_os = "android", target_env = "ohos"))))]
 mod rgba_tests {
     use super::valid_rgba_dimensions;
 
@@ -831,9 +840,12 @@ pub fn handle_msg_multi_clipboards(mut mcb: MultiClipboards) {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn get_clipboards_msg(client: bool) -> Option<Message> {
+    #[cfg(target_os = "android")]
     let mut clipboards = scrap::android::ffi::get_clipboards(client)?;
+    #[cfg(target_env = "ohos")]
+    let mut clipboards = crate::platform::ohos::get_clipboards(client)?;
     let mut msg = Message::new();
     for c in &mut clipboards.clipboards {
         let compressed = hbb_common::compress::compress(&c.content);
@@ -850,7 +862,7 @@ pub fn get_clipboards_msg(client: bool) -> Option<Message> {
 // We need this mod to notify multiple subscribers when the clipboard changes.
 // Because only one clipboard master(listener) can trigger the clipboard change event multiple listeners are created on Linux(x11).
 // https://github.com/rustdesk-org/clipboard-master/blob/4fb62e5b62fb6350d82b571ec7ba94b3cd466695/src/master/x11.rs#L226
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub mod clipboard_listener {
     use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
     use hbb_common::{bail, log, ResultType};

@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
 use hbb_common::{message_proto::*, ResultType};
 use std::sync::Mutex;
@@ -73,7 +73,7 @@ impl Screenshot {
                 std::fs::write(p, data)?;
             }
             ScreenshotAction::CopyToClipboard => {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 {
                     let clips = vec![Clipboard {
                         compress: false,

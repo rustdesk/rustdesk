@@ -74,7 +74,6 @@ default-net = "0.14"
 wol-rs = "1.0"
 flutter_rust_bridge = { version = "=1.80", features = ["uuid"], optional = true}
 errno = "0.3"
-rdev = { git = "https://github.com/rustdesk-org/rdev" }
 url = { version = "2.3", features = ["serde"] }
 crossbeam-queue = "0.3"
 hex = "0.4"
@@ -86,14 +85,21 @@ shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 stunclient = "0.4"
 kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
+
+[target.'cfg(target_env = "ohos")'.dependencies]
+reqwest = { version = "0.12", features = ["blocking", "socks", "json", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
+rdev_ohos = { package = "rdev", git = "https://github.com/FrankHan052176/rdev", rev = "f15c2046cf9ed8e7cfd8ceb7379e4559274b732d" }
+
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
+rdev = { git = "https://github.com/rustdesk-org/rdev" }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
 cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
 ringbuf = "0.3"
 
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))'.dependencies]
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/rustdesk-org/rust-sciter", branch = "dyn" }
 sys-locale = "0.3"
@@ -166,15 +172,15 @@ piet = "0.6"
 piet-coregraphics = "0.6"
 foreign-types = "0.3"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))'.dependencies]
+[target.'cfg(any(target_os = "macos", all(target_os = "linux", not(target_env = "ohos")), target_os = "windows"))'.dependencies]
 tray-icon = { git = "https://github.com/tauri-apps/tray-icon", version = "0.21.3" }
 tao = { git = "https://github.com/rustdesk-org/tao", branch = "dev" }
 image = "0.24"
 
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "macos", all(target_os = "linux", not(target_env = "ohos"))))'.dependencies]
 keepawake = { git = "https://github.com/rustdesk-org/keepawake-rs" }
 
-[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))'.dependencies]
 wallpaper = { git = "https://github.com/rustdesk-org/wallpaper.rs" }
 tiny-skia = "0.11"
 softbuffer = "0.4"
@@ -182,7 +188,7 @@ fontdb = "0.23"
 bytemuck = "1.23"
 ttf-parser = "0.25"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 libxdo-sys = "0.11"
 psimple = { package = "libpulse-simple-binding", version = "2.27" }
 pulse = { package = "libpulse-binding", version = "2.27" }
@@ -202,7 +208,7 @@ termios = "0.3"
 terminfo = "0.8"
 winit = "0.30"
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(any(all(target_os = "linux", not(target_env = "ohos")), target_os = "android"))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

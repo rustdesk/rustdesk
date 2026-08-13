@@ -1,0 +1,69 @@
+name: OpenHarmony FFI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ohos-ffi:
+    name: Build aarch64 OHOS FFI
+    runs-on: ubuntu-22.04
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup HarmonyOS CLI tools
+        uses: ErBWs/setup-ohos@4dbb63025116eb6165ceac58a4bf47cbdc5ac721 # v2
+        with:
+          version: 6.1.1.280
+          cache: true
+
+      - name: Install native build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake git make ninja-build perl
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-ohos
+          components: ''
+
+      - name: Resolve the OHOS-only libsodium patch
+        shell: bash
+        run: |
+          cargo \
+            --config .cargo/ohos.toml \
+            update \
+            --package libsodium-sys
+
+      - name: Cross-compile OHOS FFI
+        shell: bash
+        run: bash scripts/build-ohos-ffi.sh
+
+      - name: Verify OHOS FFI artifact
+        shell: bash
+        run: |
+          test -s target/aarch64-unknown-linux-ohos/release/liblibrustdesk.so
+          file target/aarch64-unknown-linux-ohos/release/liblibrustdesk.so
+
+      - name: Upload OHOS FFI artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-ohos-ffi-aarch64
+          path: target/aarch64-unknown-linux-ohos/release/liblibrustdesk.so
+          if-no-files-found: error
+          compression-level: 0

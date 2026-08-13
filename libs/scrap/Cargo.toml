@@ -20,7 +20,7 @@ wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "
 # Depends on `wayland`: the three drm modules live inside the `#[cfg(feature = "wayland")]` arm of
 # common/mod.rs, so `scrap/drm` on its own would compile nothing. The root crate happens to always
 # enable `scrap/wayland`, which is what hid this.
-drm = ["wayland", "hbb_common/wayland_probe"]
+drm = ["wayland"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -61,7 +61,7 @@ target_build_utils = "0.3"
 bindgen = "0.72.1"
 pkg-config = { version = "0.3.27", optional = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 dbus = { version = "0.9", optional = true }
 tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
@@ -69,10 +69,8 @@ gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
 zbus = { version = "3.15", optional = true }
 
-[dependencies.hwcodec]
-git = "https://github.com/rustdesk-org/hwcodec"
-optional = true
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
+hwcodec = { git = "https://github.com/rustdesk-org/hwcodec", optional = true }
 
-[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+[target.'cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))'.dependencies]
 nokhwa = { git = "https://github.com/rustdesk-org/nokhwa.git", branch = "fix_from_raw_parts", features = ["input-native"] }
-

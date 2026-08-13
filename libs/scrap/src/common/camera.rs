@@ -3,7 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 use nokhwa::{
     pixel_format::RgbAFormat,
     query,
@@ -18,7 +21,10 @@ use crate::AdapterDevice;
 
 use crate::common::{bail, ResultType};
 use crate::{Frame, TraitCapturer};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 use crate::{PixelBuffer, Pixfmt};
 
 pub const PRIMARY_CAMERA_IDX: usize = 0;
@@ -26,7 +32,10 @@ lazy_static::lazy_static! {
     static ref SYNC_CAMERA_DISPLAYS: Arc<Mutex<Vec<DisplayInfo>>> = Arc::new(Mutex::new(Vec::new()));
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+)))]
 const CAMERA_NOT_SUPPORTED: &str = "This platform doesn't support camera yet";
 
 pub struct Cameras;
@@ -36,7 +45,10 @@ pub fn primary_camera_exists() -> bool {
     Cameras::exists(PRIMARY_CAMERA_IDX)
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
         match query(ApiBackend::Auto) {
@@ -158,7 +170,10 @@ impl Cameras {
     }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+)))]
 impl Cameras {
     pub fn all_info() -> ResultType<Vec<DisplayInfo>> {
         return Ok(Vec::new());
@@ -181,18 +196,27 @@ impl Cameras {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 pub struct CameraCapturer {
     camera: Camera,
     data: Vec<u8>,
     last_data: Vec<u8>, // for faster compare and copy
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos"))
+)))]
 pub struct CameraCapturer;
 
 impl CameraCapturer {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     fn new(current: usize) -> ResultType<Self> {
         let index = CameraIndex::Index(current as u32);
         let camera = Cameras::create_camera(&index)?;
@@ -204,14 +228,20 @@ impl CameraCapturer {
     }
 
     #[allow(dead_code)]
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    )))]
     fn new(_current: usize) -> ResultType<Self> {
         bail!(CAMERA_NOT_SUPPORTED);
     }
 }
 
 impl TraitCapturer for CameraCapturer {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         // TODO: move this check outside `frame`.
         if !self.camera.is_stream_open() {
@@ -230,7 +260,7 @@ impl TraitCapturer for CameraCapturer {
                         crate::would_block_if_equal(&mut self.last_data, &self.data)?;
                         // FIXME: macos's PixelBuffer cannot be directly created from bytes slice.
                         cfg_if::cfg_if! {
-                            if #[cfg(any(target_os = "linux", target_os = "windows"))] {
+                            if #[cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos"))))] {
                                 Ok(Frame::PixelBuffer(PixelBuffer::new(
                                     &self.data,
                                     Pixfmt::RGBA,
@@ -258,7 +288,10 @@ impl TraitCapturer for CameraCapturer {
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    )))]
     fn frame<'a>(&'a mut self, _timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         Err(io::Error::new(
             io::ErrorKind::Other,

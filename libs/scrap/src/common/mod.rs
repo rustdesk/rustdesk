@@ -37,12 +37,24 @@ cfg_if! {
         mod android;
         pub use self::android::*;
     }else {
+        #[cfg(target_env = "ohos")]
+        pub use self::ohos::PixelBuffer;
         //TODO: Fallback implementation.
     }
 }
 
 pub mod codec;
 pub mod convert;
+#[cfg(target_env = "ohos")]
+pub mod ohos;
+#[cfg(target_env = "ohos")]
+pub(crate) use self::ohos::avcodec as ohos_avcodec;
+#[cfg(target_env = "ohos")]
+pub use self::ohos::{
+    lookup_direct_render_target, register_direct_render_target_lookup, register_render_context,
+    register_render_stats_callback, DirectRenderTarget, DirectRenderTargetLookup,
+    RenderStatsCallback,
+};
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]

@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::ipc::Connection;
 #[cfg(not(any(target_os = "ios")))]
 use crate::ipc::{self, Data};
@@ -8,7 +8,7 @@ use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 use clipboard::ContextSend;
 #[cfg(not(any(target_os = "ios")))]
 use hbb_common::fs::serialize_transfer_job;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
 use hbb_common::{
     allow_err, bail,
@@ -152,7 +152,7 @@ pub struct Client {
     tx: UnboundedSender<Data>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 struct IpcTaskRunner<T: InvokeUiCM> {
     stream: Connection,
     cm: ConnectionManager<T>,
@@ -314,7 +314,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         self.ui_handler.remove_connection(id, close);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn show_elevation(&self, show: bool) {
         self.ui_handler.show_elevation(show);
     }
@@ -464,14 +464,14 @@ pub fn has_active_clients() -> bool {
 
 #[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl<T: InvokeUiCM> IpcTaskRunner<T> {
     async fn run(&mut self) {
         use hbb_common::config::LocalConfig;
@@ -831,7 +831,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     #[cfg(target_os = "windows")]
@@ -1681,7 +1681,7 @@ pub fn close_voice_call(id: i32) {
     };
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");
