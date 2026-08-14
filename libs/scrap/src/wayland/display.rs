@@ -12,7 +12,16 @@ use hbb_common::platform::linux::{get_wayland_displays, WaylandDisplayInfo};
 
 lazy_static! {
     static ref DISPLAYS: Mutex<Option<Arc<Displays>>> = Mutex::new(None);
+    /// When the last enumeration failed, so the next one waits instead of paying for the same
+    /// answer again. Cleared with the layout cache below: an explicit invalidation asks for a
+    /// fresh read, and a stale stamp would refuse to take one.
+    static ref PROBE_FAILED_AT: Mutex<Option<Instant>> = Mutex::new(None);
 }
+
+/// A failed enumeration is not cached, and both callers below poll: the display service about
+/// three times a second, the live layout every 1.5 s. Where there is no compositor to reach, each
+/// of those forks the probe subprocess and waits out its deadline for the same failure.
+const PROBE_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 static MISSING_LOGICAL_SIZE_WARNED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -171,11 +180,35 @@ fn get_primary_monitor() -> Option<String> {
         .or_else(try_gdbus_primary)
 }
 
+/// Whether a probe may run now, given when the last one failed. Pure so the policy can be tested
+/// without a compositor.
+fn probe_allowed(failed_at: Option<Instant>, now: Instant, delay: Duration) -> bool {
+    match failed_at {
+        Some(failed_at) => now.saturating_duration_since(failed_at) >= delay,
+        None => true,
+    }
+}
+
+/// `get_wayland_displays` behind that delay. A refused probe reports a failure, which is what the
+/// callers already do with one, so nothing downstream learns a new state to handle.
+fn probe_wayland_displays() -> hbb_common::ResultType<Vec<WaylandDisplayInfo>> {
+    if !probe_allowed(
+        *PROBE_FAILED_AT.lock().unwrap(),
+        Instant::now(),
+        PROBE_RETRY_DELAY,
+    ) {
+        hbb_common::bail!("the last wayland enumeration failed; not probing again yet");
+    }
+    let probed = get_wayland_displays();
+    *PROBE_FAILED_AT.lock().unwrap() = probed.is_err().then(Instant::now);
+    probed
+}
+
 pub fn get_displays() -> Arc<Displays> {
     let mut lock = DISPLAYS.lock().unwrap();
     match lock.as_ref() {
         Some(displays) => displays.clone(),
-        None => match get_wayland_displays() {
+        None => match probe_wayland_displays() {
             Ok(displays) => {
                 let mut primary_index = None;
                 if let Some(name) = get_primary_monitor() {
@@ -215,6 +248,7 @@ pub fn get_displays() -> Arc<Displays> {
 #[inline]
 pub fn clear_wayland_displays_cache() {
     let _ = DISPLAYS.lock().unwrap().take();
+    let _ = PROBE_FAILED_AT.lock().unwrap().take();
 }
 
 // Return (min_x, max_x, min_y, max_y)
@@ -228,7 +262,7 @@ pub fn get_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
 // detection (which may spawn external commands), so it is cheap enough to poll for
 // layout changes. https://github.com/rustdesk/rustdesk/issues/15601
 pub fn get_layout_for_uinput_live() -> Option<((i32, i32, i32, i32), Vec<DisplayRect>)> {
-    match get_wayland_displays() {
+    match probe_wayland_displays() {
         Ok(displays) => {
             desktop_rect_of(&displays).map(|rect| (rect, logical_rects_of(&displays)))
         }
@@ -385,6 +419,32 @@ fn map_axis(v: i32, base_origin: i32, base_extent: i32, live_origin: i32, live_e
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_probe_runs_when_none_has_failed() {
+        assert!(probe_allowed(None, Instant::now(), PROBE_RETRY_DELAY));
+    }
+
+    #[test]
+    fn a_probe_waits_out_the_delay_after_a_failure() {
+        let now = Instant::now();
+        let failed_at = now - PROBE_RETRY_DELAY / 2;
+        assert!(!probe_allowed(Some(failed_at), now, PROBE_RETRY_DELAY));
+    }
+
+    #[test]
+    fn a_probe_runs_again_once_the_delay_has_passed() {
+        let now = Instant::now();
+        let failed_at = now - PROBE_RETRY_DELAY;
+        assert!(probe_allowed(Some(failed_at), now, PROBE_RETRY_DELAY));
+    }
+
+    #[test]
+    fn a_stamp_from_the_future_does_not_wedge_the_probe_forever() {
+        // saturating_duration_since answers zero rather than panicking, so this only waits.
+        let now = Instant::now();
+        assert!(!probe_allowed(Some(now + PROBE_RETRY_DELAY), now, PROBE_RETRY_DELAY));
+    }
 
     fn display(
         x: i32,
