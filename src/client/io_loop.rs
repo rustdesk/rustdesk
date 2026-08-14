@@ -2260,11 +2260,6 @@ impl<T: InvokeUiSession> Remote<T> {
                     .msgbox("custom-error", "Privacy mode", "Peer denied", "");
                 self.update_privacy_mode(impl_key, false);
             }
-            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Please install plugins", "");
-                self.update_privacy_mode(impl_key, false);
-            }
             back_notification::PrivacyModeState::PrvOnFailed => {
                 self.handler.msgbox(
                     "custom-error",

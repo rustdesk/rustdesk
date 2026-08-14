@@ -1219,7 +1219,6 @@ impl Connection {
                     }
                 },
                 Err(err) => {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
                     }
@@ -5011,7 +5010,7 @@ impl Connection {
                         }
                     } else {
                         crate::common::make_privacy_mode_msg(
-                            back_notification::PrivacyModeState::PrvOnFailedPlugin,
+                            back_notification::PrivacyModeState::PrvOnFailed,
                             impl_key,
                         )
                     }
