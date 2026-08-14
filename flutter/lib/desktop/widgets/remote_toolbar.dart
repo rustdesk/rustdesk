@@ -1476,13 +1476,11 @@ class _DisplayMenu extends StatefulWidget {
   final FFI ffi;
   final ToolbarState state;
   final Function(bool) setFullscreen;
-  _DisplayMenu(
-      {Key? key,
-      required this.id,
+  const _DisplayMenu(
+      {required this.id,
       required this.ffi,
       required this.state,
-      required this.setFullscreen})
-      : super(key: key);
+      required this.setFullscreen});
 
   @override
   State<_DisplayMenu> createState() => _DisplayMenuState();
