@@ -821,39 +821,31 @@ impl Drop for UinputRefreshGuard {
     }
 }
 
-/// Never probes or blocks: use from hot gates such as `wayland::clear()`, `is_inited()` and display
-/// enumeration, where seconds of IPC would trip "deadline has elapsed".
+/// Never probes, never blocks: the form the ROUTING gates must use. Seconds of IPC inside
+/// `wayland::clear()`, `is_inited()` or the display enumeration trips "deadline has elapsed".
 pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
-/// Tri-state availability assessment reported by the availability machinery.
-/// `Unsettled` — another probe in flight, or a failure still below the disable threshold — is not
-/// a verdict.
+/// The three honest answers the availability machinery can give. `Unsettled` — another probe in
+/// flight, or a failure still below the disable threshold — is not a verdict, and the
+/// login-screen headless decision must not read it as one.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Availability {
+pub(crate) enum Availability {
     Available,
     Unavailable,
     Unsettled,
 }
 
-fn cached_verdict(state: &ProbeState) -> Option<(Availability, bool)> {
-    match state {
-        ProbeState::Available(since, _) => {
-            Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
-        }
-        ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
-        ProbeState::Unknown => None,
-    }
-}
-
-/// MAY BLOCK for seconds: never a routing gate. This blocking form serves capture-side callers
-/// through `is_available`, where waiting out a settle is acceptable.
+/// MAY BLOCK for seconds: never a routing gate, and never on the login request path — that path
+/// reads `availability_cached`. This blocking form serves the capture-side callers through
+/// `is_available`, where waiting out a settle is acceptable.
 fn availability() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
         // A settled "no" STAYS the answer while an off-thread re-probe re-verifies it; going
-        // Unknown at expiry would reopen an Unsettled window every TTL on a helper-less box.
+        // Unknown at expiry would reopen an Unsettled window every TTL on a helper-less box, and
+        // the login decision reads Unsettled as a possible greeter.
         let stale_no =
             matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
         let verdict = match &*st {
@@ -886,30 +878,23 @@ fn availability() -> Availability {
     probe_and_publish()
 }
 
-/// Starts a cold-cache probe without blocking the unauthenticated login request.
-fn probe_availability_async() {
-    if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-        return;
-    }
-    let in_flight = ProbeInFlightGuard;
-    let spawned = std::thread::Builder::new()
-        .name("drm-avail-probe".into())
-        .spawn(move || {
-            let _in_flight = in_flight;
-            probe_and_publish();
-        });
-    if let Err(err) = spawned {
-        log::warn!("drm: could not spawn the availability probe thread: {err}");
-    }
-}
-
-/// Non-blocking login-path probe. A cold cache is refreshed off-thread and refused until retry.
-fn availability_cached() -> Availability {
+/// The non-blocking tri-state, for decisions on the LOGIN REQUEST path that must never wait: an
+/// unauthenticated peer reaches that path, so a probe there would let it park a worker for the
+/// probe deadline. Unknown kicks the probe off-thread and answers Unsettled, which the login
+/// decision treats as a possibly servable greeter (no Xorg) until the state settles.
+pub(crate) fn availability_cached() -> Availability {
     let (verdict, stale_no) = {
-        let state = DRM_STATE.lock().unwrap();
+        let st = DRM_STATE.lock().unwrap();
         let stale_no =
-            matches!(&*state, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
-        (cached_verdict(&state), stale_no)
+            matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
+        let verdict = match &*st {
+            ProbeState::Available(since, _) => {
+                Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
+            }
+            ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
+            ProbeState::Unknown => None,
+        };
+        (verdict, stale_no)
     };
     if let Some((answer, stale)) = verdict {
         if stale {
@@ -920,13 +905,20 @@ fn availability_cached() -> Availability {
         }
         return answer;
     }
-    probe_availability_async();
+    if !DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        let in_flight = ProbeInFlightGuard;
+        let spawned = std::thread::Builder::new()
+            .name("drm-avail-probe".into())
+            .spawn(move || {
+                let _in_flight = in_flight;
+                probe_and_publish();
+            });
+        // On error the guard moved into the dropped closure and released the flag already.
+        if let Err(err) = spawned {
+            log::warn!("drm: could not spawn the availability probe thread: {err}");
+        }
+    }
     Availability::Unsettled
-}
-
-/// Returns cached availability and starts any required probe off-thread.
-pub(crate) fn is_available_cached_or_probe() -> bool {
-    availability_cached() == Availability::Available
 }
 
 /// Probe synchronously and publish the outcome. The caller must hold DRM_PROBE_IN_FLIGHT.

@@ -443,7 +443,7 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 /// admission still requires a definitive Available verdict to avoid a helper-less black screen.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_can_serve_login_screen() -> bool {
-    super::drm_capturer::is_available_cached_or_probe()
+    super::drm_capturer::availability_cached() == super::drm_capturer::Availability::Available
 }
 
 /// Without the feature nothing can capture a Wayland greeter, so the refusal stands.
