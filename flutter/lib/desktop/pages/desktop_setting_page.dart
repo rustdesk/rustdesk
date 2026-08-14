@@ -166,7 +166,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   void dispose() {
     super.dispose();
     Get.delete<PageController>(tag: _kSettingPageControllerTag);
-    Get.delete<RxInt>(tag: _kSettingPageTabKeyTag);
+    Get.delete<Rx<SettingsTabKey>>(tag: _kSettingPageTabKeyTag);
     WidgetsBinding.instance.removeObserver(this);
     _videoConnTimer?.cancel();
   }
