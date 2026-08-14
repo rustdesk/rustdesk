@@ -750,7 +750,11 @@ static WAYLAND_GEOMETRY_FAILED_AT: Mutex<Option<Instant>> = Mutex::new(None);
 /// The last layout the compositor actually gave, served during that hold-off. Deliberately never
 /// an empty list: `augment_with_wayland_geometry_from` reads empty as "no compositor here" and
 /// leaves every monitor at DRM's (0, 0), so answering empty would publish a stacked desktop.
-static WAYLAND_GEOMETRY_LAST_GOOD: Mutex<Option<std::sync::Arc<scrap::wayland::display::Displays>>> =
+///
+/// Kept with the `DRM_STATE_GEN` it was captured under and dropped when that moves, because the
+/// assignment matches connectors to outputs by name and resolution: replaying a layout from a
+/// different topology could hand a new connector another monitor's origin.
+static WAYLAND_GEOMETRY_LAST_GOOD: Mutex<Option<(u64, std::sync::Arc<scrap::wayland::display::Displays>)>> =
     Mutex::new(None);
 const WAYLAND_GEOMETRY_BACKOFF: Duration = Duration::from_secs(5);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
@@ -1265,21 +1269,35 @@ fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
 /// already has is the quiet answer, where an empty one would advertise the raw DRM stack. Until
 /// there is a layout to repeat, ask.
 fn wayland_displays_for_geometry() -> std::sync::Arc<scrap::wayland::display::Displays> {
+    let gen = DRM_STATE_GEN.load(Ordering::Acquire);
+    let last_good = || {
+        WAYLAND_GEOMETRY_LAST_GOOD
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|(captured_gen, _)| *captured_gen == gen)
+            .map(|(_, wl)| wl.clone())
+    };
     let holding_off = matches!(
         *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap(),
         Some(failed_at) if failed_at.elapsed() < WAYLAND_GEOMETRY_BACKOFF
     );
     if holding_off {
-        if let Some(last_good) = WAYLAND_GEOMETRY_LAST_GOOD.lock().unwrap().clone() {
-            return last_good;
+        if let Some(wl) = last_good() {
+            return wl;
         }
     }
     let wl = scrap::wayland::display::get_displays();
     if wl.displays.is_empty() {
         *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap() = Some(Instant::now());
+        // This answer would leave every monitor at (0, 0) too, so the previous layout stands here
+        // as well, not only on the calls the hold-off covers.
+        if let Some(wl) = last_good() {
+            return wl;
+        }
     } else {
         *WAYLAND_GEOMETRY_FAILED_AT.lock().unwrap() = None;
-        *WAYLAND_GEOMETRY_LAST_GOOD.lock().unwrap() = Some(wl.clone());
+        *WAYLAND_GEOMETRY_LAST_GOOD.lock().unwrap() = Some((gen, wl.clone()));
     }
     wl
 }
