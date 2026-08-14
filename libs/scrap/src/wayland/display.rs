@@ -227,6 +227,8 @@ fn enumerate_displays() -> hbb_common::ResultType<Vec<WaylandDisplayInfo>> {
             if !LOOKUP_FAILURE_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
                 warn!("Failed to get wayland displays: {}", err);
             }
+        } else {
+            LOOKUP_FAILURE_WARNED.store(false, std::sync::atomic::Ordering::Relaxed);
         }
     }
     probed
