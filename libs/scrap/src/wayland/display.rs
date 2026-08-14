@@ -27,6 +27,10 @@ const FAILED_LOOKUP_BACKOFF: Duration = Duration::from_secs(5);
 #[cfg(any(test, feature = "drm"))]
 static LAST_FAILED_LOOKUP: Mutex<Option<Instant>> = Mutex::new(None);
 
+#[cfg(feature = "drm")]
+static LOOKUP_FAILURE_WARNED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 pub struct Displays {
     pub primary: usize,
     pub displays: Vec<WaylandDisplayInfo>,
@@ -219,6 +223,11 @@ fn enumerate_displays() -> hbb_common::ResultType<Vec<WaylandDisplayInfo>> {
     #[cfg(feature = "drm")]
     {
         *LAST_FAILED_LOOKUP.lock().unwrap() = (probed.is_err() && !named).then(Instant::now);
+        if let Err(err) = &probed {
+            if !LOOKUP_FAILURE_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                warn!("Failed to get wayland displays: {}", err);
+            }
+        }
     }
     probed
 }
@@ -267,8 +276,9 @@ pub fn get_displays() -> Arc<Displays> {
                 *lock = Some(displays.clone());
                 displays
             }
-            Err(err) => {
-                warn!("Failed to get wayland displays: {}", err);
+            Err(_err) => {
+                #[cfg(not(feature = "drm"))]
+                warn!("Failed to get wayland displays: {}", _err);
                 Arc::new(Displays {
                     primary: 0,
                     displays: Vec::new(),
@@ -303,8 +313,9 @@ pub fn get_layout_for_uinput_live() -> Option<((i32, i32, i32, i32), Vec<Display
         Ok(displays) => {
             desktop_rect_of(&displays).map(|rect| (rect, logical_rects_of(&displays)))
         }
-        Err(err) => {
-            warn!("Failed to get wayland displays: {}", err);
+        Err(_err) => {
+            #[cfg(not(feature = "drm"))]
+            warn!("Failed to get wayland displays: {}", _err);
             None
         }
     }
