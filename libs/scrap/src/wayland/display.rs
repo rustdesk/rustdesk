@@ -18,6 +18,10 @@ lazy_static! {
     static ref PROBE_FAILED_AT: Mutex<Option<Instant>> = Mutex::new(None);
 }
 
+/// Counts invalidations, so a probe that was already out when one landed knows its answer is
+/// about the layout that was just discarded.
+static INVALIDATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// A failed enumeration is not cached, and both callers below poll: the display service about
 /// three times a second, the live layout every 1.5 s. Where there is no compositor to reach, each
 /// of those forks the probe subprocess and waits out its deadline for the same failure.
@@ -189,6 +193,14 @@ fn probe_allowed(failed_at: Option<Instant>, now: Instant, delay: Duration) -> b
     }
 }
 
+/// Whether a finished probe may still stamp its failure. A probe runs unlocked and takes seconds,
+/// so an invalidation can land while it is out; its failure then belongs to the layout that was
+/// just discarded, and stamping it would refuse the fresh read the invalidation asked for. Pure,
+/// for the same reason as above.
+fn failure_still_counts(invalidations_before: u64, invalidations_now: u64) -> bool {
+    invalidations_before == invalidations_now
+}
+
 /// `get_wayland_displays` behind that delay. A refused probe reports a failure, which is what the
 /// callers already do with one, so nothing downstream learns a new state to handle.
 fn probe_wayland_displays() -> hbb_common::ResultType<Vec<WaylandDisplayInfo>> {
@@ -199,8 +211,12 @@ fn probe_wayland_displays() -> hbb_common::ResultType<Vec<WaylandDisplayInfo>> {
     ) {
         hbb_common::bail!("the last wayland enumeration failed; not probing again yet");
     }
+    let invalidations_before = INVALIDATIONS.load(std::sync::atomic::Ordering::Acquire);
     let probed = get_wayland_displays();
-    *PROBE_FAILED_AT.lock().unwrap() = probed.is_err().then(Instant::now);
+    let invalidations_now = INVALIDATIONS.load(std::sync::atomic::Ordering::Acquire);
+    if failure_still_counts(invalidations_before, invalidations_now) {
+        *PROBE_FAILED_AT.lock().unwrap() = probed.is_err().then(Instant::now);
+    }
     probed
 }
 
@@ -247,6 +263,7 @@ pub fn get_displays() -> Arc<Displays> {
 
 #[inline]
 pub fn clear_wayland_displays_cache() {
+    INVALIDATIONS.fetch_add(1, std::sync::atomic::Ordering::Release);
     let _ = DISPLAYS.lock().unwrap().take();
     let _ = PROBE_FAILED_AT.lock().unwrap().take();
 }
@@ -437,6 +454,27 @@ mod tests {
         let now = Instant::now();
         let failed_at = now - PROBE_RETRY_DELAY;
         assert!(probe_allowed(Some(failed_at), now, PROBE_RETRY_DELAY));
+    }
+
+    #[test]
+    fn a_failure_stamps_when_nothing_was_invalidated_while_it_ran() {
+        assert!(failure_still_counts(7, 7));
+    }
+
+    #[test]
+    fn a_failure_from_before_an_invalidation_does_not_stamp() {
+        // The clear asked for a fresh read; this answer is about the layout it discarded.
+        assert!(!failure_still_counts(7, 8));
+    }
+
+    #[test]
+    fn an_invalidation_lets_the_next_probe_run_even_after_a_failure() {
+        // What the counter protects, end to end on the two pure halves: a stamp is dropped by the
+        // clear, so the delay cannot refuse the read that clear was asking for.
+        let now = Instant::now();
+        assert!(!probe_allowed(Some(now), now, PROBE_RETRY_DELAY));
+        let after_clear: Option<Instant> = None;
+        assert!(probe_allowed(after_clear, now, PROBE_RETRY_DELAY));
     }
 
     #[test]
