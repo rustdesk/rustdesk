@@ -483,8 +483,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "Vingerafdruk"),
         ("Copy Fingerprint", "Vingerafdruk kopiëren"),
         ("no fingerprints", "geen vingerafdrukken"),
-        ("Select a peer", "Selecteer een peer"),
-        ("Select peers", "Selecteer peers"),
         ("Uninstall", "Verwijderen"),
         ("Update", "Bijwerken"),
         ("Enable", "Activeren"),

@@ -483,8 +483,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "지문"),
         ("Copy Fingerprint", "지문 복사"),
         ("no fingerprints", "지문이 없습니다"),
-        ("Select a peer", "피어 선택"),
-        ("Select peers", "피어 선택"),
         ("Uninstall", "설치 제거"),
         ("Update", "업데이트"),
         ("Enable", "허용"),

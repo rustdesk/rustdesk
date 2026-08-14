@@ -483,8 +483,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "Pirkstu nospiedums"),
         ("Copy Fingerprint", "Kopēt pirkstu nospiedumu"),
         ("no fingerprints", "nav pirkstu nospiedumu"),
-        ("Select a peer", "Atlasīt līdzīgu"),
-        ("Select peers", "Atlasīt līdzīgus"),
         ("Uninstall", "Atinstalēt"),
         ("Update", "Atjaunināt"),
         ("Enable", "Iespējot"),

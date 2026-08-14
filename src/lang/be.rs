@@ -483,8 +483,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "Адбітак"),
         ("Copy Fingerprint", "Капіяваць адбітак"),
         ("no fingerprints", "адбіткі адсутнічаюць"),
-        ("Select a peer", "Выберыце абанента"),
-        ("Select peers", "Выберыце абанентаў"),
         ("Uninstall", "Выдаліць"),
         ("Update", "Абнавіць"),
         ("Enable", "Уключыць"),

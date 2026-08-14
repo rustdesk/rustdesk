@@ -483,8 +483,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Fingerprint", "Δακτυλικό αποτύπωμα"),
         ("Copy Fingerprint", "Αντιγραφή δακτυλικού αποτυπώματος"),
         ("no fingerprints", "χωρίς δακτυλικά αποτυπώματα"),
-        ("Select a peer", "Επιλέξτε έναν σταθμό"),
-        ("Select peers", "Επιλέξτε σταθμούς"),
         ("Uninstall", "Κατάργηση εγκατάστασης"),
         ("Update", "Ενημέρωση"),
         ("Enable", "Ενεργοποίηση"),
