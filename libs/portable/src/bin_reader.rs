@@ -368,8 +368,7 @@ mod tests {
         assert_eq!(
             files
                 .iter()
-                .filter(|f| normalize_path(&f.path)
-                    == "data/flutter_assets/assets/icon.ico")
+                .filter(|f| normalize_path(&f.path) == "data/flutter_assets/assets/icon.ico")
                 .count(),
             1
         );

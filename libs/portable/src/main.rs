@@ -85,7 +85,9 @@ fn previous_package_files(dir: &Path) -> Vec<String> {
 }
 
 fn normalized(path: &str) -> String {
-    path.replace('\\', "/").trim_start_matches("./").to_lowercase()
+    path.replace('\\', "/")
+        .trim_start_matches("./")
+        .to_lowercase()
 }
 
 // meta.toml is plain text in a user-writable directory, and it now drives deletion,
