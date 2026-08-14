@@ -272,7 +272,7 @@ fn execute(path: PathBuf, args: Vec<String>, _ui: bool) {
     }
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let mut args = Vec::new();
     let mut arg_exe = Default::default();
     let mut i = 0;
@@ -291,7 +291,7 @@ fn main() {
     let quick_support = false;
 
     let mut ui = false;
-    let reader = BinaryReader::default();
+    let reader = BinaryReader::new()?;
     if let Some(exe) = setup(
         reader,
         None,
@@ -306,6 +306,7 @@ fn main() {
         }
         execute(exe, args, ui);
     }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -368,4 +369,3 @@ mod meta_tests {
         assert_eq!(resolve_within(base, ""), None);
     }
 }
-

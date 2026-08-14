@@ -40,16 +40,16 @@ pub(crate) struct BinaryReader {
     pub package_paths: Vec<String>,
 }
 
-impl Default for BinaryReader {
-    fn default() -> Self {
-        let package = read_package();
+impl BinaryReader {
+    pub fn new() -> Result<Self, String> {
+        let package = read_package()?;
         let package_paths = package.0.iter().map(|f| f.path.clone()).collect();
         let (files, exe) = merge(read_embedded(), package);
-        Self {
+        Ok(Self {
             files,
             exe,
             package_paths,
-        }
+        })
     }
 }
 
@@ -118,7 +118,9 @@ fn parse(blob: &'static [u8]) -> Option<(Vec<BinaryData>, String)> {
         }
         let path_length = read_u32(blob, base)? as usize;
         base += LENGTH;
-        let path = String::from_utf8_lossy(blob.get(base..base + path_length)?).to_string();
+        let path = std::str::from_utf8(blob.get(base..base + path_length)?)
+            .ok()?
+            .to_owned();
         base += path_length;
         let file_length = read_u32(blob, base)? as usize;
         base += LENGTH;
@@ -132,7 +134,7 @@ fn parse(blob: &'static [u8]) -> Option<(Vec<BinaryData>, String)> {
             path,
         });
     }
-    let executable = String::from_utf8_lossy(blob.get(base..)?).to_string();
+    let executable = std::str::from_utf8(blob.get(base..)?).ok()?.to_owned();
     Some((parsed, executable))
 }
 
@@ -146,16 +148,25 @@ fn read_embedded() -> (Vec<BinaryData>, String) {
     parse(BIN_DATA).unwrap_or_default()
 }
 
+fn parse_package_blob(blob: Option<&'static [u8]>) -> Result<(Vec<BinaryData>, String), String> {
+    let Some(blob) = blob else {
+        return Ok(Default::default());
+    };
+    let package = parse(blob).ok_or_else(|| "RDPKG resource is invalid".to_owned())?;
+    if package.1.trim().is_empty() {
+        return Err("RDPKG resource has no executable".to_owned());
+    }
+    Ok(package)
+}
+
 #[cfg(windows)]
-fn read_package() -> (Vec<BinaryData>, String) {
-    read_resource(PACKAGE_RESOURCE_NAME)
-        .and_then(parse)
-        .unwrap_or_default()
+fn read_package() -> Result<(Vec<BinaryData>, String), String> {
+    parse_package_blob(read_resource(PACKAGE_RESOURCE_NAME))
 }
 
 #[cfg(not(windows))]
-fn read_package() -> (Vec<BinaryData>, String) {
-    Default::default()
+fn read_package() -> Result<(Vec<BinaryData>, String), String> {
+    Ok(Default::default())
 }
 
 // Reads an RCDATA resource out of the running image. Resources live in the mapped
@@ -288,6 +299,13 @@ mod tests {
         assert!(parse(b"notrustd".as_slice()).is_none());
         // Truncated mid-record rather than panicking on a slice out of range.
         assert!(parse(b"rustdesk\x00\x00\x00\x40partial".as_slice()).is_none());
+    }
+
+    #[test]
+    fn distinguishes_an_absent_package_from_a_malformed_one() {
+        assert!(parse_package_blob(None).unwrap().0.is_empty());
+        assert!(parse_package_blob(Some(b"damaged")).is_err());
+        assert!(parse_package_blob(Some(blob(&[("./custom.txt", b"cfg")], ""))).is_err());
     }
 
     #[test]
