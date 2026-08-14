@@ -439,14 +439,11 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
 ///
-/// The cached probe, not the blocking one: this is a routing gate. Available-only ON PURPOSE, and
-/// deliberately NOT symmetric with the seat0 adoption gate: that one only starts Xorg on a
-/// definitive Unavailable (never over a maybe-live greeter), while admission only accepts on a
-/// definitive Available (never a greeter nothing can yet capture). Both err toward refuse-and-retry
-/// during an unsettled probe; admitting there would black-screen a client on a helper-less box.
+/// This routing gate never blocks an unauthenticated request. A cold cache probes off-thread, while
+/// admission still requires a definitive Available verdict to avoid a helper-less black screen.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_can_serve_login_screen() -> bool {
-    super::drm_capturer::is_available_cached()
+    super::drm_capturer::is_available_cached_or_probe()
 }
 
 /// Without the feature nothing can capture a Wayland greeter, so the refusal stands.

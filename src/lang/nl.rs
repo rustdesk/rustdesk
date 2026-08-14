@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Dit bestand is identiek aan het bestand van het externe station."),
         ("show_monitors_tip", "Monitoren weergeven in de werkbalk"),
         ("View Mode", "Toeschouwermodus"),
-        ("login_linux_tip", "Toegang tot het externe Linux-account"),
         ("verify_rustdesk_password_tip", "Bevestiging wachtwoord RustDesk"),
         ("No need to elevate", "Niet nodig om te verhogen"),
         ("System Sound", "Systeemgeluid"),

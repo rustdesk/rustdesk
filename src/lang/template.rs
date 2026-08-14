@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", ""),
         ("show_monitors_tip", ""),
         ("View Mode", ""),
-        ("login_linux_tip", ""),
         ("verify_rustdesk_password_tip", ""),
         ("No need to elevate", ""),
         ("System Sound", ""),

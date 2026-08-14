@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "See fail on partneri omaga identne."),
         ("show_monitors_tip", "Kuva kuvarid tööriistaribal"),
         ("View Mode", "Kuvarežiim"),
-        ("login_linux_tip", "X-töölaua seansi lubamiseks pead sisse logima Linuxi kaugkontosse."),
         ("verify_rustdesk_password_tip", "Kinnita RustDeski parool"),
         ("No need to elevate", "Kõrgendamine pole vajalik"),
         ("System Sound", "Süsteemiheli"),

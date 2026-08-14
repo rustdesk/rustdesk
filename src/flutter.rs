@@ -1589,12 +1589,6 @@ pub mod connection_manager {
         }
     }
 
-    #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_listen_ipc_thread() {
-        start_listen_ipc();
-    }
-
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn start_listen_ipc() {
         use crate::ui_cm_interface::{start_ipc, ConnectionManager};
@@ -1611,7 +1605,7 @@ pub mod connection_manager {
     #[inline]
     pub fn cm_init() {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        start_listen_ipc_thread();
+        start_listen_ipc();
     }
 
     #[cfg(target_os = "android")]

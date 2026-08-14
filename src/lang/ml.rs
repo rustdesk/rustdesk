@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "ഈ ഫയൽ നിലവിലുണ്ട്."),
         ("show_monitors_tip", "ടൂൾബാറിൽ മോണിറ്ററുകൾ കാണിക്കുക"),
         ("View Mode", "വ്യൂ മോഡ്"),
-        ("login_linux_tip", "റിമോട്ട് ലിനക്സ് സെഷനായി ലോഗിൻ ചെയ്യണം"),
         ("verify_rustdesk_password_tip", "RustDesk പാസ്‌വേഡ് പരിശോധിക്കുക"),
         ("No need to elevate", "എലവേറ്റ് ചെയ്യേണ്ടതില്ല"),
         ("System Sound", "സിസ്റ്റം സൗണ്ട്"),

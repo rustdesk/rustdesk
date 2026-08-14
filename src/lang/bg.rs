@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Файлът съвпада с този от другата страна."),
         ("show_monitors_tip", "Показване на мониторите в лентата с инструменти"),
         ("View Mode", "Режим на изглед"),
-        ("login_linux_tip", "Трябва да влезете в отдалечен Linux акаунт, за да активирате X сесия на работния плот"),
         ("verify_rustdesk_password_tip", "Проверете RustDesk паролата"),
         ("No need to elevate", "Няма нужда за повишаване на права"),
         ("System Sound", "Системен звук"),

@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "این فایل با فایل همتا یکسان است."),
         ("show_monitors_tip", "نمایش مانیتورها در نوار ابزار"),
         ("View Mode", "حالت مشاهده"),
-        ("login_linux_tip", "برای فعال کردن دسکتاپ X، باید به حساب لینوکس راه دور وارد شوید"),
         ("verify_rustdesk_password_tip", "رمز عبور RustDesk را تأیید کنید"),
         ("No need to elevate", "نیازی به ارتقاء نیست"),
         ("System Sound", "صدای سیستم"),

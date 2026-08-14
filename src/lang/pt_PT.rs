@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Este ficheiro é idêntico ao do destino."),
         ("show_monitors_tip", "Mostrar monitores na barra de ferramentas"),
         ("View Mode", "Modo de visualização"),
-        ("login_linux_tip", "É necessário iniciar sessão na conta Linux remota para ativar uma sessão de ambiente de trabalho X"),
         ("verify_rustdesk_password_tip", "Verificar palavra-passe do RustDesk"),
         ("No need to elevate", "Não é necessário elevar"),
         ("System Sound", "Som do sistema"),

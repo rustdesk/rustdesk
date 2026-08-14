@@ -465,7 +465,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("identical_file_tip", "Ky skedar është identik me atë të peer-it."),
         ("show_monitors_tip", "Shfaq monitorët në shiritin e veglave"),
         ("View Mode", "Modaliteti i pamjes"),
-        ("login_linux_tip", "Duhet të hyni në llogarinë Linux në distancë për të aktivizuar një seancë desktopi X"),
         ("verify_rustdesk_password_tip", "Verifiko fjalëkalimin e RustDesk"),
         ("No need to elevate", "Nuk ka nevojë për ngritje privilegjesh"),
         ("System Sound", "Tingulli i sistemit"),
