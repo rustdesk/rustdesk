@@ -1352,12 +1352,12 @@ class ScreenAdjustor {
   bool get isFullscreen => stateGlobal.fullscreen.isTrue;
   int get windowId => stateGlobal.windowId;
 
-  Future<bool> isWindowMaximized() async {
+  Future<bool?> isWindowMaximized() async {
     try {
       return await WindowController.fromWindowId(windowId).isMaximized();
     } catch (_) {
       // The delayed resolution callback may run after the window is disposed.
-      return true;
+      return null;
     }
   }
 
@@ -1383,15 +1383,15 @@ class ScreenAdjustor {
   // unreliable across Wayland/X11 state changes, so normalize reported frames
   // and cache usable work-area measurements before sizing the window.
 
-  void _updateLinuxWorkAreaCache({
+  Future<void> _updateLinuxWorkAreaCache({
     required window_size.Screen screen,
     required Rect wndRect,
     required bool isWayland,
     required bool isX11,
     required bool forMenu,
-  }) {
+  }) async {
     if (isWayland &&
-      (_waylandWorkAreaScreenFrame != screen.frame ||
+        (_waylandWorkAreaScreenFrame != screen.frame ||
             _waylandWorkAreaScaleFactor != screen.scaleFactor)) {
       _waylandMaximizedWorkAreaSize = null;
       _waylandWorkAreaScreenFrame = screen.frame;
@@ -1400,7 +1400,7 @@ class ScreenAdjustor {
     if (isWayland &&
         forMenu &&
         !isFullscreen &&
-      stateGlobal.isMaximized.value) {
+        await isWindowMaximized() == true) {
       _waylandMaximizedWorkAreaSize = wndRect.size;
     }
     if (isX11 &&
@@ -1496,7 +1496,7 @@ class ScreenAdjustor {
       // Use it instead of the remote source resolution.
       final isWayland = isLinux && bind.mainCurrentIsWayland();
       final isX11 = isLinux && !isWayland;
-      _updateLinuxWorkAreaCache(
+      await _updateLinuxWorkAreaCache(
         screen: screen,
         wndRect: wndRect,
         isWayland: isWayland,
@@ -1618,7 +1618,11 @@ class ScreenAdjustor {
         await updateScreen();
       }
       if (isLinux) {
-        if (await isWindowMaximized()) {
+        final isMaximized = await isWindowMaximized();
+        if (isMaximized == null) {
+          return;
+        }
+        if (isMaximized == true) {
           // setFrame may be ignored while the native window is maximized.
           try {
             await wc.unmaximize();
@@ -2394,13 +2398,14 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         if (!await widget.screenAdjustor.isWindowCanBeAdjusted()) {
           return;
         }
-        if (widget.screenAdjustor.isFullscreen ||
-            await widget.screenAdjustor.isWindowMaximized()) {
+        if (widget.screenAdjustor.isFullscreen) {
           return;
         }
-        // This delayed callback can outlive the menu State, so its context
-        // is unsafe.
-        widget.screenAdjustor.doAdjustWindow();
+        if ((await widget.screenAdjustor.isWindowMaximized()) == false) {
+          // This delayed callback can outlive the menu State, so its context
+          // is unsafe.
+          widget.screenAdjustor.doAdjustWindow();
+        }
       }
     });
   }
