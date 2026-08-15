@@ -1671,7 +1671,6 @@ class ScreenAdjustor {
     }
     final view = context != null ? View.of(context) : views.first;
     final mediaSize = MediaQueryData.fromView(view).size;
-    await updateScreen();
     final viewStyle =
         await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
     if (viewStyle != kRemoteViewStyleOriginal) {
@@ -1683,6 +1682,7 @@ class ScreenAdjustor {
         return false;
       }
     }
+    await updateScreen();
     if (_screen == null) {
       return false;
     }
@@ -1746,7 +1746,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    _screenAdjustor.updateScreen();
     menuChildrenGetter(_IconSubmenuButtonState state) {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
