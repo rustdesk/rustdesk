@@ -1676,11 +1676,9 @@ class ScreenAdjustor {
     if (viewStyle != kRemoteViewStyleOriginal) {
       return false;
     }
-    if (!isWeb) {
-      final remoteCount = RemoteCountState.find().value;
-      if (remoteCount != 1) {
-        return false;
-      }
+    final remoteCount = RemoteCountState.find().value;
+    if (remoteCount != 1) {
+      return false;
     }
     await updateScreen();
     if (_screen == null) {
