@@ -1450,7 +1450,7 @@ class ScreenAdjustor {
       frameRect = x11WorkArea;
     }
     final screenScale = screen.scaleFactor;
-    if (isWayland && screenScale > 1) {
+    if (isWayland && screenScale > 1.01) {
       String monitorLayoutMode;
       try {
         monitorLayoutMode = await (_gnomeMonitorLayoutMode ??=
