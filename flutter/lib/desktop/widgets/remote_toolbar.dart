@@ -1380,60 +1380,9 @@ class ScreenAdjustor {
         });
   }
 
-  // Linux screen work-area handling:
-  //
-  // 1. Wayland fractional scaling
-  //
-  // Applies to: GNOME on Linux Wayland.
-  //
-  // Observed GNOME Wayland values on a physical 1920x1080 display:
-  //
-  // Fractional Scaling | UI scale | screen w x h | screen scaleFactor | wndRect/mediaSize | canvasModel.scale
-  // -------------------+----------+--------------+--------------------+-------------------+------------------
-  // Disabled           | 200%     | 1920 x 1080  | 2                  | 1:1               | 0.5
-  // Enabled            | 150%     | 1280 x 720   | 2                  | 1:1               | 0.5
-  // Enabled            | 200%     |  960 x 540   | 2                  | 1:1               | 0.5
-  //
-  // With Fractional Scaling disabled, screen frames use unscaled physical
-  // dimensions while GTK window sizes use logical dimensions. In that case,
-  // divide the screen frame by scaleFactor. With Fractional Scaling enabled,
-  // the screen frame is already logical and must not be divided again. GNOME
-  // Fractional Scaling is queried through mainGetCommon; an unknown result is
-  // left unchanged to avoid incorrectly scaling an already-logical frame.
-  // Confirmed that GNOME and KDE X11 do not have this issue.
-  // KDE does not have this GNOME Fractional Scaling option and does not have
-  // this issue either.
-  //
-  // 2. Wayland visibleFrame
-  //
-  // Applies to: GNOME and KDE on Linux Wayland.
-  //
-  // On both GNOME and KDE Wayland, visibleFrame may always be identical to
-  // frame and therefore may include desktop panels or docks. During a
-  // non-fullscreen, maximized menu check, cache wndRect.size as the observed
-  // work-area size. Later menu checks use the smaller of that cached size and
-  // the reported frame size. This cache is used only to decide whether to show
-  // Adjust Window.
-  //
-  // Limitation: the cache contains only a size, not the work-area origin. It
-  // is unavailable until a maximized, non-fullscreen menu check has occurred,
-  // and may become stale if panels change without frame or scaleFactor changing.
-  // Wayland compositors also control window positioning, so a successful resize
-  // does not guarantee that the restored window will be moved fully on-screen.
-  //
-  // 3. X11 fullscreen visibleFrame
-  //
-  // Applies to: Linux X11 desktop environments.
-  //
-  // On X11, visibleFrame normally represents the work area, but may become
-  // identical to frame while fullscreen. Cache visibleFrame during a
-  // non-fullscreen menu check. During a fullscreen menu check, use the cache
-  // only when its width or height is smaller than the reported visibleFrame.
-  // The actual adjustment exits fullscreen first and does not use this cache.
-  //
-  // Limitation: the cache is unavailable until a non-fullscreen menu check has
-  // occurred, and may become stale if panels change without frame or
-  // scaleFactor changing.
+  // Linux screen and work-area coordinates can use different units or become
+  // unreliable across Wayland/X11 state changes, so normalize reported frames
+  // and cache usable work-area measurements before sizing the window.
 
   void _updateLinuxWorkAreaCache({
     required window_size.Screen screen,
