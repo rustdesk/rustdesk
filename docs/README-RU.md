@@ -59,7 +59,7 @@ RustDesk приветствует вклад каждого. Ознакомьт�
 
 - Выполните команду `cargo run`
 
-## [Сборка](https://rustdesk.com/docs/ru/dev/build/)
+## [Сборка](https://rustdesk.com/docs/en/dev/build/)
 
 ## Как собрать на Linux 
 
@@ -170,7 +170,6 @@ target/release/rustdesk
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: связь с [сервером RustDesk](https://github.com/rustdesk/rustdesk-server), ожидает удаленного прямого (через TCP hole punching) или ретранслируемого соединения
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: специфичный для платформы код
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: код Flutter для ПК-версии и мобильных устройств
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript для Web-клиента Flutter
 
 ## Скриншоты
 

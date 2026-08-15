@@ -168,7 +168,6 @@ Asigură-te că rulezi aceste comenzi din rădăcina repository-ului RustDesk, a
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: comunică cu [rustdesk-server](https://github.com/rustdesk/rustdesk-server), așteaptă conexiune directă remote (TCP hole punching) sau prin relay
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: cod specific platformei
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: cod Flutter pentru desktop și mobil
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript pentru clientul Flutter web
 
 ## Capturi de ecran
 
