@@ -1655,7 +1655,8 @@ class ScreenAdjustor {
   Future<window_size.Screen?> _getCurrentScreen() async {
     try {
       return (await window_size.getWindowInfo()).screen;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Failed to get current window screen: $e');
       return null;
     }
   }
@@ -2310,15 +2311,19 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   Future<void> _getLocalResolutionWayland() async {
     if (!isWayland) return _getLocalResolution();
-    final window = await window_size.getWindowInfo();
-    final screen = window.screen;
-    if (screen != null) {
-      setState(() {
-        _localResolution = Resolution(
-          screen.frame.width.toInt(),
-          screen.frame.height.toInt(),
-        );
-      });
+    try {
+      final window = await window_size.getWindowInfo();
+      final screen = window.screen;
+      if (screen != null) {
+        setState(() {
+          _localResolution = Resolution(
+            screen.frame.width.toInt(),
+            screen.frame.height.toInt(),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to get local resolution on Wayland: $e');
     }
   }
 
