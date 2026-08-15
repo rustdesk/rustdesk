@@ -1573,12 +1573,10 @@ class ScreenAdjustor {
         return null;
       }
       // The remote size may change after the menu is built. Reject targets
-      // that exceed the available area or exactly fill it in both dimensions.
+      // that exceed the available area.
       final exceedsScreen =
           width > availableSize.width || height > availableSize.height;
-      final fillsScreen =
-          width == availableSize.width && height == availableSize.height;
-      if (exceedsScreen || fillsScreen) {
+      if (exceedsScreen) {
         return null;
       }
       if (left < frameRect.left) {
