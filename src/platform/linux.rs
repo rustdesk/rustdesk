@@ -58,8 +58,8 @@ lazy_static::lazy_static! {
     };
     static ref ACTIVE_USER_LOOKUP_CACHE: std::sync::Mutex<Option<ActiveUserLookupCache>> =
         std::sync::Mutex::new(None);
-    static ref GNOME_FRACTIONAL_SCALING_CACHE: std::sync::Mutex<
-        Option<(Instant, Option<bool>)>,
+    static ref GNOME_MONITOR_LAYOUT_MODE_CACHE: std::sync::Mutex<
+        Option<(Instant, Option<GnomeMonitorLayoutMode>)>,
     > = Default::default();
     // https://github.com/rustdesk/rustdesk/issues/13705
     // Check if `sudo -E` actually preserves environment.
@@ -93,10 +93,33 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn gnome_fractional_scaling_enabled() -> Option<bool> {
-    use std::{io::Read, process::Stdio};
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GnomeMonitorLayoutMode {
+    Logical,
+    Physical,
+}
 
-    if let Ok(cache) = GNOME_FRACTIONAL_SCALING_CACHE.lock() {
+impl GnomeMonitorLayoutMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Logical => "logical",
+            Self::Physical => "physical",
+        }
+    }
+}
+
+fn gnome_monitor_layout_mode_from_value(value: u32) -> Option<GnomeMonitorLayoutMode> {
+    // Upstream: https://gitlab.gnome.org/GNOME/mutter/-/blob/main/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml
+    // Ubuntu mode 3: https://git.launchpad.net/ubuntu/+source/mutter/tree/debian/patches/x11-Add-support-for-fractional-scaling-using-Randr.patch
+    match value {
+        1 | 3 => Some(GnomeMonitorLayoutMode::Logical),
+        2 => Some(GnomeMonitorLayoutMode::Physical),
+        _ => None,
+    }
+}
+
+pub fn gnome_monitor_layout_mode() -> Option<GnomeMonitorLayoutMode> {
+    if let Ok(cache) = GNOME_MONITOR_LAYOUT_MODE_CACHE.lock() {
         if let Some((updated_at, result)) = *cache {
             if updated_at.elapsed() < Duration::from_secs(10) {
                 return result;
@@ -120,60 +143,92 @@ pub fn gnome_fractional_scaling_enabled() -> Option<bool> {
         {
             return None;
         }
-        let mut child = match Command::new("gsettings")
-            .args(["get", "org.gnome.mutter", "experimental-features"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(child) => child,
+        use dbus::{arg::PropMap, blocking::BlockingSender};
+
+        let conn = match dbus::blocking::Connection::new_session() {
+            Ok(conn) => conn,
             Err(err) => {
-                log::warn!("Failed to start gsettings: {err}");
+                log::warn!("Failed to connect to the session bus for GNOME monitor layout: {err}");
                 return None;
             }
         };
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Ok(None) => {
-                    log::warn!("Timed out while checking GNOME fractional scaling");
-                    if let Err(err) = child.kill() {
-                        log::debug!("Failed to kill timed-out gsettings process: {err}");
-                    }
-                    if let Err(err) = child.wait() {
-                        log::debug!("Failed to reap timed-out gsettings process: {err}");
-                    }
-                    return None;
-                }
-                Err(err) => {
-                    log::warn!("Failed to wait for gsettings: {err}");
-                    if let Err(err) = child.kill() {
-                        log::debug!("Failed to kill gsettings process: {err}");
-                    }
-                    if let Err(err) = child.wait() {
-                        log::debug!("Failed to reap gsettings process: {err}");
-                    }
-                    return None;
-                }
+        let message = match dbus::Message::new_method_call(
+            "org.gnome.Mutter.DisplayConfig",
+            "/org/gnome/Mutter/DisplayConfig",
+            "org.gnome.Mutter.DisplayConfig",
+            "GetCurrentState",
+        ) {
+            Ok(message) => message,
+            Err(err) => {
+                log::warn!("Failed to create GNOME monitor layout query: {err}");
+                return None;
             }
         };
-        if !status.success() {
-            return None;
+        let reply = match conn.send_with_reply_and_block(message, Duration::from_secs(2)) {
+            Ok(reply) => reply,
+            Err(err) => {
+                log::warn!("Failed to query GNOME monitor layout: {err}");
+                return None;
+            }
+        };
+        let mut args = reply.iter_init();
+        for _ in 0..3 {
+            if !args.next() {
+                log::warn!("GNOME monitor layout reply is missing properties");
+                return None;
+            }
         }
-        let mut stdout = Vec::new();
-        child.stdout.take()?.read_to_end(&mut stdout).ok()?;
-        String::from_utf8(stdout)
-            .ok()
-            .map(|features| features.contains("scale-monitor-framebuffer"))
+        let properties: PropMap = match args.read() {
+            Ok(properties) => properties,
+            Err(err) => {
+                log::warn!("Failed to read GNOME monitor layout properties: {err}");
+                return None;
+            }
+        };
+        let Some(value) = dbus::arg::prop_cast::<u32>(&properties, "layout-mode").copied() else {
+            log::warn!("GNOME monitor layout reply has no layout-mode");
+            return None;
+        };
+        let mode = gnome_monitor_layout_mode_from_value(value);
+        if mode.is_none() {
+            log::warn!("GNOME monitor layout reply has unknown layout-mode {value}");
+        }
+        mode
     })();
-    if let Ok(mut cache) = GNOME_FRACTIONAL_SCALING_CACHE.lock() {
+    if let Ok(mut cache) = GNOME_MONITOR_LAYOUT_MODE_CACHE.lock() {
         *cache = Some((Instant::now(), result));
     }
     result
+}
+
+#[cfg(test)]
+mod gnome_monitor_layout_tests {
+    use super::*;
+
+    #[test]
+    fn maps_logical_layouts() {
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(1),
+            Some(GnomeMonitorLayoutMode::Logical)
+        );
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(3),
+            Some(GnomeMonitorLayoutMode::Logical)
+        );
+    }
+
+    #[test]
+    fn maps_physical_layout() {
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(2),
+            Some(GnomeMonitorLayoutMode::Physical)
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_layout() {
+        assert_eq!(gnome_monitor_layout_mode_from_value(4), None);
+    }
 }
 
 #[inline]

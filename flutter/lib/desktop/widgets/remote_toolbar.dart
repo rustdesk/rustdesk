@@ -1338,7 +1338,7 @@ class ScreenAdjustor {
   Size? _waylandMaximizedWorkAreaSize;
   Rect? _waylandWorkAreaScreenFrame;
   double? _waylandWorkAreaScaleFactor;
-  Future<String>? _gnomeFractionalScalingEnabled;
+  Future<String>? _gnomeMonitorLayoutMode;
   Rect? _x11WorkArea;
   Rect? _x11WorkAreaScreenFrame;
   double? _x11WorkAreaScaleFactor;
@@ -1451,15 +1451,15 @@ class ScreenAdjustor {
     }
     final screenScale = screen.scaleFactor;
     if (isWayland && screenScale > 1) {
-      String fractionalScalingEnabled;
+      String monitorLayoutMode;
       try {
-        fractionalScalingEnabled = await (_gnomeFractionalScalingEnabled ??=
-            bind.mainGetCommon(key: 'gnome-fractional-scaling-enabled'));
+        monitorLayoutMode = await (_gnomeMonitorLayoutMode ??=
+            bind.mainGetCommon(key: 'gnome-monitor-layout-mode'));
       } catch (_) {
-        _gnomeFractionalScalingEnabled = Future.value('');
-        fractionalScalingEnabled = '';
+        _gnomeMonitorLayoutMode = Future.value('');
+        monitorLayoutMode = '';
       }
-      if (fractionalScalingEnabled == 'false') {
+      if (monitorLayoutMode == 'physical') {
         frameRect = Rect.fromLTRB(
           frameRect.left / screenScale,
           frameRect.top / screenScale,
