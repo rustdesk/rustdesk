@@ -9,7 +9,6 @@ import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/plugin/widgets/desc_ui.dart';
 import 'package:flutter_hbb/plugin/common.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -1653,32 +1652,7 @@ class ScreenAdjustor {
 
   Future<window_size.Screen?> _getCurrentScreen() async {
     try {
-      final screen = (await window_size.getWindowInfo()).screen;
-      if (screen != null) {
-        return screen;
-      }
-    } catch (_) {}
-    return _getMainWindowScreen();
-  }
-
-  Future<window_size.Screen?> _getMainWindowScreen() async {
-    try {
-      final response = await rustDeskWinManager.call(
-          WindowType.Main, kWindowGetWindowInfo, '');
-      final info = response.result;
-      if (info == null || info.isEmpty) {
-        return null;
-      }
-      final screenMap = jsonDecode(info);
-      return window_size.Screen(
-          Rect.fromLTRB(screenMap['frame']['l'], screenMap['frame']['t'],
-              screenMap['frame']['r'], screenMap['frame']['b']),
-          Rect.fromLTRB(
-              screenMap['visibleFrame']['l'],
-              screenMap['visibleFrame']['t'],
-              screenMap['visibleFrame']['r'],
-              screenMap['visibleFrame']['b']),
-          screenMap['scaleFactor']);
+      return (await window_size.getWindowInfo()).screen;
     } catch (_) {
       return null;
     }
