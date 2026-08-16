@@ -300,7 +300,7 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
         {
             do
             {
-                if (lstrcmpW(processName, processEntry.szExeFile) == 0)
+                if (lstrcmpiW(processName, processEntry.szExeFile) == 0)
                 {
                     HANDLE process = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processEntry.th32ProcessID);
                     if (process != NULL)
