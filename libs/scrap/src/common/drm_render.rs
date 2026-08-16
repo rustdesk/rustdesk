@@ -1,7 +1,7 @@
 // Unprivileged half of the split DRM/KMS capture path: the root `--service` exports a scanout
 // dma-buf fd + descriptor, this side imports it and EGL-detiles. libEGL/libGLESv2 are dlopen'd
 // in the UNPRIVILEGED process on this path; the root service loads them only if it falls back to
-// its own CPU-mapped grab (`drmtap_grab_mapped`). See docs/DRM_CAPTURE_SECURITY.md.
+// its own CPU-mapped grab (`drmtap_grab_mapped`).
 
 use super::drmtap_dl::{self, drmtap_ctx, drmtap_dmabuf_desc, drmtap_frame_info, DrmtapLib};
 use super::Pixfmt;
