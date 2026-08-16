@@ -51,7 +51,7 @@ fn run_rdp(port: u16, name: &str) {
     }
 }
 
-// Prefer the name the user knows the peer by: alias, then cached hostname.
+// Show the peer identity with its hostname, using the ID when no alias exists.
 fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
     let lc = lc.read().unwrap();
     let alias = lc
@@ -59,14 +59,13 @@ fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
         .get("alias")
         .map(|s| s.trim())
         .unwrap_or_default();
-    if !alias.is_empty() {
-        return alias.to_owned();
-    }
     let hostname = lc.info.hostname.trim();
-    if !hostname.is_empty() {
-        return hostname.to_owned();
+    let identity = if !alias.is_empty() { alias } else { id };
+    if hostname.is_empty() || hostname == identity {
+        identity.to_owned()
+    } else {
+        format!("{} ({})", identity, hostname)
     }
-    id.to_owned()
 }
 
 pub async fn listen(
