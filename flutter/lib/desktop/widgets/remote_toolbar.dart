@@ -1336,7 +1336,6 @@ class ScreenAdjustor {
   Size? _waylandMaximizedWorkAreaSize;
   Rect? _waylandWorkAreaScreenFrame;
   double? _waylandWorkAreaScaleFactor;
-  Future<String>? _gnomeMonitorLayoutMode;
   Rect? _x11WorkArea;
   Rect? _x11WorkAreaScreenFrame;
   double? _x11WorkAreaScaleFactor;
@@ -1451,10 +1450,9 @@ class ScreenAdjustor {
     if (isWayland && screenScale > 1.01) {
       String monitorLayoutMode;
       try {
-        monitorLayoutMode = await (_gnomeMonitorLayoutMode ??=
-            bind.mainGetCommon(key: 'gnome-monitor-layout-mode'));
+        monitorLayoutMode =
+            await bind.mainGetCommon(key: 'gnome-monitor-layout-mode');
       } catch (_) {
-        _gnomeMonitorLayoutMode = Future.value('');
         monitorLayoutMode = '';
       }
       if (monitorLayoutMode == 'physical') {
