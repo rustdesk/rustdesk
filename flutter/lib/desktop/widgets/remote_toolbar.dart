@@ -1567,8 +1567,7 @@ class ScreenAdjustor {
       if (magicWidth < -0.1 || magicHeight < -0.1) {
         return null;
       }
-      // Transient fullscreen metrics once produced a calculated 4.0x60.0
-      // target frame. Reject implausibly small targets to avoid hiding the window.
+      // Reject implausibly small targets to avoid hiding the window.
       if (width < 300 || height < 300) {
         return null;
       }

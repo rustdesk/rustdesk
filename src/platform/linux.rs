@@ -137,10 +137,7 @@ pub fn gnome_monitor_layout_mode() -> Option<GnomeMonitorLayoutMode> {
         let is_gnome_session = std::env::var("DESKTOP_SESSION")
             .unwrap_or_default()
             .to_ascii_lowercase();
-        if !is_gnome_desktop
-            && !is_gnome_session.contains("gnome")
-            && std::env::var_os("GNOME_DESKTOP_SESSION_ID").is_none()
-        {
+        if !is_gnome_desktop && !is_gnome_session.contains("gnome") {
             return None;
         }
         use dbus::{arg::PropMap, blocking::BlockingSender};
