@@ -153,6 +153,21 @@ void showServerSettingsWithValue(
           child: Obx(() => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      translate(
+                          'Connect this client to your self-hosted ID, relay, and API services.'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color
+                                ?.withOpacity(0.72),
+                          ),
+                    ),
+                  ),
+                  SizedBox(height: 14),
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
                       autofocus: true),
                   SizedBox(height: 8),

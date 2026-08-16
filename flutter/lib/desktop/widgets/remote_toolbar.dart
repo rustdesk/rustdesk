@@ -327,28 +327,28 @@ class ToolbarState {
 class _ToolbarTheme {
   static const Color blueColor = MyTheme.button;
   static const Color hoverBlueColor = MyTheme.accent;
-  static Color inactiveColor = Colors.grey[800]!;
-  static Color hoverInactiveColor = Colors.grey[850]!;
+  static const Color inactiveColor = Color(0xFF66738B);
+  static const Color hoverInactiveColor = MyTheme.violet;
 
-  static const Color redColor = Colors.redAccent;
-  static const Color hoverRedColor = Colors.red;
+  static const Color redColor = MyTheme.coral;
+  static const Color hoverRedColor = Color(0xFFE6574F);
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
 
-  static const double buttonSize = 32;
-  static const double buttonHMargin = 2;
+  static const double buttonSize = 34;
+  static const double buttonHMargin = 3;
   static const double buttonVMargin = 6;
-  static const double iconRadius = 8;
-  static const double elevation = 3;
+  static const double iconRadius = 9;
+  static const double elevation = 4;
 
   static double dividerSpaceToAction = isWindows ? 8 : 14;
 
-  static double menuBorderRadius = isWindows ? 5.0 : 7.0;
+  static double menuBorderRadius = 8.0;
   static EdgeInsets menuPadding = isWindows
       ? EdgeInsets.fromLTRB(4, 12, 4, 12)
       : EdgeInsets.fromLTRB(6, 14, 6, 14);
-  static const double menuButtonBorderRadius = 3.0;
+  static const double menuButtonBorderRadius = 6.0;
 
   static Color borderColor(BuildContext context) =>
       MyTheme.color(context).border3 ?? MyTheme.border;
@@ -852,7 +852,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
-    final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
+    final toolbarBorderRadius = BorderRadius.all(Radius.circular(10.0));
     // innerAxis: how the toolbar icons themselves flow.
     // outerAxis: how the toolbar block and the handle stack against each other
     // (perpendicular to the dock edge, so the handle hangs off the interior face).

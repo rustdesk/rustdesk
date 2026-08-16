@@ -188,24 +188,45 @@ class _PeersViewState extends State<_PeersView>
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.sentiment_very_dissatisfied_rounded,
-                  color: Theme.of(context).tabBarTheme.labelColor,
-                  size: 40,
-                ).paddingOnly(bottom: 10),
-                Text(
-                  translate(
-                    _emptyMessages[widget.peers.loadEvent] ?? 'Empty',
-                  ),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Theme.of(context).tabBarTheme.labelColor,
-                  ),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 30, 8, 30),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                      color: MyTheme.color(context).border ?? MyTheme.border),
+                  bottom: BorderSide(
+                      color: MyTheme.color(context).border ?? MyTheme.border),
                 ),
-              ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.radar_outlined,
+                    color: MyTheme.accent,
+                    size: 34,
+                  ).paddingOnly(bottom: 12),
+                  Text(
+                    translate(
+                      _emptyMessages[widget.peers.loadEvent] ?? 'Empty',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    translate('Use Connect to device to start a session.'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.color
+                              ?.withOpacity(0.58),
+                        ),
+                  ),
+                ],
+              ),
             ),
           );
         } else {

@@ -10,7 +10,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 
@@ -34,20 +33,10 @@ class OnlineStatusWidget extends StatefulWidget {
 /// State for the connection page.
 class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   final _svcStopped = Get.find<RxBool>(tag: 'stop-service');
-  final _svcIsUsingPublicServer = true.obs;
   Timer? _updateTimer;
 
   double get em => 14.0;
   double? get height => bind.isIncomingOnly() ? null : em * 3;
-
-  void onUsePublicServerGuide() {
-    const url = "https://rustdesk.com/pricing";
-    canLaunchUrlString(url).then((can) {
-      if (can) {
-        launchUrlString(url);
-      }
-    });
-  }
 
   @override
   void initState() {
@@ -78,37 +67,6 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
               .marginOnly(left: em),
         );
 
-    setupServerWidget() => Flexible(
-          child: Offstage(
-            offstage: !(!_svcStopped.value &&
-                stateGlobal.svcStatus.value == SvcStatus.ready &&
-                _svcIsUsingPublicServer.value),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(', ', style: TextStyle(fontSize: em)),
-                Flexible(
-                  child: InkWell(
-                    onTap: onUsePublicServerGuide,
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            translate('setup_server_tip'),
-                            style: TextStyle(
-                                decoration: TextDecoration.underline,
-                                fontSize: em),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              ],
-            ),
-          ),
-        );
-
     basicWidget() => Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -121,8 +79,8 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                         stateGlobal.svcStatus.value == SvcStatus.connecting
                     ? kColorWarn
                     : (stateGlobal.svcStatus.value == SvcStatus.ready
-                        ? Color.fromARGB(255, 50, 190, 166)
-                        : Color.fromARGB(255, 224, 79, 95)),
+                        ? Color(0xFF178A67)
+                        : Color(0xFFD95367)),
               ),
             ).marginSymmetric(horizontal: em),
             Container(
@@ -131,9 +89,6 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
             ),
             // stop
             if (!isIncomingOnly) startServiceWidget(),
-            // ready && public
-            // No need to show the guide if is custom client.
-            if (!isIncomingOnly) setupServerWidget(),
           ],
         );
 
@@ -159,10 +114,10 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
       _svcStopped.value
           ? translate("Service is not running")
           : stateGlobal.svcStatus.value == SvcStatus.connecting
-              ? translate("connecting_status")
+              ? translate("Checking connection")
               : stateGlobal.svcStatus.value == SvcStatus.notReady
-                  ? translate("not_ready_status")
-                  : translate('Ready'),
+                  ? translate("Offline")
+                  : translate('Online'),
       style: TextStyle(fontSize: em),
     );
   }
@@ -180,7 +135,6 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
     } else {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
-    _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
     try {
       stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
     } catch (_) {}
@@ -190,6 +144,14 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
   const ConnectionPage({Key? key}) : super(key: key);
+
+  static _ConnectionPageState? _activeState;
+
+  /// Focus the primary connection field from shell actions such as the
+  /// sidebar's "Connect to device" command.
+  static void focusRemoteId() {
+    _activeState?._focusRemoteId();
+  }
 
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();
@@ -216,9 +178,18 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   final _menuOpen = false.obs;
 
+  void _focusRemoteId() {
+    if (!mounted) return;
+    _idFocusNode.requestFocus();
+    final textLength = _idEditingController.value.text.length;
+    _idEditingController.selection =
+        TextSelection(baseOffset: 0, extentOffset: textLength);
+  }
+
   @override
   void initState() {
     super.initState();
+    ConnectionPage._activeState = this;
     _allPeersLoader.init(setState);
     _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
@@ -238,6 +209,9 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   @override
   void dispose() {
+    if (identical(ConnectionPage._activeState, this)) {
+      ConnectionPage._activeState = null;
+    }
     _idController.dispose();
     windowManager.removeListener(this);
     _allPeersLoader.clear();
@@ -304,24 +278,27 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   Widget build(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
-    return Column(
-      children: [
-        Expanded(
-            child: Column(
-          children: [
-            Row(
-              children: [
-                Flexible(child: _buildRemoteIDTextField(context)),
-              ],
-            ).marginOnly(top: 22),
-            SizedBox(height: 12),
-            Divider().paddingOnly(right: 12),
-            Expanded(child: PeerTabPage()),
-          ],
-        ).paddingOnly(left: 12.0)),
-        if (!isOutgoingOnly) const Divider(height: 1),
-        if (!isOutgoingOnly) OnlineStatusWidget()
-      ],
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          Expanded(
+              child: Column(
+            children: [
+              Row(
+                children: [
+                  Flexible(child: _buildRemoteIDTextField(context)),
+                ],
+              ).marginOnly(top: 24),
+              const SizedBox(height: 16),
+              Divider(color: MyTheme.border).paddingOnly(right: 12),
+              Expanded(child: PeerTabPage()),
+            ],
+          ).paddingOnly(left: 12.0)),
+          if (!isOutgoingOnly) Divider(height: 1, color: MyTheme.border),
+          if (!isOutgoingOnly) OnlineStatusWidget()
+        ],
+      ),
     );
   }
 
@@ -343,14 +320,17 @@ class _ConnectionPageState extends State<ConnectionPage>
   Widget _buildRemoteIDTextField(BuildContext context) {
     var w = Container(
       width: 320 + 20 * 2,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+      padding: const EdgeInsets.fromLTRB(0, 18, 0, 14),
       decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(13)),
-          border: Border.all(color: Theme.of(context).colorScheme.background)),
+        border: Border(
+          top: BorderSide(color: MyTheme.accent.withOpacity(0.35)),
+          bottom: BorderSide(color: MyTheme.border),
+        ),
+      ),
       child: Ink(
         child: Column(
           children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
+            getConnectionPageTitle(context, false).marginOnly(bottom: 12),
             Row(
               children: [
                 Expanded(
@@ -418,13 +398,12 @@ class _ConnectionPageState extends State<ConnectionPage>
                           keyboardType: TextInputType.visiblePassword,
                           focusNode: fieldFocusNode,
                           style: const TextStyle(
-                            fontFamily: 'WorkSans',
                             fontSize: 22,
+                            fontWeight: FontWeight.w500,
                             height: 1.4,
                           ),
                           maxLines: 1,
-                          cursorColor:
-                              Theme.of(context).textTheme.titleLarge?.color,
+                          cursorColor: MyTheme.accent,
                           decoration: InputDecoration(
                               filled: false,
                               counterText: '',
@@ -517,7 +496,7 @@ class _ConnectionPageState extends State<ConnectionPage>
               padding: const EdgeInsets.only(top: 13.0),
               child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 SizedBox(
-                  height: 28.0,
+                  height: 38.0,
                   child: ElevatedButton(
                     onPressed: () {
                       onConnect();
@@ -527,11 +506,11 @@ class _ConnectionPageState extends State<ConnectionPage>
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  height: 28.0,
-                  width: 28.0,
+                  height: 38.0,
+                  width: 38.0,
                   decoration: BoxDecoration(
                     border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: Center(
                     child: StatefulBuilder(

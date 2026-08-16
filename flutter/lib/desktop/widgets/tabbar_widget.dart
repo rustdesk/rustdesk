@@ -238,6 +238,11 @@ int _lastClickTime = 0;
 class DesktopTab extends StatefulWidget {
   final bool showLogo;
   final bool showTitle;
+
+  /// When false, keep only the native window controls and let the parent
+  /// provide product navigation. This is used by the RigelDesk workspace shell
+  /// so the session tab model stays intact without exposing a tab strip.
+  final bool showTabBar;
   final bool showMinimize;
   final bool showMaximize;
   final bool showClose;
@@ -264,6 +269,7 @@ class DesktopTab extends StatefulWidget {
     required this.controller,
     this.showLogo = true,
     this.showTitle = false,
+    this.showTabBar = true,
     this.showMinimize = true,
     this.showMaximize = true,
     this.showClose = true,
@@ -298,6 +304,7 @@ class _DesktopTabState extends State<DesktopTab>
 
   bool get showLogo => widget.showLogo;
   bool get showTitle => widget.showTitle;
+  bool get showTabBar => widget.showTabBar;
   bool get showMinimize => widget.showMinimize;
   bool get showMaximize => widget.showMaximize;
   bool get showClose => widget.showClose;
@@ -512,7 +519,14 @@ class _DesktopTabState extends State<DesktopTab>
   Widget build(BuildContext context) {
     return Column(children: [
       Obx(() {
-        if (stateGlobal.showTabBar.isTrue &&
+        final globalShowTabBar = stateGlobal.showTabBar.isTrue;
+        if (!showTabBar) {
+          return SizedBox(
+            height: _kTabBarHeight,
+            child: _buildWindowBar(context),
+          );
+        }
+        if (globalShowTabBar &&
             !(kUseCompatibleUiMode && isHideSingleItem())) {
           final showBottomDivider = _showTabBarBottomDivider(tabType);
           return SizedBox(
@@ -540,6 +554,70 @@ class _DesktopTabState extends State<DesktopTab>
               ? pageViewBuilder!(_buildPageView())
               : _buildPageView())
     ]);
+  }
+
+  Widget _buildWindowBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(
+            color: MyTheme.color(context).divider ?? MyTheme.border,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onPanStart: (_) => startDragging(isMainWindow),
+              child: Row(
+                children: [
+                  loadIcon(18).marginOnly(left: 16, right: 8),
+                  Text(
+                    kProductName,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                  ),
+                  const SizedBox(width: 10),
+                  Obx(() {
+                    final tabs = state.value.tabs;
+                    if (tabs.isEmpty || state.value.selected >= tabs.length) {
+                      return const SizedBox.shrink();
+                    }
+                    return Text(
+                      tabs[state.value.selected].label,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color
+                                ?.withOpacity(0.60),
+                          ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          WindowActionPanel(
+            isMainWindow: isMainWindow,
+            state: state,
+            tabController: controller,
+            invisibleTabKeys: invisibleTabKeys,
+            tail: tail,
+            showMinimize: showMinimize,
+            showMaximize: showMaximize,
+            showClose: showClose,
+            onClose: onWindowCloseButton,
+            labelGetter: labelGetter,
+          ).paddingOnly(left: 10),
+        ],
+      ),
+    );
   }
 
   List<Widget> _tabWidgets = [];
@@ -610,7 +688,9 @@ class _DesktopTabState extends State<DesktopTab>
                               .then((value) => stateGlobal.setMaximized(value));
                         }
                       }
-                    : (isIncomingHomePage ? () {} : null), // Keep tap recognizer for Windows touch.
+                    : (isIncomingHomePage
+                        ? () {}
+                        : null), // Keep tap recognizer for Windows touch.
                 onPanStart: (_) => startDragging(isMainWindow),
                 onPanCancel: () {
                   // We want to disable dragging of the tab area in the tab bar.
@@ -640,9 +720,12 @@ class _DesktopTabState extends State<DesktopTab>
                         ),
                         Offstage(
                             offstage: !showTitle,
-                            child: const Text(
-                              "RustDesk",
-                              style: TextStyle(fontSize: 13),
+                            child: Text(
+                              kProductName,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ).marginOnly(left: 2))
                       ]).marginOnly(
                         left: 5,
@@ -1457,27 +1540,27 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
 
   static const light = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
-      unSelectedTabIconColor: Color.fromARGB(255, 162, 203, 241),
-      selectedTextColor: Colors.black,
-      unSelectedTextColor: Color.fromARGB(255, 112, 112, 112),
-      selectedIconColor: Color.fromARGB(255, 26, 26, 26),
-      unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
-      dividerColor: Color.fromARGB(255, 238, 238, 238),
-      hoverColor: Colors.white54,
-      closeHoverColor: Colors.white,
-      selectedTabBackgroundColor: Colors.white54);
+      unSelectedTabIconColor: Color(0xFF9AA5B8),
+      selectedTextColor: MyTheme.navy,
+      unSelectedTextColor: Color(0xFF687388),
+      selectedIconColor: MyTheme.navy,
+      unSelectedIconColor: Color(0xFF687388),
+      dividerColor: Color(0xFFD9DDE8),
+      hoverColor: Color(0xFFE9ECF4),
+      closeHoverColor: Color(0xFFF4F5F9),
+      selectedTabBackgroundColor: Color(0xFFE9ECF4));
 
   static const dark = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
-      unSelectedTabIconColor: Color.fromARGB(255, 30, 65, 98),
+      unSelectedTabIconColor: Color(0xFF66748D),
       selectedTextColor: Colors.white,
-      unSelectedTextColor: Color.fromARGB(255, 192, 192, 192),
-      selectedIconColor: Color.fromARGB(255, 192, 192, 192),
-      unSelectedIconColor: Color.fromARGB(255, 255, 255, 255),
-      dividerColor: Color.fromARGB(255, 64, 64, 64),
-      hoverColor: Colors.black26,
-      closeHoverColor: Colors.black,
-      selectedTabBackgroundColor: Colors.black26);
+      unSelectedTextColor: Color(0xFFB9C2D3),
+      selectedIconColor: Color(0xFFF4F6FA),
+      unSelectedIconColor: Color(0xFFB9C2D3),
+      dividerColor: Color(0xFF30394B),
+      hoverColor: Color(0xFF232C3D),
+      closeHoverColor: Color(0xFF1B2435),
+      selectedTabBackgroundColor: Color(0xFF232C3D));
 
   @override
   ThemeExtension<TabbarTheme> copyWith({

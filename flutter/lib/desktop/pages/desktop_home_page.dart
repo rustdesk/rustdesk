@@ -12,7 +12,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -32,7 +31,7 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-const borderColor = Color(0xFF2F65BA);
+const borderColor = MyTheme.accent;
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -59,20 +58,451 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return _buildBlock(
-        child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
-      ],
-    ));
+    if (isIncomingOnly) {
+      return _buildBlock(child: buildLeftPane(context));
+    }
+    return _buildBlock(child: _buildWorkspace(context));
   }
 
   Widget _buildBlock({required Widget child}) {
     return buildRemoteBlock(
         block: _block, mask: true, use: canBeBlocked, child: child);
+  }
+
+  Widget buildBrandHeader(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 12, 11, 14),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: MyTheme.coral.withOpacity(0.75)),
+        ),
+      ),
+      child: Row(
+        children: [
+          loadIcon(36),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              kProductName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: MyTheme.navy,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkspace(BuildContext context) {
+    final isOutgoingOnly = bind.isOutgoingOnly();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep the connection page mounted while the overview rail changes
+        // size. This avoids resetting its state when a window crosses the
+        // compact breakpoint during maximize/restore.
+        final showOverview = constraints.maxWidth >= 760;
+        final double overviewWidth = showOverview
+            ? (constraints.maxWidth - 446)
+                .clamp(0.0, double.infinity)
+                .toDouble()
+            : 0.0;
+        return Container(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRect(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: overviewWidth,
+                    child: _buildWorkspaceOverview(context, isOutgoingOnly),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    border: overviewWidth > 0
+                        ? Border(
+                            left: BorderSide(
+                              color: MyTheme.color(context).divider ??
+                                  MyTheme.border,
+                            ),
+                          )
+                        : null,
+                  ),
+                  child: buildRightPane(context),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWorkspaceOverview(BuildContext context, bool isOutgoingOnly) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(34, 34, 28, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'REMOTE OPERATIONS',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  letterSpacing: 1.7,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: MyTheme.accent,
+                ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            translate('Remote workspace'),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            translate(
+                'Connect to a device, review your sessions, and keep remote support moving.'),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.color
+                      ?.withOpacity(0.68),
+                ),
+          ),
+          const SizedBox(height: 28),
+          _buildWorkspaceHero(context),
+          if (!isOutgoingOnly) ...[
+            const SizedBox(height: 22),
+            _buildLocalDeviceCard(context),
+          ],
+          const SizedBox(height: 22),
+          FutureBuilder<Widget>(
+            future: Future.value(
+                Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+            builder: (_, data) =>
+                data.hasData ? data.data! : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceHero(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: MyTheme.accent.withOpacity(0.35)),
+          bottom: BorderSide(color: MyTheme.accent.withOpacity(0.35)),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 4,
+            height: 58,
+            color: MyTheme.coral,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your control room',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Reach a device through your configured self-hosted services.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocalDeviceCard(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: Consumer<ServerModel>(
+        builder: (context, model, child) {
+          final showOneTime = model.approveMode != 'click' &&
+              model.verificationMethod != kUsePermanentPassword;
+          return Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                    color: MyTheme.color(context).border ?? MyTheme.border),
+                bottom: BorderSide(
+                    color: MyTheme.color(context).border ?? MyTheme.border),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 18, 0, 16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 42,
+                        color: MyTheme.coral,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'SERVER LINK',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: MyTheme.accent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.5,
+                                  ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              'This device',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Connection used to receive incoming sessions.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.color
+                                        ?.withOpacity(0.60),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _hostStatus(context),
+                    ],
+                  ),
+                ),
+                _hostIdentityRow(
+                  context,
+                  label: 'DEVICE ID',
+                  value: model.serverId.text,
+                  onCopy: () {
+                    Clipboard.setData(ClipboardData(text: model.serverId.text));
+                    showToast(translate('Copied'));
+                  },
+                ),
+                Divider(
+                  height: 1,
+                  color: MyTheme.color(context).divider ?? MyTheme.border,
+                ),
+                _hostIdentityRow(
+                  context,
+                  label: showOneTime ? 'ONE-TIME PASSWORD' : 'PASSWORD',
+                  value: model.serverPasswd.text,
+                  onCopy: showOneTime
+                      ? () {
+                          Clipboard.setData(
+                              ClipboardData(text: model.serverPasswd.text));
+                          showToast(translate('Copied'));
+                        }
+                      : null,
+                  onRefresh: showOneTime
+                      ? () => bind.mainUpdateTemporaryPassword()
+                      : null,
+                  onSettings: bind.isDisableSettings()
+                      ? null
+                      : () =>
+                          DesktopSettingPage.switch2page(SettingsTabKey.safety),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _hostStatus(BuildContext context) {
+    return Obx(() {
+      final Color color;
+      final String label;
+      if (svcStopped.value) {
+        color = MyTheme.darkGray;
+        label = 'SERVICE STOPPED';
+      } else {
+        switch (stateGlobal.svcStatus.value) {
+          case SvcStatus.ready:
+            color = MyTheme.cmIdColor;
+            label = 'ONLINE';
+            break;
+          case SvcStatus.connecting:
+            color = MyTheme.coral;
+            label = 'CHECKING';
+            break;
+          case SvcStatus.notReady:
+            color = MyTheme.darkGray;
+            label = 'OFFLINE';
+            break;
+        }
+      }
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.42)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _hostIdentityRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    VoidCallback? onCopy,
+    VoidCallback? onRefresh,
+    VoidCallback? onSettings,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.52),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                SelectableText(
+                  value.isEmpty ? 'Not available' : value,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontSize: 15,
+                        letterSpacing: 0.2,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          if (onCopy != null)
+            _hostAction(
+              context,
+              tooltip: 'Copy',
+              icon: Icons.copy_outlined,
+              onPressed: onCopy,
+            ),
+          if (onRefresh != null)
+            _hostAction(
+              context,
+              tooltip: 'Refresh',
+              icon: Icons.refresh_outlined,
+              onPressed: onRefresh,
+            ),
+          if (onSettings != null)
+            _hostAction(
+              context,
+              tooltip: 'Settings',
+              icon: Icons.edit_outlined,
+              onPressed: onSettings,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hostAction(
+    BuildContext context, {
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
+        splashRadius: 18,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      ),
+    );
   }
 
   Widget buildLeftPane(BuildContext context) {
@@ -85,10 +515,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           alignment: Alignment.center,
           child: loadPowered(context),
         ),
-      Align(
-        alignment: Alignment.center,
-        child: loadLogo(),
-      ),
+      buildBrandHeader(context),
       buildTip(context),
       if (!isOutgoingOnly) buildIDBoard(context),
       if (!isOutgoingOnly) buildPasswordBoard(context),
@@ -129,8 +556,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 200.0,
-        color: Theme.of(context).colorScheme.background,
+        width: isIncomingOnly ? 280.0 : 220.0,
+        color: Theme.of(context).cardColor,
         child: Stack(
           children: [
             Column(
@@ -427,33 +854,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
-  Widget buildHelpCards(String updateUrl) {
-    if (!bind.isCustomClient() &&
-        updateUrl.isNotEmpty &&
-        !isCardClosed &&
-        bind.mainUriPrefixSync().contains('rustdesk')) {
-      final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
-      String btnText = isToUpdate ? 'Update' : 'Download';
-      GestureTapCallback onPressed = () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
-        await launchUrl(url);
-      };
-      if (isToUpdate) {
-        onPressed = () {
-          handleUpdate(updateUrl);
-        };
-      }
-      return buildInstallCard(
-          "Status",
-          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} (${bind.mainGetNewVersion()}).",
-          btnText,
-          onPressed,
-          closeButton: true,
-          help: isToUpdate ? 'Changelog' : null,
-          link: isToUpdate
-              ? 'https://github.com/rustdesk/rustdesk/releases/tag/${bind.mainGetNewVersion()}'
-              : null);
-    }
+  Widget buildHelpCards(String _) {
     if (systemError.isNotEmpty) {
       return buildInstallCard("", systemError, "", () {});
     }
@@ -465,13 +866,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             () async {
           await rustDeskWinManager.closeAllSubWindows();
           bind.mainGotoInstall();
-        });
-      } else if (bind.mainIsInstalledLowerVersion()) {
-        return buildInstallCard(
-            "Status", "Your installation is lower version.", "Click to upgrade",
-            () async {
-          await rustDeskWinManager.closeAllSubWindows();
-          bind.mainUpdateMe();
         });
       }
     } else if (isMacOS) {
@@ -526,9 +920,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             "",
             () async {},
             marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            help: 'Help',
-            link:
-                'https://rustdesk.com/docs/en/client/linux/#permissions-issue',
             closeButton: true,
             closeOption: keyShowSelinuxHelpTip,
           ));
@@ -537,15 +928,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       if (bind.mainCurrentIsWayland()) {
         LinuxCards.add(buildInstallCard(
             "Warning", "wayland_experiment_tip", "", () async {},
-            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            help: 'Help',
-            link: 'https://rustdesk.com/docs/en/client/linux/#x11-required'));
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0));
       } else if (bind.mainIsLoginWayland()) {
         LinuxCards.add(buildInstallCard("Warning",
             "Login screen using Wayland is not supported", "", () async {},
-            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0,
-            help: 'Help',
-            link: 'https://rustdesk.com/docs/en/client/linux/#login-screen'));
+            marginTop: LinuxCards.isEmpty ? 20.0 : 5.0));
       }
       if (LinuxCards.isNotEmpty) {
         return Column(
@@ -765,7 +1152,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
     bool isChattyMethod(String methodName) {
       switch (methodName) {
-        case kWindowBumpMouse: return true;
+        case kWindowBumpMouse:
+          return true;
       }
 
       return false;
@@ -774,7 +1162,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       if (!isChattyMethod(call.method)) {
         debugPrint(
-          "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
+            "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
       }
       if (call.method == kWindowMainWindowOnTop) {
         windowOnTop(null);
@@ -809,9 +1197,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           connToken: call.arguments['connToken'],
         );
       } else if (call.method == kWindowBumpMouse) {
-        return RdPlatformChannel.instance.bumpMouse(
-          dx: call.arguments['dx'],
-          dy: call.arguments['dy']);
+        return RdPlatformChannel.instance
+            .bumpMouse(dx: call.arguments['dx'], dy: call.arguments['dy']);
       } else if (call.method == kWindowEventMoveTabToNewWindow) {
         final args = call.arguments.split(',');
         int? windowId;

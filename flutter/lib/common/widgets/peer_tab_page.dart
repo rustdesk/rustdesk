@@ -83,6 +83,10 @@ class _PeerTabPageState extends State<PeerTabPage>
           : int.parse(uiType) == 1
               ? PeerUiType.tile
               : PeerUiType.list;
+    } else if (isDesktop || isWebDesktop) {
+      // A compact list is the primary desktop workspace view. Users can
+      // still switch back to tiles or a grid from the view menu.
+      peerCardUiType.value = PeerUiType.list;
     }
     hideAbTagsPanel.value =
         bind.mainGetLocalOption(key: kOptionHideAbTagsPanel) == 'Y';
@@ -150,12 +154,21 @@ class _PeerTabPageState extends State<PeerTabPage>
             ?..withOpacity(0.5);
           final hover = false.obs;
           final deco = BoxDecoration(
-              color: Theme.of(context).colorScheme.background,
-              borderRadius: BorderRadius.circular(6));
+            border: Border(
+              bottom: BorderSide(
+                color: MyTheme.color(context).border ?? MyTheme.border,
+                width: 1,
+              ),
+            ),
+          );
           final decoBorder = BoxDecoration(
-              border: Border(
-            bottom: BorderSide(width: 2, color: color!),
-          ));
+            border: Border(
+              bottom: BorderSide(
+                color: color!,
+                width: 2,
+              ),
+            ),
+          );
           counter += 1;
           return ReorderableDragStartListener(
               key: ValueKey(t),
@@ -166,12 +179,28 @@ class _PeerTabPageState extends State<PeerTabPage>
                     onTriggered: isMobile ? mobileShowTabVisibilityMenu : null,
                     child: InkWell(
                       child: Container(
-                        decoration: (hover.value
-                            ? (selected ? decoBorder : deco)
-                            : (selected ? decoBorder : null)),
-                        child: Icon(model.tabIcon(t), color: color)
-                            .paddingSymmetric(horizontal: 4),
-                      ).paddingSymmetric(horizontal: 4),
+                        decoration:
+                            selected ? decoBorder : (hover.value ? deco : null),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(model.tabIcon(t), color: color, size: 16),
+                            if (!stateGlobal.isPortrait.isTrue) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                model.tabTooltip(t),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ).paddingSymmetric(horizontal: 8, vertical: 6),
+                      ).paddingSymmetric(horizontal: 8),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
                           ? null
                           : () async {

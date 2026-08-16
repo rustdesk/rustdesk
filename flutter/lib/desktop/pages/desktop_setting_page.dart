@@ -20,7 +20,6 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common/widgets/dialog.dart';
 import '../../common/widgets/login.dart';
@@ -307,8 +306,23 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       style: const TextStyle(
         color: _accentColor,
         fontSize: _kTitleFontSize,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w700,
       ),
+    );
+    final settingsHint = Text(
+      translate('Configure your workspace'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontSize: 11,
+            color:
+                Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.68),
+          ),
+    );
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [settingsText, const SizedBox(height: 2), settingsHint],
     );
     return Row(
       children: [
@@ -323,17 +337,17 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           ).marginOnly(left: 5),
         if (isWeb)
           SizedBox(
-            height: 62,
+            height: 72,
             child: Align(
               alignment: Alignment.center,
-              child: settingsText,
+              child: titleBlock,
             ),
           ).marginOnly(left: 20),
         if (!isWeb)
           SizedBox(
-            height: 62,
-            child: settingsText,
-          ).marginOnly(left: 20, top: 10),
+            height: 72,
+            child: titleBlock,
+          ).marginOnly(left: 20, top: 8),
         const Spacer(),
       ],
     );
@@ -354,6 +368,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
         width: _kTabWidth,
         height: _kTabHeight,
         child: InkWell(
+          borderRadius: BorderRadius.circular(7),
           onTap: () {
             if (selectedTab.value != tab.key) {
               int index = DesktopSettingPage.tabKeys.indexOf(tab.key);
@@ -364,25 +379,36 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
             }
             selectedTab.value = tab.key;
           },
-          child: Row(children: [
-            Container(
-              width: 4,
-              height: _kTabHeight * 0.7,
-              color: selected ? _accentColor : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: selected ? _accentColor.withOpacity(0.10) : null,
+              borderRadius: BorderRadius.circular(7),
             ),
-            Icon(
-              selected ? tab.selected : tab.unselected,
-              color: selected ? _accentColor : null,
-              size: 20,
-            ).marginOnly(left: 13, right: 10),
-            Text(
-              translate(tab.label),
-              style: TextStyle(
-                  color: selected ? _accentColor : null,
-                  fontWeight: FontWeight.w400,
-                  fontSize: _kContentFontSize),
-            ),
-          ]),
+            child: Row(children: [
+              Container(
+                width: 4,
+                height: _kTabHeight * 0.7,
+                decoration: BoxDecoration(
+                  color: selected ? _accentColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              Icon(
+                selected ? tab.selected : tab.unselected,
+                color: selected
+                    ? _accentColor
+                    : Theme.of(context).iconTheme.color?.withOpacity(0.72),
+                size: 20,
+              ).marginOnly(left: 13, right: 10),
+              Text(
+                translate(tab.label),
+                style: TextStyle(
+                    color: selected ? _accentColor : null,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: _kContentFontSize),
+              ),
+            ]),
+          ),
         ),
       );
     });
@@ -480,8 +506,6 @@ class _GeneralState extends State<_General> {
   Widget other() {
     final incomingOnly = bind.isIncomingOnly();
     final outgoingOnly = bind.isOutgoingOnly();
-    final showAutoUpdate = (isWindows && bind.mainIsInstalled()) ||
-    (isMacOS && bind.mainIsInstalled() && bind.mainIsInstalledDaemon(prompt: false) && !bind.isCustomClient());
     final children = <Widget>[
       if (!isWeb && !incomingOnly)
         _OptionCheckBox(context, 'Confirm before closing multiple tabs',
@@ -540,20 +564,6 @@ class _GeneralState extends State<_General> {
             ),
           ),
       ],
-      if (!isWeb && !bind.isCustomClient())
-        _OptionCheckBox(
-          context,
-          'Check for software update on startup',
-          kOptionEnableCheckUpdate,
-          isServer: false,
-        ),
-      if (showAutoUpdate)
-        _OptionCheckBox(
-          context,
-          'Auto update',
-          kOptionAllowAutoUpdate,
-          isServer: true,
-        ),
       if (isWindows && !outgoingOnly)
         _OptionCheckBox(
           context,
@@ -1774,11 +1784,8 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                 ),
               if (!hideWebSocket && (!hideServer || !hideProxy)) divider,
               if (!hideWebSocket)
-                switchWidget(
-                    Icons.web_asset_outlined,
-                    'Use WebSocket',
-                    '${translate('websocket_tip')}\n\n${translate('server-oss-not-support-tip')}',
-                    kOptionAllowWebSocket),
+                switchWidget(Icons.web_asset_outlined, 'Use WebSocket',
+                    translate('websocket_tip'), kOptionAllowWebSocket),
               if (!isWeb)
                 futureBuilder(
                   future: bind.mainIsUsingPublicServer(),
@@ -1801,8 +1808,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                               icon: Icons.lan_outlined,
                               title: 'Disable UDP',
                               showTooltip: true,
-                              tooltipMessage:
-                                  '${translate('disable-udp-tip')}\n\n${translate('server-oss-not-support-tip')}',
+                              tooltipMessage: translate('disable-udp-tip'),
                               trailing: Switch(
                                 value: bind.mainGetOptionSync(
                                         key: kOptionDisableUdp) ==
@@ -2408,29 +2414,25 @@ class _AboutState extends State<_About> {
   @override
   Widget build(BuildContext context) {
     return futureBuilder(future: () async {
-      final license = await bind.mainGetLicense();
       final version = await bind.mainGetVersion();
       final buildDate = await bind.mainGetBuildDate();
       final fingerprint = await bind.mainGetFingerprint();
       final myId = await bind.mainGetMyId();
       return {
-        'license': license,
         'version': version,
         'buildDate': buildDate,
         'fingerprint': fingerprint,
         'myId': myId
       };
     }(), hasData: (data) {
-      final license = data['license'].toString();
       final version = data['version'].toString();
       final buildDate = data['buildDate'].toString();
       final fingerprint = data['fingerprint'].toString();
       final myId = data['myId'].toString();
-      const linkStyle = TextStyle(decoration: TextDecoration.underline);
       final scrollController = ScrollController();
       return SingleChildScrollView(
         controller: scrollController,
-        child: _Card(title: translate('About RustDesk'), children: [
+        child: _Card(title: 'About $kProductName', children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2450,24 +2452,11 @@ class _AboutState extends State<_About> {
               SelectionArea(
                   child: Text('${translate('ID')}: $myId')
                       .marginSymmetric(vertical: 4.0)),
-              InkWell(
-                  onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
-                  },
-                  child: Text(
-                    translate('Privacy Statement'),
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
-              InkWell(
-                  onTap: () {
-                    launchUrlString('https://rustdesk.com');
-                  },
-                  child: Text(
-                    translate('Website'),
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: BoxDecoration(
+                  gradient: MyTheme.brandGradient,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 padding:
                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: SelectionArea(
@@ -2478,11 +2467,11 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
+                            '$kProductName • Self-hosted remote access',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
-                            translate('Slogan_tip'),
+                            translate('Built for Rigelis teams'),
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: Colors.white),
@@ -2516,6 +2505,14 @@ Widget _Card(
         child: SizedBox(
           width: _kCardFixedWidth,
           child: Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: MyTheme.accent.withOpacity(0.14),
+              ),
+            ),
             child: Column(
               children: [
                 Row(
@@ -2526,6 +2523,7 @@ Widget _Card(
                       textAlign: TextAlign.start,
                       style: const TextStyle(
                         fontSize: _kTitleFontSize,
+                        fontWeight: FontWeight.w700,
                       ),
                     )),
                     ...?title_suffix

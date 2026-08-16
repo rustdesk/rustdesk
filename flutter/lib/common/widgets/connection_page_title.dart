@@ -1,25 +1,36 @@
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 
 import '../../common.dart';
 
 Widget getConnectionPageTitle(BuildContext context, bool isWeb) {
-  return Row(
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(
-          child: Row(
+      Text(
+        'CONNECT',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: MyTheme.accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+      ),
+      const SizedBox(height: 6),
+      Row(
         children: [
-          AutoSizeText(
-            translate('Control Remote Desktop'),
-            maxLines: 1,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.merge(TextStyle(height: 1)),
-          ).marginOnly(right: 4),
+          Expanded(
+            child: AutoSizeText(
+              translate('Connect to a device'),
+              maxLines: 1,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.merge(const TextStyle(height: 1)),
+            ),
+          ),
           Tooltip(
-            waitDuration: Duration(milliseconds: 300),
+            waitDuration: const Duration(milliseconds: 300),
             message: translate(isWeb ? "web_id_input_tip" : "id_input_tip"),
             child: Icon(
               Icons.help_outline_outlined,
@@ -32,7 +43,18 @@ Widget getConnectionPageTitle(BuildContext context, bool isWeb) {
             ),
           ),
         ],
-      )),
+      ),
+      const SizedBox(height: 5),
+      Text(
+        translate('Enter a device ID or choose one from your devices.'),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.color
+                  ?.withOpacity(0.65),
+            ),
+      ),
     ],
   );
 }

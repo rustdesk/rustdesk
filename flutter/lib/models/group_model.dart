@@ -186,7 +186,7 @@ class GroupModel {
               json['error']
                   .toString()
                   .contains('ambiguous column name: status')) {
-            throw translate('upgrade_rustdesk_server_pro_to_{1.1.10}_tip');
+            throw '$kProductName server needs a newer version to use groups.';
           } else {
             throw json['error'];
           }

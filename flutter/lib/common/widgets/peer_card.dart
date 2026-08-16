@@ -47,9 +47,9 @@ class _PeerCard extends StatefulWidget {
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
-  final double _cardRadius = 16;
-  final double _tileRadius = 5;
-  final double _borderWidth = 2;
+  final double _cardRadius = 12;
+  final double _tileRadius = 0;
+  final double _borderWidth = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +95,12 @@ class _PeerCardState extends State<_PeerCard>
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(
       BoxDecoration(
-        border: Border.all(color: Colors.transparent, width: _borderWidth),
+        border: Border(
+          bottom: BorderSide(
+            color: MyTheme.color(context).border ?? MyTheme.border,
+            width: _borderWidth,
+          ),
+        ),
         borderRadius: BorderRadius.circular(
           peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
         ),
@@ -104,9 +109,13 @@ class _PeerCardState extends State<_PeerCard>
     return MouseRegion(
       onEnter: (evt) {
         deco.value = BoxDecoration(
-          border: Border.all(
+          color: MyTheme.accent.withOpacity(0.055),
+          border: Border(
+            bottom: BorderSide(
               color: Theme.of(context).colorScheme.primary,
-              width: _borderWidth),
+              width: _borderWidth,
+            ),
+          ),
           borderRadius: BorderRadius.circular(
             peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
           ),
@@ -114,7 +123,12 @@ class _PeerCardState extends State<_PeerCard>
       },
       onExit: (evt) {
         deco.value = BoxDecoration(
-          border: Border.all(color: Colors.transparent, width: _borderWidth),
+          border: Border(
+            bottom: BorderSide(
+              color: MyTheme.color(context).border ?? MyTheme.border,
+              width: _borderWidth,
+            ),
+          ),
           borderRadius: BorderRadius.circular(
             peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
           ),
@@ -145,7 +159,9 @@ class _PeerCardState extends State<_PeerCard>
       children: [
         Container(
             decoration: BoxDecoration(
-              color: str2color('${peer.id}${peer.platform}', 0x7f),
+              color: peerCardUiType.value == PeerUiType.list
+                  ? Colors.transparent
+                  : MyTheme.accent.withOpacity(0.10),
               borderRadius: isPortrait
                   ? BorderRadius.circular(_tileRadius)
                   : BorderRadius.only(
@@ -171,7 +187,9 @@ class _PeerCardState extends State<_PeerCard>
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.background,
+              color: peerCardUiType.value == PeerUiType.list
+                  ? Colors.transparent
+                  : Theme.of(context).cardColor,
               borderRadius: BorderRadius.only(
                 topRight: Radius.circular(_tileRadius),
                 bottomRight: Radius.circular(_tileRadius),
@@ -303,7 +321,16 @@ class _PeerCardState extends State<_PeerCard>
               children: [
                 Expanded(
                   child: Container(
-                    color: str2color('${peer.id}${peer.platform}', 0x7f),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          MyTheme.accent.withOpacity(0.16),
+                          MyTheme.coral.withOpacity(0.07),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -323,9 +350,13 @@ class _PeerCardState extends State<_PeerCard>
                                       waitDuration: const Duration(seconds: 1),
                                       child: Text(
                                         name,
-                                        style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12),
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .textTheme
+                                                .titleLarge
+                                                ?.color,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500),
                                         textAlign: TextAlign.center,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -342,8 +373,12 @@ class _PeerCardState extends State<_PeerCard>
                                       waitDuration: const Duration(seconds: 1),
                                       child: Text(
                                         peer.note,
-                                        style: const TextStyle(
-                                            color: Colors.white38,
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .textTheme
+                                                .titleLarge
+                                                ?.color
+                                                ?.withOpacity(0.55),
                                             fontSize: 10),
                                         textAlign: TextAlign.center,
                                         overflow: TextOverflow.ellipsis,
@@ -359,7 +394,7 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
-                  color: Theme.of(context).colorScheme.background,
+                  color: Theme.of(context).cardColor,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

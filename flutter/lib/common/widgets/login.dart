@@ -657,6 +657,18 @@ class LoginWidgetUserPass extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 8.0),
+            Text(
+              translate('Sign in to your self-hosted workspace'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.72),
+                  ),
+            ),
+            const SizedBox(height: 10.0),
             DialogTextField(
                 title: translate(DialogTextField.kUsernameTitle),
                 controller: username,

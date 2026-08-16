@@ -80,12 +80,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
         command_line_arguments.end());
   }
 
-  std::wstring app_name = L"RustDesk";
+  const std::wstring product_name = L"RigelDesk";
+  std::wstring app_name = product_name;
   FUNC_RUSTDESK_GET_APP_NAME get_rustdesk_app_name = (FUNC_RUSTDESK_GET_APP_NAME)GetProcAddress(hInstance, "get_rustdesk_app_name");
   if (get_rustdesk_app_name) {
     wchar_t app_name_buffer[512] = {0};
     if (get_rustdesk_app_name(app_name_buffer, 512) == 0) {
-      app_name = std::wstring(app_name_buffer);
+      const std::wstring configured_name(app_name_buffer);
+      // The core reports its upstream default when no branded client name is
+      // configured. Keep native window surfaces aligned with RigelDesk.
+      if (!configured_name.empty() && configured_name != L"RustDesk") {
+        app_name = configured_name;
+      }
     }
   }
 
