@@ -835,7 +835,17 @@ class _RemotePageState extends State<RemotePage>
       _macOSLocalFocusLost = false;
       stateGlobal.getInputSource(force: true);
       _syncMacOSKeyboardGrab(reassert: true, allowInactiveLifecycle: true);
-    } else if (!isWindows) {
+    } else if (isWindows) {
+      // Blur unfocuses this node and nothing restores it, so the keyboard stayed
+      // dead until a click. Focus only while the window is really active, or a
+      // background window would grab system keys. onFocusChange does enterOrLeave.
+      if (!_isWindowBlur &&
+          _isSelectedTab &&
+          _blockableOverlayState.middleBlocked.isFalse &&
+          !_rawKeyFocusNode.hasFocus) {
+        _rawKeyFocusNode.requestFocus();
+      }
+    } else {
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
