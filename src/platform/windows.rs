@@ -2642,13 +2642,9 @@ pub fn wide_string(s: &str) -> Vec<u16> {
         .collect()
 }
 
-// This changes only mstsc's top-level window title. The full-screen connection
-// bar is rendered separately by the MsTscAx ActiveX control, so SetWindowTextW
-// cannot change its displayed target. Microsoft exposes
-// IMsRdpClientNonScriptable3::ConnectionBarText for hosts that create the
-// ActiveX control themselves, but it must be set before entering full screen
-// and cannot be applied to an independently launched mstsc.exe process:
-// https://learn.microsoft.com/windows/win32/termserv/imsrdpclientnonscriptable3-connectionbartext
+// This only changes mstsc's top-level window title. The full-screen connection
+// bar is rendered separately and cannot be customized when mstsc.exe is
+// launched as an independent process.
 pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
     let name: String = name.chars().filter(|c| !c.is_control()).take(120).collect();
     if name.is_empty() {
