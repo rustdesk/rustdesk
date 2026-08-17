@@ -2203,7 +2203,7 @@ jobs:
             mkdir -p ~/.cargo/
             echo """
               [source.crates-io]
-              registry = 'https://github.com/rust-lang/crates.io-index'
+              registry = 'sparse+https://index.crates.io/'
             """ > ~/.cargo/config
             cat ~/.cargo/config
             # install dependencies from vcpkg
