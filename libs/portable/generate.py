@@ -25,6 +25,7 @@ def normalize(path: str) -> str:
 def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
     res: dict = dict()
     skip = normalize(exclude) if exclude else None
+    excluded = False
     # os.curdir is the literal ".", so restoring it left us inside `folder`.
     curdir = os.getcwd()
     os.chdir(folder)
@@ -35,6 +36,7 @@ def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
             full_path = os.path.join(root, f)
             if skip and normalize(full_path) == skip:
                 print(f"Excluding {full_path}...")
+                excluded = True
                 continue
             print(f"Processing {full_path}...")
             f = open(full_path, "rb")
@@ -45,6 +47,8 @@ def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
             md5_code = md5_generator.hexdigest().encode(encoding=encoding)
             res[full_path] = (content_compressed, md5_code)
     os.chdir(curdir)
+    if skip and not excluded:
+        raise ValueError(f"excluded file was not found in {folder}: {exclude}")
     return res
 
 

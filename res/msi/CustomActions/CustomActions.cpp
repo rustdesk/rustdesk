@@ -1077,7 +1077,9 @@ UINT __stdcall UninstallPrinter(
 
     // Must match the name install used, otherwise the printer is left behind. Absent
     // on packages built before this was passed in, where it was the stock name.
-    if (SUCCEEDED(WcaGetProperty(L"CustomActionData", &pwzData)) && pwzData)
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+    if (pwzData)
     {
         appNameValue = pwzData;
     }
