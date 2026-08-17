@@ -439,8 +439,7 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
 ///
-/// This routing gate never blocks an unauthenticated request. A cold cache probes off-thread, while
-/// admission still requires a definitive Available verdict to avoid a helper-less black screen.
+/// A cold cache probes off-thread; admission still requires a definitive `Available` verdict.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_can_serve_login_screen() -> bool {
     super::drm_capturer::availability_cached() == super::drm_capturer::Availability::Available
