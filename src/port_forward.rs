@@ -15,7 +15,7 @@ use hbb_common::{
     ResultType, Stream,
 };
 
-fn run_rdp(port: u16, name: &str) {
+fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
     std::process::Command::new("cmdkey")
         .arg("/delete:localhost")
         .output()
@@ -43,15 +43,19 @@ fn run_rdp(port: u16, name: &str) {
     {
         Ok(child) => {
             #[cfg(windows)]
-            crate::platform::set_rdp_window_title(child, name.to_owned());
+            {
+                let lc = lc.clone();
+                let id = id.to_owned();
+                crate::platform::set_rdp_window_title(child, move || rdp_display_name(&lc, &id));
+            }
             #[cfg(not(windows))]
-            let _ = (child, name);
+            let _ = (child, lc, id);
         }
         Err(err) => log::warn!("Failed to launch mstsc: {}", err),
     }
 }
 
-// Show the peer identity with its hostname, using the ID when no alias exists.
+#[cfg(windows)]
 fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
     let lc = lc.read().unwrap();
     let alias = lc
@@ -85,7 +89,7 @@ pub async fn listen(
     log::info!("listening on port {:?}", addr);
     let is_rdp = port == 0;
     if is_rdp {
-        run_rdp(addr.port(), &rdp_display_name(&lc, &id));
+        run_rdp(addr.port(), &lc, &id);
     }
     let mut ui_receiver = ui_receiver;
     loop {
@@ -123,7 +127,7 @@ pub async fn listen(
                     }
                     Some(Data::NewRDP) => {
                         println!("receive run_rdp from ui_receiver");
-                        run_rdp(addr.port(), &rdp_display_name(&lc, &id));
+                        run_rdp(addr.port(), &lc, &id);
                     }
                     _ => {}
                 }

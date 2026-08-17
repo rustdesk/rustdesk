@@ -2645,11 +2645,32 @@ pub fn wide_string(s: &str) -> Vec<u16> {
 // This only changes mstsc's top-level window title. The full-screen connection
 // bar is rendered separately and cannot be customized when mstsc.exe is
 // launched as an independent process.
-pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
-    let name: String = name.chars().filter(|c| !c.is_control()).take(120).collect();
-    if name.is_empty() {
-        return;
-    }
+fn sanitize_rdp_window_title(name: &str) -> String {
+    name.chars()
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(
+                    *c,
+                    '\u{061C}'
+                        | '\u{200B}'..='\u{200F}'
+                        | '\u{2028}'..='\u{202E}'
+                        | '\u{2060}'..='\u{206F}'
+                        | '\u{FEFF}'
+                )
+        })
+        .take(120)
+        .collect()
+}
+
+fn should_update_rdp_window_title(current: &str, name: &str, applied_name: &str) -> bool {
+    current != name
+        && (current.contains("localhost") || (!applied_name.is_empty() && current == applied_name))
+}
+
+pub fn set_rdp_window_title<F>(mut child: std::process::Child, name_of: F)
+where
+    F: Fn() -> String + Send + 'static,
+{
     let process_id = child.id();
     // mstsc owns the title and can restore "localhost" while connecting or
     // reconnecting. Follow only the process we launched and reapply the peer
@@ -2658,6 +2679,7 @@ pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
         .name("rdp-window-title".to_owned())
         .spawn(move || {
             let mut warned = false;
+            let mut applied_name = String::new();
             loop {
                 match child.try_wait() {
                     Ok(Some(_)) => break,
@@ -2665,14 +2687,24 @@ pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
                         log::warn!("Failed to query mstsc process: {}", err);
                         break;
                     }
-                    Ok(None) => match set_process_rdp_window_title(process_id, &name) {
-                        Ok(()) => warned = false,
-                        Err(err) if !warned => {
-                            log::warn!("Failed to set RDP window title: {}", err);
-                            warned = true;
+                    Ok(None) => {
+                        let name = sanitize_rdp_window_title(&name_of());
+                        if !name.is_empty() {
+                            match set_process_rdp_window_title(process_id, &name, &applied_name) {
+                                Ok(applied) => {
+                                    if applied {
+                                        applied_name = name;
+                                    }
+                                    warned = false;
+                                }
+                                Err(err) if !warned => {
+                                    log::warn!("Failed to set RDP window title: {}", err);
+                                    warned = true;
+                                }
+                                Err(_) => {}
+                            }
                         }
-                        Err(_) => {}
-                    },
+                    }
                 }
                 std::thread::sleep(Duration::from_millis(500));
             }
@@ -2682,10 +2714,17 @@ pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
     }
 }
 
-fn set_process_rdp_window_title(process_id: DWORD, name: &str) -> io::Result<()> {
-    struct Context {
+fn set_process_rdp_window_title(
+    process_id: DWORD,
+    name: &str,
+    applied_name: &str,
+) -> io::Result<bool> {
+    struct Context<'a> {
         process_id: DWORD,
+        name: &'a str,
+        applied_name: &'a str,
         title: Vec<u16>,
+        applied: bool,
         error: Option<io::Error>,
     }
 
@@ -2702,29 +2741,66 @@ fn set_process_rdp_window_title(process_id: DWORD, name: &str) -> io::Result<()>
         }
         let mut title = vec![0u16; len as usize + 1];
         let len = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as _);
-        if len > 0 && String::from_utf16_lossy(&title[..len as usize]).contains("localhost") {
-            if SetWindowTextW(hwnd, context.title.as_ptr()) == FALSE {
-                context.error = Some(io::Error::last_os_error());
-                return FALSE;
-            }
+        if len <= 0 {
+            return TRUE;
+        }
+        let current = String::from_utf16_lossy(&title[..len as usize]);
+        if current == context.name {
+            context.applied = true;
+            return TRUE;
+        }
+        if !should_update_rdp_window_title(&current, context.name, context.applied_name) {
+            return TRUE;
+        }
+        let mut result = 0;
+        winapi::um::errhandlingapi::SetLastError(ERROR_SUCCESS);
+        let sent = SendMessageTimeoutW(
+            hwnd,
+            WM_SETTEXT,
+            0,
+            context.title.as_ptr() as LPARAM,
+            SMTO_ABORTIFHUNG,
+            1000,
+            &mut result,
+        );
+        if sent == 0 {
+            let err = io::Error::last_os_error();
+            context.error = Some(if err.raw_os_error() == Some(ERROR_SUCCESS as i32) {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    "failed to send the mstsc title update without an OS error",
+                )
+            } else {
+                err
+            });
+        } else if result == 0 {
+            context.error = Some(io::Error::new(
+                io::ErrorKind::Other,
+                "mstsc rejected the title update",
+            ));
+        } else {
+            context.applied = true;
         }
         TRUE
     }
 
     let mut context = Context {
         process_id,
+        name,
+        applied_name,
         title: wide_string(name),
+        applied: false,
         error: None,
     };
     let enumerated =
         unsafe { EnumWindows(Some(enum_window), &mut context as *mut Context as LPARAM) };
-    if let Some(err) = context.error {
-        return Err(err);
-    }
     if enumerated == FALSE {
         return Err(io::Error::last_os_error());
     }
-    Ok(())
+    match context.error {
+        Some(err) if !context.applied => Err(err),
+        _ => Ok(context.applied),
+    }
 }
 
 /// send message to currently shown window
@@ -4626,6 +4702,44 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rdp_window_title_removes_control_and_format_characters() {
+        assert_eq!(
+            sanitize_rdp_window_title("peer\n\u{061C}\u{200D}\u{202E}\u{2066}\u{FEFF} (服务器)"),
+            "peer (服务器)"
+        );
+    }
+
+    #[test]
+    fn rdp_window_title_is_limited_to_120_characters() {
+        let title = sanitize_rdp_window_title(&"界".repeat(121));
+        assert_eq!(title.chars().count(), 120);
+    }
+
+    #[test]
+    fn rdp_window_title_updates_only_the_tunnel_or_the_previously_applied_name() {
+        assert!(should_update_rdp_window_title(
+            "localhost - Remote Desktop Connection",
+            "peer",
+            ""
+        ));
+        assert!(should_update_rdp_window_title(
+            "peer",
+            "peer (hostname)",
+            "peer"
+        ));
+        assert!(!should_update_rdp_window_title(
+            "localhost tunnel",
+            "localhost tunnel",
+            "localhost tunnel"
+        ));
+        assert!(!should_update_rdp_window_title(
+            "Remote Desktop Connection",
+            "peer",
+            ""
+        ));
+    }
 
     // Test-only reusable Win32 HANDLE RAII helper.
     // If a future non-test path needs the same pattern, move it out of this test module.
