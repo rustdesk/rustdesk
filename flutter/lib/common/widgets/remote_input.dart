@@ -455,8 +455,6 @@ class _RawTouchGestureDetectorRegionState
     if (isSpecialHoldDragActive) {
       // Initialize the last focal point to calculate deltas manually.
       _lastSpecialHoldDragFocalPoint = d.focalPoint;
-    } else if (canvasLocked) {
-      return;
     }
   }
 
@@ -499,11 +497,6 @@ class _RawTouchGestureDetectorRegionState
 
   onTwoFingerScaleEnd(ScaleEndDetails d) async {
     if (isNotTouchBasedDevice()) {
-      return;
-    }
-    if (canvasLocked && !isSpecialHoldDragActive) {
-      _scale = 1;
-      await inputModel.sendMouse('up', MouseButtons.left);
       return;
     }
     if ((isDesktop || isWebDesktop)) {
