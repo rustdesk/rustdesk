@@ -765,8 +765,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "თქვენი IP მისამართი დაბლოკილია მეორე მხარის მიერ"),
         ("id_whitelist_caveat_tip", "ID-ს აცხადებს დამაკავშირებელი კლიენტი. თეთრი სია ამცირებს ექსპოზიციას და ვერ ჩაანაცვლებს პაროლს ან 2FA-ს"),
         ("whitelist_cidr_tip", "მხარდაჭერილია CIDR ჩანაწერი, მაგალითად 192.168.1.0/24"),
-        ("Continue", ""),
-        ("Browser didn't open? Use the url below to sign in.", ""),
-        ("Lock canvas", ""),
+        ("Continue", "გაგრძელება"),
+        ("Browser didn't open? Use the url below to sign in.", "ბრაუზერი არ გაიხსნა? შესასვლელად გამოიყენეთ ქვემოთ მოცემული ბმული."),
+        ("Lock canvas", "ტილოს დაბლოკვა"),
     ].iter().cloned().collect();
 }

@@ -765,8 +765,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "IP ของคุณถูกบล็อกโดยฝั่งตรงข้าม"),
         ("id_whitelist_caveat_tip", "ID ถูกรายงานโดยไคลเอนต์ที่เชื่อมต่อ ไวท์ลิสต์ช่วยลดการเปิดเผยและไม่สามารถใช้แทนรหัสผ่านหรือ 2FA ได้"),
         ("whitelist_cidr_tip", "รองรับรูปแบบ CIDR เช่น 192.168.1.0/24"),
-        ("Continue", ""),
-        ("Browser didn't open? Use the url below to sign in.", ""),
-        ("Lock canvas", ""),
+        ("Continue", "ดำเนินการต่อ"),
+        ("Browser didn't open? Use the url below to sign in.", "เบราว์เซอร์ไม่เปิดใช่ไหม? ใช้ URL ด้านล่างเพื่อเข้าสู่ระบบ"),
+        ("Lock canvas", "ล็อคแคนวาส"),
     ].iter().cloned().collect();
 }

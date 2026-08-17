@@ -765,8 +765,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "La vostra IP està bloquejada per l'altre extrem"),
         ("id_whitelist_caveat_tip", "L'ID és informat pel client que es connecta. Aquesta llista blanca redueix l'exposició i no substitueix la contrasenya ni la 2FA"),
         ("whitelist_cidr_tip", "S'admet la notació CIDR, per exemple 192.168.1.0/24"),
-        ("Continue", ""),
-        ("Browser didn't open? Use the url below to sign in.", ""),
-        ("Lock canvas", ""),
+        ("Continue", "Continua"),
+        ("Browser didn't open? Use the url below to sign in.", "No s'ha obert el navegador? Utilitzeu l'URL de sota per iniciar la sessió."),
+        ("Lock canvas", "Bloca el llenç"),
     ].iter().cloned().collect();
 }

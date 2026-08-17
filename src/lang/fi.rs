@@ -765,8 +765,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Vastapuoli on estänyt IP-osoitteesi"),
         ("id_whitelist_caveat_tip", "ID on yhdistävän asiakkaan ilmoittama. Sallintalista pienentää altistusta eikä korvaa salasanaa tai 2FA:ta"),
         ("whitelist_cidr_tip", "CIDR-merkintä on tuettu, esimerkiksi 192.168.1.0/24"),
-        ("Continue", ""),
-        ("Browser didn't open? Use the url below to sign in.", ""),
-        ("Lock canvas", ""),
+        ("Continue", "Jatka"),
+        ("Browser didn't open? Use the url below to sign in.", "Eikö selain avautunut? Kirjaudu sisään alla olevan osoitteen kautta."),
+        ("Lock canvas", "Lukitse näkymä"),
     ].iter().cloned().collect();
 }
