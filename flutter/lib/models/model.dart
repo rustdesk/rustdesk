@@ -2213,7 +2213,6 @@ class CanvasModel with ChangeNotifier {
   double _y = 0;
   // image scale
   double _scale = 1.0;
-  // Freeze mobile canvas scale and pan gestures.
   bool _locked = false;
   double _devicePixelRatio = 1.0;
   Size _size = Size.zero;
