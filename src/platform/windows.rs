@@ -2645,18 +2645,39 @@ pub fn wide_string(s: &str) -> Vec<u16> {
 // This only changes mstsc's top-level window title. The full-screen connection
 // bar is rendered separately and cannot be customized when mstsc.exe is
 // launched as an independent process.
+fn is_unicode_format_character(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08E2}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{110BD}'
+            | '\u{110CD}'
+            | '\u{13430}'..='\u{1343F}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
+}
+
 fn sanitize_rdp_window_title(name: &str) -> String {
     name.chars()
         .filter(|c| {
             !c.is_control()
-                && !matches!(
-                    *c,
-                    '\u{061C}'
-                        | '\u{200B}'..='\u{200F}'
-                        | '\u{2028}'..='\u{202E}'
-                        | '\u{2060}'..='\u{206F}'
-                        | '\u{FEFF}'
-                )
+                && !is_unicode_format_character(*c)
+                && !matches!(*c, '\u{2028}' | '\u{2029}' | '\u{2065}')
         })
         .take(120)
         .collect()
@@ -4706,8 +4727,12 @@ mod tests {
     #[test]
     fn rdp_window_title_removes_control_and_format_characters() {
         assert_eq!(
-            sanitize_rdp_window_title("peer\n\u{061C}\u{200D}\u{202E}\u{2066}\u{FEFF} (服务器)"),
-            "peer (服务器)"
+            sanitize_rdp_window_title(
+                "peer\n\u{00AD}\u{0600}\u{061C}\u{06DD}\u{070F}\u{0890}\u{08E2}\u{180E}\
+                 \u{200D}\u{2028}\u{202E}\u{2065}\u{2066}\u{FEFF}\u{FFF9}\u{110BD}\u{110CD}\
+                 \u{13430}\u{1BCA0}\u{1D173}\u{E0001}\u{E0020} (host)"
+            ),
+            "peer (host)"
         );
     }
 
