@@ -163,7 +163,6 @@ Venligst pass på att du kjører disse kommandoene fra roten av RustDesk reposit
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Kommunikasjon med [rustdesk-server](https://github.com/rustdesk/rustdesk-server), vent på direkte fjernstyring (TCP hulling) eller vidresendt tilkobling
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform spesefik kode
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter kode for desktop og mobil
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript for Flutter nettsted klient
 
 ## Skjermbilder
 

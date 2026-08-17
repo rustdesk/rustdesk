@@ -166,7 +166,6 @@ Certifique-se de executar esses comandos a partir da raiz do repositório do Rus
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunica-se com o [rustdesk-server](https://github.com/rustdesk/rustdesk-server), aguarda por conexão remota direta (perfuração de túnel TCP / hole punching) ou retransmitida.
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico de cada plataforma.
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: código Flutter para desktop e dispositivos móveis.
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript para o cliente web do Flutter.
 
 ## Capturas de Tela
 

@@ -168,7 +168,6 @@ Bitte stellen Sie sicher, dass Sie diese Befehle im Stammverzeichnis des RustDes
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Mit [rustdesk-server](https://github.com/rustdesk/rustdesk-server) kommunizieren, warten auf direkte (TCP hole punching) oder weitergeleitete Verbindung
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: Plattformspezifischer Code
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter-Code für Handys
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: JavaScript für Flutter-Webclient
 
 ## Screenshots
 
