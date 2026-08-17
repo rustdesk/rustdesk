@@ -519,6 +519,7 @@ mod tests {
             height,
             logical_size,
             refresh_rate: 60,
+            transform: 0,
         }
     }
 

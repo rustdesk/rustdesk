@@ -63,7 +63,13 @@ pub struct IpcDrmCapturer {
     display: i32,
     connector: Option<String>,
     // What the encoder was sized from: CapturerInfo{width,height} is read once, at build time.
+    // With a rotated output these are the ROTATED dimensions, matching the frames delivered.
     session_size: Option<(usize, usize)>,
+    // Compositor output rotation in degrees. The scanout of a rotated output holds the desktop
+    // drawn sideways (the physically turned monitor is what straightens it locally), so frames
+    // are turned back before delivery. Fixed per session: a mid-session rotation changes the
+    // advertised geometry, which restarts the video service and builds a new capturer.
+    transform: i32,
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -74,6 +80,83 @@ pub struct IpcDrmCapturer {
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
 fn connector_key(d: &DrmDisplayInfo) -> String {
     format!("{}:{}", d.device, d.name)
+}
+
+/// Frame dimensions after undoing `transform` degrees of output rotation.
+fn rotated_dims(transform: i32, w: usize, h: usize) -> (usize, usize) {
+    if transform == 90 || transform == 270 {
+        (h, w)
+    } else {
+        (w, h)
+    }
+}
+
+/// Turn a BGRA frame upright into `dst`, undoing `transform` degrees of output rotation. `src`
+/// rows may be padded (stride from `len / h`); `dst` comes out tightly packed, which is what
+/// `PixelBuffer::new` derives its stride from. The direction is anchored to a measurement, not
+/// to the protocol text: with mutter transform=1 the scanout carried the top bar down its LEFT
+/// edge, and mapping the left column to the top row (a clockwise turn of the image) is what
+/// reads upright (rustdesk#15886).
+fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
+    const PX: usize = 4;
+    let stride = if h > 0 { src.len() / h } else { 0 };
+    dst.resize(w.checked_mul(h).and_then(|p| p.checked_mul(PX)).unwrap_or(0), 0);
+    match transform {
+        90 => {
+            // dst is h wide, w tall: dst(x', y') = src(x = y', y = h-1-x')
+            for dy in 0..w {
+                let drow = dy * h * PX;
+                for dx in 0..h {
+                    let s = (h - 1 - dx) * stride + dy * PX;
+                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
+                }
+            }
+        }
+        270 => {
+            // dst is h wide, w tall: dst(x', y') = src(x = w-1-y', y = x')
+            for dy in 0..w {
+                let drow = dy * h * PX;
+                for dx in 0..h {
+                    let s = dx * stride + (w - 1 - dy) * PX;
+                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
+                }
+            }
+        }
+        180 => {
+            for dy in 0..h {
+                let drow = dy * w * PX;
+                for dx in 0..w {
+                    let s = (h - 1 - dy) * stride + (w - 1 - dx) * PX;
+                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
+                }
+            }
+        }
+        _ => {
+            // Copy dropping any row padding, so every path out of here is tightly packed.
+            for dy in 0..h {
+                let s = dy * stride;
+                let d = dy * w * PX;
+                dst[d..d + w * PX].copy_from_slice(&src[s..s + w * PX]);
+            }
+        }
+    }
+}
+
+/// The rotation of the compositor output this connector scans out, 0 when nothing can say. The
+/// same one-output-many-connectors guard as the geometry augmentation: a layout-order fallback
+/// there would pin a rotation on a guess.
+fn wayland_transform_for(drm: &[DrmDisplayInfo], wire_idx: usize) -> i32 {
+    let wl = scrap::wayland::display::get_displays();
+    if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
+        return 0;
+    }
+    let assignment = assign_wayland_outputs(drm, &wl.displays);
+    assignment
+        .get(wire_idx)
+        .copied()
+        .flatten()
+        .map(|j| wl.displays[j].transform)
+        .unwrap_or(0)
 }
 
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
@@ -220,6 +303,10 @@ impl IpcDrmCapturer {
                 bail!("drm capture handshake timed out");
             }
         };
+        // Resolved once per session, next to the geometry it must stay consistent with: the
+        // advertised list swaps its dimensions with the same lookup, so a rotation change
+        // re-broadcasts topology and rebuilds this capturer rather than drifting mid-stream.
+        let transform = wayland_transform_for(&displays, wire_idx);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -228,7 +315,8 @@ impl IpcDrmCapturer {
                 connector: displays.get(wire_idx).map(connector_key),
                 session_size: displays
                     .get(wire_idx)
-                    .map(|d| (d.width as usize, d.height as usize)),
+                    .map(|d| rotated_dims(transform, d.width as usize, d.height as usize)),
+                transform,
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
@@ -294,10 +382,13 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
+                // Frames arrive in scanout orientation; the session was advertised (and the
+                // encoder sized) in the rotated one, so the guard compares rotated dimensions.
+                let (fw, fh) = rotated_dims(self.transform, w, h);
                 // convert_to_yuv only refuses a source LARGER than its destination, so a smaller
                 // frame leaves stale edges on screen. On the FIRST frame nothing changed: the list
                 // carries the CRTC mode, a frame the scanout fb, different when a CRTC scales.
-                if self.session_size.is_some_and(|(sw, sh)| (w, h) != (sw, sh)) {
+                if self.session_size.is_some_and(|(sw, sh)| (fw, fh) != (sw, sh)) {
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
@@ -311,15 +402,37 @@ impl TraitCapturer for IpcDrmCapturer {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         format!(
-                            "drm: display {} {what} ({sw}x{sh} -> {w}x{h}); rebuilding",
+                            "drm: display {} {what} ({sw}x{sh} -> {fw}x{fh}); rebuilding",
                             self.display
                         ),
                     ));
                 }
-                let previous = std::mem::replace(&mut self.cur, buf);
-                self.shared.slot.lock().unwrap().recycle(previous);
-                self.cur_w = w;
-                self.cur_h = h;
+                if self.transform == 0 {
+                    let previous = std::mem::replace(&mut self.cur, buf);
+                    self.shared.slot.lock().unwrap().recycle(previous);
+                } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
+                    // The rotation walks 4-byte pixels; both producer paths emit one of these
+                    // today. Anything else on a rotated session is a hard error rather than a
+                    // sheared image, and the existing health path degrades it to PipeWire.
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                    if !self.got_frame {
+                        self.note_session_without_frame();
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "drm: display {} delivered {fmt:?} on a rotated output; rebuilding",
+                            self.display
+                        ),
+                    ));
+                } else {
+                    // Turn the accepted frame upright into the capturer-owned buffer and hand the
+                    // scanout buffer straight back to the pool, keeping its two-buffer rotation.
+                    unrotate_bgra(&buf, w, h, self.transform, &mut self.cur);
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                }
+                self.cur_w = fw;
+                self.cur_h = fh;
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // Clear ONLY the streak: `rapid_builds` is for a display that delivers a first
@@ -1279,9 +1392,18 @@ fn augment_with_wayland_geometry_from(
         if origin_only {
             continue;
         }
+        // A rotated output is advertised at the ROTATED physical size: that is what the frames
+        // delivered by the capturer measure, and it is also what makes a mid-session rotation a
+        // topology change (the scanout keeps its dimensions, so nothing else would rebroadcast).
+        if w.transform == 90 || w.transform == 270 {
+            std::mem::swap(&mut info.width, &mut info.height);
+        }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
-                info.scale = drm[i].width as f64 / lw as f64;
+                // Frame width over logical width. The compositor hands logical_size already
+                // swapped for a rotated output, so post-swap width is the matching numerator;
+                // the unrotated one made a rotated 1:1 monitor advertise scale 16/9.
+                info.scale = info.width as f64 / lw as f64;
                 info.original_resolution = super::display_service::get_original_resolution(
                     &drm[i].name,
                     lw as usize,
@@ -1450,15 +1572,18 @@ pub(super) fn get_capturer_info(
         .ok_or_else(|| anyhow!("drm display index {wire_idx} out of range ({ndisplay})"))?
         .clone();
     // Publish the compositor's LOGICAL origin (what get_display_infos advertises) so the origin
-    // matches the reported geometry; KEEP the raw PHYSICAL dimensions for the capture buffer.
+    // matches the reported geometry; KEEP the raw PHYSICAL dimensions for the capture buffer —
+    // rotated to frame orientation, and from the CAPTURER's transform, not a second lookup that
+    // could disagree with the one the frame guard will enforce.
     let origin = augment_with_wayland_geometry(&displays)
         .get(wire_idx)
         .map(|di| (di.x, di.y))
         .unwrap_or((d.x, d.y));
+    let (cap_w, cap_h) = rotated_dims(capturer.transform, d.width as usize, d.height as usize);
     Ok(super::video_service::CapturerInfo {
         origin,
-        width: d.width as usize,
-        height: d.height as usize,
+        width: cap_w,
+        height: cap_h,
         ndisplay,
         current: display_idx,
         privacy_mode_id: 0,
@@ -1491,12 +1616,97 @@ mod drm_capturer_tests {
             display: 0,
             connector,
             session_size: session,
+            transform: 0,
             cur: Vec::new(),
             cur_w: 0,
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
         }
+    }
+
+    /// One BGRA pixel per label byte, so a rotation result reads as a matrix of labels.
+    fn px_frame(labels: &[&[u8]], pad_bytes: usize) -> (Vec<u8>, usize, usize) {
+        let h = labels.len();
+        let w = labels[0].len();
+        let mut buf = Vec::new();
+        for row in labels {
+            for &l in *row {
+                buf.extend_from_slice(&[l, l, l, 255]);
+            }
+            buf.extend(std::iter::repeat(0u8).take(pad_bytes));
+        }
+        (buf, w, h)
+    }
+
+    fn labels_of(buf: &[u8], w: usize, h: usize) -> Vec<Vec<u8>> {
+        (0..h)
+            .map(|y| (0..w).map(|x| buf[(y * w + x) * 4]).collect())
+            .collect()
+    }
+
+    #[test]
+    fn unrotate_90_maps_the_left_column_to_the_top_row() {
+        // The measured anchor from rustdesk#15886: mutter transform=1 carries the panel bar down
+        // the scanout's LEFT edge, and upright means that edge becomes the TOP row.
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut dst);
+        // src left column top-to-bottom = [1, 4]; clockwise puts it on the top row as [4, 1].
+        assert_eq!(labels_of(&dst, h, w), vec![vec![4, 1], vec![5, 2], vec![6, 3]]);
+    }
+
+    #[test]
+    fn unrotate_270_is_the_inverse_of_90() {
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut once = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut once);
+        let mut back = Vec::new();
+        unrotate_bgra(&once, h, w, 270, &mut back);
+        assert_eq!(back, src);
+    }
+
+    #[test]
+    fn unrotate_180_reverses_both_axes() {
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 180, &mut dst);
+        assert_eq!(labels_of(&dst, w, h), vec![vec![6, 5, 4], vec![3, 2, 1]]);
+    }
+
+    #[test]
+    fn unrotate_reads_padded_strides_and_writes_tight() {
+        // Row stride is derived from len/h, so a padded source must not shear the result.
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 8);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut dst);
+        assert_eq!(dst.len(), w * h * 4);
+        assert_eq!(labels_of(&dst, h, w), vec![vec![4, 1], vec![5, 2], vec![6, 3]]);
+        let mut plain = Vec::new();
+        unrotate_bgra(&src, w, h, 0, &mut plain);
+        assert_eq!(labels_of(&plain, w, h), vec![vec![1, 2, 3], vec![4, 5, 6]]);
+    }
+
+    #[test]
+    fn a_rotated_session_delivers_rotated_frames_and_guards_in_rotated_dims() {
+        use scrap::TraitPixelBuffer;
+        let mut c = capturer_with(Some((32, 64))); // rotated session of a 64x32 scanout
+        c.transform = 90;
+        put_frame(&c, 64, 32);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (32, 64));
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // A scanout change still ends the session, reported in rotated dimensions.
+        put_frame(&c, 32, 64);
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a scanout change must end a rotated session too"),
+        };
+        assert!(err.to_string().contains("(32x64 -> 64x32)"), "{err}");
     }
 
     fn zero_frame_streak_of(c: &IpcDrmCapturer) -> u32 {
@@ -1646,6 +1856,7 @@ mod drm_capturer_tests {
             height: h,
             logical_size: Some((w, h)),
             refresh_rate: 60,
+            transform: 0,
         }
     }
 
