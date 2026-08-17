@@ -15,73 +15,51 @@ use hbb_common::{
     ResultType, Stream,
 };
 
+#[cfg(windows)]
 const RDP_CREDENTIAL_TARGET: &str = "TERMSRV/localhost";
 
-fn delete_rdp_credential(target: &str) {
-    match std::process::Command::new("cmdkey")
-        .arg(format!("/delete:{}", target))
-        .output()
-    {
-        Ok(output) if output.status.success() => {}
-        // A missing credential is expected on the first launch. Keep the
-        // nonzero status at debug level without logging cmdkey output.
-        Ok(output) => log::debug!(
-            "Could not delete RDP credential for target '{}': {}",
-            target,
-            output.status
-        ),
-        Err(err) => log::warn!(
-            "Failed to start cmdkey while deleting RDP credential for target '{}': {}",
-            target,
-            err
-        ),
-    }
-}
-
-fn store_rdp_credential(target: &str, username: &str, password: &str) {
-    let mut args = vec![format!("/generic:{}", target)];
-    if !username.is_empty() {
-        args.push(format!("/user:{}", username));
-    }
-    if !password.is_empty() {
-        args.push(format!("/pass:{}", password));
-    }
-    match std::process::Command::new("cmdkey").args(&args).output() {
-        Ok(output) if output.status.success() => {}
-        Ok(output) => log::warn!(
-            "Failed to store RDP credential for target '{}': {}",
-            target,
-            output.status
-        ),
-        Err(err) => log::warn!(
-            "Failed to start cmdkey while storing RDP credential for target '{}': {}",
-            target,
-            err
-        ),
-    }
-}
-
 fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
-    delete_rdp_credential(RDP_CREDENTIAL_TARGET);
+    #[cfg(windows)]
     let (username, password) = {
         let lc = lc.read().unwrap();
         (lc.get_option("rdp_username"), lc.get_option("rdp_password"))
     };
-    if !username.is_empty() || !password.is_empty() {
-        store_rdp_credential(RDP_CREDENTIAL_TARGET, &username, &password);
-    }
+    #[cfg(windows)]
+    let (rdp_credential, prompt_for_credentials) =
+        match crate::platform::prepare_temporary_rdp_credential(
+            RDP_CREDENTIAL_TARGET,
+            &username,
+            &password,
+        ) {
+            Ok(credential) => (credential, false),
+            Err(err) => {
+                log::warn!(
+                    "Failed to prepare RDP credential for target '{}': {}",
+                    RDP_CREDENTIAL_TARGET,
+                    err
+                );
+                (None, true)
+            }
+        };
     // Keep using /v instead of a generated .rdp file: mstsc then preserves the
     // user's Default.rdp settings and avoids unsigned-file warnings or policies.
-    match std::process::Command::new("mstsc")
-        .arg(format!("/v:localhost:{}", port))
-        .spawn()
-    {
+    let mut command = std::process::Command::new("mstsc");
+    command.arg(format!("/v:localhost:{}", port));
+    #[cfg(windows)]
+    if prompt_for_credentials {
+        command.arg("/prompt");
+    }
+    match command.spawn() {
         Ok(child) => {
             #[cfg(windows)]
             {
                 let lc = lc.clone();
                 let id = id.to_owned();
-                crate::platform::set_rdp_window_title(child, move || rdp_display_name(&lc, &id));
+                crate::platform::set_rdp_window_title(
+                    child,
+                    move || rdp_display_name(&lc, &id),
+                    rdp_credential,
+                );
             }
             #[cfg(not(windows))]
             let _ = (child, lc, id);

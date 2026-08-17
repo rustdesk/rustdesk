@@ -2642,6 +2642,222 @@ pub fn wide_string(s: &str) -> Vec<u16> {
         .collect()
 }
 
+const RDP_CREDENTIAL_COMMENT_PREFIX: &str = "RustDesk temporary RDP credential ";
+
+struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);
+
+// CredReadW returns a self-contained allocation that remains valid until
+// CredFree. Moving ownership to the mstsc monitor thread is therefore safe.
+unsafe impl Send for RdpCredentialBuffer {}
+
+impl RdpCredentialBuffer {
+    fn has_comment(&self, expected: &str) -> bool {
+        unsafe {
+            let comment = (*self.0).Comment;
+            !comment.is_null()
+                && comment
+                    .to_string()
+                    .map(|comment| comment == expected)
+                    .unwrap_or(false)
+        }
+    }
+
+    fn has_rustdesk_comment(&self) -> bool {
+        unsafe {
+            let comment = (*self.0).Comment;
+            !comment.is_null()
+                && comment
+                    .to_string()
+                    .ok()
+                    .and_then(|comment| {
+                        comment
+                            .strip_prefix(RDP_CREDENTIAL_COMMENT_PREFIX)
+                            .map(|id| uuid::Uuid::parse_str(id).is_ok())
+                    })
+                    .unwrap_or(false)
+        }
+    }
+}
+
+impl Drop for RdpCredentialBuffer {
+    fn drop(&mut self) {
+        use windows::Win32::Security::Credentials::CredFree;
+
+        unsafe { CredFree(self.0.cast::<std::ffi::c_void>()) };
+    }
+}
+
+enum TemporaryRdpCredentialState {
+    Present { comment: String },
+    Absent,
+}
+
+pub struct TemporaryRdpCredential {
+    target: windows::core::HSTRING,
+    previous: Option<RdpCredentialBuffer>,
+    state: TemporaryRdpCredentialState,
+}
+
+fn is_rdp_credential_not_found(err: &windows::core::Error) -> bool {
+    use windows::{core::HRESULT, Win32::Foundation::ERROR_NOT_FOUND};
+
+    err.code() == HRESULT::from_win32(ERROR_NOT_FOUND.0)
+}
+
+fn read_rdp_credential(target: &windows::core::HSTRING) -> ResultType<Option<RdpCredentialBuffer>> {
+    use windows::Win32::Security::Credentials::{CredReadW, CRED_TYPE_GENERIC};
+
+    let mut credential = null_mut();
+    match unsafe { CredReadW(target, CRED_TYPE_GENERIC, None, &mut credential) } {
+        Ok(()) if credential.is_null() => bail!("CredReadW returned an empty credential"),
+        Ok(()) => Ok(Some(RdpCredentialBuffer(credential))),
+        Err(err) if is_rdp_credential_not_found(&err) => Ok(None),
+        Err(err) => Err(anyhow!("CredReadW failed: {}", err)),
+    }
+}
+
+fn delete_rdp_credential(target: &windows::core::HSTRING) -> ResultType<()> {
+    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+
+    unsafe { CredDeleteW(target, CRED_TYPE_GENERIC, None) }
+        .map_err(|err| anyhow!("CredDeleteW failed: {}", err))
+}
+
+fn write_rdp_credential(
+    target: &windows::core::HSTRING,
+    username: &str,
+    password: &str,
+    comment: &str,
+) -> ResultType<()> {
+    use windows::{
+        core::{HSTRING, PWSTR},
+        Win32::Security::Credentials::{
+            CredWriteW, CREDENTIALW, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_PERSIST_SESSION,
+            CRED_TYPE_GENERIC,
+        },
+    };
+
+    let username = HSTRING::from(username);
+    let comment = HSTRING::from(comment);
+    let blob_size = password
+        .encode_utf16()
+        .count()
+        .checked_mul(std::mem::size_of::<u16>())
+        .and_then(|size| u32::try_from(size).ok())
+        .filter(|size| *size <= CRED_MAX_CREDENTIAL_BLOB_SIZE)
+        .ok_or_else(|| anyhow!("RDP credential password is too long"))?;
+    let mut password: Vec<u16> = password.encode_utf16().collect();
+    let mut credential = CREDENTIALW {
+        Type: CRED_TYPE_GENERIC,
+        TargetName: PWSTR(target.as_ptr() as *mut u16),
+        Comment: PWSTR(comment.as_ptr() as *mut u16),
+        CredentialBlobSize: blob_size,
+        CredentialBlob: if password.is_empty() {
+            null_mut()
+        } else {
+            password.as_mut_ptr().cast::<u8>()
+        },
+        Persist: CRED_PERSIST_SESSION,
+        UserName: if username.is_empty() {
+            PWSTR::null()
+        } else {
+            PWSTR(username.as_ptr() as *mut u16)
+        },
+        ..Default::default()
+    };
+    let result = unsafe { CredWriteW(&mut credential, 0) }
+        .map_err(|err| anyhow!("CredWriteW failed: {}", err));
+    password.fill(0);
+    result
+}
+
+pub fn prepare_temporary_rdp_credential(
+    target: &str,
+    username: &str,
+    password: &str,
+) -> ResultType<Option<TemporaryRdpCredential>> {
+    let target = windows::core::HSTRING::from(target);
+    let existing = read_rdp_credential(&target)?;
+    let had_existing = existing.is_some();
+    let existing_is_rustdesk = existing
+        .as_ref()
+        .map(RdpCredentialBuffer::has_rustdesk_comment)
+        .unwrap_or(false);
+    let previous = if existing_is_rustdesk { None } else { existing };
+
+    if username.is_empty() && password.is_empty() {
+        if !had_existing {
+            return Ok(None);
+        }
+        delete_rdp_credential(&target)?;
+        return if previous.is_some() {
+            Ok(Some(TemporaryRdpCredential {
+                target,
+                previous,
+                state: TemporaryRdpCredentialState::Absent,
+            }))
+        } else {
+            Ok(None)
+        };
+    }
+
+    let comment = format!(
+        "{}{}",
+        RDP_CREDENTIAL_COMMENT_PREFIX,
+        uuid::Uuid::new_v4().simple()
+    );
+    write_rdp_credential(&target, username, password, &comment)?;
+    Ok(Some(TemporaryRdpCredential {
+        target,
+        previous,
+        state: TemporaryRdpCredentialState::Present { comment },
+    }))
+}
+
+impl Drop for TemporaryRdpCredential {
+    fn drop(&mut self) {
+        use windows::Win32::Security::Credentials::CredWriteW;
+
+        let current = match read_rdp_credential(&self.target) {
+            Ok(current) => current,
+            Err(err) => {
+                log::warn!(
+                    "Failed to inspect temporary RDP credential for target '{}': {}",
+                    self.target.to_string_lossy(),
+                    err
+                );
+                return;
+            }
+        };
+        let unchanged = match &self.state {
+            TemporaryRdpCredentialState::Present { comment } => current
+                .as_ref()
+                .map(|credential| credential.has_comment(comment))
+                .unwrap_or(false),
+            TemporaryRdpCredentialState::Absent => current.is_none(),
+        };
+        if !unchanged {
+            return;
+        }
+
+        let result = if let Some(previous) = self.previous.as_ref() {
+            unsafe { CredWriteW(previous.0, 0) }
+                .map_err(|err| anyhow!("CredWriteW failed while restoring: {}", err))
+        } else if current.is_some() {
+            delete_rdp_credential(&self.target)
+        } else {
+            Ok(())
+        };
+        if let Err(err) = result {
+            log::warn!(
+                "Failed to restore RDP credential for target '{}': {}",
+                self.target.to_string_lossy(),
+                err
+            );
+        }
+    }
+}
+
 // This only changes mstsc's top-level window title. The full-screen connection
 // bar is rendered separately and cannot be customized when mstsc.exe is
 // launched as an independent process.
@@ -2688,8 +2904,11 @@ fn should_update_rdp_window_title(current: &str, name: &str, applied_name: &str)
         && (current.contains("localhost") || (!applied_name.is_empty() && current == applied_name))
 }
 
-pub fn set_rdp_window_title<F>(mut child: std::process::Child, name_of: F)
-where
+pub fn set_rdp_window_title<F>(
+    mut child: std::process::Child,
+    name_of: F,
+    _credential: Option<TemporaryRdpCredential>,
+) where
     F: Fn() -> String + Send + 'static,
 {
     let process_id = child.id();
@@ -2699,6 +2918,7 @@ where
     if let Err(err) = std::thread::Builder::new()
         .name("rdp-window-title".to_owned())
         .spawn(move || {
+            let _credential = _credential;
             let mut warned = false;
             let mut applied_name = String::new();
             loop {
