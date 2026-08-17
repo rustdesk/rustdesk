@@ -15,25 +15,60 @@ use hbb_common::{
     ResultType, Stream,
 };
 
-fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
-    std::process::Command::new("cmdkey")
-        .arg("/delete:localhost")
+const RDP_CREDENTIAL_TARGET: &str = "TERMSRV/localhost";
+
+fn delete_rdp_credential(target: &str) {
+    match std::process::Command::new("cmdkey")
+        .arg(format!("/delete:{}", target))
         .output()
-        .ok();
-    let username = std::env::var("rdp_username").unwrap_or_default();
-    let password = std::env::var("rdp_password").unwrap_or_default();
+    {
+        Ok(output) if output.status.success() => {}
+        // A missing credential is expected on the first launch. Keep the
+        // nonzero status at debug level without logging cmdkey output.
+        Ok(output) => log::debug!(
+            "Could not delete RDP credential for target '{}': {}",
+            target,
+            output.status
+        ),
+        Err(err) => log::warn!(
+            "Failed to start cmdkey while deleting RDP credential for target '{}': {}",
+            target,
+            err
+        ),
+    }
+}
+
+fn store_rdp_credential(target: &str, username: &str, password: &str) {
+    let mut args = vec![format!("/generic:{}", target)];
+    if !username.is_empty() {
+        args.push(format!("/user:{}", username));
+    }
+    if !password.is_empty() {
+        args.push(format!("/pass:{}", password));
+    }
+    match std::process::Command::new("cmdkey").args(&args).output() {
+        Ok(output) if output.status.success() => {}
+        Ok(output) => log::warn!(
+            "Failed to store RDP credential for target '{}': {}",
+            target,
+            output.status
+        ),
+        Err(err) => log::warn!(
+            "Failed to start cmdkey while storing RDP credential for target '{}': {}",
+            target,
+            err
+        ),
+    }
+}
+
+fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
+    delete_rdp_credential(RDP_CREDENTIAL_TARGET);
+    let (username, password) = {
+        let lc = lc.read().unwrap();
+        (lc.get_option("rdp_username"), lc.get_option("rdp_password"))
+    };
     if !username.is_empty() || !password.is_empty() {
-        let mut args = vec!["/generic:localhost".to_owned()];
-        if !username.is_empty() {
-            args.push(format!("/user:{}", username));
-        }
-        if !password.is_empty() {
-            args.push(format!("/pass:{}", password));
-        }
-        std::process::Command::new("cmdkey")
-            .args(&args)
-            .output()
-            .ok();
+        store_rdp_credential(RDP_CREDENTIAL_TARGET, &username, &password);
     }
     // Keep using /v instead of a generated .rdp file: mstsc then preserves the
     // user's Default.rdp settings and avoids unsigned-file warnings or policies.
