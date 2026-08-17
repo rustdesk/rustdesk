@@ -2687,15 +2687,10 @@ impl Drop for RdpCredentialBuffer {
     }
 }
 
-enum TemporaryRdpCredentialState {
-    Present { comment: String },
-    Absent,
-}
-
 pub struct TemporaryRdpCredential {
     target: windows::core::HSTRING,
     previous: Option<RdpCredentialBuffer>,
-    state: TemporaryRdpCredentialState,
+    comment: String,
 }
 
 fn is_rdp_credential_not_found(err: &windows::core::Error) -> bool {
@@ -2776,30 +2771,20 @@ pub fn prepare_temporary_rdp_credential(
     username: &str,
     password: &str,
 ) -> ResultType<Option<TemporaryRdpCredential>> {
+    // Credential Guard may reject mstsc-saved Windows credentials; peer credentials use Generic.
+    // Without a peer username, leave Credential Manager untouched and let mstsc handle its entry.
+    // See https://learn.microsoft.com/windows/security/identity-protection/credential-guard/considerations-known-issues#saved-windows-credentials-considerations
+    if username.is_empty() {
+        return Ok(None);
+    }
+
     let target = windows::core::HSTRING::from(target);
     let existing = read_rdp_credential(&target)?;
-    let had_existing = existing.is_some();
     let existing_is_rustdesk = existing
         .as_ref()
         .map(RdpCredentialBuffer::has_rustdesk_comment)
         .unwrap_or(false);
     let previous = if existing_is_rustdesk { None } else { existing };
-
-    if username.is_empty() && password.is_empty() {
-        if !had_existing {
-            return Ok(None);
-        }
-        delete_rdp_credential(&target)?;
-        return if previous.is_some() {
-            Ok(Some(TemporaryRdpCredential {
-                target,
-                previous,
-                state: TemporaryRdpCredentialState::Absent,
-            }))
-        } else {
-            Ok(None)
-        };
-    }
 
     let comment = format!(
         "{}{}",
@@ -2810,7 +2795,7 @@ pub fn prepare_temporary_rdp_credential(
     Ok(Some(TemporaryRdpCredential {
         target,
         previous,
-        state: TemporaryRdpCredentialState::Present { comment },
+        comment,
     }))
 }
 
@@ -2829,13 +2814,10 @@ impl Drop for TemporaryRdpCredential {
                 return;
             }
         };
-        let unchanged = match &self.state {
-            TemporaryRdpCredentialState::Present { comment } => current
-                .as_ref()
-                .map(|credential| credential.has_comment(comment))
-                .unwrap_or(false),
-            TemporaryRdpCredentialState::Absent => current.is_none(),
-        };
+        let unchanged = current
+            .as_ref()
+            .map(|credential| credential.has_comment(&self.comment))
+            .unwrap_or(false);
         if !unchanged {
             return;
         }
