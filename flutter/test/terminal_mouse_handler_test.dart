@@ -1,6 +1,32 @@
 import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
+
+const _terminalSize = Size(400, 120);
+
+Widget _terminalHarness(
+  Terminal terminal,
+  TerminalController controller,
+) =>
+    MaterialApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: _terminalSize.width,
+          height: _terminalSize.height,
+          child: TerminalMouseInteraction(
+            terminal,
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+
+void _writeLines(Terminal terminal, int count) => terminal.write(
+      List.generate(count, (index) => 'line $index\r\n').join(),
+    );
 
 void main() {
   late Terminal terminal;
@@ -110,5 +136,134 @@ void main() {
       report(TerminalMouseButton.wheelDown, TerminalMouseButtonState.up),
       isNull,
     );
+  });
+
+  testWidgets('dragging below scrolls and extends selection', (tester) async {
+    final controller = TerminalController();
+    _writeLines(terminal, 80);
+    await tester.pumpWidget(_terminalHarness(terminal, controller));
+    final terminalView =
+        tester.state<TerminalViewState>(find.byType(TerminalView));
+    final scrollController = terminalView.widget.scrollController!;
+    scrollController.jumpTo(0);
+    await tester.pump();
+    final renderTerminal = terminalView.renderTerminal;
+    const localStart = Offset(20, 20);
+    final startCell = renderTerminal.getCellOffset(localStart);
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    final outside = Offset(20, renderTerminal.size.height);
+    await tester.handlePointerEventRecord([
+      PointerEventRecord(Duration.zero, [
+        mouse.down(renderTerminal.localToGlobal(localStart)),
+        mouse.move(renderTerminal.localToGlobal(outside)),
+      ]),
+      PointerEventRecord(const Duration(milliseconds: 150), [
+        mouse.move(
+          renderTerminal.localToGlobal(outside + const Offset(1, 1)),
+        ),
+        mouse.up(),
+      ]),
+    ]);
+
+    expect(scrollController.offset, greaterThan(0));
+    expect(controller.selection!.begin, startCell);
+    expect(controller.selection!.end.y, greaterThan(startCell.y));
+    final releasedOffset = scrollController.offset;
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(scrollController.offset, releasedOffset);
+  });
+
+  testWidgets('tmux mouse input is reported without local selection',
+      (tester) async {
+    final controller = TerminalController();
+    terminal.write('\x1b[?1049h\x1b[?1002h\x1b[?1006hword');
+    await tester.pumpWidget(_terminalHarness(terminal, controller));
+    final renderTerminal = tester
+        .state<TerminalViewState>(find.byType(TerminalView))
+        .renderTerminal;
+    const wheel = Offset(120, 40);
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: renderTerminal.localToGlobal(wheel),
+        scrollDelta: const Offset(0, 40),
+      ),
+    );
+    await tester.pump();
+    final wheelCell = renderTerminal.getCellOffset(wheel);
+    expect(output.first, '\x1b[<65;${wheelCell.x + 1};${wheelCell.y + 1}M');
+    output.clear();
+    final clickPosition =
+        renderTerminal.getOffset(const CellOffset(0, 0)) + const Offset(1, 1);
+    final clickCell = renderTerminal.getCellOffset(clickPosition);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.down(renderTerminal.localToGlobal(clickPosition));
+    await mouse.up();
+    await tester.pump();
+    await mouse.down(renderTerminal.localToGlobal(clickPosition));
+    await mouse.up();
+    await tester.pump(kDoubleTapTimeout);
+    expect(output, [
+      '\x1b[<0;${clickCell.x + 1};${clickCell.y + 1}M',
+      '\x1b[<0;${clickCell.x + 1};${clickCell.y + 1}m',
+      '\x1b[<0;${clickCell.x + 1};${clickCell.y + 1}M',
+      '\x1b[<0;${clickCell.x + 1};${clickCell.y + 1}m',
+    ]);
+    expect(controller.selection, isNull);
+    expect(controller.suspendedPointerInputs, isFalse);
+    output.clear();
+    const start = Offset(40, 40);
+    const end = Offset(240, 80);
+    final startCell = renderTerminal.getCellOffset(start);
+    final endCell = renderTerminal.getCellOffset(end);
+    await mouse.down(renderTerminal.localToGlobal(start));
+    await mouse.moveTo(renderTerminal.localToGlobal(end));
+    await tester.pump();
+
+    expect(output, [
+      '\x1b[<0;${startCell.x + 1};${startCell.y + 1}M',
+      '\x1b[<32;${endCell.x + 1};${endCell.y + 1}M',
+    ]);
+    expect(controller.selection, isNull);
+    await mouse.up();
+    expect(output.last, '\x1b[<0;${endCell.x + 1};${endCell.y + 1}m');
+    expect(controller.suspendedPointerInputs, isFalse);
+  });
+
+  testWidgets('tmux drag stays suppressed after mouse mode is disabled',
+      (tester) async {
+    final controller = TerminalController();
+    terminal.write('\x1b[?1049h\x1b[?1002h\x1b[?1006hword');
+    await tester.pumpWidget(_terminalHarness(terminal, controller));
+    final renderTerminal = tester
+        .state<TerminalViewState>(find.byType(TerminalView))
+        .renderTerminal;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    final start = renderTerminal.localToGlobal(const Offset(40, 40));
+    final end = renderTerminal.localToGlobal(const Offset(240, 80));
+    await mouse.down(start);
+    output.clear();
+    terminal.write('\x1b[?1002l');
+    await mouse.moveTo(end);
+
+    expect(output, isEmpty);
+    expect(controller.selection, isNull);
+    expect(controller.suspendedPointerInputs, isTrue);
+    terminal.write('\x1b[?1002h');
+    await mouse.moveTo(start);
+    expect(output, isEmpty);
+    expect(controller.selection, isNull);
+    await mouse.up();
+    expect(output, isEmpty);
+    expect(controller.suspendedPointerInputs, isFalse);
+
+    await mouse.down(start);
+    output.clear();
+    terminal.write('\x1b[?1002l');
+    await mouse.up();
+    await tester.pump(kDoubleTapTimeout);
+
+    expect(output, isEmpty);
+    expect(controller.selection, isNull);
+    expect(controller.suspendedPointerInputs, isFalse);
   });
 }
