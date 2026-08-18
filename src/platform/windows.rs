@@ -1817,7 +1817,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String> {
     let (subkey, path, start_menu, _) = get_install_info();
     if let Some(product_code) = get_msi_product_code(&subkey)? {
-        return Ok(format!("MsiExec.exe /X {product_code}"));
+        return Ok(format!("MsiExec.exe /X {product_code} || exit /b"));
     }
 
     let mut uninstall_cert_cmd = "".to_string();
@@ -3713,8 +3713,12 @@ fn get_reg_msi_key(subkey: &str, is_msi: Option<bool>) -> ResultType<Option<Stri
         return Ok(None);
     }
 
-    let product_code = get_msi_product_code(subkey)?
-        .ok_or_else(|| anyhow!("MSI product code was not found in {subkey}"))?;
+    let Some(product_code) = get_msi_product_code(subkey)? else {
+        if is_msi == Some(true) {
+            bail!("MSI product code was not found in {subkey}");
+        }
+        return Ok(None);
+    };
     Ok(Some(get_msi_uninstall_subkey(&product_code)?))
 }
 

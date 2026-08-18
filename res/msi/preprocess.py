@@ -12,6 +12,7 @@ import platform
 from pathlib import Path
 from itertools import chain
 import shutil
+from xml.sax.saxutils import quoteattr
 
 g_indent_unit = "\t"
 g_version = ""
@@ -269,7 +270,8 @@ def gen_native_arp_properties():
         for _, v in g_arpsystemcomponent.items():
             if "msi" in v and "v" in v:
                 lines_new.append(
-                    f'{indent}<Property Id="{v["msi"]}" Value="{v["v"]}" />\n'
+                    f'{indent}<Property Id={quoteattr(str(v["msi"]))} '
+                    f'Value={quoteattr(str(v["v"]))} />\n'
                 )
 
         for i, line in enumerate(lines_new):
@@ -292,7 +294,8 @@ def gen_install_state_values():
             if "msi" not in value and "v" in value:
                 value_type = value.get("t", "string")
                 lines_new.append(
-                    f'{indent}<RegistryValue Type="{value_type}" Name="{name}" Value="{value["v"]}" />\n'
+                    f'{indent}<RegistryValue Type={quoteattr(str(value_type))} '
+                    f'Name={quoteattr(str(name))} Value={quoteattr(str(value["v"]))} />\n'
                 )
 
         for i, line in enumerate(lines_new):
@@ -312,6 +315,10 @@ def gen_custom_ARPSYSTEMCOMPONENT(args, _dist_dir):
         custom_arp = dict(json.loads(args.custom_arp))
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         print(f"Failed to decode custom arp: {e}")
+        return False
+
+    if any(not isinstance(value, dict) for value in custom_arp.values()):
+        print("Custom arp entries must be objects.")
         return False
 
     if any(
