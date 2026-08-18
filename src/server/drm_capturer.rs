@@ -107,10 +107,9 @@ fn unrotate_hotspot(transform: i32, w: i32, h: i32, hotx: i32, hoty: i32) -> (i3
     }
 }
 
-/// Turn a 4-byte-pixel frame upright into tightly packed `dst`, undoing `transform` degrees.
-/// `src` rows may be padded (stride = `len / h`). The direction is pinned by the unit tests to
-/// the measured anchor of rustdesk#15886 (mutter transform=1: left scanout edge is the top),
-/// and the body is libyuv's ARGBRotate, which walks pixels so channel order does not matter.
+/// Turn a 4-byte-pixel frame upright into tightly packed `dst`, undoing `transform` degrees;
+/// padded `src` rows ok (stride = len/h). Direction pinned by the tests to the measured anchor
+/// of rustdesk#15886; libyuv walks pixels, so channel order does not matter.
 fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
     const PX: usize = 4;
     let stride = if h > 0 { src.len() / h } else { 0 };
@@ -120,6 +119,7 @@ fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u
         0,
     );
     if dst.is_empty() || stride < w * PX {
+        log::error!("unrotate: rejected geometry {w}x{h} stride {stride}; frame left blank");
         return;
     }
     let mode = match transform {
@@ -412,10 +412,9 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
-                // A layout change (a rotation included) bumps the snapshot generation and is
-                // otherwise invisible here: mode and framebuffer keep their size. Rebuild so the
-                // session picks up the new transform; deliberately NOT counted against display
-                // health, this is the layout moving, not the display failing.
+                // A layout change bumps the generation and is otherwise invisible here (mode
+                // and framebuffer keep their size). Rebuild for the new transform; not counted
+                // against health: the layout moved, the display did not fail.
                 if scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen {
                     self.shared.slot.lock().unwrap().recycle(buf);
                     return Err(io::Error::new(

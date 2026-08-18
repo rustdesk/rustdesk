@@ -524,10 +524,11 @@ pub(super) fn get_capturer_for_display(
                     // `logical_size` field and never touches `physical_size`, so the rect is not
                     // logical. The advertised DRM geometry is physical too, in DELIVERED
                     // orientation: `augment_with_wayland_geometry` transposes width/height for a
-                    // 90/270 output (rustdesk#15886) and the portal's stream caps arrive equally
-                    // rotated, so the raw compare still holds. Dividing one side by the scale
-                    // would compare logical against physical and reject the valid stream on
-                    // exactly the scaled outputs it was meant to rescue.
+                    // 90/270 output (rustdesk#15886). Whether the portal's caps arrive rotated
+                    // is UNMEASURED on a rotated display (pipewiresrc does not apply
+                    // SPA_META_VideoTransform), so the size half accepts either orientation
+                    // rather than gambling a permanent offline on one of them. Dividing a side
+                    // by the scale would still be wrong: logical against physical.
                     //
                     // The size check is what tells one connector apart from the whole-desktop
                     // rect the portal usually exposes. It is skipped only when BOTH sides say
@@ -539,11 +540,13 @@ pub(super) fn get_capturer_for_display(
                     // a monitor on a card the service cannot open is missing from the DRM list
                     // while the compositor still drives it.
                     let single_display = single_display && cap_display_info.num == 1;
+                    let size_matches = (advertised.width as usize == rect.1
+                        && advertised.height as usize == rect.2)
+                        || (advertised.width as usize == rect.2
+                            && advertised.height as usize == rect.1);
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
-                        && (single_display
-                            || (advertised.width as usize == rect.1
-                                && advertised.height as usize == rect.2));
+                        && (single_display || size_matches);
                     if !consistent {
                         bail!(
                             "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",

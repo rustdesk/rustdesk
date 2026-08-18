@@ -536,8 +536,8 @@ mod tests {
     #[test]
     fn test_clear_keeps_the_failure_stamp() {
         // The stamp describes the seat, not the cache: the ~1/s capturer rebuild loop clears,
-        // and dropping the stamp with it would defeat the backoff. Sole test touching these
-        // statics; serialize before adding another.
+        // and dropping the stamp with it would defeat the backoff. The generation test also
+        // calls clear now; both only assert monotonic/unchanged state, so they can interleave.
         *LAST_FAILED_LOOKUP.lock().unwrap() = Some(Instant::now());
         clear_wayland_displays_cache();
         let stamp = *LAST_FAILED_LOOKUP.lock().unwrap();
