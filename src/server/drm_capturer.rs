@@ -821,15 +821,14 @@ impl Drop for UinputRefreshGuard {
     }
 }
 
-/// Never probes, never blocks: the form the ROUTING gates must use. Seconds of IPC inside
-/// `wayland::clear()`, `is_inited()` or the display enumeration trips "deadline has elapsed".
+/// Never probes or blocks. Use in hot paths such as `wayland::clear()`, `is_inited()`, and display
+/// enumeration, where seconds of IPC would trip "deadline has elapsed".
 pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
-/// The three honest answers the availability machinery can give. `Unsettled` — another probe in
-/// flight, or a failure still below the disable threshold — is not a verdict, and the
-/// login-screen headless decision must not read it as one.
+/// A tri-state assessment of DRM capture availability.
+/// `Unsettled` means a probe is in flight or failures have not reached the disable threshold.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Availability {
     Available,
@@ -843,9 +842,8 @@ pub(crate) enum Availability {
 fn availability() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();
-        // A settled "no" STAYS the answer while an off-thread re-probe re-verifies it; going
-        // Unknown at expiry would reopen an Unsettled window every TTL on a helper-less box, and
-        // the login decision reads Unsettled as a possible greeter.
+        // Keep a settled "no" while an off-thread probe re-verifies it, avoiding a transient
+        // Unsettled result whenever the negative cache expires.
         let stale_no =
             matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
         let verdict = match &*st {
@@ -878,10 +876,8 @@ fn availability() -> Availability {
     probe_and_publish()
 }
 
-/// The non-blocking tri-state, for decisions on the LOGIN REQUEST path that must never wait: an
-/// unauthenticated peer reaches that path, so a probe there would let it park a worker for the
-/// probe deadline. Unknown kicks the probe off-thread and answers Unsettled, which the login
-/// decision treats as a possibly servable greeter (no Xorg) until the state settles.
+/// Non-blocking login-path assessment.
+/// Unknown starts a probe off-thread; callers require `Available` before admitting a session.
 pub(crate) fn availability_cached() -> Availability {
     let (verdict, stale_no) = {
         let st = DRM_STATE.lock().unwrap();

@@ -12,8 +12,6 @@ use crate::clipboard::{update_clipboard, ClipboardSide};
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
-#[cfg(target_os = "linux")]
-use crate::platform::linux_desktop_manager;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
@@ -117,39 +115,6 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
-#[cfg(target_os = "linux")]
-fn should_check_linux_headless_os_auth_before_desktop_start(
-    is_headless_allowed: bool,
-    username: &str,
-) -> bool {
-    is_headless_allowed && !username.trim().is_empty()
-}
-
-#[cfg(target_os = "linux")]
-fn linux_desktop_start_credentials(
-    is_headless_allowed: bool,
-    os_login: Option<&OSLogin>,
-) -> Option<(String, String)> {
-    if !is_headless_allowed {
-        return None;
-    }
-    if let Some(os_login) = os_login.filter(|os_login| !os_login.username.trim().is_empty()) {
-        return Some((os_login.username.clone(), os_login.password.clone()));
-    }
-    Some((String::new(), String::new()))
-}
-
-#[cfg(target_os = "linux")]
-fn should_record_linux_headless_os_auth_failure(
-    is_headless_allowed: bool,
-    username: &str,
-    err_msg: &str,
-) -> bool {
-    is_headless_allowed
-        && !username.trim().is_empty()
-        && err_msg == crate::client::LOGIN_MSG_PASSWORD_WRONG
-}
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn should_use_terminal_os_login_scope(is_terminal: bool, os_login_username: &str) -> bool {
     cfg!(target_os = "windows") && is_terminal && !os_login_username.trim().is_empty()
@@ -208,8 +173,6 @@ struct Session {
 struct StartCmIpcPara {
     rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    rx_desktop_ready: mpsc::Receiver<()>,
-    tx_cm_stream_ready: mpsc::Sender<()>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -351,8 +314,6 @@ pub struct Connection {
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
-    #[cfg(target_os = "linux")]
-    linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
@@ -435,14 +396,10 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
 ///
-/// The cached probe, not the blocking one: this is a routing gate. Available-only ON PURPOSE, and
-/// deliberately NOT symmetric with the seat0 adoption gate: that one only starts Xorg on a
-/// definitive Unavailable (never over a maybe-live greeter), while admission only accepts on a
-/// definitive Available (never a greeter nothing can yet capture). Both err toward refuse-and-retry
-/// during an unsettled probe; admitting there would black-screen a client on a helper-less box.
+/// A cold cache probes off-thread; admission still requires a definitive `Available` verdict.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 fn drm_can_serve_login_screen() -> bool {
-    super::drm_capturer::is_available_cached()
+    super::drm_capturer::availability_cached() == super::drm_capturer::Availability::Available
 }
 
 /// Without the feature nothing can capture a Wayland greeter, so the refusal stands.
@@ -484,14 +441,6 @@ impl Connection {
         let (tx_input, _rx_input) = std_mpsc::channel();
         let (tx_from_authed, mut rx_from_authed) = mpsc::unbounded_channel::<ipc::Data>();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
-        #[cfg(target_os = "linux")]
-        let linux_headless_handle =
-            LinuxHeadlessHandle::new(_rx_cm_stream_ready, _tx_desktop_ready);
-
         let (tx_post_seq, rx_post_seq) = mpsc::unbounded_channel();
         tokio::spawn(async move {
             Self::post_seq_loop(rx_post_seq).await;
@@ -568,15 +517,11 @@ impl Connection {
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
-            #[cfg(target_os = "linux")]
-            linux_headless_handle,
             closed: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
                 tx_from_cm,
-                rx_desktop_ready,
-                tx_cm_stream_ready,
             }),
             auto_disconnect_timer: None,
             authed_conn_id: None,
@@ -1854,12 +1799,6 @@ impl Connection {
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
-            #[cfg(target_os = "linux")]
-            if crate::platform::is_headless_allowed() {
-                if linux_desktop_manager::is_headless() {
-                    platform_additions.insert("headless".into(), json!(true));
-                }
-            }
         }
         #[cfg(target_os = "windows")]
         {
@@ -2690,14 +2629,7 @@ impl Connection {
             tokio::spawn(async move {
                 #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
-                if let Err(err) = start_ipc(
-                    p.rx_to_cm,
-                    p.tx_from_cm,
-                    p.rx_desktop_ready,
-                    p.tx_cm_stream_ready,
-                )
-                .await
-                {
+                if let Err(err) = start_ipc(p.rx_to_cm, p.tx_from_cm).await {
                     log::warn!("ipc to connection manager exit: {}", err);
                     // https://github.com/rustdesk/rustdesk-server-pro/discussions/382#discussioncomment-10525725, cm may start failed
                     #[cfg(windows)]
@@ -2831,59 +2763,6 @@ impl Connection {
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if !should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
-                #[cfg(not(target_os = "linux"))]
-                self.try_start_cm_ipc();
-            }
-
-            #[cfg(target_os = "linux")]
-            if should_check_linux_headless_os_auth_before_desktop_start(
-                self.linux_headless_handle.is_headless_allowed,
-                &lr.os_login.username,
-            ) {
-                let (_failure, res) = self.check_failure(0).await;
-                if !res {
-                    return true;
-                }
-            }
-
-            #[cfg(not(target_os = "linux"))]
-            let err_msg = "".to_owned();
-            #[cfg(target_os = "linux")]
-            let err_msg = match self
-                .linux_headless_handle
-                .try_start_desktop(lr.os_login.as_ref())
-                .await
-            {
-                LinuxDesktopStartOutcome::Finished(err_msg) => err_msg,
-                LinuxDesktopStartOutcome::Busy => {
-                    self.send_login_error(crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY)
-                        .await;
-                    return true;
-                }
-            };
-
-            // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
-            if !err_msg.is_empty() && err_msg != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
-            {
-                #[cfg(target_os = "linux")]
-                if should_record_linux_headless_os_auth_failure(
-                    self.linux_headless_handle.is_headless_allowed,
-                    &lr.os_login.username,
-                    &err_msg,
-                ) {
-                    let (failure, res) = self.check_failure(0).await;
-                    if !res {
-                        return true;
-                    }
-                    self.update_failure(failure, false, 0);
-                }
-                self.send_login_error(err_msg).await;
-                return true;
-            }
-
-            #[cfg(target_os = "linux")]
-            if !should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
-                // In headless mode, the desktop check above settles the snapshot used by CM routing.
                 self.try_start_cm_ipc();
             }
 
@@ -2930,33 +2809,19 @@ impl Connection {
                 }
                 return true;
             } else if self.is_recent_session(false) {
-                if err_msg.is_empty() {
-                    #[cfg(target_os = "linux")]
-                    self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    if !self.send_logon_response_and_keep_alive().await {
-                        return false;
-                    }
-                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
-                } else {
-                    self.send_login_error(err_msg).await;
+                if !self.send_logon_response_and_keep_alive().await {
+                    return false;
                 }
+                self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
             } else if lr.password.is_empty() {
-                if err_msg.is_empty() {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
-                        if let Some(keep_alive) =
-                            self.prepare_terminal_login_for_authorization().await
-                        {
-                            return keep_alive;
-                        }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
+                    if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await
+                    {
+                        return keep_alive;
                     }
-                    self.try_start_cm(lr.my_id, lr.my_name, false);
-                } else {
-                    self.send_login_error(
-                        crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY,
-                    )
-                    .await;
                 }
+                self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let (failure, res) = self.check_failure(0).await;
                 if !res {
@@ -2965,28 +2830,15 @@ impl Connection {
                 if !self.validate_password(allow_logon_screen_password) {
                     self.update_failure_with_scope(failure, false, 0, FailureScope::Default);
                     self.check_update_temporary_password(false);
-                    if err_msg.is_empty() {
-                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
-                            .await;
-                        self.try_start_cm(lr.my_id, lr.my_name, false);
-                    } else {
-                        self.send_login_error(
-                            crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG,
-                        )
+                    self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                         .await;
-                    }
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     self.update_failure_with_scope(failure, true, 0, FailureScope::Default);
-                    if err_msg.is_empty() {
-                        #[cfg(target_os = "linux")]
-                        self.linux_headless_handle.wait_desktop_cm_ready().await;
-                        if !self.send_logon_response_and_keep_alive().await {
-                            return false;
-                        }
-                        self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
-                    } else {
-                        self.send_login_error(err_msg).await;
+                    if !self.send_logon_response_and_keep_alive().await {
+                        return false;
                     }
+                    self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
                 }
             }
         } else if let Some(message::Union::Auth2fa(tfa)) = msg.union {
@@ -6139,13 +5991,10 @@ pub fn claim_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 // IPC bootstrap summary:
-// - Resolve target CM socket (headless/non-headless, optional UID-scoped path on Linux).
 // - Start CM when missing, then bridge bidirectional messages between this task and CM IPC.
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    mut _rx_desktop_ready: mpsc::Receiver<()>,
-    tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -6155,139 +6004,51 @@ async fn start_ipc(
         }
         sleep(1.).await;
     }
-    #[cfg(target_os = "linux")]
-    let headless_cm = crate::is_server()
-        && crate::platform::is_headless_allowed()
-        && linux_desktop_manager::is_headless();
-    #[cfg(not(target_os = "linux"))]
-    let headless_cm = false;
     let mut stream = None;
-    if !headless_cm {
-        if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
-            stream = Some(s);
-        }
+    if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+        stream = Some(s);
     }
     if stream.is_none() {
-        #[allow(unused_mut)]
-        #[allow(unused_assignments)]
-        let mut args = vec!["--cm"];
-        #[allow(unused_mut)]
-        #[cfg(target_os = "linux")]
-        let mut user = None;
-
-        // Cm run as user, wait until desktop session is ready.
-        #[cfg(target_os = "linux")]
-        if headless_cm {
-            let mut username = linux_desktop_manager::get_cached_username();
-            loop {
-                if !username.is_empty() {
-                    break;
+        let args = vec!["--cm"];
+        let run_done;
+        if crate::platform::is_root() {
+            let mut res = Ok(None);
+            for _ in 0..10 {
+                #[cfg(not(any(target_os = "linux")))]
+                {
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone());
                 }
-                // `_rx_desktop_ready` is used as a wake-up signal from desktop/session state changes
-                // (for example wait_desktop_cm_ready paths). It is not itself a proof of CM readiness.
-                let wait_result = timeout(1_000, _rx_desktop_ready.recv()).await;
-                if matches!(wait_result, Ok(None)) {
-                    return Err(anyhow!(
-                        "Desktop-ready channel closed before a Linux session became available"
-                    ));
-                }
-                username = linux_desktop_manager::get_cached_username();
-            }
-            let uid = {
-                let username_for_cmd = username.clone();
-                let mut uid_cmd = hbb_common::tokio::process::Command::new("id");
-                // TODO:
-                // Keep current behavior for now to minimize change risk.
-                // If usernames starting with '-' are observed in the field, prefer:
-                // `id -u -- <username>` to avoid option-parsing ambiguity.
-                // Already verified that `id -u -- <username>` works as expected on macOS and Ubuntu 24.04.
-                uid_cmd.arg("-u").arg(&username_for_cmd).kill_on_drop(true);
-                let output = timeout(10_000, uid_cmd.output())
-                    .await
-                    .map_err(|_| anyhow!("Timed out querying uid for {}", username))?
-                    .map_err(|e| anyhow!("Failed to run `id -u {}`: {}", username, e))?;
-                if !output.status.success() {
-                    bail!("Failed to query uid for {}", username);
-                }
-                let output = String::from_utf8_lossy(&output.stdout);
-                let output = output.trim();
-                if output.parse::<u32>().is_err() {
-                    bail!("Invalid uid {}", output);
-                }
-                output.to_string()
-            };
-            user = Some((uid, username));
-            args = vec!["--cm-no-ui"];
-        }
-        #[cfg(target_os = "linux")]
-        let cm_uid: Option<u32> = match &user {
-            Some((uid, _)) => Some(
-                uid.parse::<u32>()
-                    .map_err(|_| anyhow!("Invalid uid {}", uid))?,
-            ),
-            None => None,
-        };
-        #[cfg(target_os = "linux")]
-        if let Some(uid) = cm_uid {
-            if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
-                stream = Some(s);
-            }
-        }
-        if stream.is_none() {
-            let run_done;
-            if crate::platform::is_root() {
-                let mut res = Ok(None);
-                for _ in 0..10 {
-                    #[cfg(not(any(target_os = "linux")))]
-                    {
-                        log::debug!("Start cm");
-                        res = crate::platform::run_as_user(args.clone());
-                    }
-                    #[cfg(target_os = "linux")]
-                    {
-                        log::debug!("Start cm");
-                        res = crate::platform::run_as_user(
-                            args.clone(),
-                            user.clone(),
-                            None::<(&str, &str)>,
-                        );
-                    }
-                    if res.is_ok() {
-                        break;
-                    }
-                    log::error!("Failed to run cm: {res:?}");
-                    sleep(1.).await;
-                }
-                if let Some(task) = res? {
-                    super::CHILD_PROCESS.lock().unwrap().push(task);
-                }
-                run_done = true;
-            } else {
-                run_done = false;
-            }
-            if !run_done {
-                log::debug!("Start cm");
-                super::CHILD_PROCESS
-                    .lock()
-                    .unwrap()
-                    .push(crate::run_me(args)?);
-            }
-            for _ in 0..20 {
-                sleep(0.3).await;
                 #[cfg(target_os = "linux")]
                 {
-                    if let Some(uid) = cm_uid {
-                        if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
-                            stream = Some(s);
-                            break;
-                        }
-                        continue;
-                    }
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone(), None, None::<(&str, &str)>);
                 }
-                if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
-                    stream = Some(s);
+                if res.is_ok() {
                     break;
                 }
+                log::error!("Failed to run cm: {res:?}");
+                sleep(1.).await;
+            }
+            if let Some(task) = res? {
+                super::CHILD_PROCESS.lock().unwrap().push(task);
+            }
+            run_done = true;
+        } else {
+            run_done = false;
+        }
+        if !run_done {
+            log::debug!("Start cm");
+            super::CHILD_PROCESS
+                .lock()
+                .unwrap()
+                .push(crate::run_me(args)?);
+        }
+        for _ in 0..20 {
+            sleep(0.3).await;
+            if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+                stream = Some(s);
+                break;
             }
         }
     }
@@ -6295,7 +6056,6 @@ async fn start_ipc(
         bail!("Failed to connect to connection manager");
     }
 
-    let _res = tx_stream_ready.send(()).await;
     let mut stream = stream.ok_or(anyhow!("none stream"))?;
     loop {
         tokio::select! {
@@ -6605,84 +6365,6 @@ impl Drop for Connection {
                     hbb_common::allow_err!(CloseHandle(HANDLE(token.as_raw() as _)));
                 };
             }
-        }
-    }
-}
-
-// Login requests are unauthenticated here, so only one may reach loginctl/PAM at a time.
-#[cfg(target_os = "linux")]
-static LINUX_DESKTOP_START_IN_FLIGHT: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-#[cfg(target_os = "linux")]
-struct LinuxDesktopStartGuard;
-
-#[cfg(target_os = "linux")]
-impl Drop for LinuxDesktopStartGuard {
-    fn drop(&mut self) {
-        LINUX_DESKTOP_START_IN_FLIGHT.store(false, Ordering::Release);
-    }
-}
-
-#[cfg(target_os = "linux")]
-enum LinuxDesktopStartOutcome {
-    Finished(String),
-    Busy,
-}
-
-#[cfg(target_os = "linux")]
-struct LinuxHeadlessHandle {
-    pub is_headless_allowed: bool,
-    pub wait_ipc_timeout: u64,
-    pub rx_cm_stream_ready: mpsc::Receiver<()>,
-    pub tx_desktop_ready: mpsc::Sender<()>,
-}
-
-#[cfg(target_os = "linux")]
-impl LinuxHeadlessHandle {
-    pub fn new(rx_cm_stream_ready: mpsc::Receiver<()>, tx_desktop_ready: mpsc::Sender<()>) -> Self {
-        let is_headless_allowed = crate::is_server() && crate::platform::is_headless_allowed();
-        Self {
-            is_headless_allowed,
-            wait_ipc_timeout: 10_000,
-            rx_cm_stream_ready,
-            tx_desktop_ready,
-        }
-    }
-
-    pub async fn try_start_desktop(
-        &mut self,
-        os_login: Option<&OSLogin>,
-    ) -> LinuxDesktopStartOutcome {
-        let Some((username, password)) =
-            linux_desktop_start_credentials(self.is_headless_allowed, os_login)
-        else {
-            return LinuxDesktopStartOutcome::Finished(String::new());
-        };
-        if LINUX_DESKTOP_START_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-            return LinuxDesktopStartOutcome::Busy;
-        }
-        let guard = LinuxDesktopStartGuard;
-        let err_msg = match tokio::task::spawn_blocking(move || {
-            let _guard = guard;
-            linux_desktop_manager::try_start_desktop(&username, &password)
-        })
-        .await
-        {
-            Ok(err_msg) => err_msg,
-            Err(err) => {
-                log::error!("Linux desktop start task failed: {err}");
-                crate::client::LOGIN_MSG_DESKTOP_XSESSION_FAILED.to_owned()
-            }
-        };
-        LinuxDesktopStartOutcome::Finished(err_msg)
-    }
-
-    pub async fn wait_desktop_cm_ready(&mut self) {
-        // A value captured at construction can lag behind a seat0 transition.
-        if self.is_headless_allowed && linux_desktop_manager::is_headless() {
-            self.tx_desktop_ready.send(()).await.ok();
-            let _res = timeout(self.wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
         }
     }
 }
