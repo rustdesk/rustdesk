@@ -586,10 +586,6 @@ class _GeneralState extends State<_General> {
       ));
     }
 
-    if (!isWeb && bind.mainShowOption(key: kOptionAllowLinuxHeadless)) {
-      children.add(_OptionCheckBox(
-          context, 'Allow linux headless', kOptionAllowLinuxHeadless));
-    }
     if (!bind.isDisableAccount()) {
       children.add(_OptionCheckBox(
         context,

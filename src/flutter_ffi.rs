@@ -962,14 +962,6 @@ pub fn main_get_error() -> String {
     get_error()
 }
 
-pub fn main_show_option(_key: String) -> SyncReturn<bool> {
-    #[cfg(target_os = "linux")]
-    if _key.eq(config::keys::OPTION_ALLOW_LINUX_HEADLESS) {
-        return SyncReturn(true);
-    }
-    SyncReturn(false)
-}
-
 pub fn main_set_option(key: String, value: String) {
     #[cfg(target_os = "android")]
     {
