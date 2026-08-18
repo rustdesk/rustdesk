@@ -29,7 +29,34 @@ pub struct CursorSnapshot {
     pub height: u32,
     pub hotx: i32,
     pub hoty: i32,
+    /// Cursor plane position (CRTC_X/CRTC_Y), scanout px of this reader's display.
+    pub x: i32,
+    pub y: i32,
+    /// True when hotx/hoty came from the HOTSPOT_X/Y plane property. Only
+    /// DRIVER_CURSOR_HOTSPOT drivers (virtio, vmwgfx, qxl) create it; on real hardware the
+    /// kernel has no hotspot to give and hotx/hoty are `guess_hotspot`'s estimate. Inferred
+    /// from the VALUES being non-zero (libdrmtap zero-fills an absent property), so a VM shape
+    /// whose true hotspot IS (0,0) reads as a guess - accepted: the consumer's measurement
+    /// then lands on ~(0,0) anyway.
+    pub hot_from_property: bool,
     pub colors: Vec<u8>,
+}
+
+/// Best-effort hotspot from the opaque-pixel bounding box, for when the kernel gives none: a
+/// tall glyph (I-beam) grabs at its center, anything else at its opaque top-left. A WIDE
+/// center-hotspot glyph (a horizontal resize arrow) is wrong here by half its width - the
+/// consumer measures the real value against the peer-injected position and overrides (see
+/// drm_capturer's cursor calibration), so this only has to be a first frame's seed.
+pub(crate) fn guess_hotspot(minx: i32, miny: i32, maxx: i32, maxy: i32) -> (i32, i32) {
+    if maxx < minx || maxy < miny {
+        return (0, 0);
+    }
+    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
+    if bh > bw * 2 {
+        ((minx + maxx) / 2, (miny + maxy) / 2)
+    } else {
+        (minx, miny)
+    }
 }
 
 /// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
@@ -363,6 +390,9 @@ impl DrmReader {
                     height: 1,
                     hotx: 0,
                     hoty: 0,
+                    x: 0,
+                    y: 0,
+                    hot_from_property: false,
                     colors: vec![0, 0, 0, 0],
                 })
             } else if !c.pixels.is_null()
@@ -397,17 +427,11 @@ impl DrmReader {
                         if y > maxy { maxy = y; }
                     }
                 }
-                let (hotx, hoty) = if c.hot_x != 0 || c.hot_y != 0 {
+                let hot_from_property = c.hot_x != 0 || c.hot_y != 0;
+                let (hotx, hoty) = if hot_from_property {
                     (c.hot_x, c.hot_y)
-                } else if maxx >= minx && maxy >= miny {
-                    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
-                    if bh > bw * 2 {
-                        ((minx + maxx) / 2, (miny + maxy) / 2)
-                    } else {
-                        (minx, miny)
-                    }
                 } else {
-                    (0, 0)
+                    guess_hotspot(minx, miny, maxx, maxy)
                 };
                 // Fold geometry + hotspot into the id: identical pixels with a changed size or
                 // hotspot must count as a new shape, otherwise drm_capture_worker suppresses the
@@ -423,6 +447,9 @@ impl DrmReader {
                     height: ch as u32,
                     hotx,
                     hoty,
+                    x: c.x,
+                    y: c.y,
+                    hot_from_property,
                     colors,
                 })
             } else {
@@ -473,5 +500,28 @@ impl Drop for DrmReader {
             unsafe { (self.lib.close)(self.ctx) };
             self.ctx = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::guess_hotspot;
+
+    #[test]
+    fn a_tall_glyph_guesses_its_center() {
+        // I-beam: 4 wide, 20 tall starting at (10, 2).
+        assert_eq!(guess_hotspot(10, 2, 13, 21), (11, 11));
+    }
+
+    #[test]
+    fn a_wide_glyph_guesses_its_top_left_which_the_consumer_must_correct() {
+        // Horizontal resize arrow: 24 wide, 8 tall. The real hotspot is the center; this
+        // guess is what the calibration in drm_capturer exists to replace.
+        assert_eq!(guess_hotspot(4, 12, 27, 19), (4, 12));
+    }
+
+    #[test]
+    fn an_empty_bounding_box_guesses_zero() {
+        assert_eq!(guess_hotspot(64, 64, -1, -1), (0, 0));
     }
 }
