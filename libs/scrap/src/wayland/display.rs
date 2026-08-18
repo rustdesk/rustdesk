@@ -292,16 +292,29 @@ pub fn get_displays() -> Arc<Displays> {
 
 #[inline]
 pub fn clear_wayland_displays_cache() {
-    SNAPSHOT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Release);
     let _ = DISPLAYS.lock().unwrap().take();
     // The failure stamp survives on purpose: it describes the seat, not the cache, and the
     // capturer rebuild loop clears about once a second.
 }
 
-// Bumped on every snapshot invalidation. A capturer records it at build and treats a later
-// bump as "my geometry may be stale, rebuild": that is the only trigger a rotation has, since
-// it changes neither the CRTC mode nor the framebuffer size (rustdesk#15886).
+// Bumped ONLY by the layout-drift edge in display_service (its single owner), never by cache
+// clears: session inits and hotplug workers clear the cache too, and a bump there tears down
+// every OTHER live capturer on a multi-display session. A capturer records this at build and
+// treats a later bump as "the layout changed under me, rebuild" — the only trigger a rotation
+// has, since it changes neither the CRTC mode nor the framebuffer size (rustdesk#15886).
 static SNAPSHOT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether no snapshot has been cached: the signature of an enumeration that failed at session
+/// build (an `Err` is deliberately not cached), as opposed to a session that started healthy.
+#[cfg(feature = "drm")]
+pub fn wayland_snapshot_missing() -> bool {
+    DISPLAYS.lock().unwrap().is_none()
+}
+
+#[cfg(any(test, feature = "drm"))]
+pub fn bump_layout_generation() {
+    SNAPSHOT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Release);
+}
 
 #[cfg(feature = "drm")]
 pub fn wayland_snapshot_generation() -> u64 {
@@ -356,6 +369,8 @@ fn desktop_rect_of(displays: &[WaylandDisplayInfo]) -> Option<(i32, i32, i32, i3
         min_y = min_y.min(d.y);
         let size = if let Some(logical_size) = d.logical_size {
             logical_size
+        } else if d.transform == 90 || d.transform == 270 {
+            oriented_physical(d)
         } else {
             // When `logical_size` is None, we cannot obtain the correct desktop rectangle.
             // This may occur if the Wayland compositor does not provide logical size information,
@@ -603,11 +618,17 @@ mod tests {
     }
 
     #[test]
-    fn clearing_the_cache_bumps_the_generation() {
+    fn only_the_explicit_bump_moves_the_generation() {
+        // A cache clear must NOT bump: session inits clear too, and a bump there rebuilds
+        // every other live capturer (adversarial finding on the first version of this).
         let before = SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire);
         clear_wayland_displays_cache();
-        let after = SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire);
-        assert!(after > before);
+        assert_eq!(
+            SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire),
+            before
+        );
+        bump_layout_generation();
+        assert!(SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire) > before);
     }
 
     fn rect(name: &str, x: i32, y: i32, w: i32, h: i32) -> DisplayRect {

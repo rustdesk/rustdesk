@@ -108,7 +108,8 @@ struct CapDisplayInfo {
 }
 
 /// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
-/// asked. `(minx, maxx, miny, maxy)`, in scanout pixels: no compositor here applied a scale, so
+/// asked. `(minx, maxx, miny, maxy)`, in delivered-orientation physical pixels (a rotated
+/// output counts transposed, matching its frames): no compositor here applied a scale, so
 /// unlike `desktop_rect_of` there is no logical size to handle.
 #[cfg(feature = "drm")]
 fn drm_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {

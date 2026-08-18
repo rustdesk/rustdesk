@@ -55,9 +55,9 @@ impl FrameSlot {
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
-    // Session transform, written once by new() after the handshake resolves it; the receive
-    // thread reads it to turn cursor bitmaps. Cursor data arriving in the microseconds before
-    // the store rotates as 0 and self-corrects on the next shape change.
+    // Session transform, written once by new() post-handshake; the receive thread turns cursor
+    // bitmaps with it. Cursor data racing the store (up to a cold enumeration, seconds) rotates
+    // as 0 and self-corrects on the next shape change.
     transform: std::sync::atomic::AtomicI32,
 }
 
@@ -151,8 +151,8 @@ fn transform_and_origin(
 ) -> (i32, Option<(i32, i32)>) {
     if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
         if wl.displays.is_empty() && !drm.is_empty() {
-            // A failed enumeration at build time would otherwise pin an unrotated session
-            // silently for its whole life; the rebuild machinery retries on the next build.
+            // The layout poll treats a recovery from this state as an edge and rebuilds the
+            // session, so the degrade is bounded by the enumeration outage, not session-long.
             log::warn!(
                 "drm: no wayland snapshot at capturer build for display {:?}; assuming unrotated",
                 drm.get(wire_idx).map(|d| d.name.as_str()).unwrap_or("?")
@@ -161,12 +161,14 @@ fn transform_and_origin(
         return (0, None);
     }
     let assignment = assign_wayland_outputs(drm, &wl.displays);
-    // The transform comes ONLY from an identity match (name, or unique resolution): the
-    // assignment's layout-order fallback is fine for an origin guess, but pinning a ROTATION
-    // on a guessed output could turn the wrong monitor's frames.
-    let transform = drm
+    // The transform comes ONLY from an identity match (name, or unique resolution), through the
+    // SAME progressive-taken pass the advertise side keys its swap off: the layout-order
+    // fallback is fine for an origin guess, but a rotation pinned on a guess splits the
+    // advertised dimensions from the delivered ones.
+    let transform = identity_matches(drm, &wl.displays)
         .get(wire_idx)
-        .and_then(|d| match_wayland_display(d, &wl.displays, &vec![false; wl.displays.len()]))
+        .copied()
+        .flatten()
         .map(|j| wl.displays[j].transform)
         // Hardware-rotated 180 scans out already upright (i915 advertises rotate-180 and
         // mutter uses it), and wl_output cannot tell hardware from software rotation, so 180
@@ -1431,6 +1433,7 @@ fn augment_with_wayland_geometry_from(
     if origin_only && drm.len() > 1 {
         return infos;
     }
+    let identity = identity_matches(drm, &wl.displays);
     for (i, info) in infos.iter_mut().enumerate() {
         let Some(w) = matched[i].map(|j| &wl.displays[j]) else {
             continue;
@@ -1441,7 +1444,10 @@ fn augment_with_wayland_geometry_from(
         // frames, so it must advertise them; only the logical-scale adoption stays multi-output.
         // original_resolution follows in the same motion, or the client reads the transposed
         // current size against an untransposed original as a third-party resolution change.
-        if w.transform == 90 || w.transform == 270 {
+        // Identity matches ONLY, the same rule the capturer's transform follows: swapping on a
+        // layout-order guess advertises dimensions the capturer will not deliver.
+        let is_identity = identity[i].is_some() && identity[i] == matched[i];
+        if is_identity && (w.transform == 90 || w.transform == 270) {
             std::mem::swap(&mut info.width, &mut info.height);
             info.original_resolution = super::display_service::get_original_resolution(
                 &drm[i].name,
@@ -1471,6 +1477,24 @@ fn augment_with_wayland_geometry_from(
 /// Each output goes to at most one connector; unmatched ones take the next free output of the same
 /// size, else the next free one in layout order, since leaving them unaugmented keeps them all at
 /// DRM's (0,0).
+/// The identity half of the assignment (name, or unique resolution), same progressive `taken`
+/// as the full one. Rotation keys off THIS on both sides: swapping or turning on a layout-order
+/// guess splits the advertised dimensions from the delivered frames.
+fn identity_matches(
+    drm: &[DrmDisplayInfo],
+    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+) -> Vec<Option<usize>> {
+    let mut taken = vec![false; wl.len()];
+    let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
+    for (i, d) in drm.iter().enumerate() {
+        if let Some(j) = match_wayland_display(d, wl, &taken) {
+            matched[i] = Some(j);
+            taken[j] = true;
+        }
+    }
+    matched
+}
+
 fn assign_wayland_outputs(
     drm: &[DrmDisplayInfo],
     wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
