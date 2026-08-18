@@ -346,8 +346,21 @@ fn check_get_displays_changed_msg() -> Option<Message> {
             // list that overwrites the login peer-info displays and the client shows "No displays".
             #[cfg(feature = "drm")]
             if super::drm_capturer::is_available_cached() {
-                if let Some(displays) = super::drm_capturer::get_display_infos() {
-                    SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+                let synced = !SYNC_DISPLAYS.lock().unwrap().displays.is_empty();
+                let stamped_before = scrap::wayland::display::wayland_failure_stamped();
+                // With nothing published yet, even the unaugmented DRM list beats the empty
+                // broadcast below; with a synced layout, a suppressed turn keeps it instead.
+                if !synced || !scrap::wayland::display::wayland_lookup_suppressed() {
+                    if let Some(displays) = super::drm_capturer::get_display_infos() {
+                        // A first failure keeps the synced layout for one backoff; only a
+                        // failure that persists across one replaces it with the DRM stack.
+                        if !synced
+                            || stamped_before
+                            || !scrap::wayland::display::wayland_lookup_suppressed()
+                        {
+                            SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+                        }
+                    }
                 }
             }
             return get_displays_msg();
