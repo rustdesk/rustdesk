@@ -24,7 +24,7 @@ def normalize(path: str) -> str:
 
 def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
     res: dict = dict()
-    skip = normalize(os.path.abspath(exclude)) if exclude else None
+    skip = normalize(exclude) if exclude else None
     excluded = False
     # os.curdir is the literal ".", so restoring it left us inside `folder`.
     curdir = os.getcwd()
@@ -34,7 +34,7 @@ def generate_md5_table(folder: str, level, exclude: str = None) -> dict:
         for f in files:
             md5_generator = md5()
             full_path = os.path.join(root, f)
-            if skip and normalize(os.path.abspath(full_path)) == skip:
+            if skip and normalize(full_path) == skip:
                 print(f"Excluding {full_path}...")
                 excluded = True
                 continue
