@@ -65,10 +65,8 @@ pub struct IpcDrmCapturer {
     // What the encoder was sized from: CapturerInfo{width,height} is read once, at build time.
     // With a rotated output these are the ROTATED dimensions, matching the frames delivered.
     session_size: Option<(usize, usize)>,
-    // Compositor output rotation in degrees. The scanout of a rotated output holds the desktop
-    // drawn sideways (the physically turned monitor is what straightens it locally), so frames
-    // are turned back before delivery. Fixed per session: a mid-session rotation changes the
-    // advertised geometry, which restarts the video service and builds a new capturer.
+    // Output rotation in degrees: a rotated scanout holds the desktop drawn sideways, so frames
+    // are turned back before delivery. Fixed per session; a rotation rebuilds the capturer.
     transform: i32,
     cur: Vec<u8>,
     cur_w: usize,
@@ -303,8 +301,7 @@ impl IpcDrmCapturer {
                 bail!("drm capture handshake timed out");
             }
         };
-        // Resolved once per session, next to the geometry it must stay consistent with: the
-        // advertised list swaps its dimensions with the same lookup, so a rotation change
+        // Per session, from the same lookup the advertised list swaps by: a rotation change
         // re-broadcasts topology and rebuilds this capturer rather than drifting mid-stream.
         let transform = wayland_transform_for(&displays, wire_idx);
         Ok((
@@ -411,9 +408,8 @@ impl TraitCapturer for IpcDrmCapturer {
                     let previous = std::mem::replace(&mut self.cur, buf);
                     self.shared.slot.lock().unwrap().recycle(previous);
                 } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
-                    // The rotation walks 4-byte pixels; both producer paths emit one of these
-                    // today. Anything else on a rotated session is a hard error rather than a
-                    // sheared image, and the existing health path degrades it to PipeWire.
+                    // The rotation walks 4-byte pixels: anything else is a hard error rather
+                    // than a sheared image, and the health path degrades it to PipeWire.
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
@@ -426,8 +422,6 @@ impl TraitCapturer for IpcDrmCapturer {
                         ),
                     ));
                 } else {
-                    // Turn the accepted frame upright into the capturer-owned buffer and hand the
-                    // scanout buffer straight back to the pool, keeping its two-buffer rotation.
                     unrotate_bgra(&buf, w, h, self.transform, &mut self.cur);
                     self.shared.slot.lock().unwrap().recycle(buf);
                 }
@@ -1392,17 +1386,15 @@ fn augment_with_wayland_geometry_from(
         if origin_only {
             continue;
         }
-        // A rotated output is advertised at the ROTATED physical size: that is what the frames
-        // delivered by the capturer measure, and it is also what makes a mid-session rotation a
-        // topology change (the scanout keeps its dimensions, so nothing else would rebroadcast).
+        // Advertised at the ROTATED physical size: what delivered frames measure, and what makes
+        // a mid-session rotation a topology change (the scanout itself keeps its dimensions).
         if w.transform == 90 || w.transform == 270 {
             std::mem::swap(&mut info.width, &mut info.height);
         }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
-                // Frame width over logical width. The compositor hands logical_size already
-                // swapped for a rotated output, so post-swap width is the matching numerator;
-                // the unrotated one made a rotated 1:1 monitor advertise scale 16/9.
+                // Post-swap width over logical width, which arrives already swapped when rotated:
+                // the unrotated numerator made a rotated 1:1 monitor advertise scale 16/9.
                 info.scale = info.width as f64 / lw as f64;
                 info.original_resolution = super::display_service::get_original_resolution(
                     &drm[i].name,
@@ -1571,10 +1563,9 @@ pub(super) fn get_capturer_info(
         .get(wire_idx)
         .ok_or_else(|| anyhow!("drm display index {wire_idx} out of range ({ndisplay})"))?
         .clone();
-    // Publish the compositor's LOGICAL origin (what get_display_infos advertises) so the origin
-    // matches the reported geometry; KEEP the raw PHYSICAL dimensions for the capture buffer —
-    // rotated to frame orientation, and from the CAPTURER's transform, not a second lookup that
-    // could disagree with the one the frame guard will enforce.
+    // Publish the compositor's LOGICAL origin (what get_display_infos advertises); dimensions
+    // stay PHYSICAL, rotated to frame orientation from the CAPTURER's transform — not a second
+    // lookup that could disagree with the one the frame guard enforces.
     let origin = augment_with_wayland_geometry(&displays)
         .get(wire_idx)
         .map(|di| (di.x, di.y))
