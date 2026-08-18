@@ -100,11 +100,6 @@ fn refresh_wayland_uinput_rect_if_changed() {
     if is_x11() || !crate::input_service::wayland_use_uinput() {
         return;
     }
-    // Nothing to poll at a login screen; the DRM path owns the rect there.
-    #[cfg(feature = "drm")]
-    if crate::platform::linux::is_login_screen_wayland_cached() {
-        return;
-    }
     {
         let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
         if let Some(last_check) = lock.last_check {
@@ -120,26 +115,46 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // Refresh the per-display layout every poll: monitor origins can shift (e.g. two
     // displays swap positions) without changing the overall desktop rect, and the mouse
     // path needs the current per-display geometry to correct coordinates.
-    let drifted = {
+    let (live_changed, mut drifted) = {
         let mut layout = WAYLAND_LAYOUT.lock().unwrap();
+        // An EDGE, not a level: live-vs-previous-live. Comparing against the baseline latches
+        // true for the rest of the session and re-cleared the cache every poll.
+        let live_changed = if layout.live.is_empty() {
+            !layout.baseline.is_empty() && layout.baseline != live_rects
+        } else {
+            layout.live != live_rects
+        };
         let drifted = !layout.baseline.is_empty()
             && !live_rects.is_empty()
             && layout.baseline != live_rects;
-        layout.live = live_rects;
-        drifted
+        layout.live = live_rects.clone();
+        (live_changed, drifted)
     };
+    // The advertised DRM list augments from the CACHED wayland snapshot and nothing else
+    // invalidates it mid-session, so a layout change (a rotation included: DisplayRect carries
+    // the transform) never reached check_changed. On the DRM path the advertise re-enumerates
+    // within 300 ms and the client rebases, so the baseline promotes in the same motion —
+    // otherwise the remap would correct the same delta a second time (rustdesk#15601).
+    #[cfg(feature = "drm")]
+    if live_changed && super::drm_capturer::is_available_cached() {
+        scrap::wayland::display::clear_wayland_displays_cache();
+        set_wayland_layout_baseline(live_rects.clone());
+        WAYLAND_LAYOUT.lock().unwrap().live = live_rects.clone();
+        drifted = false;
+    }
+    #[cfg(not(feature = "drm"))]
+    let _ = live_changed;
+    // At a login screen the DRM path owns the rect; only the range/remap update is skipped,
+    // the snapshot invalidation above must still run (a greeter session has no other trigger).
+    #[cfg(feature = "drm")]
+    if crate::platform::linux::is_login_screen_wayland_cached() {
+        return;
+    }
     // The remap corrects for per-display origin shifts; the uinput ABS range corrects for
     // the overall bounding box. Only enable the remap once the range matches the live
     // layout, otherwise moves would be remapped into a range the device is not yet using.
     // A drift with no bbox change (origins swapped) needs no range update and enables now.
     let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
-    // The advertised DRM list augments from the CACHED wayland snapshot and nothing else
-    // invalidates it mid-session, so a live-layout change never reached check_changed. Cleared
-    // only on an observed change, keeping probes tied to real layout events (rustdesk#15886).
-    #[cfg(feature = "drm")]
-    if drifted || !range_ok {
-        scrap::wayland::display::clear_wayland_displays_cache();
-    }
     if !range_ok {
         let (minx, maxx, miny, maxy) = rect;
         log::info!(

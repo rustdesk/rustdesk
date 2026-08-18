@@ -55,6 +55,10 @@ impl FrameSlot {
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
+    // Session transform, written once by new() after the handshake resolves it; the receive
+    // thread reads it to turn cursor bitmaps. Cursor data arriving in the microseconds before
+    // the store rotates as 0 and self-corrects on the next shape change.
+    transform: std::sync::atomic::AtomicI32,
 }
 
 pub struct IpcDrmCapturer {
@@ -68,6 +72,9 @@ pub struct IpcDrmCapturer {
     // Output rotation in degrees: a rotated scanout holds the desktop drawn sideways, so frames
     // are turned back before delivery. Fixed per session; a rotation rebuilds the capturer.
     transform: i32,
+    // The wayland snapshot generation this session was built from: a later invalidation means
+    // the layout (a rotation included) may have changed, and frame() asks for a rebuild.
+    snapshot_gen: u64,
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -89,57 +96,51 @@ fn rotated_dims(transform: i32, w: usize, h: usize) -> (usize, usize) {
     }
 }
 
-/// Turn a BGRA frame upright into tightly packed `dst`, undoing `transform` degrees; `src` rows
-/// may be padded (stride = `len / h`). Direction anchored to a measurement (rustdesk#15886): with
-/// mutter transform=1 the LEFT scanout edge is the top, and left-column-to-top-row reads upright.
-fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
-    const PX: usize = 4;
-    let stride = if h > 0 { src.len() / h } else { 0 };
-    dst.resize(w.checked_mul(h).and_then(|p| p.checked_mul(PX)).unwrap_or(0), 0);
+/// Hotspot of a rotated cursor bitmap: the same point mapping `unrotate_bgra` applies to
+/// pixels, applied to the one coordinate that must keep naming the click point.
+fn unrotate_hotspot(transform: i32, w: i32, h: i32, hotx: i32, hoty: i32) -> (i32, i32) {
     match transform {
-        90 => {
-            // dst is h wide, w tall: dst(x', y') = src(x = y', y = h-1-x')
-            for dy in 0..w {
-                let drow = dy * h * PX;
-                for dx in 0..h {
-                    let s = (h - 1 - dx) * stride + dy * PX;
-                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
-                }
-            }
-        }
-        270 => {
-            // dst is h wide, w tall: dst(x', y') = src(x = w-1-y', y = x')
-            for dy in 0..w {
-                let drow = dy * h * PX;
-                for dx in 0..h {
-                    let s = dx * stride + (w - 1 - dy) * PX;
-                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
-                }
-            }
-        }
-        180 => {
-            for dy in 0..h {
-                let drow = dy * w * PX;
-                for dx in 0..w {
-                    let s = (h - 1 - dy) * stride + (w - 1 - dx) * PX;
-                    dst[drow + dx * PX..drow + dx * PX + PX].copy_from_slice(&src[s..s + PX]);
-                }
-            }
-        }
-        _ => {
-            // Copy dropping any row padding, so every path out of here is tightly packed.
-            for dy in 0..h {
-                let s = dy * stride;
-                let d = dy * w * PX;
-                dst[d..d + w * PX].copy_from_slice(&src[s..s + w * PX]);
-            }
-        }
+        90 => (h - 1 - hoty, hotx),
+        180 => (w - 1 - hotx, h - 1 - hoty),
+        270 => (hoty, w - 1 - hotx),
+        _ => (hotx, hoty),
     }
 }
 
-/// The rotation of the compositor output this connector scans out, 0 when nothing can say. The
-/// same one-output-many-connectors guard as the geometry augmentation: a layout-order fallback
-/// there would pin a rotation on a guess.
+/// Turn a 4-byte-pixel frame upright into tightly packed `dst`, undoing `transform` degrees.
+/// `src` rows may be padded (stride = `len / h`). The direction is pinned by the unit tests to
+/// the measured anchor of rustdesk#15886 (mutter transform=1: left scanout edge is the top),
+/// and the body is libyuv's ARGBRotate, which walks pixels so channel order does not matter.
+fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
+    const PX: usize = 4;
+    let stride = if h > 0 { src.len() / h } else { 0 };
+    let (dw, dh) = rotated_dims(transform, w, h);
+    dst.resize(
+        dw.checked_mul(dh).and_then(|p| p.checked_mul(PX)).unwrap_or(0),
+        0,
+    );
+    if dst.is_empty() || stride < w * PX {
+        return;
+    }
+    let mode = match transform {
+        90 => scrap::RotationMode::kRotate90,
+        180 => scrap::RotationMode::kRotate180,
+        270 => scrap::RotationMode::kRotate270,
+        _ => scrap::RotationMode::kRotate0,
+    };
+    unsafe {
+        scrap::ARGBRotate(
+            src.as_ptr(),
+            stride as i32,
+            dst.as_mut_ptr(),
+            (dw * PX) as i32,
+            w as i32,
+            h as i32,
+            mode,
+        );
+    }
+}
+
 /// Transform and augmented origin for one wire entry, derived from ONE wayland snapshot so both
 /// reflect the same output assignment; two `get_displays()` reads could straddle a cache
 /// invalidation. `None` origin means nothing to augment with (caller keeps the DRM origin).
@@ -149,14 +150,28 @@ fn transform_and_origin(
     wl: &scrap::wayland::display::Displays,
 ) -> (i32, Option<(i32, i32)>) {
     if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
+        if wl.displays.is_empty() && !drm.is_empty() {
+            // A failed enumeration at build time would otherwise pin an unrotated session
+            // silently for its whole life; the rebuild machinery retries on the next build.
+            log::warn!(
+                "drm: no wayland snapshot at capturer build for display {:?}; assuming unrotated",
+                drm.get(wire_idx).map(|d| d.name.as_str()).unwrap_or("?")
+            );
+        }
         return (0, None);
     }
     let assignment = assign_wayland_outputs(drm, &wl.displays);
-    let transform = assignment
+    // The transform comes ONLY from an identity match (name, or unique resolution): the
+    // assignment's layout-order fallback is fine for an origin guess, but pinning a ROTATION
+    // on a guessed output could turn the wrong monitor's frames.
+    let transform = drm
         .get(wire_idx)
-        .copied()
-        .flatten()
+        .and_then(|d| match_wayland_display(d, &wl.displays, &vec![false; wl.displays.len()]))
         .map(|j| wl.displays[j].transform)
+        // Hardware-rotated 180 scans out already upright (i915 advertises rotate-180 and
+        // mutter uses it), and wl_output cannot tell hardware from software rotation, so 180
+        // keeps master behavior until the plane rotation property travels the wire.
+        .map(|t| if t == 90 || t == 270 { t } else { 0 })
         .unwrap_or(0);
     let origin = augment_with_wayland_geometry_from(drm, wl, &assignment)
         .get(wire_idx)
@@ -289,6 +304,7 @@ impl IpcDrmCapturer {
                 ended: None,
             }),
             cv: Condvar::new(),
+            transform: std::sync::atomic::AtomicI32::new(0),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -309,9 +325,14 @@ impl IpcDrmCapturer {
             }
         };
         // One snapshot for the session: transform, origin and the advertised swap must all
-        // reflect the same output assignment. A rotation change rebuilds this capturer.
+        // reflect the same output assignment. The generation is read BEFORE the snapshot, so a
+        // clear racing the build rebuilds once instead of running a session on stale geometry.
+        let snapshot_gen = scrap::wayland::display::wayland_snapshot_generation();
         let wl = scrap::wayland::display::get_displays();
         let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
+        shared
+            .transform
+            .store(transform, std::sync::atomic::Ordering::Release);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -322,6 +343,7 @@ impl IpcDrmCapturer {
                     .get(wire_idx)
                     .map(|d| rotated_dims(transform, d.width as usize, d.height as usize)),
                 transform,
+                snapshot_gen,
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
@@ -388,6 +410,17 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
+                // A layout change (a rotation included) bumps the snapshot generation and is
+                // otherwise invisible here: mode and framebuffer keep their size. Rebuild so the
+                // session picks up the new transform; deliberately NOT counted against display
+                // health, this is the layout moving, not the display failing.
+                if scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen {
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drm: display {} layout changed; rebuilding", self.display),
+                    ));
+                }
                 // Frames arrive in scanout orientation, the session was sized rotated, so the
                 // guard compares rotated dims. convert_to_yuv only refuses a LARGER source (a
                 // smaller one leaves stale edges); first frame: CRTC mode vs scanout fb.
@@ -415,8 +448,9 @@ impl TraitCapturer for IpcDrmCapturer {
                     let previous = std::mem::replace(&mut self.cur, buf);
                     self.shared.slot.lock().unwrap().recycle(previous);
                 } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
-                    // The rotation walks 4-byte pixels: anything else is a hard error rather
-                    // than a sheared image, and the health path degrades it to PipeWire.
+                    // Unreachable with today's producers (the convert path emits 4-byte pixels
+                    // and the CPU path hardcodes BGRA); kept so a future non-4-byte producer
+                    // fails the session instead of shearing the image.
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
@@ -694,16 +728,29 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
+                        // The compositor pre-rotates the bitmap it programs into the cursor
+                        // plane; over the unrotated video the cursor alone would stay turned and
+                        // its hotspot transposed (review finding 11 on rustdesk#15889).
+                        let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+                        let (width, height, hotx, hoty, colors) = if t == 90 || t == 270 {
+                            let mut turned = Vec::new();
+                            unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
+                            let (hx, hy) =
+                                unrotate_hotspot(t, width as i32, height as i32, hotx, hoty);
+                            (height as i32, width as i32, hx, hy, turned)
+                        } else {
+                            (width as i32, height as i32, hotx, hoty, raw)
+                        };
                         set_drm_cursor(
                             display,
                             cursor_epoch,
                             DrmCursorData {
                                 id,
-                                width: width as i32,
-                                height: height as i32,
+                                width,
+                                height,
                                 hotx,
                                 hoty,
-                                colors: raw,
+                                colors,
                             },
                         );
                     }
@@ -1392,8 +1439,15 @@ fn augment_with_wayland_geometry_from(
         info.y = w.y;
         // Rotated size before the origin-only cut: a lone rotated output still delivers rotated
         // frames, so it must advertise them; only the logical-scale adoption stays multi-output.
+        // original_resolution follows in the same motion, or the client reads the transposed
+        // current size against an untransposed original as a third-party resolution change.
         if w.transform == 90 || w.transform == 270 {
             std::mem::swap(&mut info.width, &mut info.height);
+            info.original_resolution = super::display_service::get_original_resolution(
+                &drm[i].name,
+                info.width as usize,
+                info.height as usize,
+            );
         }
         if origin_only {
             continue;
@@ -1605,12 +1659,14 @@ mod drm_capturer_tests {
                     ended: None,
                 }),
                 cv: Condvar::new(),
+                transform: std::sync::atomic::AtomicI32::new(0),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
             connector,
             session_size: session,
             transform: 0,
+            snapshot_gen: scrap::wayland::display::wayland_snapshot_generation(),
             cur: Vec::new(),
             cur_w: 0,
             cur_h: 0,
@@ -1637,6 +1693,34 @@ mod drm_capturer_tests {
         (0..h)
             .map(|y| (0..w).map(|x| buf[(y * w + x) * 4]).collect())
             .collect()
+    }
+
+    #[test]
+    fn unrotate_hotspot_follows_the_pixel_mapping() {
+        // 3 wide x 2 tall, hotspot at (2,0) (top-right): after the 90 turn (left column to top
+        // row) that pixel sits at (1,2) in the 2x3 result; 270 sends it to (0,0).
+        assert_eq!(unrotate_hotspot(90, 3, 2, 2, 0), (1, 2));
+        assert_eq!(unrotate_hotspot(270, 3, 2, 2, 0), (0, 0));
+        assert_eq!(unrotate_hotspot(180, 3, 2, 2, 0), (0, 1));
+        assert_eq!(unrotate_hotspot(0, 3, 2, 2, 0), (2, 0));
+    }
+
+    #[test]
+    fn a_stale_snapshot_generation_asks_for_a_rebuild_without_blaming_the_display() {
+        let mut c = capturer_named(Some((64, 32)), Some("test:gen-rebuild"));
+        c.snapshot_gen = c.snapshot_gen.wrapping_sub(1);
+        put_frame(&c, 64, 32);
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a stale generation must rebuild, not deliver"),
+        };
+        assert!(err.to_string().contains("layout changed"), "{err}");
+        assert!(!c.got_frame);
+        assert_eq!(
+            zero_frame_streak_of(&c),
+            0,
+            "a layout rebuild must not count against display health"
+        );
     }
 
     #[test]

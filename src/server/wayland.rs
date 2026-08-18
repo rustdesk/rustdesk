@@ -521,11 +521,12 @@ pub(super) fn get_capturer_for_display(
                     // (scrap `common/wayland.rs`), i.e. `PipeWireCapturable.physical_size`.
                     // `try_fix_logical_size` only repairs the capturable's SEPARATE
                     // `logical_size` field and never touches `physical_size`, so the rect is not
-                    // logical. The advertised DRM geometry is physical too
-                    // (`augment_with_wayland_geometry` sets x/y/scale and deliberately leaves
-                    // width/height as the DRM mode). Dividing one side by the scale therefore
-                    // compares logical against physical and rejects the valid stream on exactly
-                    // the scaled outputs it was meant to rescue.
+                    // logical. The advertised DRM geometry is physical too, in DELIVERED
+                    // orientation: `augment_with_wayland_geometry` transposes width/height for a
+                    // 90/270 output (rustdesk#15886) and the portal's stream caps arrive equally
+                    // rotated, so the raw compare still holds. Dividing one side by the scale
+                    // would compare logical against physical and reject the valid stream on
+                    // exactly the scaled outputs it was meant to rescue.
                     //
                     // The size check is what tells one connector apart from the whole-desktop
                     // rect the portal usually exposes. It is skipped only when BOTH sides say
