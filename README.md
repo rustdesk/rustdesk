@@ -1,182 +1,106 @@
-<p align="center">
-  <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#raw-steps-to-build">Build</a> •
-  <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Structure</a> •
-  <a href="#snapshot">Snapshot</a><br>
-  [<a href="docs/README-UA.md">Українська</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>] | [<a href="docs/README-TR.md">Türkçe</a>] | [<a href="docs/README-NO.md">Norsk</a>] | [<a href="docs/README-RO.md">Română</a>]<br>
-  <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> to your native language</b>
-</p>
+# Cyberdriver
 
-> [!Caution]
-> **Misuse Disclaimer:** <br>
-> The developers of RustDesk do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
+Cyberdriver is the Cyberdesk desktop agent. Install it on a Windows machine and that machine shows up in your Cyberdesk dashboard, ready to be screenshotted, clicked, typed into, and automated by Cyberdesk workflows and agents.
 
+[Documentation](https://docs.cyberdesk.io) · [Quickstart](https://docs.cyberdesk.io/cyberdriver/quickstart) · [Dashboard](https://cyberdesk.io/dashboard)
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
+## How it works
 
-[![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Advanced%20Features-blue)](https://rustdesk.com/pricing.html)
+Cyberdriver runs as a Windows service with a desktop app for configuration. On startup it opens an outbound WebSocket tunnel to Cyberdesk and waits for work. Everything travels over that one connection:
 
-Yet another remote desktop solution, written in Rust. Works out of the box with no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
+- **No inbound ports.** Cyberdriver dials out to Cyberdesk, so it works behind NAT and corporate firewalls without port forwarding.
+- **No local HTTP server.** The control routes are only reachable through the authenticated tunnel, never from localhost.
+- **Service-first.** Because it runs as a service, Cyberdriver starts at boot and can control the machine before anyone logs in, including the Windows login screen.
 
-![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
+Interactive remote desktop sessions (**Desktop Tools** in the dashboard) run over Cyberdesk-hosted rendezvous and relay servers, so you get a live screen alongside the automation API.
 
-RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for help getting started.
+## Install
 
-[**FAQ**](https://github.com/rustdesk/rustdesk/wiki/FAQ)
+Windows x64 is the supported platform. Run the PowerShell installer from the [Quickstart](https://docs.cyberdesk.io/cyberdriver/quickstart), or grab the MSI directly from [Releases](https://github.com/cyberdesk-hq/cyberdriver-new/releases/latest) and install it as Administrator.
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+Then connect the machine with an organization API key from the dashboard, either by pasting it into the **Cyberdesk tunnel** card in the Cyberdriver app, or from a terminal:
 
-[**NIGHTLY BUILD**](https://github.com/rustdesk/rustdesk/releases/tag/nightly)
-
-[<img src="https://f-droid.org/badge/get-it-on.png"
-    alt="Get it on F-Droid"
-    height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
-[<img src="https://flathub.org/api/badge?svg&locale=en"
-    alt="Get it on Flathub"
-    height="80">](https://flathub.org/apps/com.rustdesk.RustDesk)
-
-## Dependencies
-
-Desktop versions use Flutter or Sciter (deprecated) for GUI, this tutorial is for Sciter only, since it is easier and more friendly to start. Check out our [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) for building Flutter version.
-
-Please download Sciter dynamic library yourself.
-
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
-[Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
-[macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
-
-## Raw Steps to build
-
-- Prepare your Rust development env and C++ build env
-
-- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
-
-  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-  - Linux/macOS: vcpkg install libvpx libyuv opus aom
-
-- run `cargo run`
-
-## [Build](https://rustdesk.com/docs/en/dev/build/)
-
-## How to Build on Linux
-
-### Ubuntu 18 (Debian 10)
-
-```sh
-sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
-        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
-        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libpam0g-dev
+```powershell
+cyberdriver join --secret ak_your_api_key
 ```
 
-### openSUSE Tumbleweed
+The machine appears under **Desktops** in the dashboard once the tunnel is up.
 
-```sh
-sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel pam-devel
+Administrator is required at install time because the MSI registers a system service and writes to `Program Files`. Day-to-day use of the app does not need elevation. See [why Administrator is required](https://docs.cyberdesk.io/cyberdriver/quickstart#why-administrator-is-required-for-the-beta-msi).
+
+## CLI
+
+```
+cyberdriver join --secret <ak_*> [options]
+cyberdriver status
+cyberdriver config-print
+cyberdriver logs [--tail <bytes>] [--follow] [--path <file>]
+cyberdriver new-identity
+cyberdriver stop
+cyberdriver --version
 ```
 
-### Fedora 28 (CentOS 8)
+Useful `join` options:
 
-```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel gstreamer1-devel gstreamer1-plugins-base-devel pam-devel
-```
+| Flag | Purpose |
+| --- | --- |
+| `--secret <ak_*>` | Cyberdesk organization API key. Stored encrypted, then dropped from argv. |
+| `--name <name>` | Display name in the dashboard. Printable ASCII, max 128 chars. |
+| `--new-identity` | Reset the machine fingerprint and peer identity. Use this on every clone booted from a golden image or AMI. |
+| `--no-keepalive` | Disable keepalive. It is on by default. |
+| `--register-as-keepalive-for <machine-id>` | Run this host as the remote keepalive machine for another machine. |
+| `--api-base <base>` | Point the tunnel at a custom Cyberdesk host. |
+| `--env dev` | Use the Cyberdesk development environment. |
 
-### Arch (Manjaro)
+`cyberdriver status` and `config-print` are the fastest way to see whether the API key is configured, which environment you are on, and what the machine fingerprint is. Full reference: [CLI and Machine Images](https://docs.cyberdesk.io/cyberdriver/cli).
 
-```sh
-sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pipewire
-```
+## What Cyberdesk can do over the tunnel
 
-### Install vcpkg
+| Area | Capabilities |
+| --- | --- |
+| Display | Screen dimensions, screenshots |
+| Mouse | Position, move, click, drag, scroll |
+| Keyboard | Type text, key sequences and chords |
+| Clipboard | Copy text to the clipboard |
+| Files | List, read, write |
+| Shell | PowerShell commands and persistent sessions |
+| Management | Diagnostics, remote update, remote shutdown, keepalive control |
 
-```sh
-git clone https://github.com/microsoft/vcpkg
-cd vcpkg
-git checkout 2023.04.15
-cd ..
-vcpkg/bootstrap-vcpkg.sh
-export VCPKG_ROOT=$HOME/vcpkg
-vcpkg/vcpkg install libvpx libyuv opus aom
-```
+These are consumed through the Cyberdesk API and workflows rather than called directly. See [Desktop Tools](https://docs.cyberdesk.io/cyberdriver/desktop-tools).
 
-### Fix libvpx (For Fedora)
+## Configuration
 
-```sh
-cd vcpkg/buildtrees/libvpx/src
-cd *
-./configure
-sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
-sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
-make
-cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
-cd
-```
+Settings live in the Cyberdriver config directory and are managed through the app, the CLI, or MSI install properties. Run `cyberdriver config-print` to see the resolved state.
 
-### Build
+Environment variables, useful for scripted and image-based deployments:
 
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-git clone --recurse-submodules https://github.com/rustdesk/rustdesk
-cd rustdesk
-mkdir -p target/debug
-wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
-mv libsciter-gtk.so target/debug
-VCPKG_ROOT=$HOME/vcpkg cargo run
-```
+| Variable | Purpose |
+| --- | --- |
+| `CYBERDESK_AGENT_KEY` | API key, instead of `--secret`. |
+| `CYBERDRIVER_MACHINE_NAME` | Machine display name, instead of `--name`. |
+| `CYBERDESK_API_BASE` | Tunnel base URL, instead of `--api-base`. |
 
-## How to build with Docker
+For unattended and fleet installs, the MSI accepts `APIKEY`, `INSTALL_AS_SERVICE`, `CYBERDESK_API_BASE`, and `REGISTER_NOW`. See [`docs/headless-install.md`](docs/headless-install.md) for the golden image workflow, including how to avoid every clone sharing one identity.
 
-Begin by cloning the repository and building the Docker container:
+## Troubleshooting
 
-```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-git submodule update --init --recursive
-docker build -t "rustdesk-builder" .
-```
+Start with `cyberdriver logs --tail 65536` and `cyberdriver status`. The docs cover the common cases:
 
-Then, each time you need to build the application, run the following command:
+- [Diagnostics and logs](https://docs.cyberdesk.io/cyberdriver/diagnostics)
+- [Corporate TLS inspection and firewalls](https://docs.cyberdesk.io/cyberdriver/quickstart#corporate-tls-inspection-and-firewalls)
+- [Clear all Cyberdriver traces and reinstall](https://docs.cyberdesk.io/cyberdriver/clear-cyberdriver-traces)
+- [Display reliability](https://docs.cyberdesk.io/cyberdriver/display-reliability)
 
-```sh
-docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
-```
+## Legacy Cyberdriver
 
-Note that the first build may take longer before dependencies are cached, subsequent builds will be faster. Additionally, if you need to specify different arguments to the build command, you may do so at the end of the command in the `<OPTIONAL-ARGS>` position. For instance, if you wanted to build an optimized release version, you would run the command above followed by `--release`. The resulting executable will be available in the target folder on your system, and can be run with:
+The previous Python-based agent lives in [cyberdesk-hq/cyberdriver](https://github.com/cyberdesk-hq/cyberdriver) and is still supported. It does not require Administrator or a service install, but it cannot start at boot or reach the Windows login screen. See [Legacy Cyberdriver](https://docs.cyberdesk.io/cyberdriver/legacy-cyberdriver) to decide which one you want.
 
-```sh
-target/debug/rustdesk
-```
+## Development
 
-Or, if you're running a release executable:
+See [AGENTS.md](AGENTS.md) for the repository layout and build setup, and [`branding/`](branding/) for how Cyberdesk branding and release packaging are applied.
 
-```sh
-target/release/rustdesk
-```
+## License
 
-Please ensure that you run these commands from the root of the RustDesk repository, or the application may not find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
+Cyberdriver is a fork of [RustDesk](https://github.com/rustdesk/rustdesk) and is licensed under the GNU AGPL v3. See [LICENCE](LICENCE).
 
-## File Structure
-
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control
-- **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: file copy and paste implementation for Windows, Linux, macOS.
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: obsolete Sciter UI (deprecated)
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/clipboard/input/video services, and network connections
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
-- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for desktop and mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript for Flutter web client
-
-## Screenshots
-
-![Connection Manager](https://github.com/rustdesk/rustdesk/assets/28412477/db82d4e7-c4bc-4823-8e6f-6af7eadf7651)
-
-![Connected to a Windows PC](https://github.com/rustdesk/rustdesk/assets/28412477/9baa91e9-3362-4d06-aa1a-7518edcbd7ea)
-
-![File Transfer](https://github.com/rustdesk/rustdesk/assets/28412477/39511ad3-aa9a-4f8c-8947-1cce286a46ad)
-
-![TCP Tunneling](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
-
+**Misuse disclaimer:** Cyberdriver is built for automating machines you own or are authorized to control. Unauthorized access, control, or invasion of privacy is against our guidelines, and the authors are not responsible for misuse.
