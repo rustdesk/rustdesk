@@ -133,6 +133,15 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // layout, otherwise moves would be remapped into a range the device is not yet using.
     // A drift with no bbox change (origins swapped) needs no range update and enables now.
     let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
+    // The advertised DRM list is augmented from the CACHED wayland snapshot, and nothing else
+    // invalidates it mid-session, so a live-layout change (a rotation, a move) never reached
+    // check_changed: the poll above reads live and noticed, the advertise kept serving the old
+    // snapshot. Cleared only when this poll saw an actual change, so the probe cost stays tied
+    // to real layout events (rustdesk#15886).
+    #[cfg(feature = "drm")]
+    if drifted || !range_ok {
+        scrap::wayland::display::clear_wayland_displays_cache();
+    }
     if !range_ok {
         let (minx, maxx, miny, maxy) = rect;
         log::info!(
