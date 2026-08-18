@@ -871,13 +871,7 @@ fn should_start_server(
     let mut start_new = false;
     let mut should_kill = false;
 
-    if desktop.sid.is_empty() {
-        if !uid.is_empty() {
-            // From having a monitor to not having a monitor.
-            *uid = "".to_owned();
-            should_kill = true;
-        }
-    } else if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
+    if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
         *uid = desktop.uid.clone();
         if try_x11 {
             set_x11_env(&desktop);
