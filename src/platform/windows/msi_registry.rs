@@ -57,7 +57,11 @@ fn find_product_codes_in_view(app_name: &str, wow: bool) -> ResultType<Vec<Strin
     Ok(matches)
 }
 
-fn is_matching_entry(entry: &RegKey, app_name: &str, key_name: &str) -> ResultType<bool> {
+pub(super) fn is_matching_entry(
+    entry: &RegKey,
+    app_name: &str,
+    key_name: &str,
+) -> ResultType<bool> {
     match entry.get_value::<u32, _>(REG_NAME_WINDOWS_INSTALLER) {
         Ok(value) if value == MSI_WINDOWS_INSTALLER_VALUE => {}
         Ok(_) => return Ok(false),

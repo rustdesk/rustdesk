@@ -1817,6 +1817,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String> {
     let (subkey, path, start_menu, _) = get_install_info();
     if let Some(product_code) = get_msi_product_code(&subkey)? {
+        get_msi_uninstall_subkey(&product_code)?;
         return Ok(format!("MsiExec.exe /X {product_code} || exit /b"));
     }
 
@@ -3398,6 +3399,8 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     if !is_installed {
         bail!("{} is not installed.", &app_name);
     }
+    let is_msi = is_msi_installed().ok();
+    let reg_msi_key = get_reg_msi_key(&subkey, is_msi)?;
 
     let app_exe_name = &format!("{}.exe", &app_name);
     // NOTE: The pids below are matched by command line, which can silently come
@@ -3447,9 +3450,6 @@ pub fn update_me(debug: bool) -> ResultType<()> {
     let build_date = crate::BUILD_DATE;
     // Use the icon in the previous installation directory if possible.
     let display_icon = get_custom_icon("", &exe).unwrap_or(exe.to_string());
-
-    let is_msi = is_msi_installed().ok();
-    let reg_msi_key = get_reg_msi_key(&subkey, is_msi)?;
 
     fn get_reg_cmd(
         subkey: &str,
@@ -3630,6 +3630,21 @@ fn normalize_msi_product_code(value: &str) -> Option<String> {
     Some(format!("{{{}}}", product_code.hyphenated()).to_uppercase())
 }
 
+fn get_reg_string_of(subkey: &str, name: &str) -> ResultType<Option<String>> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let path = subkey.strip_prefix(HKLM_PREFIX).unwrap_or(subkey);
+    let key = match hklm.open_subkey(path) {
+        Ok(key) => key,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => bail!("Failed to open registry key {subkey}: {err}"),
+    };
+    match key.get_value::<String, _>(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => bail!("Failed to read {name} from registry key {subkey}: {err}"),
+    }
+}
+
 fn parse_msi_product_code_from_uninstall_string(
     uninstall_string: &str,
     subkey: &str,
@@ -3657,21 +3672,22 @@ fn parse_msi_product_code_from_uninstall_string(
 }
 
 fn get_msi_product_code(subkey: &str) -> ResultType<Option<String>> {
-    let product_code = get_reg_of(subkey, REG_NAME_MSI_PRODUCT_CODE);
-    if !product_code.is_empty() {
+    let product_code = get_reg_string_of(subkey, REG_NAME_MSI_PRODUCT_CODE)?;
+    if let Some(product_code) = product_code.filter(|value| !value.is_empty()) {
         return normalize_msi_product_code(&product_code)
             .map(Some)
             .ok_or_else(|| anyhow!("Invalid MSI product code in {subkey}"));
     }
 
-    let uninstall_string = get_reg_of(subkey, REG_NAME_UNINSTALL_STRING);
+    let uninstall_string =
+        get_reg_string_of(subkey, REG_NAME_UNINSTALL_STRING)?.unwrap_or_default();
     match parse_msi_product_code_from_uninstall_string(&uninstall_string, subkey)? {
         Some(product_code) => Ok(Some(product_code)),
         None => msi_registry::find_product_code(&crate::get_app_name()),
     }
 }
 
-fn is_msi_uninstall_entry_in_view(subkey: &str, wow: bool) -> ResultType<bool> {
+fn is_msi_uninstall_entry_in_view(subkey: &str, wow: bool, app_name: &str) -> ResultType<bool> {
     let flags = KEY_READ
         | if wow {
             KEY_WOW64_32KEY
@@ -3685,24 +3701,19 @@ fn is_msi_uninstall_entry_in_view(subkey: &str, wow: bool) -> ResultType<bool> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(err) => return Err(anyhow!("Failed to open registry key {subkey}: {err}")),
     };
-    match key.get_value::<u32, _>(REG_NAME_WINDOWS_INSTALLER) {
-        Ok(value) => Ok(value == MSI_WINDOWS_INSTALLER_VALUE),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(anyhow!(
-            "Failed to read {REG_NAME_WINDOWS_INSTALLER} from registry key {subkey}: {err}"
-        )),
-    }
+    msi_registry::is_matching_entry(&key, app_name, subkey)
 }
 
 fn get_msi_uninstall_subkey(product_code: &str) -> ResultType<String> {
+    let app_name = crate::get_app_name();
     let subkey = get_subkey(product_code, false);
-    if is_msi_uninstall_entry_in_view(&subkey, false)? {
+    if is_msi_uninstall_entry_in_view(&subkey, false, &app_name)? {
         return Ok(subkey);
     }
-    if is_msi_uninstall_entry_in_view(&subkey, true)? {
+    if is_msi_uninstall_entry_in_view(&subkey, true, &app_name)? {
         return Ok(get_subkey(product_code, true));
     }
-    bail!("Native MSI uninstall entry {product_code} was not found")
+    bail!("Matching native MSI uninstall entry {product_code} was not found")
 }
 
 fn get_reg_msi_key(subkey: &str, is_msi: Option<bool>) -> ResultType<Option<String>> {
