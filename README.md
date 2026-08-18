@@ -97,7 +97,7 @@ The previous Python-based agent lives in [cyberdesk-hq/cyberdriver](https://gith
 
 ## Development
 
-See [AGENTS.md](AGENTS.md) for the repository layout and build setup, and [`branding/`](branding/) for how Cyberdesk branding and release packaging are applied.
+See [BUILD.md](BUILD.md) for toolchain setup, local builds, and how the Windows MSI is produced. [AGENTS.md](AGENTS.md) covers the repository layout, and [`branding/`](branding/) covers how Cyberdesk branding and release packaging are applied.
 
 ## License
 
