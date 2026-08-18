@@ -89,12 +89,9 @@ fn rotated_dims(transform: i32, w: usize, h: usize) -> (usize, usize) {
     }
 }
 
-/// Turn a BGRA frame upright into `dst`, undoing `transform` degrees of output rotation. `src`
-/// rows may be padded (stride from `len / h`); `dst` comes out tightly packed, which is what
-/// `PixelBuffer::new` derives its stride from. The direction is anchored to a measurement, not
-/// to the protocol text: with mutter transform=1 the scanout carried the top bar down its LEFT
-/// edge, and mapping the left column to the top row (a clockwise turn of the image) is what
-/// reads upright (rustdesk#15886).
+/// Turn a BGRA frame upright into tightly packed `dst`, undoing `transform` degrees; `src` rows
+/// may be padded (stride = `len / h`). Direction anchored to a measurement (rustdesk#15886): with
+/// mutter transform=1 the LEFT scanout edge is the top, and left-column-to-top-row reads upright.
 fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
     const PX: usize = 4;
     let stride = if h > 0 { src.len() / h } else { 0 };
@@ -143,18 +140,28 @@ fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u
 /// The rotation of the compositor output this connector scans out, 0 when nothing can say. The
 /// same one-output-many-connectors guard as the geometry augmentation: a layout-order fallback
 /// there would pin a rotation on a guess.
-fn wayland_transform_for(drm: &[DrmDisplayInfo], wire_idx: usize) -> i32 {
-    let wl = scrap::wayland::display::get_displays();
+/// Transform and augmented origin for one wire entry, derived from ONE wayland snapshot so both
+/// reflect the same output assignment; two `get_displays()` reads could straddle a cache
+/// invalidation. `None` origin means nothing to augment with (caller keeps the DRM origin).
+fn transform_and_origin(
+    drm: &[DrmDisplayInfo],
+    wire_idx: usize,
+    wl: &scrap::wayland::display::Displays,
+) -> (i32, Option<(i32, i32)>) {
     if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
-        return 0;
+        return (0, None);
     }
     let assignment = assign_wayland_outputs(drm, &wl.displays);
-    assignment
+    let transform = assignment
         .get(wire_idx)
         .copied()
         .flatten()
         .map(|j| wl.displays[j].transform)
-        .unwrap_or(0)
+        .unwrap_or(0);
+    let origin = augment_with_wayland_geometry_from(drm, wl, &assignment)
+        .get(wire_idx)
+        .map(|di| (di.x, di.y));
+    (transform, origin)
 }
 
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
@@ -274,7 +281,7 @@ impl IpcDrmCapturer {
     pub fn new(
         display: i32,
         expected: Option<DrmDisplayInfo>,
-    ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize)> {
+    ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize, Option<(i32, i32)>)> {
         let shared = Arc::new(Shared {
             slot: Mutex::new(FrameSlot {
                 latest: None,
@@ -301,9 +308,10 @@ impl IpcDrmCapturer {
                 bail!("drm capture handshake timed out");
             }
         };
-        // Per session, from the same lookup the advertised list swaps by: a rotation change
-        // re-broadcasts topology and rebuilds this capturer rather than drifting mid-stream.
-        let transform = wayland_transform_for(&displays, wire_idx);
+        // One snapshot for the session: transform, origin and the advertised swap must all
+        // reflect the same output assignment. A rotation change rebuilds this capturer.
+        let wl = scrap::wayland::display::get_displays();
+        let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -322,6 +330,7 @@ impl IpcDrmCapturer {
             },
             displays,
             wire_idx,
+            origin,
         ))
     }
 
@@ -379,12 +388,10 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
-                // Frames arrive in scanout orientation; the session was advertised (and the
-                // encoder sized) in the rotated one, so the guard compares rotated dimensions.
+                // Frames arrive in scanout orientation, the session was sized rotated, so the
+                // guard compares rotated dims. convert_to_yuv only refuses a LARGER source (a
+                // smaller one leaves stale edges); first frame: CRTC mode vs scanout fb.
                 let (fw, fh) = rotated_dims(self.transform, w, h);
-                // convert_to_yuv only refuses a source LARGER than its destination, so a smaller
-                // frame leaves stale edges on screen. On the FIRST frame nothing changed: the list
-                // carries the CRTC mode, a frame the scanout fb, different when a CRTC scales.
                 if self.session_size.is_some_and(|(sw, sh)| (fw, fh) != (sw, sh)) {
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
@@ -1383,13 +1390,13 @@ fn augment_with_wayland_geometry_from(
         };
         info.x = w.x;
         info.y = w.y;
-        if origin_only {
-            continue;
-        }
-        // Advertised at the ROTATED physical size: what delivered frames measure, and what makes
-        // a mid-session rotation a topology change (the scanout itself keeps its dimensions).
+        // Rotated size before the origin-only cut: a lone rotated output still delivers rotated
+        // frames, so it must advertise them; only the logical-scale adoption stays multi-output.
         if w.transform == 90 || w.transform == 270 {
             std::mem::swap(&mut info.width, &mut info.height);
+        }
+        if origin_only {
+            continue;
         }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
@@ -1535,7 +1542,7 @@ pub(super) fn get_capturer_info(
         }
     }
     // Built FIRST: a transient `_drm` outage must NOT count toward the flap threshold below.
-    let (capturer, displays, wire_idx) = IpcDrmCapturer::new(display_idx as i32, expected)?;
+    let (capturer, displays, wire_idx, origin) = IpcDrmCapturer::new(display_idx as i32, expected)?;
     // The initial build counts 0, so demotion fires on the (RAPID_REBUILD_MAX + 1)-th in a window.
     if let Some(key) = key.clone() {
         let now = Instant::now();
@@ -1563,13 +1570,9 @@ pub(super) fn get_capturer_info(
         .get(wire_idx)
         .ok_or_else(|| anyhow!("drm display index {wire_idx} out of range ({ndisplay})"))?
         .clone();
-    // Publish the compositor's LOGICAL origin (what get_display_infos advertises); dimensions
-    // stay PHYSICAL, rotated to frame orientation from the CAPTURER's transform — not a second
-    // lookup that could disagree with the one the frame guard enforces.
-    let origin = augment_with_wayland_geometry(&displays)
-        .get(wire_idx)
-        .map(|di| (di.x, di.y))
-        .unwrap_or((d.x, d.y));
+    // Origin and transform come from the ONE snapshot new() resolved, so both reflect the
+    // same output assignment; dimensions stay PHYSICAL, rotated to frame orientation.
+    let origin = origin.unwrap_or((d.x, d.y));
     let (cap_w, cap_h) = rotated_dims(capturer.transform, d.width as usize, d.height as usize);
     Ok(super::video_service::CapturerInfo {
         origin,
@@ -1849,6 +1852,49 @@ mod drm_capturer_tests {
             refresh_rate: 60,
             transform: 0,
         }
+    }
+
+    #[test]
+    fn a_lone_rotated_output_advertises_delivered_dimensions() {
+        // Fix for the origin-only cut: one connector, one rotated output. The capturer will
+        // deliver rotated frames, so the advertised size must swap even in the origin-only case,
+        // while the logical scale is still not adopted (stays 1.0).
+        let drm = [drm_display("HDMI-A-1", 1920, 1080)];
+        let mut out = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        out.transform = 90;
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![out],
+        };
+        let assignment = assign_wayland_outputs(&drm, &wl.displays);
+        let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
+        assert_eq!((infos[0].width, infos[0].height), (1080, 1920));
+        assert_eq!(infos[0].scale, 1.0);
+    }
+
+    #[test]
+    fn transform_and_origin_come_from_the_same_snapshot() {
+        // Both derive from ONE Displays snapshot: the rotated output's transform and its origin
+        // must belong to the same assignment, and the multi-connector one-output guard zeroes
+        // both rather than mixing a guessed origin with a real transform.
+        let drm = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let mut rotated = wl_display("DP-1", 1920, 0, 2560, 1440);
+        rotated.transform = 270;
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![rotated, wl_display("HDMI-1", 0, 0, 1920, 1080)],
+        };
+        let (t, origin) = transform_and_origin(&drm, 1, &wl);
+        assert_eq!(t, 270);
+        assert_eq!(origin, Some((1920, 0)));
+        let lone = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![wl_display("HDMI-1", 0, 0, 1920, 1080)],
+        };
+        assert_eq!(transform_and_origin(&drm, 1, &lone), (0, None));
     }
 
     #[test]
