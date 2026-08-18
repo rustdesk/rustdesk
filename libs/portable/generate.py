@@ -127,6 +127,12 @@ if __name__ == '__main__':
         options.executable = 'rustdesk.exe'
     if not options.executable.startswith(folder):
         options.executable = folder + '/' + options.executable
+    # Note: the simple check `options.executable.startswith(folder)` is incorrect.
+    # `python generate.py -f rustdesk -e rustdesk.exe` or `python generate.py -f rustdesk`
+    # will result the print "Executable path: ..exe".
+    # So we need to check if the executable is in the folder, and if so, concat again.
+    if os.path.exists(os.path.join(folder, options.executable)):
+        options.executable = os.path.join(folder, options.executable)
     exe: str = os.path.abspath(options.executable)
     if not exe.startswith(os.path.abspath(folder)):
         print("The executable must locate in source folder")
