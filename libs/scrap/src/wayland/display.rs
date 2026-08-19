@@ -407,6 +407,15 @@ pub fn get_display_rects_for_uinput() -> Vec<DisplayRect> {
     logical_rects_of(&get_displays().displays)
 }
 
+/// The rects `get_display_rects_for_uinput` would produce for a GIVEN snapshot, for a caller
+/// that must derive several values from ONE consistent view instead of re-fetching (a refresh
+/// between two fetches would misalign the indices).
+pub fn logical_rects_of_displays(
+    displays: &[hbb_common::platform::linux::WaylandDisplayInfo],
+) -> Vec<DisplayRect> {
+    logical_rects_of(displays)
+}
+
 /// Remap an injected coordinate from the layout the client still believes in
 /// (`baseline`, captured at session init) to the current compositor layout (`live`).
 ///

@@ -107,8 +107,14 @@ enum DrmProducerMsg {
         height: u32,
         hotx: i32,
         hoty: i32,
+        x: i32,
+        y: i32,
+        hot_from_property: bool,
         colors: Vec<u8>,
     },
+    /// Cursor plane position while visible: every capture tick through a transition and the
+    /// consumer's settle window, one tick in eight once still (see `Data::DrmCursorPos`).
+    CursorPos { x: i32, y: i32 },
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -793,7 +799,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     drop(stream);
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
-    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
@@ -813,8 +819,15 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     };
     conn.send_msg(&Data::DrmDisplayList(displays.clone()), None).await?;
 
-    let (display_idx, need_cpu) = match conn.recv_msg_timeout2(10_000).await {
-        Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => (display, need_cpu),
+    let (display_idx, need_cpu, want_cursor_pos) = match conn.recv_msg_timeout2(10_000).await {
+        Some(Ok((
+            Data::DrmStart {
+                display,
+                need_cpu,
+                want_cursor_pos,
+            },
+            _fd,
+        ))) => (display, need_cpu, want_cursor_pos),
         Some(Ok((_, _fd))) => {
             log::info!("drm: peer sent something other than DrmStart in the handshake; closing");
             return Ok(());
@@ -834,7 +847,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         );
         return Ok(());
     }
-    if crtc_tx.send((target_device, target_crtc, need_cpu)).is_err() {
+    if crtc_tx
+        .send((target_device, target_crtc, need_cpu, want_cursor_pos))
+        .is_err()
+    {
         return Ok(());
     }
 
@@ -915,6 +931,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     height,
                     hotx,
                     hoty,
+                    x,
+                    y,
+                    hot_from_property,
                     colors,
                 } => {
                     conn.send_msg(
@@ -924,11 +943,20 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
+                            x,
+                            y,
+                            hot_from_property,
                         },
                         None,
                     )
                     .await?;
                     conn.send_raw(Bytes::from(colors)).await?;
+                }
+                DrmProducerMsg::CursorPos { x, y } => {
+                    // Position-only header, NO send_raw() body (like DrmDisplaysChanged). Sent
+                    // inline rather than coalesced: the producer emits at most one per capture
+                    // tick, so this cannot outpace the frame stream it rides with.
+                    conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
                 }
                 DrmProducerMsg::Displays(_) => {}
             }
@@ -970,7 +998,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
-    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
+    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
@@ -991,7 +1019,7 @@ fn drm_capture_worker(
         return;
     }
 
-    let (target_device, target_crtc, need_cpu) = match crtc_rx.recv() {
+    let (target_device, target_crtc, need_cpu, want_cursor_pos) = match crtc_rx.recv() {
         Ok(c) => c,
         Err(_) => return,
     };
@@ -1024,6 +1052,8 @@ fn drm_capture_worker(
     let mut use_dmabuf = !need_cpu;
 
     let mut last_cursor_id: u64 = 0;
+    let mut last_pos_sent: Option<(i32, i32)> = None;
+    let mut pos_streak: u32 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
     while !stop.load(Ordering::Relaxed) {
@@ -1063,6 +1093,62 @@ fn drm_capture_worker(
                 Err(err) => Err(err),
             })
         };
+        // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel),
+        // and - when the consumer opted in via DrmStart - the PLANE POSITION every tick while
+        // visible: the consumer needs a settled position, not the racy one frozen at the
+        // shape-change instant, to measure the real hotspot. This runs BEFORE the grab result is
+        // examined, so an EAGAIN/gated stretch (no new frame) still streams cursor state.
+        if let Some(c) = reader.cursor() {
+            let visible = c.id != scrap::drm_reader::HIDDEN_CURSOR_ID;
+            let pos = (c.x, c.y);
+            if c.id != last_cursor_id {
+                last_cursor_id = c.id;
+                // A shape transition restarts the position cadence even at an unchanged
+                // position (hidden -> visible in place, or a hover morph while still), or the
+                // consumer's fresh settling window would wait on a decimated stream.
+                last_pos_sent = None;
+                pos_streak = 0;
+                if frame_tx
+                    .blocking_send(DrmProducerMsg::Cursor {
+                        id: c.id,
+                        width: c.width,
+                        height: c.height,
+                        hotx: c.hotx,
+                        hoty: c.hoty,
+                        x: c.x,
+                        y: c.y,
+                        hot_from_property: c.hot_from_property,
+                        colors: c.colors,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            if want_cursor_pos && visible {
+                // Bound the idle stream: the channel holds 2 messages and a per-tick position
+                // next to every frame halves the slack a transiently slow consumer has before
+                // this thread blocks. Transitions and the consumer's ~1 s settle window ship
+                // every tick; a cursor still beyond that decimates to one tick in eight, which
+                // its late-input reopen path tolerates (it only needs SOME tick, not every one).
+                let changed = last_pos_sent != Some(pos);
+                if changed {
+                    pos_streak = 0;
+                    last_pos_sent = Some(pos);
+                } else {
+                    pos_streak = pos_streak.saturating_add(1);
+                }
+                if (changed || pos_streak <= 40 || pos_streak % 8 == 0)
+                    && frame_tx
+                        .blocking_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
+                        .is_err()
+                {
+                    break;
+                }
+            }
+        }
+
+
         match grabbed {
             None => {}
             Some(Ok(msg)) => {
@@ -1101,26 +1187,6 @@ fn drm_capture_worker(
             Some(Err(err)) => {
                 log::warn!("drm: capture error: {err}; closing _drm connection");
                 break;
-            }
-        }
-
-        // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel).
-        if let Some(c) = reader.cursor() {
-            if c.id != last_cursor_id {
-                last_cursor_id = c.id;
-                if frame_tx
-                    .blocking_send(DrmProducerMsg::Cursor {
-                        id: c.id,
-                        width: c.width,
-                        height: c.height,
-                        hotx: c.hotx,
-                        hoty: c.hoty,
-                        colors: c.colors,
-                    })
-                    .is_err()
-                {
-                    break;
-                }
             }
         }
 
