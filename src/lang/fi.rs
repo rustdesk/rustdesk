@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Jatka"),
         ("Browser didn't open? Use the url below to sign in.", "Eikö selain avautunut? Kirjaudu sisään alla olevan osoitteen kautta."),
         ("Lock canvas", "Lukitse näkymä"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Synkronoi leikepöytä istuntojen välillä"),
         ("sync-clipboard-between-sessions-tip", "Yhdessä etäistunnossa kopioitu teksti tai kuvat lähetetään myös muiden yhdistettyjen istuntojen leikepöydälle."),
     ].iter().cloned().collect();

@@ -1367,14 +1367,30 @@ fn normalize_connector(name: &str) -> String {
 
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
     let mut st = DRM_STATE.lock().unwrap();
-    if matches!(&*st, ProbeState::Available(..)) {
-        if list.is_empty() {
-            log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-        } else {
-            log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+    match &*st {
+        ProbeState::Available(..) => {
+            if list.is_empty() {
+                log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
+                publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+            } else {
+                log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+                publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+            }
+        }
+        // A hotplug that finds displays lifts a negative verdict, which is the rule
+        // `refresh_unavailable_async` already documents: only a non-empty list flips it. Without this
+        // arm the verdict could only be revised by that TTL re-probe, so a topology that went empty
+        // for an instant and came back cost the session the whole NEGATIVE_TTL on the portal even
+        // though the correct list had already arrived. A modeset takes long enough after a connector
+        // reports itself that the enumeration in between genuinely sees nothing.
+        ProbeState::Unavailable(..) if !list.is_empty() => {
+            log::info!(
+                "drm: hotplug refresh -> {} display(s), DRM is available again",
+                list.len()
+            );
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
+        _ => {}
     }
 }
 

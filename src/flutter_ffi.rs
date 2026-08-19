@@ -2659,6 +2659,13 @@ pub fn main_get_common(key: String) -> String {
             None => "",
         }
         .to_string();
+    } else if key == "supports-headless-display" {
+        // Whether this machine has DRM connectors to force at all, so the settings page does not
+        // offer a switch that could not do anything.
+        #[cfg(all(target_os = "linux", feature = "headless-display"))]
+        return crate::virtual_display_manager::linux::is_supported().to_string();
+        #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
+        return false.to_string();
     } else if key == "has-gnome-shortcuts-inhibitor-permission" {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();

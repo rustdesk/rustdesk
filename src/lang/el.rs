@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Συνέχεια"),
         ("Browser didn't open? Use the url below to sign in.", "Δεν άνοιξε το πρόγραμμα περιήγησης; Χρησιμοποιήστε τον παρακάτω σύνδεσμο για να συνδεθείτε."),
         ("Lock canvas", "Κλείδωμα καμβά"),
+        ("Headless display", ""),
+        ("headless_display_tip", ""),
         ("Sync clipboard between sessions", "Συγχρονισμός προχείρου μεταξύ συνεδριών"),
         ("sync-clipboard-between-sessions-tip", "Κείμενο ή εικόνες που αντιγράφονται σε μία απομακρυσμένη συνεδρία αποστέλλονται και στο πρόχειρο των άλλων συνδεδεμένων συνεδριών σας."),
     ].iter().cloned().collect();
