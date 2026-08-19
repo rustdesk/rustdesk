@@ -62,17 +62,25 @@ const val VIDEO_KEY_FRAME_RATE = 30
 
 class MainService : Service() {
 
+    private val wakeRetryHandler = Handler(Looper.getMainLooper())
+    private val keyguardManager: KeyguardManager by lazy {
+        applicationContext.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+    }
+    private var lastWakeAttemptAt = 0L
+    private var wakePendingReason: String? = null
+    private var wakeStartedAt = 0L
+    private var wakeDeadlineAt = 0L
+    private var wakeDidHome = false
+    private var wakeRetried = false
+    private var wakeNotifiedLocked = false
+    private var wakeNotifiedInputDisabled = false
+
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustPointerInput(kind: Int, mask: Int, x: Int, y: Int) {
         // turn on screen with LEFT_DOWN when screen off
         if (!powerManager.isInteractive && (kind == 0 || mask == LEFT_DOWN)) {
-            if (wakeLock.isHeld) {
-                Log.d(logTag, "Turn on Screen, WakeLock release")
-                wakeLock.release()
-            }
-            Log.d(logTag,"Turn on Screen")
-            wakeLock.acquire(5000)
+            wakeScreen("pointer_input")
         } else {
             when (kind) {
                 0 -> { // touch
@@ -128,6 +136,7 @@ class MainService : Service() {
                     }
                     if (authorized) {
                         if (!isFileTransfer && !isStart) {
+                            wakeAndRefreshIncomingScreenIfNeeded("authorized_connection")
                             startCapture()
                         }
                         onClientAuthorizedNotification(id, type, username, peerId)
@@ -195,6 +204,12 @@ class MainService : Service() {
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
     companion object {
+        private const val WAKELOCK_TIMEOUT_MS = 5000L
+        private const val WAKE_POLL_INTERVAL_MS = 100L
+        private const val WAKE_MAX_WAIT_MS = 2000L
+        private const val WAKE_THROTTLE_MS = 10_000L
+        private const val WAKE_RETRY_AFTER_MS = 1200L
+
         private var _isReady = false // media permission ready status
         private var _isStart = false // screen capture start status
         private var _isAudioStart = false // audio capture start status
@@ -228,6 +243,102 @@ class MainService : Service() {
     private lateinit var notificationChannel: String
     private lateinit var notificationBuilder: NotificationCompat.Builder
 
+    private val wakePollRunnable = object : Runnable {
+        override fun run() {
+            val reason = wakePendingReason ?: return
+            val now = SystemClock.elapsedRealtime()
+            if (now >= wakeDeadlineAt) {
+                if (wakeNotifiedLocked) {
+                    wakePendingReason = null
+                    return
+                }
+                Log.w(
+                    logTag,
+                    "wake timeout, interactive=${powerManager.isInteractive}, input=${InputService.isOpen}, reason:$reason"
+                )
+                setTextNotification(null, "Remote session: cannot wake screen")
+                wakePendingReason = null
+                return
+            }
+
+            if (!powerManager.isInteractive) {
+                if (!wakeRetried && now - wakeStartedAt >= WAKE_RETRY_AFTER_MS) {
+                    wakeRetried = true
+                    wakeScreen("$reason-retry")
+                }
+                wakeRetryHandler.postDelayed(this, WAKE_POLL_INTERVAL_MS)
+                return
+            }
+
+            if (keyguardManager.isKeyguardLocked) {
+                if (!wakeNotifiedLocked) {
+                    wakeNotifiedLocked = true
+                    Log.w(logTag, "keyguard locked, skip refresh, reason:$reason")
+                    setTextNotification(null, "Remote session: device locked")
+                }
+                wakeRetryHandler.postDelayed(this, WAKE_POLL_INTERVAL_MS)
+                return
+            }
+
+            if (!wakeDidHome && InputService.isOpen) {
+                wakeDidHome = true
+                InputService.ctx?.goHome()
+            } else if (!InputService.isOpen) {
+                if (!wakeNotifiedInputDisabled) {
+                    wakeNotifiedInputDisabled = true
+                    Log.w(logTag, "input service not open, skip HOME, reason:$reason")
+                    setTextNotification(null, "Remote session: enable Accessibility")
+                }
+            }
+
+            FFI.refreshScreen()
+            if (wakeNotifiedLocked || wakeNotifiedInputDisabled) {
+                setTextNotification(null, null)
+            }
+            wakePendingReason = null
+        }
+    }
+
+    private fun wakeScreen(reason: String) {
+        if (wakeLock.isHeld) {
+            Log.d(logTag, "WakeLock release before wake, reason:$reason")
+            wakeLock.release()
+        }
+        Log.d(logTag, "Wake screen, reason:$reason")
+        wakeLock.acquire(WAKELOCK_TIMEOUT_MS)
+    }
+
+    private fun wakeAndRefreshIncomingScreenIfNeeded(reason: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            wakeRetryHandler.post { wakeAndRefreshIncomingScreenIfNeeded(reason) }
+            return
+        }
+        if (powerManager.isInteractive) {
+            return
+        }
+
+        // Reset any previous transient status text for a new attempt.
+        setTextNotification(null, null)
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastWakeAttemptAt < WAKE_THROTTLE_MS) {
+            Log.i(logTag, "skip wake due to throttle, reason:$reason")
+            return
+        }
+        lastWakeAttemptAt = now
+
+        wakeRetryHandler.removeCallbacks(wakePollRunnable)
+        wakePendingReason = reason
+        wakeStartedAt = now
+        wakeDeadlineAt = now + WAKE_MAX_WAIT_MS
+        wakeDidHome = false
+        wakeRetried = false
+        wakeNotifiedLocked = false
+        wakeNotifiedInputDisabled = false
+        wakeScreen(reason)
+        wakeRetryHandler.postDelayed(wakePollRunnable, WAKE_POLL_INTERVAL_MS)
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
@@ -249,6 +360,11 @@ class MainService : Service() {
     }
 
     override fun onDestroy() {
+        wakeRetryHandler.removeCallbacks(wakePollRunnable)
+        wakePendingReason = null
+        if (wakeLock.isHeld) {
+            wakeLock.release()
+        }
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
