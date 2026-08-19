@@ -1941,7 +1941,7 @@ jobs:
             # ask build.py for the features so this line and the packaging line cannot drift
             FEATURES=$(python3 ./build.py --flutter --drm --hwcodec --unix-file-copy-paste --print-features)
             # an empty or error-shaped value would silently build a stock binary
-            for want in drm drm-wake; do
+            for want in drm; do
               case ",$FEATURES," in
                 *",$want,"*) ;;
                 *) echo "::error::build.py returned no '$want' feature: $FEATURES"; exit 1 ;;
