@@ -63,10 +63,9 @@
 
 ### Comments
 
-* Keep them short: one line by default, three at most.
-* Say **why**, never what. If the code already says it, delete the comment.
-* A comment must never be longer than the code it describes.
-* Applies to YAML, shell and Python too, not just Rust.
+* Avoid comments unless they explain a non-obvious reason, constraint, or workaround.
+* Never restate what the code does; prefer clearer code instead.
+* If the code is self-explanatory, add no comment.
 
 ### Be minimally invasive
 

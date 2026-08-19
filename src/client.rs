@@ -101,18 +101,6 @@ const RESTART_REMOTE_DEVICE_GRACE: Duration = Duration::from_secs(5 * 60);
 pub const VIDEO_QUEUE_SIZE: usize = 120;
 const MAX_DECODE_FAIL_COUNTER: usize = 3;
 
-#[cfg(target_os = "linux")]
-pub const LOGIN_MSG_DESKTOP_NOT_INITED: &str = "Desktop env is not inited";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY: &str = "Desktop session not ready";
-pub const LOGIN_MSG_DESKTOP_XSESSION_FAILED: &str = "Desktop xsession failed";
-pub const LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER: &str = "Desktop session another user login";
-pub const LOGIN_MSG_DESKTOP_XORG_NOT_FOUND: &str = "Desktop xorg not found";
-// ls /usr/share/xsessions/
-pub const LOGIN_MSG_DESKTOP_NO_DESKTOP: &str = "Desktop none";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY: &str =
-    "Desktop session not ready, password empty";
-pub const LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG: &str =
-    "Desktop session not ready, password wrong";
 pub const LOGIN_MSG_PASSWORD_EMPTY: &str = "Empty Password";
 pub const LOGIN_MSG_PASSWORD_WRONG: &str = "Wrong Password";
 pub const LOGIN_MSG_2FA_WRONG: &str = "Wrong 2FA Code";
@@ -2739,6 +2727,16 @@ impl LoginConfigHandler {
         } else {
             Bytes::new()
         };
+        let os_login: MessageField<OSLogin> = if self.conn_type == ConnType::TERMINAL {
+            Some(OSLogin {
+                username: os_username,
+                password: os_password,
+                ..Default::default()
+            })
+            .into()
+        } else {
+            Default::default()
+        };
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -2748,12 +2746,7 @@ impl LoginConfigHandler {
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
             version: crate::VERSION.to_string(),
-            os_login: Some(OSLogin {
-                username: os_username,
-                password: os_password,
-                ..Default::default()
-            })
-            .into(),
+            os_login,
             hwid,
             avatar,
             ..Default::default()
@@ -3348,54 +3341,11 @@ struct LoginErrorMsgBox {
 
 lazy_static::lazy_static! {
     static ref LOGIN_ERROR_MAP: Arc<HashMap<&'static str, LoginErrorMsgBox>> = {
-        use config::LINK_HEADLESS_LINUX_SUPPORT;
         let map = HashMap::from([(LOGIN_SCREEN_WAYLAND, LoginErrorMsgBox{
             msgtype: "error",
             title: "Login Error",
             text: "Login screen using Wayland is not supported",
             link: "https://rustdesk.com/docs/en/manual/linux/#login-screen",
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY, LoginErrorMsgBox{
-            msgtype: "session-login",
-            title: "",
-            text: "",
-            link: "",
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_XSESSION_FAILED, LoginErrorMsgBox{
-            msgtype: "session-re-login",
-            title: "",
-            text: "",
-            link: "",
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_SESSION_ANOTHER_USER, LoginErrorMsgBox{
-            msgtype: "info-nocancel",
-            title: "another_user_login_title_tip",
-            text: "another_user_login_text_tip",
-            link: "",
-            try_again: false,
-        }), (LOGIN_MSG_DESKTOP_XORG_NOT_FOUND, LoginErrorMsgBox{
-            msgtype: "info-nocancel",
-            title: "xorg_not_found_title_tip",
-            text: "xorg_not_found_text_tip",
-            link: LINK_HEADLESS_LINUX_SUPPORT,
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_NO_DESKTOP, LoginErrorMsgBox{
-            msgtype: "info-nocancel",
-            title: "no_desktop_title_tip",
-            text: "no_desktop_text_tip",
-            link: LINK_HEADLESS_LINUX_SUPPORT,
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY, LoginErrorMsgBox{
-            msgtype: "session-login-password",
-            title: "",
-            text: "",
-            link: "",
-            try_again: true,
-        }), (LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG, LoginErrorMsgBox{
-            msgtype: "session-login-re-password",
-            title: "",
-            text: "",
-            link: "",
             try_again: true,
         }), (LOGIN_MSG_NO_PASSWORD_ACCESS, LoginErrorMsgBox{
             msgtype: "wait-remote-accept-nook",
@@ -3665,17 +3615,7 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    let is_terminal = lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL);
-    let (os_username, os_password) = if is_terminal {
-        ("".to_owned(), "".to_owned())
-    } else {
-        (
-            lc.read().unwrap().get_option("os-username"),
-            lc.read().unwrap().get_option("os-password"),
-        )
-    };
-
-    send_login(lc.clone(), os_username, os_password, password, peer).await;
+    send_login(lc.clone(), String::new(), String::new(), password, peer).await;
     lc.write().unwrap().hash = hash;
     true
 }

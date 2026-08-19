@@ -1,11 +1,20 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
 pub use hbb_common::platform::linux::*;
+
+#[cfg(feature = "drm")]
+pub fn dispatch_wayland_display_probe() {
+    use std::ffi::OsStr;
+
+    if std::env::args_os().nth(1).as_deref() == Some(OsStr::new(WAYLAND_DISPLAY_PROBE_ARG)) {
+        wayland_display_probe_child_main();
+    }
+}
 use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
-    config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
+    config::Config,
     libc::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
@@ -43,8 +52,37 @@ const TERM_XTERM_256COLOR: &str = "xterm-256color";
 const TERM_SCREEN_256COLOR: &str = "screen-256color";
 const TERM_XTERM: &str = "xterm";
 
+#[cfg(feature = "drm")]
 lazy_static::lazy_static! {
-    pub static ref IS_X11: bool = hbb_common::platform::linux::is_x11_or_headless();
+    /// Only for per-frame callers; see `is_login_screen_wayland_cached`.
+    /// Own block because `#[cfg]` on one item inside a shared one breaks the macro.
+    static ref IS_LOGIN_SCREEN_WAYLAND: bool = is_login_screen_wayland();
+}
+
+lazy_static::lazy_static! {
+    /// `is_x11_or_headless()` answers x11 at a Wayland greeter, which the portal could not
+    /// serve but the DRM path can. Unmemoised lookup on purpose: this may run mid-boot, and
+    /// a "no" cached that early would be wrong for the rest of the process.
+    pub static ref IS_X11: bool = {
+        let x11 = hbb_common::platform::linux::is_x11_or_headless();
+        #[cfg(feature = "drm")]
+        {
+            if x11 && !display_server_forced() && is_login_screen_wayland() {
+                log::info!(
+                    "drm: seat0 is a Wayland login screen that reads as x11 upstream; \
+                     treating it as Wayland so the DRM path is not disabled at the one \
+                     screen it exists for"
+                );
+                false
+            } else {
+                x11
+            }
+        }
+        #[cfg(not(feature = "drm"))]
+        {
+            x11
+        }
+    };
     // Cache for TERM value - once TERM_XTERM_256COLOR is found, reuse it directly
     static ref CACHED_TERM: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     static ref DATABASE_XTERM_256COLOR: Option<Database> = {
@@ -198,14 +236,37 @@ pub struct xcb_xfixes_get_cursor_image {
 }
 
 #[inline]
-pub fn is_headless_allowed() -> bool {
-    Config::get_option(OPTION_ALLOW_LINUX_HEADLESS) == "Y"
-}
-
-#[inline]
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
     is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+}
+
+/// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
+/// forwards it to the per-user server on purpose: the greeter correction may only fix an
+/// AUTO-detected answer, never argue with the operator — a half-applied override would leave
+/// `get_display_server()` and the DRM routing gates disagreeing with each other.
+#[cfg(feature = "drm")]
+pub(crate) fn display_server_forced() -> bool {
+    std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER").is_ok()
+}
+
+/// X11 as far as the DRM path is concerned: a Wayland greeter is not, unless the operator
+/// forced the display server.
+///
+/// Both halves unmemoised, for the retry loops that must keep asking until seat0 can be named.
+#[cfg(feature = "drm")]
+pub fn is_x11_for_drm() -> bool {
+    scrap::is_x11() && (display_server_forced() || !is_login_screen_wayland())
+}
+
+/// Memoised `is_login_screen_wayland`, for per-frame callers that must not run `loginctl`.
+///
+/// Only from the per-session `--server`: it is spawned after the session is identified, so the
+/// answer is settled. Anything that can run mid-boot must use the uncached form.
+#[cfg(feature = "drm")]
+#[inline]
+pub fn is_login_screen_wayland_cached() -> bool {
+    *IS_LOGIN_SCREEN_WAYLAND
 }
 
 #[inline]
@@ -797,18 +858,6 @@ fn stop_rustdesk_servers() {
     ));
 }
 
-#[inline]
-fn stop_subprocess() {
-    let _ = run_cmds(&format!(
-        r##"ps -ef | grep '/etc/{}/xorg.conf' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
-        crate::get_app_name().to_lowercase(),
-    ));
-    let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E '{} +--cm-no-ui' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
-        crate::get_app_name().to_lowercase(),
-    ));
-}
-
 fn should_start_server(
     try_x11: bool,
     is_display_changed: bool,
@@ -822,13 +871,7 @@ fn should_start_server(
     let mut start_new = false;
     let mut should_kill = false;
 
-    if desktop.is_headless() {
-        if !uid.is_empty() {
-            // From having a monitor to not having a monitor.
-            *uid = "".to_owned();
-            should_kill = true;
-        }
-    } else if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
+    if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
         *uid = desktop.uid.clone();
         if try_x11 {
             set_x11_env(&desktop);
@@ -887,7 +930,6 @@ fn force_stop_server() {
 pub fn start_os_service() {
     check_if_stop_service();
     stop_rustdesk_servers();
-    stop_subprocess();
     start_uinput_service();
 
     std::thread::spawn(|| {
@@ -937,8 +979,7 @@ pub fn start_os_service() {
         desktop.refresh();
         update_active_user_lookup_cache(&desktop);
 
-        // Duplicate logic here with should_start_server
-        // Login wayland will try to start a headless --server.
+        // Duplicate logic here with should_start_server.
         if desktop.username == "root" || desktop.is_login_wayland() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
@@ -953,7 +994,6 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut server,
             ) {
-                stop_subprocess();
                 force_stop_server();
                 // Run the login-screen --server as the active seat0 session user (the greeter
                 // account) rather than root, so the DRM capture GPU/EGL convert never loads the
@@ -1006,7 +1046,6 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut user_server,
             ) {
-                stop_subprocess();
                 force_stop_server();
                 start_server(Some(&desktop), &mut user_server);
             }
@@ -1016,17 +1055,14 @@ pub fn start_os_service() {
             stop_server(&mut server);
         }
 
-        let keeps_headless = sid.is_empty() && desktop.is_headless();
         let keeps_session = sid == desktop.sid;
-        if keeps_headless || keeps_session {
+        if keeps_session {
             // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
             sleep_millis(500);
         } else {
             sleep_millis(super::SERVICE_INTERVAL);
         }
-        if !desktop.is_headless() {
-            sid = desktop.sid.clone();
-        }
+        sid = desktop.sid.clone();
     }
 
     if let Some(ps) = user_server.take().as_mut() {
@@ -1062,6 +1098,11 @@ pub fn get_active_userid() -> String {
 #[inline]
 /// Returns the active uid from a fresh seat0 lookup, bypassing the service-loop cache.
 pub fn get_active_userid_fresh() -> String {
+    // A Wayland greeter owns seat0 while it is up and the DRM backend serves it, so a uid gate that
+    // cannot see it rejects the greeter's own `--server`. `Desktop::refresh` reads it the same way.
+    #[cfg(feature = "drm")]
+    return get_values_of_seat0_with_gdm_wayland(&[1])[0].clone();
+    #[cfg(not(feature = "drm"))]
     get_values_of_seat0(&[1])[0].clone()
 }
 
@@ -1178,7 +1219,6 @@ fn is_flatpak() -> bool {
     std::path::PathBuf::from("/.flatpak-info").exists()
 }
 
-// Headless is enabled, always return true.
 pub fn is_prelogin() -> bool {
     if is_flatpak() {
         return false;
@@ -1789,7 +1829,6 @@ mod desktop {
         pub xauth: String,
         pub home: String,
         pub dbus: String,
-        pub is_rustdesk_subprocess: bool,
         pub wl_display: String,
     }
 
@@ -1802,11 +1841,6 @@ mod desktop {
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
             super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
-        }
-
-        #[inline]
-        pub fn is_headless(&self) -> bool {
-            self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
         fn get_display_xauth_wayland(&mut self) {
@@ -2046,25 +2080,11 @@ mod desktop {
             last
         }
 
-        fn set_is_subprocess(&mut self) {
-            self.is_rustdesk_subprocess = false;
-            let cmd = format!(
-                "ps -ef | grep '{}/xorg.conf' | grep -v grep | wc -l",
-                crate::get_app_name().to_lowercase()
-            );
-            if let Ok(res) = run_cmds(&cmd) {
-                if res.trim() != "0" {
-                    self.is_rustdesk_subprocess = true;
-                }
-            }
-        }
-
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
                 // Xwayland display and xauth may not be available in a short time after login.
                 if is_xwayland_running() && !self.is_login_wayland() {
                     self.get_display_xauth_xwayland();
-                    self.is_rustdesk_subprocess = false;
                 } else if self.is_wayland() {
                     self.get_display_xauth_wayland();
                 }
@@ -2074,7 +2094,6 @@ mod desktop {
             let seat0_values = get_values_of_seat0_with_gdm_wayland(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
-                self.is_rustdesk_subprocess = false;
                 return;
             }
 
@@ -2085,7 +2104,6 @@ mod desktop {
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
-                self.is_rustdesk_subprocess = false;
                 // Resolve HOME even on this path. Upstream returned without it because nothing then
                 // consumed a login-Wayland Desktop, but the drm build starts a `--server` as the
                 // greeter uid here, and a child with no HOME has nowhere to put its config. The
@@ -2112,11 +2130,9 @@ mod desktop {
                 } else {
                     self.get_display_xauth_wayland();
                 }
-                self.is_rustdesk_subprocess = false;
             } else {
                 self.get_display_x11();
                 self.get_xauth_x11();
-                self.set_is_subprocess();
             }
         }
     }

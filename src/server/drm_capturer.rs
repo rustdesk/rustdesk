@@ -821,42 +821,108 @@ impl Drop for UinputRefreshGuard {
     }
 }
 
-/// Never probes, never blocks: the form the ROUTING gates must use. Seconds of IPC inside
-/// `wayland::clear()`, `is_inited()` or the display enumeration trips "deadline has elapsed".
-pub(super) fn is_available_cached() -> bool {
+/// Never probes or blocks. Use in hot paths such as `wayland::clear()`, `is_inited()`, and display
+/// enumeration, where seconds of IPC would trip "deadline has elapsed".
+pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
 }
 
-/// MAY BLOCK for seconds: never a routing gate.
-pub(super) fn is_available() -> bool {
-    let verdict = {
-        let mut st = DRM_STATE.lock().unwrap();
-        if let ProbeState::Unavailable(since) = &*st {
-            if since.elapsed() >= NEGATIVE_TTL {
-                publish_probe_state(&mut st, ProbeState::Unknown);
-                DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+/// A tri-state assessment of DRM capture availability.
+/// `Unsettled` means a probe is in flight or failures have not reached the disable threshold.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Availability {
+    Available,
+    Unavailable,
+    Unsettled,
+}
+
+/// MAY BLOCK for seconds: never a routing gate, and never on the login request path — that path
+/// reads `availability_cached`. This blocking form serves the capture-side callers through
+/// `is_available`, where waiting out a settle is acceptable.
+fn availability() -> Availability {
+    let (verdict, stale_no) = {
+        let st = DRM_STATE.lock().unwrap();
+        // Keep a settled "no" while an off-thread probe re-verifies it, avoiding a transient
+        // Unsettled result whenever the negative cache expires.
+        let stale_no =
+            matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
+        let verdict = match &*st {
+            ProbeState::Available(since, _) => {
+                Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
             }
-        }
-        match &*st {
-            ProbeState::Available(since, _) => Some((true, since.elapsed() >= POSITIVE_TTL)),
-            ProbeState::Unavailable(_) => Some((false, false)),
+            ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
             ProbeState::Unknown => None, // fall through and probe with the lock released
-        }
+        };
+        (verdict, stale_no)
     };
-    if let Some((available, stale)) = verdict {
+    if let Some((answer, stale)) = verdict {
         if stale {
             refresh_available_async();
         }
-        return available;
+        if stale_no {
+            refresh_unavailable_async();
+        }
+        return answer;
     }
     if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
-        return matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..));
+        // Someone else is mid-probe: their result is not in yet, and "not yet" is not "no".
+        return match &*DRM_STATE.lock().unwrap() {
+            ProbeState::Available(..) => Availability::Available,
+            ProbeState::Unavailable(_) => Availability::Unavailable,
+            ProbeState::Unknown => Availability::Unsettled,
+        };
     }
     let _in_flight = ProbeInFlightGuard;
+    probe_and_publish()
+}
+
+/// Non-blocking login-path assessment.
+/// Unknown starts a probe off-thread; callers require `Available` before admitting a session.
+pub(crate) fn availability_cached() -> Availability {
+    let (verdict, stale_no) = {
+        let st = DRM_STATE.lock().unwrap();
+        let stale_no =
+            matches!(&*st, ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL);
+        let verdict = match &*st {
+            ProbeState::Available(since, _) => {
+                Some((Availability::Available, since.elapsed() >= POSITIVE_TTL))
+            }
+            ProbeState::Unavailable(_) => Some((Availability::Unavailable, false)),
+            ProbeState::Unknown => None,
+        };
+        (verdict, stale_no)
+    };
+    if let Some((answer, stale)) = verdict {
+        if stale {
+            refresh_available_async();
+        }
+        if stale_no {
+            refresh_unavailable_async();
+        }
+        return answer;
+    }
+    if !DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        let in_flight = ProbeInFlightGuard;
+        let spawned = std::thread::Builder::new()
+            .name("drm-avail-probe".into())
+            .spawn(move || {
+                let _in_flight = in_flight;
+                probe_and_publish();
+            });
+        // On error the guard moved into the dropped closure and released the flag already.
+        if let Err(err) = spawned {
+            log::warn!("drm: could not spawn the availability probe thread: {err}");
+        }
+    }
+    Availability::Unsettled
+}
+
+/// Probe synchronously and publish the outcome. The caller must hold DRM_PROBE_IN_FLIGHT.
+fn probe_and_publish() -> Availability {
     let t = Instant::now();
     let result = query_displays();
     let mut st = DRM_STATE.lock().unwrap();
-    let available = match result {
+    let answer = match result {
         Ok(list) if !list.is_empty() => {
             log::debug!(
                 "drm: availability probe -> available ({} displays) in {:?}",
@@ -865,28 +931,84 @@ pub(super) fn is_available() -> bool {
             );
             DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
-            true
+            Availability::Available
         }
         Ok(_) => {
             log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
             publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-            false
+            Availability::Unavailable
         }
         Err(err) => {
             let n = DRM_PROBE_FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
             if n >= DRM_PROBE_MAX_FAILURES {
                 log::info!("drm: availability probe failed {n}x ({err}); disabling DRM");
                 publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                Availability::Unavailable
             } else {
                 log::info!(
                     "drm: availability probe failed ({err}), attempt {n}/{DRM_PROBE_MAX_FAILURES}; will retry"
                 );
+                // Deliberately still Unknown in DRM_STATE: this is a retry window, not a verdict.
+                Availability::Unsettled
             }
-            false
         }
     };
     drop(st);
-    available
+    answer
+}
+
+/// The boolean form for capture-path callers, where an unsettled probe and a definitive "no"
+/// route the same way (into the non-DRM fallback).
+pub(crate) fn is_available() -> bool {
+    availability() == Availability::Available
+}
+
+/// The negative mirror of `refresh_available_async`: re-verify a stale Unavailable without ever
+/// answering Unknown in the meantime. A failed or empty re-probe re-confirms the "no" with a
+/// fresh timestamp; only a non-empty display list flips the verdict.
+fn refresh_unavailable_async() {
+    if DRM_PROBE_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let in_flight = ProbeInFlightGuard;
+    let sampled_gen = {
+        let st = DRM_STATE.lock().unwrap();
+        match &*st {
+            ProbeState::Unavailable(since) if since.elapsed() >= NEGATIVE_TTL => {}
+            _ => return,
+        }
+        DRM_STATE_GEN.load(Ordering::Acquire)
+    };
+    let spawned = std::thread::Builder::new()
+        .name("drm-unavail-refresh".into())
+        .spawn(move || {
+            let _in_flight = in_flight;
+            let result = query_displays();
+            let mut st = DRM_STATE.lock().unwrap();
+            if DRM_STATE_GEN.load(Ordering::Acquire) != sampled_gen {
+                return;
+            }
+            match result {
+                Ok(list) if !list.is_empty() => {
+                    log::info!(
+                        "drm: availability re-probe -> available ({} displays)",
+                        list.len()
+                    );
+                    DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
+                    publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+                    drop(st);
+                    scrap::wayland::display::clear_wayland_displays_cache();
+                }
+                _ => {
+                    // Restamp: a failed or empty re-probe is a fresh confirmation of "no".
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                }
+            }
+        });
+    // Nothing to release on error: the guard moved into the closure and drops with it either way.
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the unavailability re-probe thread: {err}");
+    }
 }
 
 fn refresh_available_async() {
@@ -963,9 +1085,10 @@ fn refresh_available_async() {
 
 pub(super) fn warm_availability() {
     // The gate is INSIDE the loop because `get_display_server()` answers "x11" whenever loginctl
-    // cannot yet name the seat0 session. `scrap::is_x11()` is the UNMEMOISED form.
+    // cannot yet name the seat0 session. `is_x11_for_drm()` is that form minus the greeter
+    // blind spot, where plain `is_x11()` is permanently true.
     for _ in 0..10 {
-        if scrap::is_x11() {
+        if crate::platform::linux::is_x11_for_drm() {
             std::thread::sleep(Duration::from_millis(300));
             continue;
         }
@@ -1059,64 +1182,99 @@ pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
     Some((len, any_demoted))
 }
 
-/// Releases DRM_STATE before taking the health map: never hold it while taking a per-display map.
+// A multi-display portal stream cannot replace one demoted connector. Keep its index but mark it
+// offline; a single connector remains usable through the whole-desktop fallback.
+fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
+    if list.len() <= 1 {
+        return;
+    }
+    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
+    for (display, info) in list.iter().zip(infos.iter_mut()) {
+        if health
+            .get(&connector_key(display))
+            .is_some_and(|health| health.demoted())
+        {
+            info.online = false;
+        }
+    }
+}
+
+fn primary_index_from_assignment(assignment: &[Option<usize>], primary: usize) -> usize {
+    assignment
+        .iter()
+        .position(|assigned| *assigned == Some(primary))
+        .unwrap_or(0)
+}
+
+/// Releases DRM_STATE before taking the Wayland and health locks.
+pub(super) fn get_display_infos_and_primary() -> Option<(Vec<DisplayInfo>, usize)> {
+    let list = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => list.clone(),
+        _ => return None,
+    };
+    let wl = scrap::wayland::display::get_displays();
+    let assignment = assign_wayland_outputs(&list, &wl.displays);
+    let mut infos = augment_with_wayland_geometry_from(&list, &wl, &assignment);
+    mark_demoted_displays(&list, &mut infos);
+    // Primary and geometry must use the same connector assignment snapshot.
+    let primary = primary_index_from_assignment(&assignment, wl.primary);
+    Some((infos, primary))
+}
+
 pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
     let list = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
-    let multi = list.len() > 1;
     let mut infos = augment_with_wayland_geometry(&list);
-    // The portal exposes one whole-desktop stream, so a demoted display on a multi-monitor host
-    // has nothing geometry-consistent to fall back to: OFFLINE but KEEPING its list position, so
-    // the index space stays aligned with get_capturer_info(). A single-display host stays online.
-    if multi {
-        let health = DRM_DISPLAY_HEALTH.lock().unwrap();
-        for (idx, info) in infos.iter_mut().enumerate() {
-            let key = match list.get(idx) {
-                Some(d) => connector_key(d),
-                None => continue,
-            };
-            if health.get(&key).is_some_and(|h| h.demoted()) {
-                info.online = false;
-            }
-        }
-    }
+    mark_demoted_displays(&list, &mut infos);
     Some(infos)
 }
 
-/// Index of the compositor's PRIMARY output; 0 when unknown. Asking `assign_wayland_outputs` makes
-/// the advertised primary and geometry agree, but not below two connectors or two outputs, where
-/// `augment_with_wayland_geometry` declines to run the assignment.
-pub(super) fn get_primary_index() -> usize {
-    let list = match &*DRM_STATE.lock().unwrap() {
-        ProbeState::Available(_, list) => list.clone(),
-        _ => return 0,
-    };
-    let wl = scrap::wayland::display::get_displays();
-    if wl.displays.is_empty() {
-        return 0;
-    }
-    assign_wayland_outputs(&list, &wl.displays)
-        .iter()
-        .position(|assigned| *assigned == Some(wl.primary))
-        .unwrap_or(0)
-}
-
 /// DRM reports every monitor at physical size and origin (0,0), stacking a multi-monitor client.
+///
+/// Asked at login screens too, on purpose: a greeter runs a compositor, and the socket fallback in
+/// hbb_common lets the enumerator reach it with no environment variables. Where that fallback
+/// cannot answer, the list comes back empty and everything stays unaugmented, which is what the
+/// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
     let wl = scrap::wayland::display::get_displays();
+    let assignment = assign_wayland_outputs(drm, &wl.displays);
+    augment_with_wayland_geometry_from(drm, &wl, &assignment)
+}
+
+fn augment_with_wayland_geometry_from(
+    drm: &[DrmDisplayInfo],
+    wl: &scrap::wayland::display::Displays,
+    matched: &[Option<usize>],
+) -> Vec<DisplayInfo> {
     let mut infos: Vec<DisplayInfo> = drm.iter().map(display_info_from_drm).collect();
-    if drm.len() < 2 || wl.displays.len() < 2 {
+    // A single display is still augmented: on a multi-GPU host the one connector this service can
+    // open may sit at a non-zero origin in the compositor layout, and DRM alone reports (0,0).
+    if drm.is_empty() {
         return infos;
     }
-    let matched = assign_wayland_outputs(drm, &wl.displays);
+    if wl.displays.is_empty() {
+        return infos;
+    }
+    // One connector against one output is the origin-only case: the lone output can still sit at
+    // a non-zero origin this side cannot see, but it keeps the scale-1 convention — a single
+    // display is advertised at physical size (see `logical_rects_of`), so its logical size must
+    // not be adopted. More connectors than the one output is an inconsistent snapshot, and the
+    // layout-order fallback in `assign_wayland_outputs` would plant that origin on a guess.
+    let origin_only = wl.displays.len() == 1;
+    if origin_only && drm.len() > 1 {
+        return infos;
+    }
     for (i, info) in infos.iter_mut().enumerate() {
         let Some(w) = matched[i].map(|j| &wl.displays[j]) else {
             continue;
         };
         info.x = w.x;
         info.y = w.y;
+        if origin_only {
+            continue;
+        }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
                 info.scale = drm[i].width as f64 / lw as f64;
@@ -1485,6 +1643,26 @@ mod drm_capturer_tests {
             logical_size: Some((w, h)),
             refresh_rate: 60,
         }
+    }
+
+    #[test]
+    fn one_connector_assignment_drives_geometry_and_primary() {
+        let drm = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![
+                wl_display("DP-1", 1920, 0, 2560, 1440),
+                wl_display("HDMI-1", 0, 0, 1920, 1080),
+            ],
+        };
+
+        let assignment = assign_wayland_outputs(&drm, &wl.displays);
+        let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
+        assert_eq!((infos[0].x, infos[1].x), (0, 1920));
+        assert_eq!(primary_index_from_assignment(&assignment, wl.primary), 1);
     }
 
     #[test]
