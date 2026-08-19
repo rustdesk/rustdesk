@@ -112,7 +112,8 @@ enum DrmProducerMsg {
         hot_from_property: bool,
         colors: Vec<u8>,
     },
-    /// Cursor plane position, every capture tick while visible (see `Data::DrmCursorPos`).
+    /// Cursor plane position while visible: every capture tick through a transition and the
+    /// consumer's settle window, one tick in eight once still (see `Data::DrmCursorPos`).
     CursorPos { x: i32, y: i32 },
 }
 
@@ -1102,6 +1103,11 @@ fn drm_capture_worker(
             let pos = (c.x, c.y);
             if c.id != last_cursor_id {
                 last_cursor_id = c.id;
+                // A shape transition restarts the position cadence even at an unchanged
+                // position (hidden -> visible in place, or a hover morph while still), or the
+                // consumer's fresh settling window would wait on a decimated stream.
+                last_pos_sent = None;
+                pos_streak = 0;
                 if frame_tx
                     .blocking_send(DrmProducerMsg::Cursor {
                         id: c.id,

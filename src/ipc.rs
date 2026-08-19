@@ -564,10 +564,12 @@ pub enum Data {
         #[serde(default)]
         hot_from_property: bool,
     },
-    /// Service -> client: the cursor plane position, re-sent every capture tick while the cursor
-    /// is visible (same scanout space as `DrmCursor.x/y`). NO `send_raw()` body. The consumer
-    /// pairs a settled position with the last peer-injected point to MEASURE the hotspot the
-    /// kernel does not expose on non-VM drivers (see drm_capturer's cursor calibration).
+    /// Service -> client: the cursor plane position while the cursor is visible (same scanout
+    /// space as `DrmCursor.x/y`), only when `DrmStart.want_cursor_pos` asked for it. Cadence:
+    /// every capture tick through a position change, a shape transition and the ~40 ticks a
+    /// consumer needs to see it settle, then one tick in eight while still. NO `send_raw()`
+    /// body. The consumer pairs a settled position with the last peer-injected point to MEASURE
+    /// the hotspot the kernel does not expose on non-VM drivers (see drm_capturer's calibration).
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmCursorPos { x: i32, y: i32 },
 }
