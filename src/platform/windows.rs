@@ -2722,6 +2722,49 @@ pub fn reserve_rdp_loopback_address() -> ResultType<RdpLoopbackAddress> {
     bail!("No RDP loopback address is available")
 }
 
+pub fn new_mstsc_command() -> std::process::Command {
+    if cfg!(target_arch = "x86") && is_x64() {
+        match windows_directory() {
+            Ok(directory) => {
+                // A WOW64 mstsc launcher can exit after handing off to native mstsc, dropping
+                // the temporary credential too early. Sysnative makes the guard track the
+                // actual mstsc process.
+                let path = directory.join("Sysnative").join("mstsc.exe");
+                match fs::metadata(&path) {
+                    Ok(metadata) if metadata.is_file() => {
+                        return std::process::Command::new(path);
+                    }
+                    Ok(_) => log::warn!("Native mstsc path is not a file: {}", path.display()),
+                    Err(err) => log::warn!(
+                        "Failed to find native mstsc at '{}': {}",
+                        path.display(),
+                        err
+                    ),
+                }
+            }
+            Err(err) => log::warn!("Failed to locate native mstsc: {}", err),
+        }
+    }
+    std::process::Command::new("mstsc")
+}
+
+fn windows_directory() -> io::Result<PathBuf> {
+    use winapi::um::sysinfoapi::GetWindowsDirectoryW;
+
+    let mut buffer = vec![0u16; 260];
+    loop {
+        let length = unsafe { GetWindowsDirectoryW(buffer.as_mut_ptr(), buffer.len() as _) };
+        if length == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if (length as usize) < buffer.len() {
+            buffer.truncate(length as usize);
+            return Ok(PathBuf::from(OsString::from_wide(&buffer)));
+        }
+        buffer.resize(length as usize + 1, 0);
+    }
+}
+
 struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);
 
 // CredReadW returns a self-contained allocation that remains valid until

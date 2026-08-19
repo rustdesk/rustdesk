@@ -55,6 +55,9 @@ fn run_rdp(
         };
     // Keep using /v instead of a generated .rdp file: mstsc then preserves the
     // user's Default.rdp settings and avoids unsigned-file warnings or policies.
+    #[cfg(windows)]
+    let mut command = crate::platform::new_mstsc_command();
+    #[cfg(not(windows))]
     let mut command = std::process::Command::new("mstsc");
     command.arg(format!("/v:{}:{}", host, port));
     #[cfg(windows)]
