@@ -700,19 +700,21 @@ impl RendezvousMediator {
             return Ok(());
         }
         log::debug!("Punch tcp hole to {:?}", peer_addr);
-        let mut socket = {
-            let socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
-            let local_addr = socket.local_addr();
-            // key important here for punch hole to tell my gateway incoming peer is safe.
-            // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
-            allow_err!(socket_client::connect_tcp_local(peer_addr, Some(local_addr), 30).await);
-            socket
-        };
+        let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        let local_addr = socket.local_addr();
         let mut msg_out = Message::new();
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, meta).await;
+        let side_punch = socket_client::connect_tcp_local(peer_addr, Some(local_addr), CONNECT_TIMEOUT).await.ok();
+        if let Some(stream) = side_punch {
+            // Side-punch connected (simultaneous open) - use directly, no listener needed
+            drop(socket); // rendezvous socket no longer needed
+            crate::server::create_tcp_connection(server, stream, peer_addr, true, meta).await?;
+        } else {
+            // Side-punch failed - fall back to listener
+            crate::accept_connection(server.clone(), socket, peer_addr, true, meta).await;
+        }
         Ok(())
     }
 
