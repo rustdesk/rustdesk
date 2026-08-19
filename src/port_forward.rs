@@ -16,18 +16,30 @@ use hbb_common::{
 };
 
 #[cfg(windows)]
-const RDP_CREDENTIAL_TARGET: &str = "TERMSRV/localhost";
+type RdpLoopbackLease = crate::platform::RdpLoopbackAddress;
 
-fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
+#[cfg(not(windows))]
+#[derive(Clone)]
+struct RdpLoopbackLease;
+
+fn run_rdp(
+    port: u16,
+    host: &str,
+    lc: &Arc<RwLock<LoginConfigHandler>>,
+    id: &str,
+    loopback: Option<RdpLoopbackLease>,
+) {
     #[cfg(windows)]
     let (username, password) = {
         let lc = lc.read().unwrap();
         (lc.get_option("rdp_username"), lc.get_option("rdp_password"))
     };
     #[cfg(windows)]
+    let credential_target = format!("TERMSRV/{}", host);
+    #[cfg(windows)]
     let (rdp_credential, prompt_for_credentials) =
         match crate::platform::prepare_temporary_rdp_credential(
-            RDP_CREDENTIAL_TARGET,
+            &credential_target,
             &username,
             &password,
         ) {
@@ -35,7 +47,7 @@ fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
             Err(err) => {
                 log::warn!(
                     "Failed to prepare RDP credential for target '{}': {}",
-                    RDP_CREDENTIAL_TARGET,
+                    credential_target,
                     err
                 );
                 (None, true)
@@ -44,7 +56,7 @@ fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
     // Keep using /v instead of a generated .rdp file: mstsc then preserves the
     // user's Default.rdp settings and avoids unsigned-file warnings or policies.
     let mut command = std::process::Command::new("mstsc");
-    command.arg(format!("/v:localhost:{}", port));
+    command.arg(format!("/v:{}:{}", host, port));
     #[cfg(windows)]
     if prompt_for_credentials {
         command.arg("/prompt");
@@ -58,11 +70,13 @@ fn run_rdp(port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) {
                 crate::platform::set_rdp_window_title(
                     child,
                     move || rdp_display_name(&lc, &id),
+                    host.to_owned(),
                     rdp_credential,
+                    loopback,
                 );
             }
             #[cfg(not(windows))]
-            let _ = (child, lc, id);
+            let _ = (child, lc, id, loopback);
         }
         Err(err) => log::warn!("Failed to launch mstsc: {}", err),
     }
@@ -97,12 +111,42 @@ pub async fn listen(
     remote_host: String,
     remote_port: i32,
 ) -> ResultType<()> {
-    let listener = tcp::new_listener(format!("127.0.0.1:{}", port), true).await?;
+    let is_rdp = port == 0;
+    #[cfg(windows)]
+    let rdp_loopback = if is_rdp {
+        let has_username = {
+            let lc = lc.read().unwrap();
+            !lc.get_option("rdp_username").is_empty()
+        };
+        if has_username {
+            Some(crate::platform::reserve_rdp_loopback_address()?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    #[cfg(not(windows))]
+    let rdp_loopback: Option<RdpLoopbackLease> = None;
+    #[cfg(windows)]
+    let listener_host = rdp_loopback
+        .as_ref()
+        .map(|address| address.bind_host())
+        .unwrap_or("127.0.0.1");
+    #[cfg(not(windows))]
+    let listener_host = "127.0.0.1";
+    let listener = tcp::new_listener(format!("{}:{}", listener_host, port), true).await?;
     let addr = listener.local_addr()?;
     log::info!("listening on port {:?}", addr);
-    let is_rdp = port == 0;
+    #[cfg(windows)]
+    let rdp_host = rdp_loopback
+        .as_ref()
+        .map(|address| address.mstsc_host())
+        .unwrap_or("localhost");
+    #[cfg(not(windows))]
+    let rdp_host = "localhost";
     if is_rdp {
-        run_rdp(addr.port(), &lc, &id);
+        run_rdp(addr.port(), rdp_host, &lc, &id, rdp_loopback.clone());
     }
     let mut ui_receiver = ui_receiver;
     loop {
@@ -140,7 +184,7 @@ pub async fn listen(
                     }
                     Some(Data::NewRDP) => {
                         println!("receive run_rdp from ui_receiver");
-                        run_rdp(addr.port(), &lc, &id);
+                        run_rdp(addr.port(), rdp_host, &lc, &id, rdp_loopback.clone());
                     }
                     _ => {}
                 }

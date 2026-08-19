@@ -2644,6 +2644,49 @@ pub fn wide_string(s: &str) -> Vec<u16> {
 
 const RDP_CREDENTIAL_COMMENT_PREFIX: &str = "RustDesk temporary RDP credential ";
 
+#[derive(Clone)]
+pub struct RdpLoopbackAddress(Arc<RdpLoopbackAddressInner>);
+
+struct RdpLoopbackAddressInner {
+    index: u8,
+    host: String,
+}
+
+impl RdpLoopbackAddress {
+    pub fn bind_host(&self) -> &str {
+        &self.0.host
+    }
+
+    pub fn mstsc_host(&self) -> &str {
+        &self.0.host
+    }
+}
+
+impl Drop for RdpLoopbackAddressInner {
+    fn drop(&mut self) {
+        rdp_loopback_addresses().lock().unwrap().remove(&self.index);
+    }
+}
+
+fn rdp_loopback_addresses() -> &'static Mutex<std::collections::HashSet<u8>> {
+    static ADDRESSES: std::sync::OnceLock<Mutex<std::collections::HashSet<u8>>> =
+        std::sync::OnceLock::new();
+    ADDRESSES.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+pub fn reserve_rdp_loopback_address() -> ResultType<RdpLoopbackAddress> {
+    let mut addresses = rdp_loopback_addresses().lock().unwrap();
+    let index = (2..=254)
+        .find(|index| !addresses.contains(index))
+        .ok_or_else(|| anyhow!("No RDP loopback address is available"))?;
+    addresses.insert(index);
+    let host = format!("127.0.0.{}", index);
+    Ok(RdpLoopbackAddress(Arc::new(RdpLoopbackAddressInner {
+        index,
+        host,
+    })))
+}
+
 struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);
 
 // CredReadW returns a self-contained allocation that remains valid until
@@ -2941,26 +2984,34 @@ fn sanitize_rdp_window_title(name: &str) -> String {
         .collect()
 }
 
-fn should_update_rdp_window_title(current: &str, name: &str, applied_name: &str) -> bool {
+fn should_update_rdp_window_title(
+    current: &str,
+    name: &str,
+    applied_name: &str,
+    endpoint: &str,
+) -> bool {
     current != name
-        && (current.contains("localhost") || (!applied_name.is_empty() && current == applied_name))
+        && (current.contains(endpoint) || (!applied_name.is_empty() && current == applied_name))
 }
 
 pub fn set_rdp_window_title<F>(
     mut child: std::process::Child,
     name_of: F,
+    endpoint: String,
     _credential: Option<TemporaryRdpCredential>,
+    _loopback: Option<RdpLoopbackAddress>,
 ) where
     F: Fn() -> String + Send + 'static,
 {
     let process_id = child.id();
-    // mstsc owns the title and can restore "localhost" while connecting or
+    // mstsc owns the title and can restore the endpoint while connecting or
     // reconnecting. Follow only the process we launched and reapply the peer
     // name until it exits, so concurrent RDP sessions cannot rename each other.
     if let Err(err) = std::thread::Builder::new()
         .name("rdp-window-title".to_owned())
         .spawn(move || {
             let _credential = _credential;
+            let _loopback = _loopback;
             let mut warned = false;
             let mut applied_name = String::new();
             loop {
@@ -2973,7 +3024,12 @@ pub fn set_rdp_window_title<F>(
                     Ok(None) => {
                         let name = sanitize_rdp_window_title(&name_of());
                         if !name.is_empty() {
-                            match set_process_rdp_window_title(process_id, &name, &applied_name) {
+                            match set_process_rdp_window_title(
+                                process_id,
+                                &name,
+                                &applied_name,
+                                &endpoint,
+                            ) {
                                 Ok(applied) => {
                                     if applied {
                                         applied_name = name;
@@ -3001,11 +3057,13 @@ fn set_process_rdp_window_title(
     process_id: DWORD,
     name: &str,
     applied_name: &str,
+    endpoint: &str,
 ) -> io::Result<bool> {
     struct Context<'a> {
         process_id: DWORD,
         name: &'a str,
         applied_name: &'a str,
+        endpoint: &'a str,
         title: Vec<u16>,
         applied: bool,
         error: Option<io::Error>,
@@ -3032,7 +3090,12 @@ fn set_process_rdp_window_title(
             context.applied = true;
             return TRUE;
         }
-        if !should_update_rdp_window_title(&current, context.name, context.applied_name) {
+        if !should_update_rdp_window_title(
+            &current,
+            context.name,
+            context.applied_name,
+            context.endpoint,
+        ) {
             return TRUE;
         }
         let mut result = 0;
@@ -3071,6 +3134,7 @@ fn set_process_rdp_window_title(
         process_id,
         name,
         applied_name,
+        endpoint,
         title: wide_string(name),
         applied: false,
         error: None,
@@ -5009,23 +5073,47 @@ mod tests {
         assert!(should_update_rdp_window_title(
             "localhost - Remote Desktop Connection",
             "peer",
-            ""
+            "",
+            "localhost"
+        ));
+        assert!(should_update_rdp_window_title(
+            "127.0.0.2 - Remote Desktop Connection",
+            "peer",
+            "",
+            "127.0.0.2"
         ));
         assert!(should_update_rdp_window_title(
             "peer",
             "peer (hostname)",
-            "peer"
+            "peer",
+            "127.0.0.2"
         ));
         assert!(!should_update_rdp_window_title(
             "localhost tunnel",
             "localhost tunnel",
-            "localhost tunnel"
+            "localhost tunnel",
+            "localhost"
         ));
         assert!(!should_update_rdp_window_title(
             "Remote Desktop Connection",
             "peer",
-            ""
+            "",
+            "localhost"
         ));
+    }
+
+    #[test]
+    fn rdp_loopback_addresses_are_unique_while_reserved() {
+        let first = reserve_rdp_loopback_address().unwrap();
+        let second = reserve_rdp_loopback_address().unwrap();
+        assert_eq!(first.bind_host(), "127.0.0.2");
+        assert_eq!(first.mstsc_host(), "127.0.0.2");
+        assert_eq!(second.bind_host(), "127.0.0.3");
+        assert_eq!(second.mstsc_host(), "127.0.0.3");
+
+        drop(first);
+        let reused = reserve_rdp_loopback_address().unwrap();
+        assert_eq!(reused.bind_host(), "127.0.0.2");
     }
 
     // Test-only reusable Win32 HANDLE RAII helper.
