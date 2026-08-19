@@ -758,5 +758,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "जारी रखें"),
         ("Browser didn't open? Use the url below to sign in.", "ब्राउज़र नहीं खुला? लॉगिन करने के लिए नीचे दिए गए URL का उपयोग करें।"),
         ("Lock canvas", "कैनवास लॉक करें"),
+        ("headless_display_tip", ""),
+        ("Headless display", ""),
     ].iter().cloned().collect();
 }

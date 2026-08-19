@@ -1870,6 +1870,23 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     Ok(())
 }
 
+/// Push this process's config into the running root service.
+///
+/// `set_options` reaches the user `--server`, which then syncs to root on its own. That leaves out
+/// the case where there is no `--server` at all: the root service keeps its config in memory from
+/// startup, so a change made by a root CLI would sit in the config file unread until a restart.
+/// `SyncConfig` is the only message the protected `_service` channel accepts, and root is an allowed
+/// peer on it, so this is the same operation the user server performs, from the other side.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn sync_config_to_service() -> ResultType<()> {
+    let mut c = connect_service(1000).await?;
+    let cfg = (Config::get(), Config2::get());
+    c.send(&Data::SyncConfig(Some(cfg.into()))).await?;
+    c.next_timeout(1000).await?;
+    Ok(())
+}
+
 #[inline]
 async fn get_nat_type_(ms_timeout: u64) -> ResultType<i32> {
     let mut c = connect(ms_timeout, "").await?;
