@@ -758,5 +758,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continuer"),
         ("Browser didn't open? Use the url below to sign in.", "Le navigateur ne s’est pas ouvert ? Utilisez l’URL ci-dessous pour vous connecter."),
         ("Lock canvas", "Verrouiller la vue"),
+        ("headless_display_tip", "Quand aucun écran n'est branché, force une sortie vidéo déconnectée afin qu'il y ait un écran à capturer. Elle est libérée dès qu'un écran est branché sur une autre sortie."),
+        ("Headless display", "Écran sans moniteur"),
     ].iter().cloned().collect();
 }
