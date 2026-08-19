@@ -649,16 +649,38 @@ fn should_block_display_switch_shortcut(key: Key, is_press: bool, event: &Event)
     if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
         return false;
     }
+    // Never buffer Alt while relative mouse mode is active: the Ctrl+Alt exit
+    // shortcut relies on MODIFIERS_STATE seeing the Alt, which buffering would
+    // hide.
+    if RELATIVE_MOUSE_MODE_ACTIVE.load(Ordering::SeqCst) {
+        return false;
+    }
 
-    let is_alt = key == Key::Alt || key == Key::AltGr;
-    if is_alt {
+    // Only left Alt triggers the shortcut. AltGr is a distinct key used for
+    // special characters (e.g. @, #, [ on European layouts) and must pass
+    // through normally.
+    if key == Key::Alt {
         if is_press {
             // Buffer the Alt-down; forward it once the next key is known.
-            *BUFFERED_ALT.lock().unwrap() = Some(event.clone());
+            let mut buf = match BUFFERED_ALT.lock() {
+                Ok(g) => g,
+                Err(e) => {
+                    log::error!("display-switch: BUFFERED_ALT poisoned: {}", e);
+                    return false;
+                }
+            };
+            *buf = Some(event.clone());
             return true;
         }
         // Swallow the key-up if the Alt-down was buffered and never forwarded.
-        if BUFFERED_ALT.lock().unwrap().take().is_some() {
+        let buffered = match BUFFERED_ALT.lock() {
+            Ok(mut g) => g.take().is_some(),
+            Err(e) => {
+                log::error!("display-switch: BUFFERED_ALT poisoned: {}", e);
+                return false;
+            }
+        };
+        if buffered {
             return true;
         }
         // Swallow the key-up if the Alt-down was consumed by the shortcut.
@@ -676,7 +698,13 @@ fn should_block_display_switch_shortcut(key: Key, is_press: bool, event: &Event)
         return true;
     }
 
-    let buffered_alt = BUFFERED_ALT.lock().unwrap().take();
+    let buffered_alt = match BUFFERED_ALT.lock() {
+        Ok(mut g) => g.take(),
+        Err(e) => {
+            log::error!("display-switch: BUFFERED_ALT poisoned: {}", e);
+            return false;
+        }
+    };
     let had_alt = buffered_alt.is_some();
 
     if key == Key::BackQuote && is_press && had_alt {
