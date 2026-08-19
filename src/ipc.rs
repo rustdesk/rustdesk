@@ -501,15 +501,6 @@ pub enum Data {
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
-    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
-    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
-    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
-    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
-    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
-    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
-    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
-    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
-    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
     /// CM -> server: the connection manager's WINDOW went away, which is not the same event
     /// as the operator disconnecting a peer. Linux only, and deliberately: there a session
     /// logout closes every window, and the close arrives at the CM indistinguishable from a
@@ -519,6 +510,15 @@ pub enum Data {
     /// explicit Disconnect button keeps sending `Close` and kicking for good.
     #[cfg(target_os = "linux")]
     CmWindowClosed,
+    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
+    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
+    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
+    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
+    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
+    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
+    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
+    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
     /// Client -> service: begin streaming the chosen display.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context

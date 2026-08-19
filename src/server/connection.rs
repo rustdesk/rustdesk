@@ -1213,6 +1213,13 @@ impl Connection {
                             ipc::Data::Close => {
                                 bail!("Close requested from connection manager");
                             }
+                            // Same end as above: a tunnel must not outlive the window either.
+                            // Only the reason differs, and a port forward carries none - the
+                            // peer sees the tunnel drop and decides for itself.
+                            #[cfg(target_os = "linux")]
+                            ipc::Data::CmWindowClosed => {
+                                bail!("Connection manager window closed");
+                            }
                             ipc::Data::CmErr(e) => {
                                 log::error!("Connection manager error: {e}");
                                 bail!("{e}");
