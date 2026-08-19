@@ -2648,9 +2648,15 @@ const RDP_CREDENTIAL_COMMENT_PREFIX: &str = "RustDesk temporary RDP credential "
 pub struct RdpLoopbackAddress(Arc<RdpLoopbackAddressInner>);
 
 struct RdpLoopbackAddressInner {
-    index: u8,
     host: String,
+    _mutex: RdpLoopbackMutex,
 }
+
+struct RdpLoopbackMutex(HANDLE);
+
+// Kernel handles may be closed from any thread and are otherwise immutable here.
+unsafe impl Send for RdpLoopbackMutex {}
+unsafe impl Sync for RdpLoopbackMutex {}
 
 impl RdpLoopbackAddress {
     pub fn bind_host(&self) -> &str {
@@ -2662,29 +2668,58 @@ impl RdpLoopbackAddress {
     }
 }
 
-impl Drop for RdpLoopbackAddressInner {
+impl Drop for RdpLoopbackMutex {
     fn drop(&mut self) {
-        rdp_loopback_addresses().lock().unwrap().remove(&self.index);
+        if unsafe { CloseHandle(self.0) } == FALSE {
+            log::warn!(
+                "Failed to release RDP loopback mutex: {}",
+                io::Error::last_os_error()
+            );
+        }
     }
 }
 
-fn rdp_loopback_addresses() -> &'static Mutex<std::collections::HashSet<u8>> {
-    static ADDRESSES: std::sync::OnceLock<Mutex<std::collections::HashSet<u8>>> =
-        std::sync::OnceLock::new();
-    ADDRESSES.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+fn reserve_rdp_loopback_mutex(index: u8) -> ResultType<Option<RdpLoopbackMutex>> {
+    use winapi::um::{errhandlingapi::SetLastError, synchapi::CreateMutexW};
+
+    let name = wide_string(&format!("Local\\RustDesk_RdpLoopback_{}", index));
+    unsafe {
+        SetLastError(ERROR_SUCCESS);
+        let handle = CreateMutexW(null_mut(), FALSE, name.as_ptr());
+        let error = GetLastError();
+        if handle.is_null() {
+            if error == ERROR_ACCESS_DENIED {
+                return Ok(None);
+            }
+            bail!(
+                "Failed to reserve RDP loopback address 127.0.0.{}: {}",
+                index,
+                io::Error::from_raw_os_error(error as _)
+            );
+        }
+        if error == ERROR_ALREADY_EXISTS {
+            if CloseHandle(handle) == FALSE {
+                log::warn!(
+                    "Failed to close existing RDP loopback mutex: {}",
+                    io::Error::last_os_error()
+                );
+            }
+            return Ok(None);
+        }
+        Ok(Some(RdpLoopbackMutex(handle)))
+    }
 }
 
 pub fn reserve_rdp_loopback_address() -> ResultType<RdpLoopbackAddress> {
-    let mut addresses = rdp_loopback_addresses().lock().unwrap();
-    let index = (2..=254)
-        .find(|index| !addresses.contains(index))
-        .ok_or_else(|| anyhow!("No RDP loopback address is available"))?;
-    addresses.insert(index);
-    let host = format!("127.0.0.{}", index);
-    Ok(RdpLoopbackAddress(Arc::new(RdpLoopbackAddressInner {
-        index,
-        host,
-    })))
+    for index in 2..=254 {
+        if let Some(mutex) = reserve_rdp_loopback_mutex(index)? {
+            return Ok(RdpLoopbackAddress(Arc::new(RdpLoopbackAddressInner {
+                host: format!("127.0.0.{}", index),
+                _mutex: mutex,
+            })));
+        }
+    }
+    bail!("No RDP loopback address is available")
 }
 
 struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);
