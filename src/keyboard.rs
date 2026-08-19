@@ -42,6 +42,23 @@ static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 #[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 static EXIT_SHORTCUT_KEY_DOWN: AtomicBool = AtomicBool::new(false);
 
+// Track the backquote key for the Alt+` display-switch shortcut, so the
+// matching key-up is swallowed and the switch only triggers on the initial
+// press (not OS auto-repeat).
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static DISPLAY_SWITCH_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+
+// The Alt key-down is buffered instead of forwarded immediately, so an Alt+`
+// shortcut leaves no "lone Alt" on the remote (which would focus the menu bar
+// and break a subsequent Alt+Tab).
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static BUFFERED_ALT: Mutex<Option<Event>> = Mutex::new(None);
+
+// Set when a buffered Alt was consumed by the shortcut, so the real Alt key-up
+// is swallowed too (the Alt-down was never forwarded).
+#[cfg(all(feature = "flutter", any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+static ALT_CONSUMED: AtomicBool = AtomicBool::new(false);
+
 // Track whether relative mouse mode is currently active.
 // This is set by Flutter via set_relative_mouse_mode_state() and checked
 // by the rdev grab loop to determine if exit shortcuts should be processed.
@@ -531,6 +548,14 @@ fn notify_exit_relative_mouse_mode() {
     flutter::push_session_event(&session_id, "exit_relative_mouse_mode", vec![]);
 }
 
+/// Notify Flutter to cycle to the next individual remote display.
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn notify_switch_display() {
+    let session_id = flutter::get_cur_session_id();
+    flutter::push_session_event(&session_id, "switch_display_shortcut", vec![]);
+}
+
 /// Handle relative mouse mode shortcuts in the rdev grab loop.
 /// Returns true if the event should be blocked from being sent to the peer.
 #[cfg(feature = "flutter")]
@@ -609,6 +634,70 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
     false
 }
 
+/// Handle the Alt+` (backquote) display-switch shortcut in the rdev grab loop.
+/// Returns true if the event should be blocked from being sent to the peer.
+///
+/// The Alt key-down is buffered rather than forwarded immediately, so an Alt+`
+/// shortcut never leaves a "lone Alt" on the remote (which would focus the
+/// menu bar and break a subsequent Alt+Tab). If the next key is not BackQuote,
+/// the buffered Alt-down is replayed before that key so Alt+Tab and other
+/// chords still reach the remote.
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+#[inline]
+fn should_block_display_switch_shortcut(key: Key, is_press: bool, event: &Event) -> bool {
+    if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+        return false;
+    }
+
+    let is_alt = key == Key::Alt || key == Key::AltGr;
+    if is_alt {
+        if is_press {
+            // Buffer the Alt-down; forward it once the next key is known.
+            *BUFFERED_ALT.lock().unwrap() = Some(event.clone());
+            return true;
+        }
+        // Swallow the key-up if the Alt-down was buffered and never forwarded.
+        if BUFFERED_ALT.lock().unwrap().take().is_some() {
+            return true;
+        }
+        // Swallow the key-up if the Alt-down was consumed by the shortcut.
+        if ALT_CONSUMED.swap(false, Ordering::SeqCst) {
+            return true;
+        }
+        return false;
+    }
+
+    // Swallow backquote repeat/up while the shortcut key is held.
+    if key == Key::BackQuote && DISPLAY_SWITCH_KEY_DOWN.load(Ordering::SeqCst) {
+        if !is_press {
+            DISPLAY_SWITCH_KEY_DOWN.store(false, Ordering::SeqCst);
+        }
+        return true;
+    }
+
+    let buffered_alt = BUFFERED_ALT.lock().unwrap().take();
+    let had_alt = buffered_alt.is_some();
+
+    if key == Key::BackQuote && is_press && had_alt {
+        // Alt + BackQuote: switch display, consume the buffered Alt.
+        ALT_CONSUMED.store(true, Ordering::SeqCst);
+        DISPLAY_SWITCH_KEY_DOWN.store(true, Ordering::SeqCst);
+        notify_switch_display();
+        return true;
+    }
+
+    if had_alt {
+        // Alt + <other key>: replay the buffered Alt-down, then let this key
+        // through normally (the grab loop forwards it after we return false).
+        if let Some(alt_event) = buffered_alt {
+            client::process_event(&get_keyboard_mode(), &alt_event, None);
+        }
+    }
+
+    false
+}
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -624,6 +713,10 @@ fn start_grab_loop() {
 
             #[cfg(feature = "flutter")]
             if should_block_relative_mouse_shortcut(key, is_press) {
+                return None;
+            }
+            #[cfg(feature = "flutter")]
+            if should_block_display_switch_shortcut(key, is_press, &event) {
                 return None;
             }
 
@@ -692,6 +785,10 @@ fn start_grab_loop() {
             } else {
                 #[cfg(feature = "flutter")]
                 if should_block_relative_mouse_shortcut(key, is_press) {
+                    return None;
+                }
+                #[cfg(feature = "flutter")]
+                if should_block_display_switch_shortcut(key, is_press, &event) {
                     return None;
                 }
                 client::process_event(&get_keyboard_mode(), &event, None);
