@@ -1051,6 +1051,8 @@ fn drm_capture_worker(
     let mut use_dmabuf = !need_cpu;
 
     let mut last_cursor_id: u64 = 0;
+    let mut last_pos_sent: Option<(i32, i32)> = None;
+    let mut pos_streak: u32 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
     while !stop.load(Ordering::Relaxed) {
@@ -1117,13 +1119,26 @@ fn drm_capture_worker(
                     break;
                 }
             }
-            if want_cursor_pos
-                && visible
-                && frame_tx
-                    .blocking_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
-                    .is_err()
-            {
-                break;
+            if want_cursor_pos && visible {
+                // Bound the idle stream: the channel holds 2 messages and a per-tick position
+                // next to every frame halves the slack a transiently slow consumer has before
+                // this thread blocks. Transitions and the consumer's ~1 s settle window ship
+                // every tick; a cursor still beyond that decimates to one tick in eight, which
+                // its late-input reopen path tolerates (it only needs SOME tick, not every one).
+                let changed = last_pos_sent != Some(pos);
+                if changed {
+                    pos_streak = 0;
+                    last_pos_sent = Some(pos);
+                } else {
+                    pos_streak = pos_streak.saturating_add(1);
+                }
+                if (changed || pos_streak <= 40 || pos_streak % 8 == 0)
+                    && frame_tx
+                        .blocking_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
+                        .is_err()
+                {
+                    break;
+                }
             }
         }
 
