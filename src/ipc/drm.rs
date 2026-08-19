@@ -386,9 +386,32 @@ fn drm_wake_displays(reason: &str) -> bool {
     true
 }
 
+
+/// Nothing plugged in at all is a different failure from a display that is merely asleep: there
+/// is no scanout now and there will not be one until an output exists, so capture silently falls
+/// back to the portal, which then asks for consent on a screen nobody can look at. Said on the
+/// edge rather than every poll.
+fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String]) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static NO_OUTPUT: AtomicBool = AtomicBool::new(false);
+    let none = displays.is_empty() && undriven.is_empty();
+    if none != NO_OUTPUT.swap(none, Ordering::Relaxed) {
+        if none {
+            log::warn!(
+                "drm: no connector reports a display, so this machine has no scanout to capture. \
+                 Attach a display or a dummy plug; a headless box can also force a connector on \
+                 (echo on > /sys/class/drm/<card>-<connector>/status)"
+            );
+        } else {
+            log::info!("drm: an output is present again");
+        }
+    }
+}
+
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     let (displays, undriven) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven);
     if !undriven.is_empty() {
         log::debug!(
             "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
@@ -405,6 +428,7 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
     let (displays, undriven) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven);
     if !hbb_common::config::Config::get_bool_option(OPTION_ENABLE_DRM_DISPLAY_WAKE) {
         if !undriven.is_empty() {
             log::info!(
