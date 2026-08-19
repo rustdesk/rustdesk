@@ -778,7 +778,10 @@ class InputModel {
 
   // Invoked from the Rust rdev grab loop ("Input source 1") when Alt+` is
   // pressed; the Flutter key path handles "Input source 2" above.
-  void switchToNextDisplay() => _cycleToNextDisplay();
+  void switchToNextDisplay() {
+    if (!isDesktop || !keyboardPerm || isViewOnly || isViewCamera) return;
+    _cycleToNextDisplay();
+  }
 
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
