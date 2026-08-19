@@ -1373,6 +1373,10 @@ class RustdeskImpl {
     throw UnimplementedError("cmLoginRes");
   }
 
+  Future<void> cmCloseConnectionWindow({required int connId, dynamic hint}) {
+    throw UnimplementedError("cmCloseConnectionWindow");
+  }
+
   Future<void> cmCloseConnection({required int connId, dynamic hint}) {
     throw UnimplementedError("cmCloseConnection");
   }
