@@ -273,6 +273,11 @@ class _RemotePageState extends State<RemotePage>
         tabState.tabs[selected].key == widget.id;
   }
 
+  // Every Windows requestFocus() must pass this, or a blocking dialog or an
+  // inactive tab could hand remote input to this page.
+  bool get _windowsCanFocusRemoteInput =>
+      _isSelectedTab && _blockableOverlayState.middleBlocked.isFalse;
+
   bool get _isMacOSKeyboardContextActive {
     return stateGlobal.isFocused.value && !_isWindowBlur && _isSelectedTab;
   }
@@ -517,8 +522,7 @@ class _RemotePageState extends State<RemotePage>
     // focus returns (Alt+Tab, taskbar), so enterView() never fires again.
     if (isWindows &&
         _cursorOverImage.value &&
-        _isSelectedTab &&
-        _blockableOverlayState.middleBlocked.isFalse &&
+        _windowsCanFocusRemoteInput &&
         !_rawKeyFocusNode.hasFocus) {
       _rawKeyFocusNode.requestFocus();
     }
@@ -533,7 +537,7 @@ class _RemotePageState extends State<RemotePage>
           _cursorOverImage.value = true;
           _macOSLocalFocusLost = false;
         }
-      } else {
+      } else if (!isWindows || _windowsCanFocusRemoteInput) {
         _rawKeyFocusNode.requestFocus();
       }
       _ffi.inputModel.onWindowFocus();
@@ -850,8 +854,7 @@ class _RemotePageState extends State<RemotePage>
       // dead until a click. Focus only while the window is really active, or a
       // background window would grab system keys. onFocusChange does enterOrLeave.
       if (!_isWindowBlur &&
-          _isSelectedTab &&
-          _blockableOverlayState.middleBlocked.isFalse &&
+          _windowsCanFocusRemoteInput &&
           !_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }
