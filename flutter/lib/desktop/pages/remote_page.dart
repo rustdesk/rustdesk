@@ -513,6 +513,16 @@ class _RemotePageState extends State<RemotePage>
       _queueMacOSKeyboardAfterFullScreen(allowHiddenLifecycle: true);
     }
 
+    // Refocus without PointerEnter: the cursor already hovers the image when
+    // focus returns (Alt+Tab, taskbar), so enterView() never fires again.
+    if (isWindows &&
+        _cursorOverImage.value &&
+        _isSelectedTab &&
+        _blockableOverlayState.middleBlocked.isFalse &&
+        !_rawKeyFocusNode.hasFocus) {
+      _rawKeyFocusNode.requestFocus();
+    }
+
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
       if (isMacOS) {
