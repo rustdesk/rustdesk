@@ -100,11 +100,6 @@ fn refresh_wayland_uinput_rect_if_changed() {
     if is_x11() || !crate::input_service::wayland_use_uinput() {
         return;
     }
-    // Nothing to poll at a login screen; the DRM path owns the rect there.
-    #[cfg(feature = "drm")]
-    if crate::platform::linux::is_login_screen_wayland_cached() {
-        return;
-    }
     {
         let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
         if let Some(last_check) = lock.last_check {
@@ -120,14 +115,54 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // Refresh the per-display layout every poll: monitor origins can shift (e.g. two
     // displays swap positions) without changing the overall desktop rect, and the mouse
     // path needs the current per-display geometry to correct coordinates.
-    let drifted = {
+    let (live_changed, mut drifted) = {
         let mut layout = WAYLAND_LAYOUT.lock().unwrap();
+        // An EDGE (live vs previous live), not a level: a baseline comparison latches true for
+        // the whole session. First poll: compare against the baseline, and a missing snapshot
+        // (enumeration failed at init) makes the first success the edge, or transform=0 sticks.
+        let live_changed = if layout.live.is_empty() {
+            #[cfg(feature = "drm")]
+            let failed_init = layout.baseline.is_empty()
+                && scrap::wayland::display::wayland_snapshot_missing();
+            #[cfg(not(feature = "drm"))]
+            let failed_init = false;
+            layout.baseline != live_rects && !layout.baseline.is_empty() || failed_init
+        } else {
+            layout.live != live_rects
+        };
         let drifted = !layout.baseline.is_empty()
             && !live_rects.is_empty()
             && layout.baseline != live_rects;
-        layout.live = live_rects;
-        drifted
+        layout.live = live_rects.clone();
+        (live_changed, drifted)
     };
+    // Single owner of the generation bump: on the cache clear it let every session init tear
+    // down every other live capturer. Baseline promotes with the clear (rustdesk#15601), and an
+    // edge seen while DRM is transiently non-Available stays OWED rather than consumed.
+    #[cfg(feature = "drm")]
+    {
+        static PROMOTION_OWED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        if live_changed {
+            PROMOTION_OWED.store(true, Ordering::Release);
+        }
+        if PROMOTION_OWED.load(Ordering::Acquire) && super::drm_capturer::is_available_cached() {
+            PROMOTION_OWED.store(false, Ordering::Release);
+            scrap::wayland::display::clear_wayland_displays_cache();
+            scrap::wayland::display::bump_layout_generation();
+            set_wayland_layout_baseline(live_rects.clone());
+            WAYLAND_LAYOUT.lock().unwrap().live = live_rects.clone();
+            drifted = false;
+        }
+    }
+    #[cfg(not(feature = "drm"))]
+    let _ = live_changed;
+    // At a login screen the DRM path owns the rect; only the range/remap update is skipped,
+    // the snapshot invalidation above must still run (a greeter session has no other trigger).
+    #[cfg(feature = "drm")]
+    if crate::platform::linux::is_login_screen_wayland_cached() {
+        return;
+    }
     // The remap corrects for per-display origin shifts; the uinput ABS range corrects for
     // the overall bounding box. Only enable the remap once the range matches the live
     // layout, otherwise moves would be remapped into a range the device is not yet using.
