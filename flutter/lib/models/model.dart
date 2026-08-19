@@ -2842,7 +2842,7 @@ class CursorData {
     required this.width,
     required this.height,
   })  : hotx = hotxOrigin * scale,
-        hoty = hotxOrigin * scale;
+        hoty = hotyOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
