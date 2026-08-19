@@ -550,7 +550,9 @@ pub fn core_main() -> Option<Vec<String>> {
                     Some("status") | None => {
                         let enabled = hbb_common::config::option2bool(
                             KEY,
-                            crate::ipc::get_options().get(KEY).map_or("", |v| v.as_str()),
+                            crate::ipc::get_options()
+                                .get(KEY)
+                                .map_or("", |v| v.as_str()),
                         );
                         print!("{}", headless::status_text(enabled));
                     }
@@ -562,7 +564,16 @@ pub fn core_main() -> Option<Vec<String>> {
                         } else if crate::platform::is_installed() && is_root() {
                             // Only the option is set here. Forcing the connector is the root
                             // service's job.
-                            crate::ipc::set_option(KEY, if verb == "enable" { "Y" } else { "N" });
+                            let want = if verb == "enable" { "Y" } else { "N" };
+                            crate::ipc::set_option(KEY, want);
+                            // `set_option` swallows a failed send, and `set_options` only writes the
+                            // local config after that send succeeds - so a failure here would leave
+                            // the old value in place and the push below would hand the service a
+                            // value nobody asked for. Read it back instead of assuming.
+                            if config::Config::get_option(KEY) != want {
+                                println!("Could not save the setting!");
+                                return None;
+                            }
                             // ... but on the machine this feature is FOR, that is not enough.
                             // `ipc::set_option` talks to the user `--server`, and a box with no
                             // display has no seat0 session, so there is no `--server` to talk to:
