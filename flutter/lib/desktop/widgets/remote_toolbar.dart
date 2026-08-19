@@ -9,7 +9,6 @@ import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -1334,6 +1333,12 @@ class ScreenAdjustor {
   final FFI ffi;
   final VoidCallback cbExitFullscreen;
   window_size.Screen? _screen;
+  Size? _waylandMaximizedWorkAreaSize;
+  Rect? _waylandWorkAreaScreenFrame;
+  double? _waylandWorkAreaScaleFactor;
+  Rect? _x11WorkArea;
+  Rect? _x11WorkAreaScreenFrame;
+  double? _x11WorkAreaScaleFactor;
 
   ScreenAdjustor({
     required this.id,
@@ -1344,9 +1349,18 @@ class ScreenAdjustor {
   bool get isFullscreen => stateGlobal.fullscreen.isTrue;
   int get windowId => stateGlobal.windowId;
 
+  Future<bool?> isWindowMaximized() async {
+    try {
+      return await WindowController.fromWindowId(windowId).isMaximized();
+    } catch (_) {
+      // The delayed resolution callback may run after the window is disposed.
+      return null;
+    }
+  }
+
   adjustWindow(BuildContext context) {
     return futureBuilder(
-        future: isWindowCanBeAdjusted(),
+        future: isWindowCanBeAdjusted(context),
         hasData: (data) {
           final visible = data as bool;
           if (!visible) return Offstage();
@@ -1362,36 +1376,201 @@ class ScreenAdjustor {
         });
   }
 
-  doAdjustWindow(BuildContext context) async {
-    await updateScreen();
-    if (_screen != null) {
-      cbExitFullscreen();
-      double scale = _screen!.scaleFactor;
-      final wndRect = await WindowController.fromWindowId(windowId).getFrame();
-      final mediaSize = MediaQueryData.fromView(View.of(context)).size;
-      // On windows, wndRect is equal to GetWindowRect and mediaSize is equal to GetClientRect.
+  // Linux screen and work-area coordinates can use different units or become
+  // unreliable across Wayland/X11 state changes, so normalize reported frames
+  // and cache usable work-area measurements before sizing the window.
+
+  Future<void> _updateLinuxWorkAreaCache({
+    required window_size.Screen screen,
+    required Rect wndRect,
+    required bool isWayland,
+    required bool isX11,
+    required bool forMenu,
+  }) async {
+    if (isWayland &&
+        (_waylandWorkAreaScreenFrame != screen.frame ||
+            _waylandWorkAreaScaleFactor != screen.scaleFactor)) {
+      _waylandMaximizedWorkAreaSize = null;
+      _waylandWorkAreaScreenFrame = screen.frame;
+      _waylandWorkAreaScaleFactor = screen.scaleFactor;
+    }
+    if (isWayland &&
+        forMenu &&
+        !isFullscreen &&
+        await isWindowMaximized() == true) {
+      _waylandMaximizedWorkAreaSize = wndRect.size;
+    }
+    if (isX11 &&
+        (_x11WorkAreaScreenFrame != screen.frame ||
+            _x11WorkAreaScaleFactor != screen.scaleFactor)) {
+      _x11WorkArea = null;
+      _x11WorkAreaScreenFrame = screen.frame;
+      _x11WorkAreaScaleFactor = screen.scaleFactor;
+    }
+    if (isX11 && forMenu && !isFullscreen) {
+      _x11WorkArea = screen.visibleFrame;
+    }
+  }
+
+  Future<Rect?> _getEffectiveScreenFrame({
+    required window_size.Screen screen,
+    required bool isWayland,
+    required bool isX11,
+    required bool forMenu,
+  }) async {
+    Rect frameRect = screen.visibleFrame;
+    if (isMacOS && forMenu && isFullscreen) {
+      List<double>? workArea;
+      try {
+        workArea = await kMacOSPermChannel
+            .invokeListMethod<double>('getMacOSWorkAreaSize');
+      } catch (_) {
+        return null;
+      }
+      if (workArea == null || workArea.length != 2) {
+        return null;
+      }
+      frameRect = Rect.fromLTWH(
+        frameRect.left,
+        frameRect.top,
+        workArea[0] < frameRect.width ? workArea[0] : frameRect.width,
+        workArea[1] < frameRect.height ? workArea[1] : frameRect.height,
+      );
+    }
+    final x11WorkArea = _x11WorkArea;
+    if (isX11 &&
+        forMenu &&
+        isFullscreen &&
+        x11WorkArea != null &&
+        (x11WorkArea.width < frameRect.width ||
+            x11WorkArea.height < frameRect.height)) {
+      frameRect = x11WorkArea;
+    }
+    final screenScale = screen.scaleFactor;
+    if (isWayland && screenScale > 1.01) {
+      String monitorLayoutMode;
+      try {
+        monitorLayoutMode =
+            await bind.mainGetCommon(key: 'gnome-monitor-layout-mode');
+      } catch (_) {
+        monitorLayoutMode = '';
+      }
+      if (monitorLayoutMode == 'physical') {
+        frameRect = Rect.fromLTRB(
+          frameRect.left / screenScale,
+          frameRect.top / screenScale,
+          frameRect.right / screenScale,
+          frameRect.bottom / screenScale,
+        );
+      }
+    }
+    return frameRect;
+  }
+
+  Future<Rect?> _getAdjustedWindowFrame(Size mediaSize,
+      {bool forMenu = false}) async {
+    final screen = _screen;
+    if (screen != null) {
+      // Windows window frames use physical pixels while Flutter view sizes are
+      // logical. macOS and Linux window frames use the same units as Flutter.
+      double scale = isWindows ? screen.scaleFactor : 1.0;
+      final Rect wndRect;
+      try {
+        wndRect = await WindowController.fromWindowId(windowId).getFrame();
+      } catch (e) {
+        debugPrint("Failed to get frame of window $windowId, it may be hidden");
+        return null;
+      }
+      // On Windows, wndRect is GetWindowRect while mediaSize is GetClientRect.
       // https://stackoverflow.com/a/7561083
       double magicWidth =
           wndRect.right - wndRect.left - mediaSize.width * scale;
       double magicHeight =
           wndRect.bottom - wndRect.top - mediaSize.height * scale;
       final canvasModel = ffi.canvasModel;
+      // canvasModel.scale is the rendered scale and already applies kIgnoreDpi.
+      // Use it instead of the remote source resolution.
+      final isWayland = isLinux && bind.mainCurrentIsWayland();
+      final isX11 = isLinux && !isWayland;
+      await _updateLinuxWorkAreaCache(
+        screen: screen,
+        wndRect: wndRect,
+        isWayland: isWayland,
+        isX11: isX11,
+        forMenu: forMenu,
+      );
+      if (isWindows && forMenu && isFullscreen) {
+        // desktop_multi_window's hidden title bar keeps 8 physical pixels on
+        // each horizontal edge and at the bottom, plus up to 1px at the top.
+        // Fullscreen removes these in WM_NCCALCSIZE, so predict the restored
+        // frame's worst-case padding when deciding whether to show the menu.
+        magicWidth = 16.0;
+        magicHeight = 9.0;
+      }
+      double horizontalEdges;
+      double verticalEdges;
+      if (forMenu && (isLinux || ((isMacOS || isWindows) && isFullscreen))) {
+        // Linux Adjust Window unmaximizes; macOS and Windows exit fullscreen
+        // before resizing. Predict the restored normal-window edges when
+        // deciding whether to show the menu item.
+        final resizePadding = isLinux && !kUseCompatibleUiMode
+            ? kDragToResizeAreaPaddingSize
+            : 0.0;
+        final windowEdge = kWindowBorderWidth + resizePadding;
+        horizontalEdges = windowEdge * 2;
+        verticalEdges = kDesktopRemoteTabBarHeight + windowEdge * 2;
+      } else {
+        horizontalEdges = CanvasModel.leftToEdge + CanvasModel.rightToEdge;
+        verticalEdges = CanvasModel.topToEdge + CanvasModel.bottomToEdge;
+      }
       final width = (canvasModel.getDisplayWidth() * canvasModel.scale +
-                  CanvasModel.leftToEdge +
-                  CanvasModel.rightToEdge) *
+                  horizontalEdges) *
               scale +
           magicWidth;
-      final height = (canvasModel.getDisplayHeight() * canvasModel.scale +
-                  CanvasModel.topToEdge +
-                  CanvasModel.bottomToEdge) *
-              scale +
-          magicHeight;
+      final height =
+          (canvasModel.getDisplayHeight() * canvasModel.scale + verticalEdges) *
+                  scale +
+              magicHeight;
       double left = wndRect.left + (wndRect.width - width) / 2;
       double top = wndRect.top + (wndRect.height - height) / 2;
 
-      Rect frameRect = _screen!.frame;
-      if (!isFullscreen) {
-        frameRect = _screen!.visibleFrame;
+      final frameRect = await _getEffectiveScreenFrame(
+        screen: screen,
+        isWayland: isWayland,
+        isX11: isX11,
+        forMenu: forMenu,
+      );
+      if (frameRect == null) {
+        return null;
+      }
+      var availableSize = frameRect.size;
+      if (isWayland && forMenu && _waylandMaximizedWorkAreaSize != null) {
+        final cachedSize = _waylandMaximizedWorkAreaSize!;
+        availableSize = Size(
+          cachedSize.width < availableSize.width
+              ? cachedSize.width
+              : availableSize.width,
+          cachedSize.height < availableSize.height
+              ? cachedSize.height
+              : availableSize.height,
+        );
+      }
+      // A window frame cannot be smaller than its client area. Tolerate small
+      // floating-point differences; larger negative values mean the native
+      // frame and Flutter view metrics are not synchronized.
+      if (magicWidth < -0.1 || magicHeight < -0.1) {
+        return null;
+      }
+      // Reject implausibly small targets to avoid hiding the window.
+      if (width < 300 || height < 300) {
+        return null;
+      }
+      // The remote size may change after the menu is built. Reject targets
+      // that exceed the available area.
+      final exceedsScreen =
+          width > availableSize.width || height > availableSize.height;
+      if (exceedsScreen) {
+        return null;
       }
       if (left < frameRect.left) {
         left = frameRect.left;
@@ -1405,69 +1584,101 @@ class ScreenAdjustor {
       if ((top + height) > frameRect.bottom) {
         top = frameRect.bottom - height;
       }
-      await WindowController.fromWindowId(windowId)
-          .setFrame(Rect.fromLTWH(left, top, width, height));
+      return Rect.fromLTWH(left, top, width, height);
+    }
+    return null;
+  }
+
+  doAdjustWindow([BuildContext? context]) async {
+    // A resolution change is adjusted after a delay, when the menu context may
+    // already be disposed. Each desktop_multi_window window has its own engine,
+    // so that engine's first view is the current window.
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (context == null && views.isEmpty) {
+      return;
+    }
+    final view = context != null ? View.of(context) : views.first;
+    await updateScreen();
+    if (_screen != null) {
+      final wc = WindowController.fromWindowId(windowId);
+      final wasFullscreen = isFullscreen;
+      cbExitFullscreen();
+      if (wasFullscreen) {
+        // Wait for the native fullscreen exit to update the window frame.
+        await Future.delayed(Duration(milliseconds: 700));
+        await updateScreen();
+      }
+      if (isLinux) {
+        final isMaximized = await isWindowMaximized();
+        if (isMaximized == null) {
+          return;
+        }
+        if (isMaximized == true) {
+          // setFrame may be ignored while the native window is maximized.
+          try {
+            await wc.unmaximize();
+          } catch (_) {
+            return;
+          }
+          stateGlobal.setMaximized(false);
+          // Wait for the window manager and Flutter view metrics to reflect
+          // the restored window before calculating and setting its frame.
+          await Future.delayed(Duration(milliseconds: 300));
+          await updateScreen();
+        }
+      }
+      final mediaSize = MediaQueryData.fromView(view).size;
+      final frame = await _getAdjustedWindowFrame(mediaSize);
+      if (frame == null) {
+        return;
+      }
+      try {
+        await wc.setFrame(frame);
+      } catch (_) {
+        return;
+      }
       stateGlobal.setMaximized(false);
     }
   }
 
   updateScreen() async {
-    final String info =
-        isWeb ? screenInfo : await _getScreenInfoDesktop() ?? '';
-    if (info.isEmpty) {
-      _screen = null;
-    } else {
-      final screenMap = jsonDecode(info);
-      _screen = window_size.Screen(
-          Rect.fromLTRB(screenMap['frame']['l'], screenMap['frame']['t'],
-              screenMap['frame']['r'], screenMap['frame']['b']),
-          Rect.fromLTRB(
-              screenMap['visibleFrame']['l'],
-              screenMap['visibleFrame']['t'],
-              screenMap['visibleFrame']['r'],
-              screenMap['visibleFrame']['b']),
-          screenMap['scaleFactor']);
+    _screen = await _getCurrentScreen();
+  }
+
+  Future<window_size.Screen?> _getCurrentScreen() async {
+    try {
+      return (await window_size.getWindowInfo()).screen;
+    } catch (e) {
+      debugPrint('Failed to get current window screen: $e');
+      return null;
     }
   }
 
-  _getScreenInfoDesktop() async {
-    final v = await rustDeskWinManager.call(
-        WindowType.Main, kWindowGetWindowInfo, '');
-    return v.result;
-  }
-
-  Future<bool> isWindowCanBeAdjusted() async {
+  Future<bool> isWindowCanBeAdjusted([BuildContext? context]) async {
+    if (isWeb) {
+      return false;
+    }
+    // Capture the view before awaiting because the menu context may be disposed.
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (context == null && views.isEmpty) {
+      return false;
+    }
+    final view = context != null ? View.of(context) : views.first;
+    final mediaSize = MediaQueryData.fromView(view).size;
     final viewStyle =
         await bind.sessionGetViewStyle(sessionId: ffi.sessionId) ?? '';
     if (viewStyle != kRemoteViewStyleOriginal) {
       return false;
     }
-    if (!isWeb) {
-      final remoteCount = RemoteCountState.find().value;
-      if (remoteCount != 1) {
-        return false;
-      }
+    final remoteCount = RemoteCountState.find().value;
+    if (remoteCount != 1) {
+      return false;
     }
+    await updateScreen();
     if (_screen == null) {
       return false;
     }
-    final scale = kIgnoreDpi ? 1.0 : _screen!.scaleFactor;
-    double selfWidth = _screen!.visibleFrame.width;
-    double selfHeight = _screen!.visibleFrame.height;
-    if (isFullscreen) {
-      selfWidth = _screen!.frame.width;
-      selfHeight = _screen!.frame.height;
-    }
-
-    final canvasModel = ffi.canvasModel;
-    final displayWidth = canvasModel.getDisplayWidth();
-    final displayHeight = canvasModel.getDisplayHeight();
-    final requiredWidth =
-        CanvasModel.leftToEdge + displayWidth + CanvasModel.rightToEdge;
-    final requiredHeight =
-        CanvasModel.topToEdge + displayHeight + CanvasModel.bottomToEdge;
-    return selfWidth > (requiredWidth * scale) &&
-        selfHeight > (requiredHeight * scale);
+    return await _getAdjustedWindowFrame(mediaSize, forMenu: true) != null;
   }
 }
 
@@ -1518,7 +1729,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    _screenAdjustor.updateScreen();
     menuChildrenGetter(_IconSubmenuButtonState state) {
       final menuChildren = <Widget>[
         _screenAdjustor.adjustWindow(context),
@@ -2082,15 +2292,19 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
 
   Future<void> _getLocalResolutionWayland() async {
     if (!isWayland) return _getLocalResolution();
-    final window = await window_size.getWindowInfo();
-    final screen = window.screen;
-    if (screen != null) {
-      setState(() {
-        _localResolution = Resolution(
-          screen.frame.width.toInt(),
-          screen.frame.height.toInt(),
-        );
-      });
+    try {
+      final window = await window_size.getWindowInfo();
+      final screen = window.screen;
+      if (screen != null) {
+        setState(() {
+          _localResolution = Resolution(
+            screen.frame.width.toInt(),
+            screen.frame.height.toInt(),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to get local resolution on Wayland: $e');
     }
   }
 
@@ -2162,8 +2376,16 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         return;
       }
       if (w == rect.width.toInt() && h == rect.height.toInt()) {
-        if (await widget.screenAdjustor.isWindowCanBeAdjusted()) {
-          widget.screenAdjustor.doAdjustWindow(context);
+        if (!await widget.screenAdjustor.isWindowCanBeAdjusted()) {
+          return;
+        }
+        if (widget.screenAdjustor.isFullscreen) {
+          return;
+        }
+        if ((await widget.screenAdjustor.isWindowMaximized()) == false) {
+          // This delayed callback can outlive the menu State, so its context
+          // is unsafe.
+          widget.screenAdjustor.doAdjustWindow();
         }
       }
     });

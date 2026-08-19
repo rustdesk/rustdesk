@@ -2655,6 +2655,14 @@ pub fn main_get_common(key: String) -> String {
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
         #[cfg(not(target_os = "linux"))]
         return false.to_string();
+    } else if key == "gnome-monitor-layout-mode" {
+        #[cfg(target_os = "linux")]
+        return match crate::platform::linux::gnome_monitor_layout_mode() {
+            Some(mode) => mode.as_str().to_owned(),
+            None => String::new(),
+        };
+        #[cfg(not(target_os = "linux"))]
+        return String::new();
     } else if key == "permanent-password-set" {
         return ui_interface::is_permanent_password_set().to_string();
     } else if key == "local-permanent-password-set" {
