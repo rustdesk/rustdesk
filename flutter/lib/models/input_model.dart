@@ -16,6 +16,7 @@ import 'package:get/get.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
+import 'display_utils.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
@@ -735,6 +736,50 @@ class InputModel {
     }
   }
 
+  // Alt+` (physical backquote key) cycles to the next individual remote
+  // display, skipping the "All displays" pseudo-monitor. Mirrors the
+  // relative-mouse exit shortcut: intercept locally and never forward.
+  bool _displaySwitchShortcutDown = false;
+
+  bool _handleDisplaySwitchShortcut({
+    required PhysicalKeyboardKey physicalKey,
+    required bool isKeyUp,
+    required bool isKeyDown,
+    required bool isRepeat,
+    required bool altPressed,
+  }) {
+    if (!isDesktop || !keyboardPerm || isViewCamera) return false;
+    if (physicalKey != PhysicalKeyboardKey.backquote) return false;
+
+    // Once held, swallow every backquote event until release so the remote
+    // never sees an orphan down/repeat/up it did not initiate.
+    if (_displaySwitchShortcutDown) {
+      if (isKeyUp) _displaySwitchShortcutDown = false;
+      return true;
+    }
+
+    if (!isKeyDown || isRepeat || !altPressed) return false;
+
+    _displaySwitchShortcutDown = true;
+    _cycleToNextDisplay();
+    return true;
+  }
+
+  void _cycleToNextDisplay() {
+    final ffi = parent.target;
+    if (ffi == null) return;
+    final pi = ffi.ffiModel.pi;
+    final total = pi.displays.length;
+    if (total <= 1) return;
+
+    final next = nextDisplayIndex(pi.currentDisplay, total);
+    openMonitorInTheSameTab(next, ffi, pi);
+  }
+
+  // Invoked from the Rust rdev grab loop ("Input source 1") when Alt+` is
+  // pressed; the Flutter key path handles "Input source 2" above.
+  void switchToNextDisplay() => _cycleToNextDisplay();
+
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
     if (isViewOnly) return KeyEventResult.handled;
     if (isViewCamera) return KeyEventResult.handled;
@@ -747,6 +792,16 @@ class InputModel {
     }
 
     if (_relativeMouse.handleRawKeyEvent(e)) {
+      return KeyEventResult.handled;
+    }
+
+    if (_handleDisplaySwitchShortcut(
+      physicalKey: e.physicalKey,
+      isKeyUp: e is RawKeyUpEvent,
+      isKeyDown: e is RawKeyDownEvent,
+      isRepeat: e is RawKeyDownEvent && e.repeat,
+      altPressed: e.isAltPressed,
+    )) {
       return KeyEventResult.handled;
     }
 
@@ -844,6 +899,16 @@ class InputModel {
       shiftPressed: shift,
       altPressed: alt,
       commandPressed: command,
+    )) {
+      return KeyEventResult.handled;
+    }
+
+    if (_handleDisplaySwitchShortcut(
+      physicalKey: e.physicalKey,
+      isKeyUp: e is KeyUpEvent,
+      isKeyDown: e is KeyDownEvent,
+      isRepeat: e is KeyRepeatEvent,
+      altPressed: HardwareKeyboard.instance.isAltPressed,
     )) {
       return KeyEventResult.handled;
     }

@@ -474,6 +474,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'exit_relative_mouse_mode') {
         // Handle exit shortcut from rdev grab loop (Ctrl+Alt on Win/Linux, Cmd+G on macOS)
         parent.target?.inputModel.exitRelativeMouseModeWithKeyRelease();
+      } else if (name == 'switch_display_shortcut') {
+        // Handle Alt+` display-switch shortcut from rdev grab loop ("Input source 1")
+        parent.target?.inputModel.switchToNextDisplay();
       } else {
         debugPrint('Event is not handled in the fixed branch: $name');
       }
