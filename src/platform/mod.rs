@@ -32,7 +32,7 @@ use hbb_common::sysinfo::System;
 use hbb_common::{message_proto::CursorData, sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
 
-// Application name must start with a letter and contain only letters, numbers, and hyphens.
+// Restrict names because installers interpolate them into privileged scripts and paths.
 #[cfg(any(windows, target_os = "macos"))]
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
     let mut bytes = app_name.bytes();

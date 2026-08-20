@@ -1023,9 +1023,35 @@ jobs:
       group: signed-update-${{ inputs.upload-tag }}
       cancel-in-progress: false
     permissions:
-      # Required to publish or replace signed release assets for the target tag.
+      # Required to inspect and publish signed release assets for the target tag.
       contents: write
     steps:
+      - name: Refuse to replace published update metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ env.TAG_NAME }}
+        run: |
+          set -euo pipefail
+          releases="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          release_id="$(
+            jq -r --arg tag "$TAG_NAME" '
+              [.[][] | select(.tag_name == $tag)] |
+              if length == 0 then ""
+              elif length == 1 then .[0].id
+              else error("multiple releases found for tag")
+              end
+            ' <<<"$releases"
+          )"
+          if [ -z "$release_id" ]; then
+            exit 0
+          fi
+          assets="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100")"
+          if jq -e 'any(.[][]; .name == "rustdesk-update.json")' <<<"$assets" >/dev/null; then
+            echo "::error::Signed update metadata is already published for ${TAG_NAME}; use a new release tag for corrected artifacts."
+            exit 1
+          fi
+
       - name: Checkout source code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
