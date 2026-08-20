@@ -1900,25 +1900,43 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
 }
 
 trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
-  int initSpeed = ffi.inputModel.trackpadSpeed;
+  final initSpeed = ffi.inputModel.trackpadSpeed;
   final curSpeed = SimpleWrapper(initSpeed);
-  final btnClose = dialogButton('Close', onPressed: () async {
-    if (curSpeed.value <= kMaxTrackpadSpeed &&
-        curSpeed.value >= kMinTrackpadSpeed &&
-        curSpeed.value != initSpeed) {
-      await bind.sessionSetTrackpadSpeed(
-          sessionId: sessionId, value: curSpeed.value);
-      await ffi.inputModel.updateTrackpadSpeed();
+  ffi.dialogManager.show((setState, close, context) {
+    submit() async {
+      if (curSpeed.value <= kMaxTrackpadSpeed &&
+          curSpeed.value >= kMinTrackpadSpeed &&
+          curSpeed.value != initSpeed) {
+        await bind.sessionSetTrackpadSpeed(
+            sessionId: sessionId, value: curSpeed.value);
+        await ffi.inputModel.updateTrackpadSpeed();
+      }
+      close();
     }
-    ffi.dialogManager.dismissAll();
-  });
-  msgBoxCommon(
-      ffi.dialogManager,
-      'Trackpad speed',
-      TrackpadSpeedWidget(
-        value: curSpeed,
+
+    return CustomAlertDialog(
+      title: Text(
+        translate('Trackpad speed'),
+        style: TextStyle(fontSize: 21),
       ),
-      [btnClose]);
+      content: TrackpadSpeedWidget(value: curSpeed),
+      actions: [
+        dialogButton(
+          'Cancel',
+          icon: Icon(Icons.close_rounded),
+          onPressed: close,
+          isOutline: true,
+        ),
+        dialogButton(
+          'OK',
+          icon: Icon(Icons.done_rounded),
+          onPressed: submit,
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }
 
 void deleteConfirmDialog(Function onSubmit, String title) async {
