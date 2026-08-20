@@ -135,13 +135,28 @@ fn rejects_schema_policy_artifact_and_url_mismatches() {
         ("sha256", json!("not-a-sha256"), true),
         ("url", json!("https://github.com/rustdesk/rustdesk/releases/download/v1.4.7/rustdesk-1.4.6-x86_64.exe"), true),
         ("url", json!("https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/other.exe"), true),
-        ("url", json!("https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk-1.4.6_x86_64.exe?download=1"), true),
-        ("url", json!("https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk-1.4.6_x86_64.exe#hash"), true),
     ];
     for (key, value, artifact_field) in cases {
         let mut metadata = metadata();
         set_value(&mut metadata, key, value, artifact_field);
         assert!(verify(&sign_fixture(metadata, KEY_ID)).is_err(), "{}", key);
+    }
+}
+
+#[test]
+fn rejects_artifact_url_query_or_fragment() {
+    for suffix in ["?download=1", "#hash"] {
+        let mut invalid_metadata = metadata();
+        invalid_metadata["artifacts"][0]["url"] = json!(format!(
+            "https://github.com/rustdesk/rustdesk/releases/download/v1.4.6/rustdesk-1.4.6-x86_64.exe{suffix}"
+        ));
+        let fixture = sign_fixture(invalid_metadata, KEY_ID);
+        let error = verify(&fixture).err().expect("invalid artifact URL");
+
+        assert_eq!(
+            "update artifact URL must not contain query or fragment",
+            error.to_string()
+        );
     }
 }
 

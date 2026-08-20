@@ -255,7 +255,7 @@ fn validate_artifact(artifact: &UpdateArtifact, expected_url_prefix: &str) -> Re
     }
     let basename = parsed_url
         .path_segments()
-        .and_then(|segments| segments.last())
+        .and_then(|mut segments| segments.next_back())
         .ok_or_else(|| anyhow!("update artifact URL has no basename"))?;
     if basename != artifact.file_name {
         return Err(anyhow!("update artifact URL basename mismatch"));

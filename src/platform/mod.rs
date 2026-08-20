@@ -31,6 +31,21 @@ use hbb_common::sysinfo::System;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::{message_proto::CursorData, sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
+
+// Application name must start with a letter and contain only letters, numbers, and hyphens.
+#[cfg(any(windows, target_os = "macos"))]
+fn validate_install_app_name(app_name: &str) -> ResultType<()> {
+    let mut bytes = app_name.bytes();
+    if !bytes.next().is_some_and(|byte| byte.is_ascii_alphabetic())
+        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        hbb_common::bail!(
+            "Application name must start with a letter and contain only letters, numbers, and hyphens."
+        );
+    }
+    Ok(())
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
 pub const SERVICE_INTERVAL: u64 = 300;
 
@@ -210,6 +225,27 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn install_app_names_require_ascii_letter_prefix() {
+        for app_name in ["RustDesk", "RustDesk-2", "A", "A-0"] {
+            assert!(validate_install_app_name(app_name).is_ok(), "{app_name}");
+        }
+        for app_name in [
+            "",
+            "1RustDesk",
+            "-RustDesk",
+            "Rust_Desk",
+            "Rust.Desk",
+            "Rust Desk",
+            "RüstDesk",
+            "RustDesk;touch",
+        ] {
+            assert!(validate_install_app_name(app_name).is_err(), "{app_name}");
+        }
+    }
+
     #[test]
     fn test_cursor_data() {
         for _ in 0..30 {

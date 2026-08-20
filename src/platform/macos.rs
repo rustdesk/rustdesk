@@ -9,7 +9,7 @@ mod verified_dmg;
 #[path = "macos/verified_dmg_tests.rs"]
 mod verified_dmg_tests;
 
-use super::{CursorData, ResultType};
+use super::{validate_install_app_name, CursorData, ResultType};
 use cocoa::{
     appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*},
     base::{id, nil, BOOL, NO, YES},
@@ -1012,6 +1012,8 @@ fn update_me_from_app_dir(app_dir: String) -> ResultType<()> {
 }
 
 fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
+    let app_name = crate::get_app_name();
+    validate_install_app_name(&app_name)?;
     let is_installed_daemon = is_installed_daemon(false);
     let option_stop_service = "stop-service";
     let is_service_stopped = hbb_common::config::option2bool(
@@ -1019,7 +1021,6 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
         &crate::ui_interface::get_option(option_stop_service),
     );
 
-    let app_name = crate::get_app_name();
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
@@ -1181,13 +1182,7 @@ fn validate_update_tree(path: &Path, framework_root: Option<&Path>) -> ResultTyp
 /// Must be called from a process running as root (e.g. the service binary).
 pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> ResultType<()> {
     let app_name = crate::get_app_name();
-    if app_name.is_empty()
-        || !app_name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    {
-        bail!("[root-update] unsafe application name");
-    }
+    validate_install_app_name(&app_name)?;
     let app_bundle = format!("/Applications/{}.app", app_name);
     let tmp_dir_output = std::process::Command::new("/usr/bin/mktemp")
         .args(&["-d", "/tmp/.rustdeskupdate-root-XXXXXX"])

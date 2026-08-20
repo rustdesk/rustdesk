@@ -779,6 +779,7 @@ jobs:
               target: x86_64-apple-darwin,
               os: macos-15-intel, #macos-latest or macos-14 use M1 now, https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#:~:text=14%20GB-,macos%2Dlatest%20or%20macos%2D14,-The%20macos%2Dlatestlabel
               extra-build-args: "",
+              extra-cargo-features: "",
               arch: x86_64,
               vcpkg-triplet: x64-osx,
             }
@@ -787,6 +788,7 @@ jobs:
               os: macos-14,
               # extra-build-args: "--disable-flutter-texture-render", # disable this for mac, because we see a lot of users reporting flickering both on arm and x64, and we can not confirm if texture rendering has better performance if htere is no vram, https://github.com/rustdesk/rustdesk/issues/6296
               extra-build-args: "--screencapturekit",
+              extra-cargo-features: ",screencapturekit",
               arch: aarch64,
               vcpkg-triplet: arm64-osx,
             }
@@ -941,8 +943,8 @@ jobs:
 
       - name: Test verified updates
         run: |
-          cargo test --locked --release --lib verified_dmg_tests --features flutter,hwcodec,unix-file-copy-paste,screencapturekit
-          cargo test --locked --release --lib update_metadata::tests --features flutter,hwcodec,unix-file-copy-paste,screencapturekit
+          cargo test --locked --release --lib verified_dmg_tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
+          cargo test --locked --release --lib update_metadata::tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -1084,31 +1086,6 @@ jobs:
             --artifact "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME"
 
-      - name: Remove published update metadata
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ env.TAG_NAME }}
-        run: |
-          set -euo pipefail
-          releases="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
-          release_count="$(jq -r --arg tag "$TAG_NAME" '[.[][] | select(.tag_name == $tag)] | length' <<<"$releases")"
-          if [ "$release_count" -eq 0 ]; then
-            exit 0
-          fi
-          if [ "$release_count" -ne 1 ]; then
-            echo "::error::Expected one release for tag $TAG_NAME, found $release_count"
-            exit 1
-          fi
-          release_id="$(jq -r --arg tag "$TAG_NAME" '.[][] | select(.tag_name == $tag) | .id' <<<"$releases")"
-          assets="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100")"
-          for asset_name in rustdesk-update.json rustdesk-update.json.sig; do
-            asset_ids="$(jq -r --arg name "$asset_name" '.[][] | select(.name == $name) | .id' <<<"$assets")"
-            for asset_id in $asset_ids; do
-              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"
-            done
-          done
-
       - name: Upload signed update artifacts
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
@@ -1124,6 +1101,8 @@ jobs:
             ./artifacts/rustdesk-${{ env.VERSION }}-aarch64.dmg
             ./artifacts/rustdesk-${{ env.VERSION }}-x86_64.dmg
 
+      # The release action replaces same-name assets, so keep published sidecars
+      # until replacements are ready.
       - name: Upload signed update metadata signature
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
         with:
