@@ -1960,10 +1960,11 @@ void trackpadSpeedDialog(SessionID sessionId, FFI ffi) {
   var speedText = initSpeed.toString();
   var isSubmitting = false;
   ffi.dialogManager.show((setState, close, context) {
-    Future<void> submit() async {
+    Future<void> submit([String? submittedText]) async {
       if (isSubmitting) {
         return;
       }
+      speedText = submittedText ?? speedText;
       final speed = _validateTrackpadSpeed(speedText);
       if (speed == null) {
         return;
@@ -1991,6 +1992,7 @@ void trackpadSpeedDialog(SessionID sessionId, FFI ffi) {
       content: TrackpadSpeedWidget(
         value: curSpeed,
         onTextChanged: (text) => speedText = text,
+        onTextSubmitted: submit,
       ),
       actions: _trackpadSpeedDialogActions(
         isSubmitting: isSubmitting,

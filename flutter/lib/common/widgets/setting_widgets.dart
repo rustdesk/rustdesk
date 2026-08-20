@@ -254,12 +254,16 @@ class TrackpadSpeedWidget extends StatefulWidget {
   // If null, no debouncer will be applied.
   final Function(int)? onDebouncer;
   final ValueChanged<String>? onTextChanged;
+  // IME actions call TextField.onSubmitted without reaching the dialog's
+  // raw Enter handler, so the dialog needs a separate submission callback.
+  final ValueChanged<String>? onTextSubmitted;
 
   TrackpadSpeedWidget({
     Key? key,
     required this.value,
     this.onDebouncer,
     this.onTextChanged,
+    this.onTextSubmitted,
   });
 
   @override
@@ -285,7 +289,23 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
     widget.onTextChanged?.call(_controller.text);
   }
 
+  void updateTextValue(String text) {
+    widget.onTextChanged?.call(text);
+    final newValue = int.tryParse(text);
+    if (newValue == null ||
+        newValue < kMinTrackpadSpeed ||
+        newValue > kMaxTrackpadSpeed) {
+      return;
+    }
+    setState(() => value = newValue);
+  }
+
   void submitTextValue(String text) {
+    final onTextSubmitted = widget.onTextSubmitted;
+    if (onTextSubmitted != null) {
+      onTextSubmitted(text);
+      return;
+    }
     if (widget.onTextChanged != null) {
       return;
     }
@@ -333,7 +353,7 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
                     controller: _controller,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    onChanged: widget.onTextChanged,
+                    onChanged: updateTextValue,
                     onSubmitted: submitTextValue,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
