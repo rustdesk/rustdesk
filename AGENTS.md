@@ -61,6 +61,12 @@
 * Do not make formatting-only changes.
 * Keep naming/style consistent with nearby code.
 
+### Comments
+
+* Avoid comments unless they explain a non-obvious reason, constraint, or workaround.
+* Never restate what the code does; prefer clearer code instead.
+* If the code is self-explanatory, add no comment.
+
 ### Be minimally invasive
 
 * Prefer purely additive changes: layer new (`#[cfg]`-gated) blocks or new functions around existing code instead of restructuring it. The ideal diff for a fix adds lines and modifies/deletes none.

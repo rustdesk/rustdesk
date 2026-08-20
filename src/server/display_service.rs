@@ -65,6 +65,13 @@ pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
 }
 
+// The uinput ABS range currently programmed into the device, for the DRM path's "reapply only when
+// it changed" check. The PipeWire path compares it inline in refresh_wayland_uinput_rect_if_changed.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) fn wayland_uinput_rect() -> Option<(i32, i32, i32, i32)> {
+    WAYLAND_UINPUT_RECT.lock().unwrap().rect
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
     WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
@@ -91,6 +98,11 @@ pub(super) fn remap_wayland_uinput_coord(x: i32, y: i32) -> (i32, i32) {
 #[cfg(target_os = "linux")]
 fn refresh_wayland_uinput_rect_if_changed() {
     if is_x11() || !crate::input_service::wayland_use_uinput() {
+        return;
+    }
+    // Nothing to poll at a login screen; the DRM path owns the rect there.
+    #[cfg(feature = "drm")]
+    if crate::platform::linux::is_login_screen_wayland_cached() {
         return;
     }
     {
@@ -328,6 +340,29 @@ fn check_get_displays_changed_msg() -> Option<Message> {
     #[cfg(target_os = "linux")]
     {
         if !is_x11() {
+            // On the DRM/KMS capture path the PipeWire enumeration (which is what feeds
+            // `SYNC_DISPLAYS` via `check_update_displays`) is bypassed, so populate the sync list
+            // from the DRM display list here. Without this the display service broadcasts an empty
+            // list that overwrites the login peer-info displays and the client shows "No displays".
+            #[cfg(feature = "drm")]
+            if super::drm_capturer::is_available_cached() {
+                let synced = !SYNC_DISPLAYS.lock().unwrap().displays.is_empty();
+                let stamped_before = scrap::wayland::display::wayland_failure_stamped();
+                // With nothing published yet, even the unaugmented DRM list beats the empty
+                // broadcast below; with a synced layout, a suppressed turn keeps it instead.
+                if !synced || !scrap::wayland::display::wayland_lookup_suppressed() {
+                    if let Some(displays) = super::drm_capturer::get_display_infos() {
+                        // A first failure keeps the synced layout for one backoff; only a
+                        // failure that persists across one replaces it with the DRM stack.
+                        if !synced
+                            || stamped_before
+                            || !scrap::wayland::display::wayland_lookup_suppressed()
+                        {
+                            SYNC_DISPLAYS.lock().unwrap().check_changed(&displays);
+                        }
+                    }
+                }
+            }
             return get_displays_msg();
         }
     }
@@ -434,10 +469,53 @@ pub(super) fn get_display_info(idx: usize) -> Option<DisplayInfo> {
     SYNC_DISPLAYS.lock().unwrap().displays.get(idx).cloned()
 }
 
+// True when at least one advertised (synced) display is NOT served by the DRM/KMS capture path,
+// i.e. a mixed DRM + PipeWire session. The cursor service (platform::linux::get_cursor /
+// get_cursor_data) uses this to decide whether a hidden DRM hardware-cursor sentinel is
+// authoritative: in a pure-DRM session it is (the pointer is genuinely off every captured CRTC),
+// but in a mixed session the sentinel only means the pointer moved onto a PipeWire-served display,
+// whose cursor must come from the normal path instead of being hidden everywhere.
+//
+// When DRM capture is active the advertised list is enumerated from the DRM display list, so a DRM
+// list shorter than the synced list means at least one advertised display is served by PipeWire.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub fn has_non_drm_backed_display() -> bool {
+    match super::drm_capturer::display_count_and_any_demoted() {
+        // A display served by PipeWire is either ABSENT from the DRM list (a shorter count, e.g. a
+        // pure-portal display) or PRESENT-BUT-DEMOTED (kept in place at the same index and marked
+        // offline so the index space stays aligned -- see get_display_infos). The count check alone
+        // misses the demotion case (same count), so a demoted display is treated as non-DRM-backed
+        // too. This is what gates the hidden-cursor sentinel: it stays authoritative only in a
+        // pure-DRM session. The scalar accessor is deliberate: this is polled every cursor tick
+        // while the sentinel is active, and cloning + geometry-augmenting the whole list per tick
+        // (what get_display_infos does) answered the same two facts.
+        Some((count, any_demoted)) => {
+            count < SYNC_DISPLAYS.lock().unwrap().displays.len() || any_demoted
+        }
+        None => false,
+    }
+}
+
 // Display to DisplayInfo
 // The DisplayInfo is be sent to the peer.
 pub(super) fn check_update_displays(all: &Vec<Display>) {
     let _ = update_sync_displays(all);
+}
+
+/// Whether there is a compositor on this seat worth asking. `get_displays()` does not cache
+/// its failure, so where there is none it re-probes every call for an answer that cannot
+/// change any caller's outcome. Last in the `&&` chain, so it never runs first on a poll.
+#[inline]
+#[cfg(target_os = "linux")]
+fn wayland_has_compositor() -> bool {
+    #[cfg(feature = "drm")]
+    {
+        !crate::platform::linux::is_login_screen_wayland_cached()
+    }
+    #[cfg(not(feature = "drm"))]
+    {
+        true
+    }
 }
 
 // Return the converted input snapshot while updating the shared display cache.
@@ -447,6 +525,7 @@ pub(super) fn update_sync_displays(all: &Vec<Display>) -> Vec<DisplayInfo> {
     #[cfg(target_os = "linux")]
     let use_logical_scale = !is_x11()
         && crate::is_server()
+        && wayland_has_compositor()
         && scrap::wayland::display::get_displays().displays.len() > 1;
     let displays = all
         .iter()

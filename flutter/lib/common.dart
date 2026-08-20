@@ -84,8 +84,6 @@ const double _kPositionEpsilon = 1e-6;
 bool get isMainDesktopWindow =>
     desktopType == DesktopType.main || desktopType == DesktopType.cm;
 
-String get screenInfo => screenInfo_;
-
 /// Check if the app is running with single view mode.
 bool isSingleViewApp() {
   return desktopType == DesktopType.cm;
@@ -4048,7 +4046,8 @@ Widget netWorkErrorWidget() {
     mainAxisAlignment: MainAxisAlignment.center,
     crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      Text(translate("network_error_tip")),
+      if (!gFFI.userModel.networkErrorFromServer.value)
+        Text(translate("network_error_tip")),
       ElevatedButton(
               onPressed: gFFI.userModel.refreshCurrentUser,
               child: Text(translate("Retry")))

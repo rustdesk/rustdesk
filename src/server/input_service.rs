@@ -396,19 +396,62 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
     if let Some(hcursor) = crate::get_cursor()? {
         if hcursor != state.hcursor {
             let msg;
+            // On the DRM path get_cursor_data() may return a snapshot whose id has advanced past the
+            // requested `hcursor` (it returns the latest hardware cursor); file it in the cache AND
+            // record state.hcursor under the id ACTUALLY served, so a later reappearance of that exact
+            // shape dedupes correctly instead of being suppressed. Everything below is fully
+            // gated on the drm feature, so the drm-off build stays byte-identical to upstream.
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            let mut drm_served_id = hcursor;
             if let Some(cached) = state.cached_cursor_data.get(&hcursor) {
                 super::log::trace!("Cursor data cached, hcursor: {}", hcursor);
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
+                // File the shape under the id ACTUALLY served, not the one requested. Deliberately a
+                // NEW name rather than shadowing `hcursor`: the insert below reads as the requested
+                // id everywhere else in this function, and a cfg-gated shadow would make the two
+                // builds disagree about what that line means.
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                let served_id = data.id;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                {
+                    drm_served_id = served_id;
+                }
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                let cache_key = served_id;
+                #[cfg(not(all(target_os = "linux", feature = "drm")))]
+                let cache_key = hcursor;
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
-                state.cached_cursor_data.insert(hcursor, msg.clone());
-                super::log::trace!("Cursor data updated, hcursor: {}", hcursor);
+                // A DRM cursor id is derived from the shape's pixels plus geometry, so an animated
+                // pointer mints a new id on every shape change and this map would grow for the life
+                // of the service, each entry pinning a compressed cursor message. (Upstream's X11
+                // ids come from a small set of XFixes serials, so the map is effectively bounded
+                // there -- which is why the ceiling is gated and the stock build stays untouched.)
+                // Past the ceiling, drop the map and start over: the next request for any evicted
+                // shape just recompresses it, and the ceiling comfortably covers every static shape
+                // plus a generous animation window.
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                {
+                    const CURSOR_CACHE_MAX: usize = 64;
+                    if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
+                        state.cached_cursor_data.clear();
+                    }
+                }
+                state.cached_cursor_data.insert(cache_key, msg.clone());
+                super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
             }
-            state.hcursor = hcursor;
+            #[cfg(not(all(target_os = "linux", feature = "drm")))]
+            {
+                state.hcursor = hcursor;
+            }
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            {
+                state.hcursor = drm_served_id;
+            }
             sp.send_shared(msg.clone());
             state.cursor_data = msg;
         }
@@ -620,17 +663,22 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
     let mouse = super::uinput::client::UInputMouse::new().await?;
     log::info!("UInput mouse created");
 
-    ENIGO
-        .lock()
-        .unwrap()
-        .set_custom_keyboard(Box::new(keyboard));
-    ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
+    let mut en = ENIGO.lock().unwrap();
+    // enigo guessed x11 once at construction, which is what a Wayland greeter reads as, and
+    // then routes the devices installed below to a null xdo that drops everything silently.
+    // Reaching here means `wayland_use_uinput()` was true, so this states a fact.
+    en.set_is_x11(false);
+    // One lock for both, so there is no window where the keyboard is custom and the mouse is not.
+    en.set_custom_keyboard(Box::new(keyboard));
+    en.set_custom_mouse(Box::new(mouse));
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     let mut en = ENIGO.lock()?;
+    // Same as `setup_uinput`: the caller is gated on `wayland_use_rdp_input()`.
+    en.set_is_x11(false);
     let rdp_info_lock = RDP_SESSION_INFO.lock()?;
     let rdp_info = rdp_info_lock.as_ref().ok_or("RDP session is None")?;
 

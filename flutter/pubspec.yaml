@@ -61,9 +61,9 @@ dependencies:
   flutter_custom_cursor: ^0.0.4
   window_size:
     git:
-      url: https://github.com/google/flutter-desktop-embedding.git
+      url: https://github.com/21pages/flutter-desktop-embedding.git
       path: plugins/window_size
-      ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
+      ref: 51e67ce047c72b26810b99e8473ddb44612fe356
   get: ^4.6.5
   visibility_detector: ^0.4.0+2
   contextmenu: ^3.0.0

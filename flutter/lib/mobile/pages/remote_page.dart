@@ -1276,6 +1276,14 @@ void showOptions(
   List<TToggleMenu> cursorToggles = await toolbarCursor(context, id, gFFI);
   List<TToggleMenu> displayToggles =
       await toolbarDisplayToggle(context, id, gFFI);
+  if (isMobile) {
+    displayToggles.insert(
+        0,
+        TToggleMenu(
+            child: Text(translate('Lock canvas')),
+            value: gFFI.canvasModel.locked,
+            onChanged: (value) => gFFI.canvasModel.setLocked(value == true)));
+  }
 
   List<TToggleMenu> privacyModeList = [];
   if ((gFFI.ffiModel.pi.features.privacyMode && gFFI.ffiModel.keyboard) ||

@@ -12,8 +12,6 @@ use crate::clipboard::{update_clipboard, ClipboardSide};
 use crate::clipboard_file::*;
 #[cfg(target_os = "android")]
 use crate::keyboard::client::map_key_to_control_key;
-#[cfg(target_os = "linux")]
-use crate::platform::linux_desktop_manager;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::platform::WallPaperRemover;
 #[cfg(windows)]
@@ -93,9 +91,13 @@ lazy_static::lazy_static! {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+const SWITCH_SIDES_UUID_TTL: Duration = Duration::from_secs(10);
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
-    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid)>>> = Default::default();
+    static ref PENDING_SWITCH_SIDES_UUID: Arc::<Mutex<HashMap<String, (Instant, uuid::Uuid, bool)>>> = Default::default();
 }
 
 #[cfg(target_os = "windows")]
@@ -113,27 +115,6 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     x == 0
 }
 
-#[cfg(target_os = "linux")]
-fn should_check_linux_headless_os_auth_before_desktop_start(
-    is_headless_allowed: bool,
-    username: &str,
-) -> bool {
-    is_headless_allowed
-        && !username.trim().is_empty()
-        && linux_desktop_manager::get_username().is_empty()
-}
-
-#[cfg(target_os = "linux")]
-fn should_record_linux_headless_os_auth_failure(
-    is_headless_allowed: bool,
-    username: &str,
-    err_msg: &str,
-) -> bool {
-    is_headless_allowed
-        && !username.trim().is_empty()
-        && err_msg == crate::client::LOGIN_MSG_PASSWORD_WRONG
-}
-
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn should_use_terminal_os_login_scope(is_terminal: bool, os_login_username: &str) -> bool {
     cfg!(target_os = "windows") && is_terminal && !os_login_username.trim().is_empty()
@@ -146,43 +127,6 @@ lazy_static::lazy_static! {
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
-
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-lazy_static::lazy_static! {
-    static ref PLUGIN_BLOCK_INPUT_TXS: Arc<Mutex<HashMap<String, std_mpsc::Sender<MessageInput>>>> = Default::default();
-    static ref PLUGIN_BLOCK_INPUT_TX_RX: (Arc<Mutex<std_mpsc::Sender<bool>>>, Arc<Mutex<std_mpsc::Receiver<bool>>>) = {
-        let (tx, rx) = std_mpsc::channel();
-        (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)))
-    };
-}
-
-// Block input is required for some special cases, such as privacy mode.
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn plugin_block_input(peer: &str, block: bool) -> bool {
-    if let Some(tx) = PLUGIN_BLOCK_INPUT_TXS.lock().unwrap().get(peer) {
-        let _ = tx.send(if block {
-            MessageInput::BlockOnPlugin(peer.to_string())
-        } else {
-            MessageInput::BlockOffPlugin(peer.to_string())
-        });
-        match PLUGIN_BLOCK_INPUT_TX_RX
-            .1
-            .lock()
-            .unwrap()
-            .recv_timeout(std::time::Duration::from_millis(3_000))
-        {
-            Ok(b) => b == block,
-            Err(..) => {
-                log::error!("plugin_block_input timeout");
-                false
-            }
-        }
-    } else {
-        false
-    }
-}
 
 #[derive(Clone, Default)]
 pub struct ConnInner {
@@ -209,12 +153,6 @@ enum MessageInput {
     Pointer((PointerDeviceEvent, i32)),
     BlockOn,
     BlockOff,
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    BlockOnPlugin(String),
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    BlockOffPlugin(String),
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -235,8 +173,6 @@ struct Session {
 struct StartCmIpcPara {
     rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    rx_desktop_ready: mpsc::Receiver<()>,
-    tx_cm_stream_ready: mpsc::Sender<()>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -363,6 +299,9 @@ pub struct Connection {
     server_audit_file: String,
     controlled_context: Option<ControlledContext>,
     lr: LoginRequest,
+    // Authentication retries may update credentials, but not the requested session scope.
+    // A digest, so no peer-controlled strings are retained.
+    login_scope: Option<[u8; 32]>,
     peer_argb: u32,
     session_last_recv_time: Option<Arc<Mutex<Instant>>>,
     chat_unanswered: bool,
@@ -375,8 +314,6 @@ pub struct Connection {
     options_in_login: Option<OptionMessage>,
     #[cfg(not(any(target_os = "ios")))]
     pressed_modifiers: HashSet<rdev::Key>,
-    #[cfg(target_os = "linux")]
-    linux_headless_handle: LinuxHeadlessHandle,
     closed: bool,
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     start_cm_ipc_para: Option<StartCmIpcPara>,
@@ -457,6 +394,20 @@ const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Whether the DRM backend can serve a Wayland login screen here.
+///
+/// A cold cache probes off-thread; admission still requires a definitive `Available` verdict.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+fn drm_can_serve_login_screen() -> bool {
+    super::drm_capturer::availability_cached() == super::drm_capturer::Availability::Available
+}
+
+/// Without the feature nothing can capture a Wayland greeter, so the refusal stands.
+#[cfg(all(target_os = "linux", not(feature = "drm")))]
+fn drm_can_serve_login_screen() -> bool {
+    false
+}
+
 impl Connection {
     pub async fn start(
         addr: SocketAddr,
@@ -490,14 +441,6 @@ impl Connection {
         let (tx_input, _rx_input) = std_mpsc::channel();
         let (tx_from_authed, mut rx_from_authed) = mpsc::unbounded_channel::<ipc::Data>();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (tx_cm_stream_ready, _rx_cm_stream_ready) = mpsc::channel(1);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let (_tx_desktop_ready, rx_desktop_ready) = mpsc::channel(1);
-        #[cfg(target_os = "linux")]
-        let linux_headless_handle =
-            LinuxHeadlessHandle::new(_rx_cm_stream_ready, _tx_desktop_ready);
-
         let (tx_post_seq, rx_post_seq) = mpsc::unbounded_channel();
         tokio::spawn(async move {
             Self::post_seq_loop(rx_post_seq).await;
@@ -560,6 +503,7 @@ impl Connection {
             server_audit_file: "".to_owned(),
             controlled_context,
             lr: Default::default(),
+            login_scope: None,
             peer_argb: 0u32,
             session_last_recv_time: None,
             chat_unanswered: false,
@@ -573,15 +517,11 @@ impl Connection {
             options_in_login: None,
             #[cfg(not(any(target_os = "ios")))]
             pressed_modifiers: Default::default(),
-            #[cfg(target_os = "linux")]
-            linux_headless_handle,
             closed: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             start_cm_ipc_para: Some(StartCmIpcPara {
                 rx_to_cm,
                 tx_from_cm,
-                rx_desktop_ready,
-                tx_cm_stream_ready,
             }),
             auto_disconnect_timer: None,
             authed_conn_id: None,
@@ -1138,12 +1078,6 @@ impl Connection {
                 let _ = Self::turn_off_privacy_to_msg(id, String::new());
             }
         }
-        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        crate::plugin::handle_listen_event(
-            crate::plugin::EVENT_ON_CONN_CLOSE_SERVER.to_owned(),
-            conn.lr.my_id.clone(),
-        );
         video_service::notify_video_frame_fetched_by_conn_id(id, None);
         if conn.authorized {
             password::update_temporary_password();
@@ -1228,35 +1162,8 @@ impl Connection {
                             );
                         }
                     }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    MessageInput::BlockOnPlugin(_peer) => {
-                        let (ok, _msg) = crate::platform::block_input(true);
-                        if ok {
-                            block_input_mode = true;
-                        }
-                        let _r = PLUGIN_BLOCK_INPUT_TX_RX
-                            .0
-                            .lock()
-                            .unwrap()
-                            .send(block_input_mode);
-                    }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    MessageInput::BlockOffPlugin(_peer) => {
-                        let (ok, _msg) = crate::platform::block_input(false);
-                        if ok {
-                            block_input_mode = false;
-                        }
-                        let _r = PLUGIN_BLOCK_INPUT_TX_RX
-                            .0
-                            .lock()
-                            .unwrap()
-                            .send(block_input_mode);
-                    }
                 },
                 Err(err) => {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
                     }
@@ -1506,6 +1413,8 @@ impl Connection {
         v["uuid"] = json!(crate::encode64(hbb_common::get_uuid()));
         v["conn_id"] = json!(self.inner.id);
         v["session_id"] = json!(self.lr.session_id);
+        // Unique per record; the api server dedups retried posts by it.
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         allow_err!(self.tx_post_seq.send((url, v)));
     }
 
@@ -1555,6 +1464,7 @@ impl Connection {
             "path":path,
             "is_file":is_file,
             "info":json!(info).to_string(),
+            "nonce": uuid::Uuid::new_v4().to_string(),
         });
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -1576,6 +1486,7 @@ impl Connection {
         v["typ"] = json!(typ as i8);
         v["info"] = serde_json::Value::String(info.to_string());
         v["conn_id"] = json!(self.inner.id());
+        v["nonce"] = json!(uuid::Uuid::new_v4().to_string());
         if typ == AlarmAuditType::IpWhitelist || typ == AlarmAuditType::IdWhitelist {
             if let Some(audit_ref) = self.conn_audit_ref() {
                 v["conn_audit_ref"] = json!(audit_ref);
@@ -1603,9 +1514,103 @@ impl Connection {
         );
     }
 
-    #[inline]
     async fn post_audit_async(url: String, v: Value) -> ResultType<String> {
-        crate::post_request(url, v.to_string(), "").await
+        // Audit records are compliance evidence; retry transport errors and
+        // 5xx (e.g. a reverse proxy answering while the api server restarts)
+        // so transient failures don't silently drop them. A 4xx is a
+        // deterministic rejection and fails immediately.
+        //
+        // The delays, not the attempt count, are what cover the case this exists
+        // for: a proxy answering 502 during a restart fails fast, so without them
+        // every attempt lands within a few seconds and none outlives the restart.
+        //
+        // The window is bounded on the other side: the api server only remembers a
+        // record's nonce for five minutes, so a retry arriving after that expired
+        // would be stored a second time. Counting attempts cannot bound it - one
+        // attempt is already up to 84s (post_request_ retries the TLS handshake up
+        // to four times at 12s each, then the TCP-proxy fallback adds 36s), and a
+        // suspend between attempts stretches the wall clock without limit. So stop
+        // by elapsed time instead, early enough that the last attempt still lands
+        // inside the server's window.
+        const RETRY_DEADLINE: Duration = Duration::from_secs(120);
+        // One delay per retry, so the attempt count follows from the table and the
+        // two cannot drift apart.
+        const RETRY_BACKOFF_SECS: [u64; 2] = [10, 30];
+        const ATTEMPTS: usize = RETRY_BACKOFF_SECS.len() + 1;
+        let body = v.to_string();
+        let started = Instant::now();
+        let mut attempt = 0usize;
+        loop {
+            attempt += 1;
+            let (retryable, err) =
+                match crate::post_request_with_status(url.clone(), body.clone(), "").await {
+                    Ok((status, text)) => {
+                        if (200..300).contains(&status) {
+                            // Success is an empty body. hbbs reports handler
+                            // failures (e.g. a db write error) as 200 with an
+                            // {"error": ...} body - retryable: the server
+                            // releases the record's nonce when its write fails,
+                            // so trying again is what stores the record. Any
+                            // other nonempty body did not come from the audit
+                            // handler (a proxy interposing a 2xx maintenance
+                            // page, a malformed error) and must not be mistaken
+                            // for storage, so it is retried rather than dropped.
+                            if text.trim().is_empty() {
+                                return Ok(text);
+                            }
+                            let server_err = serde_json::from_str::<Value>(&text)
+                                .ok()
+                                .and_then(|v| v.get("error")?.as_str().map(|s| s.to_owned()))
+                                .filter(|e| !e.is_empty());
+                            let (label, detail) = match &server_err {
+                                Some(e) => ("server error", e.as_str()),
+                                None => ("unexpected response body", text.as_str()),
+                            };
+                            let brief: String = detail.chars().take(128).collect();
+                            (true, format!("{}: {}", label, brief))
+                        } else {
+                            let brief: String = text.chars().take(128).collect();
+                            // 408 and 429 are the transient 4xx: the request timed
+                            // out upstream, or a proxy is shedding load. Every other
+                            // 4xx is a deterministic rejection and retrying it would
+                            // only delay the log line.
+                            let transient = status >= 500 || status == 408 || status == 429;
+                            (transient, format!("status {}: {}", status, brief))
+                        }
+                    }
+                    Err(e) => (true, e.to_string()),
+                };
+            let elapsed = started.elapsed();
+            if !retryable || attempt >= ATTEMPTS || elapsed >= RETRY_DEADLINE {
+                log::error!(
+                    "Audit post dropped (attempt {}/{}, {:?} elapsed): {}",
+                    attempt,
+                    ATTEMPTS,
+                    elapsed,
+                    err
+                );
+                bail!("{}", err);
+            }
+            log::warn!(
+                "Audit post failed (attempt {}/{}): {}",
+                attempt,
+                ATTEMPTS,
+                err
+            );
+            // In range by construction: the guard above returns at ATTEMPTS.
+            time::sleep(Duration::from_secs(RETRY_BACKOFF_SECS[attempt - 1])).await;
+            // Re-checked after the delay so no attempt starts past the deadline;
+            // the check above alone would let one begin up to a backoff later.
+            if started.elapsed() >= RETRY_DEADLINE {
+                log::error!(
+                    "Audit post dropped (attempt {}/{}, deadline passed during backoff): {}",
+                    attempt,
+                    ATTEMPTS,
+                    err
+                );
+                bail!("{}", err);
+            }
+        }
     }
 
     fn set_conn_audit_primary_auth(&mut self, method: ConnAuditPrimaryAuth) {
@@ -1794,12 +1799,6 @@ impl Connection {
             if crate::platform::current_is_wayland() {
                 platform_additions.insert("is_wayland".into(), json!(true));
             }
-            #[cfg(target_os = "linux")]
-            if crate::platform::is_headless_allowed() {
-                if linux_desktop_manager::is_headless() {
-                    platform_additions.insert("headless".into(), json!(true));
-                }
-            }
         }
         #[cfg(target_os = "windows")]
         {
@@ -1861,7 +1860,8 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if self.is_remote() {
             let mut msg = "".to_string();
-            if crate::platform::linux::is_login_screen_wayland() {
+            // Refuse only while nothing can capture a Wayland greeter: the DRM path can.
+            if crate::platform::linux::is_login_screen_wayland() && !drm_can_serve_login_screen() {
                 msg = crate::client::LOGIN_SCREEN_WAYLAND.to_owned()
             } else {
                 let dtype = crate::platform::linux::get_display_server();
@@ -1895,13 +1895,6 @@ impl Connection {
                 username = "".to_owned();
             }
         }
-        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        PLUGIN_BLOCK_INPUT_TXS
-            .lock()
-            .unwrap()
-            .insert(self.lr.my_id.clone(), self.tx_input.clone());
-
         // Terminal feature is supported on desktop only
         #[allow(unused_mut)]
         let mut terminal = cfg!(not(any(target_os = "android", target_os = "ios")));
@@ -2523,6 +2516,90 @@ impl Connection {
         self.terminal_persistent = false;
     }
 
+    // Approval and whitelist decisions must stay bound to the same controller identity and
+    // session scope across authentication retries.
+    fn login_scope_digest(lr: &LoginRequest) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        // Length-prefixed so adjacent fields cannot alias.
+        let mut push = |bytes: &[u8]| {
+            hasher.update((bytes.len() as u64).to_le_bytes());
+            hasher.update(bytes);
+        };
+        push(lr.my_id.as_bytes());
+        // Payloads are destructured exhaustively: a new field fails to compile until it is
+        // either latched here or deliberately ignored.
+        match lr.union.as_ref() {
+            Some(login_request::Union::FileTransfer(ft)) => {
+                let FileTransfer {
+                    dir,
+                    show_hidden,
+                    special_fields: _,
+                } = ft;
+                push(b"file_transfer");
+                push(dir.as_bytes());
+                push(&[*show_hidden as u8]);
+            }
+            Some(login_request::Union::ViewCamera(vc)) => {
+                let ViewCamera { special_fields: _ } = vc;
+                push(b"view_camera");
+            }
+            Some(login_request::Union::Terminal(t)) => {
+                let Terminal {
+                    service_id,
+                    special_fields: _,
+                } = t;
+                push(b"terminal");
+                push(service_id.as_bytes());
+            }
+            Some(login_request::Union::PortForward(pf)) => {
+                let PortForward {
+                    host,
+                    port,
+                    special_fields: _,
+                } = pf;
+                push(b"port_forward");
+                push(host.as_bytes());
+                push(&port.to_le_bytes());
+            }
+            // Variants this build does not know execute as remote, so they latch as remote.
+            None | Some(_) => push(b"remote"),
+        }
+        hasher.finalize().into()
+    }
+
+    // Logging only; security decisions compare digests.
+    fn login_scope_kind(lr: &LoginRequest) -> &'static str {
+        match lr.union.as_ref() {
+            Some(login_request::Union::FileTransfer(_)) => "file_transfer",
+            Some(login_request::Union::ViewCamera(_)) => "view_camera",
+            Some(login_request::Union::Terminal(_)) => "terminal",
+            Some(login_request::Union::PortForward(_)) => "port_forward",
+            _ => "remote",
+        }
+    }
+
+    async fn check_login_scope(&mut self, lr: &LoginRequest) -> bool {
+        let requested = Self::login_scope_digest(lr);
+        match self.login_scope {
+            Some(initial) if initial != requested => {
+                // self.lr still holds the first accepted request, whose scope is the latched one.
+                log::warn!(
+                    "Rejected login scope change: conn_id={}, initial={}, requested={}",
+                    self.inner.id(),
+                    Self::login_scope_kind(&self.lr),
+                    Self::login_scope_kind(lr),
+                );
+                self.send_login_error("Connection not allowed").await;
+                false
+            }
+            Some(_) => true,
+            None => {
+                self.login_scope = Some(requested);
+                true
+            }
+        }
+    }
+
     async fn handle_login_request_without_validation(&mut self, lr: &LoginRequest) {
         self.lr = lr.clone();
         self.peer_argb = crate::str2color(&format!("{}{}", &lr.my_id, &lr.my_platform), 0xff);
@@ -2552,14 +2629,7 @@ impl Connection {
             tokio::spawn(async move {
                 #[cfg(windows)]
                 let tx_from_cm_clone = p.tx_from_cm.clone();
-                if let Err(err) = start_ipc(
-                    p.rx_to_cm,
-                    p.tx_from_cm,
-                    p.rx_desktop_ready,
-                    p.tx_cm_stream_ready,
-                )
-                .await
-                {
+                if let Err(err) = start_ipc(p.rx_to_cm, p.tx_from_cm).await {
                     log::warn!("ipc to connection manager exit: {}", err);
                     // https://github.com/rustdesk/rustdesk-server-pro/discussions/382#discussioncomment-10525725, cm may start failed
                     #[cfg(windows)]
@@ -2600,6 +2670,9 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            if !self.check_login_scope(&lr).await {
+                return false;
+            }
             self.awaiting_2fa = false;
             self.handle_login_request_without_validation(&lr).await;
             if self.authorized {
@@ -2693,43 +2766,6 @@ impl Connection {
                 self.try_start_cm_ipc();
             }
 
-            #[cfg(target_os = "linux")]
-            if should_check_linux_headless_os_auth_before_desktop_start(
-                self.linux_headless_handle.is_headless_allowed,
-                &lr.os_login.username,
-            ) {
-                let (_failure, res) = self.check_failure(0).await;
-                if !res {
-                    return true;
-                }
-            }
-
-            #[cfg(not(target_os = "linux"))]
-            let err_msg = "".to_owned();
-            #[cfg(target_os = "linux")]
-            let err_msg = self
-                .linux_headless_handle
-                .try_start_desktop(lr.os_login.as_ref());
-
-            // If err is LOGIN_MSG_DESKTOP_SESSION_NOT_READY, just keep this msg and go on checking password.
-            if !err_msg.is_empty() && err_msg != crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY
-            {
-                #[cfg(target_os = "linux")]
-                if should_record_linux_headless_os_auth_failure(
-                    self.linux_headless_handle.is_headless_allowed,
-                    &lr.os_login.username,
-                    &err_msg,
-                ) {
-                    let (failure, res) = self.check_failure(0).await;
-                    if !res {
-                        return true;
-                    }
-                    self.update_failure(failure, false, 0);
-                }
-                self.send_login_error(err_msg).await;
-                return true;
-            }
-
             // https://github.com/rustdesk/rustdesk-server-pro/discussions/646
             // `is_logon` is used to check login with `OPTION_ALLOW_LOGON_SCREEN_PASSWORD` == "Y".
             // `is_logon_ui()` is a fallback for logon UI detection on Windows.
@@ -2773,33 +2809,19 @@ impl Connection {
                 }
                 return true;
             } else if self.is_recent_session(false) {
-                if err_msg.is_empty() {
-                    #[cfg(target_os = "linux")]
-                    self.linux_headless_handle.wait_desktop_cm_ready().await;
-                    if !self.send_logon_response_and_keep_alive().await {
-                        return false;
-                    }
-                    self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
-                } else {
-                    self.send_login_error(err_msg).await;
+                if !self.send_logon_response_and_keep_alive().await {
+                    return false;
                 }
+                self.try_start_cm(lr.my_id.clone(), lr.my_name.clone(), self.authorized);
             } else if lr.password.is_empty() {
-                if err_msg.is_empty() {
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
-                        if let Some(keep_alive) =
-                            self.prepare_terminal_login_for_authorization().await
-                        {
-                            return keep_alive;
-                        }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
+                    if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await
+                    {
+                        return keep_alive;
                     }
-                    self.try_start_cm(lr.my_id, lr.my_name, false);
-                } else {
-                    self.send_login_error(
-                        crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_EMPTY,
-                    )
-                    .await;
                 }
+                self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let (failure, res) = self.check_failure(0).await;
                 if !res {
@@ -2808,28 +2830,15 @@ impl Connection {
                 if !self.validate_password(allow_logon_screen_password) {
                     self.update_failure_with_scope(failure, false, 0, FailureScope::Default);
                     self.check_update_temporary_password(false);
-                    if err_msg.is_empty() {
-                        self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
-                            .await;
-                        self.try_start_cm(lr.my_id, lr.my_name, false);
-                    } else {
-                        self.send_login_error(
-                            crate::client::LOGIN_MSG_DESKTOP_SESSION_NOT_READY_PASSWORD_WRONG,
-                        )
+                    self.send_login_error(crate::client::LOGIN_MSG_PASSWORD_WRONG)
                         .await;
-                    }
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     self.update_failure_with_scope(failure, true, 0, FailureScope::Default);
-                    if err_msg.is_empty() {
-                        #[cfg(target_os = "linux")]
-                        self.linux_headless_handle.wait_desktop_cm_ready().await;
-                        if !self.send_logon_response_and_keep_alive().await {
-                            return false;
-                        }
-                        self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
-                    } else {
-                        self.send_login_error(err_msg).await;
+                    if !self.send_logon_response_and_keep_alive().await {
+                        return false;
                     }
+                    self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
                 }
             }
         } else if let Some(message::Union::Auth2fa(tfa)) = msg.union {
@@ -2896,7 +2905,7 @@ impl Connection {
                 SWITCH_SIDES_UUID
                     .lock()
                     .unwrap()
-                    .retain(|_, v| v.0.elapsed() < Duration::from_secs(10));
+                    .retain(|_, v| v.0.elapsed() < SWITCH_SIDES_UUID_TTL);
                 let uuid_old = SWITCH_SIDES_UUID.lock().unwrap().remove(&lr.my_id);
                 if let Ok(uuid) = uuid::Uuid::from_slice(_s.uuid.to_vec().as_ref()) {
                     if let Some((_instant, uuid_old)) = uuid_old {
@@ -3636,17 +3645,18 @@ impl Connection {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::SwitchSidesRequest(s)) => {
                         if let Ok(uuid) = uuid::Uuid::from_slice(&s.uuid.to_vec()[..]) {
-                            crate::server::insert_pending_switch_sides_uuid(
+                            if crate::server::insert_pending_switch_sides_uuid(
                                 self.lr.my_id.clone(),
                                 uuid.clone(),
-                            );
-                            crate::run_me(vec![
-                                "--connect",
-                                &self.lr.my_id,
-                                "--switch_uuid",
-                                uuid.to_string().as_ref(),
-                            ])
-                            .ok();
+                            ) {
+                                crate::run_me(vec![
+                                    "--connect",
+                                    &self.lr.my_id,
+                                    "--switch_uuid",
+                                    uuid.to_string().as_ref(),
+                                ])
+                                .ok();
+                            }
                             self.on_close("switch sides", false).await;
                             return false;
                         }
@@ -3662,13 +3672,6 @@ impl Connection {
                         if !self.view_camera {
                             self.change_resolution(Some(dr.display as _), &dr.resolution);
                         }
-                    }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::PluginRequest(p)) => {
-                        let msg =
-                            crate::plugin::handle_client_event(&p.id, &self.lr.my_id, &p.content);
-                        self.send(msg).await;
                     }
                     Some(misc::Union::AutoAdjustFps(fps)) => video_service::VIDEO_QOS
                         .lock()
@@ -4859,7 +4862,7 @@ impl Connection {
                         }
                     } else {
                         crate::common::make_privacy_mode_msg(
-                            back_notification::PrivacyModeState::PrvOnFailedPlugin,
+                            back_notification::PrivacyModeState::PrvOnFailed,
                             impl_key,
                         )
                     }
@@ -5950,34 +5953,48 @@ pub fn insert_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) {
+pub fn insert_pending_switch_sides_uuid(id: String, uuid: uuid::Uuid) -> bool {
     let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
-    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
-    uuids.insert(id, (tokio::time::Instant::now(), uuid));
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    if uuids.get(&id).map(|(_, stored_uuid, _)| stored_uuid) == Some(&uuid) {
+        return false;
+    }
+    uuids.insert(id, (tokio::time::Instant::now(), uuid, false));
+    true
 }
 
 #[cfg(feature = "flutter")]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn remove_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+pub fn has_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
     let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
-    uuids.retain(|_, (instant, _)| instant.elapsed() < Duration::from_secs(10));
-    if uuids.get(id).map(|(_, stored_uuid)| stored_uuid == uuid) == Some(true) {
-        uuids.remove(id);
-        true
-    } else {
-        false
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    uuids
+        .get(id)
+        .map(|(_, stored_uuid, claimed)| stored_uuid == uuid && !*claimed)
+        == Some(true)
+}
+
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn claim_pending_switch_sides_uuid(id: &str, uuid: &uuid::Uuid) -> bool {
+    let mut uuids = PENDING_SWITCH_SIDES_UUID.lock().unwrap();
+    uuids.retain(|_, (instant, _, _)| instant.elapsed() < SWITCH_SIDES_UUID_TTL);
+    // Keep claimed entries until expiry so replaying a request cannot launch another connection.
+    if let Some((_, stored_uuid, claimed)) = uuids.get_mut(id) {
+        if stored_uuid == uuid && !*claimed {
+            *claimed = true;
+            return true;
+        }
     }
+    false
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 // IPC bootstrap summary:
-// - Resolve target CM socket (headless/non-headless, optional UID-scoped path on Linux).
 // - Start CM when missing, then bridge bidirectional messages between this task and CM IPC.
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
-    mut _rx_desktop_ready: mpsc::Receiver<()>,
-    tx_stream_ready: mpsc::Sender<()>,
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
@@ -5987,139 +6004,51 @@ async fn start_ipc(
         }
         sleep(1.).await;
     }
-    #[cfg(target_os = "linux")]
-    let headless_cm = crate::is_server()
-        && crate::platform::is_headless_allowed()
-        && linux_desktop_manager::is_headless();
-    #[cfg(not(target_os = "linux"))]
-    let headless_cm = false;
     let mut stream = None;
-    if !headless_cm {
-        if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
-            stream = Some(s);
-        }
+    if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+        stream = Some(s);
     }
     if stream.is_none() {
-        #[allow(unused_mut)]
-        #[allow(unused_assignments)]
-        let mut args = vec!["--cm"];
-        #[allow(unused_mut)]
-        #[cfg(target_os = "linux")]
-        let mut user = None;
-
-        // Cm run as user, wait until desktop session is ready.
-        #[cfg(target_os = "linux")]
-        if headless_cm {
-            let mut username = linux_desktop_manager::get_username();
-            loop {
-                if !username.is_empty() {
-                    break;
+        let args = vec!["--cm"];
+        let run_done;
+        if crate::platform::is_root() {
+            let mut res = Ok(None);
+            for _ in 0..10 {
+                #[cfg(not(any(target_os = "linux")))]
+                {
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone());
                 }
-                // `_rx_desktop_ready` is used as a wake-up signal from desktop/session state changes
-                // (for example wait_desktop_cm_ready paths). It is not itself a proof of CM readiness.
-                // TODO:
-                // When `_rx_desktop_ready` is closed, `recv()` returns
-                // `None` immediately and this loop may spin if `username` remains empty.
-                // Keep behavior unchanged for now; if field reports appear, handle `Ok(None)` by
-                // breaking/returning to avoid hot-looping.
-                let _res = timeout(1_000, _rx_desktop_ready.recv()).await;
-                username = linux_desktop_manager::get_username();
-            }
-            let uid = {
-                let username_for_cmd = username.clone();
-                let mut uid_cmd = hbb_common::tokio::process::Command::new("id");
-                // TODO:
-                // Keep current behavior for now to minimize change risk.
-                // If usernames starting with '-' are observed in the field, prefer:
-                // `id -u -- <username>` to avoid option-parsing ambiguity.
-                // Already verified that `id -u -- <username>` works as expected on macOS and Ubuntu 24.04.
-                uid_cmd.arg("-u").arg(&username_for_cmd).kill_on_drop(true);
-                let output = timeout(10_000, uid_cmd.output())
-                    .await
-                    .map_err(|_| anyhow!("Timed out querying uid for {}", username))?
-                    .map_err(|e| anyhow!("Failed to run `id -u {}`: {}", username, e))?;
-                if !output.status.success() {
-                    bail!("Failed to query uid for {}", username);
-                }
-                let output = String::from_utf8_lossy(&output.stdout);
-                let output = output.trim();
-                if output.parse::<u32>().is_err() {
-                    bail!("Invalid uid {}", output);
-                }
-                output.to_string()
-            };
-            user = Some((uid, username));
-            args = vec!["--cm-no-ui"];
-        }
-        #[cfg(target_os = "linux")]
-        let cm_uid: Option<u32> = match &user {
-            Some((uid, _)) => Some(
-                uid.parse::<u32>()
-                    .map_err(|_| anyhow!("Invalid uid {}", uid))?,
-            ),
-            None => None,
-        };
-        #[cfg(target_os = "linux")]
-        if let Some(uid) = cm_uid {
-            if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
-                stream = Some(s);
-            }
-        }
-        if stream.is_none() {
-            let run_done;
-            if crate::platform::is_root() {
-                let mut res = Ok(None);
-                for _ in 0..10 {
-                    #[cfg(not(any(target_os = "linux")))]
-                    {
-                        log::debug!("Start cm");
-                        res = crate::platform::run_as_user(args.clone());
-                    }
-                    #[cfg(target_os = "linux")]
-                    {
-                        log::debug!("Start cm");
-                        res = crate::platform::run_as_user(
-                            args.clone(),
-                            user.clone(),
-                            None::<(&str, &str)>,
-                        );
-                    }
-                    if res.is_ok() {
-                        break;
-                    }
-                    log::error!("Failed to run cm: {res:?}");
-                    sleep(1.).await;
-                }
-                if let Some(task) = res? {
-                    super::CHILD_PROCESS.lock().unwrap().push(task);
-                }
-                run_done = true;
-            } else {
-                run_done = false;
-            }
-            if !run_done {
-                log::debug!("Start cm");
-                super::CHILD_PROCESS
-                    .lock()
-                    .unwrap()
-                    .push(crate::run_me(args)?);
-            }
-            for _ in 0..20 {
-                sleep(0.3).await;
                 #[cfg(target_os = "linux")]
                 {
-                    if let Some(uid) = cm_uid {
-                        if let Ok(s) = crate::ipc::connect_for_uid(1000, uid, "_cm").await {
-                            stream = Some(s);
-                            break;
-                        }
-                        continue;
-                    }
+                    log::debug!("Start cm");
+                    res = crate::platform::run_as_user(args.clone(), None, None::<(&str, &str)>);
                 }
-                if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
-                    stream = Some(s);
+                if res.is_ok() {
                     break;
                 }
+                log::error!("Failed to run cm: {res:?}");
+                sleep(1.).await;
+            }
+            if let Some(task) = res? {
+                super::CHILD_PROCESS.lock().unwrap().push(task);
+            }
+            run_done = true;
+        } else {
+            run_done = false;
+        }
+        if !run_done {
+            log::debug!("Start cm");
+            super::CHILD_PROCESS
+                .lock()
+                .unwrap()
+                .push(crate::run_me(args)?);
+        }
+        for _ in 0..20 {
+            sleep(0.3).await;
+            if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
+                stream = Some(s);
+                break;
             }
         }
     }
@@ -6127,7 +6056,6 @@ async fn start_ipc(
         bail!("Failed to connect to connection manager");
     }
 
-    let _res = tx_stream_ready.send(()).await;
     let mut stream = stream.ok_or(anyhow!("none stream"))?;
     loop {
         tokio::select! {
@@ -6437,50 +6365,6 @@ impl Drop for Connection {
                     hbb_common::allow_err!(CloseHandle(HANDLE(token.as_raw() as _)));
                 };
             }
-        }
-    }
-}
-
-#[cfg(target_os = "linux")]
-struct LinuxHeadlessHandle {
-    pub is_headless_allowed: bool,
-    pub is_headless: bool,
-    pub wait_ipc_timeout: u64,
-    pub rx_cm_stream_ready: mpsc::Receiver<()>,
-    pub tx_desktop_ready: mpsc::Sender<()>,
-}
-
-#[cfg(target_os = "linux")]
-impl LinuxHeadlessHandle {
-    pub fn new(rx_cm_stream_ready: mpsc::Receiver<()>, tx_desktop_ready: mpsc::Sender<()>) -> Self {
-        let is_headless_allowed = crate::is_server() && crate::platform::is_headless_allowed();
-        let is_headless = is_headless_allowed && linux_desktop_manager::is_headless();
-        Self {
-            is_headless_allowed,
-            is_headless,
-            wait_ipc_timeout: 10_000,
-            rx_cm_stream_ready,
-            tx_desktop_ready,
-        }
-    }
-
-    pub fn try_start_desktop(&mut self, os_login: Option<&OSLogin>) -> String {
-        if self.is_headless_allowed {
-            match os_login {
-                Some(os_login) => {
-                    linux_desktop_manager::try_start_desktop(&os_login.username, &os_login.password)
-                }
-                None => linux_desktop_manager::try_start_desktop("", ""),
-            }
-        } else {
-            "".to_string()
-        }
-    }
-
-    pub async fn wait_desktop_cm_ready(&mut self) {
-        if self.is_headless {
-            self.tx_desktop_ready.send(()).await.ok();
-            let _res = timeout(self.wait_ipc_timeout, self.rx_cm_stream_ready.recv()).await;
         }
     }
 }
@@ -6904,6 +6788,79 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
 mod test {
     #[allow(unused)]
     use super::*;
+
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[test]
+    fn test_pending_switch_sides_uuid_is_claimed_once() {
+        let id = uuid::Uuid::new_v4().to_string();
+        let uuid = uuid::Uuid::new_v4();
+        let other_uuid = uuid::Uuid::new_v4();
+        assert!(insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
+
+        assert!(!insert_pending_switch_sides_uuid(id.clone(), uuid.clone()));
+        assert!(has_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!has_pending_switch_sides_uuid(&id, &other_uuid));
+        assert!(!claim_pending_switch_sides_uuid("other-peer", &uuid));
+        assert!(!claim_pending_switch_sides_uuid(&id, &other_uuid));
+        assert!(claim_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!has_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!claim_pending_switch_sides_uuid(&id, &uuid));
+        assert!(!insert_pending_switch_sides_uuid(id, uuid));
+    }
+
+    #[test]
+    fn login_scope_latches_session_scope_across_login_retries() {
+        let port_forward = |host: &str| {
+            let mut lr = LoginRequest::new();
+            lr.my_id = "peer".to_owned();
+            lr.set_port_forward(PortForward {
+                host: host.to_owned(),
+                port: 3389,
+                ..Default::default()
+            });
+            lr
+        };
+        let first = port_forward("localhost");
+        let scope = |lr: &LoginRequest| Connection::login_scope_digest(lr);
+
+        // A retry may carry new credentials, profile data, options, and unknown fields.
+        let mut retry = port_forward("localhost");
+        retry.password = "secret".into();
+        retry.hwid = "hwid".into();
+        retry.os_login = Some(OSLogin {
+            username: "admin".to_owned(),
+            ..Default::default()
+        })
+        .into();
+        retry.my_name = "New Display Name".to_owned();
+        retry.avatar = "data:image/png;base64,AAAA".to_owned();
+        retry
+            .special_fields
+            .mut_unknown_fields()
+            .add_varint(9999, 1);
+        assert_eq!(scope(&first), scope(&retry));
+
+        // It may not change the controller identity, move the target, or switch type.
+        let mut rotated_id = first.clone();
+        rotated_id.my_id = "rotated-id".to_owned();
+        assert_ne!(scope(&first), scope(&rotated_id));
+        assert_ne!(scope(&first), scope(&port_forward("10.0.0.5")));
+        let mut moved_port = port_forward("localhost");
+        moved_port.mut_port_forward().port = 22;
+        assert_ne!(scope(&first), scope(&moved_port));
+        let terminal = |service_id: &str| {
+            let mut lr = LoginRequest::new();
+            lr.my_id = "peer".to_owned();
+            lr.set_terminal(Terminal {
+                service_id: service_id.to_owned(),
+                ..Default::default()
+            });
+            lr
+        };
+        assert_ne!(scope(&first), scope(&terminal("")));
+        assert_ne!(scope(&terminal("a")), scope(&terminal("b")));
+    }
 
     #[test]
     fn test_wildcard_match() {
