@@ -716,17 +716,10 @@ pub fn session_input_os_password(session_id: SessionID, value: String) {
 }
 
 // File Action
-pub fn session_read_remote_dir(
-    session_id: SessionID,
-    path: String,
-    include_hidden: bool,
-) -> hbb_common::anyhow::Result<()> {
-    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
-        return Err(hbb_common::anyhow::anyhow!(
-            "Session not found for session_id: {session_id}"
-        ));
-    };
-    session.read_remote_dir(path, include_hidden);
+pub fn session_read_remote_dir(session_id: SessionID, path: String, include_hidden: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.read_remote_dir(path, include_hidden);
+    }
     Ok(())
 }
 
