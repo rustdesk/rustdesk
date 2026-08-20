@@ -50,8 +50,11 @@ typedef ReadRemoteDirectory = Future<void> Function(
     SessionID sessionId, int requestId, String path, bool includeHidden);
 
 const _kRemoteReadDirTimeout = Duration(seconds: 30);
+// The i32 minimum is reserved for automatic responses; other negative IDs are
+// correlated reads, zero is legacy, and positive IDs are file-transfer jobs.
+const _kAutomaticRemoteReadRequestId = -0x80000000;
 const _kFirstRemoteReadRequestId = -1;
-const _kMinimumRemoteReadRequestId = -0x80000000;
+const _kMinimumRemoteReadRequestId = _kAutomaticRemoteReadRequestId + 1;
 
 class FileModel {
   final WeakReference<FFI> parent;
@@ -109,13 +112,11 @@ class FileModel {
 
   void receiveFileDir(Map<String, dynamic> evt) {
     final isRemote = evt['is_local'] == "false";
-    final isHomeResponse = isRemote && fileFetcher.hasPendingRemoteRead("");
     if (isRemote) {
       // init remote home, the remote connection will send one dir event when established. TODO opt
       remoteController.initDirAndHome(evt);
     }
-    fileFetcher.tryCompleteTask(evt['value'], evt['is_local'],
-        isHomeResponse: isHomeResponse);
+    fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
   void receiveEmptyDirs(Map<String, dynamic> evt) {
@@ -364,7 +365,8 @@ class FileController {
   final history = RxList<String>.empty(growable: true);
   final sortBy = SortBy.name.obs;
   var sortAscending = true;
-  String? _latestRequestedPath;
+  // Incremented for each navigation; only the latest generation may send a
+  // waiting request or apply its result.
   int _directoryRequestGeneration = 0;
   final JobController jobController;
   final WeakReference<FFI> rootState;
@@ -501,7 +503,6 @@ class FileController {
       }
     }
     final requestGeneration = ++_directoryRequestGeneration;
-    _latestRequestedPath = path;
     try {
       final fd = await fileFetcher.fetchDirectory(path, isLocal, showHidden,
           shouldSend: () => requestGeneration == _directoryRequestGeneration);
@@ -566,13 +567,15 @@ class FileController {
   void initDirAndHome(Map<String, dynamic> evt) {
     try {
       final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
-      final isCorrelatedRead = fd.id < 0;
-      if (isCorrelatedRead && !fileFetcher.hasPendingRemoteReadId(fd.id)) {
+      final isAutomaticResponse = fd.id == _kAutomaticRemoteReadRequestId;
+      final requestedPath = fd.id < 0 && !isAutomaticResponse
+          ? fileFetcher.pendingRemoteReadPath(fd.id)
+          : null;
+      if (fd.id < 0 && !isAutomaticResponse && requestedPath == null) {
         return;
       }
-      final isHomeResponse = isCorrelatedRead
-          ? fileFetcher.isPendingRemoteHomeRead(fd.id)
-          : !fileFetcher.hasPendingRemoteRead(fd.path);
+      final isHomeResponse =
+          isAutomaticResponse || fd.id == 0 || requestedPath?.isEmpty == true;
       fd.format(options.value.isWindows, sort: sortBy.value);
       if (fd.id > 0) {
         final jobIndex = jobController.getJob(fd.id);
@@ -591,8 +594,7 @@ class FileController {
       } else if (options.value.home.isEmpty && isHomeResponse) {
         options.value.home = fd.path;
         debugPrint("init remote home: ${fd.path}");
-        if ((_latestRequestedPath?.isEmpty ?? true) &&
-            !fileFetcher.hasPendingRemoteRead("")) {
+        if (_directoryRequestGeneration == 0) {
           directory.value = fd;
         }
       }
@@ -1430,10 +1432,7 @@ class FileFetcher {
   bool hasPendingRemoteRead(String path) =>
       _remoteReadIdsByPath.containsKey(path);
 
-  bool hasPendingRemoteReadId(int id) => _remoteReadTasks.containsKey(id);
-
-  bool isPendingRemoteHomeRead(int id) =>
-      _remoteReadTasks[id]?.path.isEmpty ?? false;
+  String? pendingRemoteReadPath(int id) => _remoteReadTasks[id]?.path;
 
   int _takeRemoteReadRequestId() {
     late int id;
@@ -1530,8 +1529,7 @@ class FileFetcher {
     }
   }
 
-  tryCompleteTask(String? msg, String? isLocalStr,
-      {bool isHomeResponse = false}) {
+  tryCompleteTask(String? msg, String? isLocalStr) {
     if (msg == null || isLocalStr == null) return;
     try {
       final fd = FileDirectory.fromJson(jsonDecode(msg));
@@ -1545,22 +1543,23 @@ class FileFetcher {
         _completeRemoteReadTask(fd.id, fd);
         return;
       }
-      if (fd.path.isNotEmpty) {
-        _completeLegacyRemoteReadTask(fd, isHomeResponse);
+      if (isLocalStr == "false" && fd.path.isNotEmpty) {
+        _completeLegacyRemoteReadTask(fd);
       }
     } catch (e) {
       debugPrint("tryCompleteJob err: $e");
     }
   }
 
-  void _completeLegacyRemoteReadTask(
-      FileDirectory directory, bool isHomeResponse) {
+  void _completeLegacyRemoteReadTask(FileDirectory directory) {
+    // Legacy responses use ID zero. Match by path, except that a Home request
+    // uses an empty path while its response contains the resolved path.
     final exactId = _remoteReadIdsByPath[directory.path];
     if (exactId != null && _completeRemoteReadTask(exactId, directory)) {
       return;
     }
     final homeId = _remoteReadIdsByPath[""];
-    if (isHomeResponse && homeId != null) {
+    if (homeId != null) {
       _completeRemoteReadTask(homeId, directory);
     }
   }
