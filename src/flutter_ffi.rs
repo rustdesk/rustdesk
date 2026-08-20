@@ -720,7 +720,6 @@ pub fn session_read_remote_dir(session_id: SessionID, path: String, include_hidd
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.read_remote_dir(path, include_hidden);
     }
-    Ok(())
 }
 
 pub fn session_send_files(
