@@ -514,15 +514,10 @@ class RustdeskImpl {
       {required UuidValue sessionId,
       required String path,
       required bool includeHidden,
-      required int requestId,
       dynamic hint}) {
     return Future(() => js.context.callMethod('setByName', [
           'read_remote_dir',
-          jsonEncode({
-            'path': path,
-            'include_hidden': includeHidden,
-            'id': requestId,
-          })
+          jsonEncode({'path': path, 'include_hidden': includeHidden})
         ]));
   }
 

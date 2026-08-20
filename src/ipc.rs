@@ -129,8 +129,6 @@ pub enum FS {
         include_hidden: bool,
     },
     ReadDir {
-        #[serde(default)]
-        id: i32,
         dir: String,
         include_hidden: bool,
     },
@@ -2154,13 +2152,6 @@ mod test {
     fn verify_ffi_enum_data_size() {
         println!("{}", std::mem::size_of::<Data>());
         assert!(std::mem::size_of::<Data>() <= 120);
-    }
-
-    #[test]
-    fn read_dir_ipc_defaults_missing_request_id() {
-        let json = r#"{"t":"FS","c":{"t":"ReadDir","c":{"dir":"/tmp","include_hidden":false}}}"#;
-        let data: Data = serde_json::from_str(json).unwrap();
-        assert!(matches!(data, Data::FS(FS::ReadDir { id: 0, .. })));
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]

@@ -64,14 +64,9 @@ pub trait FileManager: Interface {
     }
 
     fn read_remote_dir(&self, path: String, include_hidden: bool) {
-        self.read_remote_dir_with_id(path, include_hidden, 0);
-    }
-
-    fn read_remote_dir_with_id(&self, path: String, include_hidden: bool, id: i32) {
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();
         file_action.set_read_dir(ReadDir {
-            id,
             path,
             include_hidden,
             ..Default::default()

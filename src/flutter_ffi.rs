@@ -720,14 +720,13 @@ pub fn session_read_remote_dir(
     session_id: SessionID,
     path: String,
     include_hidden: bool,
-    request_id: i32,
 ) -> hbb_common::anyhow::Result<()> {
     let Some(session) = sessions::get_session_by_session_id(&session_id) else {
         return Err(hbb_common::anyhow::anyhow!(
             "Session not found for session_id: {session_id}"
         ));
     };
-    session.read_remote_dir_with_id(path, include_hidden, request_id);
+    session.read_remote_dir(path, include_hidden);
     Ok(())
 }
 

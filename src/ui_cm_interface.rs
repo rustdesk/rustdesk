@@ -976,11 +976,10 @@ async fn handle_fs(
             read_empty_dirs(&dir, include_hidden, tx).await;
         }
         ipc::FS::ReadDir {
-            id,
             dir,
             include_hidden,
         } => {
-            read_dir(id, &dir, include_hidden, tx).await;
+            read_dir(&dir, include_hidden, tx).await;
         }
         ipc::FS::RemoveDir {
             path,
@@ -1530,7 +1529,7 @@ async fn read_empty_dirs(dir: &str, include_hidden: bool, tx: &UnboundedSender<D
 }
 
 #[cfg(not(any(target_os = "ios")))]
-async fn read_dir(id: i32, dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
+async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
     let path = {
         if dir.is_empty() {
             Config::get_home()
@@ -1540,16 +1539,15 @@ async fn read_dir(id: i32, dir: &str, include_hidden: bool, tx: &UnboundedSender
     };
     let result = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await;
     let msg_out = match result {
-        Ok(Ok(mut fd)) => {
-            fd.id = id;
+        Ok(Ok(fd)) => {
             let mut msg_out = Message::new();
             let mut file_response = FileResponse::new();
             file_response.set_dir(fd);
             msg_out.set_file_response(file_response);
             msg_out
         }
-        Ok(Err(err)) => fs::new_error(id, err, -1),
-        Err(err) => fs::new_error(id, err, -1),
+        Ok(Err(err)) => fs::new_error(0, err, -1),
+        Err(err) => fs::new_error(0, err, -1),
     };
     send_raw(msg_out, tx);
 }
@@ -1749,7 +1747,7 @@ mod tests {
 
     #[test]
     #[cfg(not(any(target_os = "ios")))]
-    fn read_dir_success() {
+    fn read_dir_reports_success_and_error() {
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
             let (tx, mut rx) = unbounded_channel();
@@ -1757,13 +1755,12 @@ mod tests {
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).unwrap();
 
-            super::read_dir(-1, &dir.to_string_lossy(), false, &tx).await;
+            super::read_dir(&dir.to_string_lossy(), false, &tx).await;
 
             match rx.recv().await.unwrap() {
                 Data::RawMessage(bytes) => {
                     let mut msg = Message::new();
                     msg.merge_from_bytes(&bytes).unwrap();
-                    assert_eq!(msg.file_response().dir().id, -1);
                     assert!(msg
                         .file_response()
                         .dir()
@@ -1773,25 +1770,14 @@ mod tests {
                 _ => panic!("unexpected data"),
             }
             let _ = fs::remove_dir_all(&dir);
-        });
-    }
 
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn read_dir_error_keeps_request_id() {
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            let (tx, mut rx) = unbounded_channel();
-            let dir = std::env::temp_dir().join("rustdesk_missing_read_dir_test");
-            let _ = fs::remove_dir_all(&dir);
-
-            super::read_dir(-2, &dir.to_string_lossy(), false, &tx).await;
+            super::read_dir(&dir.to_string_lossy(), false, &tx).await;
 
             match rx.recv().await.unwrap() {
                 Data::RawMessage(bytes) => {
                     let mut msg = Message::new();
                     msg.merge_from_bytes(&bytes).unwrap();
-                    assert_eq!(msg.file_response().error().id, -2);
+                    assert_eq!(msg.file_response().error().id, 0);
                     assert!(!msg.file_response().error().error.is_empty());
                 }
                 _ => panic!("unexpected data"),
