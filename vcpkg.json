@@ -26,10 +26,6 @@
       "platform": "windows & arm64"
     },
     {
-      "name": "oboe",
-      "platform": "android"
-    },
-    {
       "name": "opus",
       "host": true
     },
