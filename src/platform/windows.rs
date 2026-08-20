@@ -124,6 +124,8 @@ const REG_NAME_MSI_PRODUCT_CODE: &str = "MsiProductCode";
 const REG_NAME_UNINSTALL_STRING: &str = "UninstallString";
 const REG_NAME_WINDOWS_INSTALLER: &str = "WindowsInstaller";
 const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
+const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
+const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
@@ -1582,6 +1584,11 @@ fn get_after_install(
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
+    // MSI and EXE installations use different registry layouts, so MSI-to-EXE upgrades are not supported.
+    let (installed_subkey, _, _, _) = get_install_info();
+    if get_windows_installer_state(&installed_subkey)? == Some(true) {
+        bail!("Cannot install the EXE package over an existing MSI installation");
+    }
     let uninstall_str = get_uninstall(false, false)?;
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
@@ -1816,9 +1823,9 @@ fn get_before_uninstall(kill_self: bool) -> String {
 /// related command is omitted from the script.
 fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String> {
     let (subkey, path, start_menu, _) = get_install_info();
-    if let Some(product_code) = get_msi_product_code(&subkey)? {
-        get_msi_uninstall_subkey(&product_code)?;
-        return Ok(format!("MsiExec.exe /X {product_code} || exit /b"));
+    let installer_state = get_windows_installer_state(&subkey)?;
+    if let Some(product_code) = get_msi_product_code(&subkey, installer_state)? {
+        return Ok(build_msi_uninstall_command(&product_code));
     }
 
     let mut uninstall_cert_cmd = "".to_string();
@@ -3542,13 +3549,13 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
+{reg_cmd}
 {copy_exe}
 {rename_exe}
 {remove_meta_toml}
 {restore_service_cmd}
 {uninstall_printer_cmd}
 {install_printer_cmd}
-{reg_cmd}
 {sleep}
     ",
         app_name = app_name,
@@ -3630,6 +3637,18 @@ fn normalize_msi_product_code(value: &str) -> Option<String> {
     Some(format!("{{{}}}", product_code.hyphenated()).to_uppercase())
 }
 
+fn build_msi_uninstall_command(product_code: &str) -> String {
+    format!(
+        "set \"RUSTDESK_MSI_EXIT_CODE=\"\n\
+MsiExec.exe /X {product_code} /norestart REBOOT=ReallySuppress\n\
+set \"RUSTDESK_MSI_EXIT_CODE=%ERRORLEVEL%\"\n\
+if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{MSI_EXIT_SUCCESS_REBOOT_REQUIRED}\" echo MSI uninstall succeeded with a reboot recommendation; continuing without reboot.\n\
+if \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{MSI_EXIT_SUCCESS_REBOOT_INITIATED}\" echo MSI uninstall succeeded with a reboot request; continuing without forcing reboot.\n\
+if not \"%RUSTDESK_MSI_EXIT_CODE%\"==\"0\" if not \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{MSI_EXIT_SUCCESS_REBOOT_REQUIRED}\" if not \"%RUSTDESK_MSI_EXIT_CODE%\"==\"{MSI_EXIT_SUCCESS_REBOOT_INITIATED}\" exit /b %RUSTDESK_MSI_EXIT_CODE%\n\
+ver > nul"
+    )
+}
+
 fn get_reg_string_of(subkey: &str, name: &str) -> ResultType<Option<String>> {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let path = subkey.strip_prefix(HKLM_PREFIX).unwrap_or(subkey);
@@ -3642,6 +3661,21 @@ fn get_reg_string_of(subkey: &str, name: &str) -> ResultType<Option<String>> {
         Ok(value) => Ok(Some(value)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => bail!("Failed to read {name} from registry key {subkey}: {err}"),
+    }
+}
+
+fn get_windows_installer_state(subkey: &str) -> ResultType<Option<bool>> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let path = subkey.strip_prefix(HKLM_PREFIX).unwrap_or(subkey);
+    let key = match hklm.open_subkey(path) {
+        Ok(key) => key,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => bail!("Failed to open registry key {subkey}: {err}"),
+    };
+    match key.get_value::<u32, _>(REG_NAME_WINDOWS_INSTALLER) {
+        Ok(value) => Ok(Some(value == MSI_WINDOWS_INSTALLER_VALUE)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => bail!("Failed to read {REG_NAME_WINDOWS_INSTALLER} from {subkey}: {err}"),
     }
 }
 
@@ -3671,7 +3705,10 @@ fn parse_msi_product_code_from_uninstall_string(
     Ok(Some(product_code))
 }
 
-fn get_msi_product_code(subkey: &str) -> ResultType<Option<String>> {
+fn get_msi_product_code(subkey: &str, installer_state: Option<bool>) -> ResultType<Option<String>> {
+    if installer_state == Some(false) {
+        return Ok(None);
+    }
     let product_code = get_reg_string_of(subkey, REG_NAME_MSI_PRODUCT_CODE)?;
     if let Some(product_code) = product_code.filter(|value| !value.is_empty()) {
         return normalize_msi_product_code(&product_code)
@@ -3683,7 +3720,10 @@ fn get_msi_product_code(subkey: &str) -> ResultType<Option<String>> {
         get_reg_string_of(subkey, REG_NAME_UNINSTALL_STRING)?.unwrap_or_default();
     match parse_msi_product_code_from_uninstall_string(&uninstall_string, subkey)? {
         Some(product_code) => Ok(Some(product_code)),
-        None => msi_registry::find_product_code(&crate::get_app_name()),
+        None if installer_state == Some(true) => {
+            msi_registry::find_product_code(&crate::get_app_name())
+        }
+        None => Ok(None),
     }
 }
 
@@ -3724,7 +3764,7 @@ fn get_reg_msi_key(subkey: &str, is_msi: Option<bool>) -> ResultType<Option<Stri
         return Ok(None);
     }
 
-    let Some(product_code) = get_msi_product_code(subkey)? else {
+    let Some(product_code) = get_msi_product_code(subkey, is_msi)? else {
         if is_msi == Some(true) {
             bail!("MSI product code was not found in {subkey}");
         }

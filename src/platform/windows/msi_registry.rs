@@ -1,7 +1,7 @@
 use super::{
     normalize_msi_product_code, ResultType, MSI_WINDOWS_INSTALLER_VALUE, REG_NAME_WINDOWS_INSTALLER,
 };
-use hbb_common::{anyhow::anyhow, bail};
+use hbb_common::{anyhow::anyhow, bail, log};
 use std::collections::BTreeSet;
 use winreg::{enums::*, RegKey};
 
@@ -38,23 +38,38 @@ fn find_product_codes_in_view(app_name: &str, wow: bool) -> ResultType<Vec<Strin
     let mut matches = Vec::new();
 
     for key_name in uninstall_key.enum_keys() {
-        let key_name = key_name.map_err(|err| {
-            anyhow!("Failed to enumerate {view_name} MSI uninstall registry: {err}")
-        })?;
+        let key_name = match key_name {
+            Ok(key_name) => key_name,
+            Err(err) => {
+                log::warn!("Skipping unreadable {view_name} MSI uninstall key name: {err}");
+                continue;
+            }
+        };
         let Some(product_code) = normalize_msi_product_code(&key_name) else {
             continue;
         };
-        let entry = uninstall_key
+        let is_match = uninstall_key
             .open_subkey_with_flags(&key_name, flags)
             .map_err(|err| {
                 anyhow!("Failed to open {view_name} MSI uninstall entry {key_name}: {err}")
-            })?;
-        if is_matching_entry(&entry, app_name, &key_name)? {
+            })
+            .and_then(|entry| is_matching_entry(&entry, app_name, &key_name));
+        if scanned_entry_matches(is_match) {
             matches.push(product_code);
         }
     }
 
     Ok(matches)
+}
+
+pub(super) fn scanned_entry_matches(result: ResultType<bool>) -> bool {
+    match result {
+        Ok(is_match) => is_match,
+        Err(err) => {
+            log::warn!("Skipping invalid MSI uninstall entry: {err}");
+            false
+        }
+    }
 }
 
 pub(super) fn is_matching_entry(

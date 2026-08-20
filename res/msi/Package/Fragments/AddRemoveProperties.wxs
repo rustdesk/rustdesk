@@ -27,6 +27,8 @@
 		<!--$ArpStart$-->
 		<!--$ArpEnd$-->
 
+		<SetProperty Action="SetArpInstallLocation" Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER_INNER]" After="CostFinalize" Sequence="execute" />
+
 		<!--$CustomClientPropsStart$-->
 		<!--$CustomClientPropsEnd$-->
 
