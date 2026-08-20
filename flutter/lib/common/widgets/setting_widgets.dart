@@ -253,8 +253,14 @@ class TrackpadSpeedWidget extends StatefulWidget {
   final SimpleWrapper<int> value;
   // If null, no debouncer will be applied.
   final Function(int)? onDebouncer;
+  final ValueChanged<String>? onTextChanged;
 
-  TrackpadSpeedWidget({Key? key, required this.value, this.onDebouncer});
+  TrackpadSpeedWidget({
+    Key? key,
+    required this.value,
+    this.onDebouncer,
+    this.onTextChanged,
+  });
 
   @override
   TrackpadSpeedWidgetState createState() => TrackpadSpeedWidgetState();
@@ -276,6 +282,18 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
         debouncerSpeed.setValue(value);
       }
     });
+    widget.onTextChanged?.call(_controller.text);
+  }
+
+  void submitTextValue(String text) {
+    if (widget.onTextChanged != null) {
+      return;
+    }
+    final newValue = int.tryParse(text);
+    if (newValue == null) {
+      return;
+    }
+    updateValue(newValue);
   }
 
   @override
@@ -315,12 +333,8 @@ class TrackpadSpeedWidgetState extends State<TrackpadSpeedWidget> {
                     controller: _controller,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    onSubmitted: (text) {
-                      int? v = int.tryParse(text);
-                      if (v != null) {
-                        updateValue(v);
-                      }
-                    },
+                    onChanged: widget.onTextChanged,
+                    onSubmitted: submitTextValue,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       contentPadding:
