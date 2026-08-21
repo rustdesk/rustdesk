@@ -2875,11 +2875,7 @@ impl LoginConfigHandler {
         let my_platform = hbb_common::whoami::platform().to_string();
         #[cfg(target_os = "android")]
         let my_platform = "Android".into();
-        let hwid = if self.get_option("trust-this-device") == "Y" {
-            crate::get_hwid()
-        } else {
-            Bytes::new()
-        };
+        let hwid = crate::get_hwid();
         let mut lr = LoginRequest {
             username: pure_id,
             password: password.into(),
@@ -3604,13 +3600,16 @@ pub fn handle_login_error(
         lc.write().unwrap().password = Default::default();
         interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
         true
-    } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
+    } else if err == LOGIN_MSG_2FA_WRONG {
         let enabled = lc.read().unwrap().get_option("trust-this-device") == "Y";
         if enabled {
             lc.write()
                 .unwrap()
                 .set_option("trust-this-device".to_string(), "".to_string());
         }
+        interface.msgbox("input-2fa", err, "", "");
+        true
+    } else if err == REQUIRE_2FA {
         interface.msgbox("input-2fa", err, "", "");
         true
     } else if LOGIN_ERROR_MAP.contains_key(err) {
