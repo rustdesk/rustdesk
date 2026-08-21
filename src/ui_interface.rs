@@ -1152,7 +1152,7 @@ pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
 #[inline]
 pub fn has_hwcodec() -> bool {
     // Has real hardware codec using gpu
-    (cfg!(feature = "hwcodec") && cfg!(not(target_os = "ios"))) || cfg!(feature = "mediacodec")
+    cfg!(feature = "hwcodec") || cfg!(feature = "mediacodec")
 }
 
 #[inline]
