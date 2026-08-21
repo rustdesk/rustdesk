@@ -13,8 +13,6 @@ pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const FILE_CLIPBOARD_NAME: &'static str = "file-clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
-// Local (client side) option to relay clipboard content received from one
-// remote session to all the other connected sessions.
 pub const OPTION_ALLOW_SYNC_CLIPBOARD_BETWEEN_SESSIONS: &str =
     "allow-sync-clipboard-between-sessions";
 

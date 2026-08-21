@@ -1425,8 +1425,6 @@ pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
     send_clipboard_msg_impl(msg, _is_file, None);
 }
 
-// Relay clipboard content received from one session to all the other sessions,
-// so that copying in one remote window can be pasted in another one.
 // `except_session_id` is the session the content came from, to avoid sending it back.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn send_clipboard_msg_to_other_sessions(msg: Message, except_session_id: u64) {
