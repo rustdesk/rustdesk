@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
@@ -36,6 +38,34 @@ void main() {
     output = <String>[];
     terminal = Terminal(mouseHandler: const WheelButtonFixMouseHandler())
       ..onOutput = output.add;
+  });
+
+  testWidgets('Linux Ctrl+V is not paste', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (_) async => {'text': 'clipboard'},
+      );
+      final controller = TerminalController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(_terminalHarness(terminal, controller));
+      await tester.tap(find.byType(TerminalView));
+      await tester.pump(kDoubleTapTimeout);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      final controlVOutput = List.of(output);
+      output.clear();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      expect(controlVOutput, ['\x16']);
+      expect(output, ['clipboard']);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   String? report(
