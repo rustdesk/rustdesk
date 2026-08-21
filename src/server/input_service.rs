@@ -705,24 +705,54 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// When a refresh outlives its caller's timeout, the blocking task below keeps waiting
+// on the enigo lock or the IPC; it cannot be cancelled. Marks the launch time so
+// retries don't stack a new blocked thread on the same lock every poll: the task
+// clears the marker when it finishes, and the age bound recovers if it never runs.
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref UINPUT_REFRESH_INFLIGHT_SINCE: std::sync::Mutex<Option<Instant>> = Default::default();
+}
+#[cfg(target_os = "linux")]
+const UINPUT_REFRESH_GIVE_UP: Duration = Duration::from_secs(60);
+
 #[cfg(target_os = "linux")]
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
+    let started = Instant::now();
+    {
+        let mut inflight = UINPUT_REFRESH_INFLIGHT_SINCE.lock().unwrap();
+        if let Some(since) = *inflight {
+            if since.elapsed() < UINPUT_REFRESH_GIVE_UP {
+                bail!("previous uinput refresh still in flight");
+            }
+        }
+        *inflight = Some(started);
+    }
     // Confirm the device adopted the new range before the caller caches it.
     // spawn_blocking because ENIGO is a std Mutex and send_refresh blocks on IPC.
     tokio::task::spawn_blocking(move || {
-        if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
-            if let Some(mouse) = mouse
-                .as_mut_any()
-                .downcast_mut::<super::uinput::client::UInputMouse>()
-            {
-                return mouse.send_refresh();
+        let res = (|| {
+            if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
+                if let Some(mouse) = mouse
+                    .as_mut_any()
+                    .downcast_mut::<super::uinput::client::UInputMouse>()
+                {
+                    return mouse.send_refresh();
+                }
+                bail!("failed to downcast custom mouse to UInputMouse");
             }
-            bail!("failed to downcast custom mouse to UInputMouse");
+            // No custom mouse: nothing to refresh.
+            Ok(())
+        })();
+        // Clear only our own marker: a task that outlived the 60s bound must not
+        // release the slot a newer attempt has since claimed.
+        let mut inflight = UINPUT_REFRESH_INFLIGHT_SINCE.lock().unwrap();
+        if *inflight == Some(started) {
+            *inflight = None;
         }
-        // No custom mouse: nothing to refresh.
-        Ok(())
+        res
     })
     .await?
 }
