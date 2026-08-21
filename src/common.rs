@@ -1056,19 +1056,6 @@ fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
     Ok(())
 }
 
-async fn software_update_response_bytes(
-    tls_url: &str,
-    used_tls_type: TlsType,
-    response: reqwest::Response,
-) -> ResultType<Bytes> {
-    upsert_tls_cache(tls_url, used_tls_type, false);
-    let status = response.status();
-    if !status.is_success() {
-        bail!("Software update check failed with HTTP status: {status}");
-    }
-    Ok(response.bytes().await?)
-}
-
 // No need to check `danger_accept_invalid_cert` for now.
 // Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
@@ -1099,7 +1086,15 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     };
     let response_bytes = match latest_release_response {
         Ok((used_tls_type, response)) => {
-            software_update_response_bytes(tls_url, used_tls_type, response).await
+            upsert_tls_cache(tls_url, used_tls_type, false);
+            let status = response.status();
+            if !status.is_success() {
+                Err(anyhow!(
+                    "Software update check failed with HTTP status: {status}"
+                ))
+            } else {
+                Ok(response.bytes().await?)
+            }
         }
         Err(err) => Err(err),
     };
