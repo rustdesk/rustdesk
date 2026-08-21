@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:xterm/xterm.dart';
 
+import 'terminal_copy_shortcut.dart';
 import 'terminal_mouse_drag_reporter.dart';
 
 /// xterm 4.0.0 encodes wheel buttons as 68..71; the extra bit reads as a Shift
@@ -291,6 +292,8 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
         focusNode: widget.focusNode,
         backgroundOpacity: widget.backgroundOpacity,
         padding: widget.padding,
+        shortcuts: platformTerminalShortcuts(),
+        onKeyEvent: terminalCopyHandler(widget.terminal, widget.controller),
         onSecondaryTapDown: widget.onSecondaryTapDown,
       ),
     );
