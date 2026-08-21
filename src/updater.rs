@@ -207,11 +207,6 @@ fn check_update(manually: bool) -> ResultType<()> {
             log::debug!("Automatic update is not supported on this platform.");
             return Ok(());
         }
-        #[cfg(target_os = "macos")]
-        if !manually {
-            log::debug!("Background auto-install is not supported on macOS.");
-            return Ok(());
-        }
         let query = crate::update_metadata::UpdateArtifactQuery {
             platform: current_update_platform(),
             arch: current_update_arch(),

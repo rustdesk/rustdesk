@@ -3742,33 +3742,6 @@ pub fn handle_custom_client_staging_dir_before_update(
     Ok(())
 }
 
-// Used for auto update and manual update in the main window.
-pub fn update_to(file: &str) -> ResultType<()> {
-    if file.ends_with(".exe") {
-        let custom_client_staging_dir = get_custom_client_staging_dir();
-        if crate::is_custom_client() {
-            handle_custom_client_staging_dir_before_update(&custom_client_staging_dir)?;
-        } else {
-            // Clean up any residual staging directory from previous custom client
-            allow_err!(remove_custom_client_staging_dir(&custom_client_staging_dir));
-        }
-        if !run_uac(file, "--update")? {
-            bail!(
-                "Failed to run the update exe with UAC, error: {:?}",
-                std::io::Error::last_os_error()
-            );
-        }
-    } else if file.ends_with(".msi") {
-        if let Err(e) = update_me_msi(file, false) {
-            bail!("Failed to run the update msi: {}", e);
-        }
-    } else {
-        // unreachable!()
-        bail!("Unsupported update file format: {}", file);
-    }
-    Ok(())
-}
-
 // Don't launch tray app when running with `\qn`.
 // 1. Because `/qn` requires administrator permission and the tray app should be launched with user permission.
 //   Or launching the main window from the tray app will cause the main window to be launched with administrator permission.

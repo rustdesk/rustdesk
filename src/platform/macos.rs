@@ -35,8 +35,6 @@ use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 use std::{
-    collections::HashMap,
-    io::Write,
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -310,11 +308,7 @@ impl UpdateSource {
     }
 }
 
-fn update_daemon_agent(
-    agent_plist_file: String,
-    update_source: UpdateSource,
-    sync: bool,
-) -> ResultType<()> {
+fn update_daemon_agent(agent_plist_file: String, update_source: UpdateSource) -> ResultType<()> {
     let update_script_file = "update.scpt";
     let Some(update_script) = PRIVILEGES_SCRIPTS_DIR.get_file(update_script_file) else {
         bail!("Failed to find {}", update_script_file);
@@ -360,14 +354,7 @@ fn update_daemon_agent(
         }
         Ok(())
     };
-    if sync {
-        func()
-    } else {
-        std::thread::spawn(move || {
-            hbb_common::allow_err!(func());
-        });
-        Ok(())
-    }
+    func()
 }
 
 fn correct_app_name(s: &str) -> String {
@@ -1024,7 +1011,7 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
-        update_daemon_agent(agent_plist_file, update_source, true)?;
+        update_daemon_agent(agent_plist_file, update_source)?;
     } else {
         let (update_source_path, expected_sha256) = update_source.into_script_args();
         let output = Command::new("osascript")
@@ -1114,12 +1101,6 @@ fn update_from_verified_dmg(verified_dmg: &VerifiedDmg) -> ResultType<()> {
     Ok(())
 }
 
-pub fn update_to(_file: &str) -> ResultType<()> {
-    let update_temp_dir = get_update_temp_dir_string();
-    update_extracted(&update_temp_dir)?;
-    Ok(())
-}
-
 fn backup_update_plist(source: &str, backup: &str) -> ResultType<()> {
     match std::fs::symlink_metadata(source) {
         Ok(metadata) => {
@@ -1130,7 +1111,10 @@ fn backup_update_plist(source: &str, backup: &str) -> ResultType<()> {
             Ok(())
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            bail!("[root-update] required installed plist is missing: {}", source)
+            bail!(
+                "[root-update] required installed plist is missing: {}",
+                source
+            )
         }
         Err(err) => Err(err.into()),
     }
@@ -1142,7 +1126,10 @@ fn validate_update_tree(path: &Path, framework_root: Option<&Path>) -> ResultTyp
         // Frameworks legitimately use internal symlinks (Resources,
         // Versions/Current), but never allow a link to leave its framework.
         let Some(framework_root) = framework_root else {
-            bail!("[root-update] symlink outside framework: {}", path.display());
+            bail!(
+                "[root-update] symlink outside framework: {}",
+                path.display()
+            );
         };
         let target = std::fs::read_link(path)?;
         let target = if target.is_absolute() {
@@ -1173,7 +1160,10 @@ fn validate_update_tree(path: &Path, framework_root: Option<&Path>) -> ResultTyp
             validate_update_tree(&child, child_framework_root)?;
         }
     } else if !metadata.file_type().is_file() {
-        bail!("[root-update] unsupported file in update bundle: {}", path.display());
+        bail!(
+            "[root-update] unsupported file in update bundle: {}",
+            path.display()
+        );
     }
     Ok(())
 }
@@ -1198,10 +1188,19 @@ pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> Result
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&tmp_dir, std::fs::Permissions::from_mode(0o700))?;
     }
-    let agent_plist = format!("/Library/LaunchAgents/com.carriez.{}_server.plist", app_name);
-    let daemon_plist = format!("/Library/LaunchDaemons/com.carriez.{}_service.plist", app_name);
+    let agent_plist = format!(
+        "/Library/LaunchAgents/com.carriez.{}_server.plist",
+        app_name
+    );
+    let daemon_plist = format!(
+        "/Library/LaunchDaemons/com.carriez.{}_service.plist",
+        app_name
+    );
 
-    log::info!("[root-update] Starting silent root update from {}", dmg_path);
+    log::info!(
+        "[root-update] Starting silent root update from {}",
+        dmg_path
+    );
     // Check sessions before extracting to avoid unnecessary work
     if !crate::updater::has_no_active_conns_ipc() {
         bail!("[root-update] Active session detected, deferring update.");
@@ -1299,7 +1298,10 @@ pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> Result
     // launching a freshly extracted service binary from /tmp is not required.
     let new_service = format!("{}/Contents/MacOS/service", src_app);
     if !std::path::Path::new(&new_service).is_file() {
-        bail!("[root-update] staged service binary is missing: {}", new_service);
+        bail!(
+            "[root-update] staged service binary is missing: {}",
+            new_service
+        );
     }
     // The new binary writes its own plist definitions after the bundle is
     // moved into its final root-owned location.  This avoids executing code
@@ -1869,37 +1871,13 @@ rm -rf {tmp_dir}
     Ok(())
 }
 
-pub fn extract_update_dmg(file: &str) {
-    let update_temp_dir = get_update_temp_dir_string();
-    let mut evt: HashMap<&str, String> =
-        HashMap::from([("name", "extract-update-dmg".to_string())]);
-    match extract_dmg(file, &update_temp_dir) {
-        Ok(_) => {
-            log::info!("Extracted dmg file to {}", update_temp_dir);
-        }
-        Err(e) => {
-            evt.insert("err", e.to_string());
-            log::error!("Failed to extract dmg file {}: {}", file, e);
-        }
-    }
-    let evt = serde_json::ser::to_string(&evt).unwrap_or("".to_owned());
-    #[cfg(feature = "flutter")]
-    crate::flutter::push_global_event(crate::flutter::APP_TYPE_MAIN, evt);
-}
-
-fn extract_dmg(dmg_path: &str, target_dir: &str) -> ResultType<()> {
-    let target_path = Path::new(target_dir);
-    if target_path.exists() {
-        std::fs::remove_dir_all(target_path)?;
-    }
-    std::fs::create_dir_all(target_path)?;
-    extract_dmg_inner(dmg_path, target_dir)
-}
-
 fn extract_dmg_into_existing_dir(dmg_path: &str, target_dir: &str) -> ResultType<()> {
     let target_path = Path::new(target_dir);
     if !target_path.exists() {
-        bail!("[root-update] Temp directory does not exist: {:?}", target_path);
+        bail!(
+            "[root-update] Temp directory does not exist: {:?}",
+            target_path
+        );
     }
     extract_dmg_inner(dmg_path, target_dir)
 }
@@ -1910,17 +1888,6 @@ fn verified_dmg_update_source(verified_dmg: &VerifiedDmg) -> ResultType<UpdateSo
         path: verified_dmg_path(verified_dmg)?.to_owned(),
         expected_sha256: verified_dmg.expected_sha256.clone(),
     })
-}
-
-fn update_extracted(target_dir: &str) -> ResultType<()> {
-    let result = update_me_from_app_dir(
-        Path::new(target_dir)
-            .join(format!("{}.app", crate::get_app_name()))
-            .to_string_lossy()
-            .into_owned(),
-    );
-    try_remove_temp_update_dir(Some(target_dir));
-    result
 }
 
 pub fn get_double_click_time() -> u32 {
