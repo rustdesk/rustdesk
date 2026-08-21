@@ -162,6 +162,7 @@ unsafe extern "C" {
         userData: *mut c_void,
     ) -> i32;
     fn OH_VideoDecoder_Configure(codec: *mut OH_AVCodec, format: *mut OH_AVFormat) -> i32;
+    fn OH_VideoDecoder_SetParameter(codec: *mut OH_AVCodec, format: *mut OH_AVFormat) -> i32;
     fn OH_VideoDecoder_SetSurface(codec: *mut OH_AVCodec, window: *mut OHNativeWindow) -> i32;
     fn OH_VideoDecoder_Prepare(codec: *mut OH_AVCodec) -> i32;
     fn OH_VideoDecoder_Start(codec: *mut OH_AVCodec) -> i32;
@@ -224,6 +225,7 @@ unsafe extern "C" {
     static OH_MD_KEY_VIDEO_PIC_HEIGHT: *const c_char;
     static OH_MD_KEY_ENABLE_SYNC_MODE: *const c_char;
     static OH_MD_KEY_VIDEO_ENABLE_LOW_LATENCY: *const c_char;
+    static OH_MD_KEY_FRAME_RATE: *const c_char;
     static OH_AVCODEC_MIMETYPE_VIDEO_AVC: *const c_char;
     static OH_AVCODEC_MIMETYPE_VIDEO_HEVC: *const c_char;
 }
@@ -233,6 +235,7 @@ unsafe extern "C" {
     fn OH_AVFormat_Create() -> *mut OH_AVFormat;
     fn OH_AVFormat_Destroy(format: *mut OH_AVFormat);
     fn OH_AVFormat_SetIntValue(format: *mut OH_AVFormat, key: *const c_char, value: i32) -> bool;
+    fn OH_AVFormat_SetDoubleValue(format: *mut OH_AVFormat, key: *const c_char, value: f64) -> bool;
     fn OH_AVFormat_GetIntValue(format: *mut OH_AVFormat, key: *const c_char, out: *mut i32)
         -> bool;
 
@@ -739,6 +742,9 @@ impl OhosVideoDecoder {
                 low_latency_requested =
                     OH_AVFormat_SetIntValue(format, OH_MD_KEY_VIDEO_ENABLE_LOW_LATENCY, 1);
             }
+            if !OH_MD_KEY_FRAME_RATE.is_null() {
+                OH_AVFormat_SetDoubleValue(format, OH_MD_KEY_FRAME_RATE, 120.0);
+            }
         }
         hilog_info(&format!(
             "OHOS decoder config mime={} width={} height={} low_latency_key_available={} low_latency_set={}",
@@ -1010,6 +1016,27 @@ impl OhosVideoDecoder {
         } else {
             self.last_decode_latency_ms
         }
+    }
+
+    pub fn update_frame_rate(&self, fps: f64) -> ResultType<()> {
+        if self.codec.is_null() || fps <= 0.0 {
+            return Ok(());
+        }
+        let format = unsafe { OH_AVFormat_Create() };
+        if format.is_null() {
+            bail!("failed to create format for SetParameter");
+        }
+        unsafe {
+            if !OH_MD_KEY_FRAME_RATE.is_null() {
+                OH_AVFormat_SetDoubleValue(format, OH_MD_KEY_FRAME_RATE, fps);
+            }
+            let ret = OH_VideoDecoder_SetParameter(self.codec, format);
+            OH_AVFormat_Destroy(format);
+            if ret != AV_ERR_OK {
+                hilog_warn(&format!("OHOS decoder SetParameter frame_rate failed: {}", ret));
+            }
+        }
+        Ok(())
     }
 
     fn take_surface_rendered_frame(&mut self) -> bool {
