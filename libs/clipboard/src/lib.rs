@@ -146,7 +146,9 @@ struct MsgChannel {
 }
 
 lazy_static::lazy_static! {
+    // TODO: A stalled client I/O loop leaves its channel registered indefinitely.
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
+    // TODO: Client IDs may collide with independently generated server IDs in this shared table.
     static ref CLIENT_CONN_ID_COUNTER: Mutex<i32> = Mutex::new(0);
 }
 
@@ -173,6 +175,7 @@ pub fn get_client_conn_id(peer_id: &str) -> Option<i32> {
         .read()
         .unwrap()
         .iter()
+        .rev()
         .find(|x| x.peer_id == peer_id)
         .map(|x| x.conn_id)
 }
@@ -187,23 +190,18 @@ pub fn get_rx_cliprdr_client(
     peer_id: &str,
 ) -> (i32, Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>>) {
     let mut lock = VEC_MSG_CHANNEL.write().unwrap();
-    match lock.iter().find(|x| x.peer_id == peer_id) {
-        Some(msg_channel) => (msg_channel.conn_id, msg_channel.receiver.clone()),
-        None => {
-            let (sender, receiver) = unbounded_channel();
-            let receiver = Arc::new(TokioMutex::new(receiver));
-            let receiver2 = receiver.clone();
-            let conn_id = get_conn_id();
-            let msg_channel = MsgChannel {
-                peer_id: peer_id.to_owned(),
-                conn_id,
-                sender,
-                receiver,
-            };
-            lock.push(msg_channel);
-            (conn_id, receiver2)
-        }
-    }
+    let (sender, receiver) = unbounded_channel();
+    let receiver = Arc::new(TokioMutex::new(receiver));
+    let receiver2 = receiver.clone();
+    let conn_id = get_conn_id();
+    let msg_channel = MsgChannel {
+        peer_id: peer_id.to_owned(),
+        conn_id,
+        sender,
+        receiver,
+    };
+    lock.push(msg_channel);
+    (conn_id, receiver2)
 }
 
 pub fn get_rx_cliprdr_server(conn_id: i32) -> Arc<TokioMutex<UnboundedReceiver<ClipboardFile>>> {
@@ -287,12 +285,4 @@ fn send_data_to_all(data: ClipboardFile) {
     for msg_channel in VEC_MSG_CHANNEL.read().unwrap().iter() {
         allow_err!(msg_channel.sender.send(data.clone()));
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // #[test]
-    // fn test_cliprdr_run() {
-    //     super::cliprdr_run();
-    // }
 }
