@@ -2061,12 +2061,15 @@ mod desktop {
             if self.display.is_empty() {
                 self.display = Self::get_display_from_session(&self.sid);
             }
+            
             if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
+            
             if self.display.is_empty() {
                 self.display = ":0".to_owned();
             }
+            
             self.display = self
                 .display
                 .replace(&hbb_common::whoami::hostname(), "")
