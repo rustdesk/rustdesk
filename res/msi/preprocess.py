@@ -61,7 +61,7 @@ def make_parser():
         "--custom-arp",
         type=str,
         default="{}",
-        help='Custom arp properties, e.g. \'["Comments": {"msi": "ARPCOMMENTS", "v": "Remote control application."}]\'',
+        help='Custom arp properties, e.g. \'{"Comments": {"msi": "ARPCOMMENTS", "v": "Remote control application."}}\'',
     )
     parser.add_argument(
         "-c", "--custom", action="store_true", help="Is custom client", default=False
