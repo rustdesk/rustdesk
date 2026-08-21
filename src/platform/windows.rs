@@ -1827,6 +1827,9 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String>
     if let Some(product_code) = get_msi_product_code(&subkey, installer_state)? {
         return Ok(build_msi_uninstall_command(&product_code));
     }
+    if installer_state == Some(true) {
+        bail!("MSI product code was not found in {subkey}");
+    }
 
     let mut uninstall_cert_cmd = "".to_string();
     let mut uninstall_printer_cmd = "".to_string();
