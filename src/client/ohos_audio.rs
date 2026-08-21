@@ -143,6 +143,13 @@ impl PcmQueue {
         true
     }
 
+    fn fill_available(&mut self, output: &mut [f32]) -> bool {
+        for sample in output.iter_mut() {
+            *sample = self.samples.pop_front().unwrap_or(0.0);
+        }
+        true
+    }
+
     fn clear(&mut self) {
         self.samples.clear();
     }
@@ -274,11 +281,8 @@ unsafe extern "C" fn write_pcm(
             byte_len / std::mem::size_of::<f32>(),
         )
     };
-    if queue.fill_exact(output) {
-        AUDIO_DATA_CALLBACK_RESULT_VALID
-    } else {
-        AUDIO_DATA_CALLBACK_RESULT_INVALID
-    }
+    queue.fill_available(output);
+    AUDIO_DATA_CALLBACK_RESULT_VALID
 }
 
 pub struct OhosAudioOutput {
