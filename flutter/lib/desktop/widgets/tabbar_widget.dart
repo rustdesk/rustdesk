@@ -1457,27 +1457,27 @@ class TabbarTheme extends ThemeExtension<TabbarTheme> {
 
   static const light = TabbarTheme(
       selectedTabIconColor: MyTheme.accent,
-      unSelectedTabIconColor: Color.fromARGB(255, 162, 203, 241),
-      selectedTextColor: Colors.black,
-      unSelectedTextColor: Color.fromARGB(255, 112, 112, 112),
-      selectedIconColor: Color.fromARGB(255, 26, 26, 26),
-      unSelectedIconColor: Color.fromARGB(255, 96, 96, 96),
-      dividerColor: Color.fromARGB(255, 238, 238, 238),
-      hoverColor: Colors.white54,
-      closeHoverColor: Colors.white,
-      selectedTabBackgroundColor: Colors.white54);
+      unSelectedTabIconColor: Color(0xFF94A3B8),
+      selectedTextColor: Color(0xFF0F172A),
+      unSelectedTextColor: Color(0xFF64748B),
+      selectedIconColor: Color(0xFF0078D4),
+      unSelectedIconColor: Color(0xFF64748B),
+      dividerColor: Color(0xFFE2E8F0),
+      hoverColor: Color(0xFFF1F5F9),
+      closeHoverColor: Color(0xFFE2E8F0),
+      selectedTabBackgroundColor: Colors.white);
 
   static const dark = TabbarTheme(
-      selectedTabIconColor: MyTheme.accent,
-      unSelectedTabIconColor: Color.fromARGB(255, 30, 65, 98),
+      selectedTabIconColor: MyTheme.totalcadCyan,
+      unSelectedTabIconColor: Color(0xFF64748B),
       selectedTextColor: Colors.white,
-      unSelectedTextColor: Color.fromARGB(255, 192, 192, 192),
-      selectedIconColor: Color.fromARGB(255, 192, 192, 192),
-      unSelectedIconColor: Color.fromARGB(255, 255, 255, 255),
-      dividerColor: Color.fromARGB(255, 64, 64, 64),
-      hoverColor: Colors.black26,
-      closeHoverColor: Colors.black,
-      selectedTabBackgroundColor: Colors.black26);
+      unSelectedTextColor: Color(0xFF94A3B8),
+      selectedIconColor: MyTheme.totalcadCyan,
+      unSelectedIconColor: Color(0xFF94A3B8),
+      dividerColor: Color(0xFF273549),
+      hoverColor: Color(0xFF1E2838),
+      closeHoverColor: Color(0xFF273549),
+      selectedTabBackgroundColor: Color(0xFF161E2B));
 
   @override
   ThemeExtension<TabbarTheme> copyWith({

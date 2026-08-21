@@ -10,16 +10,24 @@ Widget getConnectionPageTitle(BuildContext context, bool isWeb) {
       Expanded(
           child: Row(
         children: [
+          Container(
+            width: 4,
+            height: 16,
+            decoration: BoxDecoration(
+              color: MyTheme.accent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ).marginOnly(right: 8),
           AutoSizeText(
             translate('Control Remote Desktop'),
             maxLines: 1,
             style: Theme.of(context)
                 .textTheme
-                .titleLarge
-                ?.merge(TextStyle(height: 1)),
-          ).marginOnly(right: 4),
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700, fontSize: 16),
+          ).marginOnly(right: 6),
           Tooltip(
-            waitDuration: Duration(milliseconds: 300),
+            waitDuration: const Duration(milliseconds: 300),
             message: translate(isWeb ? "web_id_input_tip" : "id_input_tip"),
             child: Icon(
               Icons.help_outline_outlined,

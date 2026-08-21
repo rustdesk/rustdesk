@@ -109,33 +109,58 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
           ),
         );
 
-    basicWidget() => Row(
+    basicWidget() {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final isReady = !_svcStopped.value && stateGlobal.svcStatus.value == SvcStatus.ready;
+      final isConnecting = !_svcStopped.value && stateGlobal.svcStatus.value == SvcStatus.connecting;
+
+      final statusColor = _svcStopped.value
+          ? const Color(0xFFEF4444)
+          : (isConnecting
+              ? const Color(0xFFF59E0B)
+              : (isReady ? const Color(0xFF10B981) : const Color(0xFFEF4444)));
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              height: 8,
-              width: 8,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                color: _svcStopped.value ||
-                        stateGlobal.svcStatus.value == SvcStatus.connecting
-                    ? kColorWarn
-                    : (stateGlobal.svcStatus.value == SvcStatus.ready
-                        ? Color.fromARGB(255, 50, 190, 166)
-                        : Color.fromARGB(255, 224, 79, 95)),
+                color: statusColor.withOpacity(isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
               ),
-            ).marginSymmetric(horizontal: em),
-            Container(
-              width: isIncomingOnly ? 226 : null,
-              child: _buildConnStatusMsg(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 7,
+                    width: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: statusColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: statusColor.withOpacity(0.5),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildConnStatusMsg(statusColor),
+                ],
+              ),
             ),
-            // stop
             if (!isIncomingOnly) startServiceWidget(),
-            // ready && public
-            // No need to show the guide if is custom client.
             if (!isIncomingOnly) setupServerWidget(),
           ],
-        );
+        ),
+      );
+    }
 
     return Container(
       height: height,
@@ -153,7 +178,7 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
     ).paddingOnly(right: isIncomingOnly ? 8 : 0);
   }
 
-  _buildConnStatusMsg() {
+  _buildConnStatusMsg(Color statusColor) {
     widget.onSvcStatusChanged?.call();
     return Text(
       _svcStopped.value
@@ -163,7 +188,11 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
               : stateGlobal.svcStatus.value == SvcStatus.notReady
                   ? translate("not_ready_status")
                   : translate('Ready'),
-      style: TextStyle(fontSize: em),
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: statusColor,
+      ),
     );
   }
 
@@ -341,16 +370,30 @@ class _ConnectionPageState extends State<ConnectionPage>
   /// UI for the remote ID TextField.
   /// Search for a peer.
   Widget _buildRemoteIDTextField(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBorder = Theme.of(context).extension<ColorThemeExtension>()?.border ?? MyTheme.border;
+    final cardBg = Theme.of(context).cardColor;
+
     var w = Container(
-      width: 320 + 20 * 2,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+      width: 380,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(13)),
-          border: Border.all(color: Theme.of(context).colorScheme.background)),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black26 : Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Ink(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
+            getConnectionPageTitle(context, false).marginOnly(bottom: 14),
             Row(
               children: [
                 Expanded(
@@ -419,20 +462,42 @@ class _ConnectionPageState extends State<ConnectionPage>
                           focusNode: fieldFocusNode,
                           style: const TextStyle(
                             fontFamily: 'WorkSans',
-                            fontSize: 22,
-                            height: 1.4,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                           maxLines: 1,
-                          cursorColor:
-                              Theme.of(context).textTheme.titleLarge?.color,
+                          cursorColor: MyTheme.accent,
                           decoration: InputDecoration(
-                              filled: false,
+                              filled: true,
+                              fillColor: isDark ? const Color(0xFF182232) : const Color(0xFFF1F5F9),
                               counterText: '',
+                              prefixIcon: const Icon(
+                                Icons.desktop_windows_outlined,
+                                size: 18,
+                                color: MyTheme.accent,
+                              ),
                               hintText: _idInputFocused.value
                                   ? null
                                   : translate('Enter Remote ID'),
+                              hintStyle: TextStyle(
+                                fontSize: 14,
+                                color: Theme.of(context).hintColor,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: cardBorder),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: BorderSide(color: cardBorder),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: MyTheme.accent, width: 1.5),
+                              ),
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 15, vertical: 13)),
+                                  horizontal: 14, vertical: 12)),
                           controller: fieldTextEditingController,
                           inputFormatters: [IDTextInputFormatter()],
                           onChanged: (v) {
@@ -469,20 +534,20 @@ class _ConnectionPageState extends State<ConnectionPage>
                           decoration: BoxDecoration(
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 5,
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 8,
                                 spreadRadius: 1,
                               ),
                             ],
                           ),
                           child: ClipRRect(
-                              borderRadius: BorderRadius.circular(5),
+                              borderRadius: BorderRadius.circular(10),
                               child: Material(
                                 elevation: 4,
                                 child: ConstrainedBox(
                                   constraints: BoxConstraints(
                                     maxHeight: maxHeight,
-                                    maxWidth: 319,
+                                    maxWidth: 344,
                                   ),
                                   child: _allPeersLoader.peers.isEmpty &&
                                           !_allPeersLoader.isPeersLoaded
@@ -514,34 +579,48 @@ class _ConnectionPageState extends State<ConnectionPage>
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(top: 13.0),
+              padding: const EdgeInsets.only(top: 14.0),
               child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 SizedBox(
-                  height: 28.0,
-                  child: ElevatedButton(
+                  height: 34.0,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: MyTheme.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.bolt_rounded, size: 18),
                     onPressed: () {
                       onConnect();
                     },
-                    child: Text(translate("Connect")),
+                    label: Text(
+                      translate("Connect"),
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  height: 28.0,
-                  width: 28.0,
+                  height: 34.0,
+                  width: 34.0,
                   decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(8),
+                    color: isDark ? const Color(0xFF182232) : const Color(0xFFF1F5F9),
+                    border: Border.all(color: cardBorder),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
                     child: StatefulBuilder(
                       builder: (context, setState) {
                         var offset = Offset(0, 0);
                         return Obx(() => InkWell(
+                              borderRadius: BorderRadius.circular(10),
                               child: _menuOpen.value
                                   ? Transform.rotate(
                                       angle: pi,
-                                      child: Icon(IconFont.more, size: 14),
+                                      child: Icon(IconFont.more, size: 14, color: MyTheme.accent),
                                     )
                                   : Icon(IconFont.more, size: 14),
                               onTapDown: (e) {

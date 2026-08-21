@@ -2424,11 +2424,11 @@ class _AboutState extends State<_About> {
       final buildDate = data['buildDate'].toString();
       final fingerprint = data['fingerprint'].toString();
       final myId = data['myId'].toString();
-      const linkStyle = TextStyle(decoration: TextDecoration.underline);
+      const linkStyle = TextStyle(decoration: TextDecoration.underline, color: MyTheme.accent);
       final scrollController = ScrollController();
       return SingleChildScrollView(
         controller: scrollController,
-        child: _Card(title: translate('About RustDesk'), children: [
+        child: _Card(title: 'TotalCAD Viewer', children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2450,7 +2450,7 @@ class _AboutState extends State<_About> {
                       .marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
+                    launchUrlString('https://www.totalcad.com.br/politica-de-privacidade');
                   },
                   child: Text(
                     translate('Privacy Statement'),
@@ -2458,16 +2458,23 @@ class _AboutState extends State<_About> {
                   ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com');
+                    launchUrlString('https://www.totalcad.com.br');
                   },
                   child: Text(
-                    translate('Website'),
+                    translate('Website') + ' (totalcad.com.br)',
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [MyTheme.accent, MyTheme.totalcadCyan],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 padding:
-                    const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                    const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                 child: SelectionArea(
                     child: Row(
                   children: [
@@ -2476,21 +2483,22 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
-                            style: const TextStyle(color: Colors.white),
+                            'TotalCAD Viewer © ${DateTime.now().year} TotalCAD Softwares.\nTodos os direitos reservados.',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                           ),
+                          const SizedBox(height: 6),
                           Text(
-                            translate('Slogan_tip'),
+                            'Solução corporativa de controle remoto e visualização de alta performance.',
                             style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white),
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.9)),
                           )
                         ],
                       ),
                     ),
                   ],
                 )),
-              ).marginSymmetric(vertical: 4.0)
+              ).marginSymmetric(vertical: 8.0)
             ],
           ).marginOnly(left: _kContentHMargin)
         ]),
