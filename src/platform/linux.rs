@@ -2059,6 +2059,9 @@ mod desktop {
             }
 
             if self.display.is_empty() {
+                self.display = Self::get_display_from_session(&self.sid);
+            }
+            if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
             if self.display.is_empty() {
@@ -2068,6 +2071,34 @@ mod desktop {
                 .display
                 .replace(&hbb_common::whoami::hostname(), "")
                 .replace("localhost", "");
+        }
+
+        fn get_display_from_session(session: &str) -> String {
+            if session.is_empty() {
+                return String::new();
+            }
+
+            match Command::new(CMD_LOGINCTL.as_str())
+                .args(["show-session", "-p", "Display", session])
+                .output()
+            {
+                Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .strip_prefix("Display=")
+                    .unwrap_or_default()
+                    .to_owned(),
+                Ok(output) => {
+                    log::debug!(
+                        "Failed to get display for session {session}: {}",
+                        output.status
+                    );
+                    String::new()
+                }
+                Err(err) => {
+                    log::debug!("Failed to get display for session {session}: {err}");
+                    String::new()
+                }
+            }
         }
 
         fn get_home(&mut self) {
