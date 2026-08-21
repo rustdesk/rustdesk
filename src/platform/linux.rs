@@ -2059,17 +2059,26 @@ mod desktop {
             }
 
             if self.display.is_empty() {
-                self.display = Self::get_display_from_session(&self.sid);
+                // logind stores the value pam_systemd was handed at session creation, which is not
+                // necessarily a local display: it can be qualified with this host (`myhost:0`) or
+                // name an X forwarding endpoint (`localhost:10.0`), and some setups record a bare
+                // `:`. Strip this host, then require a display number. `localhost` is deliberately
+                // left in place: a non-empty display here suppresses every fallback below, both
+                // `get_display_by_user` and the `:0` default, so anything not local must not pass.
+                let display = Self::get_display_from_session(&self.sid)
+                    .replace(&hbb_common::whoami::hostname(), "");
+                if display.strip_prefix(':').map_or(false, |number| {
+                    number.starts_with(|c: char| c.is_ascii_digit())
+                }) {
+                    self.display = display;
+                }
             }
-            
             if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
-            
             if self.display.is_empty() {
                 self.display = ":0".to_owned();
             }
-            
             self.display = self
                 .display
                 .replace(&hbb_common::whoami::hostname(), "")
