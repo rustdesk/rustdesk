@@ -763,5 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "캔버스 잠금"),
         ("Sync clipboard between sessions", "세션 간 클립보드 동기화"),
         ("sync-clipboard-between-sessions-tip", "하나의 원격 세션에서 복사한 텍스트나 이미지는 연결된 다른 세션의 클립보드에도 전송됩니다."),
+        ("terminal-clipboard-write-tip", ""),
+        ("Allow terminal apps to copy to clipboard", ""),
+        ("Enable", "활성화"),
     ].iter().cloned().collect();
 }

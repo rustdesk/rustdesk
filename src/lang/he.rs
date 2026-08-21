@@ -763,5 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "נעל לוח ציור"),
         ("Sync clipboard between sessions", "סנכרן לוח בין סשנים"),
         ("sync-clipboard-between-sessions-tip", "טקסט או תמונות שהועתקו בסשן מרוחק אחד נשלחים גם ללוח של שאר הסשנים המחוברים שלך."),
+        ("terminal-clipboard-write-tip", ""),
+        ("Allow terminal apps to copy to clipboard", ""),
+        ("Enable", "הפעל"),
     ].iter().cloned().collect();
 }

@@ -1269,16 +1269,18 @@ class __DisplayPageState extends State<_DisplayPage> {
   }
 
   SettingsTile otherRow(String label, String key) {
-    final value = bind.mainGetUserDefaultOption(key: key) == 'Y';
-    final isOptFixed = isOptionFixed(key);
+    final value = getOtherDefaultSettingOption(key) == 'Y';
+    final isOptFixed = isOtherDefaultSettingReadOnly(key);
     return SettingsTile.switchTile(
       initialValue: value,
       title: Text(translate(label)),
       onToggle: isOptFixed
           ? null
           : (b) async {
-              await bind.mainSetUserDefaultOption(
-                  key: key, value: b ? 'Y' : defaultOptionNo);
+              await setOtherDefaultSettingOption(
+                key,
+                b ? 'Y' : defaultOptionNo,
+              );
               setState(() {});
             },
     );
