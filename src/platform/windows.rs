@@ -3507,9 +3507,9 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
             size,
         );
         let reg_cmd_msi = if let Some(reg_msi_key) = &reg_msi_key {
-            format!(
-                "reg add {reg_msi_key} /f /v DisplayVersion /t REG_SZ /d \"{version}\" || exit /b"
-            )
+            // This is best-effort: failure may leave a stale version in the Windows app list,
+            // but should not interrupt the update.
+            format!("reg add {reg_msi_key} /f /v DisplayVersion /t REG_SZ /d \"{version}\"")
         } else {
             "".to_owned()
         };
