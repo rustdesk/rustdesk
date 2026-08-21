@@ -103,6 +103,9 @@ lazy_static::lazy_static! {
 #[cfg(target_os = "windows")]
 const TERMINAL_OS_LOGIN_FAILED_MSG: &str = "Incorrect username or password.";
 
+#[cfg(windows)]
+const PRIVACY_MODE_LOCKED_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
+
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -270,6 +273,8 @@ pub struct Connection {
     recording: bool,
     block_input: bool,
     privacy_mode: bool,
+    #[cfg(windows)]
+    privacy_mode_locked_wait: Option<Instant>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -481,6 +486,8 @@ impl Connection {
             recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
             privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
+            #[cfg(windows)]
+            privacy_mode_locked_wait: None,
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -1019,6 +1026,8 @@ impl Connection {
                 _ = second_timer.tick() => {
                     #[cfg(windows)]
                     conn.portable_check();
+                    #[cfg(windows)]
+                    conn.turn_on_privacy_after_unlocked().await;
                     raii::AuthedConnID::check_wake_lock_on_setting_changed();
                     if let Some((instant, minute)) = conn.auto_disconnect_timer.as_ref() {
                         if instant.elapsed().as_secs() > minute * 60 {
@@ -4812,6 +4821,11 @@ impl Connection {
             return;
         }
 
+        #[cfg(windows)]
+        if self.wait_unlocked_before_turn_on_privacy(&impl_key) {
+            return;
+        }
+
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
@@ -4891,7 +4905,35 @@ impl Connection {
         self.send(msg_out).await;
     }
 
+    #[cfg(windows)]
+    fn wait_unlocked_before_turn_on_privacy(&mut self, impl_key: &str) -> bool {
+        let waiting_since = self.privacy_mode_locked_wait.take();
+        if impl_key != privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
+            || !crate::platform::is_locked()
+        {
+            return false;
+        }
+        let waiting_since = waiting_since.unwrap_or_else(Instant::now);
+        if waiting_since.elapsed() >= PRIVACY_MODE_LOCKED_WAIT_TIMEOUT {
+            return false;
+        }
+        self.privacy_mode_locked_wait = Some(waiting_since);
+        true
+    }
+
+    #[cfg(windows)]
+    async fn turn_on_privacy_after_unlocked(&mut self) {
+        if self.privacy_mode_locked_wait.is_some() {
+            self.turn_on_privacy(privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY.to_owned())
+                .await;
+        }
+    }
+
     async fn turn_off_privacy(&mut self, impl_key: String) {
+        #[cfg(windows)]
+        {
+            self.privacy_mode_locked_wait = None;
+        }
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
                 back_notification::PrivacyModeState::PrvNotSupported,
