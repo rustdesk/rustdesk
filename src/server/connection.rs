@@ -3294,6 +3294,78 @@ impl Connection {
                                 return true;
                             }
                         }
+                        // Android is scoped-storage only: reject any peer supplied path that
+                        // escapes the app workspace before it reaches the filesystem.
+                        #[cfg(target_os = "android")]
+                        {
+                            // (path, job id) of the peer supplied path this action operates on.
+                            let checked: Option<(&str, i32)> = match &fa.union {
+                                Some(file_action::Union::ReadEmptyDirs(rd)) => {
+                                    Some((rd.path.as_str(), -1))
+                                }
+                                Some(file_action::Union::ReadDir(rd)) => {
+                                    Some((rd.path.as_str(), -1))
+                                }
+                                Some(file_action::Union::AllFiles(f)) => {
+                                    Some((f.path.as_str(), f.id))
+                                }
+                                Some(file_action::Union::Send(s)) => {
+                                    // Printer jobs read from memory, `path` is only a lookup key.
+                                    if JobType::from_proto(s.file_type) == JobType::Generic {
+                                        Some((s.path.as_str(), s.id))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                Some(file_action::Union::Receive(r)) => {
+                                    Some((r.path.as_str(), r.id))
+                                }
+                                Some(file_action::Union::RemoveDir(d)) => {
+                                    Some((d.path.as_str(), d.id))
+                                }
+                                Some(file_action::Union::RemoveFile(f)) => {
+                                    Some((f.path.as_str(), f.id))
+                                }
+                                Some(file_action::Union::Create(c)) => {
+                                    Some((c.path.as_str(), c.id))
+                                }
+                                Some(file_action::Union::Rename(r)) => {
+                                    Some((r.path.as_str(), r.id))
+                                }
+                                _ => None,
+                            };
+                            if let Some((path, job_id)) = checked {
+                                if !crate::common::is_peer_path_allowed(path) {
+                                    log::warn!(
+                                        "Reject file action outside the app workspace: {}",
+                                        path
+                                    );
+                                    if job_id >= 0 {
+                                        self.send(fs::new_error(job_id, "Permission denied", -1))
+                                            .await;
+                                    }
+                                    return true;
+                                }
+                            }
+                            if let Some(file_action::Union::Rename(r)) = &fa.union {
+                                let destination = std::path::Path::new(&r.path)
+                                    .parent()
+                                    .map(|parent| parent.join(&r.new_name));
+                                let allowed = destination
+                                    .as_deref()
+                                    .and_then(std::path::Path::to_str)
+                                    .map_or(false, crate::common::is_peer_path_allowed);
+                                if !allowed {
+                                    log::warn!(
+                                        "Reject rename destination outside the app workspace: {:?}",
+                                        destination
+                                    );
+                                    self.send(fs::new_error(r.id, "Permission denied", -1))
+                                        .await;
+                                    return true;
+                                }
+                            }
+                        }
                         match fa.union {
                             Some(file_action::Union::ReadEmptyDirs(rd)) => {
                                 self.read_empty_dirs(&rd.path, rd.include_hidden);
