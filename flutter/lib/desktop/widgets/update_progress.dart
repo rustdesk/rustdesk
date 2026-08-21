@@ -49,7 +49,7 @@ Future<void> handleUpdate(String releasePageUrl) async {
             .marginSymmetric(horizontal: 8)
             .paddingOnly(top: 12),
         actions: [
-          dialogButton(translate('Cancel'), onPressed: () async {
+          dialogButton('Cancel', onPressed: () async {
             onCanceled.value();
             await bind.mainSetCommon(
                 key: 'cancel-downloader', value: downloadId.value);
@@ -88,7 +88,7 @@ Future<void> _showVerifyingUpdate() async {
       title: Text(translate('Preparing for installation ...')),
       content: const LinearProgressIndicator(),
       actions: [
-        dialogButton(translate('Close'), onPressed: close, isOutline: true),
+        dialogButton('Close', onPressed: close, isOutline: true),
       ],
       onCancel: close,
     ),
@@ -192,9 +192,9 @@ class UpdateProgressState extends State<UpdateProgress> {
     }
 
     final List<Widget> buttons = [
-      dialogButton(translate('Download'), onPressed: jumplink),
-      dialogButton(translate('Retry'), onPressed: retry),
-      dialogButton(translate('Close'), onPressed: close),
+      dialogButton('Download', onPressed: jumplink),
+      dialogButton('Retry', onPressed: retry),
+      dialogButton('Close', onPressed: close),
     ];
     dialogManager.dismissAll();
     dialogManager.show(
