@@ -1453,7 +1453,7 @@ fn is_altgr(event: &Event) -> bool {
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "windows", target_env = "ohos"))]
 fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
@@ -1506,7 +1506,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     #[cfg(target_os = "windows")]
     try_fill_win2win_hotkey(peer, event, &key_event, &mut events);
 
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "windows", target_env = "ohos"))]
     if events.is_empty() && is_press(event) {
         try_fill_unicode(peer, event, &key_event, &mut events);
     }
