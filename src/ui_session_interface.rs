@@ -1385,6 +1385,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send2fa(&self, code: String, trust_this_device: bool) {
+        log::info!(
+            "Queueing Auth2FA for active session: code_len={}, trust_this_device={}",
+            code.len(),
+            trust_this_device
+        );
         let mut msg_out = Message::new();
         let hwid = if trust_this_device {
             crate::get_hwid()

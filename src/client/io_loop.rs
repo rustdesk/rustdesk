@@ -586,6 +586,13 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.check_clipboard_file_context();
             }
             Data::Message(msg) => {
+                if let Some(message::Union::Auth2fa(tfa)) = &msg.union {
+                    log::info!(
+                        "Sending Auth2FA to peer: code_len={}, hwid_present={}",
+                        tfa.code.len(),
+                        !tfa.hwid.is_empty()
+                    );
+                }
                 match &msg.union {
                     Some(message::Union::Misc(misc)) => match misc.union {
                         Some(misc::Union::RefreshVideo(_)) => {
@@ -1371,6 +1378,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
+                        log::info!("Received login response error: {}", err);
                         if err == client::REQUIRE_2FA {
                             self.handler.lc.write().unwrap().enable_trusted_devices =
                                 lr.enable_trusted_devices;
@@ -1380,6 +1388,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        log::info!(
+                            "Received authenticated peer info: platform={}, version={}",
+                            pi.platform,
+                            pi.version
+                        );
                         let peer_version = pi.version.clone();
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
