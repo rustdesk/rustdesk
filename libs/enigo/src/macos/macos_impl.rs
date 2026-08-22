@@ -39,6 +39,7 @@ const BUF_LEN: usize = 4;
 
 const MOUSE_EVENT_BUTTON_NUMBER_BACK: i64 = 3;
 const MOUSE_EVENT_BUTTON_NUMBER_FORWARD: i64 = 4;
+const MULTI_CLICK_MAX_DISTANCE: u32 = 4;
 
 /// The event source user data value of cgevent.
 pub const ENIGO_INPUT_EXTRA_VALUE: i64 = 100;
@@ -110,10 +111,27 @@ pub struct Enigo {
     event_source: Option<CGEventSource>,
     double_click_interval: u32,
     last_click_time: Option<std::time::Instant>,
+    last_click_position: Option<(i32, i32)>,
+    last_click_button: Option<MouseButton>,
     multiple_click: i64,
     ignore_flags: bool,
     flags: CGEventFlags,
     char_to_vkey_map: Map<String, Map<char, CGKeyCode>>,
+}
+
+fn is_same_click_sequence(
+    last_position: Option<(i32, i32)>,
+    position: (i32, i32),
+    last_button: Option<MouseButton>,
+    button: MouseButton,
+) -> bool {
+    last_button == Some(button)
+        && last_position
+            .map(|last| {
+                last.0.abs_diff(position.0) <= MULTI_CLICK_MAX_DISTANCE
+                    && last.1.abs_diff(position.1) <= MULTI_CLICK_MAX_DISTANCE
+            })
+            .unwrap_or(false)
 }
 
 impl Enigo {
@@ -191,6 +209,8 @@ impl Default for Enigo {
             double_click_interval,
             multiple_click: 1,
             last_click_time: None,
+            last_click_position: None,
+            last_click_button: None,
             ignore_flags: false,
             flags: CGEventFlags::CGEventFlagNull,
             char_to_vkey_map: Default::default(),
@@ -262,15 +282,25 @@ impl MouseControllable for Enigo {
 
     fn mouse_down(&mut self, button: MouseButton) -> crate::ResultType {
         let now = std::time::Instant::now();
+        let (current_x, current_y) = Self::mouse_location();
+        let position = (current_x, current_y);
         if let Some(t) = self.last_click_time {
-            if t.elapsed().as_millis() as u32 <= self.double_click_interval {
+            if t.elapsed().as_millis() as u32 <= self.double_click_interval
+                && is_same_click_sequence(
+                    self.last_click_position,
+                    position,
+                    self.last_click_button,
+                    button,
+                )
+            {
                 self.multiple_click += 1;
             } else {
                 self.multiple_click = 1;
             }
         }
         self.last_click_time = Some(now);
-        let (current_x, current_y) = Self::mouse_location();
+        self.last_click_position = Some(position);
+        self.last_click_button = Some(button);
         let (button, event_type, btn_value) = match button {
             MouseButton::Left => (CGMouseButton::Left, CGEventType::LeftMouseDown, None),
             MouseButton::Middle => (CGMouseButton::Center, CGEventType::OtherMouseDown, None),
@@ -862,3 +892,34 @@ fn get_map(name: &str, layout: *const u8) -> Map<char, CGKeyCode> {
     map
 }
 unsafe impl Send for Enigo {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nearby_clicks_with_same_button_continue_sequence() {
+        assert!(is_same_click_sequence(
+            Some((100, 100)),
+            (104, 96),
+            Some(MouseButton::Left),
+            MouseButton::Left,
+        ));
+    }
+
+    #[test]
+    fn distant_click_or_different_button_resets_sequence() {
+        assert!(!is_same_click_sequence(
+            Some((100, 100)),
+            (200, 200),
+            Some(MouseButton::Left),
+            MouseButton::Left,
+        ));
+        assert!(!is_same_click_sequence(
+            Some((100, 100)),
+            (100, 100),
+            Some(MouseButton::Left),
+            MouseButton::Right,
+        ));
+    }
+}
