@@ -1949,14 +1949,6 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                 .get_option("rdp_port".to_owned())
                 .parse::<i32>()
                 .unwrap_or(3389);
-            std::env::set_var(
-                "rdp_username",
-                handler.get_option("rdp_username".to_owned()),
-            );
-            std::env::set_var(
-                "rdp_password",
-                handler.get_option("rdp_password".to_owned()),
-            );
             log::info!("Remote rdp port: {}", port);
             start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
         } else if handler.args.len() == 0 {

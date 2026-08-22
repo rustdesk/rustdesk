@@ -2642,22 +2642,456 @@ pub fn wide_string(s: &str) -> Vec<u16> {
         .collect()
 }
 
+const RDP_CREDENTIAL_COMMENT_PREFIX: &str = "RustDesk temporary RDP credential ";
+
+#[derive(Clone)]
+pub struct RdpLoopbackAddress(Arc<RdpLoopbackAddressInner>);
+
+struct RdpLoopbackAddressInner {
+    host: String,
+    _mutex: RdpLoopbackMutex,
+}
+
+struct RdpLoopbackMutex(HANDLE);
+
+// Kernel handles may be closed from any thread and are otherwise immutable here.
+unsafe impl Send for RdpLoopbackMutex {}
+unsafe impl Sync for RdpLoopbackMutex {}
+
+impl RdpLoopbackAddress {
+    pub fn bind_host(&self) -> &str {
+        &self.0.host
+    }
+
+    pub fn mstsc_host(&self) -> &str {
+        &self.0.host
+    }
+}
+
+impl Drop for RdpLoopbackMutex {
+    fn drop(&mut self) {
+        if unsafe { CloseHandle(self.0) } == FALSE {
+            log::warn!(
+                "Failed to release RDP loopback mutex: {}",
+                io::Error::last_os_error()
+            );
+        }
+    }
+}
+
+fn reserve_rdp_loopback_mutex(index: u8) -> ResultType<Option<RdpLoopbackMutex>> {
+    use winapi::um::{errhandlingapi::SetLastError, synchapi::CreateMutexW};
+
+    let name = wide_string(&format!("Local\\RustDesk_RdpLoopback_{}", index));
+    unsafe {
+        SetLastError(ERROR_SUCCESS);
+        let handle = CreateMutexW(null_mut(), FALSE, name.as_ptr());
+        let error = GetLastError();
+        if handle.is_null() {
+            if error == ERROR_ACCESS_DENIED {
+                return Ok(None);
+            }
+            bail!(
+                "Failed to reserve RDP loopback address 127.0.0.{}: {}",
+                index,
+                io::Error::from_raw_os_error(error as _)
+            );
+        }
+        if error == ERROR_ALREADY_EXISTS {
+            if CloseHandle(handle) == FALSE {
+                log::warn!(
+                    "Failed to close existing RDP loopback mutex: {}",
+                    io::Error::last_os_error()
+                );
+            }
+            return Ok(None);
+        }
+        Ok(Some(RdpLoopbackMutex(handle)))
+    }
+}
+
+pub fn reserve_rdp_loopback_address() -> ResultType<RdpLoopbackAddress> {
+    for index in 2..=254 {
+        if let Some(mutex) = reserve_rdp_loopback_mutex(index)? {
+            return Ok(RdpLoopbackAddress(Arc::new(RdpLoopbackAddressInner {
+                host: format!("127.0.0.{}", index),
+                _mutex: mutex,
+            })));
+        }
+    }
+    bail!("No RDP loopback address is available")
+}
+
+pub fn new_mstsc_command() -> std::process::Command {
+    if cfg!(target_arch = "x86") && is_x64() {
+        match windows_directory() {
+            Ok(directory) => {
+                // A WOW64 mstsc launcher can exit after handing off to native mstsc, dropping
+                // the temporary credential too early. Sysnative makes the guard track the
+                // actual mstsc process.
+                let path = directory.join("Sysnative").join("mstsc.exe");
+                match fs::metadata(&path) {
+                    Ok(metadata) if metadata.is_file() => {
+                        return std::process::Command::new(path);
+                    }
+                    Ok(_) => log::warn!("Native mstsc path is not a file: {}", path.display()),
+                    Err(err) => log::warn!(
+                        "Failed to find native mstsc at '{}': {}",
+                        path.display(),
+                        err
+                    ),
+                }
+            }
+            Err(err) => log::warn!("Failed to locate native mstsc: {}", err),
+        }
+    }
+    std::process::Command::new("mstsc")
+}
+
+fn windows_directory() -> io::Result<PathBuf> {
+    use winapi::um::sysinfoapi::GetWindowsDirectoryW;
+
+    let mut buffer = vec![0u16; 260];
+    loop {
+        let length = unsafe { GetWindowsDirectoryW(buffer.as_mut_ptr(), buffer.len() as _) };
+        if length == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if (length as usize) < buffer.len() {
+            buffer.truncate(length as usize);
+            return Ok(PathBuf::from(OsString::from_wide(&buffer)));
+        }
+        buffer.resize(length as usize + 1, 0);
+    }
+}
+
+struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);
+
+// CredReadW returns a self-contained allocation that remains valid until
+// CredFree. Moving ownership to the mstsc monitor thread is therefore safe.
+unsafe impl Send for RdpCredentialBuffer {}
+
+impl RdpCredentialBuffer {
+    fn has_comment(&self, expected: &str) -> bool {
+        unsafe {
+            let comment = (*self.0).Comment;
+            !comment.is_null()
+                && comment
+                    .to_string()
+                    .map(|comment| comment == expected)
+                    .unwrap_or(false)
+        }
+    }
+
+    fn has_rustdesk_comment(&self) -> bool {
+        unsafe {
+            let comment = (*self.0).Comment;
+            !comment.is_null()
+                && comment
+                    .to_string()
+                    .ok()
+                    .and_then(|comment| {
+                        comment
+                            .strip_prefix(RDP_CREDENTIAL_COMMENT_PREFIX)
+                            .map(|id| uuid::Uuid::parse_str(id).is_ok())
+                    })
+                    .unwrap_or(false)
+        }
+    }
+}
+
+impl Drop for RdpCredentialBuffer {
+    fn drop(&mut self) {
+        use windows::Win32::Security::Credentials::CredFree;
+
+        unsafe { CredFree(self.0.cast::<std::ffi::c_void>()) };
+    }
+}
+
+struct RdpCredentialState {
+    original: Option<RdpCredentialBuffer>,
+    active: Vec<String>,
+    current_comment: String,
+}
+
+fn rdp_credential_states() -> &'static Mutex<HashMap<String, RdpCredentialState>> {
+    static STATES: std::sync::OnceLock<Mutex<HashMap<String, RdpCredentialState>>> =
+        std::sync::OnceLock::new();
+    STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+pub struct TemporaryRdpCredential {
+    target: windows::core::HSTRING,
+    comment: String,
+}
+
+fn is_rdp_credential_not_found(err: &windows::core::Error) -> bool {
+    use windows::{core::HRESULT, Win32::Foundation::ERROR_NOT_FOUND};
+
+    err.code() == HRESULT::from_win32(ERROR_NOT_FOUND.0)
+}
+
+fn read_rdp_credential(target: &windows::core::HSTRING) -> ResultType<Option<RdpCredentialBuffer>> {
+    use windows::Win32::Security::Credentials::{CredReadW, CRED_TYPE_GENERIC};
+
+    let mut credential = null_mut();
+    match unsafe { CredReadW(target, CRED_TYPE_GENERIC, None, &mut credential) } {
+        Ok(()) if credential.is_null() => bail!("CredReadW returned an empty credential"),
+        Ok(()) => Ok(Some(RdpCredentialBuffer(credential))),
+        Err(err) if is_rdp_credential_not_found(&err) => Ok(None),
+        Err(err) => Err(anyhow!("CredReadW failed: {}", err)),
+    }
+}
+
+fn delete_rdp_credential(target: &windows::core::HSTRING) -> ResultType<()> {
+    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+
+    unsafe { CredDeleteW(target, CRED_TYPE_GENERIC, None) }
+        .map_err(|err| anyhow!("CredDeleteW failed: {}", err))
+}
+
+fn write_rdp_credential(
+    target: &windows::core::HSTRING,
+    username: &str,
+    password: &str,
+    comment: &str,
+) -> ResultType<()> {
+    use windows::{
+        core::{HSTRING, PWSTR},
+        Win32::Security::Credentials::{
+            CredWriteW, CREDENTIALW, CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_PERSIST_SESSION,
+            CRED_TYPE_GENERIC,
+        },
+    };
+
+    let username = HSTRING::from(username);
+    let comment = HSTRING::from(comment);
+    let blob_size = password
+        .encode_utf16()
+        .count()
+        .checked_mul(std::mem::size_of::<u16>())
+        .and_then(|size| u32::try_from(size).ok())
+        .filter(|size| *size <= CRED_MAX_CREDENTIAL_BLOB_SIZE)
+        .ok_or_else(|| anyhow!("RDP credential password is too long"))?;
+    let mut password: Vec<u16> = password.encode_utf16().collect();
+    let mut credential = CREDENTIALW {
+        Type: CRED_TYPE_GENERIC,
+        TargetName: PWSTR(target.as_ptr() as *mut u16),
+        Comment: PWSTR(comment.as_ptr() as *mut u16),
+        CredentialBlobSize: blob_size,
+        CredentialBlob: if password.is_empty() {
+            null_mut()
+        } else {
+            password.as_mut_ptr().cast::<u8>()
+        },
+        Persist: CRED_PERSIST_SESSION,
+        UserName: if username.is_empty() {
+            PWSTR::null()
+        } else {
+            PWSTR(username.as_ptr() as *mut u16)
+        },
+        ..Default::default()
+    };
+    let result = unsafe { CredWriteW(&mut credential, 0) }
+        .map_err(|err| anyhow!("CredWriteW failed: {}", err));
+    password.fill(0);
+    result
+}
+
+pub fn prepare_temporary_rdp_credential(
+    target: &str,
+    username: &str,
+    password: &str,
+) -> ResultType<Option<TemporaryRdpCredential>> {
+    // Credential Guard may reject mstsc-saved Windows credentials; peer credentials use Generic.
+    // Without a peer username, leave Credential Manager untouched and let mstsc handle its entry.
+    // See https://learn.microsoft.com/windows/security/identity-protection/credential-guard/considerations-known-issues#saved-windows-credentials-considerations
+    if username.is_empty() {
+        return Ok(None);
+    }
+
+    let target = windows::core::HSTRING::from(target);
+    let target_key = target.to_string_lossy();
+    let mut states = rdp_credential_states().lock().unwrap();
+    let existing = read_rdp_credential(&target)?;
+    let matches_current = states
+        .get(&target_key)
+        .map(|state| {
+            existing
+                .as_ref()
+                .map(|credential| credential.has_comment(&state.current_comment))
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    if states.contains_key(&target_key) && !matches_current {
+        states.remove(&target_key);
+    }
+
+    let comment = format!(
+        "{}{}",
+        RDP_CREDENTIAL_COMMENT_PREFIX,
+        uuid::Uuid::new_v4().simple()
+    );
+    if let Some(state) = states.get_mut(&target_key) {
+        write_rdp_credential(&target, username, password, &comment)?;
+        state.active.push(comment.clone());
+        state.current_comment = comment.clone();
+    } else {
+        let original = if existing
+            .as_ref()
+            .map(RdpCredentialBuffer::has_rustdesk_comment)
+            .unwrap_or(false)
+        {
+            None
+        } else {
+            existing
+        };
+        write_rdp_credential(&target, username, password, &comment)?;
+        states.insert(
+            target_key,
+            RdpCredentialState {
+                original,
+                active: vec![comment.clone()],
+                current_comment: comment.clone(),
+            },
+        );
+    }
+    Ok(Some(TemporaryRdpCredential { target, comment }))
+}
+
+impl Drop for TemporaryRdpCredential {
+    fn drop(&mut self) {
+        use windows::Win32::Security::Credentials::CredWriteW;
+
+        let target_key = self.target.to_string_lossy();
+        let mut states = rdp_credential_states().lock().unwrap();
+        let Some(state) = states.get_mut(&target_key) else {
+            return;
+        };
+        let Some(index) = state
+            .active
+            .iter()
+            .position(|comment| comment == &self.comment)
+        else {
+            return;
+        };
+        state.active.remove(index);
+        if !state.active.is_empty() {
+            return;
+        }
+
+        let current = match read_rdp_credential(&self.target) {
+            Ok(current) => current,
+            Err(err) => {
+                log::warn!(
+                    "Failed to inspect temporary RDP credential for target '{}': {}",
+                    self.target.to_string_lossy(),
+                    err
+                );
+                return;
+            }
+        };
+        let owned = current
+            .as_ref()
+            .map(|credential| credential.has_comment(&state.current_comment))
+            .unwrap_or(false);
+        if !owned {
+            states.remove(&target_key);
+            return;
+        }
+
+        let result = if let Some(original) = state.original.as_ref() {
+            unsafe { CredWriteW(original.0, 0) }
+                .map_err(|err| anyhow!("CredWriteW failed while restoring: {}", err))
+        } else {
+            delete_rdp_credential(&self.target)
+        };
+        match result {
+            Ok(()) => {
+                states.remove(&target_key);
+            }
+            Err(err) => {
+                log::warn!(
+                    "Failed to restore RDP credential for target '{}': {}",
+                    self.target.to_string_lossy(),
+                    err
+                );
+            }
+        }
+    }
+}
+
 // This only changes mstsc's top-level window title. The full-screen connection
 // bar is rendered separately and cannot be customized when mstsc.exe is
 // launched as an independent process.
-pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
-    let name: String = name.chars().filter(|c| !c.is_control()).take(120).collect();
-    if name.is_empty() {
-        return;
-    }
+fn is_unicode_format_character(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{0600}'..='\u{0605}'
+            | '\u{061C}'
+            | '\u{06DD}'
+            | '\u{070F}'
+            | '\u{0890}'..='\u{0891}'
+            | '\u{08E2}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{110BD}'
+            | '\u{110CD}'
+            | '\u{13430}'..='\u{1343F}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0001}'
+            | '\u{E0020}'..='\u{E007F}'
+    )
+}
+
+fn sanitize_rdp_window_title(name: &str) -> String {
+    name.chars()
+        .filter(|c| {
+            !c.is_control()
+                && !is_unicode_format_character(*c)
+                && !matches!(*c, '\u{2028}' | '\u{2029}' | '\u{2065}')
+        })
+        .take(120)
+        .collect()
+}
+
+fn should_update_rdp_window_title(
+    current: &str,
+    name: &str,
+    applied_name: &str,
+    endpoint: &str,
+) -> bool {
+    current != name
+        && (current.contains(endpoint) || (!applied_name.is_empty() && current == applied_name))
+}
+
+pub fn set_rdp_window_title<F>(
+    mut child: std::process::Child,
+    name_of: F,
+    endpoint: String,
+    _credential: Option<TemporaryRdpCredential>,
+    _loopback: Option<RdpLoopbackAddress>,
+) where
+    F: Fn() -> String + Send + 'static,
+{
     let process_id = child.id();
-    // mstsc owns the title and can restore "localhost" while connecting or
+    // mstsc owns the title and can restore the endpoint while connecting or
     // reconnecting. Follow only the process we launched and reapply the peer
     // name until it exits, so concurrent RDP sessions cannot rename each other.
     if let Err(err) = std::thread::Builder::new()
         .name("rdp-window-title".to_owned())
         .spawn(move || {
+            let _credential = _credential;
+            let _loopback = _loopback;
             let mut warned = false;
+            let mut applied_name = String::new();
             loop {
                 match child.try_wait() {
                     Ok(Some(_)) => break,
@@ -2665,14 +3099,29 @@ pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
                         log::warn!("Failed to query mstsc process: {}", err);
                         break;
                     }
-                    Ok(None) => match set_process_rdp_window_title(process_id, &name) {
-                        Ok(()) => warned = false,
-                        Err(err) if !warned => {
-                            log::warn!("Failed to set RDP window title: {}", err);
-                            warned = true;
+                    Ok(None) => {
+                        let name = sanitize_rdp_window_title(&name_of());
+                        if !name.is_empty() {
+                            match set_process_rdp_window_title(
+                                process_id,
+                                &name,
+                                &applied_name,
+                                &endpoint,
+                            ) {
+                                Ok(applied) => {
+                                    if applied {
+                                        applied_name = name;
+                                    }
+                                    warned = false;
+                                }
+                                Err(err) if !warned => {
+                                    log::warn!("Failed to set RDP window title: {}", err);
+                                    warned = true;
+                                }
+                                Err(_) => {}
+                            }
                         }
-                        Err(_) => {}
-                    },
+                    }
                 }
                 std::thread::sleep(Duration::from_millis(500));
             }
@@ -2682,10 +3131,19 @@ pub fn set_rdp_window_title(mut child: std::process::Child, name: String) {
     }
 }
 
-fn set_process_rdp_window_title(process_id: DWORD, name: &str) -> io::Result<()> {
-    struct Context {
+fn set_process_rdp_window_title(
+    process_id: DWORD,
+    name: &str,
+    applied_name: &str,
+    endpoint: &str,
+) -> io::Result<bool> {
+    struct Context<'a> {
         process_id: DWORD,
+        name: &'a str,
+        applied_name: &'a str,
+        endpoint: &'a str,
         title: Vec<u16>,
+        applied: bool,
         error: Option<io::Error>,
     }
 
@@ -2702,29 +3160,72 @@ fn set_process_rdp_window_title(process_id: DWORD, name: &str) -> io::Result<()>
         }
         let mut title = vec![0u16; len as usize + 1];
         let len = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as _);
-        if len > 0 && String::from_utf16_lossy(&title[..len as usize]).contains("localhost") {
-            if SetWindowTextW(hwnd, context.title.as_ptr()) == FALSE {
-                context.error = Some(io::Error::last_os_error());
-                return FALSE;
-            }
+        if len <= 0 {
+            return TRUE;
+        }
+        let current = String::from_utf16_lossy(&title[..len as usize]);
+        if current == context.name {
+            context.applied = true;
+            return TRUE;
+        }
+        if !should_update_rdp_window_title(
+            &current,
+            context.name,
+            context.applied_name,
+            context.endpoint,
+        ) {
+            return TRUE;
+        }
+        let mut result = 0;
+        winapi::um::errhandlingapi::SetLastError(ERROR_SUCCESS);
+        let sent = SendMessageTimeoutW(
+            hwnd,
+            WM_SETTEXT,
+            0,
+            context.title.as_ptr() as LPARAM,
+            SMTO_ABORTIFHUNG,
+            1000,
+            &mut result,
+        );
+        if sent == 0 {
+            let err = io::Error::last_os_error();
+            context.error = Some(if err.raw_os_error() == Some(ERROR_SUCCESS as i32) {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    "failed to send the mstsc title update without an OS error",
+                )
+            } else {
+                err
+            });
+        } else if result == 0 {
+            context.error = Some(io::Error::new(
+                io::ErrorKind::Other,
+                "mstsc rejected the title update",
+            ));
+        } else {
+            context.applied = true;
         }
         TRUE
     }
 
     let mut context = Context {
         process_id,
+        name,
+        applied_name,
+        endpoint,
         title: wide_string(name),
+        applied: false,
         error: None,
     };
     let enumerated =
         unsafe { EnumWindows(Some(enum_window), &mut context as *mut Context as LPARAM) };
-    if let Some(err) = context.error {
-        return Err(err);
-    }
     if enumerated == FALSE {
         return Err(io::Error::last_os_error());
     }
-    Ok(())
+    match context.error {
+        Some(err) if !context.applied => Err(err),
+        _ => Ok(context.applied),
+    }
 }
 
 /// send message to currently shown window
@@ -4626,6 +5127,72 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rdp_window_title_removes_control_and_format_characters() {
+        assert_eq!(
+            sanitize_rdp_window_title(
+                "peer\n\u{00AD}\u{0600}\u{061C}\u{06DD}\u{070F}\u{0890}\u{08E2}\u{180E}\
+                 \u{200D}\u{2028}\u{202E}\u{2065}\u{2066}\u{FEFF}\u{FFF9}\u{110BD}\u{110CD}\
+                 \u{13430}\u{1BCA0}\u{1D173}\u{E0001}\u{E0020} (host)"
+            ),
+            "peer (host)"
+        );
+    }
+
+    #[test]
+    fn rdp_window_title_is_limited_to_120_characters() {
+        let title = sanitize_rdp_window_title(&"界".repeat(121));
+        assert_eq!(title.chars().count(), 120);
+    }
+
+    #[test]
+    fn rdp_window_title_updates_only_the_tunnel_or_the_previously_applied_name() {
+        assert!(should_update_rdp_window_title(
+            "localhost - Remote Desktop Connection",
+            "peer",
+            "",
+            "localhost"
+        ));
+        assert!(should_update_rdp_window_title(
+            "127.0.0.2 - Remote Desktop Connection",
+            "peer",
+            "",
+            "127.0.0.2"
+        ));
+        assert!(should_update_rdp_window_title(
+            "peer",
+            "peer (hostname)",
+            "peer",
+            "127.0.0.2"
+        ));
+        assert!(!should_update_rdp_window_title(
+            "localhost tunnel",
+            "localhost tunnel",
+            "localhost tunnel",
+            "localhost"
+        ));
+        assert!(!should_update_rdp_window_title(
+            "Remote Desktop Connection",
+            "peer",
+            "",
+            "localhost"
+        ));
+    }
+
+    #[test]
+    fn rdp_loopback_addresses_are_unique_while_reserved() {
+        let first = reserve_rdp_loopback_address().unwrap();
+        let second = reserve_rdp_loopback_address().unwrap();
+        assert_eq!(first.bind_host(), "127.0.0.2");
+        assert_eq!(first.mstsc_host(), "127.0.0.2");
+        assert_eq!(second.bind_host(), "127.0.0.3");
+        assert_eq!(second.mstsc_host(), "127.0.0.3");
+
+        drop(first);
+        let reused = reserve_rdp_loopback_address().unwrap();
+        assert_eq!(reused.bind_host(), "127.0.0.2");
+    }
 
     // Test-only reusable Win32 HANDLE RAII helper.
     // If a future non-test path needs the same pattern, move it out of this test module.
