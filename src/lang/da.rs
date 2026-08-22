@@ -405,7 +405,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Closed manually by web console", "Lukket ned manuelt af webkonsollen"),
         ("Local keyboard type", "Type af lokalt tastatur"),
         ("Select local keyboard type", "Vælg typen af lokalt tastatur"),
-        ("software_render_tip", "Hvis du bruger et Nvidia-grafikkort på Linux, og fjernskrivebordsvinduet lukker ned med det samme efter forbindelsen er oprettet, kan det hjælpe at skifte til Nouveau open source-driveren, og aktivere software-rendering. Et genstart af RustDesk er nødvendig."),
+        ("software_render_tip", "Hvis du bruger et Nvidia-grafikkort på Linux, og fjernskrivebordsvinduet lukker ned med det samme efter forbindelsen er oprettet, kan det hjælpe at skifte til Nouveau open source-driveren, og aktivere software-rendering. En genstart af RustDesk er nødvendig."),
         ("Always use software rendering", "Brug altid software-rendering"),
         ("config_input", "For at styre fjernskrivebordet med tastaturet, skal du give Rustdesk rettigheder til at optage tastetryk"),
         ("config_microphone", "For at tale sammen over fjernstyring, skal du give RustDesk rettigheder til at optage lyd"),
