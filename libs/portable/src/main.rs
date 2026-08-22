@@ -18,6 +18,8 @@ const APP_METADATA: &[u8] = &[];
 const APP_METADATA_CONFIG: &str = "meta.toml";
 const META_LINE_PREFIX_TIMESTAMP: &str = "timestamp = ";
 const APP_PREFIX: &str = "rustdesk";
+#[cfg(windows)]
+const VERIFIED_UPDATE_FILE_PREFIX: &str = "rustdesk-verified-";
 const APPNAME_RUNTIME_ENV_KEY: &str = "RUSTDESK_APPNAME";
 #[cfg(windows)]
 const SET_FOREGROUND_WINDOW_ENV_KEY: &str = "SET_FOREGROUND_WINDOW";
@@ -192,6 +194,13 @@ fn main() {
     #[cfg(not(windows))]
     let quick_support = false;
 
+    #[cfg(windows)]
+    if args.first().is_some_and(|arg| arg == "--update") {
+        if let Err(err) = win::schedule_verified_update_cleanup() {
+            eprintln!("Failed to schedule verified update file cleanup: {}", err);
+        }
+    }
+
     let mut ui = false;
     let reader = BinaryReader::default();
     if let Some(exe) = setup(
@@ -217,6 +226,33 @@ mod win {
     // Used for privacy mode(magnifier impl).
     pub const RUNTIME_BROKER_EXE: &'static str = "C:\\Windows\\System32\\RuntimeBroker.exe";
     pub const WIN_TOPMOST_INJECTED_PROCESS_EXE: &'static str = "RuntimeBroker_rustdesk.exe";
+
+    pub(super) fn schedule_verified_update_cleanup() -> std::io::Result<()> {
+        use windows::{
+            core::{HSTRING, PCWSTR},
+            Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_DELAY_UNTIL_REBOOT},
+        };
+
+        let current_exe = std::env::current_exe()?;
+        let is_verified_update = current_exe
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.starts_with(super::VERIFIED_UPDATE_FILE_PREFIX) && name.ends_with(".exe")
+            });
+        if !is_verified_update {
+            return Ok(());
+        }
+
+        unsafe {
+            MoveFileExW(
+                &HSTRING::from(current_exe.as_path()),
+                PCWSTR::null(),
+                MOVEFILE_DELAY_UNTIL_REBOOT,
+            )
+        }
+        .map_err(std::io::Error::other)
+    }
 
     pub(super) fn copy_runtime_broker(dir: &Path) {
         let src = RUNTIME_BROKER_EXE;
