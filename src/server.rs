@@ -169,12 +169,10 @@ pub fn new() -> ServerPtr {
 
 async fn accept_connection_(
     server: ServerPtr,
-    socket: Stream,
+    local_addr: SocketAddr,
     secure: bool,
     meta: ConnectionMeta,
 ) -> ResultType<()> {
-    let local_addr = socket.local_addr();
-    drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
     // see "Only one usage of each socket address is normally permitted" on windows sometimes,
@@ -279,7 +277,21 @@ pub async fn accept_connection(
     secure: bool,
     meta: ConnectionMeta,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure, meta).await {
+    let local_addr = socket.local_addr();
+    drop(socket);
+    accept_connection_at(server, local_addr, peer_addr, secure, meta).await
+}
+
+// Listen on a local_addr whose socket the caller already released, so the tcp punch path can
+// hand its rendezvous connection back to the server before the punch window instead of after it.
+pub async fn accept_connection_at(
+    server: ServerPtr,
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
+    secure: bool,
+    meta: ConnectionMeta,
+) {
+    if let Err(err) = accept_connection_(server, local_addr, secure, meta).await {
         log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }

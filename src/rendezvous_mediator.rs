@@ -700,19 +700,33 @@ impl RendezvousMediator {
             return Ok(());
         }
         log::debug!("Punch tcp hole to {:?}", peer_addr);
-        let mut socket = {
-            let socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
-            let local_addr = socket.local_addr();
-            // key important here for punch hole to tell my gateway incoming peer is safe.
-            // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
-            allow_err!(socket_client::connect_tcp_local(peer_addr, Some(local_addr), 30).await);
-            socket
-        };
+        let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        let local_addr = socket.local_addr();
         let mut msg_out = Message::new();
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, meta).await;
+        drop(socket);
+        // key important here for punch hole to tell my gateway incoming peer is safe.
+        // Punched after the message so the window covers our own SYN retransmits: the first SYN
+        // reaches the peer before it has been told to connect and is dropped, while a retransmit
+        // finds it in SYN_SENT and draws a SYN-ACK, which a gateway that drops a bare inbound SYN
+        // still passes as the reply to our own outbound SYN. Keep that stream rather than dropping
+        // it, or the RST kills the connection the listener would have accepted. The listener can
+        // not be bound meanwhile, because local_addr can not be reused while this socket holds it.
+        // 4s, not CONNECT_TIMEOUT: it covers our first two SYN retransmits on a 1s initial RTO and
+        // still covers the first one if the RTO is 3s, while leaving the peer's own retransmits at
+        // 7s and 15s to the listener in case a gateway drops that inbound SYN less consistently
+        // than it looks. The retransmits past those only buy resilience to packet loss.
+        match socket_client::connect_tcp_local(peer_addr, Some(local_addr), 4_000).await {
+            Ok(stream) => {
+                crate::server::create_tcp_connection(server, stream, peer_addr, true, meta).await?;
+            }
+            Err(err) => {
+                log::debug!("Punch tcp hole to {} failed: {}", peer_addr, err);
+                crate::accept_connection_at(server, local_addr, peer_addr, true, meta).await;
+            }
+        }
         Ok(())
     }
 
