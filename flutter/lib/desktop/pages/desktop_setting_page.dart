@@ -575,6 +575,15 @@ class _GeneralState extends State<_General> {
           kOptionEnableIpv6Punch,
           isServer: false,
         ),
+        Tooltip(
+          message: translate('sync-clipboard-between-sessions-tip'),
+          child: _OptionCheckBox(
+            context,
+            'Sync clipboard between sessions',
+            kOptionAllowSyncClipboardBetweenSessions,
+            isServer: false,
+          ),
+        ),
       ],
     ];
 
