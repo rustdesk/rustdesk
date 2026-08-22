@@ -197,7 +197,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.handle_disconnected(round);
                     // Close the WebRTC pc on this decline path too (no-op for TCP/WS); otherwise its
-                    // pc lingers in the global session cache until ICE decays on its own.
+                    // pc lingers in the global session cache until ICE decays on its own. The pc
+                    // and its teardown live on hbb_common's WebRTC I/O runtime, so this session
+                    // runtime's death on return affects neither.
                     peer.close_webrtc();
                     return;
                 }
@@ -347,7 +349,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
                 // Close the WebRTC peer connection (if this session used it) so its pc is not left
                 // lingering in the global session cache after the session ends; dropping `peer`
-                // alone does not release it. No-op for TCP/WebSocket transports.
+                // alone does not release it. No-op for TCP/WebSocket transports. The pc, its
+                // sockets and pump tasks, and this close all live on hbb_common's WebRTC I/O
+                // runtime — nothing may run them on this session runtime, which is dropped the
+                // moment io_loop returns and would kill the teardown (or, if awaited under a
+                // timeout, cancel it after `close()` latches `is_closed`, stranding the pc).
                 peer.close_webrtc();
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
