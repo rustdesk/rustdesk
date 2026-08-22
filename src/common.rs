@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
@@ -1112,9 +1112,19 @@ pub fn get_ipv6_punch_enabled() -> bool {
     )
 }
 
+pub fn get_webrtc_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_WEBRTC,
+        &get_local_option(keys::OPTION_ENABLE_WEBRTC),
+    )
+}
+
 pub fn get_local_option(key: &str) -> String {
     let v = LocalConfig::get_option(key);
-    if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
+    if key == keys::OPTION_ENABLE_UDP_PUNCH
+        || key == keys::OPTION_ENABLE_IPV6_PUNCH
+        || key == keys::OPTION_ENABLE_WEBRTC
+    {
         if v.is_empty() {
             if !is_public(&Config::get_rendezvous_server()) {
                 return "N".to_owned();
@@ -2071,11 +2081,21 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
+    let (id, pk, _) = decode_id_pk_dtls(signed, key)?;
+    Ok((id, pk))
+}
+
+/// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity.
+pub fn decode_id_pk_dtls(
+    signed: &[u8],
+    key: &sign::PublicKey,
+) -> ResultType<(String, [u8; 32], String)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk))
+        Ok((res.id, pk, res.dtls_fingerprint))
     } else {
         bail!("Wrong their public length");
     }
@@ -2377,16 +2397,25 @@ pub fn is_udp_disabled() -> bool {
     Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
+/// Run KCP with its congestion window (nc=0) instead of the turbo profile it has always shipped.
+///
+/// Opt-in: which profile wins depends on why packets are lost — nc=1 deepens real congestion,
+/// while nc=0 reads random loss as congestion and its RTO backoff drops cwnd to 1. Undecidable
+/// without a shaped link, so keep what users run today.
+#[inline]
+pub fn get_kcp_cc_enabled() -> bool {
+    Config::get_option(keys::OPTION_ENABLE_KCP_CC) == "Y"
+}
+
 // this crate https://github.com/yoshd/stun-client supports nat type
 async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
+        .await?
+        .find(|x| x.is_ipv6())
     else {
         bail!(
             "Failed to resolve STUN ipv6 server address: {}",
@@ -2403,14 +2432,13 @@ async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
 }
 
 async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u8; 4], 0));
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
+        .await?
+        .find(|x| x.is_ipv4())
     else {
         bail!(
             "Failed to resolve STUN ipv4 server address: {}",
@@ -2422,7 +2450,7 @@ async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
     Ok(if addr.ip().is_ipv4() {
         (addr, stun_server.to_owned())
     } else {
-        bail!("STUN server returned non-IPv6 address: {}", addr)
+        bail!("STUN server returned non-IPv4 address: {}", addr)
     })
 }
 
@@ -2461,10 +2489,9 @@ pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    let addr = STUNS_V6[0]
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    let addr = tokio::net::lookup_host(STUNS_V6[0])
+        .await?
+        .find(|x| x.is_ipv6())
         .ok_or_else(|| {
             anyhow!(
                 "Failed to resolve STUN ipv6 server address: {}",
@@ -2568,6 +2595,7 @@ pub async fn punch_udp(
     const MAX_INTERVAL: Duration = Duration::from_millis(200);
     const MAX_TIME: Duration = Duration::from_secs(20);
     let mut packets_sent = 0;
+    let mut recv_errors = 0u32;
     socket.send(&[]).await.ok();
     packets_sent += 1;
     let mut last_send_time = Instant::now();
@@ -2578,7 +2606,7 @@ pub async fn punch_udp(
         tokio::select! {
             _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
                 if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, stop sending packets after {:?} packets", packets_sent);
+                    bail!("UDP punch is timed out, stop sending packets after {:?} packets, {} recv errors absorbed", packets_sent, recv_errors);
                 }
                 let elapsed = last_send_time.elapsed();
 
@@ -2595,7 +2623,20 @@ pub async fn punch_udp(
                 }
             }
             res = socket.recv(&mut data) => match res {
-                Err(e) => bail!("UDP punch failed, {packets_sent} packets sent: {e}"),
+                Err(e) => {
+                    // While the hole is still forming, ICMP unreachable from the peer's NAT
+                    // is expected and surfaces as ConnectionReset/Refused on a connected
+                    // socket (notably 10054 on Windows). Treat it as loss and keep punching;
+                    // MAX_TIME above still bounds the whole attempt.
+                    // Log only the first: this retries every 10ms for up to MAX_TIME, so one
+                    // line per occurrence would write thousands into the log file per punch.
+                    // The count is reported once at the end.
+                    recv_errors += 1;
+                    if recv_errors == 1 {
+                        log::debug!("UDP punch recv error (treated as loss): {e}");
+                    }
+                    hbb_common::sleep(0.01).await;
+                }
                 Ok(n) => {
                     // log::debug!("UDP punch succeeded after sending {} packets after {:?}", packets_sent, tm.elapsed());
                     if listen {

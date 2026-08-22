@@ -758,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Nastavi"),
         ("Browser didn't open? Use the url below to sign in.", "Pregledač se nije otvorio? Za prijavu koristite URL ispod."),
         ("Lock canvas", "Zaključaj pozadinu"),
+        ("Enable WebRTC P2P connection", "Omogući WebRTC P2P konekciju"),
     ].iter().cloned().collect();
 }

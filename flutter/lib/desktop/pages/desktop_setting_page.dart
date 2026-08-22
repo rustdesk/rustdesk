@@ -575,6 +575,12 @@ class _GeneralState extends State<_General> {
           kOptionEnableIpv6Punch,
           isServer: false,
         ),
+        _OptionCheckBox(
+          context,
+          'Enable WebRTC P2P connection',
+          kOptionEnableWebrtc,
+          isServer: false,
+        ),
       ],
     ];
 

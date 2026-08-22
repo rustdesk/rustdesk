@@ -758,5 +758,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continua"),
         ("Browser didn't open? Use the url below to sign in.", "No s'ha obert el navegador? Utilitzeu l'URL de sota per iniciar la sessió."),
         ("Lock canvas", "Bloca el llenç"),
+        ("Enable WebRTC P2P connection", "Habilita la connexió WebRTC P2P"),
     ].iter().cloned().collect();
 }
