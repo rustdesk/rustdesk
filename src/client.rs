@@ -595,6 +595,28 @@ impl Client {
     /// links; short enough that UDP-blocked networks settle on relay without a noticeable wait.
     const WEBRTC_PREFER_WINDOW_MS: u64 = 2500;
 
+    /// UDP-NAT-test wait when the TCP clock is implausible (see TCP_RTT_PLAUSIBLE_MIN). The
+    /// normal bound is `rtt / 2`: the test has been running since before the TCP connect, so on
+    /// a network where TCP RTT ~ UDP RTT its response has already landed. A transparent TCP
+    /// proxy — a TUN-mode VPN on the host, or a redirect-mode proxy on the LAN gateway (soft
+    /// router), which fakes the handshake for every device behind it — breaks that by answering
+    /// in ~3ms while the real UDP round trip is hundreds of ms: the window collapsed to ~1.5ms,
+    /// udp_port stayed 0, and UDP punch never ran on such networks. The wait still exits the instant the port
+    /// arrives, so a genuinely nearby server (LAN hbbs) pays nothing; only UDP-dead networks
+    /// wait out the full grace, and only on this round — the pure-TCP fallback round never
+    /// waits. Sized as a ceiling on real-world rendezvous RTTs plus one 20ms retransmit
+    /// (intercontinental ~300ms); paths slower than that lose UDP punch under a proxy, which
+    /// is today's behavior, not a regression.
+    const UDP_NAT_TEST_GRACE: Duration = Duration::from_millis(400);
+
+    /// Below this, the measured TCP connect time is not a believable WAN round trip — it was
+    /// answered inside the LAN (host TUN proxy, gateway transparent proxy, or a genuinely local
+    /// server) — and must not be used to size the UDP window.
+    /// Generous on purpose: over-triggering costs nothing (the wait exits on arrival, and a
+    /// UDP-dead round loses to the racing fallback anyway), while a tight bound would let a
+    /// busy proxy's occasional ~80ms handshake slip through and silently drop UDP punch.
+    const TCP_RTT_PLAUSIBLE_MIN: Duration = Duration::from_millis(100);
+
     /// Delay before re-sending an ICE candidate over the rendezvous route once. The hop to the
     /// peer can be UDP (the controlled side's mediator channel), so a candidate can be lost in
     /// flight; the remote ICE agent dedups repeats, so the second copy is free.
@@ -788,13 +810,20 @@ impl Client {
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
         } else if let Some(udp) = udp.1.as_ref() {
             let tm = Instant::now();
+            // rtt is the TCP connect time. When it is too short to be a real WAN round trip it
+            // says nothing about the UDP path (a TUN VPN or the LAN gateway answered the
+            // handshake, not the server), so fall back to the flat grace; otherwise trust it.
+            let udp_nat_wait = if rtt < Self::TCP_RTT_PLAUSIBLE_MIN {
+                Self::UDP_NAT_TEST_GRACE
+            } else {
+                rtt / 2
+            };
             loop {
                 let port = *udp.lock().unwrap();
                 if port > 0 {
                     break;
                 }
-                // await for 0.5 RTT
-                if tm.elapsed() > rtt / 2 {
+                if tm.elapsed() > udp_nat_wait {
                     break;
                 }
                 hbb_common::sleep(0.001).await;
