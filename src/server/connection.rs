@@ -3083,8 +3083,9 @@ impl Connection {
                 return true;
             }
             if let Some(totp) = self.require_2fa.as_ref() {
-                if let Ok(res) = totp.check_current(&tfa.code) {
-                    if res {
+                let code_valid = totp.check_current(&tfa.code).unwrap_or(false)
+                    || totp.check(&tfa.code, (hbb_common::get_time() / 1000) as u64);
+                if code_valid {
                         self.update_failure(failure, true, 1);
                         self.require_2fa.take();
                         self.set_conn_audit_two_factor(ConnAuditTwoFactor::Totp);
@@ -3111,7 +3112,6 @@ impl Connection {
                         self.send_login_error(crate::client::LOGIN_MSG_2FA_WRONG)
                             .await;
                     }
-                }
             }
         } else if let Some(message::Union::TestDelay(t)) = msg.union {
             if t.from_client {
