@@ -12,6 +12,7 @@
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <commctrl.h>
 #include <windows.h>
 
 #include <optional>
@@ -59,6 +60,9 @@ constexpr UINT kForceRedrawMaxTries = 25;
 // per call (each nudge re-enters the 100ms resize wait).
 constexpr UINT kForceRedrawCheapTries = 2;
 
+constexpr UINT_PTR kSecondaryWindowRefreshTimerId = 0xFB16;
+constexpr UINT_PTR kSecondaryWindowSubclassId = 0xFB16;
+
 // Re-enters the embedder's OnWindowSizeChanged by nudging the Flutter child
 // window by 1px and back: this resets the resize target and resends the window
 // metrics. Same as BaseFlutterWindow::ForceChildRefresh() on the
@@ -75,6 +79,26 @@ void ForceChildRefresh(HWND child) {
                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_FRAMECHANGED);
   SetWindowPos(child, nullptr, 0, 0, width, height,
                SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_FRAMECHANGED);
+}
+
+LRESULT CALLBACK SecondaryWindowSubclassProc(HWND hwnd, UINT message,
+                                             WPARAM wparam, LPARAM lparam,
+                                             UINT_PTR subclass_id,
+                                             DWORD_PTR ref_data) {
+  if (message == WM_SHOWWINDOW && wparam == TRUE) {
+    SetTimer(hwnd, kSecondaryWindowRefreshTimerId, kForceRedrawIntervalMs,
+             nullptr);
+  } else if (message == WM_TIMER &&
+             wparam == kSecondaryWindowRefreshTimerId) {
+    KillTimer(hwnd, kSecondaryWindowRefreshTimerId);
+    ForceChildRefresh(reinterpret_cast<HWND>(ref_data));
+    return 0;
+  } else if (message == WM_NCDESTROY) {
+    KillTimer(hwnd, kSecondaryWindowRefreshTimerId);
+    RemoveWindowSubclass(hwnd, SecondaryWindowSubclassProc, subclass_id);
+  }
+
+  return DefSubclassProc(hwnd, message, wparam, lparam);
 }
 
 }  // namespace
@@ -150,6 +174,16 @@ bool FlutterWindow::OnCreate() {
         registry->GetRegistrarForPlugin("TextureRgbaRendererPlugin"));
     FlutterGpuTextureRendererPluginCApiRegisterWithRegistrar(
         registry->GetRegistrarForPlugin("FlutterGpuTextureRendererPluginCApi"));
+
+    HWND child = flutter_view_controller->view()->GetNativeWindow();
+    HWND window = GetParent(child);
+    if (!window ||
+        !SetWindowSubclass(window, SecondaryWindowSubclassProc,
+                           kSecondaryWindowSubclassId,
+                           reinterpret_cast<DWORD_PTR>(child))) {
+      OutputDebugStringA(
+          "rustdesk: Failed to install secondary window show recovery.\n");
+    }
   });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
