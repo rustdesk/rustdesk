@@ -2820,6 +2820,48 @@ fn rdp_credential_states() -> &'static Mutex<HashMap<String, RdpCredentialState>
     STATES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn restore_temporary_rdp_credential(
+    target: &windows::core::HSTRING,
+    state: &RdpCredentialState,
+) -> ResultType<()> {
+    use windows::Win32::Security::Credentials::CredWriteW;
+
+    let current = read_rdp_credential(target)?;
+    let owned = current
+        .as_ref()
+        .map(|credential| credential.has_comment(&state.current_comment))
+        .unwrap_or(false);
+    if !owned {
+        return Ok(());
+    }
+
+    if let Some(original) = state.original.as_ref() {
+        unsafe { CredWriteW(original.0, 0) }
+            .map_err(|err| anyhow!("CredWriteW failed while restoring: {}", err))
+    } else {
+        delete_rdp_credential(target)
+    }
+}
+
+pub fn cleanup_temporary_rdp_credentials() {
+    use windows::core::HSTRING;
+
+    let mut states = rdp_credential_states().lock().unwrap();
+    states.retain(|target_key, state| {
+        let target = HSTRING::from(target_key.as_str());
+        if let Err(err) = restore_temporary_rdp_credential(&target, state) {
+            log::warn!(
+                "Failed to restore RDP credential for target '{}': {}",
+                target_key,
+                err
+            );
+            true
+        } else {
+            false
+        }
+    });
+}
+
 pub struct TemporaryRdpCredential {
     target: windows::core::HSTRING,
     comment: String,
@@ -2961,8 +3003,6 @@ pub fn prepare_temporary_rdp_credential(
 
 impl Drop for TemporaryRdpCredential {
     fn drop(&mut self) {
-        use windows::Win32::Security::Credentials::CredWriteW;
-
         let target_key = self.target.to_string_lossy();
         let mut states = rdp_credential_states().lock().unwrap();
         let Some(state) = states.get_mut(&target_key) else {
@@ -2980,33 +3020,7 @@ impl Drop for TemporaryRdpCredential {
             return;
         }
 
-        let current = match read_rdp_credential(&self.target) {
-            Ok(current) => current,
-            Err(err) => {
-                log::warn!(
-                    "Failed to inspect temporary RDP credential for target '{}': {}",
-                    self.target.to_string_lossy(),
-                    err
-                );
-                return;
-            }
-        };
-        let owned = current
-            .as_ref()
-            .map(|credential| credential.has_comment(&state.current_comment))
-            .unwrap_or(false);
-        if !owned {
-            states.remove(&target_key);
-            return;
-        }
-
-        let result = if let Some(original) = state.original.as_ref() {
-            unsafe { CredWriteW(original.0, 0) }
-                .map_err(|err| anyhow!("CredWriteW failed while restoring: {}", err))
-        } else {
-            delete_rdp_credential(&self.target)
-        };
-        match result {
+        match restore_temporary_rdp_credential(&self.target, state) {
             Ok(()) => {
                 states.remove(&target_key);
             }

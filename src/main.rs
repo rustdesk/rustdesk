@@ -13,7 +13,6 @@ fn main() {
     }
     common::test_rendezvous_server();
     common::test_nat_type();
-    common::global_clean();
 }
 
 #[cfg(not(any(

@@ -13,6 +13,7 @@
 
 typedef char** (*FUNC_RUSTDESK_CORE_MAIN)(int*);
 typedef void (*FUNC_RUSTDESK_FREE_ARGS)( char**, int);
+typedef void (*FUNC_RUSTDESK_CORE_CLEANUP)();
 typedef int (*FUNC_RUSTDESK_GET_APP_NAME)(wchar_t*, int);
 typedef int (*FUNC_RUSTDESK_IS_DISABLE_INSTALLATION)();
 /// Note: `--server`, `--service` are already handled in [core_main.rs].
@@ -41,6 +42,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (!free_c_args)
   {
     std::cout << "Failed to get free_c_args." << std::endl;
+    return EXIT_FAILURE;
+  }
+  FUNC_RUSTDESK_CORE_CLEANUP rustdesk_core_cleanup =
+      (FUNC_RUSTDESK_CORE_CLEANUP)GetProcAddress(hInstance, "rustdesk_core_cleanup");
+  if (!rustdesk_core_cleanup)
+  {
+    std::cout << "Failed to get rustdesk_core_cleanup." << std::endl;
     return EXIT_FAILURE;
   }
   std::vector<std::string> command_line_arguments =
@@ -179,6 +187,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  rustdesk_core_cleanup();
   ::CoUninitialize();
   return EXIT_SUCCESS;
 }

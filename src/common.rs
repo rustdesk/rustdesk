@@ -133,7 +133,10 @@ pub fn global_init() -> bool {
     true
 }
 
-pub fn global_clean() {}
+pub fn global_clean() {
+    #[cfg(windows)]
+    crate::platform::cleanup_temporary_rdp_credentials();
+}
 
 #[inline]
 pub fn set_server_running(b: bool) {
