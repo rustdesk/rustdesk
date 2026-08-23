@@ -2294,6 +2294,7 @@ pub fn get_win_key_state() -> bool {
 }
 
 pub fn quit_gui() {
+    crate::common::clean_ui_process();
     std::process::exit(0);
     // unsafe { PostQuitMessage(0) }; // some how not work
 }

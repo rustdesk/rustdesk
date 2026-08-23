@@ -27,6 +27,6 @@ fn main() {
     }
     if let Some(args) = crate::core_main::core_main().as_mut() {
         ui::start(args);
+        common::clean_ui_process();
     }
-    common::global_clean();
 }
