@@ -55,7 +55,7 @@ fn run_rdp(
         Ok(child) => {
             let lc = lc.clone();
             let id = id.to_owned();
-            crate::platform::set_rdp_window_title(
+            crate::platform::monitor_rdp_process(
                 child,
                 move || rdp_display_name(&lc, &id),
                 host.to_owned(),
@@ -68,7 +68,7 @@ fn run_rdp(
 }
 
 #[cfg(windows)]
-fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
+fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> (String, String) {
     let lc = lc.read().unwrap();
     let alias = lc
         .options
@@ -77,11 +77,12 @@ fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> String {
         .unwrap_or_default();
     let hostname = lc.info.hostname.trim();
     let identity = if !alias.is_empty() { alias } else { id };
-    if hostname.is_empty() || hostname == identity {
+    let name = if hostname.is_empty() || hostname == identity {
         identity.to_owned()
     } else {
         format!("{} ({})", identity, hostname)
-    }
+    };
+    (name, hostname.to_owned())
 }
 
 pub async fn listen(

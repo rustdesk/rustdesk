@@ -3079,36 +3079,26 @@ fn sanitize_rdp_window_title(name: &str) -> String {
         .collect()
 }
 
-fn should_update_rdp_window_title(
-    current: &str,
-    name: &str,
-    applied_name: &str,
-    endpoint: &str,
-) -> bool {
-    current != name
-        && (current.contains(endpoint) || (!applied_name.is_empty() && current == applied_name))
+fn should_update_rdp_window_title(current: &str, name: &str, endpoint: &str) -> bool {
+    current != name && current.contains(endpoint)
 }
 
-pub fn set_rdp_window_title<F>(
+pub fn monitor_rdp_process<F>(
     mut child: std::process::Child,
     name_of: F,
     endpoint: String,
     _credential: Option<TemporaryRdpCredential>,
     _loopback: Option<RdpLoopbackAddress>,
 ) where
-    F: Fn() -> String + Send + 'static,
+    F: Fn() -> (String, String) + Send + 'static,
 {
     let process_id = child.id();
-    // mstsc owns the title and can restore the endpoint while connecting or
-    // reconnecting. Follow only the process we launched and reapply the peer
-    // name until it exits, so concurrent RDP sessions cannot rename each other.
     if let Err(err) = std::thread::Builder::new()
-        .name("rdp-window-title".to_owned())
+        .name("rdp-process-monitor".to_owned())
         .spawn(move || {
             let _credential = _credential;
             let _loopback = _loopback;
-            let mut warned = false;
-            let mut applied_name = String::new();
+            let mut title_attempted = false;
             loop {
                 match child.try_wait() {
                     Ok(Some(_)) => break,
@@ -3117,25 +3107,16 @@ pub fn set_rdp_window_title<F>(
                         break;
                     }
                     Ok(None) => {
-                        let name = sanitize_rdp_window_title(&name_of());
-                        if !name.is_empty() {
-                            match set_process_rdp_window_title(
-                                process_id,
-                                &name,
-                                &applied_name,
-                                &endpoint,
-                            ) {
-                                Ok(applied) => {
-                                    if applied {
-                                        applied_name = name;
-                                    }
-                                    warned = false;
-                                }
-                                Err(err) if !warned => {
+                        if !title_attempted {
+                            let (name, hostname) = name_of();
+                            let name = sanitize_rdp_window_title(&name);
+                            if !hostname.is_empty() && !name.is_empty() {
+                                title_attempted = true;
+                                if let Err(err) =
+                                    set_process_rdp_window_title(process_id, &name, &endpoint)
+                                {
                                     log::warn!("Failed to set RDP window title: {}", err);
-                                    warned = true;
                                 }
-                                Err(_) => {}
                             }
                         }
                     }
@@ -3144,20 +3125,14 @@ pub fn set_rdp_window_title<F>(
             }
         })
     {
-        log::warn!("Failed to start RDP window title thread: {}", err);
+        log::warn!("Failed to start RDP process monitor thread: {}", err);
     }
 }
 
-fn set_process_rdp_window_title(
-    process_id: DWORD,
-    name: &str,
-    applied_name: &str,
-    endpoint: &str,
-) -> io::Result<bool> {
+fn set_process_rdp_window_title(process_id: DWORD, name: &str, endpoint: &str) -> io::Result<bool> {
     struct Context<'a> {
         process_id: DWORD,
         name: &'a str,
-        applied_name: &'a str,
         endpoint: &'a str,
         title: Vec<u16>,
         applied: bool,
@@ -3185,12 +3160,7 @@ fn set_process_rdp_window_title(
             context.applied = true;
             return TRUE;
         }
-        if !should_update_rdp_window_title(
-            &current,
-            context.name,
-            context.applied_name,
-            context.endpoint,
-        ) {
+        if !should_update_rdp_window_title(&current, context.name, context.endpoint) {
             return TRUE;
         }
         let mut result = 0;
@@ -3228,7 +3198,6 @@ fn set_process_rdp_window_title(
     let mut context = Context {
         process_id,
         name,
-        applied_name,
         endpoint,
         title: wide_string(name),
         applied: false,
@@ -5164,27 +5133,18 @@ mod tests {
     }
 
     #[test]
-    fn rdp_window_title_updates_only_the_tunnel_or_the_previously_applied_name() {
+    fn rdp_window_title_updates_only_the_tunnel_title() {
         assert!(should_update_rdp_window_title(
             "localhost - Remote Desktop Connection",
             "peer",
-            "",
             "localhost"
         ));
         assert!(should_update_rdp_window_title(
             "127.0.0.2 - Remote Desktop Connection",
             "peer",
-            "",
-            "127.0.0.2"
-        ));
-        assert!(should_update_rdp_window_title(
-            "peer",
-            "peer (hostname)",
-            "peer",
             "127.0.0.2"
         ));
         assert!(!should_update_rdp_window_title(
-            "localhost tunnel",
             "localhost tunnel",
             "localhost tunnel",
             "localhost"
@@ -5192,7 +5152,6 @@ mod tests {
         assert!(!should_update_rdp_window_title(
             "Remote Desktop Connection",
             "peer",
-            "",
             "localhost"
         ));
     }
