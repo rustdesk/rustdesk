@@ -43,6 +43,7 @@ mod th;
 mod tr;
 mod tw;
 mod uk;
+mod ur;
 mod vi;
 mod ta;
 mod ge;
@@ -77,6 +78,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ko", "한국어"),
     ("kz", "Қазақ"),
     ("uk", "Українська"),
+    ("ur", "اردو"),
     ("fa", "فارسی"),
     ("ca", "Català"),
     ("el", "Ελληνικά"),
@@ -170,6 +172,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "be" => be::T.deref(),
         "he" => he::T.deref(),
         "hr" => hr::T.deref(),
+        "ur" => ur::T.deref(),
         "sc" => sc::T.deref(),
         "ta" => ta::T.deref(),
         "ge" => ge::T.deref(),
