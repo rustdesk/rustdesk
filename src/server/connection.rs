@@ -775,6 +775,10 @@ impl Connection {
                                     }
                                 }
                                 conn.privacy_mode = enabled;
+                                #[cfg(windows)]
+                                if !enabled {
+                                    conn.privacy_mode_locked_wait = None;
+                                }
                                 conn.send_permission(Permission::PrivacyMode, enabled).await;
                             }
                         }
