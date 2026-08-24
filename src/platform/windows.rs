@@ -2752,18 +2752,20 @@ pub fn new_mstsc_command() -> std::process::Command {
 fn windows_directory() -> io::Result<PathBuf> {
     use winapi::um::sysinfoapi::GetWindowsDirectoryW;
 
-    let mut buffer = vec![0u16; 260];
-    loop {
-        let length = unsafe { GetWindowsDirectoryW(buffer.as_mut_ptr(), buffer.len() as _) };
-        if length == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if (length as usize) < buffer.len() {
-            buffer.truncate(length as usize);
-            return Ok(PathBuf::from(OsString::from_wide(&buffer)));
-        }
-        buffer.resize(length as usize + 1, 0);
+    let mut buffer = [0u16; winapi::shared::minwindef::MAX_PATH];
+    let length = unsafe { GetWindowsDirectoryW(buffer.as_mut_ptr(), buffer.len() as _) };
+    if length == 0 {
+        return Err(io::Error::last_os_error());
     }
+    if length as usize >= buffer.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Windows directory path exceeds MAX_PATH",
+        ));
+    }
+    Ok(PathBuf::from(OsString::from_wide(
+        &buffer[..length as usize],
+    )))
 }
 
 struct RdpCredentialBuffer(*mut windows::Win32::Security::Credentials::CREDENTIALW);

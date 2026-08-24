@@ -16,27 +16,18 @@ use hbb_common::{
 };
 
 #[cfg(windows)]
-type RdpLoopbackLease = crate::platform::RdpLoopbackAddress;
-
-#[cfg(not(windows))]
-#[derive(Clone)]
-struct RdpLoopbackLease;
-
 fn run_rdp(
     port: u16,
     host: &str,
     lc: &Arc<RwLock<LoginConfigHandler>>,
     id: &str,
-    loopback: Option<RdpLoopbackLease>,
+    loopback: Option<crate::platform::RdpLoopbackAddress>,
 ) {
-    #[cfg(windows)]
     let (username, password) = {
         let lc = lc.read().unwrap();
         (lc.get_option("rdp_username"), lc.get_option("rdp_password"))
     };
-    #[cfg(windows)]
     let credential_target = format!("TERMSRV/{}", host);
-    #[cfg(windows)]
     let (rdp_credential, prompt_for_credentials) =
         match crate::platform::prepare_temporary_rdp_credential(
             &credential_target,
@@ -55,31 +46,22 @@ fn run_rdp(
         };
     // Keep using /v instead of a generated .rdp file: mstsc then preserves the
     // user's Default.rdp settings and avoids unsigned-file warnings or policies.
-    #[cfg(windows)]
     let mut command = crate::platform::new_mstsc_command();
-    #[cfg(not(windows))]
-    let mut command = std::process::Command::new("mstsc");
     command.arg(format!("/v:{}:{}", host, port));
-    #[cfg(windows)]
     if prompt_for_credentials {
         command.arg("/prompt");
     }
     match command.spawn() {
         Ok(child) => {
-            #[cfg(windows)]
-            {
-                let lc = lc.clone();
-                let id = id.to_owned();
-                crate::platform::set_rdp_window_title(
-                    child,
-                    move || rdp_display_name(&lc, &id),
-                    host.to_owned(),
-                    rdp_credential,
-                    loopback,
-                );
-            }
-            #[cfg(not(windows))]
-            let _ = (child, lc, id, loopback);
+            let lc = lc.clone();
+            let id = id.to_owned();
+            crate::platform::set_rdp_window_title(
+                child,
+                move || rdp_display_name(&lc, &id),
+                host.to_owned(),
+                rdp_credential,
+                loopback,
+            );
         }
         Err(err) => log::warn!("Failed to launch mstsc: {}", err),
     }
@@ -115,6 +97,10 @@ pub async fn listen(
     remote_port: i32,
 ) -> ResultType<()> {
     let is_rdp = port == 0;
+    #[cfg(not(windows))]
+    if is_rdp {
+        bail!("RDP is only supported on Windows");
+    }
     #[cfg(windows)]
     let rdp_loopback = if is_rdp {
         let has_username = {
@@ -129,8 +115,6 @@ pub async fn listen(
     } else {
         None
     };
-    #[cfg(not(windows))]
-    let rdp_loopback: Option<RdpLoopbackLease> = None;
     #[cfg(windows)]
     let listener_host = rdp_loopback
         .as_ref()
@@ -146,8 +130,7 @@ pub async fn listen(
         .as_ref()
         .map(|address| address.mstsc_host())
         .unwrap_or("localhost");
-    #[cfg(not(windows))]
-    let rdp_host = "localhost";
+    #[cfg(windows)]
     if is_rdp {
         run_rdp(addr.port(), rdp_host, &lc, &id, rdp_loopback.clone());
     }
@@ -185,6 +168,7 @@ pub async fn listen(
                     Some(Data::Close) => {
                         break;
                     }
+                    #[cfg(windows)]
                     Some(Data::NewRDP) => {
                         println!("receive run_rdp from ui_receiver");
                         run_rdp(addr.port(), rdp_host, &lc, &id, rdp_loopback.clone());
