@@ -1880,10 +1880,28 @@ struct ConnToken {
     session_id: u64,
 }
 
+#[cfg(target_env = "ohos")]
+fn ohos_lan_peer_config_id(target: &str) -> Option<String> {
+    let ip = std::net::IpAddr::from_str(target).ok().or_else(|| {
+        SocketAddr::from_str(target)
+            .ok()
+            .map(|address| address.ip())
+    })?;
+    let ip = ip.to_string();
+    config::LanPeers::load()
+        .peers
+        .into_iter()
+        .find(|peer| peer.online && peer.ip_mac.contains_key(&ip))
+        .map(|peer| peer.id)
+        .filter(|id| !id.is_empty())
+}
+
 /// Login config handler for [`Client`].
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
+    #[cfg(target_env = "ohos")]
+    config_id: String,
     pub conn_type: ConnType,
     pub is_terminal_admin: bool,
     hash: Hash,
@@ -1985,6 +2003,14 @@ impl LoginConfigHandler {
         }
 
         self.id = id;
+        #[cfg(target_env = "ohos")]
+        {
+            // LAN cards connect to the volatile direct IP, but credentials and
+            // peer options must remain keyed by the stable RustDesk ID. This
+            // mirrors the upstream ID-centric peer model while preserving
+            // serverless LAN direct access on HarmonyOS.
+            self.config_id = ohos_lan_peer_config_id(&self.id).unwrap_or_else(|| self.id.clone());
+        }
         self.conn_type = conn_type;
         let config = self.load_config();
         self.remember = !config.password.is_empty();
@@ -2079,10 +2105,20 @@ impl LoginConfigHandler {
         }
     }
 
+    /// Return the stable identity used for peer-scoped preferences.
+    fn peer_config_id(&self) -> &str {
+        #[cfg(target_env = "ohos")]
+        {
+            return &self.config_id;
+        }
+        #[cfg(not(target_env = "ohos"))]
+        &self.id
+    }
+
     /// Load [`PeerConfig`].
     pub fn load_config(&self) -> PeerConfig {
         debug_assert!(self.id.len() > 0);
-        PeerConfig::load(&self.id)
+        PeerConfig::load(self.peer_config_id())
     }
 
     /// Save a [`PeerConfig`] into the handler.
@@ -2091,7 +2127,7 @@ impl LoginConfigHandler {
     ///
     /// * `config` - [`PeerConfig`] to save.
     pub fn save_config(&mut self, config: PeerConfig) {
-        config.store(&self.id);
+        config.store(self.peer_config_id());
         self.config = config;
     }
 
@@ -2362,7 +2398,7 @@ impl LoginConfigHandler {
             } else {
                 self.config.options.insert(name, "Y".to_owned());
             }
-            self.config.store(&self.id);
+            self.config.store(self.peer_config_id());
             return None;
         }
 
@@ -4394,7 +4430,7 @@ pub mod peer_online {
             f(onlines, offlines)
         } else {
             let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
+            match query_online_states_(&ids, query_timeout, true).await {
                 Ok((onlines, offlines)) => {
                     f(onlines, offlines);
                 }
@@ -4403,6 +4439,13 @@ pub mod peer_online {
                 }
             }
         }
+    }
+
+    pub async fn query_online_states_result(
+        ids: Vec<String>,
+    ) -> ResultType<(Vec<String>, Vec<String>)> {
+        let query_timeout = std::time::Duration::from_millis(3_000);
+        query_online_states_(&ids, query_timeout, false).await
     }
 
     async fn create_online_stream() -> ResultType<Stream> {
@@ -4423,6 +4466,7 @@ pub mod peer_online {
     async fn query_online_states_(
         ids: &Vec<String>,
         timeout: std::time::Duration,
+        transport_failure_as_offline: bool,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_request(OnlineRequest {
@@ -4435,7 +4479,10 @@ pub mod peer_online {
             Ok(s) => s,
             Err(e) => {
                 log::debug!("Failed to create peers online stream, {e}");
-                return Ok((vec![], ids.clone()));
+                if transport_failure_as_offline {
+                    return Ok((vec![], ids.clone()));
+                }
+                return Err(e);
             }
         };
         // TODO: Use long connections to avoid socket creation
@@ -4444,7 +4491,10 @@ pub mod peer_online {
         // An established connection was aborted by the software in your host machine. (os error 10053)
         if let Err(e) = socket.send(&msg_out).await {
             log::debug!("Failed to send peers online states query, {e}");
-            return Ok((vec![], ids.clone()));
+            if transport_failure_as_offline {
+                return Ok((vec![], ids.clone()));
+            }
+            return Err(e.into());
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
@@ -4455,6 +4505,14 @@ pub mod peer_online {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
+                        let expected_state_bytes = (ids.len() + 7) / 8;
+                        if states.len() < expected_state_bytes {
+                            bail!(
+                                "Invalid online response: expected at least {} state bytes, got {}",
+                                expected_state_bytes,
+                                states.len()
+                            );
+                        }
                         let mut onlines = Vec::new();
                         let mut offlines = Vec::new();
                         for i in 0..ids.len() {

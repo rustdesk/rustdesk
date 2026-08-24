@@ -18,6 +18,7 @@ mod server;
 #[cfg(all(not(target_os = "ios"), not(target_env = "ohos")))]
 pub use self::server::*;
 mod client;
+pub use client::peer_online::query_online_states_result;
 mod lan;
 #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
 mod rendezvous_mediator;
@@ -74,6 +75,7 @@ mod ui_interface;
 mod ui_session_interface;
 
 mod hbbs_http;
+pub use hbbs_http::validate_rustdesk_api_server;
 
 #[cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
 pub mod clipboard_file;
