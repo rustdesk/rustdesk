@@ -68,8 +68,9 @@ fn run_rdp(
 }
 
 #[cfg(windows)]
-fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> (String, String) {
+fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> (String, bool) {
     let lc = lc.read().unwrap();
+    let peer_info_received = lc.version != 0;
     let alias = lc
         .options
         .get("alias")
@@ -82,7 +83,7 @@ fn rdp_display_name(lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> (String, 
     } else {
         format!("{} ({})", identity, hostname)
     };
-    (name, hostname.to_owned())
+    (name, peer_info_received)
 }
 
 pub async fn listen(

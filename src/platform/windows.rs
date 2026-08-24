@@ -3090,7 +3090,7 @@ pub fn monitor_rdp_process<F>(
     _credential: Option<TemporaryRdpCredential>,
     _loopback: Option<RdpLoopbackAddress>,
 ) where
-    F: Fn() -> (String, String) + Send + 'static,
+    F: Fn() -> (String, bool) + Send + 'static,
 {
     let process_id = child.id();
     if let Err(err) = std::thread::Builder::new()
@@ -3098,7 +3098,8 @@ pub fn monitor_rdp_process<F>(
         .spawn(move || {
             let _credential = _credential;
             let _loopback = _loopback;
-            let mut title_attempted = false;
+            let mut title_applied = false;
+            let mut warned = false;
             loop {
                 match child.try_wait() {
                     Ok(Some(_)) => break,
@@ -3107,15 +3108,17 @@ pub fn monitor_rdp_process<F>(
                         break;
                     }
                     Ok(None) => {
-                        if !title_attempted {
-                            let (name, hostname) = name_of();
+                        if !title_applied {
+                            let (name, peer_info_received) = name_of();
                             let name = sanitize_rdp_window_title(&name);
-                            if !hostname.is_empty() && !name.is_empty() {
-                                title_attempted = true;
-                                if let Err(err) =
-                                    set_process_rdp_window_title(process_id, &name, &endpoint)
-                                {
-                                    log::warn!("Failed to set RDP window title: {}", err);
+                            if peer_info_received && !name.is_empty() {
+                                match set_process_rdp_window_title(process_id, &name, &endpoint) {
+                                    Ok(applied) => title_applied = applied,
+                                    Err(err) if !warned => {
+                                        log::warn!("Failed to set RDP window title: {}", err);
+                                        warned = true;
+                                    }
+                                    Err(_) => {}
                                 }
                             }
                         }
