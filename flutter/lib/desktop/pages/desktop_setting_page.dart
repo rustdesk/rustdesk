@@ -574,6 +574,12 @@ class _GeneralState extends State<_General> {
       if (!isWeb && !incomingOnly) ...[
         _OptionCheckBox(
           context,
+          'Enable TCP hole punching',
+          kOptionEnableTcpPunch,
+          isServer: false,
+        ),
+        _OptionCheckBox(
+          context,
           'Enable UDP hole punching',
           kOptionEnableUdpPunch,
           isServer: false,

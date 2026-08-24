@@ -334,6 +334,18 @@ fn request_allows_tcp_punch(webrtc_sdp_offer: &str) -> bool {
     webrtc_sdp_offer.is_empty()
 }
 
+/// TCP punch is a user option like the other direct transports, but it is also the backstop:
+/// with every direct transport switched off there would be nothing left to punch with, so it
+/// runs regardless. Only the switches decide that — a transport that is enabled but fails to
+/// materialize (no public v6 address, offerer setup error) leaves this alone, because the
+/// relay fallback already covers a round that ends up with no usable direct transport.
+fn tcp_punch_allowed() -> bool {
+    crate::get_tcp_punch_enabled()
+        || !(crate::get_udp_punch_enabled()
+            || crate::get_ipv6_punch_enabled()
+            || crate::get_webrtc_enabled())
+}
+
 impl Client {
     const CLIENT_CLIPBOARD_NAME: &'static str = "client-clipboard";
 
@@ -521,7 +533,13 @@ impl Client {
             servers.clone(),
             contained,
         );
-        if interface.is_force_relay() || (udp.0.is_none() && !has_webrtc_offerer) {
+        // The fallback request exists only to carry a TCP punch, so it is pointless once TCP
+        // punch is off — it would reach `connect()` with nothing to try and just open a second
+        // relay.
+        if interface.is_force_relay()
+            || (udp.0.is_none() && !has_webrtc_offerer)
+            || !tcp_punch_allowed()
+        {
             return fut.await;
         }
         let preferred_fut = fut.boxed();
@@ -849,7 +867,7 @@ impl Client {
             } else {
                 String::new()
             };
-        let allow_tcp_punch = request_allows_tcp_punch(&webrtc_sdp_offer);
+        let allow_tcp_punch = tcp_punch_allowed() && request_allows_tcp_punch(&webrtc_sdp_offer);
         let punch_type = if udp_nat_port > 0 {
             "UDP"
         } else if allow_tcp_punch {

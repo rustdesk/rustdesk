@@ -769,5 +769,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Reuse one connection for port forwarding", "Використовувати одне з'єднання для перенаправлення портів"),
         ("port-forward-mux-tip", "Передавати всі з'єднання одного перенаправлення портів через одне з'єднання з віддаленим пристроєм замість повторного під'єднання та входу для кожного з них."),
         ("Enable WebRTC P2P connection", "Увімкнути P2P-підключення через WebRTC"),
+        ("Enable TCP hole punching", "Увімкнути TCP hole punching"),
     ].iter().cloned().collect();
 }

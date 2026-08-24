@@ -1153,6 +1153,13 @@ pub fn is_public(url: &str) -> bool {
     host == "rustdesk.com" || host.ends_with(".rustdesk.com")
 }
 
+pub fn get_tcp_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_TCP_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_TCP_PUNCH),
+    )
+}
+
 pub fn get_udp_punch_enabled() -> bool {
     config::option2bool(
         keys::OPTION_ENABLE_UDP_PUNCH,
