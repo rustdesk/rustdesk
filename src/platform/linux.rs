@@ -2059,6 +2059,21 @@ mod desktop {
             }
 
             if self.display.is_empty() {
+                // logind stores the value pam_systemd was handed at session creation, which is not
+                // necessarily a local display: it can be qualified with this host (`myhost:0`) or
+                // name an X forwarding endpoint (`localhost:10.0`), and some setups record a bare
+                // `:`. Strip this host, then require a display number. `localhost` is deliberately
+                // left in place: a non-empty display here suppresses every fallback below, both
+                // `get_display_by_user` and the `:0` default, so anything not local must not pass.
+                let display = Self::get_display_from_session(&self.sid)
+                    .replace(&hbb_common::whoami::hostname(), "");
+                if display.strip_prefix(':').map_or(false, |number| {
+                    number.starts_with(|c: char| c.is_ascii_digit())
+                }) {
+                    self.display = display;
+                }
+            }
+            if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
             if self.display.is_empty() {
@@ -2068,6 +2083,34 @@ mod desktop {
                 .display
                 .replace(&hbb_common::whoami::hostname(), "")
                 .replace("localhost", "");
+        }
+
+        fn get_display_from_session(session: &str) -> String {
+            if session.is_empty() {
+                return String::new();
+            }
+
+            match Command::new(CMD_LOGINCTL.as_str())
+                .args(["show-session", "-p", "Display", session])
+                .output()
+            {
+                Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .strip_prefix("Display=")
+                    .unwrap_or_default()
+                    .to_owned(),
+                Ok(output) => {
+                    log::debug!(
+                        "Failed to get display for session {session}: {}",
+                        output.status
+                    );
+                    String::new()
+                }
+                Err(err) => {
+                    log::debug!("Failed to get display for session {session}: {err}");
+                    String::new()
+                }
+            }
         }
 
         fn get_home(&mut self) {
