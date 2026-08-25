@@ -746,6 +746,24 @@ static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
+/// First moment a hotplug refresh reported an empty topology; None while displays exist.
+static EMPTY_TOPOLOGY_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+/// A monitor unplug opens a measured 5-7 s zero-display gap before the headless force (or the
+/// compositor) restores scanout; demoting inside it hands a live session to the PipeWire portal,
+/// which a headless box can never answer.
+const EMPTY_TOPOLOGY_DEMOTE_AFTER: Duration = Duration::from_secs(10);
+
+/// True once the empty topology has outlived the settle window; records the first sighting.
+fn empty_topology_ready(since: &mut Option<Instant>, window: Duration) -> bool {
+    match *since {
+        Some(t) => t.elapsed() >= window,
+        None => {
+            *since = Some(Instant::now());
+            false
+        }
+    }
+}
+
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -1366,12 +1384,31 @@ fn normalize_connector(name: &str) -> String {
 }
 
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
+    // The empty debounce is resolved before DRM_STATE is taken so the two locks never nest.
+    let empty_outlived_window = if list.is_empty() {
+        let mut since = EMPTY_TOPOLOGY_SINCE.lock().unwrap();
+        let was_first = since.is_none();
+        let ready = empty_topology_ready(&mut *since, EMPTY_TOPOLOGY_DEMOTE_AFTER);
+        if was_first {
+            // A single empty push may be the last event a dead topology ever sends, so re-ask
+            // after the window instead of waiting for a hotplug that may never come.
+            schedule_empty_topology_recheck();
+        }
+        ready
+    } else {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+        false
+    };
     let mut st = DRM_STATE.lock().unwrap();
     match &*st {
         ProbeState::Available(..) => {
             if list.is_empty() {
-                log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-                publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                if empty_outlived_window {
+                    log::info!("drm: topology empty past the settle window, marking DRM unavailable");
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                } else {
+                    log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
+                }
             } else {
                 log::info!("drm: hotplug refresh -> {} display(s)", list.len());
                 publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
@@ -1391,6 +1428,24 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
         _ => {}
+    }
+}
+
+fn schedule_empty_topology_recheck() {
+    let spawned = std::thread::Builder::new()
+        .name("drm-empty-recheck".into())
+        .spawn(|| {
+            std::thread::sleep(EMPTY_TOPOLOGY_DEMOTE_AFTER + Duration::from_millis(200));
+            if EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none() {
+                return;
+            }
+            match query_displays() {
+                Ok(list) => swap_available_displays(list),
+                Err(err) => log::debug!("drm: empty-topology recheck failed: {err}"),
+            }
+        });
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the empty-topology recheck: {err}");
     }
 }
 
@@ -1841,6 +1896,19 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+    }
+
+    #[test]
+    fn an_empty_topology_blip_does_not_demote() {
+        // The unplug-to-force gap, measured at 5-7 s on the RPi5: the first empty sighting only
+        // starts the clock, and inside the window the verdict must hold.
+        let mut since = None;
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        assert!(since.is_some(), "the first sighting must start the clock");
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        // Past the window the same state demotes.
+        since = Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
     }
 
     #[test]
