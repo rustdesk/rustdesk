@@ -271,7 +271,7 @@ pub struct Connection {
     block_input: bool,
     privacy_mode: bool,
     #[cfg(windows)]
-    privacy_mode_locked_wait: Option<Instant>,
+    privacy_mode_locked_wait: Option<(String, Instant)>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -4824,13 +4824,15 @@ impl Connection {
 
         #[cfg(windows)]
         {
-            self.privacy_mode_locked_wait = crate::platform::privacy_mode_wait_unlocked(
-                &impl_key,
-                self.privacy_mode_locked_wait,
-            );
-            if self.privacy_mode_locked_wait.is_some() {
+            let effective_impl_key = privacy_mode::get_supported_impl(&impl_key);
+            let waiting_since = self.privacy_mode_locked_wait.as_ref().map(|(_, t)| *t);
+            if let Some(waiting_since) =
+                crate::platform::privacy_mode_wait_unlocked(&effective_impl_key, waiting_since)
+            {
+                self.privacy_mode_locked_wait = Some((impl_key, waiting_since));
                 return;
             }
+            self.privacy_mode_locked_wait = None;
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
@@ -4914,9 +4916,8 @@ impl Connection {
 
     #[cfg(windows)]
     async fn turn_on_privacy_after_unlocked(&mut self) {
-        if self.privacy_mode_locked_wait.is_some() {
-            self.turn_on_privacy(privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY.to_owned())
-                .await;
+        if let Some((impl_key, _)) = self.privacy_mode_locked_wait.clone() {
+            self.turn_on_privacy(impl_key).await;
         }
     }
 
