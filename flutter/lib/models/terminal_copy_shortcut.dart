@@ -20,43 +20,68 @@ Future<void> writeTerminalClipboard(String text) async {
 }
 
 Map<ShortcutActivator, Intent>? platformTerminalShortcuts() {
-  if (defaultTargetPlatform != TargetPlatform.linux) return null;
+  final platform = defaultTargetPlatform;
+  if (platform == TargetPlatform.linux) {
+    return {
+      for (final entry in defaultTerminalShortcuts.entries)
+        if (!_isControlShortcut(entry.key, LogicalKeyboardKey.keyV))
+          entry.key: entry.value,
+      _controlShiftVPasteShortcut:
+          const PasteTextIntent(SelectionChangedCause.keyboard),
+    };
+  }
+  if (platform != TargetPlatform.windows &&
+      platform != TargetPlatform.android) {
+    return null;
+  }
   return {
     for (final entry in defaultTerminalShortcuts.entries)
-      if (!_isControlVShortcut(entry.key)) entry.key: entry.value,
-    _controlShiftVPasteShortcut:
-        const PasteTextIntent(SelectionChangedCause.keyboard),
+      if (!_isControlShortcut(
+        entry.key,
+        LogicalKeyboardKey.keyC,
+        shift: true,
+      ))
+        entry.key: entry.value,
   };
 }
 
-bool _isControlVShortcut(ShortcutActivator shortcut) =>
+bool _isControlShortcut(
+  ShortcutActivator shortcut,
+  LogicalKeyboardKey key, {
+  bool shift = false,
+}) =>
     shortcut is SingleActivator &&
-    shortcut.trigger == LogicalKeyboardKey.keyV &&
+    shortcut.trigger == key &&
     shortcut.control &&
-    !shortcut.shift &&
+    shortcut.shift == shift &&
     !shortcut.alt &&
     !shortcut.meta;
 
 FocusOnKeyEventCallback terminalCopyHandler(
   Terminal terminal,
-  TerminalController controller,
-) =>
-    (_, event) {
-      if (!_isWindowsCopyShortcut(event)) return KeyEventResult.ignored;
-      final selection = controller.selection;
-      if (selection == null || selection.isCollapsed) {
-        return KeyEventResult.ignored;
+  TerminalController controller, {
+  FocusOnKeyEventCallback? fallback,
+}) =>
+    (focusNode, event) {
+      if (_isSelectionCopyShortcut(event)) {
+        final selection = controller.selection;
+        if (selection != null && !selection.isCollapsed) {
+          if (event is KeyDownEvent) {
+            final text = terminal.buffer.getText(selection);
+            unawaited(writeTerminalClipboard(text));
+          }
+          return KeyEventResult.handled;
+        }
       }
-      if (event is KeyDownEvent) {
-        final text = terminal.buffer.getText(selection);
-        unawaited(writeTerminalClipboard(text));
-      }
-      return KeyEventResult.handled;
+      return fallback?.call(focusNode, event) ?? KeyEventResult.ignored;
     };
 
-bool _isWindowsCopyShortcut(KeyEvent event) {
+bool _isSelectionCopyShortcut(KeyEvent event) {
   final keyboard = HardwareKeyboard.instance;
-  return defaultTargetPlatform == TargetPlatform.windows &&
+  final platform = defaultTargetPlatform;
+  final usesControlCopy =
+      platform == TargetPlatform.windows || platform == TargetPlatform.android;
+  return usesControlCopy &&
       (event is KeyDownEvent || event is KeyRepeatEvent) &&
       event.logicalKey == LogicalKeyboardKey.keyC &&
       keyboard.isControlPressed &&

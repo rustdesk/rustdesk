@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/models/input_modifier_utils.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/terminal_copy_shortcut.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/mobile/terminal_keyboard_utils.dart';
 import 'package:flutter_hbb/web/dummy.dart'
@@ -244,7 +245,12 @@ class _TerminalPageState extends State<TerminalPage>
                     //
                     // Android works fine without this workaround.
                     deleteDetection: isIOS,
-                    onKeyEvent: _handleTerminalKeyEvent,
+                    shortcuts: platformTerminalShortcuts(),
+                    onKeyEvent: terminalCopyHandler(
+                      _terminalModel.terminal,
+                      _terminalModel.terminalController,
+                      fallback: _handleTerminalKeyEvent,
+                    ),
                     padding: _calculatePadding(heightPx),
                     onSecondaryTapDown: (details, offset) async {
                       final selection = _terminalModel.terminalController.selection;
