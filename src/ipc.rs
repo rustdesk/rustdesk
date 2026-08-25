@@ -279,6 +279,8 @@ pub enum DataMouse {
     Click(enigo::MouseButton),
     ScrollX(i32),
     ScrollY(i32),
+    ScrollHighResolution(i32, i32),
+    ScrollSmooth(i32, i32),
     Refresh,
 }
 

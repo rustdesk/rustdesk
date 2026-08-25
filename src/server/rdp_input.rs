@@ -1,6 +1,6 @@
 use super::input_service::set_clipboard_for_paste_sync;
 use crate::uinput::service::{can_input_via_keysym, char_to_keysym, map_key};
-use dbus::{blocking::SyncConnection, Path};
+use dbus::{arg, blocking::SyncConnection, Path};
 use enigo::{Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{log, ResultType};
 use scrap::wayland::pipewire::{get_portal, PwStreamInfo};
@@ -361,9 +361,25 @@ pub mod client {
         }
     }
 
+    fn high_resolution_axis_delta(length: i32) -> f64 {
+        length as f64 / enigo::HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP as f64
+    }
+
+    fn smooth_axis_delta(length: i32) -> f64 {
+        length as f64 / enigo::SMOOTH_SCROLL_UNITS_PER_POINT as f64
+    }
+
+    fn scroll_axis_options(x: i32, y: i32) -> arg::PropMap {
+        let mut options = arg::PropMap::new();
+        if x == 0 && y == 0 {
+            options.insert("finish".into(), arg::Variant(Box::new(true)));
+        }
+        options
+    }
+
     #[cfg(test)]
     mod tests {
-        use super::desktop_is_niri;
+        use super::{desktop_is_niri, high_resolution_axis_delta, scroll_axis_options};
 
         #[test]
         fn detects_niri_in_desktop_list() {
@@ -371,6 +387,26 @@ pub mod client {
             assert!(desktop_is_niri("NIRI"));
             assert!(desktop_is_niri("GNOME:niri"));
             assert!(!desktop_is_niri("GNOME"));
+        }
+
+        #[test]
+        fn converts_high_resolution_units_to_fractional_axis_delta() {
+            let step = enigo::HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP;
+
+            assert_eq!(high_resolution_axis_delta(step), 1.0);
+            assert_eq!(high_resolution_axis_delta(-(step / 4)), -0.25);
+        }
+
+        #[test]
+        fn marks_zero_delta_as_scroll_sequence_end() {
+            let finish_options = scroll_axis_options(0, 0);
+            let scroll_options = scroll_axis_options(1, 0);
+
+            assert_eq!(
+                dbus::arg::prop_cast::<bool>(&finish_options, "finish"),
+                Some(&true)
+            );
+            assert!(dbus::arg::prop_cast::<bool>(&scroll_options, "finish").is_none());
         }
     }
 
@@ -456,6 +492,34 @@ pub mod client {
                 0 as f64,
                 length as f64,
             );
+        }
+        fn supports_high_resolution_scroll(&self) -> bool {
+            true
+        }
+        fn mouse_scroll_high_resolution(&mut self, x: i32, y: i32) -> enigo::ResultType {
+            let portal = get_portal(&self.conn);
+            remote_desktop_portal::notify_pointer_axis(
+                &portal,
+                &self.session,
+                scroll_axis_options(x, y),
+                high_resolution_axis_delta(x),
+                high_resolution_axis_delta(y),
+            )?;
+            Ok(())
+        }
+        fn supports_smooth_scroll(&self) -> bool {
+            true
+        }
+        fn mouse_scroll_smooth(&mut self, x: i32, y: i32) -> enigo::ResultType {
+            let portal = get_portal(&self.conn);
+            remote_desktop_portal::notify_pointer_axis(
+                &portal,
+                &self.session,
+                scroll_axis_options(x, y),
+                smooth_axis_delta(x),
+                smooth_axis_delta(y),
+            )?;
+            Ok(())
         }
     }
 

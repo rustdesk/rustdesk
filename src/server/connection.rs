@@ -151,6 +151,8 @@ enum MessageInput {
     Key((KeyEvent, bool)),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Pointer((PointerDeviceEvent, i32)),
+    #[cfg(target_os = "linux")]
+    FinishScrollSequence,
     BlockOn,
     BlockOff,
 }
@@ -594,7 +596,7 @@ impl Connection {
         );
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
+        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, id));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
         #[cfg(feature = "unix-file-copy-paste")]
@@ -676,6 +678,10 @@ impl Connection {
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
+                                #[cfg(target_os = "linux")]
+                                if !enabled {
+                                    conn.request_scroll_sequence_finish();
+                                }
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
@@ -1113,7 +1119,7 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
+    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender, _conn_id: i32) {
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
@@ -1150,6 +1156,8 @@ impl Connection {
                     MessageInput::Pointer((msg, id)) => {
                         handle_pointer(&msg, id);
                     }
+                    #[cfg(target_os = "linux")]
+                    MessageInput::FinishScrollSequence => clear_scroll_sequence(_conn_id),
                     MessageInput::BlockOn => {
                         let (ok, msg) = crate::platform::block_input(true);
                         if ok {
@@ -1186,8 +1194,18 @@ impl Connection {
             }
         }
         #[cfg(target_os = "linux")]
-        clear_remapped_keycode();
+        {
+            clear_remapped_keycode();
+            clear_scroll_sequence(_conn_id);
+        }
         log::debug!("Input thread exited");
+    }
+
+    #[cfg(target_os = "linux")]
+    fn request_scroll_sequence_finish(&self) {
+        if let Err(err) = self.tx_input.send(MessageInput::FinishScrollSequence) {
+            log::warn!("Failed to queue scroll sequence finish: {err}");
+        }
     }
 
     async fn post_seq_loop(mut rx: mpsc::UnboundedReceiver<(String, Value)>) {
@@ -2001,16 +2019,48 @@ impl Connection {
                         })
                         .into();
                     }
-                    res.set_peer_info(pi);
-                    sub_service = true;
-
                     #[cfg(target_os = "linux")]
                     {
                         // use rdp_input when uinput is not available in wayland. Ex: flatpak
-                        if input_service::wayland_use_rdp_input() {
-                            let _ = setup_rdp_input().await;
+                        let (high_resolution_scroll_ready, smooth_scroll_ready) =
+                            if input_service::wayland_use_rdp_input() {
+                                match setup_rdp_input().await {
+                                    Ok(high_resolution_ready) => (
+                                        high_resolution_ready,
+                                        high_resolution_ready
+                                            && input_service::supports_smooth_scroll(),
+                                    ),
+                                    Err(err) => {
+                                        log::error!("Failed to initialize RDP input: {err}");
+                                        (false, false)
+                                    }
+                                }
+                            } else {
+                                (
+                                    input_service::supports_high_resolution_scroll(),
+                                    input_service::supports_smooth_scroll(),
+                                )
+                            };
+                        if high_resolution_scroll_ready {
+                            platform_additions
+                                .insert("supports_high_resolution_scroll".into(), json!(true));
+                        }
+                        if smooth_scroll_ready {
+                            platform_additions.insert("supports_smooth_scroll".into(), json!(true));
+                        }
+                        if high_resolution_scroll_ready || smooth_scroll_ready {
+                            match serde_json::to_string(&platform_additions) {
+                                Ok(additions) => pi.platform_additions = additions,
+                                Err(err) => {
+                                    log::error!(
+                                        "Failed to serialize Linux platform additions: {err}"
+                                    )
+                                }
+                            }
                         }
                     }
+                    res.set_peer_info(pi);
+                    sub_service = true;
                 }
             }
             self.on_remote_authorized();
@@ -4788,6 +4838,10 @@ impl Connection {
         if let Ok(q) = o.disable_keyboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_keyboard = q == BoolOption::Yes;
+                #[cfg(target_os = "linux")]
+                if self.disable_keyboard {
+                    self.request_scroll_sequence_finish();
+                }
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,

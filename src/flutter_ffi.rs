@@ -1991,6 +1991,8 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
                 "up" => MOUSE_TYPE_UP,
                 "wheel" => MOUSE_TYPE_WHEEL,
                 "trackpad" => MOUSE_TYPE_TRACKPAD,
+                "trackpad_high_resolution" => MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION,
+                "trackpad_smooth" => MOUSE_TYPE_TRACKPAD_SMOOTH,
                 "move_relative" => MOUSE_TYPE_MOVE_RELATIVE,
                 _ => 0,
             };

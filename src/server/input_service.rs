@@ -501,8 +501,27 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScrollSequenceKind {
+    HighResolution,
+    Smooth,
+}
+
+#[cfg(target_os = "linux")]
+impl ScrollSequenceKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::HighResolution => "high-resolution",
+            Self::Smooth => "smooth",
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 lazy_static::lazy_static! {
     static ref WAYLAND_CLIPBOARD_INPUT_RECORDS: Arc<Mutex<Vec<(Instant, String)>>> =
+        Default::default();
+    static ref SCROLL_SEQUENCE_OWNER: Arc<Mutex<Option<(i32, ScrollSequenceKind)>>> =
         Default::default();
 }
 
@@ -529,6 +548,20 @@ fn is_relative_mouse_active(conn: i32) -> bool {
 #[inline]
 pub(crate) fn clear_relative_mouse_active(conn: i32) {
     set_relative_mouse_active(conn, false);
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn clear_scroll_sequence(conn: i32) {
+    let mut en = ENIGO.lock().unwrap();
+    let mut owner = SCROLL_SEQUENCE_OWNER.lock().unwrap();
+    let Some((active_conn, kind)) = *owner else {
+        return;
+    };
+    if active_conn != conn {
+        return;
+    }
+    finish_scroll_sequence(&mut en, kind);
+    *owner = None;
 }
 
 static EXITING: AtomicBool = AtomicBool::new(false);
@@ -660,7 +693,13 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 
     let keyboard = super::uinput::client::UInputKeyboard::new().await?;
     log::info!("UInput keyboard created");
-    let mouse = super::uinput::client::UInputMouse::new().await?;
+    let mut mouse = super::uinput::client::UInputMouse::new().await?;
+    if let Err(err) = mouse.enable_high_resolution_scroll().await {
+        log::warn!("High-resolution uinput scrolling is unavailable: {err}");
+    }
+    if let Err(err) = mouse.enable_smooth_scroll().await {
+        log::warn!("Smooth uinput scrolling is unavailable: {err}");
+    }
     log::info!("UInput mouse created");
 
     let mut en = ENIGO.lock().unwrap();
@@ -675,7 +714,7 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 }
 
 #[cfg(target_os = "linux")]
-pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
+pub async fn setup_rdp_input() -> ResultType<bool, Box<dyn std::error::Error>> {
     let mut en = ENIGO.lock()?;
     // Same as `setup_uinput`: the caller is gated on `wayland_use_rdp_input()`.
     en.set_is_x11(false);
@@ -700,9 +739,31 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
         )?;
         en.set_custom_mouse(Box::new(mouse));
         log::info!("RdpInput mouse created");
+        return Ok(en.supports_high_resolution_scroll());
     }
 
+    Ok(false)
+}
+
+#[cfg(target_os = "linux")]
+pub async fn setup_uinput_scroll() -> ResultType<()> {
+    let mut mouse = super::uinput::client::UInputMouse::new_high_resolution_scroll().await?;
+    if let Err(err) = mouse.enable_smooth_scroll().await {
+        log::warn!("Smooth uinput scrolling is unavailable: {err}");
+    }
+    log::info!("UInput high-resolution scroll mouse created");
+    ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn supports_high_resolution_scroll() -> bool {
+    ENIGO.lock().unwrap().supports_high_resolution_scroll()
+}
+
+#[cfg(target_os = "linux")]
+pub fn supports_smooth_scroll() -> bool {
+    ENIGO.lock().unwrap().supports_smooth_scroll()
 }
 
 #[cfg(target_os = "linux")]
@@ -1280,11 +1341,113 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION => {
+            handle_scroll_sequence(&mut en, evt, conn, ScrollSequenceKind::HighResolution)
+        }
+        #[cfg(target_os = "linux")]
+        MOUSE_TYPE_TRACKPAD_SMOOTH => {
+            handle_scroll_sequence(&mut en, evt, conn, ScrollSequenceKind::Smooth)
+        }
         _ => {}
     }
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
         en.key_up(key.clone());
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn inverted_scroll_delta(x: i32, y: i32) -> Option<(i32, i32)> {
+    Some((x.checked_neg()?, y.checked_neg()?))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn dispatch_inverted_scroll(
+    x: i32,
+    y: i32,
+    dispatch: impl FnOnce(i32, i32) -> enigo::ResultType,
+) -> Option<enigo::ResultType> {
+    let (x, y) = inverted_scroll_delta(x, y)?;
+    Some(dispatch(x, y))
+}
+
+#[cfg(target_os = "linux")]
+fn inject_scroll_sequence(
+    en: &mut Enigo,
+    kind: ScrollSequenceKind,
+    x: i32,
+    y: i32,
+) -> enigo::ResultType {
+    match kind {
+        ScrollSequenceKind::HighResolution => en.mouse_scroll_high_resolution(x, y),
+        ScrollSequenceKind::Smooth => en.mouse_scroll_smooth(x, y),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn handle_scroll_sequence(en: &mut Enigo, evt: &MouseEvent, conn: i32, kind: ScrollSequenceKind) {
+    let is_finish = evt.x == 0 && evt.y == 0;
+    let mut owner = SCROLL_SEQUENCE_OWNER.lock().unwrap();
+    if is_finish && *owner != Some((conn, kind)) {
+        return;
+    }
+    if !is_finish && *owner != Some((conn, kind)) {
+        if let Some((_, active_kind)) = *owner {
+            finish_scroll_sequence(en, active_kind);
+        }
+        *owner = Some((conn, kind));
+    }
+    match dispatch_inverted_scroll(evt.x, evt.y, |x, y| inject_scroll_sequence(en, kind, x, y)) {
+        None => {
+            finish_scroll_sequence(en, kind);
+            *owner = None;
+            log::error!(
+                "Rejected overflowing {} scroll delta ({}, {})",
+                kind.label(),
+                evt.x,
+                evt.y
+            );
+        }
+        Some(Err(err)) => {
+            finish_scroll_sequence(en, kind);
+            *owner = None;
+            log::error!("Failed to inject {} scroll: {err}", kind.label());
+        }
+        Some(Ok(())) if is_finish => *owner = None,
+        Some(Ok(())) => {}
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn finish_scroll_sequence(en: &mut Enigo, kind: ScrollSequenceKind) {
+    if let Err(err) = inject_scroll_sequence(en, kind, 0, 0) {
+        log::error!("Failed to finish {} scroll: {err}", kind.label());
+    }
+}
+
+#[cfg(test)]
+mod high_resolution_scroll_tests {
+    use super::{dispatch_inverted_scroll, inverted_scroll_delta};
+
+    #[test]
+    fn inverts_scroll_axes_without_overflow() {
+        let invert = inverted_scroll_delta;
+        assert_eq!(invert(12, -34), Some((-12, 34)));
+        assert_eq!(invert(i32::MIN, 0), None);
+        assert_eq!(invert(0, i32::MIN), None);
+    }
+
+    #[test]
+    fn dispatches_zero_delta() {
+        let mut dispatched = None;
+        let result = dispatch_inverted_scroll(0, 0, |x, y| {
+            dispatched = Some((x, y));
+            Ok(())
+        });
+
+        assert!(matches!(result, Some(Ok(()))));
+        assert_eq!(dispatched, Some((0, 0)));
     }
 }
 

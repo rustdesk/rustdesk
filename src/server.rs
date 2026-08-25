@@ -623,7 +623,13 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "linux")]
         if input_service::wayland_use_uinput() {
-            allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
+            if let Err(err) = input_service::setup_uinput(0, 1920, 0, 1080).await {
+                log::error!("Failed to initialize Wayland uinput: {err}");
+            }
+        } else if crate::platform::is_x11() && crate::platform::is_installed() {
+            if let Err(err) = input_service::setup_uinput_scroll().await {
+                log::error!("Failed to initialize X11 high-resolution scrolling: {err}");
+            }
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;

@@ -2700,12 +2700,14 @@ checksum = "a0474425d51df81997e2f90a21591180b38eccf27292d755f3e30750225c175b"
 
 [[package]]
 name = "evdev"
-version = "0.11.5"
-source = "git+https://github.com/rustdesk-org/evdev#cec616e37790293d2cd2aa54a96601ed6b1b35a9"
+version = "0.12.2"
+source = "git+https://github.com/rustdesk-org/evdev?branch=feat/led-key-stages-base-0.12.2#1a252cb1098ef56b6b1d093f6a4b00e12c733a17"
 dependencies = [
  "bitvec",
+ "cfg-if 1.0.0",
  "libc",
  "nix 0.23.2",
+ "thiserror 1.0.61",
 ]
 
 [[package]]

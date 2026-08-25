@@ -217,6 +217,28 @@ impl MouseControllable for Enigo {
             }
         }
     }
+    fn supports_high_resolution_scroll(&self) -> bool {
+        self.custom_mouse
+            .as_ref()
+            .map_or(false, |mouse| mouse.supports_high_resolution_scroll())
+    }
+    fn mouse_scroll_high_resolution(&mut self, x: i32, y: i32) -> crate::ResultType {
+        match &mut self.custom_mouse {
+            Some(mouse) => mouse.mouse_scroll_high_resolution(x, y),
+            None => Err("high-resolution scroll mouse is not configured".into()),
+        }
+    }
+    fn supports_smooth_scroll(&self) -> bool {
+        self.custom_mouse
+            .as_ref()
+            .map_or(false, |mouse| mouse.supports_smooth_scroll())
+    }
+    fn mouse_scroll_smooth(&mut self, x: i32, y: i32) -> crate::ResultType {
+        match &mut self.custom_mouse {
+            Some(mouse) => mouse.mouse_scroll_smooth(x, y),
+            None => Err("smooth scroll mouse is not configured".into()),
+        }
+    }
 }
 
 fn get_led_state(key: Key) -> bool {
@@ -423,6 +445,13 @@ fn test_custom_mouse_dispatch_follows_is_x11() {
         fn mouse_click(&mut self, _button: MouseButton) {}
         fn mouse_scroll_x(&mut self, _length: i32) {}
         fn mouse_scroll_y(&mut self, _length: i32) {}
+        fn supports_high_resolution_scroll(&self) -> bool {
+            true
+        }
+        fn mouse_scroll_high_resolution(&mut self, _x: i32, _y: i32) -> crate::ResultType {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
     }
 
     let calls = Arc::new(AtomicUsize::new(0));
@@ -444,5 +473,13 @@ fn test_custom_mouse_dispatch_follows_is_x11() {
         calls.load(Ordering::Relaxed),
         1,
         "custom mouse was reached on the x11 branch"
+    );
+
+    en.mouse_scroll_high_resolution(crate::HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP, 0)
+        .unwrap();
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        2,
+        "high-resolution scroll did not reach the custom mouse"
     );
 }
