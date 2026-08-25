@@ -6,8 +6,8 @@
 //
 // Deliberately conservative, because this writes to sysfs from the root service:
 //   - off unless the operator turns it on, on every build including the unattended one;
-//   - only a connector that currently reports no display is ever forced, on a card that has a
-//     render node, so the output is one a compositor can actually draw on;
+//   - only a connector that currently reports no display is ever forced, and only where a
+//     compositor can actually drive it (`promote_split_topology` for what that means per card);
 //   - an `edid_firmware` entry someone else configured is preserved, and if theirs already covers
 //     the connector we would have picked, we force nothing at all;
 //   - the release path gives back the connector this process forced, plus any connector still
@@ -73,8 +73,9 @@ struct Connector {
     connected: bool,
     /// The connector is reporting our own synthetic EDID, so this is one we forced.
     ours: bool,
-    /// Its card exposes a render node, so a compositor can actually draw on this device.
-    renderable: bool,
+    /// A compositor can actually drive this output: its card has a render node, or the whole
+    /// machine splits scanout and rendering between cards (`promote_split_topology`).
+    drivable: bool,
 }
 
 fn read_trim(p: &Path) -> Option<String> {
@@ -126,7 +127,7 @@ fn connectors() -> Vec<Connector> {
     }
     for (dir, sysfs, card, name) in raw {
         let connected = read_trim(&dir.join("status")).as_deref() == Some("connected");
-        let renderable = *renderable_cache
+        let drivable = *renderable_cache
             .entry(card)
             .or_insert_with_key(|c| card_is_renderable(c));
         out.push(Connector {
@@ -140,11 +141,35 @@ fn connectors() -> Vec<Connector> {
             name,
             sysfs,
             connected,
-            renderable,
+            drivable,
         });
     }
+    promote_split_topology(&mut out, system_has_render_node());
     out.sort_by(|a, b| a.sysfs.cmp(&b.sysfs));
     out
+}
+
+/// A Raspberry Pi-style SoC splits the work between two DRM devices: every connector sits on a
+/// display card with no render node (vc4) and the GPU has no connectors (v3d). There the
+/// display-only card is not a Touch Bar-like dead end but the machine's one scanout path, so as
+/// long as something in the system can render at all its connectors are drivable. On a machine
+/// where any connector already sits on a card with a render node this changes nothing.
+fn promote_split_topology(all: &mut [Connector], system_has_render_node: bool) {
+    if system_has_render_node && !all.iter().any(|c| c.drivable) {
+        for c in all.iter_mut() {
+            c.drivable = true;
+        }
+    }
+}
+
+fn system_has_render_node() -> bool {
+    std::fs::read_dir(DRM_CLASS)
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.file_name().to_string_lossy().starts_with("renderD"))
+        })
+        .unwrap_or(false)
 }
 
 /// True when nothing reports a display an operator could work on. A connector we forced does not
@@ -158,7 +183,7 @@ fn no_real_output(all: &[Connector]) -> bool {
 }
 
 fn is_real_output(c: &Connector) -> bool {
-    c.connected && !c.ours && c.renderable
+    c.connected && !c.ours && c.drivable
 }
 
 pub fn is_supported() -> bool {
@@ -469,7 +494,7 @@ fn pick_connector(all: &[Connector]) -> Option<&Connector> {
         *per_name.entry(c.name.as_str()).or_default() += 1;
     }
     let usable = |c: &&Connector| {
-        !c.connected && c.renderable && PREFERENCE.iter().any(|k| c.name.starts_with(k))
+        !c.connected && c.drivable && PREFERENCE.iter().any(|k| c.name.starts_with(k))
     };
     for kind in PREFERENCE {
         let mut of_kind: Vec<&Connector> = all
@@ -778,11 +803,7 @@ pub fn status_text(enabled: bool) -> String {
                 "disconnected"
             },
             if c.ours { " (rustdesk)" } else { "" },
-            if c.renderable {
-                ""
-            } else {
-                " (no render node)"
-            },
+            if c.drivable { "" } else { " (no render node)" },
         ));
     }
     s
@@ -928,13 +949,13 @@ mod tests {
             sysfs: sysfs.to_owned(),
             connected,
             ours,
-            renderable: true,
+            drivable: true,
         }
     }
 
     fn unrenderable(sysfs: &str, name: &str, connected: bool) -> Connector {
         Connector {
-            renderable: false,
+            drivable: false,
             ..c(sysfs, name, connected, false)
         }
     }
@@ -1032,7 +1053,7 @@ mod tests {
         // the feature must arm and pick an HDMI on a card something can render to.
         let mut all = macbook_pro_2018();
         for x in all.iter_mut() {
-            if x.renderable {
+            if x.drivable {
                 x.connected = false;
             }
         }
@@ -1040,6 +1061,58 @@ mod tests {
         assert_eq!(
             pick_connector(&all).map(|c| c.sysfs.as_str()),
             Some("card1-HDMI-A-1")
+        );
+    }
+
+    /// The measured topology of a Raspberry Pi 5 (Ubuntu 25.10, kernel 6.17): `card0` is the v3d
+    /// GPU with a render node and no connectors, `card1` is vc4 with every connector and no render
+    /// node. Nothing here owns both, which is what `promote_split_topology` exists for.
+    fn raspberry_pi_5(monitor_attached: bool) -> Vec<Connector> {
+        vec![
+            unrenderable("card1-HDMI-A-1", "HDMI-A-1", false),
+            unrenderable("card1-HDMI-A-2", "HDMI-A-2", monitor_attached),
+            unrenderable("card1-Writeback-1", "Writeback-1", false),
+            unrenderable("card1-Writeback-2", "Writeback-2", false),
+        ]
+    }
+
+    #[test]
+    fn a_split_soc_counts_its_display_card() {
+        // With a monitor attached the machine has real output and must be left alone.
+        let mut all = raspberry_pi_5(true);
+        promote_split_topology(&mut all, true);
+        assert!(!no_real_output(&all));
+        // Headless it arms, and the forceable connector is on the display-only card.
+        let mut all = raspberry_pi_5(false);
+        promote_split_topology(&mut all, true);
+        assert!(no_real_output(&all));
+        assert_eq!(
+            pick_connector(&all).map(|c| c.name.as_str()),
+            Some("HDMI-A-1")
+        );
+    }
+
+    #[test]
+    fn a_machine_with_no_render_node_at_all_is_not_promoted() {
+        let mut all = raspberry_pi_5(false);
+        promote_split_topology(&mut all, false);
+        assert!(pick_connector(&all).is_none());
+    }
+
+    #[test]
+    fn promotion_leaves_a_machine_with_hybrid_cards_alone() {
+        // The Touch Bar case: real GPUs own connectors here, so nothing gets promoted even in the
+        // arming state where every display is gone.
+        let mut all = macbook_pro_2018();
+        for x in all.iter_mut() {
+            if x.drivable {
+                x.connected = false;
+            }
+        }
+        promote_split_topology(&mut all, true);
+        assert!(
+            all.iter().any(|c| !c.drivable),
+            "the Touch Bar must stay display-only"
         );
     }
 
