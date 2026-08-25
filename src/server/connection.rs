@@ -103,9 +103,6 @@ lazy_static::lazy_static! {
 #[cfg(target_os = "windows")]
 const TERMINAL_OS_LOGIN_FAILED_MSG: &str = "Incorrect username or password.";
 
-#[cfg(windows)]
-const PRIVACY_MODE_LOCKED_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
-
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -4826,8 +4823,14 @@ impl Connection {
         }
 
         #[cfg(windows)]
-        if self.wait_unlocked_before_turn_on_privacy(&impl_key) {
-            return;
+        {
+            self.privacy_mode_locked_wait = crate::platform::privacy_mode_wait_unlocked(
+                &impl_key,
+                self.privacy_mode_locked_wait,
+            );
+            if self.privacy_mode_locked_wait.is_some() {
+                return;
+            }
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
@@ -4907,22 +4910,6 @@ impl Connection {
             }
         };
         self.send(msg_out).await;
-    }
-
-    #[cfg(windows)]
-    fn wait_unlocked_before_turn_on_privacy(&mut self, impl_key: &str) -> bool {
-        let waiting_since = self.privacy_mode_locked_wait.take();
-        if impl_key != privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
-            || !crate::platform::is_locked()
-        {
-            return false;
-        }
-        let waiting_since = waiting_since.unwrap_or_else(Instant::now);
-        if waiting_since.elapsed() >= PRIVACY_MODE_LOCKED_WAIT_TIMEOUT {
-            return false;
-        }
-        self.privacy_mode_locked_wait = Some(waiting_since);
-        true
     }
 
     #[cfg(windows)]

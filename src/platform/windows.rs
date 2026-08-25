@@ -1265,6 +1265,21 @@ pub fn is_locked() -> bool {
     unsafe { is_session_locked(session_id) == TRUE }
 }
 
+pub fn privacy_mode_wait_unlocked(
+    impl_key: &str,
+    waiting_since: Option<Instant>,
+) -> Option<Instant> {
+    const TIMEOUT: Duration = Duration::from_secs(15);
+    if impl_key != crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY || !is_locked() {
+        return None;
+    }
+    let waiting_since = waiting_since.unwrap_or_else(Instant::now);
+    if waiting_since.elapsed() >= TIMEOUT {
+        return None;
+    }
+    Some(waiting_since)
+}
+
 #[inline]
 pub fn is_logon_ui() -> ResultType<bool> {
     let Some(current_sid) = get_current_process_session_id() else {
