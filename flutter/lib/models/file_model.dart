@@ -50,6 +50,8 @@ typedef ReadRemoteDirectory = Future<void> Function(
     SessionID sessionId, String path, bool includeHidden);
 
 const _kRemoteReadDirTimeout = Duration(seconds: 30);
+const _kRemoteSessionChangedError =
+    'Remote directory read cancelled because the session changed';
 
 class FileModel {
   final WeakReference<FFI> parent;
@@ -88,6 +90,7 @@ class FileModel {
   }
 
   Future<void> onReady() async {
+    fileFetcher.beginRemoteSession();
     await evtLoop.onReady();
     if (!isWeb) await localController.onReady();
     await remoteController.onReady();
@@ -1396,6 +1399,7 @@ class FileFetcher {
   final Map<String, _RemoteReadTask> _remoteReadTasks = {};
   Map<String, Completer<List<FileDirectory>>> remoteEmptyDirsTasks = {};
   Map<int, Completer<FileDirectory>> readRecursiveTasks = {};
+  int _remoteSessionGeneration = 0;
 
   final GetSessionID getSessionID;
   final ReadRemoteDirectory _readRemoteDirectory;
@@ -1415,6 +1419,16 @@ class FileFetcher {
       (_remoteReadTasks.length == 1 &&
           hasPendingRemoteRead("") &&
           !hasPendingRemoteRead(path));
+
+  void beginRemoteSession() {
+    _remoteSessionGeneration++;
+    final pendingTasks = _remoteReadTasks.entries.toList(growable: false);
+    for (final entry in pendingTasks) {
+      final task = entry.value;
+      if (!_removeRemoteReadTask(entry.key, task)) continue;
+      task.completer.completeError(StateError(_kRemoteSessionChangedError));
+    }
+  }
 
   _RemoteReadTask _registerRemoteReadTask(String path, bool includeHidden) {
     if (hasPendingRemoteRead(path)) {
@@ -1570,12 +1584,16 @@ class FileFetcher {
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
+        final remoteSessionGeneration = _remoteSessionGeneration;
         final pendingTask = _remoteReadTasks[path];
         if (pendingTask != null) {
           if (pendingTask.includeHidden == showHidden) {
             return pendingTask.completer.future;
           }
           await pendingTask.released.future;
+          if (remoteSessionGeneration != _remoteSessionGeneration) {
+            throw StateError(_kRemoteSessionChangedError);
+          }
           return fetchDirectory(path, isLocal, showHidden);
         }
         final task = _registerRemoteReadTask(path, showHidden);
