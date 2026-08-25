@@ -173,7 +173,8 @@ fn drm_displays_from_reader(
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
-fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
+/// Third field: whether any device opened. An empty list with nothing probed is not evidence.
+fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, bool) {
     if let Some(devices) = scrap::drm_reader::list_devices() {
         if devices.len() > 1 {
             log::info!(
@@ -210,7 +211,7 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
         }
         // Take this even when the list is EMPTY: the fallback re-keys identities under `device = ""`.
         if any_opened {
-            return (all, undriven_total);
+            return (all, undriven_total, true);
         }
     }
     // Auto-detect alone is not enough: it picks a card that is SCANNING OUT. Measured on the T2 with
@@ -234,9 +235,11 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
     // Deterministic order, so the display list does not depend on directory order.
     paths.sort();
     let n_paths = paths.len();
+    let mut any_opened = false;
     for p in paths {
         let Some(path) = p.to_str() else { continue };
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(path), 0) {
+            any_opened = true;
             let (mut got, mut undriven) = drm_displays_from_reader(&mut r, path);
             all.append(&mut got);
             undriven_total.append(&mut undriven);
@@ -252,10 +255,11 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
     if all.is_empty() && undriven_total.is_empty() {
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
             log::info!("drm: no card enumerated by path; falling back to the auto-detected reader");
-            return drm_displays_from_reader(&mut r, "");
+            let (got, undriven) = drm_displays_from_reader(&mut r, "");
+            return (got, undriven, true);
         }
     }
-    (all, undriven_total)
+    (all, undriven_total, any_opened)
 }
 
 /// Connectors a wake did NOT bring back. SELF-REFUTING: an entry later seen DRIVEN is removed.
@@ -391,9 +395,21 @@ fn drm_wake_displays(reason: &str) -> bool {
 /// is no scanout now and there will not be one until an output exists, so capture silently falls
 /// back to the portal, which then asks for consent on a screen nobody can look at. Said on the
 /// edge rather than every poll.
-fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String]) {
+fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String], probed: bool) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static NO_OUTPUT: AtomicBool = AtomicBool::new(false);
+    static NO_PROBE: AtomicBool = AtomicBool::new(false);
+    // Nothing probed = every open failed, not a headless machine; do not advise a dummy plug.
+    if !probed {
+        if !NO_PROBE.swap(true, Ordering::Relaxed) {
+            log::warn!(
+                "drm: no DRM device could be opened, so display presence is unknown (each open \
+                 logged its own error above)"
+            );
+        }
+        return;
+    }
+    NO_PROBE.store(false, Ordering::Relaxed);
     let none = displays.is_empty() && undriven.is_empty();
     if none != NO_OUTPUT.swap(none, Ordering::Relaxed) {
         if none {
@@ -410,8 +426,8 @@ fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String]) {
 
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
-    let (displays, undriven) = drm_enumerate_all_displays();
-    note_output_presence(&displays, &undriven);
+    let (displays, undriven, probed) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, probed);
     if !undriven.is_empty() {
         log::debug!(
             "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
@@ -427,8 +443,8 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
-    let (displays, undriven) = drm_enumerate_all_displays();
-    note_output_presence(&displays, &undriven);
+    let (displays, undriven, probed) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, probed);
     if !hbb_common::config::Config::get_bool_option(OPTION_ENABLE_DRM_DISPLAY_WAKE) {
         if !undriven.is_empty() {
             log::info!(
@@ -464,7 +480,7 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     let mut cur_wakeable = wakeable;
     while !cur_wakeable.is_empty() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let (next, next_undriven) = drm_enumerate_all_displays();
+        let (next, next_undriven, _) = drm_enumerate_all_displays();
         cur_wakeable = drm_wakeable_undriven(&next, &next_undriven);
         cur = next;
     }
@@ -541,7 +557,7 @@ fn schedule_drm_cache_refresh() {
             let fresh = std::panic::catch_unwind(drm_enumerate_all_displays)
                 .unwrap_or_else(|_| {
                     log::error!("drm: display enumeration panicked; treating as no displays");
-                    (Vec::new(), Vec::new())
+                    (Vec::new(), Vec::new(), false)
                 })
                 .0;
             let changed = {
