@@ -185,6 +185,14 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 let is_secured = peer.is_secured();
+                // Only WebRTC needs refining: its label names the transport that won the race,
+                // not the family ICE ended up nominating, and it is the one path where the two
+                // can disagree with the address the rendezvous observed.
+                let stream_type = if peer.webrtc_remote_ipv6().await.unwrap_or(false) {
+                    "WebRTC/IPv6"
+                } else {
+                    stream_type
+                };
                 self.handler
                     .set_connection_type(is_secured, direct, stream_type); // flutter -> connection_ready
                 if !is_secured
