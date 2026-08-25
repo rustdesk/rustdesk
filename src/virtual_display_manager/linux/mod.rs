@@ -105,11 +105,11 @@ fn connectors() -> Vec<Connector> {
     // One render-node lookup per card, not per connector: a machine with eight connectors on one
     // card would otherwise walk the same directory eight times every poll.
     let mut renderable_cache: HashMap<String, bool> = HashMap::new();
-    // Ownership cannot rest on the EDID alone. If the kernel forced the connector on but never
-    // loaded the override, the connector reads `connected` with somebody else's EDID or none, and
-    // treating that as a display the operator plugged in leaves the feature inert while holding a
-    // connector it can no longer manage. Our own `edid_firmware` entry names it either way.
     let named = connectors_named_by_our_entries();
+    // Two passes, because the name fallback needs to know whether a name is unique in the topology
+    // before trusting it (`connector_is_ours`).
+    let mut raw = Vec::new();
+    let mut name_count: HashMap<String, usize> = HashMap::new();
     for e in entries.flatten() {
         let dir = e.path();
         let sysfs = e.file_name().to_string_lossy().into_owned();
@@ -121,6 +121,10 @@ fn connectors() -> Vec<Connector> {
             Some((card, name)) => (card.to_owned(), name.to_owned()),
             None => continue,
         };
+        *name_count.entry(name.clone()).or_default() += 1;
+        raw.push((dir, sysfs, card, name));
+    }
+    for (dir, sysfs, card, name) in raw {
         let connected = read_trim(&dir.join("status")).as_deref() == Some("connected");
         let renderable = *renderable_cache
             .entry(card)
@@ -131,6 +135,7 @@ fn connectors() -> Vec<Connector> {
                 &std::fs::read(dir.join("edid")).unwrap_or_default(),
                 &name,
                 &named,
+                name_count.get(&name).copied().unwrap_or(1) == 1,
             ),
             name,
             sysfs,
@@ -288,8 +293,17 @@ fn detailed_timing_1080p() -> [u8; 18] {
 /// loading our override - in which case the connector reads `connected` carrying nothing of ours,
 /// and calling that a display the operator plugged in would leave the feature inert while still
 /// holding a connector it can no longer release.
-fn connector_is_ours(connected: bool, edid: &[u8], name: &str, named: &[String]) -> bool {
-    connected && (edid_bytes_are_ours(edid) || named.iter().any(|n| n == name))
+///
+/// The name fallback only counts when the name is unique in the topology: with a DP-1 on two cards,
+/// claiming both would hide a real display behind our own and the release would never fire.
+fn connector_is_ours(
+    connected: bool,
+    edid: &[u8],
+    name: &str,
+    named: &[String],
+    name_unique: bool,
+) -> bool {
+    connected && (edid_bytes_are_ours(edid) || (name_unique && named.iter().any(|n| n == name)))
 }
 
 #[allow(dead_code)]
@@ -879,15 +893,20 @@ mod tests {
         let named = vec!["HDMI-A-1".to_owned()];
 
         // The ordinary case: our EDID came back, and the name is not even needed.
-        assert!(connector_is_ours(true, &mine, "HDMI-A-1", &[]));
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", &[], true));
         // The case this exists for: forced on, override never loaded, so the connector reports
         // nothing of ours. Only our own edid_firmware entry still names it.
-        assert!(connector_is_ours(true, &[], "HDMI-A-1", &named));
+        assert!(connector_is_ours(true, &[], "HDMI-A-1", &named, true));
         // A real monitor on a connector we never named is never ours, either way round.
-        assert!(!connector_is_ours(true, &[], "DP-2", &named));
-        assert!(!connector_is_ours(true, &[], "DP-2", &[]));
+        assert!(!connector_is_ours(true, &[], "DP-2", &named, true));
+        assert!(!connector_is_ours(true, &[], "DP-2", &[], true));
         // And a disconnected connector is nobody's, whatever the parameter says.
-        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", &named));
+        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", &named, true));
+        // A duplicated name claims nothing by name alone: with DP-1 on two cards, the fallback
+        // would mark both ours and a real display behind one of them would never release ours.
+        assert!(!connector_is_ours(true, &[], "HDMI-A-1", &named, false));
+        // The EDID still decides when it does read back, duplicated name or not.
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", &named, false));
     }
 
     #[test]
