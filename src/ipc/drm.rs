@@ -112,8 +112,7 @@ enum DrmProducerMsg {
         hot_from_property: bool,
         colors: Vec<u8>,
     },
-    /// Cursor plane position while visible: every capture tick through a transition and the
-    /// consumer's settle window, one tick in eight once still (see `Data::DrmCursorPos`).
+    /// Cursor plane position while visible; the cadence contract is on `Data::DrmCursorPos`.
     CursorPos { x: i32, y: i32 },
 }
 
