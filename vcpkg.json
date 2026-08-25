@@ -26,10 +26,6 @@
       "platform": "windows & arm64"
     },
     {
-      "name": "oboe",
-      "platform": "android"
-    },
-    {
       "name": "opus",
       "host": true
     },
@@ -91,7 +87,7 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "120deac3062162151622ca4860575a33844ba10b"
+      "baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
     },
     "overlay-ports": [
       "./res/vcpkg"
