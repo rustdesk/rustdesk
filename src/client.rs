@@ -855,25 +855,33 @@ impl Client {
             .map(|(socket, addr)| (Some(socket), Some(addr)))
             .unwrap_or((None, None));
         let udp_nat_port = udp.1.map(|x| *x.lock().unwrap()).unwrap_or(0);
-        let webrtc_sdp_offer =
-            if let Some(stream) = webrtc_offerer.as_ref().and_then(|g| g.stream()) {
-                match stream.get_local_endpoint_trickle().await {
-                    Ok(endpoint) => endpoint,
-                    Err(err) => {
-                        log::warn!("failed to read local WebRTC offer: {}", err);
-                        String::new()
-                    }
-                }
-            } else {
-                String::new()
-            };
+        let webrtc_sdp_offer = webrtc_offerer
+            .as_ref()
+            .and_then(|g| g.stream())
+            .map(|stream| stream.local_endpoint().to_owned())
+            .unwrap_or_default();
         let allow_tcp_punch = tcp_punch_allowed() && request_allows_tcp_punch(&webrtc_sdp_offer);
-        let punch_type = if udp_nat_port > 0 {
-            "UDP"
-        } else if allow_tcp_punch {
-            "TCP"
+        // Every direct transport this round carries, not one of them: a round can carry several
+        // at once (a NAT port and an offer and a v6 address), and since the TCP punch became a
+        // switch it can carry none — a single name had to misreport both. `relay` is not a punch,
+        // it is what a round with nothing to punch with can still end as.
+        let mut transports = Vec::new();
+        if udp_nat_port > 0 {
+            transports.push("UDP");
+        }
+        if allow_tcp_punch {
+            transports.push("TCP");
+        }
+        if ipv6.1.is_some() {
+            transports.push("IPv6");
+        }
+        if !webrtc_sdp_offer.is_empty() {
+            transports.push("WebRTC");
+        }
+        let punch_type = if transports.is_empty() {
+            "Relay".to_owned()
         } else {
-            "WebRTC"
+            transports.join("+")
         };
         msg_out.set_punch_hole_request(PunchHoleRequest {
             id: peer.to_owned(),
@@ -889,7 +897,7 @@ impl Client {
             // The offer's envelope itself declares its ICE policy (`ice_policy: "all"` under
             // pure ws), telling the controlled side its answer may gather every candidate
             // type despite force_relay instead of requiring TURN.
-            webrtc_sdp_offer: webrtc_sdp_offer.clone(),
+            webrtc_sdp_offer,
             ..Default::default()
         });
         let webrtc_session_key = webrtc_offerer
@@ -1310,7 +1318,7 @@ impl Client {
                 webrtc_for_connect,
                 webrtc_bridge_stop,
                 allow_tcp_punch,
-                punch_type,
+                &punch_type,
             )
             .await?,
             (feedback, rendezvous_server),

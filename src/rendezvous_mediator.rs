@@ -700,14 +700,7 @@ impl RendezvousMediator {
     ) -> ResultType<String> {
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
-        let answer = match stream.get_local_endpoint_trickle().await {
-            Ok(answer) => answer,
-            Err(e) => {
-                // Close the freshly-created pc so a failure here doesn't leak it in SESSIONS.
-                stream.close().await;
-                return Err(e);
-            }
-        };
+        let answer = stream.local_endpoint().to_owned();
         let session_key = stream.session_key().to_owned();
         let return_route = ph.socket_addr.clone();
 
