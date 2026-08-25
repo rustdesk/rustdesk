@@ -2466,16 +2466,17 @@ pub fn is_udp_disabled() -> bool {
 /// without a shaped link, so keep what users run today.
 #[inline]
 pub fn get_kcp_cc_enabled() -> bool {
-    Config::get_option(keys::OPTION_ENABLE_KCP_CC) == "Y"
+    let k = keys::OPTION_ALLOW_KCP_CC;
+    config::option2bool(k, &Config::get_option(k))
 }
 
 // this crate https://github.com/yoshd/stun-client supports nat type
-async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
+async fn stun_ipv6_test(stun_server: String) -> ResultType<(SocketAddr, String)> {
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(&local_addr).await?;
     // Resolve via tokio so DNS never blocks the async runtime worker.
-    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
+    let Some(stun_addr) = tokio::net::lookup_host(&stun_server)
         .await?
         .find(|x| x.is_ipv6())
     else {
@@ -2487,79 +2488,36 @@ async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
     let client = StunClient::new(stun_addr);
     let addr = client.query_external_address_async(&socket).await?;
     Ok(if addr.ip().is_ipv6() {
-        (addr, stun_server.to_owned())
+        (addr, stun_server)
     } else {
         bail!("STUN server returned non-IPv6 address: {}", addr)
     })
 }
 
-async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use stunclient::StunClient;
-    let local_addr = SocketAddr::from(([0u8; 4], 0));
-    let socket = UdpSocket::bind(&local_addr).await?;
-    // Resolve via tokio so DNS never blocks the async runtime worker.
-    let Some(stun_addr) = tokio::net::lookup_host(stun_server)
-        .await?
-        .find(|x| x.is_ipv4())
-    else {
-        bail!(
-            "Failed to resolve STUN ipv4 server address: {}",
-            stun_server
-        );
-    };
-    let client = StunClient::new(stun_addr);
-    let addr = client.query_external_address_async(&socket).await?;
-    Ok(if addr.ip().is_ipv4() {
-        (addr, stun_server.to_owned())
-    } else {
-        bail!("STUN server returned non-IPv4 address: {}", addr)
-    })
-}
-
-static STUNS_V4: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-static STUNS_V6: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
-    use hbb_common::futures::future::{select_ok, FutureExt};
-    let tests = STUNS_V4
-        .iter()
-        .map(|&stun| stun_ipv4_test(stun).boxed())
-        .collect::<Vec<_>>();
-
-    match select_ok(tests).await {
-        Ok(res) => {
-            return Ok(res.0);
-        }
-        Err(e) => {
-            bail!(
-                "Failed to get public IPv4 address via public STUN servers: {}",
-                e
-            );
-        }
-    };
-}
-
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
+    use hbb_common::futures::future::FutureExt;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    let addr = tokio::net::lookup_host(STUNS_V6[0])
-        .await?
-        .find(|x| x.is_ipv6())
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to resolve STUN ipv6 server address: {}",
-                STUNS_V6[0]
-            )
-        })?;
+    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so any
+    // resolvable target answers equally and the whole cost is DNS. Race the lookups rather than
+    // walk them: this is awaited inline on the connection path, not every STUN host publishes a
+    // AAAA, and one resolver that hangs must not decide whether this host has v6.
+    let lookups = hbb_common::webrtc::WebRTCStream::default_stun_servers()
+        .into_iter()
+        .map(|stun| {
+            (async move {
+                let addr = tokio::net::lookup_host(&stun)
+                    .await?
+                    .find(|x| x.is_ipv6())
+                    .ok_or_else(|| {
+                        anyhow!("Failed to resolve STUN ipv6 server address: {}", stun)
+                    })?;
+                Ok::<SocketAddr, hbb_common::anyhow::Error>(addr)
+            })
+            .boxed()
+        })
+        .collect::<Vec<_>>();
+    let (addr, _) = hbb_common::futures::future::select_ok(lookups).await?;
     socket.connect(addr).await?;
     Ok(socket.local_addr()?)
 }
@@ -2626,9 +2584,9 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
 
     Some(tokio::spawn(async {
         use hbb_common::futures::future::{select_ok, FutureExt};
-        let tests = STUNS_V6
-            .iter()
-            .map(|&stun| stun_ipv6_test(stun).boxed())
+        let tests = hbb_common::webrtc::WebRTCStream::default_stun_servers()
+            .into_iter()
+            .map(|stun| stun_ipv6_test(stun).boxed())
             .collect::<Vec<_>>();
 
         match select_ok(tests).await {
