@@ -52,12 +52,16 @@ impl FrameSlot {
     }
 }
 
+/// `Shared.transform` before new() stores the real value: a cursor arriving this early is held
+/// back and replayed once the session transform is in, because the producer will not resend it
+/// until the shape changes.
+const TRANSFORM_PENDING: i32 = i32::MIN;
+
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
-    // Session transform, written once by new() post-handshake; the receive thread turns cursor
-    // bitmaps with it. Cursor data racing the store (up to a cold enumeration, seconds) rotates
-    // as 0 and self-corrects on the next shape change.
+    // Session transform, TRANSFORM_PENDING until new() stores it post-handshake; the receive
+    // thread turns cursor bitmaps with it and defers any cursor that races the store.
     transform: std::sync::atomic::AtomicI32,
 }
 
@@ -306,7 +310,7 @@ impl IpcDrmCapturer {
                 ended: None,
             }),
             cv: Condvar::new(),
-            transform: std::sync::atomic::AtomicI32::new(0),
+            transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -609,9 +613,20 @@ async fn recv_thread(
     }
     let _ = tx.send(Ok((displays, wire_idx)));
 
+    // A cursor that arrived before new() stored the session transform, held for replay. Only the
+    // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
+    let mut pending_cursor: Option<(u64, u32, u32, i32, i32, Vec<u8>)> = None;
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
+        }
+        if pending_cursor.is_some() {
+            let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+            if t != TRANSFORM_PENDING {
+                if let Some((id, width, height, hotx, hoty, raw)) = pending_cursor.take() {
+                    deliver_drm_cursor(display, cursor_epoch, id, width, height, hotx, hoty, raw, t);
+                }
+            }
         }
         let (msg, recv_fd) = match conn.recv_msg_timeout2(200).await {
             None => continue, // timeout: re-check stop at the loop top
@@ -729,31 +744,23 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        // The compositor pre-rotates the bitmap it programs into the cursor
-                        // plane; over the unrotated video the cursor alone would stay turned and
-                        // its hotspot transposed (review finding 11 on rustdesk#15889).
                         let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
-                        let (width, height, hotx, hoty, colors) = if t == 90 || t == 270 {
-                            let mut turned = Vec::new();
-                            unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
-                            let (hx, hy) =
-                                unrotate_hotspot(t, width as i32, height as i32, hotx, hoty);
-                            (height as i32, width as i32, hx, hy, turned)
+                        if t == TRANSFORM_PENDING {
+                            pending_cursor = Some((id, width, height, hotx, hoty, raw));
                         } else {
-                            (width as i32, height as i32, hotx, hoty, raw)
-                        };
-                        set_drm_cursor(
-                            display,
-                            cursor_epoch,
-                            DrmCursorData {
+                            pending_cursor = None;
+                            deliver_drm_cursor(
+                                display,
+                                cursor_epoch,
                                 id,
                                 width,
                                 height,
                                 hotx,
                                 hoty,
-                                colors,
-                            },
-                        );
+                                raw,
+                                t,
+                            );
+                        }
                     }
                     Ok(Err(err)) => break format!("cursor body: {err}"),
                 }
@@ -876,6 +883,56 @@ fn remove_drm_cursor(display: i32, epoch: u64) {
     let mut map = DRM_CURSOR.lock().unwrap();
     if map.get(&display).map(|(e, _)| *e) == Some(epoch) {
         map.remove(&display);
+    }
+}
+
+/// Unrotate a wire cursor into the session orientation and publish it. The compositor
+/// pre-rotates the bitmap it programs into the cursor plane, so over the unrotated video the
+/// cursor alone would stay turned and its hotspot transposed (review finding 11 on
+/// rustdesk#15889). The wire id hashes only the plane pixels and geometry, so a stream rebuilt
+/// under a new transform resends the SAME id and the client's by-id cursor cache would keep the
+/// old orientation: fold the transform in (the producer's own FNV step) so id and orientation
+/// can never disagree. The hidden sentinel must survive untouched.
+#[allow(clippy::too_many_arguments)]
+fn deliver_drm_cursor(
+    display: i32,
+    cursor_epoch: u64,
+    id: u64,
+    width: u32,
+    height: u32,
+    hotx: i32,
+    hoty: i32,
+    raw: Vec<u8>,
+    t: i32,
+) {
+    let (width, height, hotx, hoty, colors) = if t == 90 || t == 270 {
+        let mut turned = Vec::new();
+        unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
+        let (hx, hy) = unrotate_hotspot(t, width as i32, height as i32, hotx, hoty);
+        (height as i32, width as i32, hx, hy, turned)
+    } else {
+        (width as i32, height as i32, hotx, hoty, raw)
+    };
+    let id = fold_cursor_id(id, t);
+    set_drm_cursor(
+        display,
+        cursor_epoch,
+        DrmCursorData {
+            id,
+            width,
+            height,
+            hotx,
+            hoty,
+            colors,
+        },
+    );
+}
+
+fn fold_cursor_id(id: u64, t: i32) -> u64 {
+    if id == scrap::drm_reader::HIDDEN_CURSOR_ID {
+        id
+    } else {
+        (id ^ t as u32 as u64).wrapping_mul(1099511628211)
     }
 }
 
@@ -1712,6 +1769,20 @@ mod drm_capturer_tests {
         (0..h)
             .map(|y| (0..w).map(|x| buf[(y * w + x) * 4]).collect())
             .collect()
+    }
+
+    #[test]
+    fn the_cursor_id_names_the_orientation_too() {
+        // Same wire cursor under two transforms must publish as two ids, or the client's by-id
+        // cache serves the previous orientation after a mid-session rotation.
+        let wire = 0xDEAD_BEEF_u64;
+        assert_ne!(fold_cursor_id(wire, 0), fold_cursor_id(wire, 90));
+        assert_ne!(fold_cursor_id(wire, 90), fold_cursor_id(wire, 270));
+        // Deterministic per (id, transform), so an unchanged cursor is still deduped.
+        assert_eq!(fold_cursor_id(wire, 90), fold_cursor_id(wire, 90));
+        // The hidden sentinel is compared by VALUE at the consumers, so it must pass unfolded.
+        let hidden = scrap::drm_reader::HIDDEN_CURSOR_ID;
+        assert_eq!(fold_cursor_id(hidden, 90), hidden);
     }
 
     #[test]
