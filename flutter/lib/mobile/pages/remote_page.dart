@@ -541,6 +541,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       inputModel: inputModel,
       onPointerDown: (_) {
         if (!keyboardVisibilityController.isVisible &&
+            !_mobileFocusNode.hasFocus &&
             !_physicalFocusNode.hasFocus) {
           _physicalFocusNode.requestFocus();
         }
