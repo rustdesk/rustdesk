@@ -1192,11 +1192,11 @@ async fn udp_nat_listen(
     let socket_cloned = socket.clone();
     let func = async {
         socket.connect(peer_addr).await?;
-        let res = crate::punch_udp(socket.clone(), true).await?;
+        let init_packet = crate::punch_udp(socket.clone(), true).await?;
         let stream = crate::kcp_stream::KcpStream::accept(
             socket,
             Duration::from_millis(CONNECT_TIMEOUT as _),
-            res,
+            init_packet,
         )
         .await?;
         crate::server::create_tcp_connection(server, stream.1, peer_addr_v4, true, meta).await?;
