@@ -222,8 +222,8 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
 # IPv6. The fork commit carries the arithmetic.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "0a84ba37fbca940b82f230fb469d1b3a3172abf6" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "0a84ba37fbca940b82f230fb469d1b3a3172abf6" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
