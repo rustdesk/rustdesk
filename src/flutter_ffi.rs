@@ -2197,6 +2197,15 @@ pub fn cm_close_connection(conn_id: i32) {
     crate::ui_cm_interface::close(conn_id);
 }
 
+/// The CM window closed. On Linux that is ambiguous - a logout closes it the same way a person
+/// does - so it ends the session without the no-retry reason; elsewhere it is a plain close.
+pub fn cm_close_connection_window(conn_id: i32) {
+    #[cfg(target_os = "linux")]
+    crate::ui_cm_interface::close_window(conn_id);
+    #[cfg(all(not(target_os = "linux"), not(target_os = "ios")))]
+    crate::ui_cm_interface::close(conn_id);
+}
+
 pub fn cm_remove_disconnected_connection(conn_id: i32) {
     #[cfg(not(any(target_os = "ios")))]
     crate::ui_cm_interface::remove(conn_id);

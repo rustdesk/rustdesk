@@ -501,6 +501,15 @@ pub enum Data {
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    /// CM -> server: the connection manager's WINDOW went away, which is not the same event
+    /// as the operator disconnecting a peer. Linux only, and deliberately: there a session
+    /// logout closes every window, and the close arrives at the CM indistinguishable from a
+    /// person clicking it - measured on KDE, the CM gets no signal and logind still reports the
+    /// session active. So the ambiguous case ends the session WITHOUT the no-retry reason and
+    /// the peer is allowed to reconnect (landing on the greeter after a logout), while the
+    /// explicit Disconnect button keeps sending `Close` and kicking for good.
+    #[cfg(target_os = "linux")]
+    CmWindowClosed,
     // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
     // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
     // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the

@@ -642,6 +642,18 @@ impl Connection {
                             conn.on_close("connection manager", true).await;
                             break;
                         }
+                        // The connection manager's window went away rather than a person
+                        // disconnecting this peer. End the session exactly as above, but do not
+                        // send the manual close reason: it is the one thing that stops the peer
+                        // from retrying, and on a logout the retry is the whole point - it is
+                        // what puts the peer back on the login screen a moment later.
+                        #[cfg(target_os = "linux")]
+                        ipc::Data::CmWindowClosed => {
+                            conn.chat_unanswered = false; // seen
+                            conn.file_transferred = false; //seen
+                            conn.on_close("connection manager window closed", true).await;
+                            break;
+                        }
                         ipc::Data::CmErr(e) => {
                             if e != "expected" {
                                 // cm closed before connection
@@ -1200,6 +1212,13 @@ impl Connection {
                         match data {
                             ipc::Data::Close => {
                                 bail!("Close requested from connection manager");
+                            }
+                            // Same end as above: a tunnel must not outlive the window either.
+                            // Only the reason differs, and a port forward carries none - the
+                            // peer sees the tunnel drop and decides for itself.
+                            #[cfg(target_os = "linux")]
+                            ipc::Data::CmWindowClosed => {
+                                bail!("Connection manager window closed");
                             }
                             ipc::Data::CmErr(e) => {
                                 log::error!("Connection manager error: {e}");
