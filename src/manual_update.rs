@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use hbb_common::anyhow::Context;
+use hbb_common::{anyhow::Context, log};
 use hbb_common::{bail, ResultType};
 #[cfg(target_os = "macos")]
 use std::{io::Read, path::Path};
