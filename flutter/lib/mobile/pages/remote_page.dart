@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -272,7 +273,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       });
     }
     // update for Scaffold
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _handleIOSSoftKeyboardInput(String newValue) {
@@ -1147,18 +1150,92 @@ class ImagePaint extends StatelessWidget {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
-    if (ffiModel.isPeerLinux) {
-      final displays = ffiModel.pi.getCurDisplays();
-      if (displays.isNotEmpty) {
-        s = s / displays[0].scale;
+    final adjust = c.getAdjustY();
+    final cur = ffiModel.pi.currentDisplay;
+
+    if (cur == kAllDisplayValue) {
+      final rect = ffiModel.rect;
+      if (rect == null) return Container();
+      return CustomPaint(
+        painter: MultiDisplaysImagePainter(
+          images: m.images,
+          displays: ffiModel.pi.displays,
+          rect: rect,
+          x: c.x / s,
+          y: (c.y + adjust) / s,
+          scale: s,
+          isPeerLinux: ffiModel.isPeerLinux,
+        ),
+      );
+    } else {
+      if (ffiModel.isPeerLinux) {
+        final displays = ffiModel.pi.getCurDisplays();
+        if (displays.isNotEmpty) {
+          s = s / displays[0].scale;
+        }
+      }
+      return CustomPaint(
+        painter: ImagePainter(
+            image: m.getImage(cur) ?? m.image,
+            x: c.x / s,
+            y: (c.y + adjust) / s,
+            scale: s),
+      );
+    }
+  }
+}
+
+class MultiDisplaysImagePainter extends CustomPainter {
+  MultiDisplaysImagePainter({
+    required this.images,
+    required this.displays,
+    required this.rect,
+    required this.x,
+    required this.y,
+    required this.scale,
+    this.isPeerLinux = false,
+  });
+
+  final Map<int, ui.Image> images;
+  final List<Display> displays;
+  final Rect rect;
+  final double x;
+  final double y;
+  final double scale;
+  final bool isPeerLinux;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (x.isNaN || y.isNaN) return;
+    canvas.scale(scale, scale);
+    var paint = Paint();
+    if ((scale - 1.0).abs() > 0.001) {
+      paint.filterQuality = FilterQuality.medium;
+      if (scale > 10.00000) {
+        paint.filterQuality = FilterQuality.high;
       }
     }
-    final adjust = c.getAdjustY();
-    return CustomPaint(
-      painter: ImagePainter(
-          image: m.image, x: c.x / s, y: (c.y + adjust) / s, scale: s),
-    );
+    if (isWeb) {
+      paint.filterQuality = FilterQuality.high;
+    }
+
+    for (var i = 0; i < displays.length; i++) {
+      final img = images[i];
+      if (img == null) continue;
+      final display = displays[i];
+      final dx = x + (display.x - rect.left);
+      final dy = y + (display.y - rect.top);
+      try {
+        canvas.drawImage(
+            img, Offset(dx.toInt().toDouble(), dy.toInt().toDouble()), paint);
+      } catch (e) {
+        // ignore
+      }
+    }
   }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }
 
 class CursorPaint extends StatelessWidget {
@@ -1222,7 +1299,6 @@ void showOptions(
   }
   final privacyModeState = PrivacyModeState.find(id);
   if (pi.displays.length > 1 &&
-      pi.currentDisplay != kAllDisplayValue &&
       (privacyModeState.isEmpty ||
           allowDisplaySwitchInPrivacyMode(pi, privacyModeState.value))) {
     final cur = pi.currentDisplay;
@@ -1256,6 +1332,24 @@ void showOptions(
                               i == cur ? numColorSelected : numColorUnselected,
                           fontWeight: FontWeight.bold))))));
     }
+    final isAll = cur == kAllDisplayValue;
+    children.add(InkWell(
+        onTap: () {
+          if (isAll) return;
+          openMonitorInTheSameTab(kAllDisplayValue, gFFI, pi);
+          gFFI.dialogManager.dismissAll();
+        },
+        child: Ink(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).hintColor),
+                borderRadius: BorderRadius.circular(2),
+                color: isAll ? numBgSelected : null),
+            child: Center(
+                child: Icon(Icons.grid_view_rounded,
+                    size: 20,
+                    color: isAll ? numColorSelected : numColorUnselected)))));
     displays.add(Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(

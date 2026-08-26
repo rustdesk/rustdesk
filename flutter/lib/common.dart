@@ -379,7 +379,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -410,7 +410,7 @@ class MyTheme {
     cardColor: grayBg,
     hintColor: Color(0xFFAAAAAA),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: Colors.black87,
     ),
     tooltipTheme: tooltipTheme(),
@@ -477,7 +477,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -511,7 +511,7 @@ class MyTheme {
     ),
     cardColor: Color(0xFF24252B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: Colors.white70,
     ),
     tooltipTheme: tooltipTheme(),
@@ -3415,7 +3415,7 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
   // 4. Switch to multi-displays `kAllDisplayValue`
   // 5. Switch to Display 2.
   // Then the remote page will display last picture of Display 1 at the beginning.
-  if (pi.forceTextureRender && i != kAllDisplayValue) {
+  if (isDesktop && pi.forceTextureRender && i != kAllDisplayValue) {
     ffi.imageModel.clearImage();
   }
   bind.sessionSwitchDisplay(
@@ -3425,6 +3425,7 @@ openMonitorInTheSameTab(int i, FFI ffi, PeerInfo pi,
   );
   ffi.ffiModel.switchToNewDisplay(i, ffi.sessionId, ffi.id,
       updateCursorPos: updateCursorPos);
+  sessionRefreshVideo(ffi.sessionId, pi);
 }
 
 // Open new tab or window to show this monitor.

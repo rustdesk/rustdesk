@@ -567,9 +567,13 @@ class ImagePaint extends StatelessWidget {
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
     final adjust = c.getAdjustY();
+    final cur = gFFI.ffiModel.pi.currentDisplay;
     return CustomPaint(
       painter: ImagePainter(
-          image: m.image, x: c.x / s, y: (c.y + adjust) / s, scale: s),
+          image: m.getImage(cur) ?? m.image,
+          x: c.x / s,
+          y: (c.y + adjust) / s,
+          scale: s),
     );
   }
 }
@@ -582,7 +586,7 @@ void showOptions(
   if (image != null) {
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   }
-  if (pi.displays.length > 1 && pi.currentDisplay != kAllDisplayValue) {
+  if (pi.displays.length > 1) {
     final cur = pi.currentDisplay;
     final children = <Widget>[];
     final isDarkTheme = MyTheme.currentThemeMode() == ThemeMode.dark;
@@ -614,6 +618,24 @@ void showOptions(
                               i == cur ? numColorSelected : numColorUnselected,
                           fontWeight: FontWeight.bold))))));
     }
+    final isAll = cur == kAllDisplayValue;
+    children.add(InkWell(
+        onTap: () {
+          if (isAll) return;
+          openMonitorInTheSameTab(kAllDisplayValue, gFFI, pi);
+          gFFI.dialogManager.dismissAll();
+        },
+        child: Ink(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).hintColor),
+                borderRadius: BorderRadius.circular(2),
+                color: isAll ? numBgSelected : null),
+            child: Center(
+                child: Icon(Icons.grid_view_rounded,
+                    size: 20,
+                    color: isAll ? numColorSelected : numColorUnselected)))));
     displays.add(Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(

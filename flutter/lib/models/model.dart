@@ -845,7 +845,9 @@ class FfiModel with ChangeNotifier {
     newDisplay._scale = _pi.scaleOfDisplay(display);
     _pi.displays[display] = newDisplay;
 
-    if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
+    if (!_pi.isSupportMultiUiSession ||
+        _pi.currentDisplay == display ||
+        _pi.currentDisplay == kAllDisplayValue) {
       updateCurDisplay(sessionId);
     }
 
@@ -1882,8 +1884,45 @@ class VirtualMouseMode with ChangeNotifier {
 
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
+  final Map<int, ui.Image> _images = {};
+  final Set<ui.Image> _pendingDispose = {};
+  bool _postFrameScheduled = false;
 
-  ui.Image? get image => _image;
+  void _scheduleDispose(ui.Image? img) {
+    if (img == null) return;
+    _pendingDispose.add(img);
+    if (!_postFrameScheduled) {
+      _postFrameScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _postFrameScheduled = false;
+        final currentImages = <ui.Image>{};
+        if (_image != null) currentImages.add(_image!);
+        currentImages.addAll(_images.values);
+
+        final toDispose =
+            _pendingDispose.where((i) => !currentImages.contains(i)).toList();
+        for (var i in toDispose) {
+          _pendingDispose.remove(i);
+          try {
+            i.dispose();
+          } catch (e) {
+            // ignore
+          }
+        }
+      });
+    }
+  }
+
+  ui.Image? get image {
+    final cur = parent.target?.ffiModel.pi.currentDisplay ?? 0;
+    if (cur == kAllDisplayValue) {
+      return _image ?? _images.values.firstOrNull;
+    }
+    return _images[cur] ?? _image ?? _images.values.firstOrNull;
+  }
+
+  Map<int, ui.Image> get images => _images;
+  ui.Image? getImage(int display) => _images[display] ?? _image;
 
   String id = '';
 
@@ -1903,7 +1942,22 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
-  clearImage() => _image = null;
+  clearImage() {
+    final toDispose = <ui.Image>{};
+    if (_image != null) toDispose.add(_image!);
+    toDispose.addAll(_images.values);
+    toDispose.addAll(_pendingDispose);
+    _image = null;
+    _images.clear();
+    _pendingDispose.clear();
+    for (var img in toDispose) {
+      try {
+        img.dispose();
+      } catch (e) {
+        // ignore already disposed
+      }
+    }
+  }
 
   bool _webDecodingRgba = false;
   final List<Uint8List> _webRgbaList = List.empty(growable: true);
@@ -1938,31 +1992,42 @@ class ImageModel with ChangeNotifier {
   // web only: image already created from a decoded WebCodecs frame
   Future<void> onImage(
       int display, ui.Image image, bool Function() isCurrentSession) async {
-    await update(image, isCurrentSession: isCurrentSession);
+    await update(image, display: display, isCurrentSession: isCurrentSession);
   }
 
   decodeAndUpdate(int display, Uint8List rgba) async {
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
+    int width = rect?.width.toInt() ?? 0;
+    int height = rect?.height.toInt() ?? 0;
+    if (width <= 0 || height <= 0) {
+      final d = parent.target?.ffiModel.pi.tryGetDisplay(display: display);
+      width = d?.width ?? 0;
+      height = d?.height ?? 0;
+    }
+    if (width <= 0 || height <= 0) {
+      return;
+    }
     final image = await img.decodeImageFromPixels(
       rgba,
-      rect?.width.toInt() ?? 0,
-      rect?.height.toInt() ?? 0,
+      width,
+      height,
       isWeb | isWindows | isLinux
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,
     );
+    if (image == null) return;
     if (parent.target?.id != pid) {
-      image?.dispose();
+      _scheduleDispose(image);
       return;
     }
-    await update(image);
+    await update(image, display: display);
   }
 
   Future<void> update(ui.Image? image,
-      {bool Function()? isCurrentSession}) async {
+      {int? display, bool Function()? isCurrentSession}) async {
     if (_disposeIfStale(image, isCurrentSession)) return;
-    if (_image == null && image != null) {
+    if (_image == null && _images.isEmpty && image != null) {
       if (isDesktop || isWebDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
         await parent.target?.canvasModel.updateScrollStyle();
@@ -1973,33 +2038,50 @@ class ImageModel with ChangeNotifier {
       }
     }
     if (_disposeIfStale(image, isCurrentSession)) return;
-    _image?.dispose();
-    _image = image;
+    if (display != null) {
+      final old = _images[display];
+      if (image != null) {
+        _images[display] = image;
+      } else {
+        _images.remove(display);
+      }
+      if (old != null && old != image) {
+        _scheduleDispose(old);
+      }
+    } else {
+      final old = _image;
+      _image = image;
+      if (old != null && old != image) {
+        _scheduleDispose(old);
+      }
+    }
     if (image != null) notifyListeners();
   }
 
   bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
     if (image == null || isCurrentSession == null) return false;
     if (isCurrentSession()) return false;
-    image.dispose();
+    _scheduleDispose(image);
     return true;
   }
 
   // mobile only
   double get maxScale {
-    if (_image == null) return 1.5;
+    final img = image;
+    if (img == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final xscale = size.width / img.width;
+    final yscale = size.height / img.height;
     return max(1.5, max(xscale, yscale));
   }
 
   // mobile only
   double get minScale {
-    if (_image == null) return 1.5;
+    final img = image;
+    if (img == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / _image!.width;
-    final yscale = size.height / _image!.height;
+    final xscale = size.width / img.width;
+    final yscale = size.height / img.height;
     return min(xscale, yscale) / 1.5;
   }
 
@@ -2017,8 +2099,7 @@ class ImageModel with ChangeNotifier {
   }
 
   void disposeImage() {
-    _image?.dispose();
-    _image = null;
+    clearImage();
   }
 }
 
@@ -4234,6 +4315,10 @@ class PeerInfo with ChangeNotifier {
   }
 
   Rect? getDisplayRect(int display) {
+    if (display >= 0 && display < displays.length) {
+      final d = displays[display];
+      return Rect.fromLTWH(d.x, d.y, d.width.toDouble(), d.height.toDouble());
+    }
     final d = tryGetDisplayIfNotAllDisplay(display: display);
     if (d == null) return null;
     return Rect.fromLTWH(d.x, d.y, d.width.toDouble(), d.height.toDouble());
