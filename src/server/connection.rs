@@ -4467,6 +4467,10 @@ impl Connection {
 
     async fn toggle_privacy_mode(&mut self, t: TogglePrivacyMode) {
         if t.on {
+            #[cfg(windows)]
+            {
+                self.privacy_mode_locked_wait = None;
+            }
             self.turn_on_privacy(t.impl_key).await;
         } else {
             self.turn_off_privacy(t.impl_key).await;
@@ -4726,6 +4730,10 @@ impl Connection {
                 if self.keyboard {
                     match q {
                         BoolOption::Yes => {
+                            #[cfg(windows)]
+                            {
+                                self.privacy_mode_locked_wait = None;
+                            }
                             self.turn_on_privacy("".to_owned()).await;
                         }
                         BoolOption::No => {
