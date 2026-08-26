@@ -279,6 +279,15 @@ class _FileManagerPageState extends State<FileManagerPage>
                                 child: LinearPercentIndicator(
                                   animateFromLastPercent: true,
                                   center: Text(item.percentText),
+                                  trailing: item.recvJobRes
+                                      ? Text(
+                                          '${readableFileSize(item.speed)}/s',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: MyTheme.darkGray,
+                                          ),
+                                        )
+                                      : null,
                                   barRadius: Radius.circular(15),
                                   percent: item.percent,
                                   progressColor: MyTheme.accent,
