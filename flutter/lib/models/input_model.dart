@@ -1291,6 +1291,10 @@ class InputModel {
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
+    if (e.kind == ui.PointerDeviceKind.stylus ||
+        e.kind == ui.PointerDeviceKind.invertedStylus) {
+      return;
+    }
     if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
@@ -1543,7 +1547,7 @@ class InputModel {
       if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
         return;
       }
-      if (isPhysicalMouse.value && isIOS) {
+      if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
     }
@@ -1588,7 +1592,7 @@ class InputModel {
     if (isViewCamera) return;
     if (!_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) return;
 
-    if (!isPhysicalMouse.value) {
+    if (_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
     }
 

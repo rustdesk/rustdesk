@@ -21,6 +21,11 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     _init();
   }
 
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    // Ignore trackpad pan/zoom so RawPointerMouseRegion handles trackpad scrolling/zoom.
+  }
+
   // oneFingerPan
   GestureDragStartCallback? onOneFingerPanStart;
   GestureDragUpdateCallback? onOneFingerPanUpdate;
