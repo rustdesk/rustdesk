@@ -9,11 +9,24 @@ use hbb_common::{
 };
 use serde_derive::Deserialize;
 use std::sync::OnceLock;
-use url::Url;
+
+mod artifact;
+
+#[cfg(any(target_os = "macos", test))]
+mod offline;
+
+use artifact::{validate_artifact, validate_artifact_file_name, ArtifactUrlPolicy};
+
+#[cfg(target_os = "macos")]
+pub(crate) use offline::verify_offline_update_metadata;
+#[cfg(any(target_os = "macos", test))]
+pub(crate) use offline::OfflineUpdateMetadataRequirements;
+#[cfg(test)]
+use offline::{verify_offline_update_metadata_with_options, OfflineVerificationOptions};
 
 const UPDATE_METADATA_SIGNATURE_CONTEXT: &[u8] = b"RustDesk update metadata v1\n";
 const UPDATE_APP: &str = "rustdesk";
-const UPDATE_PACKAGE_ID: &str = "rustdesk";
+pub(crate) const PUBLIC_UPDATE_PACKAGE_ID: &str = "rustdesk";
 const METADATA_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_SCHEMA_VERSION: u32 = 1;
 const SIGNATURE_ALGORITHM: &str = "ed25519";
@@ -84,14 +97,24 @@ pub(crate) struct UpdateMetadataRequirements<'a> {
 pub(crate) struct VerifiedUpdateArtifact {
     pub version: String,
     pub url: String,
+    #[cfg(any(target_os = "macos", test))]
     pub file_name: String,
     pub size: u64,
     pub sha256: String,
 }
 
 struct VerificationOptions<'a> {
-    requirements: UpdateMetadataRequirements<'a>,
+    requirements: MetadataRequirements<'a>,
+    expected_package_id: &'a str,
+    artifact_url_policy: ArtifactUrlPolicy<'a>,
     trusted_keys: &'a [TrustedUpdateKey],
+}
+
+#[derive(Clone, Copy)]
+struct MetadataRequirements<'a> {
+    expected_version: &'a str,
+    expected_release_id: &'a str,
+    artifact: UpdateArtifactQuery<'a>,
 }
 
 fn verify_update_metadata_with_options(
@@ -113,12 +136,13 @@ fn verify_update_metadata_with_options(
     verify_metadata_signature(metadata_bytes, &signature, trusted_key)?;
     let metadata: UpdateMetadata =
         serde_json::from_slice(metadata_bytes).context("invalid update metadata JSON")?;
-    validate_metadata(&metadata, &update_signature, &options.requirements)?;
+    validate_metadata(&metadata, &update_signature, &options)?;
     let artifact = select_artifact(&metadata, &options.requirements.artifact)?;
-    validate_artifact(artifact, options.requirements.expected_artifact_url_prefix)?;
+    validate_artifact(artifact, options.artifact_url_policy)?;
     Ok(VerifiedUpdateArtifact {
         version: metadata.version.clone(),
         url: artifact.url.clone(),
+        #[cfg(any(target_os = "macos", test))]
         file_name: artifact.file_name.clone(),
         size: artifact.size,
         sha256: artifact.sha256.clone(),
@@ -130,11 +154,20 @@ pub(crate) fn verify_update_metadata(
     signature_bytes: &[u8],
     requirements: UpdateMetadataRequirements<'_>,
 ) -> ResultType<VerifiedUpdateArtifact> {
+    let artifact_url_policy =
+        ArtifactUrlPolicy::ExactPrefix(requirements.expected_artifact_url_prefix);
+    let metadata_requirements = MetadataRequirements {
+        expected_version: requirements.expected_version,
+        expected_release_id: requirements.expected_release_id,
+        artifact: requirements.artifact,
+    };
     verify_update_metadata_with_options(
         metadata_bytes,
         signature_bytes,
         VerificationOptions {
-            requirements,
+            requirements: metadata_requirements,
+            expected_package_id: PUBLIC_UPDATE_PACKAGE_ID,
+            artifact_url_policy,
             trusted_keys: TRUSTED_UPDATE_KEYS,
         },
     )
@@ -192,7 +225,7 @@ fn init_sodiumoxide() -> ResultType<()> {
 fn validate_metadata(
     metadata: &UpdateMetadata,
     signature: &UpdateSignature,
-    requirements: &UpdateMetadataRequirements<'_>,
+    options: &VerificationOptions<'_>,
 ) -> ResultType<()> {
     if metadata.schema_version != METADATA_SCHEMA_VERSION {
         return Err(anyhow!("unsupported update metadata schema version"));
@@ -203,13 +236,13 @@ fn validate_metadata(
     if metadata.app != UPDATE_APP {
         return Err(anyhow!("update metadata app mismatch"));
     }
-    if metadata.package_id != UPDATE_PACKAGE_ID {
+    if metadata.package_id != options.expected_package_id {
         return Err(anyhow!("update metadata package id is not allowed"));
     }
-    if requirements.expected_version != metadata.version {
+    if options.requirements.expected_version != metadata.version {
         return Err(anyhow!("update metadata version mismatch"));
     }
-    if requirements.expected_release_id != metadata.release_id {
+    if options.requirements.expected_release_id != metadata.release_id {
         return Err(anyhow!("update metadata release id mismatch"));
     }
     for artifact in &metadata.artifacts {
@@ -234,47 +267,6 @@ fn select_artifact<'a>(
         return Err(anyhow!("multiple matching update artifacts found"));
     }
     Ok(artifact)
-}
-
-fn validate_artifact(artifact: &UpdateArtifact, expected_url_prefix: &str) -> ResultType<()> {
-    validate_artifact_file_name(&artifact.file_name)?;
-    if !is_sha256_hex(&artifact.sha256) {
-        return Err(anyhow!("invalid update artifact sha256"));
-    }
-    let parsed_url = Url::parse(&artifact.url).context("invalid update artifact URL")?;
-    if parsed_url.query().is_some() || parsed_url.fragment().is_some() {
-        return Err(anyhow!(
-            "update artifact URL must not contain query or fragment"
-        ));
-    }
-    let expected_url = format!("{}{}", expected_url_prefix, artifact.file_name);
-    if artifact.url != expected_url {
-        return Err(anyhow!(
-            "update artifact URL is outside expected release prefix"
-        ));
-    }
-    let basename = parsed_url
-        .path_segments()
-        .and_then(|mut segments| segments.next_back())
-        .ok_or_else(|| anyhow!("update artifact URL has no basename"))?;
-    if basename != artifact.file_name {
-        return Err(anyhow!("update artifact URL basename mismatch"));
-    }
-    Ok(())
-}
-
-fn validate_artifact_file_name(file_name: &str) -> ResultType<()> {
-    if file_name.is_empty()
-        || matches!(file_name, "." | "..")
-        || file_name.contains(['/', '\\', ':'])
-    {
-        return Err(anyhow!("invalid update artifact file name"));
-    }
-    Ok(())
-}
-
-fn is_sha256_hex(value: &str) -> bool {
-    value.len() == 64 && value.as_bytes().iter().all(u8::is_ascii_hexdigit)
 }
 
 #[cfg(test)]

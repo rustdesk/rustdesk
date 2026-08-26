@@ -36,6 +36,11 @@ pub(crate) const APP_TYPE_CM: &str = "cm";
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) const APP_TYPE_CM: &str = "main";
 
+#[cfg(target_os = "macos")]
+const CORE_MAIN_EXIT_SUCCESS: i32 = 0;
+#[cfg(target_os = "macos")]
+const CORE_MAIN_EXIT_FAILURE: i32 = 1;
+
 // Do not remove the following constants.
 // Uncomment them when they are used.
 // pub(crate) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
@@ -105,11 +110,18 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if crate::core_main::core_main().is_some() {
-        return true;
-    } else {
-        #[cfg(target_os = "macos")]
-        std::process::exit(0);
+    match crate::core_main::core_main() {
+        Some(crate::core_main::CoreMainAction::StartUi(_)) => return true,
+        Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
+            eprintln!("Command failed: {err}");
+            log::error!("Command failed: {err}");
+            #[cfg(target_os = "macos")]
+            std::process::exit(CORE_MAIN_EXIT_FAILURE);
+        }
+        None => {
+            #[cfg(target_os = "macos")]
+            std::process::exit(CORE_MAIN_EXIT_SUCCESS);
+        }
     }
     #[cfg(not(target_os = "macos"))]
     false
@@ -127,8 +139,14 @@ pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_c
     unsafe { std::ptr::write(args_len, 0) };
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        if let Some(args) = crate::core_main::core_main() {
-            return rust_args_to_c_args(args, args_len);
+        match crate::core_main::core_main() {
+            Some(crate::core_main::CoreMainAction::StartUi(args)) => {
+                return rust_args_to_c_args(args, args_len);
+            }
+            Some(crate::core_main::CoreMainAction::ExitFailure(err)) => {
+                log::error!("Command failed: {err}");
+            }
+            None => {}
         }
         return std::ptr::null_mut() as _;
     }

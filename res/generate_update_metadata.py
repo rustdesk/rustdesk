@@ -6,13 +6,20 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
 from pathlib import Path
-from urllib.parse import unquote
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from update_metadata_policy import (
+    release_artifact_url,
+    validate_artifact_file_name,
+    validate_package_id,
+    validate_published_at,
+    validate_release,
+    validate_release_base_url,
+)
 
 APP_NAME = "rustdesk"
 SCHEMA_VERSION = 1
@@ -21,11 +28,6 @@ SIGNATURE_CONTEXT = b"RustDesk update metadata v1\n"
 KEY_ID = "2026-ed25519-main"
 SEED_ENV = "RUSTDESK_UPDATE_ED25519_SEED"
 PUBLIC_KEY_ENV = "RUSTDESK_UPDATE_ED25519_PUBLIC_KEY"
-GITHUB_RELEASE_PREFIX = "https://github.com/rustdesk/rustdesk/releases/download"
-RFC3339_TIMESTAMP = re.compile(
-    r"[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})"
-)
-ARTIFACT_FILE_NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 
 
 def fail(message):
@@ -65,59 +67,30 @@ def decode_env(name, expected_size):
     return value
 
 
-def validate_release(release_id, version):
-    if (
-        not release_id
-        or not release_id.isascii()
-        or release_id in {".", ".."}
-        or any(char in release_id for char in (" ", "/", "\\", "?", "#"))
-        or unquote(release_id) != release_id
-    ):
-        fail(f"invalid release id: {release_id}")
-    match = re.fullmatch(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)", release_id)
-    if not match:
-        return
-    segments = [int(part) for part in match.groups()]
-    if any(part > 65535 for part in segments) or not any(segments):
-        fail(f"invalid release version: {release_id}")
-    display_version = ".".join(match.groups())
-    if display_version != version:
-        fail(f"release id {release_id} maps to {display_version}, not {version}")
-
-
-def validate_published_at(value):
-    if not RFC3339_TIMESTAMP.fullmatch(value):
-        fail("published_at must be an RFC 3339 timestamp")
-    normalized = value[:-1] + "+00:00" if value[-1] in "Zz" else value
+def validate_or_fail(function, *args):
     try:
-        datetime.fromisoformat(normalized)
-    except ValueError:
-        fail("published_at must be an RFC 3339 timestamp")
+        return function(*args)
+    except ValueError as error:
+        fail(str(error))
 
 
-def validate_artifact_file_name(file_name):
-    if (
-        not isinstance(file_name, str)
-        or file_name in {".", ".."}
-        or not ARTIFACT_FILE_NAME_PATTERN.fullmatch(file_name)
-    ):
-        fail(f"invalid artifact file name: {file_name}")
-
-
-def artifact_metadata(spec, release_id):
+def artifact_metadata(spec, release_id, release_base_url):
     platform, arch, file_format, raw_path = spec
     if not all(value.strip() for value in (platform, arch, file_format)):
         fail("artifact selector fields must not be empty")
     path = Path(raw_path)
     file_name = path.name
-    validate_artifact_file_name(file_name)
+    validate_or_fail(validate_artifact_file_name, file_name)
+    size = path.stat().st_size
+    if size == 0:
+        fail(f"artifact must not be empty: {file_name}")
     return {
         "platform": platform,
         "arch": arch,
         "format": file_format,
-        "url": f"{GITHUB_RELEASE_PREFIX}/{release_id}/{file_name}",
+        "url": release_artifact_url(release_base_url, release_id, file_name),
         "file_name": file_name,
-        "size": path.stat().st_size,
+        "size": size,
         "sha256": sha256_hex(path),
     }
 
@@ -127,9 +100,16 @@ def command_sign(args):
     signature_out = Path(args.signature_out).resolve()
     if metadata_out == signature_out:
         fail("metadata and signature outputs must be different files")
-    validate_release(args.release_id, args.version)
-    validate_published_at(args.published_at)
-    artifacts = [artifact_metadata(spec, args.release_id) for spec in args.artifact]
+    validate_or_fail(validate_release, args.release_id, args.version)
+    validate_or_fail(validate_published_at, args.published_at)
+    package_id = validate_or_fail(validate_package_id, args.package_id)
+    release_base_url = validate_or_fail(
+        validate_release_base_url, args.release_base_url
+    )
+    artifacts = [
+        artifact_metadata(spec, args.release_id, release_base_url)
+        for spec in args.artifact
+    ]
     selectors = [(item["platform"], item["arch"], item["format"]) for item in artifacts]
     names = [item["file_name"] for item in artifacts]
     if len(set(selectors)) != len(selectors):
@@ -140,7 +120,7 @@ def command_sign(args):
     metadata = {
         "schema_version": SCHEMA_VERSION,
         "app": APP_NAME,
-        "package_id": APP_NAME,
+        "package_id": package_id,
         "version": args.version,
         "release_id": args.release_id,
         "published_at": args.published_at,
@@ -161,10 +141,7 @@ def command_sign(args):
     write_bytes(signature_out, stable_json(signature))
 
 
-def command_verify(args):
-    metadata_bytes = Path(args.metadata).read_bytes()
-    metadata = json.loads(metadata_bytes)
-    signature = json.loads(Path(args.signature).read_bytes())
+def verify_metadata_signature(metadata_bytes, signature):
     if (
         signature.get("schema_version") != SCHEMA_VERSION
         or signature.get("algorithm") != SIGNATURE_ALGORITHM
@@ -179,42 +156,27 @@ def command_verify(args):
         )
     except (InvalidSignature, ValueError, binascii.Error):
         fail("invalid metadata signature")
-    expected_fields = {
-        "schema_version": SCHEMA_VERSION,
-        "app": APP_NAME,
-        "package_id": APP_NAME,
-        "version": args.version,
-        "release_id": args.release_id,
-        "signature_key_id": KEY_ID,
-    }
-    if any(metadata.get(key) != value for key, value in expected_fields.items()):
-        fail("metadata does not match the release")
-    validate_release(args.release_id, args.version)
-    validate_published_at(metadata.get("published_at", ""))
-    local_paths = [Path(path) for path in args.artifact]
-    local_artifacts = {path.name: path for path in local_paths}
-    if len(local_artifacts) != len(local_paths):
-        fail("duplicate local artifact file name")
+
+
+def validated_artifacts(metadata, local_artifacts):
     artifacts = metadata.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         fail("metadata must contain artifacts")
     selector_fields = ("platform", "arch", "format")
-    required_artifact_fields = selector_fields + (
-        "file_name",
-        "url",
-        "size",
-        "sha256",
-    )
+    required_fields = selector_fields + ("file_name", "url", "size", "sha256")
     if any(
         not isinstance(artifact, dict)
-        or any(field not in artifact for field in required_artifact_fields)
+        or any(field not in artifact for field in required_fields)
         for artifact in artifacts
     ):
         fail("artifact metadata is missing required fields")
     names = [artifact.get("file_name") for artifact in artifacts]
     for file_name in names:
-        validate_artifact_file_name(file_name)
-    selectors = [tuple(artifact[field] for field in selector_fields) for artifact in artifacts]
+        validate_or_fail(validate_artifact_file_name, file_name)
+    selectors = [
+        tuple(artifact[field] for field in selector_fields)
+        for artifact in artifacts
+    ]
     if any(
         not all(isinstance(value, str) and value.strip() for value in selector)
         for selector in selectors
@@ -224,9 +186,41 @@ def command_verify(args):
         fail("artifact file set mismatch")
     if len(set(selectors)) != len(selectors):
         fail("duplicate artifact selector")
+    return artifacts
+
+
+def command_verify(args):
+    metadata_bytes = Path(args.metadata).read_bytes()
+    metadata = json.loads(metadata_bytes)
+    signature = json.loads(Path(args.signature).read_bytes())
+    verify_metadata_signature(metadata_bytes, signature)
+    package_id = validate_or_fail(validate_package_id, args.package_id)
+    release_base_url = validate_or_fail(
+        validate_release_base_url, args.release_base_url
+    )
+    expected_fields = {
+        "schema_version": SCHEMA_VERSION,
+        "app": APP_NAME,
+        "package_id": package_id,
+        "version": args.version,
+        "release_id": args.release_id,
+        "signature_key_id": KEY_ID,
+    }
+    if any(metadata.get(key) != value for key, value in expected_fields.items()):
+        fail("metadata does not match the release")
+    validate_or_fail(validate_release, args.release_id, args.version)
+    validate_or_fail(validate_published_at, metadata.get("published_at", ""))
+    local_paths = [Path(path) for path in args.artifact]
+    local_artifacts = {path.name: path for path in local_paths}
+    if len(local_artifacts) != len(local_paths):
+        fail("duplicate local artifact file name")
+    artifacts = validated_artifacts(metadata, local_artifacts)
     for artifact in artifacts:
         file_name = artifact["file_name"]
-        if artifact["url"] != f"{GITHUB_RELEASE_PREFIX}/{args.release_id}/{file_name}":
+        expected_url = release_artifact_url(
+            release_base_url, args.release_id, file_name
+        )
+        if artifact["url"] != expected_url:
             fail(f"artifact URL mismatch for {file_name}")
         path = local_artifacts[file_name]
         if path.stat().st_size != artifact["size"]:
@@ -271,6 +265,8 @@ def build_parser():
     sign.add_argument("--artifact", action="append", nargs=4, required=True)
     sign.add_argument("--version", required=True)
     sign.add_argument("--release-id", required=True)
+    sign.add_argument("--package-id", required=True)
+    sign.add_argument("--release-base-url", required=True)
     sign.add_argument("--published-at", required=True)
     sign.add_argument("--metadata-out", required=True)
     sign.add_argument("--signature-out", required=True)
@@ -281,6 +277,8 @@ def build_parser():
     verify.add_argument("--artifact", action="append", required=True)
     verify.add_argument("--version", required=True)
     verify.add_argument("--release-id", required=True)
+    verify.add_argument("--package-id", required=True)
+    verify.add_argument("--release-base-url", required=True)
     verify.set_defaults(func=command_verify)
     check_key = commands.add_parser("check-key")
     check_key.add_argument(

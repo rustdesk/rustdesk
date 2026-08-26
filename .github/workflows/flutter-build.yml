@@ -80,7 +80,12 @@ jobs:
 
       - name: Test update metadata signer
         if: ${{ inputs.publish-update-metadata }}
-        run: python -m unittest res/test_generate_update_metadata.py
+        run: |
+          python -m unittest \
+            res/test_generate_update_metadata.py \
+            res/test_update_metadata_cli.py \
+            res/test_flutter_build_workflow.py \
+            res/test_macos_update_scripts.py
 
       - name: Validate update metadata keys
         if: ${{ inputs.publish-update-metadata }}
@@ -1092,6 +1097,8 @@ jobs:
             --artifact macos aarch64 dmg "./artifacts/rustdesk-${VERSION}-aarch64.dmg" \
             --artifact macos x86_64 dmg "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
             --version "$VERSION" --release-id "$TAG_NAME" \
+            --package-id rustdesk \
+            --release-base-url https://github.com/rustdesk/rustdesk/releases/download \
             --published-at "$(git log -1 --format=%cI)" \
             --metadata-out ./rustdesk-update.json \
             --signature-out ./rustdesk-update.json.sig
@@ -1110,7 +1117,9 @@ jobs:
             --artifact "./artifacts/rustdesk-${VERSION}-x86-sciter.exe" \
             --artifact "./artifacts/rustdesk-${VERSION}-aarch64.dmg" \
             --artifact "./artifacts/rustdesk-${VERSION}-x86_64.dmg" \
-            --version "$VERSION" --release-id "$TAG_NAME"
+            --version "$VERSION" --release-id "$TAG_NAME" \
+            --package-id rustdesk \
+            --release-base-url https://github.com/rustdesk/rustdesk/releases/download
 
       - name: Upload signed update artifacts
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1

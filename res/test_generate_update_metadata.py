@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 SCRIPT = Path(__file__).with_name("generate_update_metadata.py")
+OFFICIAL_RELEASE_BASE_URL = "https://github.com/rustdesk/rustdesk/releases/download"
 
 
 class GenerateUpdateMetadataTest(unittest.TestCase):
@@ -54,7 +55,16 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
         path.write_bytes(data)
         return path
 
-    def sign(self, artifacts, *, version="1.4.6", release_id="v1.4.6", seed=None):
+    def sign(
+        self,
+        artifacts,
+        *,
+        version="1.4.6",
+        release_id="v1.4.6",
+        package_id="rustdesk",
+        release_base_url=OFFICIAL_RELEASE_BASE_URL,
+        seed=None,
+    ):
         metadata = self.root / "rustdesk-update.json"
         signature = self.root / "rustdesk-update.json.sig"
         args = ["sign"]
@@ -66,6 +76,10 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
                 version,
                 "--release-id",
                 release_id,
+                "--package-id",
+                package_id,
+                "--release-base-url",
+                release_base_url,
                 "--published-at",
                 "2026-05-14T00:00:00Z",
                 "--metadata-out",
@@ -77,7 +91,16 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
         result = self.run_script(*args, seed=self.seed if seed is None else seed)
         return metadata, signature, result
 
-    def verify(self, metadata, signature, artifacts, public_key=None):
+    def verify(
+        self,
+        metadata,
+        signature,
+        artifacts,
+        *,
+        public_key=None,
+        package_id="rustdesk",
+        release_base_url=OFFICIAL_RELEASE_BASE_URL,
+    ):
         args = [
             "verify",
             "--metadata",
@@ -88,6 +111,10 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
             "1.4.6",
             "--release-id",
             "v1.4.6",
+            "--package-id",
+            package_id,
+            "--release-base-url",
+            release_base_url,
         ]
         for artifact in artifacts:
             args.extend(["--artifact", str(artifact)])
@@ -138,7 +165,12 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
         metadata, signature, _ = self.sign([("windows", "x86_64", "exe", artifact)])
         wrong_key = base64.b64encode(b"x" * 32).decode("ascii")
         self.assertNotEqual(
-            self.verify(metadata, signature, [artifact], wrong_key).returncode,
+            self.verify(
+                metadata,
+                signature,
+                [artifact],
+                public_key=wrong_key,
+            ).returncode,
             0,
         )
 
@@ -146,10 +178,61 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
         artifact = self.artifact()
         spec = [("windows", "x86_64", "exe", artifact)]
         self.assertNotEqual(self.sign(spec, version="1.4.7")[2].returncode, 0)
-        self.assertNotEqual(self.sign(spec, release_id="bad/tag")[2].returncode, 0)
+        for release_id in ("bad/tag", "bad\tid", "bad%zz"):
+            self.assertNotEqual(self.sign(spec, release_id=release_id)[2].returncode, 0)
         self.assertNotEqual(self.sign(spec, seed="invalid")[2].returncode, 0)
         duplicate = spec + [("windows", "x86_64", "exe", artifact)]
         self.assertNotEqual(self.sign(duplicate)[2].returncode, 0)
+
+    def test_signs_and_verifies_custom_release_identity(self):
+        package_id = "com.example.rustdesk-custom"
+        release_base_url = "https://updates.example.com/releases/download"
+        artifact = self.artifact("rustdesk-custom-1.4.6-aarch64.dmg", b"dmg")
+
+        metadata, signature, signed = self.sign(
+            [("macos", "aarch64", "dmg", artifact)],
+            package_id=package_id,
+            release_base_url=release_base_url,
+        )
+        verified = self.verify(
+            metadata,
+            signature,
+            [artifact],
+            package_id=package_id,
+            release_base_url=release_base_url,
+        )
+
+        self.assertEqual(signed.returncode, 0, signed.stderr)
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        data = json.loads(metadata.read_text(encoding="utf-8"))
+        self.assertEqual(data["package_id"], package_id)
+        self.assertEqual(
+            data["artifacts"][0]["url"],
+            f"{release_base_url}/v1.4.6/{artifact.name}",
+        )
+
+    def test_rejects_unsafe_custom_release_policy(self):
+        artifact = self.artifact("rustdesk-custom-1.4.6-aarch64.dmg", b"dmg")
+        spec = [("macos", "aarch64", "dmg", artifact)]
+
+        for package_id in ("", "com.example/custom", "com.example custom"):
+            with self.subTest(package_id=package_id):
+                self.assertNotEqual(
+                    self.sign(spec, package_id=package_id)[2].returncode,
+                    0,
+                )
+        for release_base_url in (
+            "http://updates.example.com/releases",
+            "https://user@updates.example.com/releases",
+            "https://updates.example.com/releases/",
+            "https://updates.example.com/releases?channel=stable",
+            "https://updates.example.com/relea\nses",
+        ):
+            with self.subTest(release_base_url=release_base_url):
+                self.assertNotEqual(
+                    self.sign(spec, release_base_url=release_base_url)[2].returncode,
+                    0,
+                )
 
     def test_checks_embedded_public_key(self):
         source = self.rust_source()

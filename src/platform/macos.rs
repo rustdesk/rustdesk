@@ -54,11 +54,14 @@ static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 const UPDATE_CLEANUP_FAILED_AFTER_COMMIT: &str = "UPDATE_CLEANUP_FAILED_AFTER_COMMIT";
+const CODESIGN_VERIFY_ARGS: &[&str] = &["--verify", "--deep", "--strict", "--verbose=2"];
+const SPCTL_ASSESS_ARGS: &[&str] = &["--assess", "--type", "execute", "--verbose=2"];
 // `kill -9` may not work without administrator privileges.
 const PRIVILEGED_UPDATE_BODY: &str = r#"
 	on run {app_name, cur_pid, source_path, user_name, restore_owner, expected_sha256}
 	    set app_bundle to "/Applications/" & app_name & ".app"
 	    set app_bundle_q to quoted form of app_bundle
+	    set installed_info_q to quoted form of (app_bundle & "/Contents/Info.plist")
 	    set source_path_q to quoted form of source_path
 	    set user_name_q to quoted form of user_name
 	    set expected_sha256_q to quoted form of expected_sha256
@@ -67,6 +70,7 @@ const PRIVILEGED_UPDATE_BODY: &str = r#"
 	    set kill_others to "pids=$(pgrep -x '" & app_name & "' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
 	    -- Rehash the root-owned copy in a clean environment before staging bytes.
 	    set prepare_verified to "verified_dir=$(/usr/bin/mktemp -d /tmp/.rustdeskupdate-verified.XXXXXX); /bin/chmod 0700 \"$verified_dir\"; verified_app=\"$verified_dir/" & app_name & ".app\"; dmg_attached=0; if [ -n " & expected_sha256_q & " ]; then verified_dmg=\"$verified_dir/update.dmg\"; /bin/cp " & source_path_q & " \"$verified_dmg\"; /usr/sbin/chown root:wheel \"$verified_dmg\"; /bin/chmod 0400 \"$verified_dmg\"; actual_sha256=$(/usr/bin/env -i /usr/bin/shasum -a 256 \"$verified_dmg\"); actual_sha256=${actual_sha256%% *}; if [ \"$actual_sha256\" != " & expected_sha256_q & " ]; then echo 'Update DMG SHA256 mismatch' >&2; exit 1; fi; dmg_mount=\"$verified_dir/mount\"; /bin/mkdir \"$dmg_mount\"; dmg_attached=1; /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint \"$dmg_mount\" \"$verified_dmg\" >/dev/null; /usr/bin/ditto \"$dmg_mount/" & app_name & ".app\" \"$verified_app\"; /usr/bin/hdiutil detach \"$dmg_mount\" -force >/dev/null; dmg_attached=0; /bin/rm -f \"$verified_dmg\"; else /usr/bin/ditto " & source_path_q & " \"$verified_app\"; fi; /usr/sbin/chown -R root:wheel \"$verified_app\"; /bin/chmod -R go-w \"$verified_app\";"
+	    set validate_verified_app to "installed_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' " & installed_info_q & "); candidate_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"$verified_app/Contents/Info.plist\"); if [ -z \"$installed_bundle_id\" ] || [ -z \"$candidate_bundle_id\" ] || [ \"$installed_bundle_id\" != \"$candidate_bundle_id\" ]; then echo 'Update app bundle identifier mismatch' >&2; exit 1; fi; /usr/bin/codesign --verify --deep --strict --verbose=2 \"$verified_app\"; /usr/sbin/spctl --assess --type execute --verbose=2 \"$verified_app\";"
 	    set prepare_swap_paths to "temp_bundle=" & app_bundle_q & ".new.$$; old_bundle=" & app_bundle_q & ".old.$$;"
 	    set cleanup_swap_paths to "rm -rf \"$temp_bundle\" \"$old_bundle\";"
 	    set stage_bundle to "ditto \"$verified_app\" \"$temp_bundle\";"
@@ -79,7 +83,7 @@ const PRIVILEGED_UPDATE_BODY: &str = r#"
 	    set rollback_update to "status=$?; trap - EXIT; set +e; cleanup_status=0; if [ \"${transaction_started:-0}\" -eq 1 ] && [ \"${transaction_committed:-0}\" -ne 1 ]; then rollback_status=0;" & rollback_bundle & "if [ \"$rollback_status\" -ne 0 ]; then status=1; fi; fi; if [ \"${rollback_status:-0}\" -eq 0 ]; then " & cleanup_verified & "fi; if [ \"$cleanup_status\" -ne 0 ] && [ \"${transaction_committed:-0}\" -ne 1 ]; then status=1; elif [ \"$cleanup_status\" -ne 0 ]; then echo 'UPDATE_CLEANUP_FAILED_AFTER_COMMIT'; fi; exit \"$status\";"
 	    set commit_update to "transaction_committed=1; if ! rm -rf \"$old_bundle\"; then echo 'UPDATE_CLEANUP_FAILED_AFTER_COMMIT'; fi;"
 	    set copy_files to prepare_swap_paths & cleanup_swap_paths & stage_bundle & protect_staged_bundle & "transaction_started=1;" & move_current_bundle & install_staged_bundle & restore_installed_owner & commit_update
-	    set sh to "set -e; transaction_started=0; transaction_committed=0; bundle_backed_up=0; bundle_swapped=0; trap " & quoted form of rollback_update & " EXIT;" & check_source & kill_others & prepare_verified & copy_files
+	    set sh to "set -e; transaction_started=0; transaction_committed=0; bundle_backed_up=0; bundle_swapped=0; trap " & quoted form of rollback_update & " EXIT;" & check_source & prepare_verified & validate_verified_app & kill_others & copy_files
 
 	    do shell script sh with prompt app_name & " wants to update itself" with administrator privileges
 	end run
@@ -1168,6 +1172,56 @@ fn validate_update_tree(path: &Path, framework_root: Option<&Path>) -> ResultTyp
     Ok(())
 }
 
+fn read_bundle_plist_value(app: &Path, key: &str) -> ResultType<String> {
+    let info_plist = app.join("Contents/Info.plist");
+    let plist_command = format!("Print :{key}");
+    let output = Command::new("/usr/libexec/PlistBuddy")
+        .args(["-c", plist_command.as_str()])
+        .arg(info_plist)
+        .output()?;
+    if !output.status.success() {
+        bail!(
+            "[root-update] failed to read bundle plist value {key}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let value = String::from_utf8(output.stdout)
+        .map_err(|err| anyhow!("[root-update] bundle plist value {key} is not UTF-8: {err}"))?;
+    if value.trim().is_empty() {
+        bail!("[root-update] bundle plist value {key} is empty");
+    }
+    Ok(value.trim().to_owned())
+}
+
+fn verify_update_app_identity_and_signature(installed: &Path, candidate: &Path) -> ResultType<()> {
+    let installed_id = read_bundle_plist_value(installed, "CFBundleIdentifier")?;
+    let candidate_id = read_bundle_plist_value(candidate, "CFBundleIdentifier")?;
+    if installed_id != candidate_id {
+        bail!("[root-update] candidate bundle identifier mismatch");
+    }
+    let codesign = Command::new("/usr/bin/codesign")
+        .args(CODESIGN_VERIFY_ARGS)
+        .arg(candidate)
+        .output()?;
+    if !codesign.status.success() {
+        bail!(
+            "[root-update] candidate code signature is invalid: {}",
+            String::from_utf8_lossy(&codesign.stderr).trim()
+        );
+    }
+    let assessment = Command::new("/usr/sbin/spctl")
+        .args(SPCTL_ASSESS_ARGS)
+        .arg(candidate)
+        .output()?;
+    if !assessment.status.success() {
+        bail!(
+            "[root-update] candidate Gatekeeper assessment failed: {}",
+            String::from_utf8_lossy(&assessment.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
 /// Performs a silent update from a DMG file without any osascript dialog.
 /// Must be called from a process running as root (e.g. the service binary).
 pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> ResultType<()> {
@@ -1210,6 +1264,7 @@ pub fn update_from_dmg_as_root(dmg_path: &str, expected_version: &str) -> Result
     let src_app = format!("{}/{}.app", tmp_dir, app_name);
     log::info!("[root-update] DMG extracted to {}", tmp_dir);
     validate_update_tree(Path::new(&src_app), None)?;
+    verify_update_app_identity_and_signature(Path::new(&app_bundle), Path::new(&src_app))?;
 
     // Bind the downloaded asset to the version returned by the update
     // service before changing plists or executing anything from the staged
@@ -2086,7 +2141,7 @@ impl WakeLock {
     }
 }
 
-fn get_bundle_id() -> Option<String> {
+pub(crate) fn get_bundle_id() -> Option<String> {
     unsafe {
         let bundle: id = msg_send![class!(NSBundle), mainBundle];
         if bundle.is_null() {
