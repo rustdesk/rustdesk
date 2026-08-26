@@ -280,9 +280,22 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   animateFromLastPercent: true,
                                   center: FittedBox(
                                     fit: BoxFit.scaleDown,
-                                    child: Text(item.recvJobRes
-                                        ? '${item.percentText} · ${readableFileSize(item.speed)}/s'
-                                        : item.percentText),
+                                    child: Text.rich(
+                                      TextSpan(
+                                        text: item.percentText,
+                                        children: [
+                                          if (item.recvJobRes)
+                                            TextSpan(
+                                              text:
+                                                  ' ${readableFileSize(item.speed)}/s',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: MyTheme.darkGray,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                   barRadius: Radius.circular(15),
                                   percent: item.percent,
