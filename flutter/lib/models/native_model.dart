@@ -171,7 +171,8 @@ class PlatformFFI {
       _startListenEvent(_ffiBind); // global event
       try {
         if (isAndroid) {
-          _homeDir = (await ExternalPath.getExternalStorageDirectories())?.firstOrNull ?? '';
+          final dirs = await ExternalPath.getExternalStorageDirectories();
+          _homeDir = (dirs != null && dirs.isNotEmpty) ? dirs[0] : '';
         } else if (isIOS) {
           // The previous code was `_homeDir = (await getDownloadsDirectory())?.path ?? '';`,
           // which provided the `downloads` path in the sandbox.
