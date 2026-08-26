@@ -1733,6 +1733,9 @@ class JobProgress {
         }
         res += sizePercentStr;
       }
+      if (state == JobState.inProgress && recvJobRes) {
+        res += ", ${readableFileSize(speed)}/s";
+      }
       return res;
     }
     return '';
