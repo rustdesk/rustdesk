@@ -84,6 +84,8 @@ fn main() {
         install_android_deps();
     }
     if target_os == "windows" {
+        #[cfg(all(windows, feature = "inline"))]
+        build_manifest();
         #[cfg(windows)]
         build_windows();
     }

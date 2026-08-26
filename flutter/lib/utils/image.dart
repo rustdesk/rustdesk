@@ -126,7 +126,7 @@ class ImagePainter extends CustomPainter {
       canvas.drawImage(
           image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
     } catch (e) {
-      // ignore
+      // Ignore draw errors if the underlying ui.Image was disposed during frame transition.
     }
   }
 

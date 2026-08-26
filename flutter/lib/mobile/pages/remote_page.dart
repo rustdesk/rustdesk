@@ -1231,10 +1231,18 @@ class MultiDisplaysImagePainter extends CustomPainter {
       final dx = x + (display.x - rect.left);
       final dy = y + (display.y - rect.top);
       try {
-        canvas.drawImage(
-            img, Offset(dx.toInt().toDouble(), dy.toInt().toDouble()), paint);
+        if (isPeerLinux && display.scale > 0 && display.scale != 1.0) {
+          canvas.save();
+          canvas.translate(dx, dy);
+          canvas.scale(1.0 / display.scale, 1.0 / display.scale);
+          canvas.drawImage(img, Offset.zero, paint);
+          canvas.restore();
+        } else {
+          canvas.drawImage(
+              img, Offset(dx.toInt().toDouble(), dy.toInt().toDouble()), paint);
+        }
       } catch (e) {
-        // ignore
+        // Ignore draw errors if the underlying ui.Image was disposed during frame transition.
       }
     }
   }
