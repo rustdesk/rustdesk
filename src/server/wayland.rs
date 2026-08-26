@@ -540,17 +540,27 @@ pub(super) fn get_capturer_for_display(
                     // a monitor on a card the service cannot open is missing from the DRM list
                     // while the compositor still drives it.
                     let single_display = single_display && cap_display_info.num == 1;
-                    let size_matches = (advertised.width as usize == rect.1
-                        && advertised.height as usize == rect.2)
-                        || (advertised.width as usize == rect.2
-                            && advertised.height as usize == rect.1);
+                    // Exact orientation only: a transposed stream would be encoded at the
+                    // PipeWire dimensions while the client keeps the advertised (rotated) ones,
+                    // and no wayland path ever reconciles the two, so every frame would be
+                    // rejected client-side. Falling into the bail instead advertises the display
+                    // offline, which the client recovers from by re-enumerating.
+                    let size_matches = advertised.width as usize == rect.1
+                        && advertised.height as usize == rect.2;
+                    let transposed = advertised.width as usize == rect.2
+                        && advertised.height as usize == rect.1;
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
                         && (single_display || size_matches);
                     if !consistent {
                         bail!(
-                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
+                            "drm display {} demoted with no geometry-consistent PipeWire stream{} (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
                             display_idx,
+                            if transposed {
+                                " - stream is transposed vs advertised"
+                            } else {
+                                ""
+                            },
                             advertised.width,
                             advertised.height,
                             advertised.x,
