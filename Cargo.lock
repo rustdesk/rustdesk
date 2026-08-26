@@ -9706,8 +9706,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sctp"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07439c134425d51d2f10907aaf2f815fdfb587dce19fe94a4ae8b5faf2aae5ae"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833#56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -9747,7 +9746,7 @@ dependencies = [
 [[package]]
 name = "webrtc-util"
 version = "0.11.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=ac9e74ec2dc502d9afce8d5fc3c9644f2139aee7#ac9e74ec2dc502d9afce8d5fc3c9644f2139aee7"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833#56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",

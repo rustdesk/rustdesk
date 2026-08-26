@@ -215,10 +215,15 @@ exclude = ["vdi/host"]
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
-# webrtc-util reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
+# One branch off upstream v0.13.0, the tag whose crate versions match this stack.
+# webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
 # one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows.
+# webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
+# and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
+# IPv6. The fork commit carries the arithmetic.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "ac9e74ec2dc502d9afce8d5fc3c9644f2139aee7" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "56d097c54f9ea1e48c0dfbeb6ce7e66d2e66e833" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
