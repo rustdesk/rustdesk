@@ -543,7 +543,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,
       inputModel: inputModel,
       onPointerDown: (_) {
-        if (!_physicalFocusNode.hasFocus) {
+        if (!keyboardVisibilityController.isVisible &&
+            !_mobileFocusNode.hasFocus &&
+            !_physicalFocusNode.hasFocus) {
           _physicalFocusNode.requestFocus();
         }
       },
