@@ -549,9 +549,13 @@ pub(super) fn get_capturer_for_display(
                         && advertised.height as usize == rect.2;
                     let transposed = advertised.width as usize == rect.2
                         && advertised.height as usize == rect.1;
+                    // The single-display carve-out forgives a size DIFFERENCE (a Full Workspace
+                    // stream may report the workspace, not the mode), but never a transposed
+                    // pair: that is the same served-vs-advertised orientation split as above,
+                    // and it blanks the client the same way.
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
-                        && (single_display || size_matches);
+                        && (size_matches || (single_display && !transposed));
                     if !consistent {
                         bail!(
                             "drm display {} demoted with no geometry-consistent PipeWire stream{} (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
