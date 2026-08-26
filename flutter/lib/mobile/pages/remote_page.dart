@@ -1235,10 +1235,13 @@ class MultiDisplaysImagePainter extends CustomPainter {
       try {
         if (isPeerLinux && display.scale > 0 && display.scale != 1.0) {
           canvas.save();
-          canvas.translate(dx, dy);
-          canvas.scale(1.0 / display.scale, 1.0 / display.scale);
-          canvas.drawImage(img, Offset.zero, paint);
-          canvas.restore();
+          try {
+            canvas.translate(dx, dy);
+            canvas.scale(1.0 / display.scale, 1.0 / display.scale);
+            canvas.drawImage(img, Offset.zero, paint);
+          } finally {
+            canvas.restore();
+          }
         } else {
           canvas.drawImage(
               img, Offset(dx.toInt().toDouble(), dy.toInt().toDouble()), paint);

@@ -1,4 +1,3 @@
-#[cfg(windows)]
 fn build_windows() {
     let file = "src/platform/windows.cc";
     let file2 = "src/platform/windows_delete_test_cert.cc";
@@ -86,7 +85,6 @@ fn main() {
     if target_os == "windows" {
         #[cfg(all(windows, feature = "inline"))]
         build_manifest();
-        #[cfg(windows)]
         build_windows();
     }
     if target_os == "macos" {
