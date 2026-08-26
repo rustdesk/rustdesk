@@ -344,6 +344,12 @@ fn drm_wakeable_undriven(displays: &[DrmDisplayInfo], undriven: &[String]) -> Ve
 ///
 /// This does not chase the panel back down: anything that re-enables it makes it driven, so it never
 /// enters `undriven` for the veto to act on.
+///
+/// Known limit: the wake itself is a seat-global input jiggle, so the veto's only lever is whether
+/// the wake FIRES at all. When another undriven connector keeps the wake alive, the jiggle may
+/// light the vetoed panel too - accepted, because capturing the external takes priority - and
+/// `drm_enumerate_settled` logs it when it happens rather than leaving a lit panel unexplained
+/// behind a closed lid.
 fn veto_builtin_panel_with_lid_shut(
     displays: &[DrmDisplayInfo],
     wakeable: Vec<String>,
@@ -355,6 +361,17 @@ fn veto_builtin_panel_with_lid_shut(
         return wakeable;
     }
     veto_decision(externals, wakeable, lid_is_closed())
+}
+
+/// Undriven connectors the wake will not be fired for: whatever the veto or the hopeless latch
+/// dropped between `undriven` and the final wake list. Pure, for the same reason as
+/// `veto_decision`.
+fn excluded_from_wake(undriven: &[String], wakeable: &[String]) -> Vec<String> {
+    undriven
+        .iter()
+        .filter(|id| !wakeable.contains(id))
+        .cloned()
+        .collect()
 }
 
 /// Driven external monitors. Pure, so it is testable on a host with no lid switch.
@@ -495,6 +512,9 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     if wakeable.is_empty() {
         return displays;
     }
+    // Undriven names the wake will NOT be fired for (vetoed panel, hopeless latch). The jiggle is
+    // seat-global, so it may light these anyway; remembered here to say so afterwards.
+    let excluded = excluded_from_wake(&undriven, &wakeable);
     let fired = drm_wake_displays(&format!(
         "{reason} and {n} connected display(s) had no CRTC",
         n = wakeable.len()
@@ -533,6 +553,16 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
             }
         );
         schedule_drm_cache_refresh();
+    }
+    if fired {
+        for name in &excluded {
+            if cur.iter().any(|d| d.active && &d.name == name) {
+                log::info!(
+                    "drm: the seat-global wake fired for other connector(s) and also lit {name}, \
+                     which was excluded from this wake"
+                );
+            }
+        }
     }
     if fired && !cur_wakeable.is_empty() {
         // Only the handshake that FIRED latches; a loser's baseline was taken mid-transition.
@@ -1877,7 +1907,8 @@ mod drm_conn_tests {
     // The two halves pull in opposite directions on purpose, so each is pinned separately.
     mod lid_veto {
         use super::super::{
-            connector_type, count_external_monitors, is_builtin_panel, is_external_monitor,
+            connector_type, count_external_monitors, excluded_from_wake, is_builtin_panel,
+            is_external_monitor,
             veto_builtin_panel_with_lid_shut, veto_decision, DrmDisplayInfo,
         };
 
@@ -1931,6 +1962,17 @@ mod drm_conn_tests {
             assert_eq!(veto_decision(1, panel(), Some(false)), panel());
             assert_eq!(veto_decision(1, panel(), None), panel(), "no lid switch, no veto");
             assert_eq!(veto_decision(0, panel(), Some(true)), panel(), "headless: nothing else lit");
+        }
+
+        #[test]
+        fn the_wake_exclusion_list_names_what_was_dropped() {
+            let undriven = vec!["eDP-1".to_owned(), "DP-3".to_owned()];
+            let wakeable = vec!["DP-3".to_owned()];
+            assert_eq!(
+                excluded_from_wake(&undriven, &wakeable),
+                vec!["eDP-1".to_owned()]
+            );
+            assert!(excluded_from_wake(&undriven, &undriven).is_empty());
         }
 
         #[test]
