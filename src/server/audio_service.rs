@@ -112,11 +112,18 @@ mod comms_device {
     /// becomes a harmless duplicate of the normal default entry).
     pub fn get_default_comms_output_device_name() -> Option<String> {
         unsafe {
-            // CoInitializeEx may already have been called elsewhere in this
-            // process (e.g. by another Windows-only subsystem); ignore
-            // "already initialized" style results, only bail on hard errors
-            // inside the closure below via `?`.
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            // Only release a COM initialization reference we actually took
+            // out. `CoInitializeEx` returns `RPC_E_CHANGED_MODE` when this
+            // thread is already COM-initialized under a different
+            // concurrency model — in that case we added no reference, so
+            // calling `CoUninitialize()` unconditionally would incorrectly
+            // release one belonging to whoever initialized it first and can
+            // disrupt later COM operations on this thread. `S_OK` and
+            // `S_FALSE` (already initialized with the *same* model) both
+            // mean we hold a reference that we must release; anything else
+            // (e.g. `RPC_E_CHANGED_MODE`) means we don't.
+            let init_hr = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let we_initialized = init_hr.is_ok();
 
             let name = (|| -> windows::core::Result<String> {
                 let enumerator: IMMDeviceEnumerator =
@@ -127,7 +134,10 @@ mod comms_device {
                 Ok(prop.to_string())
             })();
 
-            CoUninitialize();
+            if we_initialized {
+                CoUninitialize();
+            }
+
             match name {
                 Ok(n) if !n.is_empty() => Some(n),
                 Ok(_) => None,
