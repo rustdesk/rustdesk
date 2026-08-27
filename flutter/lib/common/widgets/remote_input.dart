@@ -126,8 +126,7 @@ class _RawTouchGestureDetectorRegionState
   }
 
   bool isNotTouchBasedDevice() {
-    return !kTouchBasedDeviceKinds.contains(lastDeviceKind) &&
-        inputModel.isPhysicalMouse.value;
+    return !kTouchBasedDeviceKinds.contains(lastDeviceKind);
   }
 
   // Mobile, mouse mode.

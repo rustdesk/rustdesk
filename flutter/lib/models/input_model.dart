@@ -1519,8 +1519,9 @@ class InputModel {
     return dt >= 0 && dt < kTouchAfterMouseWindowMs;
   }
 
+  final Set<int> _ignoredTouchPointers = {};
+
   void onPointDownImage(PointerDownEvent e) {
-    debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
     _remoteWindowCoords = [];
@@ -1536,22 +1537,22 @@ class InputModel {
       }
       _lastMouseDownTimeMs = nowMs;
       _lastMouseDownPos = e.position;
-    }
-
-    if (_relativeMouse.enabled.value) {
-      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
-    }
-
-    if (!_isMouseOrTrackpad(e.kind)) {
+    } else {
       // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
       if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
+        _ignoredTouchPointers.add(e.pointer);
         return;
       }
       if (isPhysicalMouse.value) {
         isPhysicalMouse.value = false;
       }
     }
-    if (isPhysicalMouse.value) {
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
+    }
+
+    if (_isMouseOrTrackpad(e.kind) && isPhysicalMouse.value) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
@@ -1565,6 +1566,7 @@ class InputModel {
   }
 
   void onPointUpImage(PointerUpEvent e) {
+    if (_ignoredTouchPointers.remove(e.pointer)) return;
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1573,7 +1575,7 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (!_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) return;
+    if (!_isMouseOrTrackpad(e.kind)) return;
     if (isPhysicalMouse.value) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
@@ -1588,11 +1590,12 @@ class InputModel {
   }
 
   void onPointMoveImage(PointerMoveEvent e) {
+    if (_ignoredTouchPointers.contains(e.pointer)) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
-    if (!_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) return;
+    if (!_isMouseOrTrackpad(e.kind)) return;
 
-    if (_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) {
+    if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
     }
 
