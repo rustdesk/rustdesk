@@ -205,6 +205,9 @@ struct DisplayHealth {
     /// The dma-buf convert failed for this display. The COMMON cause is multi-GPU: our render node
     /// is not the GPU that exported the scanout. Follows the monitor for the process run.
     prefer_cpu: bool,
+    /// The PipeWire fallback for this display was rejected on geometry (a transposed stream), so
+    /// the lone-display carve-out in `mark_demoted_displays` must not keep advertising it online.
+    fallback_rejected: bool,
 }
 
 impl DisplayHealth {
@@ -216,6 +219,7 @@ impl DisplayHealth {
             last_build: None,
             rapid_builds: 0,
             prefer_cpu: false,
+            fallback_rejected: false,
         }
     }
 
@@ -483,6 +487,7 @@ impl TraitCapturer for IpcDrmCapturer {
                             h.zero_frame_streak = 0;
                             h.demotes = 0;
                             h.since = Instant::now();
+                            h.fallback_rejected = false;
                         }
                     }
                 }
@@ -1402,12 +1407,22 @@ pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
 }
 
 // A multi-display portal stream cannot replace one demoted connector. Keep its index but mark it
-// offline; a single connector remains usable through the whole-desktop fallback.
+// offline; a single connector remains usable through the whole-desktop fallback - unless that
+// fallback itself was rejected on geometry, in which case advertising the lone display online
+// would restart-loop the video service against a stream nothing can serve.
 fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
+    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
     if list.len() <= 1 {
+        if let (Some(display), Some(info)) = (list.first(), infos.first_mut()) {
+            if health
+                .get(&connector_key(display))
+                .is_some_and(|health| health.demoted() && health.fallback_rejected)
+            {
+                info.online = false;
+            }
+        }
         return;
     }
-    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
     for (display, info) in list.iter().zip(infos.iter_mut()) {
         if health
             .get(&connector_key(display))
@@ -1416,6 +1431,21 @@ fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
             info.online = false;
         }
     }
+}
+
+/// The PipeWire fallback for this display was rejected on geometry; recorded so the lone-display
+/// carve-out above stops advertising a display nothing can serve. Cleared by a delivered frame
+/// and by the demote-cooldown re-arm.
+pub(super) fn mark_fallback_rejected(display_idx: usize) {
+    let Some(expected) = display_info_of(display_idx as i32) else {
+        return;
+    };
+    DRM_DISPLAY_HEALTH
+        .lock()
+        .unwrap()
+        .entry(connector_key(&expected))
+        .or_insert_with(DisplayHealth::new)
+        .fallback_rejected = true;
 }
 
 fn primary_index_from_assignment(assignment: &[Option<usize>], primary: usize) -> usize {
@@ -1668,6 +1698,8 @@ pub(super) fn get_capturer_info(
                 }
                 h.zero_frame_streak = 0;
                 h.since = Instant::now();
+                // The cooldown re-arms DRM for this display, so the fallback verdict restarts too.
+                h.fallback_rejected = false;
             }
         }
     }
@@ -1769,6 +1801,46 @@ mod drm_capturer_tests {
         (0..h)
             .map(|y| (0..w).map(|x| buf[(y * w + x) * 4]).collect())
             .collect()
+    }
+
+    #[test]
+    fn a_lone_display_goes_offline_only_when_its_fallback_was_rejected() {
+        // Unique name = unique health key; DRM_DISPLAY_HEALTH is process-wide.
+        let list = vec![drm_display("TEST-lone-fallback", 1080, 1920)];
+        let key = connector_key(&list[0]);
+        let demoted = DisplayHealth {
+            zero_frame_streak: DRM_GRAB_MAX_FAILURES,
+            demotes: 1,
+            ..DisplayHealth::new()
+        };
+        // Demoted alone keeps the lone display online: the whole-desktop fallback is usable.
+        DRM_DISPLAY_HEALTH.lock().unwrap().insert(key.clone(), demoted);
+        let mut infos = vec![DisplayInfo {
+            online: true,
+            ..Default::default()
+        }];
+        mark_demoted_displays(&list, &mut infos);
+        assert!(infos[0].online, "the lone-display carve-out must survive");
+        // A rejected fallback ends the carve-out: advertising online would restart-loop.
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get_mut(&key)
+            .expect("just inserted")
+            .fallback_rejected = true;
+        mark_demoted_displays(&list, &mut infos);
+        assert!(!infos[0].online, "a rejected fallback must take the lone display offline");
+        // Once the demotion cooldown lapses the display is no longer demoted, and online returns
+        // even with the rejection still latched (the re-arm will clear it on the next build).
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get_mut(&key)
+            .expect("still there")
+            .since = Instant::now() - demote_cooldown(1) - Duration::from_secs(1);
+        infos[0].online = true;
+        mark_demoted_displays(&list, &mut infos);
+        assert!(infos[0].online, "past the cooldown the verdict is DRM's to retry");
     }
 
     #[test]
@@ -1907,6 +1979,7 @@ mod drm_capturer_tests {
             h.rapid_builds = 3;
             h.last_build = Some(Instant::now());
             h.prefer_cpu = true;
+            h.fallback_rejected = true;
         }
         put_frame(&c, 64, 32);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
@@ -1919,6 +1992,10 @@ mod drm_capturer_tests {
         };
         assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
         assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
+        assert!(
+            !h.fallback_rejected,
+            "a delivered frame also refutes the rejected-fallback verdict"
+        );
         assert_eq!(
             h.rapid_builds, 3,
             "but it says NOTHING about the rebuild cadence: keeping it is what lets the flap guard \

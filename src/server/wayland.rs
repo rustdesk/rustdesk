@@ -557,6 +557,10 @@ pub(super) fn get_capturer_for_display(
                         && advertised.y == rect.0 .1
                         && (size_matches || (single_display && !transposed));
                     if !consistent {
+                        // Recorded so the lone-display carve-out in `mark_demoted_displays` makes
+                        // the "advertised offline" below true for a single display too, instead of
+                        // restart-looping against a stream nothing can serve.
+                        super::drm_capturer::mark_fallback_rejected(display_idx);
                         bail!(
                             "drm display {} demoted with no geometry-consistent PipeWire stream{} (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
                             display_idx,
