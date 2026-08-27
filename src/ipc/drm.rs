@@ -363,6 +363,13 @@ fn veto_builtin_panel_with_lid_shut(
     veto_decision(externals, wakeable, lid_is_closed())
 }
 
+/// Is the wake-list identity `id` scanning out now? `id` is the `{device}:{name}` form the wake
+/// list carries; the bare connector name never equals it.
+fn wake_identity_is_lit(cur: &[DrmDisplayInfo], id: &str) -> bool {
+    cur.iter()
+        .any(|d| d.active && format!("{}:{}", d.device, d.name) == id)
+}
+
 /// Undriven connectors the wake will not be fired for: whatever the veto or the hopeless latch
 /// dropped between `undriven` and the final wake list. Pure, for the same reason as
 /// `veto_decision`.
@@ -555,10 +562,10 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
         schedule_drm_cache_refresh();
     }
     if fired {
-        for name in &excluded {
-            if cur.iter().any(|d| d.active && &d.name == name) {
+        for id in &excluded {
+            if wake_identity_is_lit(&cur, id) {
                 log::info!(
-                    "drm: the seat-global wake fired for other connector(s) and also lit {name}, \
+                    "drm: the seat-global wake fired for other connector(s) and also lit {id}, \
                      which was excluded from this wake"
                 );
             }
@@ -1962,6 +1969,20 @@ mod drm_conn_tests {
             assert_eq!(veto_decision(1, panel(), Some(false)), panel());
             assert_eq!(veto_decision(1, panel(), None), panel(), "no lid switch, no veto");
             assert_eq!(veto_decision(0, panel(), Some(true)), panel(), "headless: nothing else lit");
+        }
+
+        #[test]
+        fn a_lit_exclusion_is_matched_by_its_full_identity_never_the_bare_name() {
+            let mut lit = lit("eDP-1");
+            lit.device = "/dev/dri/card2".to_owned();
+            let cur = vec![lit];
+            assert!(super::super::wake_identity_is_lit(
+                &cur,
+                "/dev/dri/card2:eDP-1"
+            ));
+            // The wake list never carries a bare name, and a bare name must never match.
+            assert!(!super::super::wake_identity_is_lit(&cur, "eDP-1"));
+            assert!(!super::super::wake_identity_is_lit(&cur, ":eDP-1"));
         }
 
         #[test]
