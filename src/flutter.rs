@@ -1769,6 +1769,21 @@ pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> usize {
     0
 }
 
+pub fn session_take_rgba_frame(session_id: SessionID, display: usize) -> Vec<u8> {
+    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
+        return Vec::new();
+    };
+    let frame = session
+        .display_rgbas
+        .read()
+        .unwrap()
+        .get(&display)
+        .filter(|rgba| rgba.valid)
+        .map(|rgba| rgba.data.clone())
+        .unwrap_or_default();
+    frame
+}
+
 #[no_mangle]
 pub extern "C" fn session_get_rgba(session_uuid_str: *const char, display: usize) -> *const u8 {
     if let Ok(session_id) = char_to_session_id(session_uuid_str) {

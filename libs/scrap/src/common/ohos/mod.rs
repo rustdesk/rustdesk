@@ -57,6 +57,13 @@ pub fn screen_size() -> (usize, usize) {
     *CONFIGURED_SCREEN_SIZE.lock().unwrap()
 }
 
+/// Clear captured pixels and geometry between host generations so a newly
+/// connected viewer can never receive a frame retained from a prior session.
+pub fn reset_screen_state() {
+    *LATEST_SCREEN_FRAME.lock().unwrap() = ScreenFrame::default();
+    *CONFIGURED_SCREEN_SIZE.lock().unwrap() = (0, 0);
+}
+
 pub struct Capturer {
     display: Display,
     rgba: Vec<u8>,
@@ -182,5 +189,30 @@ impl<'a> TraitPixelBuffer for PixelBuffer<'a> {
 
     fn pixfmt(&self) -> Pixfmt {
         self.pixfmt
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_requires_a_new_frame_for_a_new_host_generation() {
+        reset_screen_state();
+        assert!(push_screen_frame_rgba(&[1, 2, 3, 4], 1, 1));
+        let mut first = Capturer::new(Display::primary().unwrap()).unwrap();
+        assert!(first.frame(Duration::ZERO).is_ok());
+
+        reset_screen_state();
+        assert_eq!(screen_size(), (0, 0));
+        let mut restarted = Capturer::new(Display::primary().unwrap()).unwrap();
+        match restarted.frame(Duration::ZERO) {
+            Err(error) => assert_eq!(error.kind(), io::ErrorKind::WouldBlock),
+            Ok(_) => panic!("a reset host generation must not expose a stale frame"),
+        }
+
+        assert!(push_screen_frame_rgba(&[5, 6, 7, 8], 1, 1));
+        assert!(restarted.frame(Duration::ZERO).is_ok());
+        reset_screen_state();
     }
 }

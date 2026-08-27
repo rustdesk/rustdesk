@@ -2275,6 +2275,10 @@ pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> SyncRetur
     SyncReturn(super::flutter::session_get_rgba_size(session_id, display))
 }
 
+pub fn session_take_rgba_frame(session_id: SessionID, display: usize) -> SyncReturn<Vec<u8>> {
+    SyncReturn(super::flutter::session_take_rgba_frame(session_id, display))
+}
+
 pub fn session_next_rgba(session_id: SessionID, display: usize) -> SyncReturn<()> {
     SyncReturn(super::flutter::session_next_rgba(session_id, display))
 }

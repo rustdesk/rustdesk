@@ -357,10 +357,15 @@ pub fn stop_host() {
     HOST_INPUT_EVENTS.lock().unwrap().clear();
     *HOST_POINTER_POSITION.lock().unwrap() = (0, 0);
     HOST_AUDIO.lock().unwrap().clear();
+    scrap::ohos::reset_screen_state();
     HOST_RECEIVED_CLIPBOARD.lock().unwrap().take();
     if was_enabled && HOST_THREAD_STARTED.load(Ordering::SeqCst) {
         crate::RendezvousMediator::restart();
     }
+}
+
+pub fn reset_host_screen() {
+    scrap::ohos::reset_screen_state();
 }
 
 pub fn host_is_started() -> bool {

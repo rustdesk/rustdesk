@@ -582,8 +582,7 @@ impl Connection {
                 && Self::permission(keys::OPTION_ENABLE_KEYBOARD, &control_permissions),
             clipboard: !cfg!(target_env = "ohos")
                 && Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &control_permissions),
-            audio: cfg!(target_env = "ohos")
-                || Self::permission(keys::OPTION_ENABLE_AUDIO, &control_permissions),
+            audio: Self::permission(keys::OPTION_ENABLE_AUDIO, &control_permissions),
             // to-do: make sure is the option correct here
             file: !cfg!(target_env = "ohos")
                 && Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &control_permissions),
@@ -744,6 +743,13 @@ impl Connection {
                 Some(data) = rx_from_cm.recv() => {
                     match data {
                         ipc::Data::Authorize => {
+                            if cfg!(target_env = "ohos") {
+                                conn.send_login_error(
+                                    "HarmonyOS watched/view-only hosting requires password authentication",
+                                )
+                                .await;
+                                continue;
+                            }
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
                             conn.require_2fa.take();
                             if !conn.send_logon_response_and_keep_alive().await {
@@ -781,7 +787,10 @@ impl Connection {
                         ipc::Data::SwitchPermission{name, enabled} => {
                             let enabled = if cfg!(target_env = "ohos") {
                                 if name == "audio" {
-                                    true
+                                    enabled && Self::permission(
+                                        keys::OPTION_ENABLE_AUDIO,
+                                        &conn.control_permissions,
+                                    )
                                 } else if matches!(
                                     name.as_str(),
                                     "keyboard"
@@ -828,6 +837,14 @@ impl Connection {
                             } else if &name == "audio" {
                                 conn.audio = enabled;
                                 conn.send_permission(Permission::Audio, enabled).await;
+                                if cfg!(target_env = "ohos") && !enabled {
+                                    conn.send_close_reason_no_retry(
+                                        "HarmonyOS watched/view-only audio permission was revoked",
+                                    )
+                                    .await;
+                                    conn.on_close("audio permission revoked", true).await;
+                                    break;
+                                }
                                 if conn.authorized {
                                     if let Some(s) = conn.server.upgrade() {
                                         if conn.is_authed_view_camera_conn() {
@@ -2902,6 +2919,14 @@ impl Connection {
                 sleep(1.).await;
                 return false;
             }
+            if cfg!(target_env = "ohos") && !self.audio {
+                self.send_login_error(
+                    "HarmonyOS watched/view-only hosting requires device audio permission",
+                )
+                .await;
+                sleep(1.).await;
+                return false;
+            }
             if !self.check_login_scope(&lr).await {
                 return false;
             }
@@ -3078,8 +3103,13 @@ impl Connection {
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
 
-            if (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
-                || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
+            let approve_mode = if cfg!(target_env = "ohos") {
+                ApproveMode::Password
+            } else {
+                password::approve_mode()
+            };
+            if (approve_mode == ApproveMode::Click && !allow_logon_screen_password)
+                || approve_mode == ApproveMode::Both && !password::has_valid_password()
             {
                 #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 if should_use_terminal_os_login_scope(self.terminal, &lr.os_login.username) {
