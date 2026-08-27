@@ -575,15 +575,26 @@ impl Connection {
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
-            keyboard: Self::permission(keys::OPTION_ENABLE_KEYBOARD, &control_permissions),
-            clipboard: Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &control_permissions),
-            audio: Self::permission(keys::OPTION_ENABLE_AUDIO, &control_permissions),
+            // HarmonyOS currently ships only the watched/view-only host mode.
+            // Keep every non-view capability denied in Core so stale
+            // configuration or a future ArkTS regression cannot widen access.
+            keyboard: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_KEYBOARD, &control_permissions),
+            clipboard: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_CLIPBOARD, &control_permissions),
+            audio: cfg!(target_env = "ohos")
+                || Self::permission(keys::OPTION_ENABLE_AUDIO, &control_permissions),
             // to-do: make sure is the option correct here
-            file: Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &control_permissions),
-            restart: Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &control_permissions),
-            recording: Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
-            block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
-            privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
+            file: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_FILE_TRANSFER, &control_permissions),
+            restart: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_REMOTE_RESTART, &control_permissions),
+            recording: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_RECORD_SESSION, &control_permissions),
+            block_input: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
+            privacy_mode: !cfg!(target_env = "ohos")
+                && Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -768,6 +779,26 @@ impl Connection {
                             conn.chat_unanswered = false;
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
+                            let enabled = if cfg!(target_env = "ohos") {
+                                if name == "audio" {
+                                    true
+                                } else if matches!(
+                                    name.as_str(),
+                                    "keyboard"
+                                        | "clipboard"
+                                        | "file"
+                                        | "restart"
+                                        | "recording"
+                                        | "block_input"
+                                        | "privacy_mode"
+                                ) {
+                                    false
+                                } else {
+                                    enabled
+                                }
+                            } else {
+                                enabled
+                            };
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
@@ -2317,11 +2348,11 @@ impl Connection {
     }
 
     fn peer_keyboard_enabled(&self) -> bool {
-        self.keyboard && !self.disable_keyboard
+        !cfg!(target_env = "ohos") && self.keyboard && !self.disable_keyboard
     }
 
     fn clipboard_enabled(&self) -> bool {
-        self.clipboard && !self.disable_clipboard
+        !cfg!(target_env = "ohos") && self.clipboard && !self.disable_clipboard
     }
 
     #[inline]
@@ -2863,6 +2894,14 @@ impl Connection {
         }
         // After handling CloseReason messages, proceed to process other message types
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            if cfg!(target_env = "ohos") && lr.union.is_some() {
+                self.send_login_error(
+                    "HarmonyOS host currently supports screen-and-audio viewing only",
+                )
+                .await;
+                sleep(1.).await;
+                return false;
+            }
             if !self.check_login_scope(&lr).await {
                 return false;
             }
