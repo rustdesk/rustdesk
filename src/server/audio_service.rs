@@ -22,6 +22,17 @@ pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
 static RESTARTING: AtomicBool = AtomicBool::new(false);
 
+// Suffix appended to the communications-role default output device when it
+// is surfaced in the UI's audio-input device list. See #3762: cpal's
+// `default_output_device()` on Windows only ever resolves the *console*
+// role via WASAPI, so users who have configured a different "Default
+// communication device" than "Default device" get silent loopback capture
+// unless they change their Windows-wide default. This suffix lets such a
+// user explicitly pick the communications-role device from within RustDesk
+// instead of changing system-wide settings.
+#[cfg(windows)]
+pub const COMMS_DEVICE_SUFFIX: &str = " (Communications)";
+
 lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
 }
@@ -74,6 +85,91 @@ pub fn restart() {
     }
     RESTARTING.store(true, Ordering::SeqCst);
 }
+
+// ---------------------------------------------------------------------
+// #3762 fix: expose the WASAPI *communications*-role default render
+// device so it can be selected explicitly as a loopback source, instead
+// of only ever being able to capture the *console*-role default device
+// (which is all cpal's `default_output_device()` can see on Windows).
+// ---------------------------------------------------------------------
+#[cfg(windows)]
+mod comms_device {
+    use windows::core::Interface;
+    use windows::Win32::Devices::Properties::DEVPKEY_Device_FriendlyName;
+    use windows::Win32::Media::Audio::{
+        eCommunications, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
+    };
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED,
+        STGM_READ,
+    };
+
+    /// Query the current system default *communications*-role render
+    /// (output) device's friendly name via WASAPI. Returns `None` if COM
+    /// setup fails, no such device is configured, or the name can't be
+    /// read (e.g. no communications-role device configured at all, in
+    /// which case Windows just returns the console-role device and this
+    /// becomes a harmless duplicate of the normal default entry).
+    pub fn get_default_comms_output_device_name() -> Option<String> {
+        unsafe {
+            // CoInitializeEx may already have been called elsewhere in this
+            // process (e.g. by another Windows-only subsystem); ignore
+            // "already initialized" style results, only bail on hard errors
+            // inside the closure below via `?`.
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+
+            let name = (|| -> windows::core::Result<String> {
+                let enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+                let device = enumerator.GetDefaultAudioEndpoint(eRender, eCommunications)?;
+                let store = device.OpenPropertyStore(STGM_READ)?;
+                let prop = store.GetValue(&DEVPKEY_Device_FriendlyName)?;
+                Ok(prop.to_string())
+            })();
+
+            CoUninitialize();
+            match name {
+                Ok(n) if !n.is_empty() => Some(n),
+                Ok(_) => None,
+                Err(e) => {
+                    log::debug!("Failed to query default communications output device: {:?}", e);
+                    None
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+pub use comms_device::get_default_comms_output_device_name;
+
+/// Strip the `COMMS_DEVICE_SUFFIX` marker from a UI-facing device name,
+/// returning the underlying cpal device name that can be matched against
+/// `HOST.devices()`.
+#[cfg(windows)]
+#[inline]
+pub fn strip_comms_device_suffix(name: &str) -> &str {
+    name.strip_suffix(COMMS_DEVICE_SUFFIX).unwrap_or(name)
+}
+
+/// Append the communications-role default output device (if any, and if
+/// distinct from what's already listed) to a UI-facing device name list,
+/// suffixed with `COMMS_DEVICE_SUFFIX` so it round-trips through
+/// `strip_comms_device_suffix` / `get_device()` below. No-op on
+/// non-Windows platforms.
+#[cfg(windows)]
+pub fn append_comms_output_device(devices: &mut Vec<String>) {
+    if let Some(name) = get_default_comms_output_device_name() {
+        let labeled = format!("{}{}", name, COMMS_DEVICE_SUFFIX);
+        if !devices.contains(&labeled) {
+            devices.push(labeled);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+#[inline]
+pub fn append_comms_output_device(_devices: &mut Vec<String>) {}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod pa_impl {
@@ -287,10 +383,35 @@ mod cpal_impl {
         Ok((device, format))
     }
 
+    // ------------------------------------------------------------------
+    // #3762: if the user explicitly selected the communications-role
+    // default device (surfaced in the UI with `COMMS_DEVICE_SUFFIX`, see
+    // `append_comms_output_device` above), resolve it here by matching
+    // the stripped name against cpal's device enumeration. Falls through
+    // to the original console-role `default_output_device()` behavior in
+    // every other case, so existing users see no behavior change.
+    // ------------------------------------------------------------------
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
+            if let Some(stripped) = audio_input.strip_suffix(super::COMMS_DEVICE_SUFFIX) {
+                for d in HOST.devices().with_context(|| "Failed to get audio devices")? {
+                    if d.name().unwrap_or_default() == stripped {
+                        log::info!("Communications output device: {}", stripped);
+                        let format = d
+                            .default_output_config()
+                            .map_err(|e| anyhow!(e))
+                            .with_context(|| "Failed to get default output format")?;
+                        log::info!("Default output format: {:?}", format);
+                        return Ok((d, format));
+                    }
+                }
+                bail!(
+                    "Selected communications output device '{}' not found",
+                    stripped
+                );
+            }
             return get_audio_input(&audio_input);
         }
         let device = HOST

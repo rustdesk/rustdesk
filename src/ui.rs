@@ -846,6 +846,7 @@ fn get_sound_inputs() -> Vec<String> {
             }
         }
     }
+    crate::audio_service::append_comms_output_device(&mut out);
     out
 }
 

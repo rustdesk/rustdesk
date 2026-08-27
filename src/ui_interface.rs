@@ -404,6 +404,7 @@ pub fn get_sound_inputs() -> Vec<String> {
             a.push(name);
         }
     }
+    crate::audio_service::append_comms_output_device(&mut a);
     a
 }
 
