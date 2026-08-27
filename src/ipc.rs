@@ -1892,7 +1892,10 @@ pub async fn sync_config_to_service() -> ResultType<()> {
     let mut c = connect_service(1000).await?;
     let cfg = (Config::get(), Config2::get());
     c.send(&Data::SyncConfig(Some(cfg.into()))).await?;
-    c.next_timeout(1000).await?;
+    // The service acks a pushed config with SyncConfig(None); anything else did not apply it.
+    if !matches!(c.next_timeout(1000).await?, Some(Data::SyncConfig(None))) {
+        bail!("unexpected reply from the service");
+    }
     Ok(())
 }
 

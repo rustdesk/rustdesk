@@ -559,7 +559,9 @@ pub fn core_main() -> Option<Vec<String>> {
                     Some(verb @ ("enable" | "disable")) => {
                         if is_cli_setting_change_disabled() {
                             println!("Settings are disabled!");
-                        } else if !headless::is_supported() {
+                        } else if verb == "enable" && !headless::is_supported() {
+                            // Disabling must always be possible: with DRM temporarily gone the
+                            // setting would otherwise stay armed and re-fire when DRM returns.
                             println!("No DRM connectors on this machine!");
                         } else if crate::platform::is_installed() && is_root() {
                             // Only the option is set here. Forcing the connector is the root
