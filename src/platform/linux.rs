@@ -1957,6 +1957,14 @@ mod desktop {
     const ENV_KEY_WAYLAND_DISPLAY: &str = "WAYLAND_DISPLAY";
     const ENV_KEY_DBUS_SESSION_BUS_ADDRESS: &str = "DBUS_SESSION_BUS_ADDRESS";
 
+    /// A compositor that runs Xwayland without exporting `XAUTHORITY` (wlroots, e.g. Hyprland)
+    /// still hands out a usable session through the Wayland side. Requiring xauth there never
+    /// succeeded, so every refresh ran the retry loop to the end, 240 shell pipelines at a time.
+    /// https://github.com/rustdesk/rustdesk/issues/15952
+    fn is_session_env_complete(display: &str, xauth: &str, wl_display: &str, dbus: &str) -> bool {
+        !display.is_empty() && (!xauth.is_empty() || (!wl_display.is_empty() && !dbus.is_empty()))
+    }
+
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
         pub sid: String,
@@ -2023,14 +2031,50 @@ mod desktop {
                     PLASMA_KDED,
                     tray.as_str(),
                 ];
+                self.display.clear();
+                self.xauth.clear();
+                self.wl_display.clear();
+                self.dbus.clear();
+                let mut kept = 0u8;
                 for proc in display_proc {
-                    self.display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
-                    self.xauth = get_env(ENV_KEY_XAUTHORITY, &self.uid, proc);
-                    self.wl_display = get_env(ENV_KEY_WAYLAND_DISPLAY, &self.uid, proc);
-                    self.dbus = get_env(ENV_KEY_DBUS_SESSION_BUS_ADDRESS, &self.uid, proc);
-                    if !self.display.is_empty() && !self.xauth.is_empty() {
+                    let display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
+                    let xauth = get_env(ENV_KEY_XAUTHORITY, &self.uid, proc);
+                    let wl_display = get_env(ENV_KEY_WAYLAND_DISPLAY, &self.uid, proc);
+                    let dbus = get_env(ENV_KEY_DBUS_SESSION_BUS_ADDRESS, &self.uid, proc);
+                    // Take a candidate whole and keep the best seen. Assigning each variable
+                    // unconditionally let a pattern that does not run on this desktop blank out
+                    // the values an earlier one had answered with, which is how a session with a
+                    // working portal ended up starting its `--server` with no compositor and no
+                    // bus at all. The Wayland-only rank is what a session whose Xwayland exports
+                    // no `XAUTHORITY` can still offer.
+                    let complete = is_session_env_complete(&display, &xauth, &wl_display, &dbus);
+                    let rank = if complete {
+                        3
+                    } else if !wl_display.is_empty() && !dbus.is_empty() {
+                        2
+                    } else if !display.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    if rank > kept {
+                        kept = rank;
+                        self.display = display;
+                        self.xauth = xauth;
+                        self.wl_display = wl_display;
+                        self.dbus = dbus;
+                    }
+                    if complete {
                         return;
                     }
+                }
+                // The Wayland pair on its own is a session the child server can be started
+                // against -- it is what `get_display_xauth_wayland` returns on. Retrying is for a
+                // session that has not finished coming up, and a compositor whose Xwayland starts
+                // on demand may never export a `DISPLAY` for this walk to find, so waiting ten
+                // more rounds for one costs the whole probe again on every refresh.
+                if kept >= 2 {
+                    break;
                 }
                 sleep_millis(300);
             }
