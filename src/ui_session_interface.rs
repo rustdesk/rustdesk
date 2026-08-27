@@ -1498,7 +1498,12 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::ElevateWithLogon(username, password));
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos", not(feature = "flutter")))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "ios",
+        target_env = "ohos",
+        not(feature = "flutter")
+    ))]
     pub fn switch_sides(&self) {}
 
     #[cfg(feature = "flutter")]

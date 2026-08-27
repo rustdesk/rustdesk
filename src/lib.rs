@@ -9,20 +9,20 @@ extern crate rdev_ohos as rdev;
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub use platform::{
-    clip_cursor, get_cursor, get_cursor_data, get_cursor_pos, get_focused_display,
-    set_cursor_pos, start_os_service,
+    clip_cursor, get_cursor, get_cursor_data, get_cursor_pos, get_focused_display, set_cursor_pos,
+    start_os_service,
 };
-#[cfg(all(not(target_os = "ios"), not(target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 /// cbindgen:ignore
 mod server;
-#[cfg(all(not(target_os = "ios"), not(target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 pub use self::server::*;
 mod client;
 pub use client::peer_online::query_online_states_result;
 mod lan;
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 mod rendezvous_mediator;
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(not(target_os = "ios"))]
 pub use self::rendezvous_mediator::*;
 /// cbindgen:ignore
 pub mod common;
@@ -77,7 +77,11 @@ mod ui_session_interface;
 mod hbbs_http;
 pub use hbbs_http::validate_rustdesk_api_server;
 
-#[cfg(any(target_os = "windows", all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
+#[cfg(any(
+    target_os = "windows",
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "macos"
+))]
 pub mod clipboard_file;
 
 pub mod privacy_mode;

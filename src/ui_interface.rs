@@ -1119,7 +1119,11 @@ pub fn deploy_device(token: String, new_id: Option<String>) -> DeployResult {
                         Config::set_key_confirmed(false);
                         Config::set_id(&new_id);
                     }
-                    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+                    #[cfg(not(any(
+                        target_os = "android",
+                        target_os = "ios",
+                        target_env = "ohos"
+                    )))]
                     if let Err(err) = ipc::set_config("id", new_id) {
                         return DeployResult::Error(format!(
                             "Failed to persist deployed id locally: {}",
@@ -1201,13 +1205,26 @@ pub fn is_root() -> bool {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn check_super_user_permission() -> bool {
-    #[cfg(any(windows, all(target_os = "linux", not(target_env = "ohos")), target_os = "macos"))]
+    #[cfg(any(
+        windows,
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "macos"
+    ))]
     return crate::platform::check_super_user_permission().unwrap_or(false);
-    #[cfg(not(any(windows, all(target_os = "linux", not(target_env = "ohos")), target_os = "macos")))]
+    #[cfg(not(any(
+        windows,
+        all(target_os = "linux", not(target_env = "ohos")),
+        target_os = "macos"
+    )))]
     return true;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+)))]
 pub fn check_zombie() {
     let mut deads = Vec::new();
     loop {
@@ -1231,7 +1248,12 @@ pub fn check_zombie() {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+)))]
 pub fn recent_sessions_updated() -> bool {
     let mut children = CHILDREN.lock().unwrap();
     if children.0 {
@@ -1242,7 +1264,12 @@ pub fn recent_sessions_updated() -> bool {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos", feature = "flutter")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    target_env = "ohos",
+    feature = "flutter"
+)))]
 pub fn new_remote(id: String, remote_type: String, force_relay: bool) {
     let mut lock = CHILDREN.lock().unwrap();
     let mut args = vec![format!("--{}", remote_type), id.clone()];
@@ -1482,7 +1509,10 @@ pub fn option_synced() -> bool {
     }
 }
 
-#[cfg(all(any(target_os = "android", feature = "flutter"), not(any(target_os = "ios", target_env = "ohos"))))]
+#[cfg(all(
+    any(target_os = "android", feature = "flutter"),
+    not(any(target_os = "ios", target_env = "ohos"))
+))]
 #[tokio::main(flavor = "current_thread")]
 pub(crate) async fn send_to_cm(data: &ipc::Data) {
     if let Ok(mut c) = ipc::connect(1000, "_cm").await {

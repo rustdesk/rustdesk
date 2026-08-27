@@ -709,7 +709,8 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     /// unused in flutter, use switch_display or set_peer_info
-    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool, _scale: f64) {}
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32, _cursor_embedded: bool, _scale: f64) {
+    }
 
     fn update_privacy_mode(&self) {
         self.push_event::<&str>("update_privacy_mode", &[], &[]);
@@ -1668,10 +1669,10 @@ pub mod connection_manager {
         start_listen_ipc_thread();
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     pub fn start_channel(
         rx: UnboundedReceiver<crate::ipc::Data>,
         tx: UnboundedSender<crate::ipc::Data>,

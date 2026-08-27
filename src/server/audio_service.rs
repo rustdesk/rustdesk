@@ -13,7 +13,11 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "android",
+    target_env = "ohos"
+)))]
 use hbb_common::anyhow::anyhow;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,14 +30,22 @@ lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "android",
+    target_env = "ohos"
+)))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::repeat::<cpal_impl::State, _, _>(&svc.clone(), 33, cpal_impl::run);
     svc.sp
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "android",
+    target_env = "ohos"
+))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::run(&svc.clone(), pa_impl::run);
@@ -75,7 +87,11 @@ pub fn restart() {
     RESTARTING.store(true, Ordering::SeqCst);
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "android",
+    target_env = "ohos"
+))]
 mod pa_impl {
     use super::*;
 
@@ -95,13 +111,13 @@ mod pa_impl {
     pub async fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         RESTARTING.store(false, Ordering::SeqCst);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
         let mut encoder = Encoder::new(crate::platform::PA_SAMPLE_RATE, Stereo, LowDelay)?;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         allow_err!(
             stream
                 .send(&crate::ipc::Data::Config((
@@ -110,17 +126,17 @@ mod pa_impl {
                 )))
                 .await
         );
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         #[cfg(target_os = "android")]
-        let mut android_data = vec![];
+        let mut mobile_data = vec![];
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
                 Ok(())
             })?;
 
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             if let Ok(data) = stream.next_raw().await {
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);
@@ -143,14 +159,25 @@ mod pa_impl {
             }
 
             #[cfg(target_os = "android")]
-            if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
+            if scrap::android::ffi::get_audio_raw(&mut mobile_data, &mut vec![]).is_some() {
                 // Keep `android_data` as the reusable receive buffer: overwriting it with
                 // an exact-capacity aligned buffer only made the next `get_audio_raw`
                 // reallocate it, which dropped the alignment again.
-                let aligned = align_to_32_if_needed(&android_data);
-                let bytes = aligned.as_deref().unwrap_or(&android_data[..]);
+                let aligned = align_to_32_if_needed(&mobile_data);
+                let bytes = aligned.as_deref().unwrap_or(&mobile_data[..]);
                 // SAFETY: `bytes` is 4-byte aligned (either checked above or freshly
                 // allocated with align 4), and only whole f32s are read from it.
+                let data = unsafe {
+                    std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
+                };
+                send_f32(data, &mut encoder, &sp);
+            } else {
+                hbb_common::sleep(0.1).await;
+            }
+            #[cfg(target_env = "ohos")]
+            if let Some(mobile_data) = crate::platform::ohos::take_host_audio_f32_stereo() {
+                let aligned = align_to_32_if_needed(&mobile_data);
+                let bytes = aligned.as_deref().unwrap_or(&mobile_data[..]);
                 let data = unsafe {
                     std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
                 };
@@ -171,7 +198,11 @@ pub fn is_screen_capture_kit_available() -> bool {
         .any(|host| *host == cpal::HostId::ScreenCaptureKit)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(
+    all(target_os = "linux", not(target_env = "ohos")),
+    target_os = "android",
+    target_env = "ohos"
+)))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
     use super::*;
@@ -489,14 +520,16 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             AUDIO_ZERO_COUNT += 1;
         }
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     {
         // the permitted opus data size are 120, 240, 480, 960, 1920, and 2880
         // if data size is bigger than BATCH_SIZE, AND is an integer multiple of BATCH_SIZE
         // then upload in batches
         const BATCH_SIZE: usize = 960;
         let input_size = data.len();
-        if input_size > BATCH_SIZE && input_size % BATCH_SIZE == 0 {
+        let can_batch = input_size % BATCH_SIZE == 0
+            && (input_size > BATCH_SIZE || cfg!(target_env = "ohos") && input_size == BATCH_SIZE);
+        if can_batch {
             let n = input_size / BATCH_SIZE;
             for i in 0..n {
                 match encoder
@@ -519,7 +552,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     match encoder.encode_vec_float(data, data.len() * 6) {
         Ok(data) => {
             let mut msg_out = Message::new();

@@ -867,7 +867,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
     quit_cm();
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_listen<T: InvokeUiCM>(
     cm: ConnectionManager<T>,

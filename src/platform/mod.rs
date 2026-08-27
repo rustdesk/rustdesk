@@ -1,9 +1,9 @@
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub use linux::*;
-#[cfg(target_env = "ohos")]
-pub use ohos::*;
 #[cfg(target_os = "macos")]
 pub use macos::*;
+#[cfg(target_env = "ohos")]
+pub use ohos::*;
 #[cfg(windows)]
 pub use windows::*;
 
@@ -86,13 +86,16 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
 }
 
 // Android
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn get_active_username() -> String {
     // TODO
-    "android".into()
+    #[cfg(target_os = "android")]
+    return "android".into();
+    #[cfg(target_env = "ohos")]
+    return "ohos".into();
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub const PA_SAMPLE_RATE: u32 = 48000;
 
 #[cfg(target_os = "android")]
@@ -113,15 +116,21 @@ impl WakeLock {
     }
 }
 
-#[cfg(not(any(target_os = "ios", target_env = "ohos")))]
+#[cfg(target_env = "ohos")]
+#[derive(Default)]
+pub struct WakeLock;
+
+#[cfg(not(target_os = "ios"))]
 pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");
     #[cfg(target_os = "android")]
     return crate::platform::WakeLock::new("server");
+    #[cfg(target_env = "ohos")]
+    return WakeLock;
     // display: keep screen on
     // idle: keep cpu on
     // sleep: prevent system from sleeping, even manually
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     return crate::platform::WakeLock::new(_display, true, false);
 }
 
@@ -143,7 +152,7 @@ impl Drop for InstallingService {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[inline]
 pub fn is_prelogin() -> bool {
     false

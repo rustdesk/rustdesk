@@ -3235,6 +3235,13 @@ pub fn start_audio_thread() -> MediaSender {
 }
 
 #[cfg(target_env = "ohos")]
+pub fn start_audio_thread() -> MediaSender {
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
+    std::thread::spawn(move || while audio_receiver.recv().is_ok() {});
+    audio_sender
+}
+
+#[cfg(target_env = "ohos")]
 pub(crate) fn start_audio_thread_for_session(session_id: String) -> MediaSender {
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     std::thread::spawn(move || {

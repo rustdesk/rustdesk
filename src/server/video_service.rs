@@ -19,9 +19,9 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::{display_service::check_display_changed, service::ServiceTmpl, video_qos::VideoQoS, *};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::common::SimpleCallOnReturn;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::platform::linux::is_x11;
 use crate::privacy_mode::{get_privacy_mode_conn_id, INVALID_PRIVACY_MODE_CONN_ID};
 #[cfg(windows)]
@@ -392,7 +392,7 @@ fn get_capturer_monitor(
     current: usize,
     portable_service_running: bool,
 ) -> ResultType<CapturerInfo> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !is_x11() {
             return super::wayland::get_capturer_for_display(current);
@@ -411,7 +411,7 @@ fn get_capturer_monitor(
 
     let display = displays.remove(current);
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Display::X11(inner) = &display {
         if let Err(err) = inner.get_shm_status() {
             log::warn!(
@@ -540,9 +540,9 @@ fn run(vs: VideoService) -> ResultType<()> {
     // ensure_inited() is needed because clear() may be called.
     // to-do: wayland ensure_inited should pass current display index.
     // But for now, we do not support multi-screen capture on wayland.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     super::wayland::ensure_inited()?;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let _wayland_call_on_ret = {
         // Increment active display count when starting
         let _display_count = super::wayland::increment_active_display_count();
@@ -644,7 +644,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     #[cfg(windows)]
     start_uac_elevation_check();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let mut would_block_count = 0u32;
     let mut yuv = Vec::new();
     let mut mid_data = Vec::new();
@@ -812,7 +812,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
                     try_gdi += 1;
                 }
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     would_block_count += 1;
                     if !is_x11() {
@@ -865,7 +865,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 return Err(err.into());
             }
             _ => {
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     would_block_count = 0;
                 }
@@ -1207,7 +1207,7 @@ fn handle_one_frame(
 
 #[inline]
 pub fn refresh() {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     Display::refresh_size();
 }
 
@@ -1289,7 +1289,7 @@ pub fn make_display_changed_msg(
             VideoSource::Monitor => display_service::capture_cursor_embedded(),
             VideoSource::Camera => false,
         },
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_env = "ohos")))]
         resolutions: Some(SupportedResolutions {
             resolutions: match source {
                 VideoSource::Monitor => {

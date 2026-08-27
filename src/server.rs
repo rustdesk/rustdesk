@@ -35,24 +35,24 @@ use crate::ipc::Data;
 pub mod audio_service;
 #[cfg(target_os = "windows")]
 pub mod terminal_helper;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub mod terminal_service;
 cfg_if::cfg_if! {
 if #[cfg(not(target_os = "ios"))] {
 mod clipboard_service;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub use clipboard_service::is_clipboard_service_ok;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub(crate) mod wayland;
-#[cfg(all(target_os = "linux", feature = "drm"))]
+#[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
 pub(crate) mod drm_capturer;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod uinput;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod rdp_input;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod dbus;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub mod input_service;
 } else {
 mod clipboard_service {
@@ -61,7 +61,7 @@ pub const NAME: &'static str = "";
 }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 pub mod input_service {
     pub const NAME_CURSOR: &'static str = "";
     pub const NAME_POS: &'static str = "";
@@ -69,8 +69,8 @@ pub mod input_service {
 }
 
 mod connection;
-mod login_failure_check;
 pub mod display_service;
+mod login_failure_check;
 #[cfg(windows)]
 pub mod portable_service;
 mod service;
@@ -89,9 +89,15 @@ pub struct ConnectionMeta {
     pub controlled_context: Option<ControlledContext>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 const CONFIG_SYNC_INTERVAL_SECS: f32 = 0.3;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 // 3s is enough for at least one initial sync attempt:
 // 0.3s backoff + up to 1s connect timeout + up to 1s response timeout.
 const CONFIG_SYNC_INITIAL_WAIT_SECS: u64 = 3;
@@ -135,12 +141,12 @@ pub fn new() -> ServerPtr {
             clipboard_service::FILE_NAME.to_owned(),
         )));
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         if !display_service::capture_cursor_embedded() {
             server.add_service(Box::new(input_service::new_cursor()));
             server.add_service(Box::new(input_service::new_pos()));
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
             if scrap::is_x11() {
                 // wayland does not support multiple displays currently
                 server.add_service(Box::new(input_service::new_window_focus()));
@@ -531,7 +537,7 @@ impl Drop for Server {
         for s in self.services.values() {
             s.join();
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         wayland::clear();
     }
 }
@@ -560,7 +566,7 @@ pub fn check_zombie() {
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[tokio::main]
 pub async fn start_server(_is_server: bool) {
     crate::RendezvousMediator::start_all().await;
@@ -574,13 +580,13 @@ pub async fn start_server(_is_server: bool) {
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.
 /// * `no_server` - If `is_server` is false, whether to start a server if not found.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 #[tokio::main]
 pub async fn start_server(is_server: bool, no_server: bool) {
     use std::sync::Once;
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
             log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
@@ -610,7 +616,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         // seat0 session, which during a boot is exactly when this runs, and nothing revisits it --
         // so a Wayland host that came up slowly skipped the warm for the life of the process and
         // got back the cold-probe "No displays" symptom the warm exists to remove.
-        #[cfg(all(target_os = "linux", feature = "drm"))]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos"), feature = "drm"))]
         if let Err(err) = std::thread::Builder::new()
             .name("drm-warm".into())
             .spawn(drm_capturer::warm_availability)
@@ -621,11 +627,14 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             log::warn!("drm: could not spawn the availability warm ({err}); skipping it");
         }
         input_service::fix_key_down_timeout_loop();
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if input_service::wayland_use_uinput() {
             allow_err!(input_service::setup_uinput(0, 1920, 0, 1080).await);
         }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(
+            target_os = "macos",
+            all(target_os = "linux", not(target_env = "ohos"))
+        ))]
         wait_initial_config_sync().await;
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
@@ -710,7 +719,10 @@ pub async fn start_ipc_url_server() {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 async fn wait_initial_config_sync() {
     if crate::platform::is_root() {
         return;
@@ -742,7 +754,10 @@ async fn wait_initial_config_sync() {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", not(target_env = "ohos"))
+))]
 async fn sync_and_watch_config_dir(sync_done_tx: Option<tokio::sync::oneshot::Sender<()>>) {
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
