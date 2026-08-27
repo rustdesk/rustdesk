@@ -1065,14 +1065,19 @@ fn refresh_available_async() {
                         _ => true,
                     };
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                    drop(st);
+                    // A restored list must also clear the empty-debounce clock, or the NEXT
+                    // empty push demotes instantly off a stale first-sighting.
+                    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
                     if changed {
-                        drop(st);
                         scrap::wayland::display::clear_wayland_displays_cache();
                     }
                 }
                 RefreshOutcome::Unavailable => {
-                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
-                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    // Through the shared debounce, DRM_STATE dropped first (the two locks never
+                    // nest): the refresh path must not demote faster than the hotplug path does.
+                    drop(st);
+                    swap_available_displays(Vec::new());
                 }
                 // Only the TTL stamp moves, so this does NOT go through publish_probe_state.
                 RefreshOutcome::Restamp => {
