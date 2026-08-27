@@ -357,10 +357,10 @@ impl Capturer {
     // copy from GPU memory to system memory
     unsafe fn ohgodwhat(&mut self, frame: *mut IDXGIResource) -> io::Result<()> {
         let mut texture: *mut ID3D11Texture2D = ptr::null_mut();
-        (*frame).QueryInterface(
+        wrap_hresult((*frame).QueryInterface(
             &IID_ID3D11Texture2D,
             &mut texture as *mut *mut _ as *mut *mut _,
-        );
+        ))?;
         let texture = ComPtr(texture);
 
         #[allow(invalid_value)]
@@ -500,10 +500,10 @@ impl Capturer {
             }
 
             let mut texture: *mut ID3D11Texture2D = ptr::null_mut();
-            (*frame.0).QueryInterface(
+            wrap_hresult((*frame.0).QueryInterface(
                 &IID_ID3D11Texture2D,
                 &mut texture as *mut *mut _ as *mut *mut _,
-            );
+            ))?;
             let texture = ComPtr(texture);
             self.texture = texture;
 
