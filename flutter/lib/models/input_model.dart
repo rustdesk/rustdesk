@@ -1224,6 +1224,20 @@ class InputModel {
         })));
   }
 
+  /// [FIX #15630] Start a trackpad 2-finger gesture: latch scroll mode, reset
+  /// the fractional-scroll accumulator, and open the touch pan on an
+  /// Android-controlled peer. Shared by the Down path (onPointDownImage) and
+  /// the defensive relatch in onPointMoveImage, so a fallback relatch cannot
+  /// emit pan_update without pan_start or reuse a stale remainder.
+  void _beginTrackpadTwoFinger(Offset position) {
+    _trackpadTwoFinger = true;
+    _trackpadScrollUnsent = Offset.zero;
+    // Mirror the Android-peer pan lifecycle (onPointerPanZoomStart).
+    if (peerPlatform == kPeerPlatformAndroid) {
+      handlePointerEvent('touch', kMouseEventTypePanStart, position);
+    }
+  }
+
   /// [FIX #15630] Send a smooth scroll for an Android trackpad 2-finger gesture.
   ///
   /// The device reports 2-finger as a pressed touch-drag (there is no native
@@ -1625,13 +1639,7 @@ class InputModel {
         (e.buttons & 0x1) != 0 &&
         _trackpadHoverDeviceId != null &&
         e.device == _trackpadHoverDeviceId) {
-      _trackpadTwoFinger = true;
-      _trackpadScrollUnsent = Offset.zero;
-      // Mirror the Android-peer pan lifecycle (onPointerPanZoomStart) so a
-      // synthetic 2-finger gesture opens a touch pan on the controlled peer.
-      if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent('touch', kMouseEventTypePanStart, e.position);
-      }
+      _beginTrackpadTwoFinger(e.position);
       return;
     }
 
@@ -1743,10 +1751,13 @@ class InputModel {
       if (_trackpadHoverDeviceId != null &&
           e.device == _trackpadHoverDeviceId &&
           (e.buttons & 0x1) != 0) {
-        // The Down (onPointDownImage) normally sets this latch already;
-        // re-assert it defensively so interleaved hover frames stay
-        // suppressed (onPointHoverImage) even if a Down is ever missed.
-        _trackpadTwoFinger = true;
+        // The Down (onPointDownImage) normally starts the gesture already;
+        // start it here too if that Down was ever missed, so interleaved
+        // hover frames stay suppressed (onPointHoverImage) and the peer sees
+        // a proper pan_start before the first pan_update.
+        if (!_trackpadTwoFinger) {
+          _beginTrackpadTwoFinger(e.position);
+        }
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }
       return;
