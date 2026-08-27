@@ -59,6 +59,7 @@ pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
+pub const PLATFORM_OHOS: &str = "HarmonyOS";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
@@ -1789,7 +1790,9 @@ pub fn is_keyboard_mode_supported(
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => {
-            if peer_platform.to_lowercase() == crate::PLATFORM_ANDROID.to_lowercase() {
+            if peer_platform.eq_ignore_ascii_case(crate::PLATFORM_ANDROID)
+                || peer_platform.eq_ignore_ascii_case(crate::PLATFORM_OHOS)
+            {
                 false
             } else {
                 version_number >= hbb_common::get_version_number("1.2.0")

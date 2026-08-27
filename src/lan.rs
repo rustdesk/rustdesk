@@ -56,13 +56,17 @@ pub(super) fn start_listening() -> ResultType<()> {
                                 let username = crate::platform::get_active_username();
                                 #[cfg(target_env = "ohos")]
                                 let username = crate::username();
+                                #[cfg(not(target_env = "ohos"))]
+                                let platform = whoami::platform().to_string();
+                                #[cfg(target_env = "ohos")]
+                                let platform = crate::PLATFORM_OHOS.to_owned();
                                 let peer = PeerDiscovery {
                                     cmd: "pong".to_owned(),
                                     mac: get_mac(&self_addr),
                                     id,
                                     hostname,
                                     username,
-                                    platform: whoami::platform().to_string(),
+                                    platform,
                                     ..Default::default()
                                 };
                                 msg_out.set_peer_discovery(peer);

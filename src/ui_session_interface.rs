@@ -674,6 +674,9 @@ impl<T: InvokeUiSession> Session<T> {
         if is_remote {
             self.peer_platform()
         } else {
+            #[cfg(target_env = "ohos")]
+            return crate::PLATFORM_OHOS.to_owned();
+            #[cfg(not(target_env = "ohos"))]
             whoami::platform().to_string()
         }
     }
