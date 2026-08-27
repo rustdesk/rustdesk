@@ -245,9 +245,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       if (gFFI.chatModel.chatWindowOverlayEntry == null &&
           gFFI.ffiModel.pi.version.isNotEmpty) {
         gFFI.invokeMethod("enable_soft_keyboard", false);
+        _mobileFocusNode.unfocus();
+        _physicalFocusNode.requestFocus();
       }
-      _mobileFocusNode.unfocus();
-      _physicalFocusNode.requestFocus();
 
       // Workaround for iOS: physical keyboard input fails after virtual keyboard is hidden
       // https://github.com/flutter/flutter/issues/39900
@@ -519,12 +519,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               }
                               return Container(
                                 color: MyTheme.canvasColor,
-                                child: inputModel.isPhysicalMouse.value
-                                    ? getBodyForMobile()
-                                    : RawTouchGestureDetectorRegion(
-                                        child: getBodyForMobile(),
-                                        ffi: gFFI,
-                                      ),
+                                child: RawTouchGestureDetectorRegion(
+                                  child: getBodyForMobile(),
+                                  ffi: gFFI,
+                                ),
                               );
                             }),
                           ),
