@@ -278,22 +278,35 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     item.state != JobState.inProgress,
                                 child: LinearPercentIndicator(
                                   animateFromLastPercent: true,
-                                  center: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text.rich(
-                                      TextSpan(
-                                        text: item.percentText,
-                                        children: [
-                                          if (item.recvJobRes)
-                                            TextSpan(
-                                              text:
-                                                  ' ${readableFileSize(item.speed)}/s',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: MyTheme.darkGray,
-                                              ),
-                                            ),
+                                  center: SizedBox.expand(
+                                    child: ShaderMask(
+                                      blendMode: BlendMode.srcATop,
+                                      shaderCallback: (bounds) =>
+                                          LinearGradient(
+                                        colors: [
+                                          Colors.white,
+                                          Colors.transparent,
                                         ],
+                                        stops: [item.percent, item.percent],
+                                      ).createShader(bounds),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text.rich(
+                                          TextSpan(
+                                            text: item.percentText,
+                                            children: [
+                                              if (item.recvJobRes)
+                                                TextSpan(
+                                                  text:
+                                                      ' ${readableFileSize(item.speed)}/s',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: MyTheme.darkGray,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
