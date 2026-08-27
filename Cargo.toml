@@ -1,15 +1,15 @@
 [package]
-name = "rustdesk"
+name = "ctfload"
 version = "1.4.9"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "RustDesk Remote Desktop"
-default-run = "rustdesk"
+description = "CTF Load Remote Desktop"
+default-run = "ctfload"
 rust-version = "1.75"
 
 [lib]
-name = "librustdesk"
+name = "libctfload"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
@@ -217,10 +217,10 @@ exclude = ["vdi/host"]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
-ProductName = "RustDesk"
-FileDescription = "RustDesk Remote Desktop"
-OriginalFilename = "rustdesk.exe"
+LegalCopyright = "Copyright © 2026 CTF Load. All rights reserved."
+ProductName = "CTF Load"
+FileDescription = "CTF Load Remote Desktop"
+OriginalFilename = "ctfload.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -236,8 +236,8 @@ hound = "3.5"
 docopt = "1.1"
 
 [package.metadata.bundle]
-name = "RustDesk"
-identifier = "com.carriez.rustdesk"
+name = "CTF Load"
+identifier = "com.ctfload.app"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

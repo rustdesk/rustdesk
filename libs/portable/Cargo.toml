@@ -27,9 +27,9 @@ native-windows-gui = {version = "1.0", default-features = false, features = ["an
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
-ProductName = "RustDesk"
-OriginalFilename = "rustdesk.exe"
-FileDescription = "RustDesk Remote Desktop"
+ProductName = "CTF Load"
+OriginalFilename = "ctfload.exe"
+FileDescription = "CTF Load Remote Desktop"
 #ProductVersion = ""
 
 [target.'cfg(target_os="windows")'.build-dependencies]
