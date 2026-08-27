@@ -1183,7 +1183,7 @@ impl Connection {
                         }
                     }
                     conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
-                    #[cfg(feature = "hwcodec")]
+                    #[cfg(any(feature = "hwcodec", target_env = "ohos"))]
                     conn.update_supported_encoding();
                 }
                 _ = test_delay_timer.tick() => {
@@ -5787,7 +5787,7 @@ impl Connection {
             .map(|t| t.0 = Instant::now());
     }
 
-    #[cfg(feature = "hwcodec")]
+    #[cfg(any(feature = "hwcodec", target_env = "ohos"))]
     fn update_supported_encoding(&mut self) {
         let Some(last) = &self.last_supported_encoding else {
             return;

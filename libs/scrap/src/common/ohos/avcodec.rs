@@ -1,6 +1,13 @@
 use super::direct_render::DirectRenderTarget;
-use crate::{common::GoogleImage, CodecFormat, ImageRgb};
-use hbb_common::message_proto::{Chroma, EncodedVideoFrames, SupportedDecoding};
+use crate::{
+    codec::{base_bitrate, EncoderApi, EncoderCfg, EncodingUpdate},
+    common::GoogleImage,
+    CodecFormat, EncodeInput, EncodeYuvFormat, ImageRgb, Pixfmt,
+};
+use hbb_common::bytes::Bytes;
+use hbb_common::message_proto::{
+    Chroma, EncodedVideoFrame, EncodedVideoFrames, SupportedDecoding, VideoFrame,
+};
 use hbb_common::{anyhow::anyhow, bail, ResultType};
 use std::{
     collections::{HashMap, VecDeque},
@@ -19,6 +26,7 @@ use std::{
 lazy_static::lazy_static! {
     static ref LAST_DECODER_INIT_ERROR: Mutex<String> = Mutex::new(String::new());
     static ref DECODER_SUPPORT_CACHE: Mutex<Vec<(CodecFormat, bool)>> = Mutex::new(Vec::new());
+    static ref ENCODER_SUPPORT_CACHE: Mutex<Vec<(CodecFormat, bool)>> = Mutex::new(Vec::new());
 }
 
 static MEDIA_LOCK_POISON_REPORTED: AtomicBool = AtomicBool::new(false);
@@ -34,7 +42,15 @@ const MAX_STREAM_CHANGED_RETRIES: u32 = 8;
 const AV_PIXEL_FORMAT_YUVI420: i32 = 1;
 const AV_PIXEL_FORMAT_NV12: i32 = 2;
 const AV_PIXEL_FORMAT_NV21: i32 = 3;
+const AVCODEC_BUFFER_FLAGS_EOS: u32 = 1 << 0;
 const AVCODEC_BUFFER_FLAGS_SYNC_FRAME: u32 = 1 << 1;
+const AVCODEC_BUFFER_FLAGS_INCOMPLETE_FRAME: u32 = 1 << 2;
+const AVCODEC_BUFFER_FLAGS_CODEC_DATA: u32 = 1 << 3;
+const HARDWARE_CODEC_CATEGORY: i32 = 0;
+const ENCODER_FPS: i32 = 30;
+const ENCODER_BUFFER_TIMEOUT_US: i64 = 100_000;
+const ENCODER_OUTPUT_TIMEOUT: Duration = Duration::from_millis(300);
+const ENCODER_INPUT_BACKPRESSURE: &str = "OHOS_ENCODER_INPUT_BACKPRESSURE";
 const OH_SCALING_MODE_SCALE_FIT_V2: i32 = 4;
 const HILOG_DOMAIN: u32 = 0xFF01;
 const HILOG_TAG: &[u8] = b"RustDeskNative\0";
@@ -185,6 +201,33 @@ unsafe extern "C" {
     fn OH_VideoDecoder_GetOutputDescription(codec: *mut OH_AVCodec) -> *mut OH_AVFormat;
 }
 
+#[link(name = "native_media_venc")]
+unsafe extern "C" {
+    fn OH_VideoEncoder_CreateByName(name: *const c_char) -> *mut OH_AVCodec;
+    fn OH_VideoEncoder_Destroy(codec: *mut OH_AVCodec) -> i32;
+    fn OH_VideoEncoder_Configure(codec: *mut OH_AVCodec, format: *mut OH_AVFormat) -> i32;
+    fn OH_VideoEncoder_Prepare(codec: *mut OH_AVCodec) -> i32;
+    fn OH_VideoEncoder_Start(codec: *mut OH_AVCodec) -> i32;
+    fn OH_VideoEncoder_Stop(codec: *mut OH_AVCodec) -> i32;
+    fn OH_VideoEncoder_SetParameter(codec: *mut OH_AVCodec, format: *mut OH_AVFormat) -> i32;
+    fn OH_VideoEncoder_PushInputBuffer(codec: *mut OH_AVCodec, index: u32) -> i32;
+    fn OH_VideoEncoder_FreeOutputBuffer(codec: *mut OH_AVCodec, index: u32) -> i32;
+    fn OH_VideoEncoder_QueryInputBuffer(
+        codec: *mut OH_AVCodec,
+        index: *mut u32,
+        timeout_us: i64,
+    ) -> i32;
+    fn OH_VideoEncoder_GetInputBuffer(codec: *mut OH_AVCodec, index: u32) -> *mut OH_AVBuffer;
+    fn OH_VideoEncoder_QueryOutputBuffer(
+        codec: *mut OH_AVCodec,
+        index: *mut u32,
+        timeout_us: i64,
+    ) -> i32;
+    fn OH_VideoEncoder_GetOutputBuffer(codec: *mut OH_AVCodec, index: u32) -> *mut OH_AVBuffer;
+    fn OH_VideoEncoder_GetInputDescription(codec: *mut OH_AVCodec) -> *mut OH_AVFormat;
+    fn OH_VideoEncoder_GetOutputDescription(codec: *mut OH_AVCodec) -> *mut OH_AVFormat;
+}
+
 #[link(name = "hilog_ndk.z")]
 unsafe extern "C" {
     fn OH_LOG_PrintMsg(
@@ -199,6 +242,26 @@ unsafe extern "C" {
 #[link(name = "native_media_codecbase")]
 unsafe extern "C" {
     fn OH_AVCodec_GetCapability(mime: *const c_char, is_encoder: bool) -> *mut OH_AVCapability;
+    fn OH_AVCodec_GetCapabilityByCategory(
+        mime: *const c_char,
+        is_encoder: bool,
+        category: i32,
+    ) -> *mut OH_AVCapability;
+    fn OH_AVCapability_GetName(capability: *mut OH_AVCapability) -> *const c_char;
+    fn OH_AVCapability_IsVideoSizeSupported(
+        capability: *mut OH_AVCapability,
+        width: i32,
+        height: i32,
+    ) -> bool;
+    fn OH_AVCapability_GetEncoderBitrateRange(
+        capability: *mut OH_AVCapability,
+        bitrate_range: *mut OH_AVRange,
+    ) -> i32;
+    fn OH_AVCapability_GetVideoSupportedPixelFormats(
+        capability: *mut OH_AVCapability,
+        pixel_formats: *mut *const i32,
+        pixel_format_count: *mut u32,
+    ) -> i32;
     fn OH_AVCapability_GetVideoWidthRange(
         capability: *mut OH_AVCapability,
         width_range: *mut OH_AVRange,
@@ -207,11 +270,6 @@ unsafe extern "C" {
         capability: *mut OH_AVCapability,
         height_range: *mut OH_AVRange,
     ) -> i32;
-    fn OH_AVCapability_IsVideoSizeSupported(
-        capability: *mut OH_AVCapability,
-        width: i32,
-        height: i32,
-    ) -> bool;
     static OH_MD_KEY_WIDTH: *const c_char;
     static OH_MD_KEY_HEIGHT: *const c_char;
     static OH_MD_KEY_PIXEL_FORMAT: *const c_char;
@@ -226,6 +284,9 @@ unsafe extern "C" {
     static OH_MD_KEY_ENABLE_SYNC_MODE: *const c_char;
     static OH_MD_KEY_VIDEO_ENABLE_LOW_LATENCY: *const c_char;
     static OH_MD_KEY_FRAME_RATE: *const c_char;
+    static OH_MD_KEY_BITRATE: *const c_char;
+    static OH_MD_KEY_I_FRAME_INTERVAL: *const c_char;
+    static OH_MD_KEY_VIDEO_ENCODER_ENABLE_B_FRAME: *const c_char;
     static OH_AVCODEC_MIMETYPE_VIDEO_AVC: *const c_char;
     static OH_AVCODEC_MIMETYPE_VIDEO_HEVC: *const c_char;
 }
@@ -235,7 +296,9 @@ unsafe extern "C" {
     fn OH_AVFormat_Create() -> *mut OH_AVFormat;
     fn OH_AVFormat_Destroy(format: *mut OH_AVFormat);
     fn OH_AVFormat_SetIntValue(format: *mut OH_AVFormat, key: *const c_char, value: i32) -> bool;
-    fn OH_AVFormat_SetDoubleValue(format: *mut OH_AVFormat, key: *const c_char, value: f64) -> bool;
+    fn OH_AVFormat_SetLongValue(format: *mut OH_AVFormat, key: *const c_char, value: i64) -> bool;
+    fn OH_AVFormat_SetDoubleValue(format: *mut OH_AVFormat, key: *const c_char, value: f64)
+        -> bool;
     fn OH_AVFormat_GetIntValue(format: *mut OH_AVFormat, key: *const c_char, out: *mut i32)
         -> bool;
 
@@ -1033,7 +1096,10 @@ impl OhosVideoDecoder {
             let ret = OH_VideoDecoder_SetParameter(self.codec, format);
             OH_AVFormat_Destroy(format);
             if ret != AV_ERR_OK {
-                hilog_warn(&format!("OHOS decoder SetParameter frame_rate failed: {}", ret));
+                hilog_warn(&format!(
+                    "OHOS decoder SetParameter frame_rate failed: {}",
+                    ret
+                ));
             }
         }
         Ok(())
@@ -1549,6 +1615,698 @@ fn get_format_i32(format: *mut OH_AVFormat, key: *const c_char) -> Option<i32> {
     let mut out = 0i32;
     let ok = unsafe { OH_AVFormat_GetIntValue(format, key, &mut out) };
     ok.then_some(out)
+}
+
+#[derive(Debug, Clone)]
+pub struct OhosVideoEncoderConfig {
+    pub format: CodecFormat,
+    pub width: u32,
+    pub height: u32,
+    pub quality: f32,
+    pub keyframe_interval: Option<usize>,
+}
+
+struct EncoderOutput {
+    data: Vec<u8>,
+    pts: i64,
+    flags: u32,
+}
+
+pub struct OhosVideoEncoder {
+    codec: *mut OH_AVCodec,
+    config: OhosVideoEncoderConfig,
+    yuvfmt: EncodeYuvFormat,
+    input_size: usize,
+    bitrate_kbps: u32,
+    bitrate_range: OH_AVRange,
+    codec_data: Vec<u8>,
+    started: bool,
+}
+
+impl OhosVideoEncoder {
+    fn new_inner(config: OhosVideoEncoderConfig) -> ResultType<Self> {
+        let width =
+            i32::try_from(config.width).map_err(|_| anyhow!("OHOS encoder width is too large"))?;
+        let height = i32::try_from(config.height)
+            .map_err(|_| anyhow!("OHOS encoder height is too large"))?;
+        if width <= 0 || height <= 0 || width % 2 != 0 || height % 2 != 0 {
+            bail!("OHOS NV12 encoder requires positive even dimensions")
+        }
+        let capability = encoder_capability(config.format.clone());
+        if capability.is_null() {
+            bail!("no hardware OHOS encoder for {:?}", config.format)
+        }
+        if !unsafe { OH_AVCapability_IsVideoSizeSupported(capability, width, height) } {
+            bail!(
+                "OHOS hardware encoder does not support {}x{} for {:?}",
+                width,
+                height,
+                config.format
+            )
+        }
+        let name = unsafe { OH_AVCapability_GetName(capability) };
+        if name.is_null() {
+            bail!("OHOS hardware encoder capability has no name")
+        }
+        let codec = unsafe { OH_VideoEncoder_CreateByName(name) };
+        if codec.is_null() {
+            mark_encoder_unavailable(config.format.clone(), "CreateByName failed");
+            bail!("failed to create OHOS hardware encoder")
+        }
+
+        let mut encoder = Self {
+            codec,
+            config,
+            yuvfmt: EncodeYuvFormat {
+                pixfmt: Pixfmt::NV12,
+                w: width as usize,
+                h: height as usize,
+                stride: vec![width as usize, width as usize],
+                u: width as usize * height as usize,
+                v: 0,
+            },
+            input_size: width as usize * height as usize * 3 / 2,
+            bitrate_kbps: 0,
+            bitrate_range: OH_AVRange {
+                min_val: 1,
+                max_val: i32::MAX,
+            },
+            codec_data: Vec::new(),
+            started: false,
+        };
+        if ensure_ok(
+            unsafe {
+                OH_AVCapability_GetEncoderBitrateRange(capability, &mut encoder.bitrate_range)
+            },
+            "GetEncoderBitrateRange",
+        )
+        .is_err()
+        {
+            encoder.bitrate_range = OH_AVRange {
+                min_val: 1,
+                max_val: i32::MAX,
+            };
+        }
+        encoder.bitrate_kbps = encoder.clamped_bitrate_kbps(encoder.config.quality);
+        if let Err(err) = encoder.configure(width, height) {
+            mark_encoder_unavailable(encoder.config.format.clone(), &err.to_string());
+            return Err(err);
+        }
+        Ok(encoder)
+    }
+
+    fn configure(&mut self, width: i32, height: i32) -> ResultType<()> {
+        let format = unsafe { OH_AVFormat_Create() };
+        if format.is_null() {
+            bail!("failed to create OHOS encoder format")
+        }
+        let configure_result = (|| -> ResultType<()> {
+            set_format_int(format, unsafe { OH_MD_KEY_WIDTH }, width, "width")?;
+            set_format_int(format, unsafe { OH_MD_KEY_HEIGHT }, height, "height")?;
+            set_format_int(
+                format,
+                unsafe { OH_MD_KEY_PIXEL_FORMAT },
+                AV_PIXEL_FORMAT_NV12,
+                "pixel format",
+            )?;
+            set_format_double(
+                format,
+                unsafe { OH_MD_KEY_FRAME_RATE },
+                ENCODER_FPS as f64,
+                "frame rate",
+            )?;
+            set_format_long(
+                format,
+                unsafe { OH_MD_KEY_BITRATE },
+                i64::from(self.bitrate_kbps) * 1000,
+                "bitrate",
+            )?;
+            set_format_int(
+                format,
+                unsafe { OH_MD_KEY_ENABLE_SYNC_MODE },
+                1,
+                "sync mode",
+            )?;
+            let b_frame_key = unsafe { OH_MD_KEY_VIDEO_ENCODER_ENABLE_B_FRAME };
+            if !b_frame_key.is_null() {
+                let _ = unsafe { OH_AVFormat_SetIntValue(format, b_frame_key, 0) };
+            }
+            if let Some(frames) = self.config.keyframe_interval {
+                let interval_ms = frames
+                    .saturating_mul(1000)
+                    .checked_div(ENCODER_FPS as usize)
+                    .unwrap_or(1000)
+                    .min(i32::MAX as usize) as i32;
+                set_format_int(
+                    format,
+                    unsafe { OH_MD_KEY_I_FRAME_INTERVAL },
+                    interval_ms,
+                    "I-frame interval",
+                )?;
+            }
+            ensure_ok(
+                unsafe { OH_VideoEncoder_Configure(self.codec, format) },
+                "Encoder Configure",
+            )
+        })();
+        unsafe { OH_AVFormat_Destroy(format) };
+        configure_result?;
+        ensure_ok(
+            unsafe { OH_VideoEncoder_Prepare(self.codec) },
+            "Encoder Prepare",
+        )?;
+        ensure_ok(
+            unsafe { OH_VideoEncoder_Start(self.codec) },
+            "Encoder Start",
+        )?;
+        self.started = true;
+        // Vendor encoders may not publish aligned input geometry until the
+        // codec has entered the running state (the official callback sample
+        // queries this from the first input-buffer callback).
+        self.update_input_layout(width as usize, height as usize)?;
+        Ok(())
+    }
+
+    fn update_input_layout(&mut self, width: usize, height: usize) -> ResultType<()> {
+        let description = unsafe { OH_VideoEncoder_GetInputDescription(self.codec) };
+        if description.is_null() {
+            bail!("OHOS encoder input description is unavailable")
+        }
+        let layout = (|| -> ResultType<(usize, usize)> {
+            let stride_value = get_format_i32(description, unsafe { OH_MD_KEY_VIDEO_STRIDE })
+                .ok_or_else(|| anyhow!("OHOS encoder input stride is unavailable"))?;
+            let slice_height_value =
+                get_format_i32(description, unsafe { OH_MD_KEY_VIDEO_SLICE_HEIGHT })
+                    .ok_or_else(|| anyhow!("OHOS encoder input slice height is unavailable"))?;
+            let stride = usize::try_from(stride_value)
+                .map_err(|_| anyhow!("OHOS encoder input stride is invalid: {stride_value}"))?;
+            let slice_height = usize::try_from(slice_height_value).map_err(|_| {
+                anyhow!("OHOS encoder input slice height is invalid: {slice_height_value}")
+            })?;
+            if stride < width || slice_height < height {
+                bail!(
+                    "OHOS encoder input layout {}x{} is smaller than {}x{}",
+                    stride,
+                    slice_height,
+                    width,
+                    height
+                )
+            }
+            Ok((stride, slice_height))
+        })();
+        unsafe { OH_AVFormat_Destroy(description) };
+        let (stride, slice_height) = layout?;
+        let u = stride
+            .checked_mul(slice_height)
+            .ok_or_else(|| anyhow!("OHOS encoder NV12 Y plane overflow"))?;
+        let input_size = stride
+            .checked_mul((slice_height + 1) / 2)
+            .and_then(|chroma| u.checked_add(chroma))
+            .ok_or_else(|| anyhow!("OHOS encoder NV12 buffer size overflow"))?;
+        self.yuvfmt = EncodeYuvFormat {
+            pixfmt: Pixfmt::NV12,
+            w: width,
+            // convert_to_yuv() sizes its destination from EncodeYuvFormat::h.
+            // Keep the codec's aligned Y/UV plane offset inside that allocation.
+            h: slice_height,
+            stride: vec![stride, stride],
+            u,
+            v: 0,
+        };
+        self.input_size = input_size;
+        Ok(())
+    }
+
+    fn encode_inner(&mut self, data: &[u8], ms: i64) -> ResultType<VideoFrame> {
+        if !self.started {
+            bail!("OHOS encoder is not running")
+        }
+        self.submit_input(data, ms)?;
+        let deadline = Instant::now() + ENCODER_OUTPUT_TIMEOUT;
+        let mut frame_data = Vec::new();
+        let mut frame_flags = 0u32;
+        let mut frame_pts = None;
+        let mut codec_data = Vec::new();
+        loop {
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                bail!("timed out waiting for OHOS encoder output")
+            };
+            let Some(output) = self.query_output(remaining)? else {
+                if Instant::now() >= deadline {
+                    bail!("timed out waiting for OHOS encoder output")
+                }
+                continue;
+            };
+            if output.flags & AVCODEC_BUFFER_FLAGS_EOS != 0 {
+                bail!("OHOS encoder returned EOS")
+            }
+            let codec_only = output.flags & AVCODEC_BUFFER_FLAGS_CODEC_DATA != 0
+                && output.flags & AVCODEC_BUFFER_FLAGS_SYNC_FRAME == 0;
+            if codec_only {
+                codec_data.extend_from_slice(&output.data);
+                if output.flags & AVCODEC_BUFFER_FLAGS_INCOMPLETE_FRAME == 0 {
+                    self.codec_data.clone_from(&codec_data);
+                    codec_data.clear();
+                }
+                continue;
+            }
+            frame_pts = Some(output.pts);
+            frame_flags |= output.flags;
+            frame_data.extend_from_slice(&output.data);
+            if output.flags & AVCODEC_BUFFER_FLAGS_INCOMPLETE_FRAME == 0 {
+                break;
+            }
+        }
+        if frame_data.is_empty() {
+            bail!("OHOS encoder returned an empty frame")
+        }
+        let key = frame_flags & AVCODEC_BUFFER_FLAGS_SYNC_FRAME != 0;
+        let pts = frame_pts
+            .unwrap_or_else(|| ms.saturating_mul(1000))
+            .div_euclid(1000);
+        let mut frames = Vec::with_capacity(if key && !self.codec_data.is_empty() {
+            2
+        } else {
+            1
+        });
+        if key && !self.codec_data.is_empty() && !frame_data.starts_with(&self.codec_data) {
+            frames.push(EncodedVideoFrame {
+                data: Bytes::from(self.codec_data.clone()),
+                pts,
+                key: false,
+                ..Default::default()
+            });
+        }
+        frames.push(EncodedVideoFrame {
+            data: Bytes::from(frame_data),
+            pts,
+            key,
+            ..Default::default()
+        });
+        let encoded = EncodedVideoFrames {
+            frames: frames.into(),
+            ..Default::default()
+        };
+        let mut video_frame = VideoFrame::new();
+        match self.config.format {
+            CodecFormat::H264 => video_frame.set_h264s(encoded),
+            CodecFormat::H265 => video_frame.set_h265s(encoded),
+            _ => bail!("unsupported OHOS encoder format: {:?}", self.config.format),
+        }
+        Ok(video_frame)
+    }
+
+    fn submit_input(&mut self, data: &[u8], ms: i64) -> ResultType<()> {
+        let width = self.config.width as usize;
+        let height = self.config.height as usize;
+        let stride = self.yuvfmt.stride[0];
+        let chroma_rows = (height + 1) / 2;
+        let y_required = (height - 1)
+            .checked_mul(stride)
+            .and_then(|offset| offset.checked_add(width))
+            .ok_or_else(|| anyhow!("OHOS encoder Y input overflow"))?;
+        let uv_required = (chroma_rows - 1)
+            .checked_mul(stride)
+            .and_then(|offset| self.yuvfmt.u.checked_add(offset))
+            .and_then(|offset| offset.checked_add(width))
+            .ok_or_else(|| anyhow!("OHOS encoder UV input overflow"))?;
+        if data.len() < y_required.max(uv_required) {
+            bail!("OHOS encoder NV12 input is too small")
+        }
+        let input_size = i32::try_from(self.input_size)
+            .map_err(|_| anyhow!("OHOS encoder input is too large"))?;
+        let query_deadline = Instant::now() + ENCODER_OUTPUT_TIMEOUT;
+        let index = loop {
+            let mut index = 0u32;
+            let ret = unsafe {
+                OH_VideoEncoder_QueryInputBuffer(self.codec, &mut index, ENCODER_BUFFER_TIMEOUT_US)
+            };
+            match ret {
+                AV_ERR_OK => break index,
+                AV_ERR_TRY_AGAIN_LATER if Instant::now() < query_deadline => continue,
+                AV_ERR_TRY_AGAIN_LATER => bail!(ENCODER_INPUT_BACKPRESSURE),
+                _ => {
+                    self.stop_after_input_failure();
+                    bail!("OHOS encoder QueryInputBuffer failed: {}", ret)
+                }
+            }
+        };
+        let result = (|| -> ResultType<()> {
+            let buffer = unsafe { OH_VideoEncoder_GetInputBuffer(self.codec, index) };
+            if buffer.is_null() {
+                bail!("OHOS encoder input buffer is null")
+            }
+            let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
+            if capacity < 0 || (capacity as usize) < self.input_size {
+                bail!(
+                    "OHOS encoder input capacity {} is smaller than {}",
+                    capacity,
+                    self.input_size
+                )
+            }
+            let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
+            if addr.is_null() {
+                bail!("OHOS encoder input address is null")
+            }
+            unsafe { ptr::write_bytes(addr, 0, self.input_size) };
+            for row in 0..height {
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        data.as_ptr().add(row * stride),
+                        addr.add(row * stride),
+                        width,
+                    );
+                }
+            }
+            for row in 0..chroma_rows {
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        data.as_ptr().add(self.yuvfmt.u + row * stride),
+                        addr.add(self.yuvfmt.u + row * stride),
+                        width,
+                    );
+                }
+            }
+            let attr = OH_AVCodecBufferAttr {
+                pts: ms.saturating_mul(1000),
+                size: input_size,
+                offset: 0,
+                flags: 0,
+            };
+            ensure_ok(
+                unsafe { OH_AVBuffer_SetBufferAttr(buffer, &attr) },
+                "Encoder SetBufferAttr",
+            )?;
+            ensure_ok(
+                unsafe { OH_VideoEncoder_PushInputBuffer(self.codec, index) },
+                "Encoder PushInputBuffer",
+            )
+        })();
+        if result.is_err() {
+            // Stop invalidates and releases every queried input index. Reusing an
+            // encoder after stranding one index can exhaust its finite queue.
+            self.stop_after_input_failure();
+        }
+        result
+    }
+
+    fn stop_after_input_failure(&mut self) {
+        if !self.started {
+            return;
+        }
+        let ret = unsafe { OH_VideoEncoder_Stop(self.codec) };
+        if ret != AV_ERR_OK && ret != AV_ERR_INVALID_STATE {
+            hilog_warn(&format!(
+                "OHOS encoder Stop after input failure failed: {ret}"
+            ));
+        }
+        self.started = false;
+    }
+
+    fn query_output(&mut self, timeout: Duration) -> ResultType<Option<EncoderOutput>> {
+        let mut index = 0u32;
+        let timeout_us = timeout.as_micros().min(i64::MAX as u128) as i64;
+        let ret = unsafe { OH_VideoEncoder_QueryOutputBuffer(self.codec, &mut index, timeout_us) };
+        match ret {
+            AV_ERR_INVALID_STATE | AV_ERR_TRY_AGAIN_LATER => return Ok(None),
+            AV_ERR_STREAM_CHANGED => {
+                let description = unsafe { OH_VideoEncoder_GetOutputDescription(self.codec) };
+                if !description.is_null() {
+                    unsafe { OH_AVFormat_Destroy(description) };
+                }
+                return Ok(None);
+            }
+            AV_ERR_OK => {}
+            _ => bail!("OHOS encoder QueryOutputBuffer failed: {}", ret),
+        }
+        let buffer = unsafe { OH_VideoEncoder_GetOutputBuffer(self.codec, index) };
+        let copied = (|| -> ResultType<EncoderOutput> {
+            if buffer.is_null() {
+                bail!("OHOS encoder output buffer is null")
+            }
+            let mut attr = OH_AVCodecBufferAttr::default();
+            ensure_ok(
+                unsafe { OH_AVBuffer_GetBufferAttr(buffer, &mut attr) },
+                "Encoder GetBufferAttr",
+            )?;
+            if attr.offset < 0 || attr.size < 0 {
+                bail!("OHOS encoder returned negative output bounds")
+            }
+            let capacity = unsafe { OH_AVBuffer_GetCapacity(buffer) };
+            if capacity < 0 {
+                bail!("OHOS encoder output capacity is invalid")
+            }
+            let offset = attr.offset as usize;
+            let size = attr.size as usize;
+            let end = offset
+                .checked_add(size)
+                .ok_or_else(|| anyhow!("OHOS encoder output bounds overflow"))?;
+            if end > capacity as usize {
+                bail!("OHOS encoder output exceeds buffer capacity")
+            }
+            let addr = unsafe { OH_AVBuffer_GetAddr(buffer) };
+            if addr.is_null() && size != 0 {
+                bail!("OHOS encoder output address is null")
+            }
+            let data = if size == 0 {
+                Vec::new()
+            } else {
+                unsafe { std::slice::from_raw_parts(addr.add(offset), size) }.to_vec()
+            };
+            Ok(EncoderOutput {
+                data,
+                pts: attr.pts,
+                flags: attr.flags,
+            })
+        })();
+        let free_result = ensure_ok(
+            unsafe { OH_VideoEncoder_FreeOutputBuffer(self.codec, index) },
+            "Encoder FreeOutputBuffer",
+        );
+        match (copied, free_result) {
+            (Ok(output), Ok(())) => Ok(Some(output)),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+        }
+    }
+
+    fn clamped_bitrate_kbps(&self, ratio: f32) -> u32 {
+        let ratio = if ratio.is_finite() {
+            ratio.max(0.1)
+        } else {
+            1.0
+        };
+        let requested_bps =
+            (base_bitrate(self.config.width, self.config.height) as f32 * ratio * 1000.0)
+                .round()
+                .clamp(1.0, i32::MAX as f32) as i64;
+        let min_bps = i64::from(self.bitrate_range.min_val.max(1));
+        let max_bps = i64::from(
+            self.bitrate_range
+                .max_val
+                .max(self.bitrate_range.min_val.max(1)),
+        );
+        requested_bps
+            .clamp(min_bps, max_bps)
+            .div_euclid(1000)
+            .max(1) as u32
+    }
+
+    fn mark_runtime_failure(&self, error: &dyn std::fmt::Display) {
+        mark_encoder_unavailable(self.config.format.clone(), &error.to_string());
+    }
+}
+
+impl EncoderApi for OhosVideoEncoder {
+    fn new(cfg: EncoderCfg, _i444: bool) -> ResultType<Self> {
+        match cfg {
+            EncoderCfg::OHOS(config) => Self::new_inner(config),
+            _ => bail!("OHOS encoder type mismatch"),
+        }
+    }
+
+    fn encode_to_message(&mut self, input: EncodeInput, ms: i64) -> ResultType<VideoFrame> {
+        let result = self.encode_inner(input.yuv()?, ms);
+        if let Err(error) = &result {
+            if error.to_string() != ENCODER_INPUT_BACKPRESSURE {
+                self.mark_runtime_failure(error);
+            }
+        }
+        result
+    }
+
+    fn yuvfmt(&self) -> EncodeYuvFormat {
+        self.yuvfmt.clone()
+    }
+
+    fn set_quality(&mut self, ratio: f32) -> ResultType<()> {
+        let bitrate_kbps = self.clamped_bitrate_kbps(ratio);
+        let format = unsafe { OH_AVFormat_Create() };
+        if format.is_null() {
+            bail!("failed to create OHOS bitrate format")
+        }
+        let result = (|| -> ResultType<()> {
+            set_format_long(
+                format,
+                unsafe { OH_MD_KEY_BITRATE },
+                i64::from(bitrate_kbps) * 1000,
+                "bitrate",
+            )?;
+            ensure_ok(
+                unsafe { OH_VideoEncoder_SetParameter(self.codec, format) },
+                "Encoder SetParameter",
+            )
+        })();
+        unsafe { OH_AVFormat_Destroy(format) };
+        if let Err(error) = &result {
+            self.mark_runtime_failure(error);
+        } else {
+            self.bitrate_kbps = bitrate_kbps;
+            self.config.quality = ratio;
+        }
+        result
+    }
+
+    fn bitrate(&self) -> u32 {
+        self.bitrate_kbps
+    }
+
+    fn support_changing_quality(&self) -> bool {
+        true
+    }
+
+    fn latency_free(&self) -> bool {
+        false
+    }
+
+    fn is_hardware(&self) -> bool {
+        true
+    }
+
+    fn disable(&self) {
+        mark_encoder_unavailable(self.config.format.clone(), "disabled after runtime failure");
+        crate::codec::Encoder::update(EncodingUpdate::Check);
+    }
+}
+
+impl Drop for OhosVideoEncoder {
+    fn drop(&mut self) {
+        if self.codec.is_null() {
+            return;
+        }
+        if self.started {
+            let ret = unsafe { OH_VideoEncoder_Stop(self.codec) };
+            if ret != AV_ERR_OK && ret != AV_ERR_INVALID_STATE {
+                hilog_warn(&format!("OHOS encoder Stop failed: {}", ret));
+            }
+            self.started = false;
+        }
+        let ret = unsafe { OH_VideoEncoder_Destroy(self.codec) };
+        if ret != AV_ERR_OK {
+            hilog_warn(&format!("OHOS encoder Destroy failed: {}", ret));
+        }
+        self.codec = ptr::null_mut();
+    }
+}
+
+pub fn supports_encoder(format: CodecFormat) -> bool {
+    if let Some((_, available)) = lock_media_state(&ENCODER_SUPPORT_CACHE)
+        .iter()
+        .find(|(cached_format, _)| *cached_format == format)
+    {
+        return *available;
+    }
+    let available = !encoder_capability(format.clone()).is_null();
+    lock_media_state(&ENCODER_SUPPORT_CACHE).push((format.clone(), available));
+    hilog_info(&format!(
+        "OHOS supports hardware encoder {:?}: {}",
+        format, available
+    ));
+    available
+}
+
+fn encoder_capability(format: CodecFormat) -> *mut OH_AVCapability {
+    let mime = match format {
+        CodecFormat::H264 => h264_mime(),
+        CodecFormat::H265 => h265_mime(),
+        _ => return ptr::null_mut(),
+    };
+    let capability =
+        unsafe { OH_AVCodec_GetCapabilityByCategory(mime, true, HARDWARE_CODEC_CATEGORY) };
+    if capability.is_null() {
+        return capability;
+    }
+    let mut formats = ptr::null();
+    let mut count = 0u32;
+    if unsafe {
+        OH_AVCapability_GetVideoSupportedPixelFormats(capability, &mut formats, &mut count)
+    } != AV_ERR_OK
+        || formats.is_null()
+        || count == 0
+        || count > 1024
+    {
+        return ptr::null_mut();
+    }
+    let supports_nv12 = unsafe { std::slice::from_raw_parts(formats, count as usize) }
+        .iter()
+        .any(|format| *format == AV_PIXEL_FORMAT_NV12);
+    if supports_nv12 {
+        capability
+    } else {
+        ptr::null_mut()
+    }
+}
+
+pub(crate) fn mark_encoder_unavailable(format: CodecFormat, reason: &str) {
+    let mut cache = lock_media_state(&ENCODER_SUPPORT_CACHE);
+    if let Some((_, available)) = cache
+        .iter_mut()
+        .find(|(cached_format, _)| *cached_format == format)
+    {
+        *available = false;
+    } else {
+        cache.push((format.clone(), false));
+    }
+    drop(cache);
+    hilog_error(&format!(
+        "disabling OHOS hardware encoder {:?}: {}",
+        format, reason
+    ));
+}
+
+fn set_format_int(
+    format: *mut OH_AVFormat,
+    key: *const c_char,
+    value: i32,
+    label: &str,
+) -> ResultType<()> {
+    if key.is_null() || !unsafe { OH_AVFormat_SetIntValue(format, key, value) } {
+        bail!("failed to set OHOS encoder {}", label)
+    }
+    Ok(())
+}
+
+fn set_format_long(
+    format: *mut OH_AVFormat,
+    key: *const c_char,
+    value: i64,
+    label: &str,
+) -> ResultType<()> {
+    if key.is_null() || !unsafe { OH_AVFormat_SetLongValue(format, key, value) } {
+        bail!("failed to set OHOS encoder {}", label)
+    }
+    Ok(())
+}
+
+fn set_format_double(
+    format: *mut OH_AVFormat,
+    key: *const c_char,
+    value: f64,
+    label: &str,
+) -> ResultType<()> {
+    if key.is_null() || !unsafe { OH_AVFormat_SetDoubleValue(format, key, value) } {
+        bail!("failed to set OHOS encoder {}", label)
+    }
+    Ok(())
 }
 
 fn checked_input_addr(buffer: *mut OH_AVBuffer, data_len: usize) -> ResultType<(*mut u8, i32)> {

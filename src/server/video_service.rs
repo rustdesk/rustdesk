@@ -40,6 +40,8 @@ use hbb_common::{
 };
 #[cfg(feature = "hwcodec")]
 use scrap::hwcodec::{HwRamEncoder, HwRamEncoderConfig};
+#[cfg(target_env = "ohos")]
+use scrap::ohos::avcodec::OhosVideoEncoderConfig;
 #[cfg(feature = "vram")]
 use scrap::vram::{VRamEncoder, VRamEncoderConfig};
 #[cfg(not(windows))]
@@ -581,16 +583,44 @@ fn run(vs: VideoService) -> ResultType<()> {
     );
     let client_record = video_qos.record();
     drop(video_qos);
-    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup_encoder(
-        &c,
-        sp.name(),
-        quality,
-        client_record,
-        record_incoming,
-        last_portable_service_running,
-        vs.source,
-        display_idx,
-    ) {
+    let setup = || {
+        setup_encoder(
+            &c,
+            sp.name(),
+            quality,
+            client_record,
+            record_incoming,
+            last_portable_service_running,
+            vs.source,
+            display_idx,
+        )
+    };
+    #[cfg(target_env = "ohos")]
+    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = {
+        let mut created = None;
+        let mut last_error = None;
+        // A failed H.265 initialization quarantines only H.265 and recomputes
+        // negotiation, so the next attempt is H.264 before the final VP9 fallback.
+        for attempt in 1..=3 {
+            match setup() {
+                Ok(result) => {
+                    created = Some(result);
+                    break;
+                }
+                Err(error) => {
+                    log::error!("Failed to create OHOS encoder on attempt {attempt}: {error:?}");
+                    Encoder::update(scrap::codec::EncodingUpdate::Check);
+                    last_error = Some(error);
+                }
+            }
+        }
+        match created {
+            Some(result) => result,
+            None => return Err(last_error.expect("OHOS encoder setup attempted")),
+        }
+    };
+    #[cfg(not(target_env = "ohos"))]
+    let (mut encoder, encoder_cfg, codec_format, use_i444, recorder) = match setup() {
         Ok(result) => result,
         Err(err) => {
             log::error!("Failed to create encoder: {err:?}, fallback to VP9");
@@ -601,16 +631,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 codec: VpxVideoCodecId::VP9,
                 keyframe_interval: None,
             }));
-            setup_encoder(
-                &c,
-                sp.name(),
-                quality,
-                client_record,
-                record_incoming,
-                last_portable_service_running,
-                vs.source,
-                display_idx,
-            )?
+            setup()?
         }
     };
     #[cfg(feature = "vram")]
@@ -982,35 +1003,48 @@ fn get_encoder_config(
     let negotiated_codec = Encoder::negotiated_codec();
     match negotiated_codec {
         CodecFormat::H264 | CodecFormat::H265 => {
-            #[cfg(feature = "vram")]
-            if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec) {
-                return EncoderCfg::VRAM(VRamEncoderConfig {
-                    device: c.device(),
-                    width: c.width,
-                    height: c.height,
-                    quality,
-                    feature,
-                    keyframe_interval,
-                });
-            }
-            #[cfg(feature = "hwcodec")]
-            if let Some(hw) = HwRamEncoder::try_get(negotiated_codec) {
-                return EncoderCfg::HWRAM(HwRamEncoderConfig {
-                    name: hw.name,
-                    mc_name: hw.mc_name,
-                    width: c.width,
-                    height: c.height,
+            #[cfg(target_env = "ohos")]
+            {
+                EncoderCfg::OHOS(OhosVideoEncoderConfig {
+                    format: negotiated_codec,
+                    width: c.width as _,
+                    height: c.height as _,
                     quality,
                     keyframe_interval,
-                });
+                })
             }
-            EncoderCfg::VPX(VpxEncoderConfig {
-                width: c.width as _,
-                height: c.height as _,
-                quality,
-                codec: VpxVideoCodecId::VP9,
-                keyframe_interval,
-            })
+            #[cfg(not(target_env = "ohos"))]
+            {
+                #[cfg(feature = "vram")]
+                if let Some(feature) = VRamEncoder::try_get(&c.device(), negotiated_codec) {
+                    return EncoderCfg::VRAM(VRamEncoderConfig {
+                        device: c.device(),
+                        width: c.width,
+                        height: c.height,
+                        quality,
+                        feature,
+                        keyframe_interval,
+                    });
+                }
+                #[cfg(feature = "hwcodec")]
+                if let Some(hw) = HwRamEncoder::try_get(negotiated_codec) {
+                    return EncoderCfg::HWRAM(HwRamEncoderConfig {
+                        name: hw.name,
+                        mc_name: hw.mc_name,
+                        width: c.width,
+                        height: c.height,
+                        quality,
+                        keyframe_interval,
+                    });
+                }
+                EncoderCfg::VPX(VpxEncoderConfig {
+                    width: c.width as _,
+                    height: c.height as _,
+                    quality,
+                    codec: VpxVideoCodecId::VP9,
+                    keyframe_interval,
+                })
+            }
         }
         format @ (CodecFormat::VP8 | CodecFormat::VP9) => EncoderCfg::VPX(VpxEncoderConfig {
             width: c.width as _,
