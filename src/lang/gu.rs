@@ -758,6 +758,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "ચાલુ રાખો"),
         ("Browser didn't open? Use the url below to sign in.", "બ્રાઉઝર ખૂલ્યું નથી? લોગિન કરવા માટે નીચે આપેલ URL નો ઉપયોગ કરો."),
         ("Lock canvas", "કેનવાસ લોક કરો"),
+        ("Sync clipboard between sessions", ""),
         ("sync-clipboard-between-sessions-tip", ""),
     ].iter().cloned().collect();
 }
