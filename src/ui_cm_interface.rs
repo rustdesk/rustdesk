@@ -1546,13 +1546,19 @@ async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
             fs::get_path(dir)
         }
     };
-    if let Ok(Ok(fd)) = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await {
-        let mut msg_out = Message::new();
-        let mut file_response = FileResponse::new();
-        file_response.set_dir(fd);
-        msg_out.set_file_response(file_response);
-        send_raw(msg_out, tx);
-    }
+    let result = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await;
+    let msg_out = match result {
+        Ok(Ok(fd)) => {
+            let mut msg_out = Message::new();
+            let mut file_response = FileResponse::new();
+            file_response.set_dir(fd);
+            msg_out.set_file_response(file_response);
+            msg_out
+        }
+        Ok(Err(err)) => fs::new_error(0, err, -1),
+        Err(err) => fs::new_error(0, err, -1),
+    };
+    send_raw(msg_out, tx);
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -1750,7 +1756,7 @@ mod tests {
 
     #[test]
     #[cfg(not(any(target_os = "ios")))]
-    fn read_dir_success() {
+    fn read_dir_reports_success_and_error() {
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
             let (tx, mut rx) = unbounded_channel();
@@ -1773,6 +1779,18 @@ mod tests {
                 _ => panic!("unexpected data"),
             }
             let _ = fs::remove_dir_all(&dir);
+
+            super::read_dir(&dir.to_string_lossy(), false, &tx).await;
+
+            match rx.recv().await.unwrap() {
+                Data::RawMessage(bytes) => {
+                    let mut msg = Message::new();
+                    msg.merge_from_bytes(&bytes).unwrap();
+                    assert_eq!(msg.file_response().error().id, 0);
+                    assert!(!msg.file_response().error().error.is_empty());
+                }
+                _ => panic!("unexpected data"),
+            }
         });
     }
 
