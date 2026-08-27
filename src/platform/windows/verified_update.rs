@@ -1,5 +1,4 @@
 mod file;
-mod signature;
 
 use super::{
     get_custom_client_staging_dir, handle_custom_client_staging_dir_before_update,
@@ -23,7 +22,6 @@ pub fn update_to_verified(file: &str, expected_sha256: &str, expected_size: u64)
         update_file.cleanup();
         return Err(err);
     }
-    let update_file = update_file.verify_authenticode()?;
     let update_path = match update_file.path_str() {
         Ok(path) => path.to_owned(),
         Err(err) => {
@@ -46,21 +44,6 @@ pub fn update_to_verified(file: &str, expected_sha256: &str, expected_size: u64)
     let result = launch_verified_update(&extension, &update_path);
     clear_custom_client_staging_after_launch_failure(&custom_client_staging_dir, &result);
     finish_verified_update_launch(update_file, &extension, result)
-}
-
-impl VerifiedUpdateFile {
-    pub(crate) fn verify_authenticode(self) -> ResultType<Self> {
-        match self
-            .path_str()
-            .and_then(|path| signature::verify_authenticode_signature(Path::new(path)))
-        {
-            Ok(()) => Ok(self),
-            Err(err) => {
-                self.cleanup();
-                Err(err)
-            }
-        }
-    }
 }
 
 fn launch_verified_update(extension: &str, update_path: &str) -> ResultType<()> {

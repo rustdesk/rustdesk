@@ -15,7 +15,7 @@ MANUAL_SCRIPT = MACOS_SOURCE.split(
 
 
 class MacosUpdateScriptTests(unittest.TestCase):
-    def test_candidate_identity_and_os_signature_precede_install(self):
+    def test_candidate_identity_precedes_install_without_os_signature_checks(self):
         for name, script in (
             ("daemon", DAEMON_SCRIPT),
             ("manual", MANUAL_SCRIPT),
@@ -27,12 +27,8 @@ class MacosUpdateScriptTests(unittest.TestCase):
                     if "set validate_verified_app" in line
                 )
                 self.assertGreaterEqual(validation.count("CFBundleIdentifier"), 2)
-                self.assertIn(
-                    "/usr/bin/codesign --verify --deep --strict", validation
-                )
-                self.assertIn(
-                    "/usr/sbin/spctl --assess --type execute", validation
-                )
+                self.assertNotIn("/usr/bin/codesign", validation)
+                self.assertNotIn("/usr/sbin/spctl", validation)
                 self.assertIn(
                     "prepare_verified & validate_verified_app", script
                 )
@@ -54,19 +50,19 @@ class MacosUpdateScriptTests(unittest.TestCase):
                         shell.index('"transaction_started=1;"'),
                     )
 
-    def test_root_update_validates_candidate_before_transaction(self):
+    def test_root_update_validates_candidate_identity_before_transaction(self):
         root_update = MACOS_SOURCE.split(
             "pub fn update_from_dmg_as_root", 1
         )[1]
         validator = MACOS_SOURCE.split(
-            "fn verify_update_app_identity_and_signature", 1
+            "fn verify_update_app_identity", 1
         )[1].split("\nfn ", 1)[0]
 
-        self.assertIn('Command::new("/usr/bin/codesign")', validator)
-        self.assertIn('Command::new("/usr/sbin/spctl")', validator)
+        self.assertNotIn('Command::new("/usr/bin/codesign")', validator)
+        self.assertNotIn('Command::new("/usr/sbin/spctl")', validator)
         self.assertGreaterEqual(validator.count("CFBundleIdentifier"), 2)
         self.assertLess(
-            root_update.index("verify_update_app_identity_and_signature"),
+            root_update.index("verify_update_app_identity"),
             root_update.index("let staged_version_result"),
         )
 

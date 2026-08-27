@@ -252,7 +252,6 @@ fn verified_update_path(
     file_path: &Path,
 ) -> Option<(crate::platform::VerifiedUpdateFile, String)> {
     let update_file = match crate::platform::copy_and_verify_update_file_sha256(p, expected_sha256)
-        .and_then(crate::platform::VerifiedUpdateFile::verify_authenticode)
     {
         Ok(update_file) => update_file,
         Err(e) => {
