@@ -1519,6 +1519,7 @@ class InputModel {
     return dt >= 0 && dt < kTouchAfterMouseWindowMs;
   }
 
+  final Set<int> _activeMousePointers = {};
   final Set<int> _ignoredTouchPointers = {};
 
   void onPointDownImage(PointerDownEvent e) {
@@ -1532,6 +1533,7 @@ class InputModel {
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (_isMouseOrTrackpad(e.kind)) {
+      _activeMousePointers.add(e.pointer);
       if (!isPhysicalMouse.value) {
         isPhysicalMouse.value = true;
       }
@@ -1552,7 +1554,7 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (_isMouseOrTrackpad(e.kind) && isPhysicalMouse.value) {
+    if (_isMouseOrTrackpad(e.kind)) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
@@ -1567,6 +1569,7 @@ class InputModel {
 
   void onPointUpImage(PointerUpEvent e) {
     if (_ignoredTouchPointers.remove(e.pointer)) return;
+    final isTrackedMouse = _activeMousePointers.remove(e.pointer);
     if (isDesktop) _queryOtherWindowCoords = false;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1575,14 +1578,23 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (!_isMouseOrTrackpad(e.kind)) return;
-    if (isPhysicalMouse.value) {
-      // In relative mouse mode, send button events without position.
-      // Use _relativeMouse.enabled.value consistently with the guard above.
-      if (_relativeMouse.enabled.value) {
-        _relativeMouse
-            .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
-      } else {
+    if (!_isMouseOrTrackpad(e.kind) && !isTrackedMouse) return;
+
+    // Send mouse up unconditionally for mouse/trackpad pointers so buttons never get stuck.
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse
+          .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
+    } else {
+      final canvasPosition = _pointerPositionForRemoteCanvas(e);
+      handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+    }
+  }
+
+  void onPointCancelImage(PointerCancelEvent e) {
+    _ignoredTouchPointers.remove(e.pointer);
+    final isTrackedMouse = _activeMousePointers.remove(e.pointer);
+    if (_isMouseOrTrackpad(e.kind) || isTrackedMouse) {
+      if (_lastButtons != 0) {
         final canvasPosition = _pointerPositionForRemoteCanvas(e);
         handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
       }

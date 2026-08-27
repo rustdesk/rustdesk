@@ -256,9 +256,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         _iosKeyboardWorkaroundTimer?.cancel();
         _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 100), () {
           if (!mounted) return;
+          if (gFFI.chatModel.chatWindowOverlayEntry != null) return;
           _physicalFocusNode.unfocus();
           _iosKeyboardWorkaroundTimer = Timer(Duration(milliseconds: 50), () {
             if (!mounted) return;
+            if (gFFI.chatModel.chatWindowOverlayEntry != null) return;
             _physicalFocusNode.requestFocus();
           });
         });
@@ -541,6 +543,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       inputModel: inputModel,
       onPointerDown: (_) {
         if (!keyboardVisibilityController.isVisible &&
+            gFFI.chatModel.chatWindowOverlayEntry == null &&
             !_mobileFocusNode.hasFocus &&
             !_physicalFocusNode.hasFocus) {
           _physicalFocusNode.requestFocus();
