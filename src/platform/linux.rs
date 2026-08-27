@@ -1571,9 +1571,7 @@ fn get_envs<'a>(
     process_pat: &str,
     names: &[&'a str],
 ) -> std::collections::HashMap<&'a str, String> {
-    get_envs_where(uid, process_pat, names, false, |found| {
-        found.values().all(|value| !value.is_empty())
-    })
+    get_envs_where(uid, process_pat, names, false, |count| count == names.len())
 }
 
 /// The newest process matching `process_pat`, whatever it happens to carry: the semantics of the
@@ -1585,17 +1583,12 @@ fn get_envs_of_newest<'a>(
     process_pat: &str,
     names: &[&'a str],
 ) -> std::collections::HashMap<&'a str, String> {
-    let mut seen = false;
-    get_envs_where(uid, process_pat, names, true, |_| {
-        !std::mem::replace(&mut seen, true)
-    })
+    get_envs_where(uid, process_pat, names, true, |_| true)
 }
 
-/// `get_envs` with the caller's own notion of a complete answer: the newest process `accept`
-/// takes wins outright, and the count-based ranking is only the fallback when none is accepted.
-/// Ranking by how many of `names` a process carries cannot know that some of them are mandatory
-/// and others interchangeable, so it can rank a process holding three optional values above the
-/// one holding the mandatory pair.
+/// `get_envs` with the caller's own process order and its own notion of a complete answer, told
+/// how many of `names` the process carries: the first process `accept` takes wins outright, and
+/// the count-based ranking is only the fallback for when no process is accepted at all.
 fn get_envs_where<'a, F>(
     uid: &str,
     process_pat: &str,
@@ -1604,7 +1597,7 @@ fn get_envs_where<'a, F>(
     mut accept: F,
 ) -> std::collections::HashMap<&'a str, String>
 where
-    F: FnMut(&std::collections::HashMap<&'a str, String>) -> bool,
+    F: FnMut(usize) -> bool,
 {
     // The tie-breaking logic uses a u64 bitmask, limiting us to 64 variables.
     debug_assert!(
@@ -1667,15 +1660,18 @@ where
             continue;
         };
         let cmdline_str = String::from_utf8_lossy(&cmdline).replace('\0', " ");
-        if !re.is_match(&cmdline_str) {
+        // The `grep -v 'grep'` of the pipeline this replaces. A user grepping for one of these
+        // patterns is otherwise the newest match for it, and answers with whatever environment
+        // their shell had -- an X forwarding endpoint over ssh, say.
+        if cmdline_str.contains("grep") || !re.is_match(&cmdline_str) {
             continue;
         }
 
-        // Read environ and extract matching variables
-        let environ_path = proc_path.join("environ");
-        let Ok(environ) = std::fs::read(&environ_path) else {
-            continue;
-        };
+        // Read environ and extract matching variables. A read that fails -- the process exited
+        // between these two reads -- is a process carrying none of `names`, not a process to
+        // skip: skipping it would hand `newest_first` on to an older PID, where the pipeline
+        // this replaces stopped at the single PID its `tail -1` had already picked.
+        let environ = std::fs::read(proc_path.join("environ")).unwrap_or_default();
 
         let mut found = empty.clone();
         let mut found_count = 0usize;
@@ -1695,10 +1691,7 @@ where
                 continue;
             };
             if let Some(slot) = found.get_mut(key) {
-                // An exported-but-empty value (`DISPLAY=`) is not an answer: counting it would
-                // score this process as a match and, on a single-name query, return the empty
-                // value before a process that has a real one is ever examined.
-                if slot.is_empty() && !val_bytes.is_empty() {
+                if slot.is_empty() {
                     *slot = String::from_utf8_lossy(val_bytes).into_owned();
                     found_count += 1;
 
@@ -1713,7 +1706,7 @@ where
             }
         }
 
-        if accept(&found) {
+        if accept(found_count) {
             return found;
         }
 
