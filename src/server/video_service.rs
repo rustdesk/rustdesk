@@ -550,11 +550,10 @@ fn run(vs: VideoService) -> ResultType<()> {
         SimpleCallOnReturn {
             b: true,
             f: Box::new(|| {
-                // Decrement active display count and only clear if this was the last display
-                let remaining_count = super::wayland::decrement_active_display_count();
-                if remaining_count == 0 {
-                    super::wayland::clear();
-                }
+                // Decrement and clear under ONE count guard: a separate decrement-then-clear lets
+                // a newly admitted service grab the old capturer pointer right before clear()
+                // frees it.
+                super::wayland::decrement_active_display_count_and_clear_if_last();
             }),
         }
     };

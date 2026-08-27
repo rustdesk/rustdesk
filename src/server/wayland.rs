@@ -33,12 +33,20 @@ pub(super) fn increment_active_display_count() -> usize {
     *count
 }
 
-pub(super) fn decrement_active_display_count() -> usize {
+/// Decrement and, when this was the last service, tear the shared state down UNDER THE SAME count
+/// guard. A separate decrement-then-clear leaves a window where a newly admitted service grabs the
+/// old capturer pointer and clear() then frees it out from under `c.frame()`; holding the guard
+/// makes admission (which increments under the same lock) wait until the teardown is done. Lock
+/// order is COUNT then CAP_DISPLAY_INFO everywhere: run() increments before ensure_inited touches
+/// the map, never while holding it.
+pub(super) fn decrement_active_display_count_and_clear_if_last() {
     let mut count = ACTIVE_DISPLAY_COUNT.write().unwrap();
     if *count > 0 {
         *count -= 1;
     }
-    *count
+    if *count == 0 {
+        clear();
+    }
 }
 
 /// A geometry bail must rebuild the SHARED capture state, but `clear()` only runs when the last
