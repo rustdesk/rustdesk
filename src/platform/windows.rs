@@ -1265,23 +1265,61 @@ pub fn is_locked() -> bool {
     unsafe { is_session_locked(session_id) == TRUE }
 }
 
-pub fn privacy_mode_wait_unlocked(
-    impl_key: &str,
-    waiting_since: Option<Instant>,
-) -> Option<Instant> {
-    if impl_key != crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY || !is_locked() {
-        return None;
-    }
-    let waiting_since = waiting_since.unwrap_or_else(Instant::now);
-    if privacy_mode_retry_expired(waiting_since) {
-        return None;
-    }
-    Some(waiting_since)
+const PRIVACY_MODE_DEFER_TIMEOUT: Duration = Duration::from_secs(15);
+
+pub struct PrivacyModeDeferredRequest {
+    impl_key: String,
+    since: Instant,
+    unlocked: bool,
 }
 
-pub fn privacy_mode_retry_expired(waiting_since: Instant) -> bool {
-    const TIMEOUT: Duration = Duration::from_secs(15);
-    waiting_since.elapsed() >= TIMEOUT
+impl PrivacyModeDeferredRequest {
+    #[inline]
+    pub fn impl_key(&self) -> &str {
+        &self.impl_key
+    }
+
+    #[inline]
+    pub fn expired(&self) -> bool {
+        self.since.elapsed() >= PRIVACY_MODE_DEFER_TIMEOUT
+    }
+}
+
+pub fn privacy_mode_defer_while_locked(
+    impl_key: &str,
+    pending: &mut Option<PrivacyModeDeferredRequest>,
+) -> bool {
+    privacy_mode_defer(impl_key, is_locked(), pending)
+}
+
+fn privacy_mode_defer(
+    impl_key: &str,
+    locked: bool,
+    pending: &mut Option<PrivacyModeDeferredRequest>,
+) -> bool {
+    if impl_key != crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY {
+        return false;
+    }
+    if locked {
+        return match pending.as_ref() {
+            Some(p) => !p.expired(),
+            None => {
+                *pending = Some(PrivacyModeDeferredRequest {
+                    impl_key: impl_key.to_owned(),
+                    since: Instant::now(),
+                    unlocked: false,
+                });
+                true
+            }
+        };
+    }
+    if let Some(p) = pending.as_mut() {
+        if !p.unlocked {
+            p.unlocked = true;
+            p.since = Instant::now();
+        }
+    }
+    false
 }
 
 #[inline]
@@ -4724,6 +4762,55 @@ mod tests {
         };
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn privacy_mode_defer_restarts_deadline_after_unlock() {
+        let key = crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
+        let mut pending = None;
+
+        assert!(privacy_mode_defer(key, true, &mut pending));
+        let locked_since = pending.as_ref().map(|p| p.since).expect("request is stored");
+        assert!(privacy_mode_defer(key, true, &mut pending));
+        assert_eq!(pending.as_ref().map(|p| p.since), Some(locked_since));
+
+        assert!(!privacy_mode_defer(key, false, &mut pending));
+        let unlocked_since = pending.as_ref().map(|p| p.since).expect("request is kept");
+        assert!(unlocked_since >= locked_since);
+        assert_eq!(
+            pending.as_ref().map(|p| p.impl_key().to_owned()),
+            Some(key.to_owned())
+        );
+
+        assert!(!privacy_mode_defer(key, false, &mut pending));
+        assert_eq!(pending.as_ref().map(|p| p.since), Some(unlocked_since));
+    }
+
+    #[test]
+    fn privacy_mode_defer_stops_when_locked_wait_expires() {
+        let key = crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY;
+        let Some(expired_since) = Instant::now().checked_sub(PRIVACY_MODE_DEFER_TIMEOUT) else {
+            return;
+        };
+        let mut pending = Some(PrivacyModeDeferredRequest {
+            impl_key: key.to_owned(),
+            since: expired_since,
+            unlocked: false,
+        });
+
+        assert!(pending.as_ref().map_or(false, |p| p.expired()));
+        assert!(!privacy_mode_defer(key, true, &mut pending));
+    }
+
+    #[test]
+    fn privacy_mode_defer_ignores_other_impls() {
+        let mut pending = None;
+        assert!(!privacy_mode_defer(
+            "privacy_mode_impl_mag",
+            true,
+            &mut pending
+        ));
+        assert!(pending.is_none());
     }
 
     #[test]

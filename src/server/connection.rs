@@ -271,7 +271,7 @@ pub struct Connection {
     block_input: bool,
     privacy_mode: bool,
     #[cfg(windows)]
-    privacy_mode_locked_wait: Option<(String, std::time::Instant)>,
+    privacy_mode_deferred: Option<crate::platform::PrivacyModeDeferredRequest>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -484,7 +484,7 @@ impl Connection {
             block_input: Self::permission(keys::OPTION_ENABLE_BLOCK_INPUT, &control_permissions),
             privacy_mode: Self::permission(keys::OPTION_ENABLE_PRIVACY_MODE, &control_permissions),
             #[cfg(windows)]
-            privacy_mode_locked_wait: None,
+            privacy_mode_deferred: None,
             control_permissions,
             last_test_delay: None,
             network_delay: 0,
@@ -774,7 +774,7 @@ impl Connection {
                                 conn.privacy_mode = enabled;
                                 #[cfg(windows)]
                                 if !enabled {
-                                    conn.privacy_mode_locked_wait = None;
+                                    conn.privacy_mode_deferred = None;
                                 }
                                 conn.send_permission(Permission::PrivacyMode, enabled).await;
                             }
@@ -4469,7 +4469,7 @@ impl Connection {
         if t.on {
             #[cfg(windows)]
             {
-                self.privacy_mode_locked_wait = None;
+                self.privacy_mode_deferred = None;
             }
             self.turn_on_privacy(t.impl_key).await;
         } else {
@@ -4732,7 +4732,7 @@ impl Connection {
                         BoolOption::Yes => {
                             #[cfg(windows)]
                             {
-                                self.privacy_mode_locked_wait = None;
+                                self.privacy_mode_deferred = None;
                             }
                             self.turn_on_privacy("".to_owned()).await;
                         }
@@ -4833,11 +4833,10 @@ impl Connection {
         #[cfg(windows)]
         {
             let effective_impl_key = privacy_mode::get_supported_impl(&impl_key);
-            let waiting_since = self.privacy_mode_locked_wait.as_ref().map(|(_, t)| *t);
-            if let Some(waiting_since) =
-                crate::platform::privacy_mode_wait_unlocked(&effective_impl_key, waiting_since)
-            {
-                self.privacy_mode_locked_wait = Some((impl_key, waiting_since));
+            if crate::platform::privacy_mode_defer_while_locked(
+                &effective_impl_key,
+                &mut self.privacy_mode_deferred,
+            ) {
                 return;
             }
         }
@@ -4927,12 +4926,12 @@ impl Connection {
 
     #[cfg(windows)]
     fn keep_privacy_mode_retry(&mut self) -> bool {
-        let Some(waiting_since) = self.privacy_mode_locked_wait.as_ref().map(|(_, t)| *t) else {
+        let Some(expired) = self.privacy_mode_deferred.as_ref().map(|p| p.expired()) else {
             return false;
         };
         let turned_on = privacy_mode::get_privacy_mode_conn_id() == Some(self.inner.id);
-        if turned_on || crate::platform::privacy_mode_retry_expired(waiting_since) {
-            self.privacy_mode_locked_wait = None;
+        if turned_on || expired {
+            self.privacy_mode_deferred = None;
             return false;
         }
         true
@@ -4940,7 +4939,11 @@ impl Connection {
 
     #[cfg(windows)]
     async fn turn_on_privacy_after_unlocked(&mut self) {
-        if let Some((impl_key, _)) = self.privacy_mode_locked_wait.clone() {
+        if let Some(impl_key) = self
+            .privacy_mode_deferred
+            .as_ref()
+            .map(|p| p.impl_key().to_owned())
+        {
             self.turn_on_privacy(impl_key).await;
         }
     }
@@ -4948,7 +4951,7 @@ impl Connection {
     async fn turn_off_privacy(&mut self, impl_key: String) {
         #[cfg(windows)]
         {
-            self.privacy_mode_locked_wait = None;
+            self.privacy_mode_deferred = None;
         }
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
             crate::common::make_privacy_mode_msg_with_details(
