@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -191,6 +192,7 @@ class _TerminalPageState extends State<TerminalPage>
   KeyEventResult _handleTerminalKeyEvent(FocusNode _, KeyEvent event) {
     final hardwareKeyboard = HardwareKeyboard.instance;
     final shouldPaste = shouldHandleTerminalPasteShortcut(
+      platform: defaultTargetPlatform,
       logicalKey: event.logicalKey,
       isKeyDown: event is KeyDownEvent,
       isKeyRepeat: event is KeyRepeatEvent,
