@@ -165,10 +165,28 @@ fn is_allowed_windows_portable_service_peer(
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[inline]
-pub(crate) fn is_allowed_service_peer_uid(peer_uid: u32, active_uid: Option<u32>) -> bool {
+fn service_peer_uid_allowed(
+    peer_uid: u32,
+    active_uid: Option<u32>,
+    login_handoff_uid: Option<u32>,
+) -> bool {
     // Root is allowed at the UID gate because the service side may run as root.
-    // Callers still enforce executable matching before accepting service-scoped peers.
-    peer_uid == 0 || active_uid.is_some_and(|uid| uid == peer_uid)
+    peer_uid == 0 || active_uid == Some(peer_uid) || login_handoff_uid == Some(peer_uid)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[inline]
+pub(crate) fn is_allowed_service_peer_uid(peer_uid: u32, active_uid: Option<u32>) -> bool {
+    // During a GDM -> desktop handoff the preserved greeter server may have to reopen DRM and
+    // uinput channels after Mutter changes the output topology. Admit only that exact remembered
+    // greeter UID while the handoff is active. Callers still require the peer to be the same
+    // installed executable before accepting a service-scoped connection.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    let login_handoff_uid = crate::platform::linux::login_handoff_uid();
+    #[cfg(not(all(target_os = "linux", feature = "drm")))]
+    let login_handoff_uid = None;
+
+    service_peer_uid_allowed(peer_uid, active_uid, login_handoff_uid)
 }
 
 #[cfg(target_os = "macos")]
@@ -949,10 +967,13 @@ mod tests {
     #[test]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn test_service_peer_uid_policy() {
-        assert!(super::is_allowed_service_peer_uid(0, None));
-        assert!(super::is_allowed_service_peer_uid(501, Some(501)));
-        assert!(!super::is_allowed_service_peer_uid(502, Some(501)));
-        assert!(!super::is_allowed_service_peer_uid(501, None));
+        let allowed = super::service_peer_uid_allowed;
+        assert!(allowed(0, None, None));
+        assert!(allowed(501, Some(501), None));
+        assert!(allowed(60_590, Some(1_000), Some(60_590)));
+        assert!(!allowed(502, Some(501), None));
+        assert!(!allowed(501, None, None));
+        assert!(!allowed(60_591, Some(1_000), Some(60_590)));
     }
 
     #[test]

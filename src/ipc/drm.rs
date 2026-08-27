@@ -726,10 +726,14 @@ fn drm_auth_admitted(prev_in_flight: usize) -> bool {
     prev_in_flight < MAX_DRM_AUTH_IN_FLIGHT
 }
 
-fn drm_peer_authorized(peer_uid: Option<u32>, active_uid: Option<u32>) -> bool {
+fn drm_peer_authorized(
+    peer_uid: Option<u32>,
+    active_uid: Option<u32>,
+    login_handoff_uid: Option<u32>,
+) -> bool {
     match peer_uid {
         Some(0) => true,
-        Some(uid) => active_uid == Some(uid),
+        Some(uid) => active_uid == Some(uid) || login_handoff_uid == Some(uid),
         None => false,
     }
 }
@@ -887,7 +891,11 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         // Re-authorize per frame with the CACHE-ONLY active uid: a fresh lookup forks `loginctl` and
         // would stall every stream on this single-threaded runtime. A miss is fail-closed for a non-root peer
             // (root stays authorized; see `drm_peer_authorized`).
-        let peer_ok = drm_peer_authorized(peer_uid, active_uid_cached());
+        let peer_ok = drm_peer_authorized(
+            peer_uid,
+            active_uid_cached(),
+            crate::platform::linux::login_handoff_uid(),
+        );
         if !peer_ok {
             log::warn!("drm: _drm peer no longer matches the active session (or it is unknown); closing");
             break;
@@ -1728,13 +1736,14 @@ mod drm_conn_tests {
 
     #[test]
     fn drm_peer_authorized_matrix() {
-        assert!(drm_peer_authorized(Some(0), Some(1000)));
-        assert!(drm_peer_authorized(Some(0), None));
-        assert!(drm_peer_authorized(Some(1000), Some(1000)));
-        assert!(!drm_peer_authorized(Some(1000), Some(1001)));
-        assert!(!drm_peer_authorized(Some(1000), None));
-        assert!(!drm_peer_authorized(None, Some(1000)));
-        assert!(!drm_peer_authorized(None, None));
+        assert!(drm_peer_authorized(Some(0), Some(1000), None));
+        assert!(drm_peer_authorized(Some(0), None, None));
+        assert!(drm_peer_authorized(Some(1000), Some(1000), None));
+        assert!(drm_peer_authorized(Some(60589), Some(1000), Some(60589)));
+        assert!(!drm_peer_authorized(Some(1000), Some(1001), None));
+        assert!(!drm_peer_authorized(Some(1000), None, None));
+        assert!(!drm_peer_authorized(None, Some(1000), Some(60589)));
+        assert!(!drm_peer_authorized(None, None, None));
     }
 
     #[test]
