@@ -142,11 +142,11 @@ static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic:
 fn drm_displays_from_reader(
     reader: &mut scrap::drm_reader::DrmReader,
     device: &str,
-) -> (Vec<DrmDisplayInfo>, Vec<String>) {
+) -> Option<(Vec<DrmDisplayInfo>, Vec<String>)> {
     let render_node = reader.render_node().unwrap_or_default();
     let mut undriven = Vec::new();
     let displays: Vec<DrmDisplayInfo> = reader
-        .displays()
+        .displays()?
         .into_iter()
         // Only outputs bound to a CRTC: a CONNECTED-but-unbound connector enumerates with
         // `crtc_id == 0`, and `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams ITS frames.
@@ -169,12 +169,36 @@ fn drm_displays_from_reader(
             device: device.to_owned(),
         })
         .collect();
-    (displays, undriven)
+    Some((displays, undriven))
+}
+
+/// What the enumeration can honestly claim. `enumerated` = at least one card COMPLETED a
+/// connector enumeration (an open alone proves nothing: drmtap_list_displays returns -errno on
+/// an open device whose resources cannot be read); `uninspected` = some visible card was skipped
+/// or failed, so an empty list does not prove absence.
+#[derive(Clone, Copy)]
+struct EnumerationTrust {
+    enumerated: bool,
+    uninspected: bool,
+}
+
+/// Card nodes visible in /dev/dri, whether or not they can be opened.
+fn dri_card_count() -> usize {
+    std::fs::read_dir("/dev/dri")
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()))
+                })
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
-/// Third field: whether any device opened. An empty list with nothing probed is not evidence.
-fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, bool) {
+fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, EnumerationTrust) {
     if let Some(devices) = scrap::drm_reader::list_devices() {
         if devices.len() > 1 {
             log::info!(
@@ -195,23 +219,35 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, bool) {
         let mut all = Vec::new();
         let mut undriven_total = Vec::new();
         let mut any_opened = false;
+        // list_devices silently skips card nodes it cannot open, so absence is only proven when
+        // its list covers every node /dev/dri shows.
+        let mut uninspected = devices.len() < dri_card_count();
+        let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
                 any_opened = true;
-                let (mut got, mut undriven) = drm_displays_from_reader(&mut r, &dev.path);
-                all.append(&mut got);
-                undriven_total.append(&mut undriven);
-            } else if dev.display_count == 0 {
-                log::debug!(
-                    "drm: {} has no active display and did not open; cannot tell whether it has a \
-                     connected output that is merely switched off",
-                    dev.path
-                );
+                match drm_displays_from_reader(&mut r, &dev.path) {
+                    Some((mut got, mut undriven)) => {
+                        enumerated = true;
+                        all.append(&mut got);
+                        undriven_total.append(&mut undriven);
+                    }
+                    None => uninspected = true,
+                }
+            } else {
+                uninspected = true;
+                if dev.display_count == 0 {
+                    log::debug!(
+                        "drm: {} has no active display and did not open; cannot tell whether it has a \
+                         connected output that is merely switched off",
+                        dev.path
+                    );
+                }
             }
         }
         // Take this even when the list is EMPTY: the fallback re-keys identities under `device = ""`.
         if any_opened {
-            return (all, undriven_total, true);
+            return (all, undriven_total, EnumerationTrust { enumerated, uninspected });
         }
     }
     // Auto-detect alone is not enough: it picks a card that is SCANNING OUT. Measured on the T2 with
@@ -235,14 +271,21 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, bool) {
     // Deterministic order, so the display list does not depend on directory order.
     paths.sort();
     let n_paths = paths.len();
-    let mut any_opened = false;
+    let mut uninspected = false;
+    let mut enumerated = false;
     for p in paths {
         let Some(path) = p.to_str() else { continue };
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(path), 0) {
-            any_opened = true;
-            let (mut got, mut undriven) = drm_displays_from_reader(&mut r, path);
-            all.append(&mut got);
-            undriven_total.append(&mut undriven);
+            match drm_displays_from_reader(&mut r, path) {
+                Some((mut got, mut undriven)) => {
+                    enumerated = true;
+                    all.append(&mut got);
+                    undriven_total.append(&mut undriven);
+                }
+                None => uninspected = true,
+            }
+        } else {
+            uninspected = true;
         }
     }
     log::info!(
@@ -255,11 +298,18 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, bool) {
     if all.is_empty() && undriven_total.is_empty() {
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
             log::info!("drm: no card enumerated by path; falling back to the auto-detected reader");
-            let (got, undriven) = drm_displays_from_reader(&mut r, "");
-            return (got, undriven, true);
+            if let Some((got, undriven)) = drm_displays_from_reader(&mut r, "") {
+                // Auto-detect inspects one card; with siblings around, absence stays unproven.
+                return (
+                    got,
+                    undriven,
+                    EnumerationTrust { enumerated: true, uninspected: uninspected || n_paths > 1 },
+                );
+            }
+            uninspected = true;
         }
     }
-    (all, undriven_total, any_opened)
+    (all, undriven_total, EnumerationTrust { enumerated, uninspected })
 }
 
 /// Connectors a wake did NOT bring back. SELF-REFUTING: an entry later seen DRIVEN is removed.
@@ -395,39 +445,75 @@ fn drm_wake_displays(reason: &str) -> bool {
 /// is no scanout now and there will not be one until an output exists, so capture silently falls
 /// back to the portal, which then asks for consent on a screen nobody can look at. Said on the
 /// edge rather than every poll.
-fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String], probed: bool) {
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum PresenceVerdict {
+    /// Nothing completed an enumeration; presence is unknowable this round.
+    Unknown,
+    /// Every inspected card is empty, but some card was skipped or failed: not proven absent.
+    UnprovenAbsence,
+    /// Every card enumerated and none has a display: the honest headless diagnosis.
+    NoOutput,
+    SomeOutput,
+}
+
+fn presence_verdict(any_display: bool, any_undriven: bool, trust: EnumerationTrust) -> PresenceVerdict {
+    if !trust.enumerated {
+        return PresenceVerdict::Unknown;
+    }
+    if any_display || any_undriven {
+        return PresenceVerdict::SomeOutput;
+    }
+    if trust.uninspected {
+        return PresenceVerdict::UnprovenAbsence;
+    }
+    PresenceVerdict::NoOutput
+}
+
+fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String], trust: EnumerationTrust) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static NO_OUTPUT: AtomicBool = AtomicBool::new(false);
     static NO_PROBE: AtomicBool = AtomicBool::new(false);
-    // Nothing probed = every open failed, not a headless machine; do not advise a dummy plug.
-    if !probed {
-        if !NO_PROBE.swap(true, Ordering::Relaxed) {
-            log::warn!(
-                "drm: no DRM device could be opened, so display presence is unknown (each open \
-                 logged its own error above)"
-            );
+    match presence_verdict(!displays.is_empty(), !undriven.is_empty(), trust) {
+        PresenceVerdict::Unknown => {
+            if !NO_PROBE.swap(true, Ordering::Relaxed) {
+                log::warn!(
+                    "drm: no DRM device completed a connector enumeration, so display presence is \
+                     unknown (each failure logged its own error above)"
+                );
+            }
         }
-        return;
-    }
-    NO_PROBE.store(false, Ordering::Relaxed);
-    let none = displays.is_empty() && undriven.is_empty();
-    if none != NO_OUTPUT.swap(none, Ordering::Relaxed) {
-        if none {
-            log::warn!(
-                "drm: no connector reports a display, so this machine has no scanout to capture. \
-                 Attach a display or a dummy plug; a headless box can also force a connector on \
-                 (echo on > /sys/class/drm/<card>-<connector>/status)"
-            );
-        } else {
-            log::info!("drm: an output is present again");
+        PresenceVerdict::UnprovenAbsence => {
+            // Not the dummy-plug advice: an uninspected sibling card may be driving a display.
+            if !NO_PROBE.swap(true, Ordering::Relaxed) {
+                log::warn!(
+                    "drm: every card that could be enumerated reports no display, but at least one \
+                     card could not be inspected; display presence is unknown"
+                );
+            }
+        }
+        PresenceVerdict::NoOutput => {
+            NO_PROBE.store(false, Ordering::Relaxed);
+            if !NO_OUTPUT.swap(true, Ordering::Relaxed) {
+                log::warn!(
+                    "drm: no connector reports a display, so this machine has no scanout to capture. \
+                     Attach a display or a dummy plug; a headless box can also force a connector on \
+                     (echo on > /sys/class/drm/<card>-<connector>/status)"
+                );
+            }
+        }
+        PresenceVerdict::SomeOutput => {
+            NO_PROBE.store(false, Ordering::Relaxed);
+            if NO_OUTPUT.swap(false, Ordering::Relaxed) {
+                log::info!("drm: an output is present again");
+            }
         }
     }
 }
 
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
-    let (displays, undriven, probed) = drm_enumerate_all_displays();
-    note_output_presence(&displays, &undriven, probed);
+    let (displays, undriven, trust) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, trust);
     if !undriven.is_empty() {
         log::debug!(
             "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
@@ -443,8 +529,8 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
-    let (displays, undriven, probed) = drm_enumerate_all_displays();
-    note_output_presence(&displays, &undriven, probed);
+    let (displays, undriven, trust) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, trust);
     if !hbb_common::config::Config::get_bool_option(OPTION_ENABLE_DRM_DISPLAY_WAKE) {
         if !undriven.is_empty() {
             log::info!(
@@ -554,12 +640,18 @@ fn schedule_drm_cache_refresh() {
         .name("drm-cache-refresh".into())
         .spawn(move || loop {
             PENDING.store(false, Ordering::Release);
-            let fresh = std::panic::catch_unwind(drm_enumerate_all_displays)
+            let (fresh, undriven, trust) = std::panic::catch_unwind(drm_enumerate_all_displays)
                 .unwrap_or_else(|_| {
                     log::error!("drm: display enumeration panicked; treating as no displays");
-                    (Vec::new(), Vec::new(), false)
-                })
-                .0;
+                    (
+                        Vec::new(),
+                        Vec::new(),
+                        EnumerationTrust { enumerated: false, uninspected: true },
+                    )
+                });
+            // The hotplug edge reports presence too; the edge-latched statics keep it idempotent
+            // across this worker and the handshake path.
+            note_output_presence(&fresh, &undriven, trust);
             let changed = {
                 let mut cache = match DRM_DISPLAY_CACHE.lock() {
                     Ok(g) => g,
@@ -1513,6 +1605,29 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    #[test]
+    fn presence_is_only_proven_by_a_complete_enumeration() {
+        let complete = EnumerationTrust { enumerated: true, uninspected: false };
+        let partial = EnumerationTrust { enumerated: true, uninspected: true };
+        let nothing = EnumerationTrust { enumerated: false, uninspected: true };
+        assert_eq!(
+            presence_verdict(false, false, complete),
+            PresenceVerdict::NoOutput
+        );
+        assert_eq!(
+            presence_verdict(false, false, partial),
+            PresenceVerdict::UnprovenAbsence,
+            "a skipped card may be driving a display"
+        );
+        assert_eq!(presence_verdict(false, false, nothing), PresenceVerdict::Unknown);
+        assert_eq!(presence_verdict(true, false, partial), PresenceVerdict::SomeOutput);
+        assert_eq!(
+            presence_verdict(false, true, complete),
+            PresenceVerdict::SomeOutput,
+            "an undriven connector is still evidence of a display"
+        );
+    }
 
     // Added to the wire later: an older peer's message must still decode.
     #[test]
