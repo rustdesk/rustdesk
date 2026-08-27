@@ -1,5 +1,5 @@
 use super::*;
-use hbb_common::{allow_err, anyhow, platform::linux::DISTRO};
+use hbb_common::{anyhow, platform::linux::DISTRO};
 use scrap::{
     is_cursor_embedded, set_map_err,
     wayland::pipewire::{fill_displays, try_fix_logical_size},
@@ -192,18 +192,22 @@ pub(super) async fn update_uinput_resolution() {
     // Reprogram the device only when the range actually changes. A display stuck in a rebuild loop
     // calls this about once a second, and reapplying an identical range is an IPC roundtrip plus a
     // uinput device reconfiguration under a user who may be at the console.
-    if super::display_service::wayland_uinput_rect() == Some(rect) {
+    let uinput_is_active = input_service::is_uinput_active();
+    if uinput_is_active && super::display_service::wayland_uinput_rect() == Some(rect) {
         snapshot_layout();
         return;
     }
     let (minx, maxx, miny, maxy) = rect;
     log::info!("update mouse resolution: ({minx}, {maxx}), ({miny}, {maxy})");
-    match timeout(
-        3_000,
-        input_service::update_mouse_resolution(minx, maxx, miny, maxy),
-    )
-    .await
-    {
+    let configure_uinput = async {
+        if uinput_is_active {
+            input_service::update_mouse_resolution(minx, maxx, miny, maxy).await
+        } else {
+            log::info!("restoring uinput after leaving a Mutter user session");
+            input_service::setup_uinput(minx, maxx, miny, maxy).await
+        }
+    };
+    match timeout(3_000, configure_uinput).await {
         // Record the rect only after a successful apply, so a transient failure is retried on the
         // next call instead of being remembered as applied.
         Ok(Ok(())) => {
@@ -221,7 +225,7 @@ pub(super) async fn ensure_inited() -> ResultType<()> {
     // IPC, so there is no PipeWire recorder to initialize here. But we still must set the uinput
     // desktop rect (check_init does this on the PipeWire path, and the DRM path skips check_init).
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available_cached() {
+    if super::drm_capturer::should_use_cached() {
         update_uinput_resolution().await;
         return Ok(());
     }
@@ -233,7 +237,7 @@ pub(super) fn is_inited() -> Option<Message> {
         None
     } else {
         #[cfg(feature = "drm")]
-        if super::drm_capturer::is_available_cached() {
+        if super::drm_capturer::should_use_cached() {
             return None;
         }
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
@@ -357,13 +361,19 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
             }
         }
+
+        if scrap::wayland::pipewire::is_mutter_session() {
+            if let Err(err) = input_service::setup_rdp_input().await {
+                log::warn!("Failed to activate Mutter remote input: {err}");
+            }
+        }
     }
     Ok(())
 }
 
 pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available_cached() {
+    if super::drm_capturer::should_use_cached() {
         // This function runs once per login (update_get_sync_displays_on_login is its only
         // caller), and login is the moment the client is PROMISED a display list -- so refresh
         // that list over a live `_drm` handshake first. The service wakes sleeping displays and
@@ -407,7 +417,7 @@ pub fn clear() {
     // against STALE geometry after a monitor hotplug/rotation/scale change. Invalidate it on teardown
     // so the next session re-reads fresh geometry (lazily, on the next enumeration) and self-heals.
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available_cached() {
+    if super::drm_capturer::should_use_cached() {
         scrap::wayland::display::clear_wayland_displays_cache();
     }
     // NOTE: intentionally do NOT reset the DRM probe cache here. `clear()` runs on every capturer
@@ -459,7 +469,7 @@ pub(super) fn get_capturer_for_display(
     // gives up after its attempts, so if EVERY gate were cache-only a --server that started
     // before the root service would never see DRM again for the rest of its life.
     #[cfg(feature = "drm")]
-    if super::drm_capturer::is_available() {
+    if super::drm_capturer::should_use() {
         match super::drm_capturer::get_capturer_info(display_idx) {
             Ok(info) => return Ok(info),
             Err(e) => {
@@ -479,7 +489,7 @@ pub(super) fn get_capturer_for_display(
     // across that roundtrip would stall every concurrent teardown for its duration, and the value
     // does not depend on anything inside the guard.
     #[cfg(feature = "drm")]
-    let drm_advertised = if super::drm_capturer::is_available_cached() {
+    let drm_advertised = if super::drm_capturer::should_use_cached() {
         match super::drm_capturer::get_display_infos() {
             Some(list) => Some((list.get(display_idx).cloned(), list.len() == 1)),
             None => Some((None, false)),

@@ -675,14 +675,34 @@ pub async fn setup_uinput(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultT
 }
 
 #[cfg(target_os = "linux")]
-pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
-    let mut en = ENIGO.lock()?;
+pub fn is_uinput_active() -> bool {
+    ENIGO
+        .lock()
+        .unwrap()
+        .get_custom_mouse()
+        .as_ref()
+        .is_some_and(|mouse| mouse.as_any().is::<super::uinput::client::UInputMouse>())
+}
+
+#[cfg(target_os = "linux")]
+fn setup_rdp_input_sync() -> ResultType<()> {
+    let mut en = ENIGO
+        .lock()
+        .map_err(|_| hbb_common::anyhow::anyhow!("ENIGO mutex is poisoned"))?;
     // Same as `setup_uinput`: the caller is gated on `wayland_use_rdp_input()`.
     en.set_is_x11(false);
-    let rdp_info_lock = RDP_SESSION_INFO.lock()?;
-    let rdp_info = rdp_info_lock.as_ref().ok_or("RDP session is None")?;
+    let rdp_info_lock = RDP_SESSION_INFO
+        .lock()
+        .map_err(|_| hbb_common::anyhow::anyhow!("RDP session mutex is poisoned"))?;
+    let rdp_info = rdp_info_lock
+        .as_ref()
+        .ok_or_else(|| hbb_common::anyhow::anyhow!("RDP session is None"))?;
 
-    let keyboard = RdpInputKeyboard::new(rdp_info.conn.clone(), rdp_info.session.clone())?;
+    let keyboard = RdpInputKeyboard::new(
+        rdp_info.conn.clone(),
+        rdp_info.session.clone(),
+        rdp_info.input_backend,
+    )?;
     en.set_custom_keyboard(Box::new(keyboard));
     log::info!("RdpInput keyboard created");
 
@@ -695,7 +715,8 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
         let mouse = RdpInputMouse::new(
             rdp_info.conn.clone(),
             rdp_info.session.clone(),
-            stream,
+            rdp_info.input_backend,
+            rdp_info.streams.clone(),
             resolution,
         )?;
         en.set_custom_mouse(Box::new(mouse));
@@ -703,6 +724,46 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn run_blocking_input_switch<F>(switch: F) -> ResultType<()>
+where
+    F: FnOnce() -> ResultType<()> + Send + 'static,
+{
+    tokio::task::spawn_blocking(switch).await?
+}
+
+#[cfg(target_os = "linux")]
+pub async fn setup_rdp_input() -> ResultType<()> {
+    // The currently installed uinput keyboard and mouse each own a Tokio runtime. Replacing
+    // them drops those runtimes, which Tokio explicitly forbids on an async worker thread.
+    // Keep the complete ENIGO backend swap on a blocking worker so both old devices are dropped
+    // outside the connection runtime.
+    run_blocking_input_switch(setup_rdp_input_sync).await
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod rdp_input_switch_tests {
+    use super::run_blocking_input_switch;
+
+    #[test]
+    fn blocking_input_switch_can_drop_owned_tokio_runtime() {
+        let outer = hbb_common::tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        outer.block_on(async {
+            let owned_runtime = hbb_common::tokio::runtime::Runtime::new().unwrap();
+            run_blocking_input_switch(move || {
+                drop(owned_runtime);
+                Ok(())
+            })
+            .await
+            .unwrap();
+        });
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -2377,13 +2438,26 @@ async fn send_sas() -> ResultType<()> {
 #[inline]
 #[cfg(target_os = "linux")]
 pub fn wayland_use_uinput() -> bool {
-    !crate::platform::is_x11() && crate::is_server()
+    #[cfg(feature = "gnome-mutter")]
+    let login_screen = crate::platform::linux::is_login_screen_wayland_cached();
+    #[cfg(not(feature = "gnome-mutter"))]
+    let login_screen = false;
+
+    !crate::platform::is_x11()
+        && crate::is_server()
+        && (login_screen || !scrap::wayland::pipewire::is_mutter_session())
 }
 
 #[inline]
 #[cfg(target_os = "linux")]
 pub fn wayland_use_rdp_input() -> bool {
-    !crate::platform::is_x11() && !crate::is_server()
+    #[cfg(feature = "gnome-mutter")]
+    let login_screen = crate::platform::linux::is_login_screen_wayland_cached();
+    #[cfg(not(feature = "gnome-mutter"))]
+    let login_screen = false;
+
+    !crate::platform::is_x11()
+        && (!crate::is_server() || (!login_screen && scrap::wayland::pipewire::is_mutter_session()))
 }
 
 #[cfg(target_os = "linux")]

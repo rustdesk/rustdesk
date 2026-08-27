@@ -65,7 +65,7 @@ const NO_LOGIN_HANDOFF_UID: u32 = u32::MAX;
 #[cfg(feature = "drm")]
 static LOGIN_HANDOFF_UID: AtomicU32 = AtomicU32::new(NO_LOGIN_HANDOFF_UID);
 
-#[cfg(feature = "drm")]
+#[cfg(any(feature = "drm", feature = "gnome-mutter"))]
 lazy_static::lazy_static! {
     /// Only for per-frame callers; see `is_login_screen_wayland_cached`.
     /// Own block because `#[cfg]` on one item inside a shared one breaks the macro.
@@ -422,7 +422,7 @@ pub fn is_x11_for_drm() -> bool {
 ///
 /// Only from the per-session `--server`: it is spawned after the session is identified, so the
 /// answer is settled. Anything that can run mid-boot must use the uncached form.
-#[cfg(feature = "drm")]
+#[cfg(any(feature = "drm", feature = "gnome-mutter"))]
 #[inline]
 pub fn is_login_screen_wayland_cached() -> bool {
     *IS_LOGIN_SCREEN_WAYLAND
