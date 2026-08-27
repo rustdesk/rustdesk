@@ -1283,10 +1283,24 @@ class InputModel {
     _relativeMouse.onWindowFocus();
   }
 
+  final Set<int> _physicalPointerDevices = {};
+
   bool _isMouseOrTrackpad(ui.PointerDeviceKind kind) {
     return kind == ui.PointerDeviceKind.mouse ||
         kind == ui.PointerDeviceKind.trackpad;
   }
+
+  bool _isPhysicalPointerDevice(PointerEvent e) {
+    if (e.kind == ui.PointerDeviceKind.stylus ||
+        e.kind == ui.PointerDeviceKind.invertedStylus) {
+      return false;
+    }
+    return _isMouseOrTrackpad(e.kind) ||
+        _physicalPointerDevices.contains(e.device);
+  }
+
+  bool isPhysicalPointerDeviceId(int device) =>
+      _physicalPointerDevices.contains(device);
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
@@ -1296,6 +1310,8 @@ class InputModel {
       return;
     }
     if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
+
+    _physicalPointerDevices.add(e.device);
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
     if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
@@ -1532,7 +1548,10 @@ class InputModel {
 
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (_isMouseOrTrackpad(e.kind)) {
+    final isPhysical = _isPhysicalPointerDevice(e);
+
+    if (isPhysical) {
+      _physicalPointerDevices.add(e.device);
       _activeMousePointers.add(e.pointer);
       if (!isPhysicalMouse.value) {
         isPhysicalMouse.value = true;
@@ -1554,7 +1573,7 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (_isMouseOrTrackpad(e.kind)) {
+    if (isPhysical) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
       if (_relativeMouse.enabled.value) {
@@ -1578,7 +1597,8 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (!_isMouseOrTrackpad(e.kind) && !isTrackedMouse) return;
+    final isPhysical = _isPhysicalPointerDevice(e) || isTrackedMouse;
+    if (!isPhysical) return;
 
     // Send mouse up unconditionally for mouse/trackpad pointers so buttons never get stuck.
     if (_relativeMouse.enabled.value) {
@@ -1593,10 +1613,16 @@ class InputModel {
   void onPointCancelImage(PointerCancelEvent e) {
     _ignoredTouchPointers.remove(e.pointer);
     final isTrackedMouse = _activeMousePointers.remove(e.pointer);
-    if (_isMouseOrTrackpad(e.kind) || isTrackedMouse) {
+    final isPhysical = _isPhysicalPointerDevice(e) || isTrackedMouse;
+    if (isPhysical) {
       if (_lastButtons != 0) {
-        final canvasPosition = _pointerPositionForRemoteCanvas(e);
-        handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+        if (_relativeMouse.enabled.value) {
+          _relativeMouse
+              .sendRelativeMouseButton(_getMouseEvent(e, _kMouseEventUp));
+        } else {
+          final canvasPosition = _pointerPositionForRemoteCanvas(e);
+          handleMouse(_getMouseEvent(e, _kMouseEventUp), canvasPosition);
+        }
       }
     }
   }
@@ -1605,7 +1631,10 @@ class InputModel {
     if (_ignoredTouchPointers.contains(e.pointer)) return;
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
-    if (!_isMouseOrTrackpad(e.kind)) return;
+
+    final isPhysical =
+        _isPhysicalPointerDevice(e) || _activeMousePointers.contains(e.pointer);
+    if (!isPhysical) return;
 
     if (!isPhysicalMouse.value) {
       isPhysicalMouse.value = true;
