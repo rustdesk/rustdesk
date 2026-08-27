@@ -41,6 +41,23 @@ pub(super) fn decrement_active_display_count() -> usize {
     *count
 }
 
+/// A geometry bail must rebuild the SHARED capture state, but `clear()` only runs when the last
+/// service exits - with another monitor or camera stream active the count never reaches zero and
+/// every retry reuses the same cached capturer and rectangle. The flag asks EVERY wayland service
+/// to exit its loop so the count drains, the last one clears, and the next entries rebuild fresh.
+static RESTART_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(super) fn request_restart() {
+    if is_x11() {
+        return;
+    }
+    RESTART_PENDING.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub(super) fn restart_pending() -> bool {
+    !is_x11() && RESTART_PENDING.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 fn map_err_scrap(err: String) -> io::Error {
     // to-do: Handle error better, do not restart server
     if err.starts_with("Did not receive a reply") {
@@ -426,6 +443,8 @@ pub fn clear() {
 
     // Reset PipeWire initialization flag to allow recreation on next init
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    // The teardown this flag asked for has happened; later services start clean.
+    RESTART_PENDING.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display

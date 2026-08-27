@@ -675,6 +675,11 @@ fn run(vs: VideoService) -> ResultType<()> {
             log::info!("switch to refresh");
             bail!("SWITCH");
         }
+        #[cfg(target_os = "linux")]
+        if super::wayland::restart_pending() {
+            log::info!("switch so the shared wayland capture state can rebuild");
+            bail!("SWITCH");
+        }
         if codec_format != Encoder::negotiated_codec() {
             log::info!(
                 "switch due to codec changed, {:?} -> {:?}",
@@ -729,6 +734,11 @@ fn run(vs: VideoService) -> ResultType<()> {
                 // sources, and a smaller one lands in the old canvas leaving stale edges.
                 if let scrap::Frame::PixelBuffer(f) = &frame {
                     if f.width() != capture_width || f.height() != capture_height {
+                        // With another wayland stream active, exiting alone rebuilds NOTHING:
+                        // the shared state survives and the retry reuses the same stale
+                        // rectangle. Ask every wayland service to drain so the last one clears.
+                        #[cfg(target_os = "linux")]
+                        super::wayland::request_restart();
                         bail!(
                             "frame {}x{} is not the {}x{} this capturer was built with; rebuilding",
                             f.width(),
