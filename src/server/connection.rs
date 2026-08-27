@@ -271,7 +271,7 @@ pub struct Connection {
     block_input: bool,
     privacy_mode: bool,
     #[cfg(windows)]
-    privacy_mode_locked_wait: Option<(String, Instant)>,
+    privacy_mode_locked_wait: Option<(String, std::time::Instant)>,
     control_permissions: Option<ControlPermissions>,
     last_test_delay: Option<Instant>,
     network_delay: u32,
@@ -4840,7 +4840,6 @@ impl Connection {
                 self.privacy_mode_locked_wait = Some((impl_key, waiting_since));
                 return;
             }
-            self.privacy_mode_locked_wait = None;
         }
 
         let msg_out = if !privacy_mode::is_privacy_mode_supported() {
@@ -4919,7 +4918,24 @@ impl Connection {
                 ),
             }
         };
+        #[cfg(windows)]
+        if self.keep_privacy_mode_retry() {
+            return;
+        }
         self.send(msg_out).await;
+    }
+
+    #[cfg(windows)]
+    fn keep_privacy_mode_retry(&mut self) -> bool {
+        let Some(waiting_since) = self.privacy_mode_locked_wait.as_ref().map(|(_, t)| *t) else {
+            return false;
+        };
+        let turned_on = privacy_mode::get_privacy_mode_conn_id() == Some(self.inner.id);
+        if turned_on || crate::platform::privacy_mode_retry_expired(waiting_since) {
+            self.privacy_mode_locked_wait = None;
+            return false;
+        }
+        true
     }
 
     #[cfg(windows)]
