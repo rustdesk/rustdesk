@@ -1681,16 +1681,14 @@ class InputModel {
 
   void onPointUpImage(PointerUpEvent e) {
     if (isDesktop) _queryOtherWindowCoords = false;
-    if (isViewOnly && !showMyCursor) return;
-    if (isViewCamera) return;
 
-    if (_relativeMouse.enabled.value) {
-      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
-    }
-
-    // [FIX #15630] End of an Android trackpad 2-finger gesture: clear scroll mode.
-    // Require the learned trackpad device so an unrelated touchscreen up cannot
-    // terminate the active gesture.
+    // [FIX #15630] End of an Android trackpad 2-finger gesture. Clear the
+    // latch before the view-mode guards below: if the session turned view-only
+    // (or camera view) mid-gesture, those guards would swallow this Up and
+    // strand the latch, freezing 1-finger cursor moves (onPointHoverImage)
+    // once the session is interactive again. Only sending pan_end to the peer
+    // keeps the view/camera policy. Require the learned trackpad device so an
+    // unrelated touchscreen up cannot terminate the active gesture.
     if (!isDesktop &&
         e.kind == ui.PointerDeviceKind.touch &&
         _trackpadHoverDeviceId != null &&
@@ -1698,10 +1696,19 @@ class InputModel {
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
       // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd).
-      if (peerPlatform == kPeerPlatformAndroid) {
+      if (!(isViewOnly && !showMyCursor) &&
+          !isViewCamera &&
+          peerPlatform == kPeerPlatformAndroid) {
         handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
       }
       return;
+    }
+
+    if (isViewOnly && !showMyCursor) return;
+    if (isViewCamera) return;
+
+    if (_relativeMouse.enabled.value) {
+      _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
     if (e.kind != ui.PointerDeviceKind.mouse) return;
