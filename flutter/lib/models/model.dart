@@ -1916,13 +1916,21 @@ class ImageModel with ChangeNotifier {
   ui.Image? get image {
     final cur = parent.target?.ffiModel.pi.currentDisplay ?? 0;
     if (cur == kAllDisplayValue) {
-      return _image ?? _images.values.firstOrNull;
+      return _image ?? (_images.isNotEmpty ? _images.values.first : null);
     }
-    return _images[cur] ?? _image ?? _images.values.firstOrNull;
+    if (_images.containsKey(cur)) {
+      return _images[cur];
+    }
+    return _images.isEmpty ? _image : null;
   }
 
   Map<int, ui.Image> get images => _images;
-  ui.Image? getImage(int display) => _images[display] ?? _image;
+  ui.Image? getImage(int display) {
+    if (_images.containsKey(display)) {
+      return _images[display];
+    }
+    return _images.isEmpty ? _image : null;
+  }
 
   String id = '';
 
@@ -2067,21 +2075,49 @@ class ImageModel with ChangeNotifier {
 
   // mobile only
   double get maxScale {
-    final img = image;
-    if (img == null) return 1.5;
+    final cur = parent.target?.ffiModel.pi.currentDisplay;
+    final isAll = cur == kAllDisplayValue;
+    final rect = parent.target?.ffiModel.rect;
+    double? width;
+    double? height;
+    if (isAll && rect != null) {
+      width = rect.width;
+      height = rect.height;
+    } else {
+      final img = image;
+      if (img != null) {
+        width = img.width.toDouble();
+        height = img.height.toDouble();
+      }
+    }
+    if (width == null || height == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / img.width;
-    final yscale = size.height / img.height;
+    final xscale = size.width / width;
+    final yscale = size.height / height;
     return max(1.5, max(xscale, yscale));
   }
 
   // mobile only
   double get minScale {
-    final img = image;
-    if (img == null) return 1.5;
+    final cur = parent.target?.ffiModel.pi.currentDisplay;
+    final isAll = cur == kAllDisplayValue;
+    final rect = parent.target?.ffiModel.rect;
+    double? width;
+    double? height;
+    if (isAll && rect != null) {
+      width = rect.width;
+      height = rect.height;
+    } else {
+      final img = image;
+      if (img != null) {
+        width = img.width.toDouble();
+        height = img.height.toDouble();
+      }
+    }
+    if (width == null || height == null) return 1.5;
     final size = parent.target!.canvasModel.getSize();
-    final xscale = size.width / img.width;
-    final yscale = size.height / img.height;
+    final xscale = size.width / width;
+    final yscale = size.height / height;
     return min(xscale, yscale) / 1.5;
   }
 

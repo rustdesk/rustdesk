@@ -147,7 +147,7 @@ struct ClipboardState {
     running: bool,
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(target_os = "linux"))]
 lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
@@ -1339,13 +1339,9 @@ impl AudioHandler {
         self.sample_rate = (format0.sample_rate, format0.sample_rate);
         Ok(())
     }
-    #[cfg(target_os = "android")]
-    fn start_audio(&mut self, _format0: AudioFormat) -> ResultType<()> {
-        Ok(())
-    }
 
     /// Start the audio playback.
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -1360,9 +1356,9 @@ impl AudioHandler {
         log::info!("Remote input format: {:?}", format0);
         #[allow(unused_mut)]
         let mut config: StreamConfig = config.into();
-        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        #[cfg(not(target_os = "ios"))]
         {
-            // this makes ios and android audio output not work
+            // this makes ios audio output not work
             config.buffer_size = cpal::BufferSize::Fixed(64);
         }
 
@@ -1465,7 +1461,7 @@ impl AudioHandler {
     }
 
     /// Build audio output stream for current device.
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(target_os = "linux"))]
     fn build_output_stream<T: cpal::Sample + cpal::SizedSample + cpal::FromSample<f32>>(
         &mut self,
         config: &StreamConfig,

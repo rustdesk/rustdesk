@@ -1283,19 +1283,10 @@ class InputModel {
     _relativeMouse.onWindowFocus();
   }
 
-  bool _isMouseOrTrackpad(ui.PointerDeviceKind kind) {
-    return kind == ui.PointerDeviceKind.mouse ||
-        kind == ui.PointerDeviceKind.trackpad;
-  }
-
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
     if (isViewOnly && !showMyCursor) return;
-    if (e.kind == ui.PointerDeviceKind.stylus ||
-        e.kind == ui.PointerDeviceKind.invertedStylus) {
-      return;
-    }
-    if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
     if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
@@ -1530,7 +1521,7 @@ class InputModel {
 
     // Track mouse down events for duplicate detection on iOS.
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (_isMouseOrTrackpad(e.kind)) {
+    if (e.kind == ui.PointerDeviceKind.mouse) {
       if (!isPhysicalMouse.value) {
         isPhysicalMouse.value = true;
       }
@@ -1542,7 +1533,7 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (!_isMouseOrTrackpad(e.kind)) {
+    if (e.kind != ui.PointerDeviceKind.mouse) {
       // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
       if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
         return;
@@ -1573,7 +1564,7 @@ class InputModel {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
     }
 
-    if (!_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) return;
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (isPhysicalMouse.value) {
       // In relative mouse mode, send button events without position.
       // Use _relativeMouse.enabled.value consistently with the guard above.
@@ -1590,11 +1581,7 @@ class InputModel {
   void onPointMoveImage(PointerMoveEvent e) {
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
-    if (!_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) return;
-
-    if (_isMouseOrTrackpad(e.kind) && !isPhysicalMouse.value) {
-      isPhysicalMouse.value = true;
-    }
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
 
     if (_relativeMouse.enabled.value) {
       _relativeMouse.updatePointerRegionTopLeftGlobal(e);
@@ -1800,11 +1787,6 @@ class InputModel {
   }
 
   bool _checkPeerControlProtected(double x, double y) {
-    if (isViewOnly && showMyCursor) {
-      lastMousePos = ui.Offset(x, y);
-      return false;
-    }
-
     final cursorModel = parent.target!.cursorModel;
     if (cursorModel.isPeerControlProtected) {
       lastMousePos = ui.Offset(x, y);

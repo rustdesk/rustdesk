@@ -1181,9 +1181,11 @@ class ImagePaint extends StatelessWidget {
           s = s / displays[0].scale;
         }
       }
+      final displayImage = m.getImage(cur);
+      if (displayImage == null) return Container();
       return CustomPaint(
         painter: ImagePainter(
-            image: m.getImage(cur) ?? m.image,
+            image: displayImage,
             x: c.x / s,
             y: (c.y + adjust) / s,
             scale: s),
