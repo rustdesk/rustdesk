@@ -155,8 +155,10 @@ fn transform_and_origin(
 ) -> (i32, Option<(i32, i32)>) {
     if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
         if wl.displays.is_empty() && !drm.is_empty() {
-            // The layout poll treats a recovery from this state as an edge and rebuilds the
-            // session, so the degrade is bounded by the enumeration outage, not session-long.
+            // A later successful enumeration refills the cache and hides this state from
+            // wayland_snapshot_missing, so the layout poll needs this durable record to know a
+            // capturer was built blind and owes a rebuild.
+            UNROTATED_SNAPSHOT_PENDING.store(true, Ordering::Release);
             log::warn!(
                 "drm: no wayland snapshot at capturer build for display {:?}; assuming unrotated",
                 drm.get(wire_idx).map(|d| d.name.as_str()).unwrap_or("?")
@@ -298,6 +300,14 @@ fn render_node_count() -> usize {
 }
 
 static UINPUT_REFRESH_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// A capturer was built with no wayland snapshot and runs unrotated; the layout poll consumes
+/// this to bump the generation once a live snapshot exists.
+static UNROTATED_SNAPSHOT_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub(super) fn take_unrotated_snapshot_pending() -> bool {
+    UNROTATED_SNAPSHOT_PENDING.swap(false, std::sync::atomic::Ordering::AcqRel)
+}
 static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 impl IpcDrmCapturer {
@@ -1562,6 +1572,10 @@ fn augment_with_wayland_geometry_from(
 /// The identity half of the assignment (name, or unique resolution), same progressive `taken`
 /// as the full one. Rotation keys off THIS on both sides: swapping or turning on a layout-order
 /// guess splits the advertised dimensions from the delivered frames.
+/// Identity assignment in two GLOBAL passes: every exact name match is reserved first, then
+/// resolution pairing runs on the unmatched remainder, and only when it is forced - exactly one
+/// free output AND exactly one unmatched connector at that resolution. A resolution guess for an
+/// earlier connector must never steal an exact name match from a later one.
 fn identity_matches(
     drm: &[DrmDisplayInfo],
     wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
@@ -1569,9 +1583,34 @@ fn identity_matches(
     let mut taken = vec![false; wl.len()];
     let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
     for (i, d) in drm.iter().enumerate() {
-        if let Some(j) = match_wayland_display(d, wl, &taken) {
+        let dn = normalize_connector(&d.name);
+        if let Some((j, _)) = wl
+            .iter()
+            .enumerate()
+            .find(|(j, w)| !taken[*j] && normalize_connector(&w.name) == dn)
+        {
             matched[i] = Some(j);
             taken[j] = true;
+        }
+    }
+    for (i, d) in drm.iter().enumerate() {
+        if matched[i].is_some() {
+            continue;
+        }
+        let free_same: Vec<usize> = wl
+            .iter()
+            .enumerate()
+            .filter(|(j, w)| !taken[*j] && w.width == d.width as i32 && w.height == d.height as i32)
+            .map(|(j, _)| j)
+            .collect();
+        let unmatched_same = drm
+            .iter()
+            .enumerate()
+            .filter(|(k, o)| matched[*k].is_none() && o.width == d.width && o.height == d.height)
+            .count();
+        if free_same.len() == 1 && unmatched_same == 1 {
+            matched[i] = Some(free_same[0]);
+            taken[free_same[0]] = true;
         }
     }
     matched
@@ -1581,13 +1620,10 @@ fn assign_wayland_outputs(
     drm: &[DrmDisplayInfo],
     wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
 ) -> Vec<Option<usize>> {
+    let mut matched = identity_matches(drm, wl);
     let mut taken = vec![false; wl.len()];
-    let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
-    for (i, d) in drm.iter().enumerate() {
-        if let Some(j) = match_wayland_display(d, wl, &taken) {
-            matched[i] = Some(j);
-            taken[j] = true;
-        }
+    for m in matched.iter().flatten() {
+        taken[*m] = true;
     }
     for (i, d) in drm.iter().enumerate() {
         if matched[i].is_some() {
@@ -1614,30 +1650,6 @@ fn assign_wayland_outputs(
     matched
 }
 
-fn match_wayland_display(
-    d: &DrmDisplayInfo,
-    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
-    taken: &[bool],
-) -> Option<usize> {
-    let dn = normalize_connector(&d.name);
-    if let Some((j, _)) = wl
-        .iter()
-        .enumerate()
-        .find(|(j, w)| !taken[*j] && normalize_connector(&w.name) == dn)
-    {
-        return Some(j);
-    }
-    let same_res: Vec<usize> = wl
-        .iter()
-        .enumerate()
-        .filter(|(j, w)| !taken[*j] && w.width == d.width as i32 && w.height == d.height as i32)
-        .map(|(j, _)| j)
-        .collect();
-    if same_res.len() == 1 {
-        return Some(same_res[0]);
-    }
-    None
-}
 
 /// DRM inserts a single-letter type discriminator the compositor drops ("HDMI-A-1" -> "HDMI-1").
 /// Only a *letter* folds: a single *digit* is an MST port index, so "DP-1-2" is not "DP-2".
@@ -2226,6 +2238,32 @@ mod drm_capturer_tests {
             2,
             "both idle buffers must be kept; a single slot dropped the older one"
         );
+    }
+
+    #[test]
+    fn a_resolution_guess_never_steals_an_exact_name_match() {
+        // The review's scenario: an earlier connector with an unmatchable name shares the
+        // resolution of a later connector's exact name match. Names reserve globally first.
+        let drm = vec![
+            drm_display("DSI-1", 1920, 1080),
+            drm_display("HDMI-A-1", 1920, 1080),
+        ];
+        let wl = vec![
+            wl_display("HDMI-1", 0, 0, 1920, 1080),
+            wl_display("Unknown-9", 1920, 0, 2560, 1440),
+        ];
+        let m = identity_matches(&drm, &wl);
+        assert_eq!(m[1], Some(0), "the exact name match must win globally");
+        assert_eq!(m[0], None, "the leftover pairing is not forced, so no identity");
+        // Two unmatched connectors at the lone free resolution: ambiguous on the DRM side too,
+        // so rotation must not be pinned on either.
+        let drm2 = vec![
+            drm_display("DSI-1", 1920, 1080),
+            drm_display("DSI-2", 1920, 1080),
+        ];
+        let wl2 = vec![wl_display("HDMI-1", 0, 0, 1920, 1080)];
+        let m2 = identity_matches(&drm2, &wl2);
+        assert!(m2[0].is_none() && m2[1].is_none());
     }
 
     #[test]
