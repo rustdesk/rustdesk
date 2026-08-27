@@ -12,6 +12,8 @@ pub(super) fn verify_authenticode_signature(path: &Path) -> ResultType<()> {
         pcwszFilePath: PCWSTR(wide_path.as_ptr()),
         ..Default::default()
     };
+    // Signed metadata authorizes the artifact; Authenticode is an offline sanity check,
+    // so revocation data is not fetched from the network.
     let mut trust_data = WinTrust::WINTRUST_DATA {
         cbStruct: size_of::<WinTrust::WINTRUST_DATA>() as u32,
         dwUIChoice: WinTrust::WTD_UI_NONE,

@@ -1093,7 +1093,7 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
                     "Software update check failed with HTTP status: {status}"
                 ))
             } else {
-                Ok(response.bytes().await?)
+                response.bytes().await.map_err(|err| err.into())
             }
         }
         Err(err) => Err(err),
