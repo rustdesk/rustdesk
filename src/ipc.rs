@@ -386,6 +386,8 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
+    #[cfg(target_env = "ohos")]
+    RejectPending,
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),

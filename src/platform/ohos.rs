@@ -354,6 +354,7 @@ pub fn stop_host() {
     hbb_common::config::Config::set_option("stop-service".to_owned(), "Y".to_owned());
     let was_enabled = HOST_ENABLED.swap(false, Ordering::SeqCst);
     crate::common::set_server_running(false);
+    crate::ui_cm_interface::clear_host_clients();
     HOST_INPUT_EVENTS.lock().unwrap().clear();
     *HOST_POINTER_POSITION.lock().unwrap() = (0, 0);
     HOST_AUDIO.lock().unwrap().clear();
@@ -378,11 +379,11 @@ pub fn host_clients_state() -> String {
 pub fn host_client_count() -> usize {
     crate::ui_cm_interface::get_clients_length()
 }
-pub fn host_authorize_client(id: i32) {
+pub fn host_authorize_client(id: i32) -> bool {
     crate::ui_cm_interface::authorize(id)
 }
-pub fn host_close_client(id: i32) {
-    crate::ui_cm_interface::close(id)
+pub fn host_close_client(id: i32) -> bool {
+    crate::ui_cm_interface::reject_pending(id)
 }
 
 pub(crate) fn receive_host_clipboards(mut clipboards: MultiClipboards) {

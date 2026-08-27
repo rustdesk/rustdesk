@@ -743,13 +743,6 @@ impl Connection {
                 Some(data) = rx_from_cm.recv() => {
                     match data {
                         ipc::Data::Authorize => {
-                            if cfg!(target_env = "ohos") {
-                                conn.send_login_error(
-                                    "HarmonyOS watched/view-only hosting requires password authentication",
-                                )
-                                .await;
-                                continue;
-                            }
                             conn.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::Click);
                             conn.require_2fa.take();
                             if !conn.send_logon_response_and_keep_alive().await {
@@ -764,6 +757,21 @@ impl Connection {
                             conn.file_transferred = false; //seen
                             conn.send_close_reason_no_retry("").await;
                             conn.on_close("connection manager", true).await;
+                            break;
+                        }
+                        #[cfg(target_env = "ohos")]
+                        ipc::Data::RejectPending => {
+                            // Reject is only a response to a still-pending local
+                            // consent request. Password/2FA may have completed
+                            // after the UI rendered, so decide on the authoritative
+                            // connection state inside this event loop.
+                            if conn.authorized {
+                                continue;
+                            }
+                            conn.chat_unanswered = false;
+                            conn.file_transferred = false;
+                            conn.send_close_reason_no_retry("").await;
+                            conn.on_close("local consent rejected", true).await;
                             break;
                         }
                         ipc::Data::CmErr(e) => {
@@ -3103,11 +3111,7 @@ impl Connection {
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
 
-            let approve_mode = if cfg!(target_env = "ohos") {
-                ApproveMode::Password
-            } else {
-                password::approve_mode()
-            };
+            let approve_mode = password::approve_mode();
             if (approve_mode == ApproveMode::Click && !allow_logon_screen_password)
                 || approve_mode == ApproveMode::Both && !password::has_valid_password()
             {

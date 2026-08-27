@@ -362,19 +362,55 @@ pub fn get_click_time() -> i64 {
 
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
-pub fn authorize(id: i32) {
-    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
-        client.authorized = true;
-        allow_err!(client.tx.send(Data::Authorize));
+pub fn authorize(id: i32) -> bool {
+    let mut clients = CLIENTS.write().unwrap();
+    let Some(client) = clients.get_mut(&id) else {
+        return false;
     };
+    if client.authorized || client.disconnected {
+        return false;
+    }
+    if client.tx.send(Data::Authorize).is_err() {
+        return false;
+    }
+    client.authorized = true;
+    true
 }
 
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
-pub fn close(id: i32) {
-    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
-        allow_err!(client.tx.send(Data::Close));
+pub fn close(id: i32) -> bool {
+    let clients = CLIENTS.read().unwrap();
+    let Some(client) = clients.get(&id) else {
+        return false;
     };
+    if client.authorized {
+        return false;
+    }
+    client.tx.send(Data::Close).is_ok()
+}
+
+#[inline]
+#[cfg(target_env = "ohos")]
+pub fn reject_pending(id: i32) -> bool {
+    let clients = CLIENTS.read().unwrap();
+    let Some(client) = clients.get(&id) else {
+        return false;
+    };
+    if client.authorized || client.disconnected {
+        return false;
+    }
+    client.tx.send(Data::RejectPending).is_ok()
+}
+
+#[inline]
+#[cfg(target_env = "ohos")]
+pub fn clear_host_clients() {
+    let mut clients = CLIENTS.write().unwrap();
+    for client in clients.values() {
+        let _ = client.tx.send(Data::Close);
+    }
+    clients.clear();
 }
 
 #[inline]
