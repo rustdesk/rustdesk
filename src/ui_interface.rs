@@ -1661,6 +1661,20 @@ pub fn verify2fa(code: String) -> bool {
     res
 }
 
+pub fn disable2fa() {
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
+    {
+        Config::set_option("2fa".to_owned(), String::new());
+        Config::clear_trusted_devices();
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+    {
+        crate::ipc::set_option("2fa", "");
+        crate::ipc::clear_trusted_devices();
+    }
+    refresh_options();
+}
+
 pub fn has_valid_bot() -> bool {
     crate::auth_2fa::TelegramBot::get().map_or(false, |bot| bot.is_some())
 }

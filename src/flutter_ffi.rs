@@ -2759,6 +2759,10 @@ pub fn main_has_valid_2fa_sync() -> SyncReturn<bool> {
     SyncReturn(has_valid_2fa())
 }
 
+pub fn main_disable2fa() {
+    disable2fa();
+}
+
 pub fn main_verify_bot(token: String) -> String {
     verify_bot(token)
 }
