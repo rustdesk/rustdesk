@@ -1354,8 +1354,12 @@ class InputModel {
     // hover (only ACTION_DOWN/MOVE), so a touch-kind hover is uniquely the trackpad
     // — record its device id (used to identify 2-finger drags in onPointDownImage)
     // and route its per-frame delta to a relative cursor move.
-    if (e.kind == ui.PointerDeviceKind.touch ||
-        e.kind == ui.PointerDeviceKind.trackpad) {
+    // Android-only: iPadOS also reports Magic Trackpad pointers as kind=trackpad,
+    // and learning that device id here would make every wrapped recognizer drop
+    // its downs (IgnoreDeviceGestureRecognizerMixin), breaking trackpad taps.
+    if (isAndroid &&
+        (e.kind == ui.PointerDeviceKind.touch ||
+            e.kind == ui.PointerDeviceKind.trackpad)) {
       _trackpadHoverDeviceId = e.device;
       // During a 2-finger scroll gesture the device also emits hover frames;
       // skip them so the cursor does not drift while scrolling. The latch is
@@ -1706,6 +1710,25 @@ class InputModel {
     }
   }
 
+  // [FIX #15630] A system gesture (e.g. an Android edge swipe) can steal the
+  // 2-finger stream mid-scroll; the platform then delivers a cancel instead of
+  // an up. Clear the latch here like onPointUpImage does, otherwise 1-finger
+  // cursor moves (onPointHoverImage) stay frozen until the next clean 2-finger
+  // cycle. No view-mode guard on purpose: cancelling is pure state cleanup.
+  void onPointCancelImage(PointerCancelEvent e) {
+    if (!isDesktop &&
+        e.kind == ui.PointerDeviceKind.touch &&
+        _trackpadHoverDeviceId != null &&
+        e.device == _trackpadHoverDeviceId &&
+        _trackpadTwoFinger) {
+      _trackpadTwoFinger = false;
+      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd).
+      if (peerPlatform == kPeerPlatformAndroid) {
+        handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
+      }
+    }
+  }
+
   void onPointMoveImage(PointerMoveEvent e) {
     if (isViewOnly && !showMyCursor) return;
     if (isViewCamera) return;
@@ -1720,10 +1743,9 @@ class InputModel {
       if (_trackpadHoverDeviceId != null &&
           e.device == _trackpadHoverDeviceId &&
           (e.buttons & 0x1) != 0) {
-        // (Re)latch on every trackpad move: a pause can let an interleaved
-        // hover frame drop the latch (see onPointHoverImage), but the fingers
-        // are still down, so the next move must resume scrolling instead of
-        // being discarded.
+        // The Down (onPointDownImage) normally sets this latch already;
+        // re-assert it defensively so interleaved hover frames stay
+        // suppressed (onPointHoverImage) even if a Down is ever missed.
         _trackpadTwoFinger = true;
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }

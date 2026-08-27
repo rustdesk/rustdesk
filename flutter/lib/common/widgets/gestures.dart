@@ -549,7 +549,6 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer
   @override
   void addAllowedPointer(PointerDownEvent event) {
     if (shouldIgnore(event)) return;
-    debugPrint("addAllowedPointer");
     if (_isStart) {
       // second
       if (onDoubleFinerTapDown != null) {
