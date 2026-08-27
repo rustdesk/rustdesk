@@ -301,6 +301,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                                       ' ${readableFileSize(item.speed)}/s',
                                                   style: TextStyle(
                                                     fontSize: 12,
+                                                    fontWeight: FontWeight.w300,
                                                     color: MyTheme.darkGray,
                                                   ),
                                                 ),
