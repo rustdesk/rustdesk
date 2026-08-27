@@ -303,8 +303,9 @@ fn lid_is_closed() -> Option<bool> {
         match dev.get_switch_state() {
             Ok(state) => return Some(state.contains(SwitchType::SW_LID)),
             Err(err) => {
-                log::debug!("drm: lid switch found but its state is unreadable ({err})");
-                return None;
+                // A later lid-capable device may still answer; give up only after all of them.
+                log::debug!("drm: a lid switch's state is unreadable ({err}); trying any other");
+                continue;
             }
         }
     }

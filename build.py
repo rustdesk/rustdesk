@@ -748,6 +748,10 @@ def build_flutter_deb(version, features):
 
 
 DRMTAP_DLOPEN_MARKER = b'/usr/lib/rustdesk/libdrmtap.so.0'
+# No longer proof of a separate Cargo feature: unconditional in every current drm build
+# (src/ipc/drm.rs OPTION_ENABLE_DRM_DISPLAY_WAKE), so its absence means a stale bundle from the
+# drm-wake-gated era, which --skip-cargo can happily stage.
+DRMTAP_WAKE_MARKER = b'enable-drm-display-wake'
 
 def _carries_drmtap_marker(path, marker=DRMTAP_DLOPEN_MARKER):
     # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk boundary:
@@ -782,6 +786,11 @@ def assert_staged_binary_is_drm():
             f'{DRMTAP_DLOPEN_MARKER.decode()} dlopen path in {binaries or "any staged binary"}); '
             'refusing to package it as the unattended-wayland variant, which conflicts with and '
             'replaces the stock package but could never capture')
+    if not any(_carries_drmtap_marker(p, DRMTAP_WAKE_MARKER) for p in binaries):
+        raise Exception(
+            'the staged drm binary predates the wake unification (built with --features drm '
+            'while drm-wake was still a separate feature) and cannot wake an idle-disabled '
+            'display; rebuild from a current tree before packaging, especially under --skip-cargo')
 
 
 def build_deb_from_folder(version, binary_folder, want_drm=False):
