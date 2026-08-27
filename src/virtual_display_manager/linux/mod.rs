@@ -183,7 +183,9 @@ fn no_real_output(all: &[Connector]) -> bool {
 }
 
 fn is_real_output(c: &Connector) -> bool {
-    c.connected && !c.ours && c.drivable
+    // A writeback connector can read `connected` (a capture sink, not a display anyone watches),
+    // and counting it would both block arming and prematurely release a held connector.
+    c.connected && !c.ours && c.drivable && !c.name.starts_with("Writeback")
 }
 
 pub fn is_supported() -> bool {
@@ -483,10 +485,9 @@ fn wait_for(sysfs: &str, connected: bool) -> bool {
 /// only a kind of output a headless machine plausibly has a cable for - `Writeback` is not an output
 /// at all, and an internal panel has nothing behind it.
 ///
-/// Among equals it prefers a name that appears on only one card, because `edid_firmware` matches a
-/// bare connector name with no card qualifier. That is insurance rather than a measured fix: on the
-/// multi-GPU machine to hand the two cards number their DisplayPort connectors DP-1..DP-3 and
-/// DP-4..DP-7, so nothing collides.
+/// A name duplicated across cards is REFUSED outright, not deprioritized: `edid_firmware` matches
+/// the bare name, so forcing one twin puts our EDID on the other card's connector at its next
+/// probe, and a monitor plugged there would classify as ours and never trigger the release.
 fn pick_connector(all: &[Connector]) -> Option<&Connector> {
     const PREFERENCE: &[&str] = &["HDMI", "DP-", "DVI", "VGA"];
     let mut per_name: HashMap<&str, usize> = HashMap::new();
@@ -494,7 +495,10 @@ fn pick_connector(all: &[Connector]) -> Option<&Connector> {
         *per_name.entry(c.name.as_str()).or_default() += 1;
     }
     let usable = |c: &&Connector| {
-        !c.connected && c.drivable && PREFERENCE.iter().any(|k| c.name.starts_with(k))
+        !c.connected
+            && c.drivable
+            && per_name.get(c.name.as_str()).copied().unwrap_or(1) == 1
+            && PREFERENCE.iter().any(|k| c.name.starts_with(k))
     };
     for kind in PREFERENCE {
         let mut of_kind: Vec<&Connector> = all
@@ -502,13 +506,7 @@ fn pick_connector(all: &[Connector]) -> Option<&Connector> {
             .filter(usable)
             .filter(|c| c.name.starts_with(kind))
             .collect();
-        // Stable and deterministic: unique names first, then sysfs order.
-        of_kind.sort_by_key(|c| {
-            (
-                per_name.get(c.name.as_str()).copied().unwrap_or(1) > 1,
-                &c.sysfs,
-            )
-        });
+        of_kind.sort_by_key(|c| &c.sysfs);
         if let Some(c) = of_kind.first() {
             return Some(c);
         }
@@ -700,6 +698,21 @@ pub fn start_watcher() {
 /// config and the user `--server` syncs it to this process over `ipc_service` in well under a second,
 /// and `--headless-display` pushes it here itself, so the in-memory value is the one that reflects
 /// what the operator just asked for.
+/// Overlay the process's own record of what it forced onto the sysfs view: while the connector
+/// settles - or when the override never loaded on it - sysfs cannot name it ours, and without
+/// this the tick would re-force it and count it as a real output. Matched by the card-qualified
+/// sysfs name, never the bare one.
+fn adopt_forced(all: &mut [Connector], forced: Option<&str>) {
+    let Some(forced) = forced else {
+        return;
+    };
+    for c in all.iter_mut() {
+        if c.sysfs == forced {
+            c.ours = true;
+        }
+    }
+}
+
 fn tick(state: &mut State) {
     if !is_enabled() {
         // Turned off, or never on. Give back anything we are still holding, then stay out of sysfs.
@@ -708,10 +721,14 @@ fn tick(state: &mut State) {
         }
         state.no_output_since = None;
         state.last_failure = None;
+        // A release timer started before the toggle must not survive it, or a later re-enable
+        // skips the stability delay.
+        state.real_since = None;
         return;
     }
 
-    let all = connectors();
+    let mut all = connectors();
+    adopt_forced(&mut all, state.forced.as_deref());
     if all.iter().any(|c| c.ours) {
         // A real display takes precedence over ours: release it, and the machine goes back to the
         // output the operator actually plugged in. Only visible for a connector other than the one we
@@ -1117,12 +1134,11 @@ mod tests {
     }
 
     #[test]
-    fn a_name_that_exists_on_two_cards_loses_to_a_unique_one() {
-        // `edid_firmware` matches a bare connector name with no card qualifier, so forcing a
-        // duplicated name would put our EDID on whichever card the kernel probes first. This is
-        // insurance, not a fix for something measured: the multi-GPU machine to hand numbers its
-        // DisplayPort connectors DP-1..DP-3 on one card and DP-4..DP-7 on the other, so no collision
-        // occurs there.
+    fn a_name_that_exists_on_two_cards_is_refused_outright() {
+        // `edid_firmware` matches a bare connector name with no card qualifier: forcing one twin
+        // puts our EDID on the other card's connector at its next probe, and a monitor plugged
+        // there would classify as ours and never trigger the release. So a duplicated name is not
+        // deprioritized, it is unusable - even when the alternative is forcing nothing.
         let all = vec![
             c("card1-DP-1", "DP-1", false, false),
             c("card1-DP-9", "DP-9", false, false),
@@ -1132,14 +1148,36 @@ mod tests {
             pick_connector(&all).map(|c| c.sysfs.as_str()),
             Some("card1-DP-9")
         );
-        // But a duplicated name is still better than no display at all.
         let only_dupes = vec![
             c("card1-DP-1", "DP-1", false, false),
             c("card2-DP-1", "DP-1", false, false),
         ];
-        assert_eq!(
-            pick_connector(&only_dupes).map(|c| c.sysfs.as_str()),
-            Some("card1-DP-1")
-        );
+        assert!(pick_connector(&only_dupes).is_none());
+    }
+
+    #[test]
+    fn a_connected_writeback_neither_blocks_arming_nor_releases_a_hold() {
+        // vc4 writebacks can read `connected`; a capture sink is not a display anyone watches.
+        let wb = c("card1-Writeback-1", "Writeback-1", true, false);
+        assert!(no_real_output(&[wb]));
+    }
+
+    #[test]
+    fn the_forced_record_outranks_sysfs() {
+        // While the forced connector settles (or when its override never loaded), sysfs cannot
+        // call it ours; the process's own record must, or the tick re-forces and miscounts it.
+        let mut all = vec![
+            c("card1-HDMI-A-1", "HDMI-A-1", true, false),
+            c("card1-HDMI-A-2", "HDMI-A-2", false, false),
+        ];
+        adopt_forced(&mut all, Some("card1-HDMI-A-1"));
+        assert!(all[0].ours, "the held connector is adopted by sysfs name");
+        assert!(!all[1].ours);
+        // And the bare name must not match: the record is card-qualified.
+        let mut all2 = vec![c("card1-HDMI-A-1", "HDMI-A-1", true, false)];
+        adopt_forced(&mut all2, Some("HDMI-A-1"));
+        assert!(!all2[0].ours);
+        adopt_forced(&mut all2, None);
+        assert!(!all2[0].ours);
     }
 }
