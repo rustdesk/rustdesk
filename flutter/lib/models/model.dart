@@ -2026,7 +2026,11 @@ class ImageModel with ChangeNotifier {
     );
     if (image == null) return;
     if (parent.target?.id != pid) {
-      _scheduleDispose(image);
+      try {
+        image.dispose();
+      } catch (e) {
+        // ignore
+      }
       return;
     }
     await update(image, display: display);
@@ -2069,7 +2073,11 @@ class ImageModel with ChangeNotifier {
   bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
     if (image == null || isCurrentSession == null) return false;
     if (isCurrentSession()) return false;
-    _scheduleDispose(image);
+    try {
+      image.dispose();
+    } catch (e) {
+      // ignore
+    }
     return true;
   }
 
