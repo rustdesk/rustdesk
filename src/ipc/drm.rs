@@ -112,8 +112,46 @@ enum DrmProducerMsg {
         hot_from_property: bool,
         colors: Vec<u8>,
     },
-    /// Cursor plane position while visible; the cadence contract is on `Data::DrmCursorPos`.
+    /// Wakeup only: the freshest position lives in `CursorPosSlot`, never in this queue, so a
+    /// slow consumer cannot backpressure the capture worker through position traffic.
     CursorPos { x: i32, y: i32 },
+}
+
+/// Latest-wins cursor position shared between the capture worker and the connection task: the
+/// worker overwrites, the connection takes, and a dropped wakeup costs nothing.
+struct CursorPosSlot {
+    dirty: std::sync::atomic::AtomicBool,
+    packed: std::sync::atomic::AtomicU64,
+}
+
+impl CursorPosSlot {
+    fn new() -> Self {
+        Self {
+            dirty: std::sync::atomic::AtomicBool::new(false),
+            packed: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+    fn store(&self, x: i32, y: i32) {
+        use std::sync::atomic::Ordering;
+        self.packed.store(pack_cursor_pos(x, y), Ordering::Release);
+        self.dirty.store(true, Ordering::Release);
+    }
+    fn take(&self) -> Option<(i32, i32)> {
+        use std::sync::atomic::Ordering;
+        if self.dirty.swap(false, Ordering::AcqRel) {
+            Some(unpack_cursor_pos(self.packed.load(Ordering::Acquire)))
+        } else {
+            None
+        }
+    }
+}
+
+fn pack_cursor_pos(x: i32, y: i32) -> u64 {
+    ((x as u32 as u64) << 32) | y as u32 as u64
+}
+
+fn unpack_cursor_pos(p: u64) -> (i32, i32) {
+    ((p >> 32) as u32 as i32, p as u32 as i32)
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -804,9 +842,13 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let worker_stop = stop.clone();
     let frames_gated = Arc::new(AtomicBool::new(false));
     let worker_gate = frames_gated.clone();
+    let cursor_pos_slot = Arc::new(CursorPosSlot::new());
+    let worker_cursor_pos = cursor_pos_slot.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || {
+            drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, worker_cursor_pos)
+        })
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -858,6 +900,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut credit: i32 = DRM_FRAME_CREDIT;
     let mut credit_since = std::time::Instant::now();
     let mut held_frame: Option<DrmProducerMsg> = None;
+    let mut last_cursor_pos_sent: Option<(i32, i32)> = None;
     loop {
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
         // While gated the worker does not grab, so it cannot advance its own MAX_STALLED watchdog: a
@@ -951,15 +994,26 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     .await?;
                     conn.send_raw(Bytes::from(colors)).await?;
                 }
-                DrmProducerMsg::CursorPos { x, y } => {
-                    // Position-only header, NO send_raw() body (like DrmDisplaysChanged). Sent
-                    // inline rather than coalesced: the producer emits at most one per capture
-                    // tick, so this cannot outpace the frame stream it rides with.
-                    conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
+                DrmProducerMsg::CursorPos { .. } => {
+                    // The payload is only a wakeup; the slot holds the freshest position, and a
+                    // value already sent never goes out again.
+                    if let Some((x, y)) = cursor_pos_slot.take() {
+                        if last_cursor_pos_sent != Some((x, y)) {
+                            last_cursor_pos_sent = Some((x, y));
+                            conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
+                        }
+                    }
                 }
                 DrmProducerMsg::Displays(_) => {}
             }
             msg = frame_rx.try_recv().ok();
+        }
+        // Wakeups may drop on a full queue, so the slot is read once more after every drain.
+        if let Some((x, y)) = cursor_pos_slot.take() {
+            if last_cursor_pos_sent != Some((x, y)) {
+                last_cursor_pos_sent = Some((x, y));
+                conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
+            }
         }
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
         if credit <= 0 {
@@ -1000,6 +1054,7 @@ fn drm_capture_worker(
     crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cursor_pos: std::sync::Arc<CursorPosSlot>,
 ) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -1125,11 +1180,12 @@ fn drm_capture_worker(
                 }
             }
             if want_cursor_pos && visible {
-                // Bound the idle stream: the channel holds 2 messages and a per-tick position
-                // next to every frame halves the slack a transiently slow consumer has before
-                // this thread blocks. Transitions and the consumer's ~1 s settle window ship
-                // every tick; a cursor still beyond that decimates to one tick in eight, which
-                // its late-input reopen path tolerates (it only needs SOME tick, not every one).
+                // Latest-wins: the slot always carries the freshest position, and the channel
+                // message is only a wakeup that may drop on a full queue - so position traffic
+                // can never block this thread away from grabbing frames. The cadence below only
+                // bounds wakeups for a still cursor; a stale streak decimates to one in eight,
+                // which the late-input reopen path tolerates (it needs SOME tick, not every one).
+                cursor_pos.store(pos.0, pos.1);
                 let changed = last_pos_sent != Some(pos);
                 if changed {
                     pos_streak = 0;
@@ -1137,12 +1193,8 @@ fn drm_capture_worker(
                 } else {
                     pos_streak = pos_streak.saturating_add(1);
                 }
-                if (changed || pos_streak <= 40 || pos_streak % 8 == 0)
-                    && frame_tx
-                        .blocking_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
-                        .is_err()
-                {
-                    break;
+                if changed || pos_streak <= 40 || pos_streak % 8 == 0 {
+                    let _ = frame_tx.try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 });
                 }
             }
         }
@@ -1538,6 +1590,20 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    #[test]
+    fn the_cursor_pos_slot_is_latest_wins_and_survives_negatives() {
+        // Cursor plane coordinates go negative when partially offscreen; the packing must
+        // round-trip the full i32 range.
+        assert_eq!(unpack_cursor_pos(pack_cursor_pos(-1, -1)), (-1, -1));
+        assert_eq!(unpack_cursor_pos(pack_cursor_pos(i32::MIN, i32::MAX)), (i32::MIN, i32::MAX));
+        let slot = CursorPosSlot::new();
+        assert_eq!(slot.take(), None, "an untouched slot yields nothing");
+        slot.store(10, 20);
+        slot.store(30, 40);
+        assert_eq!(slot.take(), Some((30, 40)), "the newest store wins");
+        assert_eq!(slot.take(), None, "and a take clears the slot");
+    }
 
     // Added to the wire later: an older peer's message must still decode.
     #[test]
