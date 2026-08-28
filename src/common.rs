@@ -2080,14 +2080,150 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+#[cfg(target_os = "windows")]
+fn load_savol_profile() {
+    /*
+     * Savol managed RustDesk agent.
+     *
+     * Все параметры ниже загружаются как Override Settings.
+     * Пользовательские настройки не должны иметь над ними приоритет.
+     */
+    let settings = json!({
+        // ============================================================
+        // SAVOL RUSTDESK SERVER
+        // ============================================================
+
+        "custom-rendezvous-server": "rustdesk.savol-fmark.com",
+        "key": "UnB6n9PTIhW47OTHpBTH0oDSVx99iZbTfFeVzXDB6wI=",
+
+        // Relay не задаём специально.
+        // hbbr находится на том же сервере и используется автоматически.
+
+
+        // ============================================================
+        // VIDEO / CAPTURE
+        // ============================================================
+
+        "enable-hwcodec": "Y",
+        "enable-directx-capture": "Y",
+        "enable-udp-punch": "Y",
+        "enable-abr": "Y",
+        "keep-awake-during-incoming-sessions": "Y",
+
+
+        // ============================================================
+        // UNATTENDED ACCESS
+        // ============================================================
+
+        "approve-mode": "password",
+        "verification-method": "use-permanent-password",
+        "allow-only-conn-window-open": "N",
+
+
+        // ============================================================
+        // PERMISSIONS
+        // ============================================================
+
+        "access-mode": "custom",
+
+        "enable-keyboard": "Y",
+        "enable-clipboard": "Y",
+        "enable-file-transfer": "Y",
+        "enable-remote-restart": "Y",
+
+        // Обычный Terminal +
+        // Terminal (Administrator) (beta).
+        "enable-terminal": "Y",
+
+        "enable-camera": "N",
+        "enable-remote-printer": "N",
+        "enable-audio": "N",
+        "enable-tunnel": "N",
+
+
+        // ============================================================
+        // SECURITY / LOCKDOWN
+        // ============================================================
+
+        "allow-remote-config-modification": "N",
+        "allow-auto-update": "N",
+
+        // Это именно builtin-настройки.
+        "hide-tray": "Y",
+        "hide-stop-service": "Y",
+
+        "disable-change-permanent-password": "Y",
+        "disable-change-id": "Y",
+
+
+        // ============================================================
+        // UI LOCKDOWN
+        // ============================================================
+
+        // Сотруднику эти разделы вообще не нужны.
+        "hide-network-settings": "Y",
+        "hide-server-settings": "Y"
+    });
+
+    /*
+     * RustDesk делит настройки по нескольким внутренним namespaces.
+     * Формируем те же lookup maps, которые использует официальный
+     * механизм Custom Client.
+     */
+    let mut map_display_settings = HashMap::new();
+
+    for s in keys::KEYS_DISPLAY_SETTINGS {
+        map_display_settings.insert(s.replace("_", "-"), s);
+    }
+
+    let mut map_local_settings = HashMap::new();
+
+    for s in keys::KEYS_LOCAL_SETTINGS {
+        map_local_settings.insert(s.replace("_", "-"), s);
+    }
+
+    let mut map_settings = HashMap::new();
+
+    for s in keys::KEYS_SETTINGS {
+        map_settings.insert(s.replace("_", "-"), s);
+    }
+
+    let mut map_builtin_settings = HashMap::new();
+
+    for s in keys::KEYS_BUILDIN_SETTINGS {
+        map_builtin_settings.insert(s.replace("_", "-"), s);
+    }
+
+    /*
+     * true = Override Settings.
+     *
+     * Это принципиально:
+     *
+     * Override
+     *   >
+     * Strategy
+     *   >
+     * User
+     *   >
+     * Default
+     */
+    read_custom_client_advanced_settings(
+        settings,
+        &map_display_settings,
+        &map_local_settings,
+        &map_settings,
+        &map_builtin_settings,
+        true,
+    );
+}
+
 pub fn load_custom_client() {
+    #[cfg(target_os = "windows")]
+    load_savol_profile();
+
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
-        return;
-    }
-    let Some(path) = std::env::current_exe().map_or(None, |x| x.parent().map(|x| x.to_path_buf()))
-    else {
         return;
     };
     #[cfg(target_os = "macos")]

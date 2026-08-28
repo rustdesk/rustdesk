@@ -430,10 +430,6 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             return None;
         } else if args[0] == "--password" {
-            if is_cli_setting_change_disabled() {
-                println!("Settings are disabled!");
-                return None;
-            }
             if config::Config::is_disable_change_permanent_password() {
                 println!("Changing permanent password is disabled!");
                 return None;
