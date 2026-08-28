@@ -997,7 +997,9 @@ impl RendezvousMediator {
             let socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
             let local_addr = socket.local_addr();
             // key important here for punch hole to tell my gateway incoming peer is safe.
-            // it can not be async here, because local_addr can not be reused, we must close the connection before use it again.
+            // Awaited rather than spawned so the mapping exists before `PunchHoleSent` goes out;
+            // `local_addr` itself is shared, not exclusive - every socket here binds it with the
+            // reuse flags `new_socket` sets.
             allow_err!(socket_client::connect_tcp_local(peer_addr, Some(local_addr), 30).await);
             socket
         };
@@ -1005,7 +1007,10 @@ impl RendezvousMediator {
         msg_out.set_punch_hole_sent(msg_punch);
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, true, meta).await;
+        let local_addr = socket.local_addr();
+        // The listener inside takes this address over, so the mediator's socket goes first.
+        drop(socket);
+        punch_tcp_until_connected(server, peer_addr, local_addr, meta).await;
         Ok(())
     }
 
@@ -1264,6 +1269,194 @@ async fn udp_nat_listen(
     Ok(())
 }
 
+/// Where the repeats start, and the factor they slow by. The controller's SYN arrives once, at an
+/// instant we are never told, inside a window we are not told either: `Client::connect` sizes its
+/// dial only after our PunchHoleSent, from its own rendezvous time and the direct failures it has
+/// recorded for us - `CONNECT_TIMEOUT` between two known-asymmetric NATs that never failed, as
+/// little as a second once one has. So the repeats cover our own ceiling instead, `CONNECT_TIMEOUT`,
+/// which is as long as the accept below has always been willing to take a connection, and back
+/// off across it: dense at the start, where every window begins and the short ones end, sparse
+/// afterwards, which is `punch_udp`'s shape for the same reason.
+const PUNCH_INTERVAL: f32 = 0.15;
+const PUNCH_BACKOFF: f32 = 1.5;
+const PUNCH_MAX_INTERVAL: f32 = 2.0;
+/// How long a punch in flight may run past the deadline, and the only timer it runs on. A punch
+/// is cancel-safe while it is still in SYN_SENT and not once the controller's SYN has crossed it:
+/// the socket is then half way through a handshake, and dropping it there cuts the connection the
+/// controller is opening - which its `connect` has already returned, so that attempt fails
+/// outright rather than falling back to relay. A timer cannot tell the two states apart, so no
+/// punch is cut on a schedule of its own, and none needs to be. A gateway that answers with RST
+/// fails the connect at once, and the loop punches again. One that drops the SYN in silence
+/// leaves the socket in SYN_SENT, where it holds the mapping open and the kernel re-sends the
+/// SYN, and any SYN of the controller's that arrives crosses it - a second punch has nothing to
+/// add. That leaves the deadline, and this much past it lets a crossing begun just before it
+/// complete; Windows gives a SYN up at about 21s anyway.
+const PUNCH_GRACE: u64 = 3000;
+
+/// The punch above leaves before hbbs has told the controller where to dial, so it is never in
+/// flight at the same time as the controller's SYN: it opens our NAT, meets nothing, and a gateway
+/// that answers it with RST takes the mapping down with it - leaving the listener below waiting on
+/// a hole that no longer exists. Punching again across the window in which the controller dials
+/// rebuilds it, and once the controller sits in SYN_SENT one of those punches meets its SYN and
+/// completes as a simultaneous open: a second way in, which a single punch never had.
+async fn punch_tcp_until_connected(
+    server: ServerPtr,
+    peer_addr: SocketAddr,
+    local_addr: SocketAddr,
+    meta: ConnectionMeta,
+) {
+    use hbb_common::tcp::new_listener;
+    // Shadows the module's `std::time::Instant`: the deadline is held against tokio's sleeps and
+    // timeouts, so it runs on their clock.
+    use hbb_common::tokio::time::Instant;
+
+    // Not fatal on its own - the punch below can still meet the controller's SYN without it, and
+    // that half is the one a listener the OS refused to bind could not have covered anyway.
+    let listener = match new_listener(local_addr, true).await {
+        Ok(listener) => {
+            log::info!("Server listening on: {local_addr}");
+            Some(listener)
+        }
+        Err(err) => {
+            log::warn!("Failed to listen on {local_addr} after punching: {err}");
+            None
+        }
+    };
+    // Bounds both halves: the punch keeps the mapping open only while the accept is still
+    // willing to take a connection through it.
+    let until = Instant::now() + Duration::from_millis(CONNECT_TIMEOUT);
+    let punch = punch_until(until, peer_addr, |ms| {
+        socket_client::connect_tcp_local(peer_addr, Some(local_addr), ms)
+    });
+    let Some(listener) = listener else {
+        if let Some(stream) = punch.await {
+            serve_punched(server, stream, peer_addr, meta).await;
+        }
+        return;
+    };
+    // Accepting in a loop, not once: a transient `accept` error must not spend the whole window
+    // the controller still has to arrive in.
+    let accept = async {
+        loop {
+            let left = until.saturating_duration_since(Instant::now()).as_millis() as u64;
+            if left == 0 {
+                break;
+            }
+            match hbb_common::timeout(left, listener.accept()).await {
+                // Not filtered by address, as `accept_connection` never did: hbbs saw the
+                // controller through one mapping and a NAT that pools its external addresses may
+                // dial us from another, and what keeps `meta`'s control permissions from a second
+                // peer is the handshake, plus that exactly one connection is ever served.
+                Ok(Ok(accepted)) => return Some(accepted),
+                Ok(Err(err)) => {
+                    log::warn!("Failed to accept from {peer_addr}: {err}");
+                    // One that persists - EMFILE, say - would otherwise spin here for the window.
+                    sleep(1.).await;
+                }
+                Err(_) => break,
+            }
+        }
+        log::info!("Nothing connected to the hole punched to {peer_addr}");
+        None
+    };
+    // Only the accept races the punch. Racing `accept_connection` instead would race the whole
+    // session it goes on to run, so a punch landing mid-session would tear that session down.
+    //
+    // Whichever arrives first is the one connection this request produces. Serving the loser too
+    // would give a second peer the control permissions hbbs granted for this one controller, and
+    // no test on the connection itself can tell the two apart before `create_tcp_connection` has
+    // spoken to it - so the invariant is kept here, by there being no second serve.
+    let punched = select! {
+        // Both ready at once is two connections, not one seen twice - a crossing carries the
+        // punch's four-tuple, which the listener never matches - and the punch is the one kept:
+        // it is known to have met something at the address hbbs gave, where the accept takes
+        // any address, and dropping it would reset the connection the controller is opening.
+        biased;
+        Some(stream) = punch => stream,
+        Some((stream, addr)) = accept => {
+            return accept_punched_connection(server, stream, addr, meta).await;
+        }
+        else => return,
+    };
+    serve_punched(server, punched, peer_addr, meta).await;
+}
+
+/// The repeats of `punch_tcp_until_connected`, over any punch rather than `connect_tcp_local`
+/// alone, so that a test can run the schedule against a paused clock - which no socket can be.
+async fn punch_until<T, F, Fut>(
+    until: tokio::time::Instant,
+    peer_addr: SocketAddr,
+    mut punch: F,
+) -> Option<T>
+where
+    F: FnMut(u64) -> Fut,
+    Fut: std::future::Future<Output = ResultType<T>>,
+{
+    use hbb_common::tokio::time::Instant;
+
+    let mut interval = PUNCH_INTERVAL;
+    let mut round = 0;
+    loop {
+        // The deadline decides whether another punch starts, never how long one already in
+        // flight may take: that one runs to PUNCH_GRACE past it.
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            log::debug!("None of {round} punches to {peer_addr} was met");
+            return None;
+        }
+        // Cut at the deadline rather than slept out past it, so the window ends on a punch and
+        // not on a gap of up to PUNCH_MAX_INTERVAL: the controller's window opened after ours,
+        // on the PunchHoleSent hbbs relayed, so one as long as ours is still open through our tail.
+        tokio::time::sleep(Duration::from_secs_f32(interval).min(left)).await;
+        interval = (interval * PUNCH_BACKOFF).min(PUNCH_MAX_INTERVAL);
+        let ms = until.saturating_duration_since(Instant::now()).as_millis() as u64 + PUNCH_GRACE;
+        match punch(ms).await {
+            // The controller's SYN crossed this punch, so the stream is the connection it
+            // dialed, not a spare one: dropping it would reset that connection.
+            Ok(stream) => return Some(stream),
+            // Not logged one by one, but the count says which gateway it was: RST fails a
+            // punch at once and fits a dozen into the window, a silent drop holds the one
+            // punch for the whole of it. `connect_tcp_local` keeps no errno anyway.
+            Err(_) => round += 1,
+        }
+    }
+}
+
+async fn serve_punched(
+    server: ServerPtr,
+    stream: Stream,
+    peer_addr: SocketAddr,
+    meta: ConnectionMeta,
+) {
+    log::info!("Punched tcp hole to {peer_addr}, connected on the punch itself");
+    if let Err(err) =
+        crate::server::create_tcp_connection(server, stream, peer_addr, true, meta).await
+    {
+        log::warn!("Failed to serve the connection punched to {peer_addr}: {err}");
+    }
+}
+
+/// The accept half of `accept_connection`, kept here because only the accept may race the punch.
+async fn accept_punched_connection(
+    server: ServerPtr,
+    stream: tokio::net::TcpStream,
+    addr: SocketAddr,
+    meta: ConnectionMeta,
+) {
+    use crate::server::create_tcp_connection;
+
+    stream.set_nodelay(true).ok();
+    match stream.local_addr() {
+        Ok(stream_addr) => {
+            let stream = Stream::from(stream, stream_addr);
+            if let Err(err) = create_tcp_connection(server, stream, addr, true, meta).await {
+                log::warn!("Failed to serve the connection from {addr}: {err}");
+            }
+        }
+        Err(err) => log::warn!("Failed to read the address accepted from {addr}: {err}"),
+    }
+}
+
 // When config is not yet synced from root, register_pk may have already been sent with a new generated pk.
 // After config sync completes, the pk may change. This struct detects pk changes and triggers
 // a re-registration by setting key_confirmed to false.
@@ -1291,7 +1484,25 @@ impl Drop for CheckIfResendPk {
 
 #[cfg(test)]
 mod tests {
-    use super::{mpsc, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
+    use super::{mpsc, socket_client, tokio, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
+    use hbb_common::tcp::new_listener;
+    use std::net::SocketAddr;
+
+    // A SOCKS proxy makes `connect_tcp_local` dial the proxy and ignore the local address, so
+    // nothing these two assert can hold. Read once, from the same global config production reads.
+    fn proxied() -> bool {
+        hbb_common::config::Config::get_socks().is_some()
+    }
+
+    /// Both held while their addresses are read, so the pair cannot be the same port - which
+    /// `SO_REUSEPORT` would let bind twice rather than refuse, leaving the tests degenerate.
+    async fn free_loopback_pair() -> (SocketAddr, SocketAddr) {
+        let (a, b) = (
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(),
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        );
+        (a.local_addr().unwrap(), b.local_addr().unwrap())
+    }
 
     fn queue(route: &mut IceRoute, candidate: &str) -> bool {
         route.queue(candidate.to_owned())
@@ -1356,5 +1567,169 @@ mod tests {
         let recent = format!("candidate-{}", ICE_DEDUP_WINDOW);
         assert!(queue(&mut route, &recent));
         assert!(rx.try_recv().is_err());
+    }
+
+    // The second way in that the repeat punch opens: a punch reaching a peer already in SYN_SENT
+    // is answered by that socket rather than reset, and the two ends come up on one connection.
+    // A punch that misses the crossing is reset outright here, loopback having no NAT to absorb
+    // it and no round trip to hide behind - so a single punch lands only by luck, and repeating
+    // is what makes it land at all. That is the premise of the repeat, asserted directly. A round
+    // that misses costs one loopback RST, so rounds are cheap and there are many.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_punch_that_meets_the_peers_syn_connects_both_ends() {
+        // The crossing needs both connects genuinely in flight at once. Loopback answers a SYN to
+        // a port nobody is listening on with an instant RST, so on one CPU the first connect runs
+        // to completion before the second is scheduled and no round can ever cross - a property of
+        // the box, which this test cannot tell apart from a broken punch.
+        if proxied() || std::thread::available_parallelism().map_or(true, |cpus| cpus.get() < 2) {
+            return;
+        }
+        for _ in 0..256 {
+            let (a, b) = free_loopback_pair().await;
+            // Held for the whole crossing, because production always has one here and the design
+            // rests on which of the two the kernel hands the connection to: the punch and the
+            // peer's SYN share a four-tuple exactly, the listener only matches the address, and
+            // the punch has to win that or every crossing would be swallowed as a plain accept.
+            let listener = new_listener(a, true).await.unwrap();
+            let to_b = tokio::spawn(socket_client::connect_tcp_local(b, Some(a), 3000));
+            let to_a = tokio::spawn(socket_client::connect_tcp_local(a, Some(b), 3000));
+            let (at_a, at_b) = tokio::join!(to_b, to_a);
+            let (Ok(Ok(mut at_a)), Ok(Ok(mut at_b))) = (at_a, at_b) else {
+                continue;
+            };
+            at_a.send_bytes(bytes::Bytes::from_static(b"punch"))
+                .await
+                .unwrap();
+            let got = at_b.next_timeout(3000).await.unwrap().unwrap();
+            assert_eq!(&got[..], b"punch", "both ends must share one connection");
+            assert!(
+                hbb_common::timeout(200, listener.accept()).await.is_err(),
+                "the crossing must reach the punch, not be accepted as an inbound connection"
+            );
+            return;
+        }
+        panic!("no punch met the peer's SYN in 256 rounds on a machine that can cross them");
+    }
+
+    // The punch binds the address the listener already holds, so it has to go through the same
+    // `connect_tcp_local` production uses - a punch built by hand here would still pass if
+    // `new_socket` ever stopped setting the reuse flags, while every real punch failed to bind.
+    // The peer's view of the source port is what proves the bind took: a fallback to an ephemeral
+    // one would connect just as happily.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_punch_binds_the_address_the_listener_holds() {
+        if proxied() {
+            return;
+        }
+        // `free_loopback_pair` hands back ports it no longer holds, so another process can take
+        // one in between; retry rather than fail for something the punch had no part in.
+        for _ in 0..8 {
+            let (local, peer_addr) = free_loopback_pair().await;
+            let (Ok(listener), Ok(peer)) = (
+                new_listener(local, true).await,
+                new_listener(peer_addr, true).await,
+            ) else {
+                continue;
+            };
+            let punch = tokio::spawn(socket_client::connect_tcp_local(
+                peer_addr,
+                Some(local),
+                1500,
+            ));
+            let (_peer_side, seen_as) = hbb_common::timeout(3000, peer.accept())
+                .await
+                .expect("the punch must reach the peer")
+                .unwrap();
+            assert_eq!(
+                seen_as.port(),
+                local.port(),
+                "the punch must leave from the address the listener holds, not an ephemeral one"
+            );
+            // Held, not asserted and dropped: the coexistence below is only exercised while this
+            // socket is still on the address, which is the state production spends its window in.
+            let _punched = punch.await.unwrap().expect("the punch must connect");
+
+            let dialed = tokio::spawn(tokio::net::TcpStream::connect(local));
+            let accepted = hbb_common::timeout(3000, listener.accept()).await;
+            assert!(
+                matches!(accepted, Ok(Ok(_))),
+                "the listener must still take connections while a punch shares its address: {accepted:?}"
+            );
+            assert!(dialed.await.unwrap().is_ok());
+            return;
+        }
+        panic!("could not hold two free loopback addresses in 8 tries");
+    }
+
+    // The schedule on its own, against a paused clock: the window is CONNECT_TIMEOUT long, and
+    // what these pin is where inside it the punches fall, which no socket could show.
+    #[tokio::test(start_paused = true)]
+    async fn the_punches_end_on_one_at_the_deadline() {
+        use super::{punch_until, PUNCH_GRACE, PUNCH_INTERVAL, PUNCH_MAX_INTERVAL};
+        use hbb_common::{anyhow::anyhow, config::CONNECT_TIMEOUT};
+        use std::time::Duration;
+        use tokio::time::Instant;
+
+        let peer: SocketAddr = "127.0.0.1:1".parse().unwrap();
+        let start = Instant::now();
+        let until = start + Duration::from_millis(CONNECT_TIMEOUT);
+        let mut punches = Vec::new();
+        // A gateway that answers with RST: every punch fails the moment it is made.
+        let met = punch_until::<(), _, _>(until, peer, |ms| {
+            punches.push((Instant::now(), ms));
+            async { Err(anyhow!("RST")) }
+        })
+        .await;
+        assert!(met.is_none());
+        assert_eq!(
+            Instant::now(),
+            until,
+            "must return the moment the window closes, not a backoff later"
+        );
+        // Tokio rounds every sleep up to the next millisecond.
+        let slack = Duration::from_millis(1);
+        assert!(punches[0].0 - start <= Duration::from_secs_f32(PUNCH_INTERVAL) + slack);
+        for pair in punches.windows(2) {
+            assert!(
+                pair[1].0 - pair[0].0 <= Duration::from_secs_f32(PUNCH_MAX_INTERVAL) + slack,
+                "no gap in the window may exceed the backoff ceiling: {pair:?}"
+            );
+        }
+        assert_eq!(
+            *punches.last().unwrap(),
+            (until, PUNCH_GRACE),
+            "the window must end on a punch, given the whole grace"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_punch_in_flight_runs_the_grace_past_the_deadline_and_no_further() {
+        use super::{punch_until, PUNCH_GRACE};
+        use hbb_common::{anyhow::anyhow, config::CONNECT_TIMEOUT};
+        use std::time::Duration;
+        use tokio::time::Instant;
+
+        let peer: SocketAddr = "127.0.0.1:1".parse().unwrap();
+        let until = Instant::now() + Duration::from_millis(CONNECT_TIMEOUT);
+        let mut punches = 0;
+        // A gateway that drops the SYN in silence: the punch sits in SYN_SENT for all it is given.
+        let met = punch_until::<(), _, _>(until, peer, |ms| {
+            punches += 1;
+            async move {
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+                Err(anyhow!("timed out"))
+            }
+        })
+        .await;
+        assert!(met.is_none());
+        assert_eq!(
+            punches, 1,
+            "a punch held in SYN_SENT is the only one the window needs"
+        );
+        assert_eq!(
+            Instant::now(),
+            until + Duration::from_millis(PUNCH_GRACE),
+            "must return when the grace runs out, not a backoff later"
+        );
     }
 }
