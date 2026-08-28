@@ -3746,11 +3746,11 @@ Future<bool> _usePersonalServer(bool use) async {
   if (current.idServer.isEmpty) {
     return false;
   }
-  if (!await _setServerConfig(null, null, ServerConfig())) {
-    return false;
-  }
+  // Park it before clearing the active options, so that a crash in between
+  // cannot leave the personal config nowhere. Clearing does not drop the parked
+  // one, it is only dropped when a personal server is entered.
   await _stashServerConfig(current);
-  return true;
+  return await _setServerConfig(null, null, ServerConfig());
 }
 
 ColorFilter? svgColor(Color? color) {
