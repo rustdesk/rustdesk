@@ -147,11 +147,6 @@ impl RendezvousMediator {
                 allow_err!(super::lan::start_listening());
             });
         }
-        // It is ok to run xdesktop manager when the headless function is not allowed.
-        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
-        if crate::is_server() {
-            crate::platform::linux_desktop_manager::start_xdesktop();
-        }
         scrap::codec::test_av1();
         *LAST_NOT_DEPLOYED_REGISTER.lock().await = None;
         loop {

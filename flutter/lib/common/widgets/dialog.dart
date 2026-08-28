@@ -936,26 +936,19 @@ void enterPasswordDialog(
   );
 }
 
-void enterUserLoginDialog(
-    SessionID sessionId,
-    OverlayDialogManager dialogManager,
-    String osAccountDescTip,
-    bool canRememberAccount) async {
+void enterUserLoginDialog(SessionID sessionId,
+    OverlayDialogManager dialogManager, String osAccountDescTip) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     osUsernameController: TextEditingController(),
     osPasswordController: TextEditingController(),
     osAccountDescTip: osAccountDescTip,
-    canRememberAccount: canRememberAccount,
   );
 }
 
-void enterUserLoginAndPasswordDialog(
-    SessionID sessionId,
-    OverlayDialogManager dialogManager,
-    String osAccountDescTip,
-    bool canRememberAccount) async {
+void enterUserLoginAndPasswordDialog(SessionID sessionId,
+    OverlayDialogManager dialogManager, String osAccountDescTip) async {
   await _connectDialog(
     sessionId,
     dialogManager,
@@ -963,7 +956,6 @@ void enterUserLoginAndPasswordDialog(
     osPasswordController: TextEditingController(),
     passwordController: TextEditingController(),
     osAccountDescTip: osAccountDescTip,
-    canRememberAccount: canRememberAccount,
   );
 }
 
@@ -974,17 +966,11 @@ _connectDialog(
   TextEditingController? osPasswordController,
   TextEditingController? passwordController,
   String? osAccountDescTip,
-  bool canRememberAccount = true,
 }) async {
   final errUsername = ''.obs;
   var rememberPassword = false;
   if (passwordController != null) {
     rememberPassword =
-        await bind.sessionGetRemember(sessionId: sessionId) ?? false;
-  }
-  var rememberAccount = false;
-  if (canRememberAccount && osUsernameController != null) {
-    rememberAccount =
         await bind.sessionGetRemember(sessionId: sessionId) ?? false;
   }
   if (osUsernameController != null) {
@@ -1014,12 +1000,6 @@ _connectDialog(
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
       if (passwordController != null && password.isEmpty) return;
-      if (rememberAccount) {
-        bind.sessionPeerOption(
-            sessionId: sessionId, name: 'os-username', value: osUsername);
-        bind.sessionPeerOption(
-            sessionId: sessionId, name: 'os-password', value: osPassword);
-      }
       gFFI.login(
         osUsername,
         osPassword,
@@ -1096,16 +1076,6 @@ _connectDialog(
             controller: osPasswordController,
             autoFocus: false,
           ),
-          if (canRememberAccount)
-            rememberWidget(
-              translate('remember_account_tip'),
-              rememberAccount,
-              (v) {
-                if (v != null) {
-                  setState(() => rememberAccount = v);
-                }
-              },
-            ),
         ],
       );
     }
@@ -1542,91 +1512,6 @@ showSetOSPassword(
   });
 }
 
-showSetOSAccount(
-  SessionID sessionId,
-  OverlayDialogManager dialogManager,
-) async {
-  final usernameController = TextEditingController();
-  final passwdController = TextEditingController();
-  var username =
-      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-username') ??
-          '';
-  var password =
-      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
-          '';
-  usernameController.text = username;
-  passwdController.text = password;
-  dialogManager.show((setState, close, context) {
-    submit() {
-      final username = usernameController.text.trim();
-      final password = usernameController.text.trim();
-      bind.sessionPeerOption(
-          sessionId: sessionId, name: 'os-username', value: username);
-      bind.sessionPeerOption(
-          sessionId: sessionId, name: 'os-password', value: password);
-      close();
-    }
-
-    descWidget(String text) {
-      return Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              text,
-              maxLines: 3,
-              softWrap: true,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 16),
-            ),
-          ),
-          Container(
-            height: 8,
-          ),
-        ],
-      );
-    }
-
-    return CustomAlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.password_rounded, color: MyTheme.accent),
-          Text(translate('OS Account')).paddingOnly(left: 10),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          descWidget(translate("os_account_desk_tip")),
-          DialogTextField(
-            title: translate(DialogTextField.kUsernameTitle),
-            controller: usernameController,
-            prefixIcon: DialogTextField.kUsernameIcon,
-            errorText: null,
-          ),
-          PasswordWidget(controller: passwdController),
-        ],
-      ),
-      actions: [
-        dialogButton(
-          "Cancel",
-          icon: Icon(Icons.close_rounded),
-          onPressed: close,
-          isOutline: true,
-        ),
-        dialogButton(
-          "OK",
-          icon: Icon(Icons.done_rounded),
-          onPressed: submit,
-        ),
-      ],
-      onSubmit: submit,
-      onCancel: close,
-    );
-  });
-}
-
 Widget buildNoteTextField({
   required TextEditingController controller,
   required VoidCallback onEscape,
@@ -2014,26 +1899,110 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
-  int initSpeed = ffi.inputModel.trackpadSpeed;
+int? _validateTrackpadSpeed(String text) {
+  final speed = int.tryParse(text);
+  if (speed == null || speed < kMinTrackpadSpeed || speed > kMaxTrackpadSpeed) {
+    BotToast.showText(
+      text:
+          '${translate('Invalid format')}: $kMinTrackpadSpeed-$kMaxTrackpadSpeed',
+      contentColor: Colors.red,
+    );
+    return null;
+  }
+  return speed;
+}
+
+Future<void> _saveTrackpadSpeed({
+  required SessionID sessionId,
+  required FFI ffi,
+  required int initSpeed,
+  required int speed,
+}) async {
+  if (speed == initSpeed) {
+    return;
+  }
+  await bind.sessionSetTrackpadSpeed(sessionId: sessionId, value: speed);
+  await ffi.inputModel.updateTrackpadSpeed();
+}
+
+void _showTrackpadSpeedSaveError(Object error, StackTrace stackTrace) {
+  debugPrint('Failed to save trackpad speed: $error');
+  debugPrintStack(stackTrace: stackTrace);
+  BotToast.showText(
+    text: translate('Failed'),
+    contentColor: Colors.red,
+  );
+}
+
+List<Widget> _trackpadSpeedDialogActions({
+  required bool isSubmitting,
+  required VoidCallback close,
+  required VoidCallback submit,
+}) {
+  return [
+    dialogButton(
+      'Cancel',
+      icon: Icon(Icons.close_rounded),
+      onPressed: isSubmitting ? null : close,
+      isOutline: true,
+    ),
+    dialogButton(
+      'OK',
+      icon: Icon(Icons.done_rounded),
+      onPressed: isSubmitting ? null : submit,
+    ),
+  ];
+}
+
+void trackpadSpeedDialog(SessionID sessionId, FFI ffi) {
+  final initSpeed = ffi.inputModel.trackpadSpeed;
   final curSpeed = SimpleWrapper(initSpeed);
-  final btnClose = dialogButton('Close', onPressed: () async {
-    if (curSpeed.value <= kMaxTrackpadSpeed &&
-        curSpeed.value >= kMinTrackpadSpeed &&
-        curSpeed.value != initSpeed) {
-      await bind.sessionSetTrackpadSpeed(
-          sessionId: sessionId, value: curSpeed.value);
-      await ffi.inputModel.updateTrackpadSpeed();
+  var speedText = initSpeed.toString();
+  var isSubmitting = false;
+  ffi.dialogManager.show((setState, close, context) {
+    Future<void> submit([String? submittedText]) async {
+      if (isSubmitting) {
+        return;
+      }
+      speedText = submittedText ?? speedText;
+      final speed = _validateTrackpadSpeed(speedText);
+      if (speed == null) {
+        return;
+      }
+      setState(() => isSubmitting = true);
+      try {
+        await _saveTrackpadSpeed(
+          sessionId: sessionId,
+          ffi: ffi,
+          initSpeed: initSpeed,
+          speed: speed,
+        );
+        close();
+      } catch (error, stackTrace) {
+        _showTrackpadSpeedSaveError(error, stackTrace);
+        setState(() => isSubmitting = false);
+      }
     }
-    ffi.dialogManager.dismissAll();
-  });
-  msgBoxCommon(
-      ffi.dialogManager,
-      'Trackpad speed',
-      TrackpadSpeedWidget(
-        value: curSpeed,
+
+    return CustomAlertDialog(
+      title: Text(
+        translate('Trackpad speed'),
+        style: TextStyle(fontSize: 21),
       ),
-      [btnClose]);
+      content: TrackpadSpeedWidget(
+        value: curSpeed,
+        onTextChanged: (text) => speedText = text,
+        onTextSubmitted: submit,
+      ),
+      actions: _trackpadSpeedDialogActions(
+        isSubmitting: isSubmitting,
+        close: close,
+        submit: submit,
+      ),
+      onSubmit: isSubmitting ? null : submit,
+      onCancel: isSubmitting ? null : close,
+    );
+  });
 }
 
 void deleteConfirmDialog(Function onSubmit, String title) async {

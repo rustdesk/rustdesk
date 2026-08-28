@@ -38,6 +38,7 @@ const AV_ERR_TRY_AGAIN_LATER: i32 = 5410006;
 const AV_ERR_STREAM_CHANGED: i32 = 5410005;
 const SURFACE_QUERY_INPUT_TIMEOUT_US: i64 = 5_000;
 const SURFACE_TRACE_SAMPLE_INTERVAL: u32 = 60;
+const SURFACE_STALL_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_STREAM_CHANGED_RETRIES: u32 = 8;
 const AV_PIXEL_FORMAT_YUVI420: i32 = 1;
 const AV_PIXEL_FORMAT_NV12: i32 = 2;
@@ -678,6 +679,7 @@ pub struct OhosVideoDecoder {
     input_pts_at: HashMap<i64, Instant>,
     last_decode_latency_ms: Option<u64>,
     last_observed_render_count: u32,
+    surface_stall_started_at: Option<Instant>,
     frames: Vec<OhosImage>,
 }
 
@@ -943,6 +945,7 @@ impl OhosVideoDecoder {
             input_pts_at: HashMap::new(),
             last_decode_latency_ms: None,
             last_observed_render_count: 0,
+            surface_stall_started_at: None,
             frames: Vec::new(),
         })
     }
@@ -1105,14 +1108,26 @@ impl OhosVideoDecoder {
         Ok(())
     }
 
-    fn take_surface_rendered_frame(&mut self) -> bool {
+    fn take_surface_rendered_frame(&mut self) -> ResultType<bool> {
         let Some(state) = self.callback_state.as_ref() else {
-            return false;
+            return Ok(false);
         };
         let current = state.render_count.load(Ordering::Acquire);
-        let rendered = current != self.last_observed_render_count;
-        self.last_observed_render_count = current;
-        rendered
+        if current != self.last_observed_render_count {
+            self.last_observed_render_count = current;
+            self.surface_stall_started_at = None;
+            return Ok(true);
+        }
+        let stalled_since = self
+            .surface_stall_started_at
+            .get_or_insert_with(Instant::now);
+        if stalled_since.elapsed() >= SURFACE_STALL_TIMEOUT {
+            bail!(
+                "OHOS surface decoder produced no rendered output for {} ms",
+                SURFACE_STALL_TIMEOUT.as_millis()
+            )
+        }
+        Ok(false)
     }
 
     fn wait_for_input_buffer(&self, timeout: Duration) -> ResultType<Option<BufferItem>> {
@@ -1295,10 +1310,10 @@ pub fn handle_h26x_video_frames(
         *pixelbuffer = false;
         for frame in frames.frames.iter() {
             if !decoder.submit_to_surface_with_key(&frame.data, frame.key)? {
-                return Ok(false);
+                return decoder.take_surface_rendered_frame();
             }
         }
-        return Ok(decoder.take_surface_rendered_frame());
+        return decoder.take_surface_rendered_frame();
     }
     let mut last_frame = OhosImage::empty();
     for frame in frames.frames.iter() {

@@ -26,9 +26,6 @@ pub mod linux;
 pub mod ohos;
 
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
-pub mod linux_desktop_manager;
-
-#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod gtk_sudo;
 
 #[cfg(all(

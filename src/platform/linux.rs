@@ -14,7 +14,7 @@ use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
-    config::{keys::OPTION_ALLOW_LINUX_HEADLESS, Config},
+    config::Config,
     libc::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     log,
     message_proto::{DisplayInfo, Resolution},
@@ -96,6 +96,9 @@ lazy_static::lazy_static! {
     };
     static ref ACTIVE_USER_LOOKUP_CACHE: std::sync::Mutex<Option<ActiveUserLookupCache>> =
         std::sync::Mutex::new(None);
+    static ref GNOME_MONITOR_LAYOUT_MODE_CACHE: std::sync::Mutex<
+        Option<(Instant, Option<GnomeMonitorLayoutMode>)>,
+    > = Default::default();
     // https://github.com/rustdesk/rustdesk/issues/13705
     // Check if `sudo -E` actually preserves environment.
     //
@@ -126,6 +129,141 @@ lazy_static::lazy_static! {
                 .unwrap_or(false)
         }
     };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GnomeMonitorLayoutMode {
+    Logical,
+    Physical,
+}
+
+impl GnomeMonitorLayoutMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Logical => "logical",
+            Self::Physical => "physical",
+        }
+    }
+}
+
+fn gnome_monitor_layout_mode_from_value(value: u32) -> Option<GnomeMonitorLayoutMode> {
+    // Upstream: https://gitlab.gnome.org/GNOME/mutter/-/blob/main/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml
+    // Ubuntu mode 3: https://git.launchpad.net/ubuntu/+source/mutter/tree/debian/patches/x11-Add-support-for-fractional-scaling-using-Randr.patch
+    match value {
+        1 | 3 => Some(GnomeMonitorLayoutMode::Logical),
+        2 => Some(GnomeMonitorLayoutMode::Physical),
+        _ => None,
+    }
+}
+
+pub fn gnome_monitor_layout_mode() -> Option<GnomeMonitorLayoutMode> {
+    if let Ok(cache) = GNOME_MONITOR_LAYOUT_MODE_CACHE.lock() {
+        if let Some((updated_at, result)) = *cache {
+            if updated_at.elapsed() < Duration::from_secs(10) {
+                return result;
+            }
+        }
+    }
+
+    let result = (|| {
+        let is_gnome_desktop = std::env::var("XDG_CURRENT_DESKTOP")
+            .unwrap_or_default()
+            .split(':')
+            .any(|desktop| {
+                desktop.eq_ignore_ascii_case("gnome") || desktop.eq_ignore_ascii_case("unity")
+            });
+        let is_gnome_session = std::env::var("DESKTOP_SESSION")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !is_gnome_desktop && !is_gnome_session.contains("gnome") {
+            return None;
+        }
+        use dbus::{arg::PropMap, blocking::BlockingSender};
+
+        let conn = match dbus::blocking::Connection::new_session() {
+            Ok(conn) => conn,
+            Err(err) => {
+                log::warn!("Failed to connect to the session bus for GNOME monitor layout: {err}");
+                return None;
+            }
+        };
+        let message = match dbus::Message::new_method_call(
+            "org.gnome.Mutter.DisplayConfig",
+            "/org/gnome/Mutter/DisplayConfig",
+            "org.gnome.Mutter.DisplayConfig",
+            "GetCurrentState",
+        ) {
+            Ok(message) => message,
+            Err(err) => {
+                log::warn!("Failed to create GNOME monitor layout query: {err}");
+                return None;
+            }
+        };
+        let reply = match conn.send_with_reply_and_block(message, Duration::from_secs(2)) {
+            Ok(reply) => reply,
+            Err(err) => {
+                log::warn!("Failed to query GNOME monitor layout: {err}");
+                return None;
+            }
+        };
+        let mut args = reply.iter_init();
+        for _ in 0..3 {
+            if !args.next() {
+                log::warn!("GNOME monitor layout reply is missing properties");
+                return None;
+            }
+        }
+        let properties: PropMap = match args.read() {
+            Ok(properties) => properties,
+            Err(err) => {
+                log::warn!("Failed to read GNOME monitor layout properties: {err}");
+                return None;
+            }
+        };
+        let Some(value) = dbus::arg::prop_cast::<u32>(&properties, "layout-mode").copied() else {
+            log::warn!("GNOME monitor layout reply has no layout-mode");
+            return None;
+        };
+        let mode = gnome_monitor_layout_mode_from_value(value);
+        if mode.is_none() {
+            log::warn!("GNOME monitor layout reply has unknown layout-mode {value}");
+        }
+        mode
+    })();
+    if let Ok(mut cache) = GNOME_MONITOR_LAYOUT_MODE_CACHE.lock() {
+        *cache = Some((Instant::now(), result));
+    }
+    result
+}
+
+#[cfg(test)]
+mod gnome_monitor_layout_tests {
+    use super::*;
+
+    #[test]
+    fn maps_logical_layouts() {
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(1),
+            Some(GnomeMonitorLayoutMode::Logical)
+        );
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(3),
+            Some(GnomeMonitorLayoutMode::Logical)
+        );
+    }
+
+    #[test]
+    fn maps_physical_layout() {
+        assert_eq!(
+            gnome_monitor_layout_mode_from_value(2),
+            Some(GnomeMonitorLayoutMode::Physical)
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_layout() {
+        assert_eq!(gnome_monitor_layout_mode_from_value(4), None);
+    }
 }
 
 #[inline]
@@ -233,11 +371,6 @@ pub struct xcb_xfixes_get_cursor_image {
     pub yhot: u16,
     pub cursor_serial: c_long,
     pub pixels: *const c_long,
-}
-
-#[inline]
-pub fn is_headless_allowed() -> bool {
-    Config::get_option(OPTION_ALLOW_LINUX_HEADLESS) == "Y"
 }
 
 #[inline]
@@ -863,18 +996,6 @@ fn stop_rustdesk_servers() {
     ));
 }
 
-#[inline]
-fn stop_subprocess() {
-    let _ = run_cmds(&format!(
-        r##"ps -ef | grep '/etc/{}/xorg.conf' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
-        crate::get_app_name().to_lowercase(),
-    ));
-    let _ = run_cmds(&format!(
-        r##"ps -ef | grep -E '{} +--cm-no-ui' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9"##,
-        crate::get_app_name().to_lowercase(),
-    ));
-}
-
 fn should_start_server(
     try_x11: bool,
     is_display_changed: bool,
@@ -888,13 +1009,7 @@ fn should_start_server(
     let mut start_new = false;
     let mut should_kill = false;
 
-    if desktop.is_headless() {
-        if !uid.is_empty() {
-            // From having a monitor to not having a monitor.
-            *uid = "".to_owned();
-            should_kill = true;
-        }
-    } else if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
+    if is_display_changed || desktop.uid != *uid && !desktop.uid.is_empty() {
         *uid = desktop.uid.clone();
         if try_x11 {
             set_x11_env(&desktop);
@@ -953,7 +1068,6 @@ fn force_stop_server() {
 pub fn start_os_service() {
     check_if_stop_service();
     stop_rustdesk_servers();
-    stop_subprocess();
     start_uinput_service();
 
     std::thread::spawn(|| {
@@ -1003,8 +1117,7 @@ pub fn start_os_service() {
         desktop.refresh();
         update_active_user_lookup_cache(&desktop);
 
-        // Duplicate logic here with should_start_server
-        // Login wayland will try to start a headless --server.
+        // Duplicate logic here with should_start_server.
         if desktop.username == "root" || desktop.is_login_wayland() {
             // try kill subprocess "--server"
             stop_server(&mut user_server);
@@ -1019,7 +1132,6 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut server,
             ) {
-                stop_subprocess();
                 force_stop_server();
                 // Run the login-screen --server as the active seat0 session user (the greeter
                 // account) rather than root, so the DRM capture GPU/EGL convert never loads the
@@ -1072,7 +1184,6 @@ pub fn start_os_service() {
                 &mut last_restart,
                 &mut user_server,
             ) {
-                stop_subprocess();
                 force_stop_server();
                 start_server(Some(&desktop), &mut user_server);
             }
@@ -1082,17 +1193,14 @@ pub fn start_os_service() {
             stop_server(&mut server);
         }
 
-        let keeps_headless = sid.is_empty() && desktop.is_headless();
         let keeps_session = sid == desktop.sid;
-        if keeps_headless || keeps_session {
+        if keeps_session {
             // for fixing https://github.com/rustdesk/rustdesk/issues/3129 to avoid too much dbus calling,
             sleep_millis(500);
         } else {
             sleep_millis(super::SERVICE_INTERVAL);
         }
-        if !desktop.is_headless() {
-            sid = desktop.sid.clone();
-        }
+        sid = desktop.sid.clone();
     }
 
     if let Some(ps) = user_server.take().as_mut() {
@@ -1249,7 +1357,6 @@ fn is_flatpak() -> bool {
     std::path::PathBuf::from("/.flatpak-info").exists()
 }
 
-// Headless is enabled, always return true.
 pub fn is_prelogin() -> bool {
     if is_flatpak() {
         return false;
@@ -1850,6 +1957,14 @@ mod desktop {
     const ENV_KEY_WAYLAND_DISPLAY: &str = "WAYLAND_DISPLAY";
     const ENV_KEY_DBUS_SESSION_BUS_ADDRESS: &str = "DBUS_SESSION_BUS_ADDRESS";
 
+    /// A compositor that runs Xwayland without exporting `XAUTHORITY` (wlroots, e.g. Hyprland)
+    /// still hands out a usable session through the Wayland side. Requiring xauth there never
+    /// succeeded, so every refresh ran the retry loop to the end, 240 shell pipelines at a time.
+    /// https://github.com/rustdesk/rustdesk/issues/15952
+    fn is_session_env_complete(display: &str, xauth: &str, wl_display: &str, dbus: &str) -> bool {
+        !display.is_empty() && (!xauth.is_empty() || (!wl_display.is_empty() && !dbus.is_empty()))
+    }
+
     #[derive(Debug, Clone, Default)]
     pub struct Desktop {
         pub sid: String,
@@ -1860,7 +1975,6 @@ mod desktop {
         pub xauth: String,
         pub home: String,
         pub dbus: String,
-        pub is_rustdesk_subprocess: bool,
         pub wl_display: String,
     }
 
@@ -1873,11 +1987,6 @@ mod desktop {
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
             super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
-        }
-
-        #[inline]
-        pub fn is_headless(&self) -> bool {
-            self.sid.is_empty() || self.is_rustdesk_subprocess
         }
 
         fn get_display_xauth_wayland(&mut self) {
@@ -1922,14 +2031,50 @@ mod desktop {
                     PLASMA_KDED,
                     tray.as_str(),
                 ];
+                self.display.clear();
+                self.xauth.clear();
+                self.wl_display.clear();
+                self.dbus.clear();
+                let mut kept = 0u8;
                 for proc in display_proc {
-                    self.display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
-                    self.xauth = get_env(ENV_KEY_XAUTHORITY, &self.uid, proc);
-                    self.wl_display = get_env(ENV_KEY_WAYLAND_DISPLAY, &self.uid, proc);
-                    self.dbus = get_env(ENV_KEY_DBUS_SESSION_BUS_ADDRESS, &self.uid, proc);
-                    if !self.display.is_empty() && !self.xauth.is_empty() {
+                    let display = get_env(ENV_KEY_DISPLAY, &self.uid, proc);
+                    let xauth = get_env(ENV_KEY_XAUTHORITY, &self.uid, proc);
+                    let wl_display = get_env(ENV_KEY_WAYLAND_DISPLAY, &self.uid, proc);
+                    let dbus = get_env(ENV_KEY_DBUS_SESSION_BUS_ADDRESS, &self.uid, proc);
+                    // Take a candidate whole and keep the best seen. Assigning each variable
+                    // unconditionally let a pattern that does not run on this desktop blank out
+                    // the values an earlier one had answered with, which is how a session with a
+                    // working portal ended up starting its `--server` with no compositor and no
+                    // bus at all. The Wayland-only rank is what a session whose Xwayland exports
+                    // no `XAUTHORITY` can still offer.
+                    let complete = is_session_env_complete(&display, &xauth, &wl_display, &dbus);
+                    let rank = if complete {
+                        3
+                    } else if !wl_display.is_empty() && !dbus.is_empty() {
+                        2
+                    } else if !display.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    if rank > kept {
+                        kept = rank;
+                        self.display = display;
+                        self.xauth = xauth;
+                        self.wl_display = wl_display;
+                        self.dbus = dbus;
+                    }
+                    if complete {
                         return;
                     }
+                }
+                // The Wayland pair on its own is a session the child server can be started
+                // against -- it is what `get_display_xauth_wayland` returns on. Retrying is for a
+                // session that has not finished coming up, and a compositor whose Xwayland starts
+                // on demand may never export a `DISPLAY` for this walk to find, so waiting ten
+                // more rounds for one costs the whole probe again on every refresh.
+                if kept >= 2 {
+                    break;
                 }
                 sleep_millis(300);
             }
@@ -1958,6 +2103,21 @@ mod desktop {
             }
 
             if self.display.is_empty() {
+                // logind stores the value pam_systemd was handed at session creation, which is not
+                // necessarily a local display: it can be qualified with this host (`myhost:0`) or
+                // name an X forwarding endpoint (`localhost:10.0`), and some setups record a bare
+                // `:`. Strip this host, then require a display number. `localhost` is deliberately
+                // left in place: a non-empty display here suppresses every fallback below, both
+                // `get_display_by_user` and the `:0` default, so anything not local must not pass.
+                let display = Self::get_display_from_session(&self.sid)
+                    .replace(&hbb_common::whoami::hostname(), "");
+                if display.strip_prefix(':').map_or(false, |number| {
+                    number.starts_with(|c: char| c.is_ascii_digit())
+                }) {
+                    self.display = display;
+                }
+            }
+            if self.display.is_empty() {
                 self.display = Self::get_display_by_user(&self.username);
             }
             if self.display.is_empty() {
@@ -1967,6 +2127,34 @@ mod desktop {
                 .display
                 .replace(&hbb_common::whoami::hostname(), "")
                 .replace("localhost", "");
+        }
+
+        fn get_display_from_session(session: &str) -> String {
+            if session.is_empty() {
+                return String::new();
+            }
+
+            match Command::new(CMD_LOGINCTL.as_str())
+                .args(["show-session", "-p", "Display", session])
+                .output()
+            {
+                Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .strip_prefix("Display=")
+                    .unwrap_or_default()
+                    .to_owned(),
+                Ok(output) => {
+                    log::debug!(
+                        "Failed to get display for session {session}: {}",
+                        output.status
+                    );
+                    String::new()
+                }
+                Err(err) => {
+                    log::debug!("Failed to get display for session {session}: {err}");
+                    String::new()
+                }
+            }
         }
 
         fn get_home(&mut self) {
@@ -2117,25 +2305,11 @@ mod desktop {
             last
         }
 
-        fn set_is_subprocess(&mut self) {
-            self.is_rustdesk_subprocess = false;
-            let cmd = format!(
-                "ps -ef | grep '{}/xorg.conf' | grep -v grep | wc -l",
-                crate::get_app_name().to_lowercase()
-            );
-            if let Ok(res) = run_cmds(&cmd) {
-                if res.trim() != "0" {
-                    self.is_rustdesk_subprocess = true;
-                }
-            }
-        }
-
         pub fn refresh(&mut self) {
             if !self.sid.is_empty() && is_active_and_seat0(&self.sid) {
                 // Xwayland display and xauth may not be available in a short time after login.
                 if is_xwayland_running() && !self.is_login_wayland() {
                     self.get_display_xauth_xwayland();
-                    self.is_rustdesk_subprocess = false;
                 } else if self.is_wayland() {
                     self.get_display_xauth_wayland();
                 }
@@ -2145,7 +2319,6 @@ mod desktop {
             let seat0_values = get_values_of_seat0_with_gdm_wayland(&[0, 1, 2]);
             if seat0_values[0].is_empty() {
                 *self = Self::default();
-                self.is_rustdesk_subprocess = false;
                 return;
             }
 
@@ -2156,7 +2329,6 @@ mod desktop {
             if self.is_login_wayland() {
                 self.display = "".to_owned();
                 self.xauth = "".to_owned();
-                self.is_rustdesk_subprocess = false;
                 // Resolve HOME even on this path. Upstream returned without it because nothing then
                 // consumed a login-Wayland Desktop, but the drm build starts a `--server` as the
                 // greeter uid here, and a child with no HOME has nowhere to put its config. The
@@ -2183,11 +2355,9 @@ mod desktop {
                 } else {
                     self.get_display_xauth_wayland();
                 }
-                self.is_rustdesk_subprocess = false;
             } else {
                 self.get_display_x11();
                 self.get_xauth_x11();
-                self.set_is_subprocess();
             }
         }
     }

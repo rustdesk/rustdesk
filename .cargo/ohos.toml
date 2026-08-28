@@ -1,2 +1,1 @@
-[patch.crates-io]
-libsodium-sys = { git = "https://github.com/FrankHan052176/sodiumoxide", rev = "a09de89d843f88a7bfccd80266150fe5d33e1eee" }
+# OHOS builds share the root Cargo.lock and its pinned libsodium-sys patch.

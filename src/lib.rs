@@ -57,10 +57,6 @@ mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 mod port_forward;
 
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
-pub mod plugin;
-
 #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 mod tray;
 
