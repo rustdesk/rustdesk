@@ -758,7 +758,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "המשך"),
         ("Browser didn't open? Use the url below to sign in.", "הדפדפן לא נפתח? השתמש בכתובת שלמטה כדי להתחבר."),
         ("Lock canvas", "נעל לוח ציור"),
-        ("Use personal server", ""),
-        ("use-personal-server-tip", ""),
+        ("Use personal server", "השתמש בשרת אישי"),
+        ("use-personal-server-tip", "מעבר חזרה לשרת הציבורי בלי לאבד את הגדרות השרת האישי; הן נשמרות ומשוחזרות כשמדליקים את המתג שוב."),
     ].iter().cloned().collect();
 }

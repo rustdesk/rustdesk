@@ -3705,7 +3705,19 @@ Future<void> _stashServerConfig(ServerConfig config) async {
 
 /// Switch between the personal server and the public one, parking the personal
 /// config aside while the public server is used so it can be restored as is.
-Future<bool> usePersonalServer(bool use) async {
+Future<bool> usePersonalServer(bool use) {
+  // The switches must not interleave: the options are written one by one, so
+  // two overlapping switches could park an empty config and lose the personal
+  // server settings altogether.
+  final result =
+      _pendingPersonalServerSwitch.then((_) => _usePersonalServer(use));
+  _pendingPersonalServerSwitch = result.then((_) => true, onError: (_) => false);
+  return result;
+}
+
+Future<bool> _pendingPersonalServerSwitch = Future.value(true);
+
+Future<bool> _usePersonalServer(bool use) async {
   if (use) {
     final stashed = getStashedServerConfig();
     if (stashed.idServer.isEmpty) {
