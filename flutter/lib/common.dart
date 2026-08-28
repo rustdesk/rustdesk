@@ -3591,7 +3591,27 @@ importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
   }
 }
 
+// Writing a server config touches several options one by one, so overlapping
+// writes could interleave and park an empty config over a valid one, losing the
+// personal server settings altogether. Serialize them all, wherever they start:
+// the settings dialog, a config import, or the personal server switch.
+Future<void> _serverConfigQueue = Future.value();
+
+Future<T> _serializeServerConfigWrite<T>(Future<T> Function() write) {
+  final result = _serverConfigQueue.then((_) => write());
+  _serverConfigQueue = result.then((_) {}, onError: (_) {});
+  return result;
+}
+
 Future<bool> setServerConfig(
+  List<TextEditingController>? controllers,
+  List<RxString>? errMsgs,
+  ServerConfig config,
+) =>
+    _serializeServerConfigWrite(
+        () => _setServerConfig(controllers, errMsgs, config));
+
+Future<bool> _setServerConfig(
   List<TextEditingController>? controllers,
   List<RxString>? errMsgs,
   ServerConfig config,
@@ -3705,17 +3725,8 @@ Future<void> _stashServerConfig(ServerConfig config) async {
 
 /// Switch between the personal server and the public one, parking the personal
 /// config aside while the public server is used so it can be restored as is.
-Future<bool> usePersonalServer(bool use) {
-  // The switches must not interleave: the options are written one by one, so
-  // two overlapping switches could park an empty config and lose the personal
-  // server settings altogether.
-  final result =
-      _pendingPersonalServerSwitch.then((_) => _usePersonalServer(use));
-  _pendingPersonalServerSwitch = result.then((_) => true, onError: (_) => false);
-  return result;
-}
-
-Future<bool> _pendingPersonalServerSwitch = Future.value(true);
+Future<bool> usePersonalServer(bool use) =>
+    _serializeServerConfigWrite(() => _usePersonalServer(use));
 
 Future<bool> _usePersonalServer(bool use) async {
   if (use) {
@@ -3724,7 +3735,7 @@ Future<bool> _usePersonalServer(bool use) async {
       return false;
     }
     // It was validated when it was entered, so no need to test it again here.
-    return await setServerConfig(null, null, stashed);
+    return await _setServerConfig(null, null, stashed);
   }
   final current = ServerConfig(
     idServer: bind.mainGetOptionSync(key: kOptionCustomRendezvousServer),
@@ -3735,7 +3746,7 @@ Future<bool> _usePersonalServer(bool use) async {
   if (current.idServer.isEmpty) {
     return false;
   }
-  if (!await setServerConfig(null, null, ServerConfig())) {
+  if (!await _setServerConfig(null, null, ServerConfig())) {
     return false;
   }
   await _stashServerConfig(current);
