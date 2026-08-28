@@ -758,5 +758,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Folytatás"),
         ("Browser didn't open? Use the url below to sign in.", "Nem nyílt meg a böngésző? A belépéshez használja az alábbi URL-címet."),
         ("Lock canvas", "Nézet zárolása"),
+        ("Use personal server", ""),
+        ("use-personal-server-tip", ""),
     ].iter().cloned().collect();
 }

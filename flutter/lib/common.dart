@@ -3642,16 +3642,91 @@ Future<bool> setServerConfig(
 
   // should set one by one
   await bind.mainSetOption(
-      key: 'custom-rendezvous-server', value: config.idServer);
-  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
-  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
-  await bind.mainSetOption(key: 'key', value: config.key);
+      key: kOptionCustomRendezvousServer, value: config.idServer);
+  await bind.mainSetOption(key: kOptionRelayServer, value: config.relayServer);
+  await bind.mainSetOption(key: kOptionApiServer, value: config.apiServer);
+  await bind.mainSetOption(key: kOptionServerKey, value: config.key);
+  if (config.idServer.isNotEmpty) {
+    // A newly entered personal server replaces whatever was parked before.
+    await _stashServerConfig(ServerConfig());
+  }
   final newApiServer = await bind.mainGetApiServer();
   if (oldApiServer.isNotEmpty &&
       oldApiServer != newApiServer &&
       gFFI.userModel.isLogin) {
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
+  return true;
+}
+
+/// The personal (self-hosted) server, and whether it is the one in use.
+/// It stays configured while the public server is used, see [usePersonalServer].
+class PersonalServerState {
+  final bool inUse;
+  final String idServer;
+
+  const PersonalServerState(this.inUse, this.idServer);
+
+  bool get isConfigured => idServer.isNotEmpty;
+}
+
+PersonalServerState getPersonalServerState() {
+  final idServer = bind.mainGetOptionSync(key: kOptionCustomRendezvousServer);
+  if (idServer.isNotEmpty) {
+    return PersonalServerState(true, idServer);
+  }
+  return PersonalServerState(false, getStashedServerConfig().idServer);
+}
+
+ServerConfig getStashedServerConfig() => ServerConfig(
+      idServer: bind.mainGetOptionSync(
+          key: '$kStashedServerConfigPrefix$kOptionCustomRendezvousServer'),
+      relayServer: bind.mainGetOptionSync(
+          key: '$kStashedServerConfigPrefix$kOptionRelayServer'),
+      apiServer: bind.mainGetOptionSync(
+          key: '$kStashedServerConfigPrefix$kOptionApiServer'),
+      key: bind.mainGetOptionSync(
+          key: '$kStashedServerConfigPrefix$kOptionServerKey'),
+    );
+
+Future<void> _stashServerConfig(ServerConfig config) async {
+  await bind.mainSetOption(
+      key: '$kStashedServerConfigPrefix$kOptionCustomRendezvousServer',
+      value: config.idServer);
+  await bind.mainSetOption(
+      key: '$kStashedServerConfigPrefix$kOptionRelayServer',
+      value: config.relayServer);
+  await bind.mainSetOption(
+      key: '$kStashedServerConfigPrefix$kOptionApiServer',
+      value: config.apiServer);
+  await bind.mainSetOption(
+      key: '$kStashedServerConfigPrefix$kOptionServerKey', value: config.key);
+}
+
+/// Switch between the personal server and the public one, parking the personal
+/// config aside while the public server is used so it can be restored as is.
+Future<bool> usePersonalServer(bool use) async {
+  if (use) {
+    final stashed = getStashedServerConfig();
+    if (stashed.idServer.isEmpty) {
+      return false;
+    }
+    // It was validated when it was entered, so no need to test it again here.
+    return await setServerConfig(null, null, stashed);
+  }
+  final current = ServerConfig(
+    idServer: bind.mainGetOptionSync(key: kOptionCustomRendezvousServer),
+    relayServer: bind.mainGetOptionSync(key: kOptionRelayServer),
+    apiServer: bind.mainGetOptionSync(key: kOptionApiServer),
+    key: bind.mainGetOptionSync(key: kOptionServerKey),
+  );
+  if (current.idServer.isEmpty) {
+    return false;
+  }
+  if (!await setServerConfig(null, null, ServerConfig())) {
+    return false;
+  }
+  await _stashServerConfig(current);
   return true;
 }
 

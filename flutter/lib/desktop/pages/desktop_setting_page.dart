@@ -1748,6 +1748,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
         );
 
     final outgoingOnly = bind.isOutgoingOnly();
+    final personalServer = getPersonalServerState();
 
     final divider = const Divider(height: 1, indent: 16, endIndent: 16);
     return _Card(
@@ -1763,6 +1764,25 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
                   title: 'ID/Relay Server',
                   onTap: () => showServerSettings(gFFI.dialogManager, setState),
                 ),
+              if (!hideServer && personalServer.isConfigured) ...[
+                divider,
+                listTile(
+                  icon: Icons.swap_horiz_outlined,
+                  title: 'Use personal server',
+                  showTooltip: true,
+                  tooltipMessage: 'use-personal-server-tip',
+                  trailing: Switch(
+                    value: personalServer.inUse,
+                    onChanged:
+                        locked || isOptionFixed(kOptionCustomRendezvousServer)
+                            ? null
+                            : (value) async {
+                                await usePersonalServer(value);
+                                setState(() {});
+                              },
+                  ),
+                ),
+              ],
               if (!hideProxy && !hideServer) divider,
               if (!hideProxy)
                 listTile(

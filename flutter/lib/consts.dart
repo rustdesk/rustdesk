@@ -179,6 +179,13 @@ const String kOptionEnableShowTerminalExtraKeys = "enable-show-terminal-extra-ke
 const String kOptionShowTerminalCtrlKeys = "show-terminal-extra-ctrl-keys";
 
 // network options
+const String kOptionCustomRendezvousServer = "custom-rendezvous-server";
+const String kOptionRelayServer = "relay-server";
+const String kOptionApiServer = "api-server";
+const String kOptionServerKey = "key";
+// The personal server config is parked under these keys while the public
+// server is in use, so that switching back does not require retyping it.
+const String kStashedServerConfigPrefix = "stashed-";
 const String kOptionAllowWebSocket = "allow-websocket";
 const String kOptionAllowInsecureTLSFallback = "allow-insecure-tls-fallback";
 const String kOptionDisableUdp = "disable-udp";

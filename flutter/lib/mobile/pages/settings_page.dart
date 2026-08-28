@@ -102,6 +102,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _disableUdp = false;
   var _enableIpv6Punch = false;
   var _isUsingPublicServer = false;
+  var _personalServer = const PersonalServerState(false, '');
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
 
@@ -149,6 +150,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         mainGetLocalBoolOptionSync(kOptionKeepAwakeDuringOutgoingSessions);
     _showTerminalExtraKeys =
         mainGetLocalBoolOptionSync(kOptionEnableShowTerminalExtraKeys);
+    _personalServer = getPersonalServerState();
   }
 
   @override
@@ -751,9 +753,29 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 onPressed: (context) {
                   showServerSettings(gFFI.dialogManager, (callback) async {
                     _isUsingPublicServer = await bind.mainIsUsingPublicServer();
+                    _personalServer = getPersonalServerState();
                     setState(callback);
                   });
                 }),
+          if (!disabledSettings &&
+              !_hideNetwork &&
+              !_hideServer &&
+              _personalServer.isConfigured)
+            SettingsTile.switchTile(
+              title: Text(translate('Use personal server')),
+              initialValue: _personalServer.inUse,
+              onToggle: isOptionFixed(kOptionCustomRendezvousServer)
+                  ? null
+                  : (v) async {
+                      await usePersonalServer(v);
+                      final isUsingPublicServer =
+                          await bind.mainIsUsingPublicServer();
+                      setState(() {
+                        _isUsingPublicServer = isUsingPublicServer;
+                        _personalServer = getPersonalServerState();
+                      });
+                    },
+            ),
           if (!_hideNetwork && !_hideProxy)
             SettingsTile(
                 title: Text(translate('Socks5/Http(s) Proxy')),
