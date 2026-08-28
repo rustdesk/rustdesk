@@ -1155,6 +1155,13 @@ pub fn main_discover() {
     discover();
 }
 
+/// Run the same Core LAN discovery used by Flutter, but wait until its
+/// response window has completed. Native frontends use this from a worker
+/// thread when they need a coherent DiscoveryPeer snapshot before rendering.
+pub fn main_discover_blocking() -> Result<(), String> {
+    crate::lan::discover().map_err(|err| err.to_string())
+}
+
 pub fn main_get_api_server() -> String {
     get_api_server()
 }
