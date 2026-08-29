@@ -25,7 +25,7 @@ cargo --config "$cargo_config" build \
   --release \
   --locked \
   --lib \
-  --features flutter \
+  --features flutter,cliprdr-file-service \
   "$@"
 
 artifact="$repo_root/target/aarch64-unknown-linux-ohos/release/liblibrustdesk.so"

@@ -146,7 +146,7 @@ pub struct Client;
 struct ClipboardState {
     #[cfg(feature = "flutter")]
     is_text_required: bool,
-    #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+    #[cfg(all(feature = "flutter", any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service")))]
     is_file_required: bool,
     running: bool,
 }
@@ -930,7 +930,7 @@ impl Client {
     }
 
     #[inline]
-    #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+    #[cfg(all(feature = "flutter", any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service")))]
     pub fn set_is_file_clipboard_required(b: bool) {
         CLIPBOARD_STATE.lock().unwrap().is_file_required = b;
     }
@@ -1060,7 +1060,7 @@ impl ClipboardState {
         Self {
             #[cfg(feature = "flutter")]
             is_text_required: true,
-            #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+            #[cfg(all(feature = "flutter", any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service")))]
             is_file_required: true,
             running: false,
         }
@@ -3027,6 +3027,7 @@ impl LoginConfigHandler {
 pub enum MediaData {
     VideoQueue,
     VideoFrame(Box<VideoFrame>),
+    PauseVideo(bool),
     AudioFrame(Box<AudioFrame>),
     AudioFormat(AudioFormat),
     Reset,
@@ -3065,10 +3066,14 @@ pub fn start_video_thread<F, T>(
         let mut count = 0;
         let mut duration = std::time::Duration::ZERO;
         let mut skip_beginning = 0;
+        let mut paused = false;
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(_) | MediaData::VideoQueue => {
+                        if paused {
+                            continue;
+                        }
                         let vf = match data {
                             MediaData::VideoFrame(vf) => {
                                 *discard_queue.write().unwrap() = false;
@@ -3181,6 +3186,15 @@ pub fn start_video_thread<F, T>(
                     MediaData::Reset => {
                         if let Some(handler) = video_handler.as_mut() {
                             handler.reset(None);
+                        }
+                    }
+                    MediaData::PauseVideo(next_paused) => {
+                        paused = next_paused;
+                        if paused {
+                            video_handler = None;
+                            while video_queue.read().unwrap().pop().is_some() {}
+                        } else {
+                            session.refresh_video(display as _);
                         }
                     }
                     MediaData::RecordScreen(start) => {
@@ -4062,6 +4076,12 @@ pub enum Data {
     RejectInsecureConnection,
     Login((String, String, String, bool)),
     Message(Message),
+    #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+    ClipboardFileSnapshot((
+        i32,
+        clipboard::platform::unix::serv_files::PreparedConnClipFiles,
+        Message,
+    )),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
@@ -4085,6 +4105,7 @@ pub enum Data {
     CloseVoiceCall,
     ContinueInsecureConnection,
     ResetDecoder(Option<usize>),
+    PauseVideo(bool),
     RenameFile((i32, String, String, bool)),
     TakeScreenshot((i32, String)),
 }

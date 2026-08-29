@@ -76,7 +76,8 @@ pub use hbbs_http::validate_rustdesk_api_server;
 #[cfg(any(
     target_os = "windows",
     all(target_os = "linux", not(target_env = "ohos")),
-    target_os = "macos"
+    target_os = "macos",
+    all(target_env = "ohos", feature = "cliprdr-file-service")
 ))]
 pub mod clipboard_file;
 

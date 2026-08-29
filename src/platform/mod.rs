@@ -25,6 +25,9 @@ pub mod linux;
 #[cfg(target_env = "ohos")]
 pub mod ohos;
 
+#[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+pub mod ohos_clipboard_file;
+
 #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod gtk_sudo;
 

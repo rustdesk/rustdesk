@@ -1052,6 +1052,27 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("clipboard", &[("content", &content)], &[]);
     }
 
+    #[cfg(target_env = "ohos")]
+    fn clipboard_multi(&self, clipboards: MultiClipboards) {
+        let session_ids: Vec<SessionID> = self
+            .session_handlers
+            .read()
+            .unwrap()
+            .keys()
+            .copied()
+            .collect();
+        for session_id in &session_ids {
+            crate::platform::ohos::receive_client_clipboards(session_id, clipboards.clone());
+        }
+        let format_count = clipboards.clipboards.len().to_string();
+        self.push_event("clipboard_multi", &[("formats", &format_count)], &[]);
+    }
+
+    #[cfg(target_env = "ohos")]
+    fn clipboard_files(&self, paths: Vec<String>) {
+        self.push_event("clipboard_files", &[("paths", &paths)], &[]);
+    }
+
     fn switch_back(&self, peer_id: &str) {
         self.push_event("switch_back", &[("peer_id", peer_id)], &[]);
     }
@@ -1269,6 +1290,13 @@ pub fn session_add_existed(
     displays: Vec<i32>,
     is_view_camera: bool,
 ) -> ResultType<()> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (peer_id, session_id, displays, is_view_camera);
+        bail!("shared peer UI sessions are not supported on OHOS");
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
     let conn_type = if is_view_camera {
         ConnType::VIEW_CAMERA
     } else {
@@ -1276,6 +1304,7 @@ pub fn session_add_existed(
     };
     sessions::insert_peer_session_id(peer_id, conn_type, session_id, displays);
     Ok(())
+    }
 }
 
 /// Create a new remote session with the given id.
@@ -1324,6 +1353,10 @@ pub fn session_add(
         // The same session is added before?
         bail!("same session id is found");
     }
+    #[cfg(target_env = "ohos")]
+    if sessions::get_session_by_peer_id(id.to_owned(), conn_type).is_some() {
+        bail!("same peer session is already active on OHOS");
+    }
 
     LocalConfig::set_remote_id(&id);
 
@@ -1340,6 +1373,8 @@ pub fn session_add(
         password: preset_password,
         #[cfg(target_env = "ohos")]
         core_session_id: session_id.to_string(),
+        #[cfg(target_env = "ohos")]
+        ui_active: Arc::new(AtomicBool::new(true)),
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
@@ -1457,7 +1492,7 @@ pub fn update_text_clipboard_required() {
     Client::set_is_text_clipboard_required(is_required);
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn update_file_clipboard_required() {
     let is_required = sessions::get_sessions()
         .iter()
@@ -1471,7 +1506,11 @@ pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
         if !s.is_default() {
             continue;
         }
-        #[cfg(feature = "unix-file-copy-paste")]
+        #[cfg(target_env = "ohos")]
+        if !s.is_ui_active() {
+            continue;
+        }
+        #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
         if _is_file {
             if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
                 && s.is_file_clipboard_required()
@@ -1497,6 +1536,95 @@ pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
             s.send(Data::Message(msg.clone()));
         }
     }
+}
+
+#[cfg(target_env = "ohos")]
+pub fn session_send_clipboards(session_id: SessionID, mut clipboards: MultiClipboards) -> bool {
+    let mut msg = Message::new();
+    for clipboard in &mut clipboards.clipboards {
+        if clipboard.content.len() > 1024 * 1024 {
+            clipboard.compress = false;
+            continue;
+        }
+        let compressed = hbb_common::compress::compress(&clipboard.content);
+        let use_compressed = compressed.len() < clipboard.content.len();
+        if use_compressed {
+            clipboard.content = compressed.into();
+        }
+        clipboard.compress = use_compressed;
+    }
+    msg.set_multi_clipboards(clipboards);
+    session_send_clipboard_msg(session_id, msg, false)
+}
+
+#[cfg(target_env = "ohos")]
+pub fn session_core_connection_id(session_id: SessionID) -> Option<String> {
+    sessions::get_session_by_session_id(&session_id)
+        .map(|session| session.core_session_id.clone())
+}
+
+#[cfg(target_env = "ohos")]
+pub fn session_send_clipboard_msg(session_id: SessionID, msg: Message, is_file: bool) -> bool {
+    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
+        return false;
+    };
+    if !session.is_default() || !session.is_ui_active() {
+        return false;
+    }
+    if is_file {
+        #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
+        if crate::is_support_file_copy_paste_num(session.lc.read().unwrap().version)
+            && session.is_file_clipboard_required()
+        {
+            session.send(Data::Message(msg));
+            return true;
+        }
+        return false;
+    }
+    if !session.is_text_clipboard_required() {
+        return false;
+    }
+    if let Some(message::Union::MultiClipboards(multi_clipboards)) = &msg.union {
+        let version = session.ui_handler.peer_info.read().unwrap().version.clone();
+        let platform = session
+            .ui_handler
+            .peer_info
+            .read()
+            .unwrap()
+            .platform
+            .clone();
+        if let Some(msg_out) = crate::clipboard::get_msg_if_not_support_multi_clip(
+            &version,
+            &platform,
+            multi_clipboards,
+        ) {
+            session.send(Data::Message(msg_out));
+            return true;
+        }
+    }
+    session.send(Data::Message(msg));
+    true
+}
+
+#[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+pub fn session_send_file_clipboard_snapshot(
+    session_id: SessionID,
+    conn_id: i32,
+    snapshot: clipboard::platform::unix::serv_files::PreparedConnClipFiles,
+    msg: Message,
+) -> bool {
+    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
+        return false;
+    };
+    if !session.is_default()
+        || !session.is_ui_active()
+        || !crate::is_support_file_copy_paste_num(session.lc.read().unwrap().version)
+        || !session.is_file_clipboard_required()
+    {
+        return false;
+    }
+    session.send(Data::ClipboardFileSnapshot((conn_id, snapshot, msg)));
+    true
 }
 
 // Server Side
@@ -1746,6 +1874,14 @@ pub fn session_next_rgba(session_id: SessionID, display: usize) {
     if let Some(s) = sessions::get_session_by_session_id(&session_id) {
         return s.ui_handler.next_rgba(display);
     }
+}
+
+pub fn session_set_video_paused(session_id: SessionID, paused: bool) -> bool {
+    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
+        return false;
+    };
+    session.set_video_paused(paused);
+    true
 }
 
 #[inline]

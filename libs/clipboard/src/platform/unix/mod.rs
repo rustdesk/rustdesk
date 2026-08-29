@@ -4,9 +4,13 @@ use lazy_static::lazy_static;
 mod filetype;
 pub use filetype::{FileDescription, FileType};
 /// use FUSE for file pasting on these platforms
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "ohos"),
+    feature = "unix-file-copy-paste"
+))]
 pub mod fuse;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "unix-file-copy-paste"))]
 pub mod macos;
 
 pub mod local_file;

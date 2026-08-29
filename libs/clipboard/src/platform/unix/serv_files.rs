@@ -1,5 +1,6 @@
 use super::local_file::LocalFile;
 use crate::{platform::unix::local_file::construct_file_list, ClipboardFile, CliprdrError};
+use dashmap::DashMap;
 use hbb_common::{
     bytes::{BufMut, BytesMut},
     log,
@@ -7,12 +8,15 @@ use hbb_common::{
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, time::SystemTime, usize};
 
+const MAX_FILE_CONTENTS_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
+
 lazy_static::lazy_static! {
     // local files are cached, this value should not be changed when copying files
     // Because `CliprdrFileContentsRequest` only contains the index of the file in the list.
     // We need to keep the file list in the same order as the remote side.
     // We may add a `FileId` field to `CliprdrFileContentsRequest` in the future.
     static ref CLIP_FILES: Arc<Mutex<ClipFiles>> = Default::default();
+    static ref CONN_CLIP_FILES: DashMap<i32, Arc<Mutex<ClipFiles>>> = Default::default();
 }
 
 #[derive(Debug)]
@@ -63,6 +67,9 @@ struct ClipFiles {
     first_file_index: usize,
     files_pdu: Vec<u8>,
 }
+
+#[derive(Clone)]
+pub struct PreparedConnClipFiles(Arc<Mutex<ClipFiles>>);
 
 impl ClipFiles {
     fn clear(&mut self) {
@@ -213,13 +220,13 @@ impl ClipFiles {
                         ),
                     });
                 }
-                let read_size = if offset + length > file.size {
-                    file.size - offset
-                } else {
-                    length
-                };
+                let read_size = length.min(file.size - offset);
 
-                let mut buf = vec![0u8; read_size as usize];
+                let read_size =
+                    usize::try_from(read_size).map_err(|_| CliprdrError::InvalidRequest {
+                        description: "clipboard file request is too large".to_string(),
+                    })?;
+                let mut buf = vec![0u8; read_size];
 
                 file.read_exact_at(&mut buf, offset)?;
 
@@ -249,6 +256,12 @@ impl ClipFiles {
 #[inline]
 pub fn clear_files() {
     CLIP_FILES.lock().clear();
+    CONN_CLIP_FILES.clear();
+}
+
+#[inline]
+pub fn clear_conn_files(conn_id: i32) {
+    CONN_CLIP_FILES.remove(&conn_id);
 }
 
 pub fn read_file_contents(
@@ -260,18 +273,35 @@ pub fn read_file_contents(
     n_position_high: i32,
     cb_requested: i32,
 ) -> Vec<Result<ClipboardFile, CliprdrError>> {
+    let file_idx = match usize::try_from(list_index) {
+        Ok(file_idx) => file_idx,
+        Err(_) => {
+            return vec![Err(CliprdrError::InvalidRequest {
+                description: format!("got invalid file index: {list_index}"),
+            })]
+        }
+    };
     let fcr = if dw_flags == 0x1 {
         FileContentsRequest::Size {
             stream_id,
-            file_idx: list_index as usize,
+            file_idx,
         }
     } else if dw_flags == 0x2 {
-        let offset = (n_position_high as u64) << 32 | n_position_low as u64;
-        let length = cb_requested as u64;
+        let length = match u64::try_from(cb_requested) {
+            Ok(length) if length > 0 && length <= MAX_FILE_CONTENTS_REQUEST_BYTES => length,
+            _ => {
+                return vec![Err(CliprdrError::InvalidRequest {
+                    description: format!(
+                        "clipboard file request length must be between 1 and {MAX_FILE_CONTENTS_REQUEST_BYTES} bytes"
+                    ),
+                })]
+            }
+        };
+        let offset = (n_position_high as u32 as u64) << 32 | n_position_low as u32 as u64;
 
         FileContentsRequest::Range {
             stream_id,
-            file_idx: list_index as usize,
+            file_idx,
             offset,
             length,
         }
@@ -281,7 +311,19 @@ pub fn read_file_contents(
         })];
     };
 
-    let mut clip_files = CLIP_FILES.lock();
+    let conn_files = CONN_CLIP_FILES
+        .get(&conn_id)
+        .map(|entry| entry.value().clone());
+    #[cfg(target_env = "ohos")]
+    let Some(clip_files) = conn_files
+    else {
+        return vec![Err(CliprdrError::InvalidRequest {
+            description: "clipboard file descriptor snapshot is missing".to_string(),
+        })];
+    };
+    #[cfg(not(target_env = "ohos"))]
+    let clip_files = conn_files.unwrap_or_else(|| CLIP_FILES.clone());
+    let mut clip_files = clip_files.lock();
     let mut res = vec![];
     if let Some(files_res) = clip_files.get_files_for_audit(&fcr) {
         res.push(Ok(files_res));
@@ -305,8 +347,44 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     files_lock.build_file_list_pdu()
 }
 
-pub fn get_file_list_pdu() -> Vec<u8> {
-    CLIP_FILES.lock().files_pdu.clone()
+pub fn sync_files_for_conn(files: &[String], conn_id: i32) -> Result<(), CliprdrError> {
+    let snapshot = prepare_files_for_conn(files)?;
+    commit_files_for_conn(conn_id, snapshot);
+    Ok(())
+}
+
+pub fn prepare_files_for_conn(files: &[String]) -> Result<PreparedConnClipFiles, CliprdrError> {
+    let signatures = fingerprint(files);
+    let mut snapshot = ClipFiles::default();
+    snapshot.sync_files(files, signatures)?;
+    snapshot.build_file_list_pdu()?;
+    Ok(PreparedConnClipFiles(Arc::new(Mutex::new(snapshot))))
+}
+
+pub fn commit_files_for_conn(conn_id: i32, snapshot: PreparedConnClipFiles) {
+    CONN_CLIP_FILES.insert(conn_id, snapshot.0);
+}
+
+pub fn get_file_list_pdu(conn_id: i32) -> Vec<u8> {
+    if let Some(snapshot) = CONN_CLIP_FILES.get(&conn_id) {
+        return snapshot.value().lock().files_pdu.clone();
+    }
+    let selected_files = CLIP_FILES.lock().files.clone();
+    if selected_files.is_empty() {
+        CONN_CLIP_FILES.remove(&conn_id);
+        return Vec::new();
+    }
+    let mut snapshot = ClipFiles::default();
+    let signatures = fingerprint(&selected_files);
+    if snapshot.sync_files(&selected_files, signatures).is_err()
+        || snapshot.build_file_list_pdu().is_err()
+    {
+        CONN_CLIP_FILES.remove(&conn_id);
+        return Vec::new();
+    }
+    let pdu = snapshot.files_pdu.clone();
+    CONN_CLIP_FILES.insert(conn_id, Arc::new(Mutex::new(snapshot)));
+    pdu
 }
 
 #[cfg(test)]
@@ -315,6 +393,8 @@ mod sig_test {
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static CLIPBOARD_STATE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     // Unique temp dir under the system temp dir; removed on drop (no dev-dep).
     struct TmpDir(PathBuf);
@@ -386,7 +466,26 @@ mod sig_test {
     }
 
     #[test]
+    fn rejects_negative_file_index_before_cache_access() {
+        let result = read_file_contents(1, 1, -1, 0x1, 0, 0, 0);
+        assert!(matches!(
+            result.as_slice(),
+            [Err(CliprdrError::InvalidRequest { .. })]
+        ));
+    }
+
+    #[test]
+    fn rejects_unbounded_range_request() {
+        let result = read_file_contents(1, 1, 0, 0x2, 0, 0, -1);
+        assert!(matches!(
+            result.as_slice(),
+            [Err(CliprdrError::InvalidRequest { .. })]
+        ));
+    }
+
+    #[test]
     fn recopy_after_edit_refreshes_cached_size() {
+        let _state_guard = CLIPBOARD_STATE_TEST_LOCK.lock().unwrap();
         let tmp = TmpDir::new("recopy");
         let file = tmp.join("doc.bin");
         fs::write(&file, b"v1").unwrap(); // 2 bytes
@@ -414,5 +513,29 @@ mod sig_test {
         }
 
         clear_files(); // leave the global clean for other tests
+    }
+
+    #[test]
+    fn connection_snapshot_is_not_replaced_by_another_selection() {
+        let _state_guard = CLIPBOARD_STATE_TEST_LOCK.lock().unwrap();
+        let tmp = TmpDir::new("per_conn");
+        let first = tmp.join("first.txt");
+        let second = tmp.join("second.txt");
+        fs::write(&first, b"first").unwrap();
+        fs::write(&second, b"second selection").unwrap();
+        let first_files = vec![path_str(&first)];
+        let second_files = vec![path_str(&second)];
+
+        sync_files_for_conn(&first_files, 101).unwrap();
+        let first_pdu = get_file_list_pdu(101);
+        sync_files_for_conn(&second_files, 202).unwrap();
+        let second_pdu = get_file_list_pdu(202);
+
+        assert!(!first_pdu.is_empty());
+        assert!(!second_pdu.is_empty());
+        assert_ne!(first_pdu, second_pdu);
+        assert_eq!(get_file_list_pdu(101), first_pdu);
+        clear_conn_files(101);
+        clear_conn_files(202);
     }
 }

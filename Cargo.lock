@@ -7307,6 +7307,7 @@ dependencies = [
  "wol-rs",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "zstd",
 ]
 
 [[package]]

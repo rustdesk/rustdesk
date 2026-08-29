@@ -33,7 +33,7 @@ use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
     time::SystemTime,
@@ -74,6 +74,8 @@ pub struct Session<T: InvokeUiSession> {
     pub audit_guid: Arc<Mutex<String>>,
     #[cfg(target_env = "ohos")]
     pub core_session_id: String,
+    #[cfg(target_env = "ohos")]
+    pub ui_active: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -184,7 +186,7 @@ impl SessionPermissionConfig {
             && !self.lc.read().unwrap().view_only.v
     }
 
-    #[cfg(feature = "unix-file-copy-paste")]
+    #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
     pub fn is_file_clipboard_required(&self) -> bool {
         let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
@@ -423,7 +425,11 @@ impl<T: InvokeUiSession> Session<T> {
             && !self.lc.read().unwrap().view_only.v
     }
 
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    #[cfg(any(
+        target_os = "windows",
+        feature = "unix-file-copy-paste",
+        feature = "cliprdr-file-service"
+    ))]
     pub fn is_file_clipboard_required(&self) -> bool {
         let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
@@ -1413,6 +1419,21 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Close);
     }
 
+    pub fn set_video_paused(&self, paused: bool) {
+        #[cfg(target_env = "ohos")]
+        self.ui_active.store(!paused, Ordering::SeqCst);
+        self.send(Data::PauseVideo(paused));
+    }
+
+    pub fn is_ui_active(&self) -> bool {
+        #[cfg(target_env = "ohos")]
+        {
+            return self.ui_active.load(Ordering::SeqCst);
+        }
+        #[cfg(not(target_env = "ohos"))]
+        true
+    }
+
     pub fn continue_insecure_connection(&self, continue_insecure: bool) {
         let data = if continue_insecure {
             Data::ContinueInsecureConnection
@@ -1736,6 +1757,10 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
     #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn clipboard(&self, content: String);
+    #[cfg(target_env = "ohos")]
+    fn clipboard_multi(&self, clipboards: MultiClipboards);
+    #[cfg(target_env = "ohos")]
+    fn clipboard_files(&self, paths: Vec<String>);
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);

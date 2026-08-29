@@ -19,7 +19,14 @@ use crate::{
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
 #[cfg(feature = "unix-file-copy-paste")]
-use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
+use crate::clipboard::try_empty_clipboard_files;
+#[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+use crate::clipboard::ClipboardSide;
+#[cfg(any(
+    feature = "unix-file-copy-paste",
+    all(not(target_os = "windows"), feature = "cliprdr-file-service")
+))]
+use crate::clipboard_file::unix_file_clip;
 #[cfg(any(
     target_os = "windows",
     all(target_os = "macos", feature = "unix-file-copy-paste")
@@ -47,11 +54,15 @@ use hbb_common::{
     },
     Stream,
 };
-#[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+#[cfg(any(
+    target_os = "windows",
+    feature = "unix-file-copy-paste",
+    feature = "cliprdr-file-service"
+))]
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     num::NonZeroI64,
     path::PathBuf,
@@ -76,13 +87,21 @@ pub struct Remote<T: InvokeUiSession> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
     first_frame: bool,
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    #[cfg(any(
+        target_os = "windows",
+        feature = "unix-file-copy-paste",
+        feature = "cliprdr-file-service"
+    ))]
     client_conn_id: i32, // used for file clipboard
+    #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+    ohos_clipboard_materializer: crate::platform::ohos_clipboard_file::OhosClipboardMaterializer,
     data_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
     elevation_requested: bool,
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
+    video_paused: bool,
+    video_keyframe_required: HashSet<usize>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
@@ -111,6 +130,7 @@ impl<T: InvokeUiSession> Remote<T> {
         receiver: mpsc::UnboundedReceiver<Data>,
         sender: mpsc::UnboundedSender<Data>,
     ) -> Self {
+        let video_paused = !handler.is_ui_active();
         #[cfg(target_env = "ohos")]
         let audio_sender =
             crate::client::start_audio_thread_for_session(handler.core_session_id.clone());
@@ -128,8 +148,14 @@ impl<T: InvokeUiSession> Remote<T> {
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
             first_frame: false,
-            #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+            #[cfg(any(
+                target_os = "windows",
+                feature = "unix-file-copy-paste",
+                feature = "cliprdr-file-service"
+            ))]
             client_conn_id: 0,
+            #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+            ohos_clipboard_materializer: Default::default(),
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
@@ -137,6 +163,8 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
+            video_paused,
+            video_keyframe_required: Default::default(),
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
@@ -213,29 +241,61 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
 
                 // just build for now
-                #[cfg(not(any(target_os = "windows", feature = "unix-file-copy-paste")))]
+                #[cfg(not(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                )))]
                 let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
 
-                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                ))]
                 let (_tx_holder, rx) = mpsc::unbounded_channel();
-                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                ))]
                 let mut rx_clip_client_holder = (Arc::new(TokioMutex::new(rx)), None);
-                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                ))]
                 {
                     if self.handler.is_default() {
                         (self.client_conn_id, rx_clip_client_holder.0) =
                             clipboard::get_rx_cliprdr_client(&self.handler.get_id());
                         log::debug!("get cliprdr client for conn_id {}", self.client_conn_id);
                         let client_conn_id = self.client_conn_id;
+                        #[cfg(target_env = "ohos")]
+                        let core_session_id = self.handler.core_session_id.clone();
+                        #[cfg(target_env = "ohos")]
+                        crate::platform::ohos::set_client_clipboard_conn_id(
+                            core_session_id.clone(),
+                            client_conn_id,
+                        );
                         rx_clip_client_holder.1 = Some(crate::SimpleCallOnReturn {
                             b: true,
                             f: Box::new(move || {
                                 clipboard::remove_channel_by_conn_id(client_conn_id);
+                                #[cfg(target_env = "ohos")]
+                                crate::platform::ohos::clear_client_clipboard_conn_id(
+                                    &core_session_id,
+                                    client_conn_id,
+                                );
                             }),
                         });
                     };
                 }
-                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                ))]
                 let mut rx_clip_client = rx_clip_client_holder.0.lock().await;
 
                 let mut status_timer =
@@ -285,7 +345,11 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         _msg = rx_clip_client.recv() => {
-                            #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                            #[cfg(any(
+                                target_os = "windows",
+                                feature = "unix-file-copy-paste",
+                                feature = "cliprdr-file-service"
+                            ))]
                             self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
@@ -389,9 +453,15 @@ impl<T: InvokeUiSession> Remote<T> {
             // unmounted. Keep this async path for other file-clipboard platforms.
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
         }
+        #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+        clipboard::platform::unix::serv_files::clear_conn_files(self.client_conn_id);
     }
 
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    #[cfg(any(
+        target_os = "windows",
+        feature = "unix-file-copy-paste",
+        feature = "cliprdr-file-service"
+    ))]
     async fn handle_local_clipboard_msg(
         &self,
         peer: &mut Stream,
@@ -1022,6 +1092,24 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
             },
+            Data::PauseVideo(paused) => {
+                self.video_paused = paused;
+                if paused {
+                    self.video_keyframe_required
+                        .extend(self.video_threads.keys().copied());
+                }
+                for thread in self.video_threads.values_mut() {
+                    if paused {
+                        while thread.video_queue.read().unwrap().pop().is_some() {}
+                    }
+                    thread.video_sender.send(MediaData::PauseVideo(paused)).ok();
+                }
+            }
+            #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+            Data::ClipboardFileSnapshot((conn_id, snapshot, msg)) => {
+                clipboard::platform::unix::serv_files::commit_files_for_conn(conn_id, snapshot);
+                allow_err!(peer.send(&msg).await);
+            }
             Data::TakeScreenshot((display, sid)) => {
                 let mut msg = Message::new();
                 msg.set_screenshot_request(ScreenshotRequest {
@@ -1346,13 +1434,26 @@ impl<T: InvokeUiSession> Remote<T> {
                     self.video_format = CodecFormat::from(&vf);
 
                     let display = vf.display as usize;
+                    if self.video_paused {
+                        return true;
+                    }
+                    let contains_key_frame = Self::contains_key_frame(&vf);
+                    if self.video_keyframe_required.contains(&display)
+                        || !self.video_threads.contains_key(&display)
+                    {
+                        if !contains_key_frame {
+                            self.handler.refresh_video(display as _);
+                            return true;
+                        }
+                        self.video_keyframe_required.remove(&display);
+                    }
                     if !self.video_threads.contains_key(&display) {
                         self.new_video_thread(display);
                     }
                     let Some(thread) = self.video_threads.get_mut(&display) else {
                         return true;
                     };
-                    if Self::contains_key_frame(&vf) {
+                    if contains_key_frame {
                         thread
                             .video_sender
                             .send(MediaData::VideoFrame(Box::new(vf)))
@@ -1464,7 +1565,13 @@ impl<T: InvokeUiSession> Remote<T> {
                             #[cfg(not(target_os = "ios"))]
                             crate::flutter::update_text_clipboard_required();
 
-                            #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+                            #[cfg(all(
+                                feature = "flutter",
+                                any(
+                                    feature = "unix-file-copy-paste",
+                                    feature = "cliprdr-file-service"
+                                )
+                            ))]
                             crate::flutter::update_file_clipboard_required();
                         }
 
@@ -1488,7 +1595,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::Clipboard(cb)) => {
                     let clipboard_allowed = {
                         let lc = self.handler.lc.read().unwrap();
-                        !lc.disable_clipboard.v && !lc.view_only.v
+                        !lc.disable_clipboard.v && !lc.view_only.v && self.handler.is_ui_active()
                     };
                     if clipboard_allowed {
                         #[cfg(not(any(
@@ -1497,7 +1604,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             target_env = "ohos"
                         )))]
                         update_clipboard(vec![cb], ClipboardSide::Client);
-                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
+                        #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
                                 hbb_common::compress::decompress(&cb.content)
@@ -1508,6 +1615,11 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.clipboard(content);
                             }
                         }
+                        #[cfg(target_env = "ohos")]
+                        self.handler.clipboard_multi(MultiClipboards {
+                            clipboards: vec![cb],
+                            ..Default::default()
+                        });
                         #[cfg(target_os = "android")]
                         crate::clipboard::handle_msg_clipboard(cb);
                     }
@@ -1515,7 +1627,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 Some(message::Union::MultiClipboards(_mcb)) => {
                     let clipboard_allowed = {
                         let lc = self.handler.lc.read().unwrap();
-                        !lc.disable_clipboard.v && !lc.view_only.v
+                        !lc.disable_clipboard.v && !lc.view_only.v && self.handler.is_ui_active()
                     };
                     if clipboard_allowed {
                         #[cfg(not(any(
@@ -1524,7 +1636,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             target_env = "ohos"
                         )))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
-                        #[cfg(any(target_os = "ios", target_env = "ohos"))]
+                        #[cfg(target_os = "ios")]
                         {
                             if let Some(cb) = _mcb
                                 .clipboards
@@ -1541,11 +1653,17 @@ impl<T: InvokeUiSession> Remote<T> {
                                 }
                             }
                         }
+                        #[cfg(target_env = "ohos")]
+                        self.handler.clipboard_multi(_mcb);
                         #[cfg(target_os = "android")]
                         crate::clipboard::handle_msg_multi_clipboards(_mcb);
                     }
                 }
-                #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    feature = "unix-file-copy-paste",
+                    feature = "cliprdr-file-service"
+                ))]
                 Some(message::Union::Cliprdr(clip)) => {
                     self.handle_cliprdr_msg(clip, peer).await;
                 }
@@ -1831,7 +1949,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 #[cfg(feature = "flutter")]
                                 #[cfg(not(target_os = "ios"))]
                                 crate::flutter::update_text_clipboard_required();
-                                #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+                                #[cfg(all(
+                                    feature = "flutter",
+                                    any(
+                                        feature = "unix-file-copy-paste",
+                                        feature = "cliprdr-file-service"
+                                    )
+                                ))]
                                 crate::flutter::update_file_clipboard_required();
                                 self.handler.set_permission("keyboard", p.enabled);
                             }
@@ -1851,7 +1975,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                 if !p.enabled && self.handler.is_file_transfer() {
                                     return true;
                                 }
-                                #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+                                #[cfg(all(
+                                    feature = "flutter",
+                                    any(
+                                        feature = "unix-file-copy-paste",
+                                        feature = "cliprdr-file-service"
+                                    )
+                                ))]
                                 crate::flutter::update_file_clipboard_required();
                                 self.handler.set_permission("file", p.enabled);
                                 #[cfg(feature = "unix-file-copy-paste")]
@@ -2355,14 +2485,18 @@ impl<T: InvokeUiSession> Remote<T> {
         ContextSend::enable(enabled);
     }
 
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    #[cfg(any(
+        target_os = "windows",
+        feature = "unix-file-copy-paste",
+        feature = "cliprdr-file-service"
+    ))]
     async fn handle_cliprdr_msg(
         &mut self,
         clip: hbb_common::message_proto::Cliprdr,
         _peer: &mut Stream,
     ) {
         log::debug!("handling cliprdr msg from server peer");
-        #[cfg(feature = "flutter")]
+        #[cfg(all(feature = "flutter", not(target_env = "ohos")))]
         if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
                 != clipboard::get_client_conn_id(&crate::flutter::get_cur_peer_id()).unwrap_or(0)
@@ -2377,12 +2511,22 @@ impl<T: InvokeUiSession> Remote<T> {
         };
 
         let is_stopping_allowed = clip.is_beginning_message();
-        let file_transfer_enabled = self.handler.is_file_clipboard_required();
+        let file_transfer_enabled =
+            self.handler.is_file_clipboard_required() && self.handler.is_ui_active();
+        #[cfg(not(all(target_env = "ohos", feature = "cliprdr-file-service")))]
         let stop = is_stopping_allowed && !file_transfer_enabled;
+        #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+        let stop = !file_transfer_enabled;
         log::debug!(
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
-        if !stop {
+        if stop {
+            #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+            {
+                self.ohos_clipboard_materializer.cancel();
+                clipboard::platform::unix::serv_files::clear_conn_files(self.client_conn_id);
+            }
+        } else {
             #[cfg(any(
                 target_os = "windows",
                 all(target_os = "macos", feature = "unix-file-copy-paste")
@@ -2398,7 +2542,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         .map_err(|e| e.into())
                 });
             }
-            #[cfg(feature = "unix-file-copy-paste")]
+            #[cfg(any(
+                feature = "unix-file-copy-paste",
+                all(not(target_os = "windows"), feature = "cliprdr-file-service")
+            ))]
             if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
                 let mut out_msgs = vec![];
 
@@ -2419,7 +2566,43 @@ impl<T: InvokeUiSession> Remote<T> {
                     );
                 }
 
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+                {
+                    let serves_local_files = matches!(
+                        &clip,
+                        clipboard::ClipboardFile::MonitorReady
+                            | clipboard::ClipboardFile::FormatListResponse { .. }
+                            | clipboard::ClipboardFile::FormatDataRequest { .. }
+                            | clipboard::ClipboardFile::FileContentsRequest { .. }
+                    );
+                    if serves_local_files {
+                        out_msgs = unix_file_clip::serve_clip_messages(
+                            ClipboardSide::Client,
+                            clip,
+                            self.client_conn_id,
+                        );
+                    } else {
+                        let root = self
+                            .handler
+                            .core_session_id
+                            .parse::<crate::flutter_ffi::SessionID>()
+                            .ok()
+                            .and_then(|session_id| {
+                                crate::platform::ohos::get_client_clipboard_file_root(&session_id)
+                            });
+                        let (messages, completed_paths) = self.ohos_clipboard_materializer.handle(
+                            clip,
+                            self.client_conn_id,
+                            root.as_deref(),
+                        );
+                        out_msgs = messages;
+                        if let Some(paths) = completed_paths {
+                            self.handler.clipboard_files(paths);
+                        }
+                    }
+                }
+
+                #[cfg(all(not(target_os = "macos"), not(target_env = "ohos")))]
                 {
                     out_msgs = unix_file_clip::serve_clip_messages(
                         ClipboardSide::Client,

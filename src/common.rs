@@ -156,13 +156,13 @@ pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
 }
 
 #[inline]
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn is_support_file_copy_paste(ver: &str) -> bool {
     is_support_file_copy_paste_num(hbb_common::get_version_number(ver))
 }
 
 #[inline]
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn is_support_file_copy_paste_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.3.8")
 }

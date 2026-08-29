@@ -6,7 +6,9 @@ use hbb_common::{
 };
 use serde::Serialize;
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
+    io::Read,
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
@@ -23,6 +25,9 @@ lazy_static::lazy_static! {
     static ref STARTED_SESSIONS: Mutex<HashSet<SessionID>> = Default::default();
     static ref CLIPBOARDS_HOST: Mutex<Option<MultiClipboards>> = Default::default();
     static ref CLIENT_CLIPBOARD: Mutex<ClientClipboardState> = Default::default();
+    static ref CLIENT_RECEIVED_CLIPBOARDS: Mutex<HashMap<SessionID, VecDeque<MultiClipboards>>> = Default::default();
+    static ref CLIENT_CLIPBOARD_FILE_ROOTS: Mutex<HashMap<SessionID, PathBuf>> = Default::default();
+    static ref CLIENT_CLIPBOARD_CONN_IDS: Mutex<HashMap<String, i32>> = Default::default();
     static ref HOST_INPUT_EVENTS: Mutex<VecDeque<HostInputEvent>> = Default::default();
     static ref HOST_POINTER_POSITION: Mutex<(i32, i32)> = Default::default();
     static ref HOST_AUDIO: Mutex<VecDeque<Vec<u8>>> = Default::default();
@@ -438,6 +443,157 @@ pub fn update_client_text_clipboard(content: String) -> bool {
     true
 }
 
+pub fn update_client_clipboards(clipboards: MultiClipboards) -> bool {
+    let mut state = CLIENT_CLIPBOARD.lock().unwrap();
+    if !state.enabled {
+        return false;
+    }
+    state.clipboards = Some(clipboards);
+    true
+}
+
+pub(crate) fn receive_client_clipboards(session_id: &SessionID, mut clipboards: MultiClipboards) {
+    const MAX_CLIENT_CLIPBOARD_BYTES: usize = 64 * 1024 * 1024;
+    const MAX_CLIENT_CLIPBOARD_FORMATS: usize = 16;
+    let mut aggregate_size = 0usize;
+    clipboards.clipboards.truncate(MAX_CLIENT_CLIPBOARD_FORMATS);
+    clipboards.clipboards.retain_mut(|clipboard| {
+        if clipboard.compress {
+            let Ok(content) = decompress_clipboard_content(
+                &clipboard.content,
+                MAX_CLIENT_CLIPBOARD_BYTES,
+            ) else {
+                return false;
+            };
+            clipboard.content = content.into();
+            clipboard.compress = false;
+        }
+        let Some(next_size) = aggregate_size.checked_add(clipboard.content.len()) else {
+            return false;
+        };
+        if next_size > MAX_CLIENT_CLIPBOARD_BYTES {
+            return false;
+        }
+        aggregate_size = next_size;
+        true
+    });
+    if clipboards.clipboards.is_empty() {
+        return;
+    }
+    let mut queues = CLIENT_RECEIVED_CLIPBOARDS.lock().unwrap();
+    let queue = queues.entry(*session_id).or_default();
+    if queue.len() >= 4 {
+        queue.pop_front();
+    }
+    queue.push_back(clipboards);
+}
+
+fn decompress_clipboard_content(data: &[u8], limit: usize) -> Result<Vec<u8>, String> {
+    let decoder = zstd::Decoder::new(data).map_err(|error| error.to_string())?;
+    let mut content = Vec::new();
+    decoder
+        .take(limit.saturating_add(1) as u64)
+        .read_to_end(&mut content)
+        .map_err(|error| error.to_string())?;
+    if content.len() > limit {
+        return Err("decompressed clipboard content exceeds the size limit".to_owned());
+    }
+    Ok(content)
+}
+
+pub fn take_client_received_clipboards(session_id: &SessionID) -> Option<MultiClipboards> {
+    let mut queues = CLIENT_RECEIVED_CLIPBOARDS.lock().unwrap();
+    let queue = queues.get_mut(session_id)?;
+    let clipboards = queue.pop_front();
+    if queue.is_empty() {
+        queues.remove(session_id);
+    }
+    clipboards
+}
+
+#[cfg(feature = "cliprdr-file-service")]
+pub fn set_client_clipboard_file_root(session_id: &SessionID, root: String) -> Result<(), String> {
+    let root = PathBuf::from(root);
+    let has_unsafe_component = root.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::CurDir | std::path::Component::ParentDir
+        )
+    });
+    let has_dedicated_parent = root
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        == Some("rustdesk-clipboard-in");
+    if !root.is_absolute()
+        || has_unsafe_component
+        || root.file_name().is_none()
+        || !has_dedicated_parent
+    {
+        return Err("clipboard file root must be a dedicated session directory".to_owned());
+    }
+    std::fs::create_dir_all(&root)
+        .map_err(|error| format!("failed to create clipboard file root: {error}"))?;
+    CLIENT_CLIPBOARD_FILE_ROOTS
+        .lock()
+        .unwrap()
+        .insert(*session_id, root);
+    Ok(())
+}
+
+#[cfg(feature = "cliprdr-file-service")]
+pub(crate) fn get_client_clipboard_file_root(session_id: &SessionID) -> Option<PathBuf> {
+    CLIENT_CLIPBOARD_FILE_ROOTS
+        .lock()
+        .unwrap()
+        .get(session_id)
+        .cloned()
+}
+
+#[cfg(feature = "cliprdr-file-service")]
+pub(crate) fn set_client_clipboard_conn_id(core_session_id: String, conn_id: i32) {
+    CLIENT_CLIPBOARD_CONN_IDS
+        .lock()
+        .unwrap()
+        .insert(core_session_id, conn_id);
+}
+
+#[cfg(feature = "cliprdr-file-service")]
+pub(crate) fn clear_client_clipboard_conn_id(core_session_id: &str, conn_id: i32) {
+    let mut conn_ids = CLIENT_CLIPBOARD_CONN_IDS.lock().unwrap();
+    if conn_ids.get(core_session_id) == Some(&conn_id) {
+        conn_ids.remove(core_session_id);
+    }
+    clipboard::platform::unix::serv_files::clear_conn_files(conn_id);
+}
+
+#[cfg(feature = "cliprdr-file-service")]
+pub fn update_client_file_clipboard(
+    session_id: SessionID,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    if paths.is_empty() {
+        return Err("file clipboard is empty".to_owned());
+    }
+    let core_session_id = crate::flutter::session_core_connection_id(session_id)
+        .ok_or_else(|| "active session clipboard connection is not ready".to_owned())?;
+    let conn_id = CLIENT_CLIPBOARD_CONN_IDS
+        .lock()
+        .unwrap()
+        .get(&core_session_id)
+        .copied()
+        .ok_or_else(|| "active session clipboard connection is not ready".to_owned())?;
+    let snapshot = clipboard::platform::unix::serv_files::prepare_files_for_conn(&paths)
+        .map_err(|e| format!("failed to stage file clipboard: {e}"))?;
+    let msg =
+        crate::clipboard_file::clip_2_msg(crate::clipboard_file::unix_file_clip::get_format_list());
+    if crate::flutter::session_send_file_clipboard_snapshot(session_id, conn_id, snapshot, msg) {
+        Ok(())
+    } else {
+        Err("active session is not ready for file clipboard".to_owned())
+    }
+}
+
 pub fn update_clipboards(client: bool, clipboards: MultiClipboards) {
     if client {
         CLIENT_CLIPBOARD.lock().unwrap().clipboards = Some(clipboards);
@@ -482,6 +638,14 @@ pub(crate) fn emit_session_event(session_id: &SessionID, event: EventToUI) -> bo
 
 pub(crate) fn finish_session(session_id: &SessionID) {
     STARTED_SESSIONS.lock().unwrap().remove(session_id);
+    CLIENT_RECEIVED_CLIPBOARDS
+        .lock()
+        .unwrap()
+        .remove(session_id);
+    CLIENT_CLIPBOARD_FILE_ROOTS
+        .lock()
+        .unwrap()
+        .remove(session_id);
 }
 
 pub fn register_render_stats_callback(callback: RenderStatsCallback) {
