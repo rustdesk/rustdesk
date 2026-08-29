@@ -11,13 +11,10 @@
 		<!--<PropertyRef Id="UpgradesFile" />-->
 
 		<PropertyRef Id="AddRemovePropertiesFile" />
-		<Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
 
 		<Media Id="1" Cabinet="cab1.cab" EmbedCab="yes" CompressionLevel="high" />
 		<Icon Id="AppIcon" SourceFile="Resources\icon.ico" />
 		<CustomAction Id="BlockSelfInstalledApp" Error="!(loc.AnotherAppDialogDescription)" />
-		<util:CloseApplication Id="CloseRustDeskBeforeInstallValidate" Target="$(var.Product).exe" CloseMessage="yes" EndSessionMessage="yes" RebootPrompt="no" Sequence="1" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
-		<util:CloseApplication Id="CloseRuntimeBrokerBeforeInstallValidate" Target="RuntimeBroker_rustdesk.exe" CloseMessage="yes" EndSessionMessage="yes" RebootPrompt="no" Sequence="2" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
 
 		<!-- User Interface -->
 		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
@@ -31,17 +28,12 @@
 
 		<InstallExecuteSequence>
 			<Custom Action="BlockSelfInstalledApp" After="AppSearch" Condition="NOT Installed AND (APP_WINDOWS_INSTALLER=&quot;#0&quot; OR APP_WINDOWS_INSTALLER32=&quot;#0&quot;)" />
-			<?if $(sys.BUILDARCH) = arm64 ?>
-				<Custom Action="Wix4CloseApplications_A64" Before="InstallValidate" Condition="VersionNT &gt; 400" />
-			<?else?>
-				<Custom Action="Wix4CloseApplications_X64" Before="InstallValidate" Condition="VersionNT &gt; 400" />
-			<?endif?>
 			<InstallExecute After="RemoveExistingProducts" />
 
 			<!--Only do InstallValidate if is not Uninstall-->
 			<!--<InstallValidate Condition="NOT (Installed AND REMOVE AND NOT UPGRADINGPRODUCTCODE )" />-->
-			<!--Only do InstallValidate if is Install-->
-			<InstallValidate Condition="NOT Installed" />
+			<!--Only validate fresh installs, not major upgrades-->
+			<InstallValidate Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED" />
 
 		</InstallExecuteSequence>
 

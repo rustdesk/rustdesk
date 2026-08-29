@@ -9,7 +9,6 @@
 				<File Id="App.exe" Name="$(var.Product).exe" KeyPath="yes" Checksum="yes">
 					<!--<fire:FirewallException Id="AppEx" Name="$(var.Product) Service" Scope="any" IgnoreFailure="yes" />-->
 				</File>
-				<ServiceControl Id="StopRustDeskService" Name="$(var.Product)" Stop="install" Wait="yes" />
 			</Component>
 		</DirectoryRef>
 
