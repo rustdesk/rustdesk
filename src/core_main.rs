@@ -127,6 +127,13 @@ pub fn core_main() -> Option<Vec<String>> {
     if args.contains(&"--noinstall".to_string()) {
         args.clear();
     }
+    // The portable wrapper injects `--install` when its name ends with `install.exe`,
+    // including `no-install.exe`. Drop the argument instead of exiting so disabled
+    // clients can continue running as portable applications.
+    if config::is_disable_installation() {
+        args.retain(|arg| arg != "--install");
+        flutter_args.retain(|arg| arg != "--install");
+    }
     if args.len() > 0 {
         if args[0] == "--version" {
             println!("{}", crate::VERSION);
@@ -183,9 +190,6 @@ pub fn core_main() -> Option<Vec<String>> {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
         return None;
     }
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    init_plugins(&args);
     if args.is_empty() || crate::common::is_empty_uni_link(&args[0]) {
         #[cfg(target_os = "macos")]
         {
@@ -660,7 +664,8 @@ pub fn core_main() -> Option<Vec<String>> {
                         None
                     }
                 };
-                let new_id = get_value("--id");
+                // An empty --id (e.g. an unset var) would deploy a blank id; the Android flow guards this too (#15146).
+                let new_id = get_value("--id").filter(|s| !s.is_empty());
                 match crate::ui_interface::deploy_device(token, new_id) {
                     crate::ui_interface::DeployResult::Ok => {
                         println!("Device deployed.");
@@ -708,14 +713,6 @@ pub fn core_main() -> Option<Vec<String>> {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
             crate::ui_interface::start_option_status_sync();
-        } else if args[0] == "--cm-no-ui" {
-            #[cfg(feature = "flutter")]
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            {
-                crate::ui_interface::start_option_status_sync();
-                crate::flutter::connection_manager::start_cm_no_ui();
-            }
-            return None;
         } else if args[0] == "--whiteboard" {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -729,22 +726,6 @@ pub fn core_main() -> Option<Vec<String>> {
                 crate::platform::gtk_sudo::exec();
             }
             return None;
-        } else {
-            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            if args[0] == "--plugin-install" {
-                if args.len() == 2 {
-                    crate::plugin::change_uninstall_plugin(&args[1], false);
-                } else if args.len() == 3 {
-                    crate::plugin::install_plugin_with_url(&args[1], &args[2]);
-                }
-                return None;
-            } else if args[0] == "--plugin-uninstall" {
-                if args.len() == 2 {
-                    crate::plugin::change_uninstall_plugin(&args[1], true);
-                }
-                return None;
-            }
         }
     }
     //_async_logger_holder.map(|x| x.flush());
@@ -752,23 +733,6 @@ pub fn core_main() -> Option<Vec<String>> {
     return Some(flutter_args);
     #[cfg(not(feature = "flutter"))]
     return Some(args);
-}
-
-#[inline]
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn init_plugins(args: &Vec<String>) {
-    if args.is_empty() || "--server" == (&args[0] as &str) {
-        #[cfg(debug_assertions)]
-        let load_plugins = true;
-        #[cfg(not(debug_assertions))]
-        let load_plugins = crate::platform::is_installed();
-        if load_plugins {
-            crate::plugin::init();
-        }
-    } else if "--service" == (&args[0] as &str) {
-        hbb_common::allow_err!(crate::plugin::remove_uninstalled());
-    }
 }
 
 fn import_config(path: &str) {

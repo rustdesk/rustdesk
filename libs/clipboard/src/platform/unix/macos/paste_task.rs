@@ -2,10 +2,10 @@ use crate::{
     platform::unix::{FileDescription, FileType, BLOCK_SIZE},
     send_data, ClipboardFile, CliprdrError, ProgressPercent,
 };
-use hbb_common::{allow_err, log, tokio::time::Instant};
+use hbb_common::{allow_err, fs::join_validated_path, log, tokio::time::Instant};
 use std::{
     cmp::min,
-    fs::{File, FileTimes},
+    fs::{File, FileTimes, OpenOptions},
     io::{BufWriter, Write},
     os::macos::fs::FileTimesExt,
     path::{Path, PathBuf},
@@ -26,6 +26,10 @@ const RECEIVE_WAIT_TIMEOUT: Duration = Duration::from_millis(5_000);
 // "1984-01-24 08:00:00 +0000"
 const TIMESTAMP_FOR_FILE_PROGRESS_COMPLETED: u64 = 443779200;
 const ATTR_PROGRESS_FRACTION_COMPLETED: &str = "com.apple.progress.fractionCompleted";
+
+fn create_new_file(path: impl AsRef<Path>) -> std::io::Result<File> {
+    OpenOptions::new().write(true).create_new(true).open(path)
+}
 
 pub struct FileContentsResponse {
     pub conn_id: i32,
@@ -117,7 +121,15 @@ impl PasteTask {
             target_dir,
             files,
         };
-        task_handle.update_next(0).ok();
+        // Path validation and creation are not atomic. Local filesystem changes can
+        // invalidate checked paths, and entries created before an error are not rolled back.
+        if let Err(error) = task_handle
+            .validate_paths()
+            .and_then(|_| task_handle.update_next(0))
+        {
+            log::error!("Failed to initialize paste task: {}", &error);
+            task_handle.on_error(error);
+        }
         if task_handle.is_finished() {
             task_handle.on_finished();
         } else {
@@ -250,6 +262,13 @@ impl PasteTask {
 }
 
 impl PasteTaskHandle {
+    fn validate_paths(&self) -> Result<(), CliprdrError> {
+        for file in &self.files {
+            Self::join_file_path(&self.target_dir, &file.name)?;
+        }
+        Ok(())
+    }
+
     fn update_next(&mut self, size: u64) -> Result<(), CliprdrError> {
         if self.is_finished() {
             return Ok(());
@@ -259,7 +278,7 @@ impl PasteTaskHandle {
         let is_start = self.progress.list_index == -1;
         if is_start || (self.progress.offset + size) >= self.progress.download_file_size {
             if !is_start {
-                self.on_done();
+                self.on_done()?;
             }
             for i in (self.progress.list_index + 1)..self.files.len() as i32 {
                 let Some(file_desc) = self.files.get(i as usize) else {
@@ -270,14 +289,12 @@ impl PasteTaskHandle {
                 match file_desc.kind {
                     FileType::File => {
                         if file_desc.size == 0 {
-                            if let Some(new_file_path) =
-                                Self::get_new_filename(&self.target_dir, file_desc)
-                            {
-                                if let Ok(f) = std::fs::File::create(&new_file_path) {
-                                    f.set_len(0).ok();
-                                    Self::set_file_metadata(&f, file_desc);
-                                }
-                            };
+                            let path = Self::join_file_path(&self.target_dir, &file_desc.name)?;
+                            if let Some(path) = Self::get_new_filename(path, file_desc) {
+                                let f = create_new_file(&path)
+                                    .map_err(|err| CliprdrError::FileError { path, err })?;
+                                Self::set_file_metadata(&f, file_desc);
+                            }
                         } else {
                             self.progress.list_index = i;
                             self.progress.offset = 0;
@@ -286,10 +303,11 @@ impl PasteTaskHandle {
                         }
                     }
                     FileType::Directory => {
-                        let path = self.target_dir.join(&file_desc.name);
-                        if !path.exists() {
-                            std::fs::create_dir_all(path).ok();
-                        }
+                        let path = Self::join_file_path(&self.target_dir, &file_desc.name)?;
+                        std::fs::create_dir_all(&path).map_err(|err| CliprdrError::FileError {
+                            path: path.to_string_lossy().to_string(),
+                            err,
+                        })?;
                     }
                     FileType::Symlink => {
                         // to-do: handle symlink
@@ -362,9 +380,7 @@ impl PasteTaskHandle {
             });
         };
 
-        let original_file_path = self
-            .target_dir
-            .join(&file.name)
+        let original_file_path = Self::join_file_path(&self.target_dir, &file.name)?
             .to_string_lossy()
             .to_string();
         let Some(download_file_path) = Self::get_first_filename(
@@ -391,7 +407,7 @@ impl PasteTaskHandle {
                 });
             }
         }
-        match std::fs::File::create(&download_file_path) {
+        match create_new_file(&download_file_path) {
             Ok(handle) => {
                 let writer = BufWriter::with_capacity(BLOCK_SIZE as usize * 2, handle);
                 self.progress.download_file_index = self.progress.list_index;
@@ -446,6 +462,15 @@ impl PasteTaskHandle {
         None
     }
 
+    fn join_file_path(target_dir: &PathBuf, name: &Path) -> Result<PathBuf, CliprdrError> {
+        let name = name.to_str().ok_or_else(|| CliprdrError::InvalidRequest {
+            description: "clipboard file name is not valid UTF-8".to_string(),
+        })?;
+        join_validated_path(target_dir, name).map_err(|error| CliprdrError::InvalidRequest {
+            description: error.to_string(),
+        })
+    }
+
     fn progress_percent(&self) -> ProgressPercent {
         let percent = self.progress.current_size as f64 / self.progress.total_size as f64;
         ProgressPercent {
@@ -476,8 +501,12 @@ impl PasteTaskHandle {
     fn on_finished(&mut self) {
         if self.progress.error.is_some() {
             self.on_cancelled();
-        } else {
-            self.on_done();
+            return;
+        }
+        if let Err(error) = self.on_done() {
+            log::error!("Failed to finish paste task: {}", &error);
+            self.on_error(error);
+            return;
         }
         if self.progress.current_size != self.progress.total_size {
             self.progress.error = Some(CliprdrError::InvalidRequest {
@@ -496,15 +525,16 @@ impl PasteTaskHandle {
         std::fs::remove_file(&self.progress.download_file_path).ok();
     }
 
-    fn on_done(&mut self) {
+    fn on_done(&mut self) -> Result<(), CliprdrError> {
         self.update_progress_completed(Some(1.0));
         Self::remove_progress_completed(&self.progress.download_file_path);
 
         let Some(file) = self.progress.file_handle.as_mut() else {
-            return;
+            return Ok(());
         };
         if self.progress.download_file_index == PasteTask::INVALID_FILE_INDEX {
-            return;
+            log::error!("Invalid download file index");
+            return Ok(());
         }
 
         if let Err(e) = file.flush() {
@@ -518,26 +548,26 @@ impl PasteTaskHandle {
                 "Failed to get file description: {}",
                 self.progress.download_file_index
             );
-            return;
+            return Ok(());
         };
-        let Some(rename_to_path) = Self::get_new_filename(&self.target_dir, file_desc) else {
-            return;
+        let path = Self::join_file_path(&self.target_dir, &file_desc.name)?;
+        let Some(rename_to_path) = Self::get_new_filename(path, file_desc) else {
+            return Ok(());
         };
-        match std::fs::rename(&self.progress.download_file_path, &rename_to_path) {
-            Ok(_) => Self::set_file_metadata2(&rename_to_path, file_desc),
-            Err(e) => {
-                log::error!("Failed to rename file: {:?}", e);
+        std::fs::rename(&self.progress.download_file_path, &rename_to_path).map_err(|err| {
+            CliprdrError::FileError {
+                path: rename_to_path.clone(),
+                err,
             }
-        }
+        })?;
+        Self::set_file_metadata2(&rename_to_path, file_desc);
         self.progress.download_file_path = "".to_owned();
         self.progress.download_file_index = PasteTask::INVALID_FILE_INDEX;
+        Ok(())
     }
 
-    fn get_new_filename(target_dir: &PathBuf, file_desc: &FileDescription) -> Option<String> {
-        let mut rename_to_path = target_dir
-            .join(&file_desc.name)
-            .to_string_lossy()
-            .to_string();
+    fn get_new_filename(path: PathBuf, file_desc: &FileDescription) -> Option<String> {
+        let mut rename_to_path = path.to_string_lossy().to_string();
         if Path::new(&rename_to_path).exists() {
             let Some(new_path) = Self::get_first_filename(rename_to_path.clone(), file_desc.kind)
             else {
@@ -635,5 +665,124 @@ impl PasteTaskHandle {
             });
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    struct TestDirectory(PathBuf);
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).ok();
+        }
+    }
+
+    fn test_directories() -> (TestDirectory, PathBuf, PathBuf) {
+        let temp = TestDirectory(std::env::temp_dir().join(uuid::Uuid::new_v4().to_string()));
+        std::fs::create_dir(&temp.0).unwrap();
+        let target = temp.0.join("target");
+        let outside = temp.0.join("outside");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        (temp, target, outside)
+    }
+
+    fn file_description(name: &str, kind: FileType, size: u64) -> FileDescription {
+        FileDescription {
+            conn_id: 0,
+            name: PathBuf::from(name),
+            kind,
+            atime: SystemTime::UNIX_EPOCH,
+            last_modified: SystemTime::UNIX_EPOCH,
+            last_metadata_changed: SystemTime::UNIX_EPOCH,
+            creation_time: SystemTime::UNIX_EPOCH,
+            size,
+            perm: 0,
+        }
+    }
+
+    fn paste_task_handle(target_dir: PathBuf, files: Vec<FileDescription>) -> PasteTaskHandle {
+        PasteTaskHandle {
+            progress: PasteTaskProgress {
+                list_index: -1,
+                offset: 0,
+                total_size: files.iter().map(|file| file.size).sum(),
+                current_size: 0,
+                last_sent_time: Instant::now(),
+                download_file_index: PasteTask::INVALID_FILE_INDEX,
+                download_file_size: 0,
+                download_file_path: String::new(),
+                download_file_current_size: 0,
+                file_handle: None,
+                error: None,
+                is_canceled: false,
+            },
+            target_dir,
+            files,
+        }
+    }
+
+    #[test]
+    fn validates_all_paths_before_creating_files() {
+        let (_temp, target, outside) = test_directories();
+        symlink(&outside, target.join("link")).unwrap();
+
+        let files = vec![
+            file_description("created.txt", FileType::File, 0),
+            file_description("link/escaped", FileType::Directory, 0),
+        ];
+        let mut task = paste_task_handle(target.clone(), files);
+
+        assert!(matches!(
+            task.validate_paths().and_then(|_| task.update_next(0)),
+            Err(CliprdrError::InvalidRequest { .. })
+        ));
+        assert!(!target.join("created.txt").exists());
+        assert!(!outside.join("escaped").exists());
+    }
+
+    #[test]
+    fn final_path_validation_failure_marks_task_failed_and_removes_download() {
+        let (_temp, target, outside) = test_directories();
+
+        let download_path = target.join("file.rddownload");
+        let download_file = create_new_file(&download_path).unwrap();
+        let files = vec![file_description("link/file.txt", FileType::File, 1)];
+        let mut task = paste_task_handle(target.clone(), files);
+        task.progress.list_index = 1;
+        task.progress.current_size = 1;
+        task.progress.download_file_index = 0;
+        task.progress.download_file_size = 1;
+        task.progress.download_file_path = download_path.to_string_lossy().to_string();
+        task.progress.download_file_current_size = 1;
+        task.progress.file_handle = Some(BufWriter::new(download_file));
+        symlink(&outside, target.join("link")).unwrap();
+
+        task.on_finished();
+
+        assert!(matches!(
+            task.progress.error,
+            Some(CliprdrError::InvalidRequest { .. })
+        ));
+        assert!(!download_path.exists());
+        assert!(!outside.join("file.txt").exists());
+    }
+
+    #[test]
+    fn rejects_symlink_component_when_creating_directory() {
+        let (_temp, target, outside) = test_directories();
+        symlink(&outside, target.join("link")).unwrap();
+
+        let directory = file_description("link/escaped", FileType::Directory, 0);
+        let mut task = paste_task_handle(target, vec![directory]);
+        assert!(matches!(
+            task.update_next(0),
+            Err(CliprdrError::InvalidRequest { .. })
+        ));
+        assert!(!outside.join("escaped").exists());
     }
 }

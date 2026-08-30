@@ -1787,6 +1787,11 @@ class InputModel {
   }
 
   bool _checkPeerControlProtected(double x, double y) {
+    if (isViewOnly && showMyCursor) {
+      lastMousePos = ui.Offset(x, y);
+      return false;
+    }
+
     final cursorModel = parent.target!.cursorModel;
     if (cursorModel.isPeerControlProtected) {
       lastMousePos = ui.Offset(x, y);

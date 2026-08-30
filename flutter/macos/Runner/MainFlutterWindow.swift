@@ -36,8 +36,28 @@ class RelativeMouseState {
 }
 
 class MainFlutterWindow: NSWindow {
+    private static let fullscreenWorkAreaSizes = NSMapTable<NSWindow, NSValue>(
+        keyOptions: [.weakMemory, .objectPointerPersonality],
+        valueOptions: .strongMemory
+    )
+    private static let fullscreenObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.willEnterFullScreenNotification,
+        object: nil,
+        queue: .main
+    ) { notification in
+        guard let window = notification.object as? NSWindow,
+              let screen = window.screen else {
+            return
+        }
+        fullscreenWorkAreaSizes.setObject(
+            NSValue(size: screen.visibleFrame.size),
+            forKey: window
+        )
+    }
+
     override func awakeFromNib() {
         rustdesk_core_main();
+        _ = MainFlutterWindow.fullscreenObserver
         let flutterViewController = FlutterViewController.init()
         let windowFrame = self.frame
         self.contentViewController = flutterViewController
@@ -277,6 +297,16 @@ class MainFlutterWindow: NSWindow {
                 case "disableNativeRelativeMouseMode":
                     self.disableNativeRelativeMouseMode()
                     result(true)
+
+                case "getMacOSWorkAreaSize":
+                    guard Thread.isMainThread,
+                          let window = registrar.view?.window,
+                          let size = MainFlutterWindow.fullscreenWorkAreaSizes
+                            .object(forKey: window)?.sizeValue else {
+                        result(nil)
+                        break
+                    }
+                    result([Double(size.width), Double(size.height)])
 
                 default:
                     result(FlutterMethodNotImplemented)

@@ -3,10 +3,22 @@ mod ipc_auth;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "ipc/fs.rs"]
 mod ipc_fs;
+// The DRM/KMS capture producer, the `_drm` channel and its SCM_RIGHTS framing live in their own
+// module, declared the same way as the other pieces of this file, so the opt-in feature adds a
+// bounded, self-contained surface here instead of ~1800 lines in the middle of the shared IPC.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[path = "ipc/drm.rs"]
+mod ipc_drm;
+// Re-exported so the paths callers already use (`crate::ipc::start_drm`, `crate::ipc::connect_drm`,
+// `crate::ipc::DrmDisplayInfo`) keep working, and so the `Data` variants can name the two
+// payload types.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::DrmConn;
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::connect_drm;
 
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::plugin::ipc::Plugin;
 use crate::{
     common::{is_server, CheckTestNatType},
     privacy_mode,
@@ -41,6 +53,8 @@ pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
+#[cfg(target_os = "macos")]
+use ipc_auth::authorize_user_server_process;
 #[cfg(windows)]
 use ipc_auth::{
     authorize_windows_main_ipc_connection, portable_service_listener_security_attributes,
@@ -58,6 +72,9 @@ use ipc_fs::{
     check_pid, ensure_secure_ipc_parent_dir, scrub_secure_ipc_parent_dir,
     should_scrub_parent_entries_after_check_pid, write_pid,
 };
+// Gated with the module that uses it, so a `drm`-less build does not carry an unused import.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+use ipc_fs::remove_ipc_entry_via_secure_parent_fd;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
@@ -292,6 +309,14 @@ pub enum DataPortableService {
     CmShowElevation(bool),
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum SwitchSidesUuidAction {
+    Check,
+    Consume,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum Data {
@@ -367,7 +392,7 @@ pub enum Data {
     SwitchSidesRequest(String),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    SwitchSidesUuid(String, String, Option<bool>),
+    SwitchSidesUuid(String, String, SwitchSidesUuidAction, Option<bool>),
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     SwitchSidesBack,
@@ -376,9 +401,6 @@ pub enum Data {
     StartVoiceCall,
     VoiceCallResponse(bool),
     CloseVoiceCall(String),
-    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    Plugin(Plugin),
     #[cfg(windows)]
     SyncWinCpuUsage(Option<f64>),
     FileTransferLog((String, String)),
@@ -472,11 +494,67 @@ pub enum Data {
     #[cfg(target_os = "windows")]
     PortForwardSessionCount(Option<usize>),
     SocksWs(Option<Box<(Option<config::Socks5Server>, String)>>),
+    #[cfg(target_os = "macos")]
+    HasNoActiveConns(Option<bool>),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    /// CM -> server: the connection manager's WINDOW went away, which is not the same event
+    /// as the operator disconnecting a peer. Linux only, and deliberately: there a session
+    /// logout closes every window, and the close arrives at the CM indistinguishable from a
+    /// person clicking it - measured on KDE, the CM gets no signal and logind still reports the
+    /// session active. So the ambiguous case ends the session WITHOUT the no-retry reason and
+    /// the peer is allowed to reconnect (landing on the greeter after a logout), while the
+    /// explicit Disconnect button keeps sending `Close` and kicking for good.
+    #[cfg(target_os = "linux")]
+    CmWindowClosed,
+    // --- DRM/KMS capture (opt-in `drm` feature) over the `_drm` service-scoped channel ---
+    // All of the following are `cfg(all(linux, drm))`, so the drm-off IPC wire is byte-identical
+    // to upstream. Protocol on `_drm`: on connect the root service sends `DrmDisplayList`, the
+    // client replies `DrmStart{display}`, then the service streams `DrmFrame` + send_raw(BGRA) and
+    // `DrmCursor` + send_raw(RGBA). A frame/cursor header is ALWAYS immediately followed by exactly
+    // one `send_raw()` payload (the same header-then-raw pairing as `FileBlockFromCM`). This keeps
+    // the header extensible. The zero-copy `DrmFrameDmabuf(DmabufDesc)` sibling below carries only a
+    // small JSON metadata descriptor; the scanout dma-buf fd rides an SCM_RIGHTS ancillary message on
+    // the same `DrmConn` send (see `DrmConn::send_msg`), so it has NO trailing `send_raw()` body.
+    /// Client -> service: begin streaming the chosen display.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    // `need_cpu` is set by an unprivileged consumer that could not open a render-node convert context
+    // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
+    // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
+    // detile, so a render-node-less seat still captures instead of losing the stream.
+    DrmStart { display: i32, need_cpu: bool },
+    /// Service -> client: the enumerated DRM displays (sent once, before frames).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplayList(Vec<DrmDisplayInfo>),
+    /// Service -> client: the connector topology changed mid-stream (a monitor hotplug/unplug/modeset,
+    /// observed by the service's udev DRM-uevent listener). Carries the freshly-enumerated list so the
+    /// consumer can swap its sticky positive availability cache off the hot path, WITHOUT re-probing
+    /// `_drm` (which would trip the enumeration restart loop). Interleaved with frames on the same
+    /// stream; carries no `send_raw()` body and no fd.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmDisplaysChanged(Vec<DrmDisplayInfo>),
+    /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
+    /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrame { width: u32, height: u32 },
+    /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
+    /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
+    /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
+    /// the EGL detile/convert itself (see `DmabufDesc`).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmFrameDmabuf(DmabufDesc),
+    /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmCursor {
+        id: u64,
+        width: u32,
+        height: u32,
+        hotx: i32,
+        hoty: i32,
+    },
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -881,8 +959,14 @@ async fn handle(data: Data, stream: &mut Connection) {
             Some(value) => {
                 let mut updated = true;
                 if name == "id" {
-                    Config::set_key_confirmed(false);
-                    Config::set_id(&value);
+                    // An empty id would wipe the local id and unconfirm the key (cf. #15626).
+                    if value.is_empty() {
+                        log::warn!("Ignoring empty id write over IPC");
+                        updated = false;
+                    } else {
+                        Config::set_key_confirmed(false);
+                        Config::set_id(&value);
+                    }
                 } else if name == "temporary-password" {
                     password::update_temporary_password();
                 } else if name == "permanent-password" {
@@ -968,6 +1052,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SwitchSidesRequest(id) => {
             let uuid = uuid::Uuid::new_v4();
             crate::server::insert_switch_sides_uuid(id, uuid.clone());
+            crate::hbbs_http::sync::register_switch_grant(uuid.to_string());
             allow_err!(
                 stream
                     .send(&Data::SwitchSidesRequest(uuid.to_string()))
@@ -976,20 +1061,24 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::SwitchSidesUuid(uuid, id, None) => {
+        Data::SwitchSidesUuid(uuid, id, action, None) => {
             let allowed = uuid
                 .parse::<uuid::Uuid>()
-                .map(|uuid| crate::server::remove_pending_switch_sides_uuid(&id, &uuid))
+                .map(|uuid| match action {
+                    SwitchSidesUuidAction::Check => {
+                        crate::server::has_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                    SwitchSidesUuidAction::Consume => {
+                        crate::server::claim_pending_switch_sides_uuid(&id, &uuid)
+                    }
+                })
                 .unwrap_or(false);
             allow_err!(
                 stream
-                    .send(&Data::SwitchSidesUuid(uuid, id, Some(allowed)))
+                    .send(&Data::SwitchSidesUuid(uuid, id, action, Some(allowed)))
                     .await
             );
         }
-        #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        Data::Plugin(plugin) => crate::plugin::ipc::handle_plugin(plugin, stream).await,
         #[cfg(windows)]
         Data::ControlledSessionCount(_) => {
             allow_err!(
@@ -997,6 +1086,16 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::ControlledSessionCount(
                         crate::Connection::alive_conns().len()
                     ))
+                    .await
+            );
+        }
+        #[cfg(target_os = "macos")]
+        Data::HasNoActiveConns(None) => {
+            allow_err!(
+                stream
+                    .send(&Data::HasNoActiveConns(Some(
+                        crate::updater::has_no_active_conns()
+                    )))
                     .await
             );
         }
@@ -1334,14 +1433,21 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub async fn connect_for_uid(
     ms_timeout: u64,
     uid: u32,
     postfix: &str,
 ) -> ResultType<ConnectionTmpl<ConnClient>> {
     let path = Config::ipc_path_for_uid(uid, postfix);
-    connect_with_path(ms_timeout, &path).await
+    let conn = connect_with_path(ms_timeout, &path).await?;
+    #[cfg(target_os = "macos")]
+    if postfix.is_empty()
+        && !authorize_user_server_process(conn.peer_uid(), conn.peer_pid(), uid)
+    {
+        bail!("Rejected user IPC peer for uid {}", uid);
+    }
+    Ok(conn)
 }
 
 #[cfg(target_os = "linux")]
@@ -1689,19 +1795,24 @@ pub fn clear_trusted_devices() {
 }
 
 pub fn get_id() -> String {
+    // An empty id may come from a process that took over the main IPC with a
+    // config scope that has no id yet (e.g. a user GUI that became the server
+    // while the installed service was restarting). Treat it as no answer,
+    // otherwise the empty id is adopted below and wipes the local one.
     if let Ok(Some(v)) = get_config("id") {
-        // update salt also, so that next time reinstallation not causing first-time auto-login failure
-        if let Ok(Some(v2)) = get_config("salt") {
-            Config::set_salt(&v2);
+        if !v.is_empty() {
+            // update salt also, so that next time reinstallation not causing first-time auto-login failure
+            if let Ok(Some(v2)) = get_config("salt") {
+                Config::set_salt(&v2);
+            }
+            if v != Config::get_id() {
+                Config::set_key_confirmed(false);
+                Config::set_id(&v);
+            }
+            return v;
         }
-        if v != Config::get_id() {
-            Config::set_key_confirmed(false);
-            Config::set_id(&v);
-        }
-        v
-    } else {
-        Config::get_id()
     }
+    Config::get_id()
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {

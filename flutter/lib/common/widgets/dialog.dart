@@ -205,6 +205,10 @@ void changeWhiteList({Function()? callback}) async {
           const SizedBox(
             height: 8.0,
           ),
+          Text(translate("whitelist_cidr_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
           Row(
             children: [
               Expanded(
@@ -272,6 +276,111 @@ void changeWhiteList({Function()? callback}) async {
               }
               await bind.mainSetOption(
                   key: kOptionWhitelist, value: newWhiteList);
+              callback?.call();
+              close();
+            },
+          ),
+      ],
+      onCancel: close,
+    );
+  });
+}
+
+void changeIdWhiteList({Function()? callback}) async {
+  final curIdWhiteList = await bind.mainGetOption(key: kOptionIdWhitelist);
+  var newIdWhiteListField = curIdWhiteList == defaultOptionWhitelist
+      ? ''
+      : curIdWhiteList.split(',').join('\n');
+  var controller = TextEditingController(text: newIdWhiteListField);
+  var msg = "";
+  var isInProgress = false;
+  final isOptFixed = isOptionFixed(kOptionIdWhitelist);
+  gFFI.dialogManager.show((setState, close, context) {
+    return CustomAlertDialog(
+      title: Text(translate("ID whitelisting")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(translate("whitelist_sep")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Text(translate("id_whitelist_wildcard_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Text(translate("id_whitelist_caveat_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                        maxLines: null,
+                        decoration: InputDecoration(
+                          errorText: msg.isEmpty ? null : translate(msg),
+                        ),
+                        controller: controller,
+                        enabled: !isOptFixed,
+                        autofocus: true)
+                    .workaroundFreezeLinuxMint(),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 4.0,
+          ),
+          // NOT use Offstage to wrap LinearProgressIndicator
+          if (isInProgress) const LinearProgressIndicator(),
+        ],
+      ),
+      actions: [
+        dialogButton("Cancel", onPressed: close, isOutline: true),
+        if (!isOptFixed)
+          dialogButton("Clear", onPressed: () async {
+            await bind.mainSetOption(
+                key: kOptionIdWhitelist, value: defaultOptionWhitelist);
+            callback?.call();
+            close();
+          }, isOutline: true),
+        if (!isOptFixed)
+          dialogButton(
+            "OK",
+            onPressed: () async {
+              setState(() {
+                msg = "";
+                isInProgress = true;
+              });
+              newIdWhiteListField = controller.text.trim();
+              var newIdWhiteList = "";
+              if (newIdWhiteListField.isEmpty) {
+                // pass
+              } else {
+                final ids = newIdWhiteListField
+                    .trim()
+                    .split(RegExp(r"[\s,;\n]+"))
+                    .where((e) => e.isNotEmpty)
+                    .toList();
+                // Separators are handled above; allow all other Unicode characters.
+                for (final id in ids) {
+                  final hasControlCharacters = id.runes.any(
+                      (char) => char <= 0x1f || (char >= 0x7f && char <= 0x9f));
+                  if (hasControlCharacters) {
+                    msg = "${translate("Invalid ID")} $id";
+                    setState(() {
+                      isInProgress = false;
+                    });
+                    return;
+                  }
+                }
+                newIdWhiteList = ids.join(',');
+              }
+              if (newIdWhiteList.trim().isEmpty) {
+                newIdWhiteList = defaultOptionWhitelist;
+              }
+              await bind.mainSetOption(
+                  key: kOptionIdWhitelist, value: newIdWhiteList);
               callback?.call();
               close();
             },
@@ -827,26 +936,19 @@ void enterPasswordDialog(
   );
 }
 
-void enterUserLoginDialog(
-    SessionID sessionId,
-    OverlayDialogManager dialogManager,
-    String osAccountDescTip,
-    bool canRememberAccount) async {
+void enterUserLoginDialog(SessionID sessionId,
+    OverlayDialogManager dialogManager, String osAccountDescTip) async {
   await _connectDialog(
     sessionId,
     dialogManager,
     osUsernameController: TextEditingController(),
     osPasswordController: TextEditingController(),
     osAccountDescTip: osAccountDescTip,
-    canRememberAccount: canRememberAccount,
   );
 }
 
-void enterUserLoginAndPasswordDialog(
-    SessionID sessionId,
-    OverlayDialogManager dialogManager,
-    String osAccountDescTip,
-    bool canRememberAccount) async {
+void enterUserLoginAndPasswordDialog(SessionID sessionId,
+    OverlayDialogManager dialogManager, String osAccountDescTip) async {
   await _connectDialog(
     sessionId,
     dialogManager,
@@ -854,7 +956,6 @@ void enterUserLoginAndPasswordDialog(
     osPasswordController: TextEditingController(),
     passwordController: TextEditingController(),
     osAccountDescTip: osAccountDescTip,
-    canRememberAccount: canRememberAccount,
   );
 }
 
@@ -865,17 +966,11 @@ _connectDialog(
   TextEditingController? osPasswordController,
   TextEditingController? passwordController,
   String? osAccountDescTip,
-  bool canRememberAccount = true,
 }) async {
   final errUsername = ''.obs;
   var rememberPassword = false;
   if (passwordController != null) {
     rememberPassword =
-        await bind.sessionGetRemember(sessionId: sessionId) ?? false;
-  }
-  var rememberAccount = false;
-  if (canRememberAccount && osUsernameController != null) {
-    rememberAccount =
         await bind.sessionGetRemember(sessionId: sessionId) ?? false;
   }
   if (osUsernameController != null) {
@@ -905,12 +1000,6 @@ _connectDialog(
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
       if (passwordController != null && password.isEmpty) return;
-      if (rememberAccount) {
-        bind.sessionPeerOption(
-            sessionId: sessionId, name: 'os-username', value: osUsername);
-        bind.sessionPeerOption(
-            sessionId: sessionId, name: 'os-password', value: osPassword);
-      }
       gFFI.login(
         osUsername,
         osPassword,
@@ -987,16 +1076,6 @@ _connectDialog(
             controller: osPasswordController,
             autoFocus: false,
           ),
-          if (canRememberAccount)
-            rememberWidget(
-              translate('remember_account_tip'),
-              rememberAccount,
-              (v) {
-                if (v != null) {
-                  setState(() => rememberAccount = v);
-                }
-              },
-            ),
         ],
       );
     }
@@ -1433,91 +1512,6 @@ showSetOSPassword(
   });
 }
 
-showSetOSAccount(
-  SessionID sessionId,
-  OverlayDialogManager dialogManager,
-) async {
-  final usernameController = TextEditingController();
-  final passwdController = TextEditingController();
-  var username =
-      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-username') ??
-          '';
-  var password =
-      await bind.sessionGetOption(sessionId: sessionId, arg: 'os-password') ??
-          '';
-  usernameController.text = username;
-  passwdController.text = password;
-  dialogManager.show((setState, close, context) {
-    submit() {
-      final username = usernameController.text.trim();
-      final password = usernameController.text.trim();
-      bind.sessionPeerOption(
-          sessionId: sessionId, name: 'os-username', value: username);
-      bind.sessionPeerOption(
-          sessionId: sessionId, name: 'os-password', value: password);
-      close();
-    }
-
-    descWidget(String text) {
-      return Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              text,
-              maxLines: 3,
-              softWrap: true,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 16),
-            ),
-          ),
-          Container(
-            height: 8,
-          ),
-        ],
-      );
-    }
-
-    return CustomAlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.password_rounded, color: MyTheme.accent),
-          Text(translate('OS Account')).paddingOnly(left: 10),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          descWidget(translate("os_account_desk_tip")),
-          DialogTextField(
-            title: translate(DialogTextField.kUsernameTitle),
-            controller: usernameController,
-            prefixIcon: DialogTextField.kUsernameIcon,
-            errorText: null,
-          ),
-          PasswordWidget(controller: passwdController),
-        ],
-      ),
-      actions: [
-        dialogButton(
-          "Cancel",
-          icon: Icon(Icons.close_rounded),
-          onPressed: close,
-          isOutline: true,
-        ),
-        dialogButton(
-          "OK",
-          icon: Icon(Icons.done_rounded),
-          onPressed: submit,
-        ),
-      ],
-      onSubmit: submit,
-      onCancel: close,
-    );
-  });
-}
-
 Widget buildNoteTextField({
   required TextEditingController controller,
   required VoidCallback onEscape,
@@ -1905,26 +1899,110 @@ customImageQualityDialog(SessionID sessionId, String id, FFI ffi) async {
   msgBoxCommon(ffi.dialogManager, 'Custom Image Quality', content, [btnClose]);
 }
 
-trackpadSpeedDialog(SessionID sessionId, FFI ffi) async {
-  int initSpeed = ffi.inputModel.trackpadSpeed;
+int? _validateTrackpadSpeed(String text) {
+  final speed = int.tryParse(text);
+  if (speed == null || speed < kMinTrackpadSpeed || speed > kMaxTrackpadSpeed) {
+    BotToast.showText(
+      text:
+          '${translate('Invalid format')}: $kMinTrackpadSpeed-$kMaxTrackpadSpeed',
+      contentColor: Colors.red,
+    );
+    return null;
+  }
+  return speed;
+}
+
+Future<void> _saveTrackpadSpeed({
+  required SessionID sessionId,
+  required FFI ffi,
+  required int initSpeed,
+  required int speed,
+}) async {
+  if (speed == initSpeed) {
+    return;
+  }
+  await bind.sessionSetTrackpadSpeed(sessionId: sessionId, value: speed);
+  await ffi.inputModel.updateTrackpadSpeed();
+}
+
+void _showTrackpadSpeedSaveError(Object error, StackTrace stackTrace) {
+  debugPrint('Failed to save trackpad speed: $error');
+  debugPrintStack(stackTrace: stackTrace);
+  BotToast.showText(
+    text: translate('Failed'),
+    contentColor: Colors.red,
+  );
+}
+
+List<Widget> _trackpadSpeedDialogActions({
+  required bool isSubmitting,
+  required VoidCallback close,
+  required VoidCallback submit,
+}) {
+  return [
+    dialogButton(
+      'Cancel',
+      icon: Icon(Icons.close_rounded),
+      onPressed: isSubmitting ? null : close,
+      isOutline: true,
+    ),
+    dialogButton(
+      'OK',
+      icon: Icon(Icons.done_rounded),
+      onPressed: isSubmitting ? null : submit,
+    ),
+  ];
+}
+
+void trackpadSpeedDialog(SessionID sessionId, FFI ffi) {
+  final initSpeed = ffi.inputModel.trackpadSpeed;
   final curSpeed = SimpleWrapper(initSpeed);
-  final btnClose = dialogButton('Close', onPressed: () async {
-    if (curSpeed.value <= kMaxTrackpadSpeed &&
-        curSpeed.value >= kMinTrackpadSpeed &&
-        curSpeed.value != initSpeed) {
-      await bind.sessionSetTrackpadSpeed(
-          sessionId: sessionId, value: curSpeed.value);
-      await ffi.inputModel.updateTrackpadSpeed();
+  var speedText = initSpeed.toString();
+  var isSubmitting = false;
+  ffi.dialogManager.show((setState, close, context) {
+    Future<void> submit([String? submittedText]) async {
+      if (isSubmitting) {
+        return;
+      }
+      speedText = submittedText ?? speedText;
+      final speed = _validateTrackpadSpeed(speedText);
+      if (speed == null) {
+        return;
+      }
+      setState(() => isSubmitting = true);
+      try {
+        await _saveTrackpadSpeed(
+          sessionId: sessionId,
+          ffi: ffi,
+          initSpeed: initSpeed,
+          speed: speed,
+        );
+        close();
+      } catch (error, stackTrace) {
+        _showTrackpadSpeedSaveError(error, stackTrace);
+        setState(() => isSubmitting = false);
+      }
     }
-    ffi.dialogManager.dismissAll();
-  });
-  msgBoxCommon(
-      ffi.dialogManager,
-      'Trackpad speed',
-      TrackpadSpeedWidget(
-        value: curSpeed,
+
+    return CustomAlertDialog(
+      title: Text(
+        translate('Trackpad speed'),
+        style: TextStyle(fontSize: 21),
       ),
-      [btnClose]);
+      content: TrackpadSpeedWidget(
+        value: curSpeed,
+        onTextChanged: (text) => speedText = text,
+        onTextSubmitted: submit,
+      ),
+      actions: _trackpadSpeedDialogActions(
+        isSubmitting: isSubmitting,
+        close: close,
+        submit: submit,
+      ),
+      onSubmit: isSubmitting ? null : submit,
+      onCancel: isSubmitting ? null : close,
+    );
+  });
 }
 
 void deleteConfirmDialog(Function onSubmit, String title) async {

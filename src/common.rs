@@ -105,7 +105,7 @@ lazy_static::lazy_static! {
     // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
     static ref IS_MAIN: bool = std::env::args().nth(1).map_or(true, |arg| !arg.starts_with("--"));
-    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned()) || std::env::args().nth(1) == Some("--cm-no-ui".to_owned());
+    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned());
 }
 
 pub struct SimpleCallOnReturn {
@@ -122,6 +122,8 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
     {
         if !crate::platform::linux::is_x11() {
@@ -1078,7 +1080,7 @@ pub fn get_full_name() -> String {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("install.exe")
+    !config::is_disable_installation() && name.to_lowercase().ends_with("install.exe")
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
@@ -1139,8 +1141,15 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    let url = url.to_ascii_lowercase();
-    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
+    let parsed = url::Url::parse(url)
+        .ok()
+        .filter(|parsed| parsed.has_host())
+        .or_else(|| url::Url::parse(&format!("http://{url}")).ok());
+    let Some(host) = parsed.as_ref().and_then(url::Url::host_str) else {
+        return false;
+    };
+    let host = host.strip_suffix('.').unwrap_or(host);
+    host == "rustdesk.com" || host.ends_with(".rustdesk.com")
 }
 
 pub fn get_udp_punch_enabled() -> bool {
@@ -1457,6 +1466,58 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         post_request_via_tcp_proxy(&url, &body, header),
     )
     .await
+}
+
+/// POST request via TCP proxy, preserving the HTTP status code.
+async fn post_request_via_tcp_proxy_status(
+    url: &str,
+    body: &str,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    let headers = parse_simple_header(header);
+    let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+    Ok((
+        resp.status as u16,
+        String::from_utf8_lossy(&resp.body).to_string(),
+    ))
+}
+
+/// Like `post_request`, but returns the HTTP status code so callers can tell
+/// a server-side failure from success. Same fallback rules: on connection
+/// failure or 5xx, retry once through the raw TCP proxy when eligible.
+pub async fn post_request_with_status(
+    url: String,
+    body: String,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    if should_use_raw_tcp_for_api(&url) {
+        return post_request_via_tcp_proxy_status(&url, &body, header).await;
+    }
+    let http_result = post_request_http(&url, &body, header).await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+    if should_fallback && can_fallback_to_raw_tcp(&url) {
+        log::warn!(
+            "HTTP POST to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
+            tcp_proxy_log_target(&url),
+            http_result
+                .as_ref()
+                .map(|(s, _)| *s)
+                .map_err(|e| e.to_string()),
+        );
+        match post_request_via_tcp_proxy_status(&url, &body, header).await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+            }
+        }
+    }
+    http_result
 }
 
 #[async_recursion]
@@ -2878,6 +2939,16 @@ mod tests {
         assert!(!is_public("localhost"));
         assert!(!is_public("https://rustdesk.computer.com"));
         assert!(!is_public("rustdesk.comhello.com"));
+    }
+
+    #[test]
+    fn test_is_public_matches_rustdesk_root_domain() {
+        assert!(is_public("rustdesk.com/"));
+        assert!(is_public("rustdesk.com:21117"));
+        assert!(is_public("api.rustdesk.com:21117"));
+        assert!(!is_public("hello-rustdesk.com"));
+        assert!(!is_public("api.rustdesk.com.evil.test"));
+        assert!(!is_public("https://rustdesk.com@evil.test"));
     }
 
     #[test]

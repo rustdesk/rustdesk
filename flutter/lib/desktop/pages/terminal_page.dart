@@ -5,7 +5,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
-import 'package:xterm/xterm.dart';
+import 'package:flutter_hbb/models/terminal_mouse_handler.dart';
 import 'terminal_connection_manager.dart';
 
 class TerminalPage extends StatefulWidget {
@@ -197,7 +197,7 @@ class _TerminalPageState extends State<TerminalPage>
       body: LayoutBuilder(
         builder: (context, constraints) {
           final heightPx = constraints.maxHeight;
-          return TerminalView(
+          return TerminalMouseInteraction(
             _terminalModel.terminal,
             controller: _terminalModel.terminalController,
             focusNode: _terminalFocusNode,
