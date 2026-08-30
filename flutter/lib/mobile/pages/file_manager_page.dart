@@ -181,11 +181,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       if (destinationType == FileSystemEntityType.directory) {
         final overwriteResult = await model.showFileConfirmDialog(
             translate('Overwrite'), destination, false, false);
-        if (overwriteResult == false) return;
-        if (overwriteResult != true) {
-          showToast(translate('Failed'));
-          return;
-        }
+        if (overwriteResult != true) return;
         overwrite = true;
       } else if (destinationType != FileSystemEntityType.notFound) {
         showToast(translate('Failed'));

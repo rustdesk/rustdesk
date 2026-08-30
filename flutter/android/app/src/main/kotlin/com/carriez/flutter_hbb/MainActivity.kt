@@ -742,7 +742,7 @@ class MainActivity : FlutterActivity() {
                     continue
                 }
                 val destination = safeDestinationChild(destinationDir, name)
-                if (destination == null) {
+                if (destination == null || destination.exists()) {
                     ok = false
                     continue
                 }
