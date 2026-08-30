@@ -728,6 +728,7 @@ class MainActivity : FlutterActivity() {
     ): Boolean {
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
         var ok = true
+        val destinationNames = HashSet<String>()
         val cursor = contentResolver.query(childrenUri, childColumns, null, null, null)
             ?: return false
         cursor.use {
@@ -736,6 +737,10 @@ class MainActivity : FlutterActivity() {
                 val name = cursor.getString(1)
                 val mime = cursor.getString(2)
                 val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                if (name != null && !destinationNames.add(name)) {
+                    ok = false
+                    continue
+                }
                 val destination = safeDestinationChild(destinationDir, name)
                 if (destination == null) {
                     ok = false
@@ -844,7 +849,9 @@ class MainActivity : FlutterActivity() {
             ?: throw IllegalStateException("Unable to query destination folder")
         cursor.use {
             while (cursor.moveToNext()) {
-                if (cursor.getString(1) == name) {
+                if (cursor.getString(1) == name &&
+                    cursor.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR
+                ) {
                     return cursor.getString(0)
                 }
             }

@@ -169,6 +169,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
           (picked['name'] as String?)?.replaceAll('\\', '/').split('/').last;
       if (uri == null ||
           name == null ||
+          name == '.' ||
+          name == '..' ||
           !PathUtil.validName(name, importIsWindows)) {
         showToast(translate('Failed'));
         return;
