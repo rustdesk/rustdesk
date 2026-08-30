@@ -230,9 +230,10 @@ pub fn need_fs_cm_send_files() -> bool {
 /// resolved to its canonical form (of the deepest existing ancestor, so paths that are
 /// about to be created are handled too) so symlinks cannot escape the workspace.
 ///
-/// An empty path means "the home directory" and is therefore allowed.
+/// Only the `ReadDir` protocol action treats an empty path as the home directory.
+/// Callers must opt in to that protocol-specific behavior with `allow_empty`.
 #[cfg(target_os = "android")]
-pub fn is_peer_path_allowed(path: &str) -> bool {
+pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
     use std::path::{Component, Path, PathBuf};
 
     // Canonicalize the deepest existing ancestor and re-append the missing tail.
@@ -254,7 +255,7 @@ pub fn is_peer_path_allowed(path: &str) -> bool {
     }
 
     if path.is_empty() {
-        return true;
+        return allow_empty;
     }
     let path = Path::new(path);
     // `..` is never needed by the protocol and would defeat the prefix check below.
@@ -272,7 +273,7 @@ pub fn is_peer_path_allowed(path: &str) -> bool {
 
 #[inline]
 #[cfg(not(target_os = "android"))]
-pub fn is_peer_path_allowed(_path: &str) -> bool {
+pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
     true
 }
 

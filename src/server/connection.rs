@@ -3317,44 +3317,45 @@ impl Connection {
                         // escapes the app workspace before it reaches the filesystem.
                         #[cfg(target_os = "android")]
                         {
-                            // (path, job id) of the peer supplied path this action operates on.
-                            let checked: Option<(&str, i32)> = match &fa.union {
+                            // (path, job id, allow empty) of the peer supplied path this action
+                            // operates on.
+                            let checked: Option<(&str, i32, bool)> = match &fa.union {
                                 Some(file_action::Union::ReadEmptyDirs(rd)) => {
-                                    Some((rd.path.as_str(), -1))
+                                    Some((rd.path.as_str(), -1, false))
                                 }
                                 Some(file_action::Union::ReadDir(rd)) => {
-                                    Some((rd.path.as_str(), -1))
+                                    Some((rd.path.as_str(), -1, true))
                                 }
                                 Some(file_action::Union::AllFiles(f)) => {
-                                    Some((f.path.as_str(), f.id))
+                                    Some((f.path.as_str(), f.id, false))
                                 }
                                 Some(file_action::Union::Send(s)) => {
                                     // Printer jobs read from memory, `path` is only a lookup key.
                                     if JobType::from_proto(s.file_type) == JobType::Generic {
-                                        Some((s.path.as_str(), s.id))
+                                        Some((s.path.as_str(), s.id, false))
                                     } else {
                                         None
                                     }
                                 }
                                 Some(file_action::Union::Receive(r)) => {
-                                    Some((r.path.as_str(), r.id))
+                                    Some((r.path.as_str(), r.id, false))
                                 }
                                 Some(file_action::Union::RemoveDir(d)) => {
-                                    Some((d.path.as_str(), d.id))
+                                    Some((d.path.as_str(), d.id, false))
                                 }
                                 Some(file_action::Union::RemoveFile(f)) => {
-                                    Some((f.path.as_str(), f.id))
+                                    Some((f.path.as_str(), f.id, false))
                                 }
                                 Some(file_action::Union::Create(c)) => {
-                                    Some((c.path.as_str(), c.id))
+                                    Some((c.path.as_str(), c.id, false))
                                 }
                                 Some(file_action::Union::Rename(r)) => {
-                                    Some((r.path.as_str(), r.id))
+                                    Some((r.path.as_str(), r.id, false))
                                 }
                                 _ => None,
                             };
-                            if let Some((path, job_id)) = checked {
-                                if !crate::common::is_peer_path_allowed(path) {
+                            if let Some((path, job_id, allow_empty)) = checked {
+                                if !crate::common::is_peer_path_allowed(path, allow_empty) {
                                     log::warn!(
                                         "Reject file action outside the app workspace: {}",
                                         path
@@ -3373,7 +3374,9 @@ impl Connection {
                                 let allowed = destination
                                     .as_deref()
                                     .and_then(std::path::Path::to_str)
-                                    .map_or(false, crate::common::is_peer_path_allowed);
+                                    .map_or(false, |path| {
+                                        crate::common::is_peer_path_allowed(path, false)
+                                    });
                                 if !allowed {
                                     log::warn!(
                                         "Reject rename destination outside the app workspace: {:?}",
