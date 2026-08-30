@@ -1,6 +1,9 @@
 mod custom_server;
-use hbb_common::{ResultType, base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _}};
 use custom_server::*;
+use hbb_common::{
+    base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _},
+    ResultType,
+};
 
 fn gen_name(lic: &CustomServer) -> ResultType<String> {
     let tmp = URL_SAFE_NO_PAD.encode(&serde_json::to_vec(lic)?);
