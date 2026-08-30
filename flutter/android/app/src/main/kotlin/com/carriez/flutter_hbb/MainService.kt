@@ -537,8 +537,11 @@ class MainService : Service() {
         surface?.release()
 
         // release audio
-        _isAudioStart = false
-        audioRecordHandle.tryReleaseAudio()
+        stopMicrophoneCapture {
+            _isAudioStart = false
+            audioRecordHandle.tryReleaseAudio()
+            true
+        }
     }
 
     fun destroy() {
