@@ -42,7 +42,8 @@ dependencies:
     git:
       url: https://github.com/rustdesk-org/Dash-Chat-2
   draggable_float_widget: ^0.1.0
-  settings_ui: ^2.0.2
+  settings_ui:
+    path: third_party/settings_ui_ohos
   flutter_breadcrumb: ^1.0.1
   http: ^1.1.0
   qr_code_scanner: ^1.0.0
@@ -100,7 +101,8 @@ dependencies:
       ref: 08a471bb8ceccdd50483c81cdfa8b81b07b14b87
   uuid: ^3.0.7
   auto_size_text_field: ^2.2.1
-  flex_color_picker: ^3.3.0
+  flex_color_picker:
+    path: third_party/flex_color_picker_ohos
   dynamic_layouts:
     git:
       url: https://github.com/rustdesk-org/dynamic_layouts.git
@@ -108,10 +110,11 @@ dependencies:
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
-  extended_text: 14.0.0
-  xterm: 4.0.0
+  extended_text: ^15.0.2
+  xterm:
+    path: third_party/xterm_ohos
   sqflite: 2.2.0
-  google_fonts: ^6.2.1
+  google_fonts: ^8.2.1
   vector_math: ^2.1.4
 
 dev_dependencies:

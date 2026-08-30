@@ -4,7 +4,7 @@ use crate::{
     ui_session_interface::{io_loop, InvokeUiSession, Session},
 };
 use flutter_rust_bridge::StreamSink;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::dlopen::{
     symbor::{Library, Symbol},
     Error as LibError,
@@ -54,7 +54,7 @@ lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = load_plugin_in_app_path("texture_rgba_renderer_plugin.dll");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 lazy_static::lazy_static! {
     pub static ref TEXTURE_RGBA_RENDERER_PLUGIN: Result<Library, LibError> = Library::open("libtexture_rgba_renderer_plugin.so");
 }
@@ -104,7 +104,7 @@ fn load_plugin_in_app_path(dll_name: &str) -> Result<Library, LibError> {
 #[cfg(not(windows))]
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if crate::core_main::core_main().is_some() {
         return true;
     } else {
@@ -125,14 +125,14 @@ pub extern "C" fn handle_applicationShouldOpenUntitledFile() {
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main_args(args_len: *mut c_int) -> *mut *mut c_char {
     unsafe { std::ptr::write(args_len, 0) };
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         if let Some(args) = crate::core_main::core_main() {
             return rust_args_to_c_args(args, args_len);
         }
         return std::ptr::null_mut() as _;
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return std::ptr::null_mut() as _;
 }
 
@@ -281,7 +281,7 @@ struct DisplaySessionInfo {
 struct VideoRenderer {
     is_support_multi_ui_session: bool,
     map_display_sessions: Arc<RwLock<HashMap<usize, DisplaySessionInfo>>>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
@@ -289,7 +289,7 @@ struct VideoRenderer {
 
 impl Default for VideoRenderer {
     fn default() -> Self {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         let on_rgba_func = match &*TEXTURE_RGBA_RENDERER_PLUGIN {
             Ok(lib) => {
                 let find_sym_res = unsafe {
@@ -333,7 +333,7 @@ impl Default for VideoRenderer {
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             on_rgba_func,
             #[cfg(feature = "vram")]
             on_texture_func,
@@ -445,7 +445,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn on_rgba(&self, display: usize, rgba: &scrap::ImageRgb) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
@@ -583,8 +583,13 @@ impl FlutterHandler {
                 }
             }
             if push {
+                #[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Event(out.clone()));
+                }
+                #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+                {
+                    crate::platform::ohos::emit_session_event(sid, EventToUI::Event(out.clone()));
                 }
             }
         }
@@ -594,7 +599,10 @@ impl FlutterHandler {
         // to-do: Make sure the following logic is correct.
         // No need to remove the display handler, because it will be removed when the connection is closed.
         if let Some(session) = self.session_handlers.write().unwrap().get_mut(&session_id) {
+            #[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
             try_send_close_event(&session.event_stream);
+            #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+            try_send_polling_close_event(&session_id);
         }
     }
 
@@ -838,7 +846,7 @@ impl InvokeUiSession for FlutterHandler {
     fn adapt_size(&self) {}
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
         let use_texture_render = self.use_texture_render.load(Ordering::Relaxed);
         self.on_rgba_flutter_texture_render(use_texture_render, display, rgba);
@@ -848,7 +856,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     #[inline]
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb) {
         self.on_rgba_soft_render(display, rgba);
     }
@@ -859,10 +867,18 @@ impl InvokeUiSession for FlutterHandler {
         if !self.use_texture_render.load(Ordering::Relaxed) {
             return;
         }
-        for (_, session) in self.session_handlers.read().unwrap().iter() {
+        for (session_id, session) in self.session_handlers.read().unwrap().iter() {
             if session.renderer.on_texture(display, texture) {
                 if let Some(stream) = &session.event_stream {
                     stream.add(EventToUI::Texture(display, true));
+                } else {
+                    #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+                    {
+                        crate::platform::ohos::emit_session_event(
+                            session_id,
+                            EventToUI::Texture(display, true),
+                        );
+                    }
                 }
             }
         }
@@ -1029,9 +1045,30 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn clipboard(&self, content: String) {
         self.push_event("clipboard", &[("content", &content)], &[]);
+    }
+
+    #[cfg(target_env = "ohos")]
+    fn clipboard_multi(&self, clipboards: MultiClipboards) {
+        let session_ids: Vec<SessionID> = self
+            .session_handlers
+            .read()
+            .unwrap()
+            .keys()
+            .copied()
+            .collect();
+        for session_id in &session_ids {
+            crate::platform::ohos::receive_client_clipboards(session_id, clipboards.clone());
+        }
+        let format_count = clipboards.clipboards.len().to_string();
+        self.push_event("clipboard_multi", &[("formats", &format_count)], &[]);
+    }
+
+    #[cfg(target_env = "ohos")]
+    fn clipboard_files(&self, paths: Vec<String>) {
+        self.push_event("clipboard_files", &[("paths", &paths)], &[]);
     }
 
     fn switch_back(&self, peer_id: &str) {
@@ -1187,20 +1224,27 @@ impl FlutterHandler {
 
         let mut is_sent = false;
         let is_multi_sessions = self.is_multi_ui_session();
-        for h in self.session_handlers.read().unwrap().values() {
+        for (session_id, session) in self.session_handlers.read().unwrap().iter() {
             // The soft renderer does not support multi-displays session for now.
-            if h.displays.len() > 1 {
+            if session.displays.len() > 1 {
                 continue;
             }
             // If there're multiple ui sessions, we only notify the ui session that has the display.
             if is_multi_sessions {
-                if !h.displays.contains(&display) {
+                if !session.displays.contains(&display) {
                     continue;
                 }
             }
-            if let Some(stream) = &h.event_stream {
+            #[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
+            if let Some(stream) = &session.event_stream {
+                let _ = session_id;
                 stream.add(EventToUI::Rgba(display));
                 is_sent = true;
+            }
+            #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+            {
+                is_sent |=
+                    crate::platform::ohos::emit_session_event(session_id, EventToUI::Rgba(display));
             }
         }
         // We need `is_sent` here. Because we use texture render for multi-displays session.
@@ -1218,7 +1262,7 @@ impl FlutterHandler {
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn on_rgba_flutter_texture_render(
         &self,
         use_texture_render: bool,
@@ -1244,13 +1288,21 @@ pub fn session_add_existed(
     displays: Vec<i32>,
     is_view_camera: bool,
 ) -> ResultType<()> {
-    let conn_type = if is_view_camera {
-        ConnType::VIEW_CAMERA
-    } else {
-        ConnType::DEFAULT_CONN
-    };
-    sessions::insert_peer_session_id(peer_id, conn_type, session_id, displays);
-    Ok(())
+    #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+    {
+        let _ = (peer_id, session_id, displays, is_view_camera);
+        bail!("shared peer UI sessions are not supported on OHOS");
+    }
+    #[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
+    {
+        let conn_type = if is_view_camera {
+            ConnType::VIEW_CAMERA
+        } else {
+            ConnType::DEFAULT_CONN
+        };
+        sessions::insert_peer_session_id(peer_id, conn_type, session_id, displays);
+        Ok(())
+    }
 }
 
 /// Create a new remote session with the given id.
@@ -1299,6 +1351,10 @@ pub fn session_add(
         // The same session is added before?
         bail!("same session id is found");
     }
+    #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+    if sessions::get_session_by_peer_id(id.to_owned(), conn_type).is_some() {
+        bail!("same peer session is already active on OHOS");
+    }
 
     LocalConfig::set_remote_id(&id);
 
@@ -1313,6 +1369,10 @@ pub fn session_add(
 
     let session: Session<FlutterHandler> = Session {
         password: preset_password,
+        #[cfg(target_env = "ohos")]
+        core_session_id: session_id.to_string(),
+        #[cfg(target_env = "ohos")]
+        ui_active: Arc::new(AtomicBool::new(true)),
         server_keyboard_enabled: Arc::new(RwLock::new(true)),
         server_file_transfer_enabled: Arc::new(RwLock::new(true)),
         server_clipboard_enabled: Arc::new(RwLock::new(true)),
@@ -1375,6 +1435,37 @@ pub fn session_start_(
         );
     }
 
+    start_session_connection(session_id, id, is_connected)
+}
+
+#[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+pub(crate) fn session_start_with_polling_events_(
+    session_id: &SessionID,
+    id: &str,
+    already_started: bool,
+) -> ResultType<()> {
+    let is_found = sessions::get_sessions().iter().any(|session| {
+        session
+            .session_handlers
+            .read()
+            .unwrap()
+            .contains_key(session_id)
+    });
+    if !is_found {
+        bail!(
+            "No session with peer id {}, session id: {}",
+            id,
+            session_id.to_string()
+        );
+    }
+    start_session_connection(session_id, id, already_started)
+}
+
+fn start_session_connection(
+    session_id: &SessionID,
+    id: &str,
+    is_connected: bool,
+) -> ResultType<()> {
     if let Some(session) = sessions::get_session_by_session_id(session_id) {
         let is_first_ui_session = session.session_handlers.read().unwrap().len() == 1;
         if !is_connected && is_first_ui_session {
@@ -1402,6 +1493,12 @@ fn try_send_close_event(event_stream: &Option<StreamSink<EventToUI>>) {
     }
 }
 
+#[inline]
+#[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+fn try_send_polling_close_event(session_id: &SessionID) {
+    crate::platform::ohos::emit_session_event(session_id, EventToUI::Event("close".to_owned()));
+}
+
 #[cfg(not(target_os = "ios"))]
 pub fn update_text_clipboard_required() {
     let is_required = sessions::get_sessions()
@@ -1409,10 +1506,12 @@ pub fn update_text_clipboard_required() {
         .any(|s| s.is_default() && s.is_text_clipboard_required());
     #[cfg(target_os = "android")]
     let _ = scrap::android::ffi::call_clipboard_manager_enable_client_clipboard(is_required);
+    #[cfg(target_env = "ohos")]
+    crate::platform::ohos::set_client_clipboard_enabled(is_required);
     Client::set_is_text_clipboard_required(is_required);
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn update_file_clipboard_required() {
     let is_required = sessions::get_sessions()
         .iter()
@@ -1426,7 +1525,11 @@ pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
         if !s.is_default() {
             continue;
         }
-        #[cfg(feature = "unix-file-copy-paste")]
+        #[cfg(target_env = "ohos")]
+        if !s.is_ui_active() {
+            continue;
+        }
+        #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
         if _is_file {
             if crate::is_support_file_copy_paste_num(s.lc.read().unwrap().version)
                 && s.is_file_clipboard_required()
@@ -1552,11 +1655,11 @@ pub mod connection_manager {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn start_listen_ipc() {
         use crate::ui_cm_interface::{start_ipc, ConnectionManager};
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         std::thread::spawn(crate::ipc::start_pa);
 
         let cm = ConnectionManager {
@@ -1567,14 +1670,14 @@ pub mod connection_manager {
 
     #[inline]
     pub fn cm_init() {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         start_listen_ipc();
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     pub fn start_channel(
         rx: UnboundedReceiver<crate::ipc::Data>,
         tx: UnboundedSender<crate::ipc::Data>,
@@ -1669,6 +1772,21 @@ pub fn session_get_rgba_size(session_id: SessionID, display: usize) -> usize {
             .map_or(0, |rgba| rgba.data.len());
     }
     0
+}
+
+pub fn session_take_rgba_frame(session_id: SessionID, display: usize) -> Vec<u8> {
+    let Some(session) = sessions::get_session_by_session_id(&session_id) else {
+        return Vec::new();
+    };
+    let frame = session
+        .display_rgbas
+        .read()
+        .unwrap()
+        .get(&display)
+        .filter(|rgba| rgba.valid)
+        .map(|rgba| rgba.data.clone())
+        .unwrap_or_default();
+    frame
 }
 
 #[no_mangle]
@@ -2067,7 +2185,7 @@ pub mod sessions {
             }
         }
         let s = SESSIONS.write().unwrap().remove(&remove_peer_key?);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         update_session_count_to_server();
         s
     }
@@ -2169,7 +2287,7 @@ pub mod sessions {
             let mut write_lock = s.ui_handler.session_handlers.write().unwrap();
             if let Some(h) = write_lock.get_mut(&session_id) {
                 h.displays = value.iter().map(|x| *x as usize).collect::<_>();
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 let displays_refresh = value.clone();
                 if value.len() == 1 {
                     // Switch display.
@@ -2202,7 +2320,7 @@ pub mod sessions {
                 // One more key frame (first frame) will be sent because the refresh message.
                 // 2. If this display is currently captured -> Not refresh -> Message "Refresh display" is required.
                 // Without the message, the control side cannot see the latest display image.
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 {
                     let is_support_multi_ui_session = crate::common::is_support_multi_ui_session(
                         &s.ui_handler.peer_info.read().unwrap().version,
@@ -2230,12 +2348,12 @@ pub mod sessions {
             .write()
             .unwrap()
             .insert(session_id, Default::default());
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         update_session_count_to_server();
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     fn update_session_count_to_server() {
         crate::ipc::update_controlling_session_count(SESSIONS.read().unwrap().len()).ok();
     }

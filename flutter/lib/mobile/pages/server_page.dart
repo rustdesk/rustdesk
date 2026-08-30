@@ -188,7 +188,11 @@ class _ServerPageState extends State<ServerPage> {
     _updateTimer = periodic_immediate(const Duration(seconds: 3), () async {
       await gFFI.serverModel.fetchID();
     });
-    gFFI.serverModel.checkAndroidPermission();
+    if (isAndroid) {
+      gFFI.serverModel.checkAndroidPermission();
+    } else if (isOhos) {
+      gFFI.serverModel.checkOhosPermission();
+    }
   }
 
   @override
@@ -224,6 +228,7 @@ class _ServerPageState extends State<ServerPage> {
 }
 
 void checkService() async {
+  if (isOhos) return;
   gFFI.invokeMethod("check_service");
   // for Android 10/11, request MANAGE_EXTERNAL_STORAGE permission from system setting page
   if (AndroidPermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
@@ -582,7 +587,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    final hasAudioPermission = androidVersion >= 30;
+    final hasAudioPermission = isOhos || androidVersion >= 30;
     final hideStopService = isAndroid &&
         bind.mainGetBuildinOption(key: kOptionHideStopService) == 'Y';
     final allowPermChangeInAcceptWindow = option2bool(
@@ -619,6 +624,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
             translate("Input Control"),
             serverModel.inputOk,
             serverModel.toggleInput,
+            enabled: !isOhos,
           ),
           PermissionRow(
             translate("Transfer file"),

@@ -1,0 +1,109 @@
+name: OpenHarmony FFI
+
+on:
+  push:
+    branches: [master, feat/ohos-unified-core-flutter]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ohos-ffi:
+    name: Build aarch64 OHOS FFI
+    runs-on: ubuntu-22.04
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup HarmonyOS CLI tools
+        uses: ErBWs/setup-ohos@4dbb63025116eb6165ceac58a4bf47cbdc5ac721 # v2
+        with:
+          version: 6.1.1.280
+          cache: true
+
+      - name: Install native build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake git libclang-dev make ninja-build perl protobuf-compiler
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-ohos
+          components: ''
+
+      - name: Install Flutter-OH and bridge generator
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 3.41.10-ohos-0.0.2-beta \
+            https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter-ohos"
+          echo "$RUNNER_TEMP/flutter-ohos/bin" >> "$GITHUB_PATH"
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
+
+      - name: Resolve Flutter dependencies
+        shell: bash
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Cross-compile OHOS FFI
+        shell: bash
+        run: bash scripts/build-ohos-ffi.sh
+
+      - name: Verify OHOS FFI artifact
+        shell: bash
+        run: |
+          artifact=target/aarch64-unknown-linux-ohos/release/librustdesk_ohos_flutter_bridge.so
+          packaged=flutter/ohos/entry/libs/arm64-v8a/liblibrustdesk.so
+          test -s "$artifact"
+          test -s "$packaged"
+          cmp "$artifact" "$packaged"
+          file "$artifact"
+
+      - name: Package Flutter HarmonyOS HAP
+        shell: bash
+        run: |
+          rm -rf flutter/build/ohos/hap flutter/ohos/entry/build
+          set +e
+          bash scripts/build-ohos-flutter-hap.sh
+          flutter_status=$?
+          set -e
+          if [[ "$flutter_status" != 0 ]]; then
+            unsigned=flutter/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
+            test -s "$unsigned"
+            mkdir -p flutter/build/ohos/hap
+            cp "$unsigned" flutter/build/ohos/hap/entry-default-unsigned.hap
+          fi
+
+      - name: Verify Flutter HarmonyOS package
+        shell: bash
+        run: |
+          hap="$(find flutter/build/ohos/hap -name '*.hap' -type f -print -quit)"
+          test -n "$hap"
+          unzip -l "$hap" | grep -q 'libs/arm64-v8a/liblibrustdesk.so'
+          unzip -l "$hap" | grep -q 'libs/arm64-v8a/libc++_shared.so'
+          printf 'Flutter HAP: %s\n' "$hap"
+
+      - name: Upload OHOS FFI artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-ohos-ffi-aarch64
+          path: flutter/ohos/entry/libs/arm64-v8a/liblibrustdesk.so
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload Flutter HarmonyOS HAP
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-flutter-ohos-hap
+          path: flutter/build/ohos/hap/*.hap
+          if-no-files-found: error

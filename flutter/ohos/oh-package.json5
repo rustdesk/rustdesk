@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.1.0",
+  "name": "flutter_hbb",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.6"
+  }
+}

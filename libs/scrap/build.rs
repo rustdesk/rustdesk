@@ -4,7 +4,7 @@ use std::{
     println,
 };
 
-#[cfg(all(target_os = "linux", feature = "linux-pkg-config"))]
+#[cfg(feature = "linux-pkg-config")]
 fn link_pkg_config(name: &str) -> Vec<PathBuf> {
     // sometimes an override is needed
     let pc_name = match name {
@@ -18,7 +18,7 @@ fn link_pkg_config(name: &str) -> Vec<PathBuf> {
 
     lib.include_paths
 }
-#[cfg(not(all(target_os = "linux", feature = "linux-pkg-config")))]
+#[cfg(not(feature = "linux-pkg-config"))]
 fn link_pkg_config(_name: &str) -> Vec<PathBuf> {
     unimplemented!()
 }
@@ -125,7 +125,11 @@ fn link_homebrew_m1(name: &str) -> PathBuf {
 fn find_package(name: &str) -> Vec<PathBuf> {
     let no_pkg_config_var_name = format!("NO_PKG_CONFIG_{name}");
     println!("cargo:rerun-if-env-changed={no_pkg_config_var_name}");
-    if cfg!(all(target_os = "linux", feature = "linux-pkg-config"))
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    if target_os == "linux"
+        && target_env != "ohos"
+        && cfg!(feature = "linux-pkg-config")
         && std::env::var(no_pkg_config_var_name).as_deref() != Ok("1")
     {
         link_pkg_config(name)
@@ -232,6 +236,7 @@ fn main() {
 
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
     // note: all link symbol names in x86 (32-bit) are prefixed wth "_".
     // run "rustup show" to show current default toolchain, if it is stable-x86-pc-windows-msvc,
@@ -249,6 +254,13 @@ fn main() {
     gen_vcpkg_package("aom", "aom_ffi.h", "aom_ffi.rs", "^(aom|AOM|OBU|AV1).*");
     gen_vcpkg_package("libyuv", "yuv_ffi.h", "yuv_ffi.rs", ".*");
     // ffmpeg();
+
+    // OpenHarmony reports target_os=linux. Dependencies above intentionally use
+    // RustDesk's normal vcpkg path; only the desktop capture backend selection
+    // must stop before the host-side cfg checks below choose X11.
+    if target_env == "ohos" {
+        return;
+    }
 
     if target_os == "ios" {
         // nothing

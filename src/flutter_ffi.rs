@@ -1,6 +1,6 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 use crate::platform::linux::is_x11;
 use crate::{
     client::file_trait::FileManager,
@@ -69,11 +69,11 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
         crate::common::test_nat_type();
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let _ = crate::common::global_init();
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         // core_main's init_log does not work for flutter since it is only applied to its load_library in main.c
         hbb_common::init_log(false, "flutter_ffi");
@@ -172,6 +172,7 @@ pub fn session_add_sync(
     }
 }
 
+#[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
 pub fn session_start(
     events2ui: StreamSink<EventToUI>,
     session_id: SessionID,
@@ -180,6 +181,7 @@ pub fn session_start(
     session_start_(&session_id, &id, events2ui)
 }
 
+#[cfg(any(not(target_env = "ohos"), feature = "ohos-flutter"))]
 pub fn session_start_with_displays(
     events2ui: StreamSink<EventToUI>,
     session_id: SessionID,
@@ -261,11 +263,13 @@ pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         crate::keyboard::release_remote_keys("map");
         session.close_event_stream(session_id);
         session.close();
     }
+    #[cfg(all(target_env = "ohos", feature = "ohos-har"))]
+    crate::platform::ohos::finish_session(&session_id);
 }
 
 pub fn session_refresh(session_id: SessionID, display: usize) {
@@ -328,7 +332,7 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     {
         crate::flutter::update_text_clipboard_required();
     }
-    #[cfg(feature = "unix-file-copy-paste")]
+    #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
     if sessions::get_session_by_session_id(&session_id).is_some()
         && (value == config::keys::OPTION_ENABLE_FILE_COPY_PASTE || value == "view-only")
     {
@@ -609,7 +613,7 @@ pub fn session_handle_flutter_raw_key_event(
 // As Rust is multi-threaded, enter() can be called before leave().
 // The Rust-side grab ownership state filters stale transitions.
 pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncReturn<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if let Some(session) = sessions::get_session_by_session_id(&_session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         // Use the full per-window UUID (not lc.session_id which is per-connection)
@@ -928,9 +932,9 @@ pub fn session_send_selected_session_id(session_id: SessionID, sid: String) {
 }
 
 pub fn main_get_sound_inputs() -> Vec<String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return get_sound_inputs();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     vec![String::from("")]
 }
 
@@ -984,17 +988,24 @@ pub fn main_set_option(key: String, value: String) {
             return;
         }
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     if key.eq(config::keys::OPTION_ENABLE_KEYBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "keyboard".to_owned(),
             config::option2bool(&key, &value),
         );
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_env = "ohos"))]
     if key.eq(config::keys::OPTION_ENABLE_CLIPBOARD) {
         crate::ui_cm_interface::switch_permission_all(
             "clipboard".to_owned(),
+            config::option2bool(&key, &value),
+        );
+    }
+    #[cfg(target_env = "ohos")]
+    if key.eq(config::keys::OPTION_ENABLE_AUDIO) {
+        crate::ui_cm_interface::switch_permission_all(
+            "audio".to_owned(),
             config::option2bool(&key, &value),
         );
     }
@@ -1015,7 +1026,7 @@ pub fn main_set_option(key: String, value: String) {
         set_option(key, value.clone());
         #[cfg(target_os = "android")]
         crate::rendezvous_mediator::RendezvousMediator::restart();
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         crate::common::test_rendezvous_server();
     } else {
         set_option(key, value.clone());
@@ -1113,11 +1124,11 @@ pub fn main_get_lan_peers() -> String {
 }
 
 pub fn main_get_connect_status() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         serde_json::to_string(&get_connect_status()).unwrap_or("".to_string())
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let mut state = hbb_common::config::get_online_state();
         if state > 0 {
@@ -1128,7 +1139,7 @@ pub fn main_get_connect_status() -> String {
 }
 
 pub fn main_check_connect_status() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     start_option_status_sync(); // avoid multi calls
 }
 
@@ -1241,11 +1252,11 @@ pub fn main_set_local_option(key: String, value: String) {
 // 1. For get, the value is stored in the server process.
 // 2. For clear, we need to need to return the error mmsg from the server process to flutter.
 pub fn main_handle_wayland_screencast_restore_token(_key: String, _value: String) -> String {
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         return "".to_owned();
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if _value == "get" {
         match crate::ipc::get_wayland_screencast_restore_token(_key) {
             Ok(v) => v,
@@ -1269,15 +1280,15 @@ pub fn main_handle_wayland_screencast_restore_token(_key: String, _value: String
 }
 
 pub fn main_get_input_source() -> SyncReturn<String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let input_source = get_cur_session_input_source();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let input_source = "".to_owned();
     SyncReturn(input_source)
 }
 
 pub fn main_set_input_source(session_id: SessionID, value: String) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         change_input_source(session_id, value);
         if let Some(session) = sessions::get_session_by_session_id(&session_id) {
@@ -1296,11 +1307,11 @@ pub fn main_set_input_source(session_id: SessionID, value: String) {
 /// - Windows/macOS/Linux: attempts to move the cursor to (x, y)
 /// - Android/iOS: no-op, always returns `false`
 pub fn main_set_cursor_position(x: i32, y: i32) -> SyncReturn<bool> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         SyncReturn(crate::set_cursor_pos(x, y))
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let _ = (x, y);
         SyncReturn(false)
@@ -1330,7 +1341,7 @@ pub fn main_clip_cursor(
     bottom: i32,
     enable: bool,
 ) -> SyncReturn<bool> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let rect = if enable {
             Some((left, top, right, bottom))
@@ -1339,7 +1350,7 @@ pub fn main_clip_cursor(
         };
         SyncReturn(crate::clip_cursor(rect))
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         let _ = (left, top, right, bottom, enable);
         SyncReturn(false)
@@ -1568,13 +1579,13 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
 
 pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([("name", "theme"), ("dark", &dark)]));
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
 pub fn main_change_language(lang: String) {
     main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
-    #[cfg(not(any(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
@@ -1599,15 +1610,15 @@ pub fn main_is_option_fixed(key: String) -> SyncReturn<bool> {
 }
 
 pub fn main_get_main_display() -> SyncReturn<String> {
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     let display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     {
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
         let is_linux_wayland = false;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let is_linux_wayland = !is_x11();
 
         if !is_linux_wayland {
@@ -1623,7 +1634,7 @@ pub fn main_get_main_display() -> SyncReturn<String> {
             }
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if is_linux_wayland {
             let displays = scrap::wayland::display::get_displays();
             if let Some(display) = displays.displays.get(displays.primary) {
@@ -1644,11 +1655,11 @@ pub fn main_get_main_display() -> SyncReturn<String> {
 // No need to check if is on Wayland in this function.
 // The Flutter side gets display information on Wayland using a different method.
 pub fn main_get_displays() -> SyncReturn<String> {
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     let display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     let mut display_info = "".to_owned();
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     if let Ok(displays) = crate::display_service::try_get_displays() {
         let displays = displays
             .iter()
@@ -1718,7 +1729,7 @@ pub fn cm_close_voice_call(id: i32) {
 }
 
 pub fn set_voice_call_input_device(_is_cm: bool, _device: String) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if _is_cm {
         let _ = crate::ipc::set_config("voice-call-input", _device);
     } else {
@@ -1727,7 +1738,7 @@ pub fn set_voice_call_input_device(_is_cm: bool, _device: String) {
 }
 
 pub fn get_voice_call_input_device(_is_cm: bool) -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if _is_cm {
         match crate::ipc::get_config("voice-call-input") {
             Ok(Some(device)) => device,
@@ -1736,7 +1747,7 @@ pub fn get_voice_call_input_device(_is_cm: bool) -> String {
     } else {
         crate::audio_service::get_voice_call_input_device().unwrap_or_default()
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     "".to_owned()
 }
 
@@ -1788,6 +1799,76 @@ pub fn main_init(app_dir: String, custom_client_config: String) {
     initialize(&app_dir, &custom_client_config);
 }
 
+pub fn main_configure_ohos_host_display(width: usize, height: usize, display_id: u64) -> bool {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::server::ohos_screen_capture::configure(width, height, display_id);
+    }
+    #[cfg(not(target_env = "ohos"))]
+    false
+}
+
+pub fn main_set_ohos_host_clipboard_enabled(enabled: bool) {
+    #[cfg(target_env = "ohos")]
+    {
+        crate::platform::ohos::set_host_clipboard_available(enabled);
+        if !enabled {
+            crate::ui_cm_interface::switch_permission_all("clipboard".to_owned(), false);
+        }
+    }
+    #[cfg(not(target_env = "ohos"))]
+    let _ = enabled;
+}
+
+pub fn main_update_ohos_host_clipboard_text(text: String) -> bool {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::platform::ohos::update_host_text_clipboard(text);
+    }
+    #[cfg(not(target_env = "ohos"))]
+    false
+}
+
+pub fn main_take_ohos_host_clipboard_text() -> Option<String> {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::platform::ohos::take_host_received_text_clipboard();
+    }
+    #[cfg(not(target_env = "ohos"))]
+    None
+}
+
+pub fn main_start_ohos_host() -> String {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::server::ohos_screen_capture::start_captured_host()
+            .err()
+            .unwrap_or_default();
+    }
+    #[cfg(not(target_env = "ohos"))]
+    "OHOS captured host is unavailable".to_owned()
+}
+
+pub fn main_stop_ohos_host() -> String {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::server::ohos_screen_capture::stop_captured_host()
+            .err()
+            .unwrap_or_default();
+    }
+    #[cfg(not(target_env = "ohos"))]
+    String::new()
+}
+
+pub fn main_ohos_host_is_started() -> SyncReturn<bool> {
+    #[cfg(target_env = "ohos")]
+    {
+        return SyncReturn(crate::platform::ohos::host_is_started());
+    }
+    #[cfg(not(target_env = "ohos"))]
+    SyncReturn(false)
+}
+
 pub fn main_device_id(id: String) {
     *crate::common::DEVICE_ID.lock().unwrap() = id;
 }
@@ -1820,16 +1901,16 @@ pub fn main_is_root() -> bool {
 }
 
 pub fn get_double_click_time() -> SyncReturn<i32> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         return SyncReturn(crate::platform::get_double_click_time() as _);
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     SyncReturn(500i32)
 }
 
 pub fn main_start_dbus_server() {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         use crate::dbus::start_dbus_server;
         // spawn new thread to start dbus server
@@ -1920,7 +2001,7 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             // The server does not track mode deactivation; it simply stops receiving
             // relative move events when the client exits relative mouse mode.
             if !active {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 crate::keyboard::set_relative_mouse_mode_state(false);
                 return;
             }
@@ -1968,7 +2049,7 @@ pub fn session_send_mouse(session_id: SessionID, msg: String) {
             }
 
             // All validation passed - marker will be forwarded as a no-op relative move.
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             crate::keyboard::set_relative_mouse_mode_state(true);
         }
 
@@ -2101,7 +2182,7 @@ pub fn session_printer_response(
 }
 
 pub fn main_set_home_dir(_home: String) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         *config::APP_HOME_DIR.write().unwrap() = _home;
     }
@@ -2157,11 +2238,11 @@ pub fn main_check_mouse_time() {
 }
 
 pub fn main_get_mouse_time() -> f64 {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         get_mouse_time()
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         0.0
     }
@@ -2200,9 +2281,9 @@ pub fn cm_close_connection(conn_id: i32) {
 /// The CM window closed. On Linux that is ambiguous - a logout closes it the same way a person
 /// does - so it ends the session without the no-retry reason; elsewhere it is a plain close.
 pub fn cm_close_connection_window(conn_id: i32) {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     crate::ui_cm_interface::close_window(conn_id);
-    #[cfg(all(not(target_os = "linux"), not(target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", all(target_os = "linux", not(target_env = "ohos")))))]
     crate::ui_cm_interface::close(conn_id);
 }
 
@@ -2238,12 +2319,12 @@ pub fn cm_elevate_portable(conn_id: i32) {
 }
 
 pub fn cm_switch_back(conn_id: i32) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     crate::ui_cm_interface::switch_back(conn_id);
 }
 
 pub fn cm_get_config(name: String) -> String {
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_env = "ohos")))]
     {
         if let Ok(Some(v)) = crate::ipc::get_config(&name) {
             v
@@ -2251,7 +2332,7 @@ pub fn cm_get_config(name: String) -> String {
             "".to_string()
         }
     }
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_env = "ohos"))]
     {
         "".to_string()
     }
@@ -2310,7 +2391,7 @@ pub fn main_is_installed() -> SyncReturn<bool> {
 }
 
 pub fn main_init_input_source() -> SyncReturn<()> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     crate::keyboard::input_source::init_input_source();
     SyncReturn(())
 }
@@ -2433,7 +2514,7 @@ pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
 }
 
 pub fn cm_init() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     crate::flutter::connection_manager::cm_init();
 }
 
@@ -2447,7 +2528,10 @@ pub fn main_start_ipc_url_server() {
 }
 
 pub fn main_test_wallpaper(_second: u64) {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(
+        target_os = "windows",
+        all(target_os = "linux", not(target_env = "ohos"))
+    ))]
     std::thread::spawn(move || match crate::platform::WallPaperRemover::new() {
         Ok(_remover) => {
             std::thread::sleep(std::time::Duration::from_secs(_second));
@@ -2497,11 +2581,11 @@ pub fn is_disable_installation() -> SyncReturn<bool> {
 
 pub fn is_preset_password() -> bool {
     // On desktop, service owns the authoritative config; query it via IPC and return only a boolean.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return crate::ipc::is_permanent_password_preset();
 
     // On mobile, we have no service IPC; verify against local storage.
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return config::Config::is_using_preset_password();
 }
 
@@ -2525,11 +2609,11 @@ pub fn is_support_multi_ui_session(version: String) -> SyncReturn<bool> {
 }
 
 pub fn is_selinux_enforcing() -> SyncReturn<bool> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         SyncReturn(crate::platform::linux::is_selinux_enforcing())
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
     {
         SyncReturn(false)
     }
@@ -2547,11 +2631,11 @@ pub fn main_supported_privacy_mode_impls() -> SyncReturn<String> {
 }
 
 pub fn main_supported_input_source() -> SyncReturn<String> {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     {
         SyncReturn("".to_owned())
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         SyncReturn(
             serde_json::to_string(&crate::keyboard::input_source::get_supported_input_source())
@@ -2660,17 +2744,17 @@ pub fn main_get_common(key: String) -> String {
         }
         .to_string();
     } else if key == "has-gnome-shortcuts-inhibitor-permission" {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         return crate::platform::linux::has_gnome_shortcuts_inhibitor_permission().to_string();
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
         return false.to_string();
     } else if key == "gnome-monitor-layout-mode" {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         return match crate::platform::linux::gnome_monitor_layout_mode() {
             Some(mode) => mode.as_str().to_owned(),
             None => String::new(),
         };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", not(target_env = "ohos"))))]
         return String::new();
     } else if key == "permanent-password-set" {
         return ui_interface::is_permanent_password_set().to_string();
@@ -2836,7 +2920,7 @@ pub fn main_set_common(_key: String, _value: String) {
         crate::hbbs_http::downloader::cancel(&_value);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if _key == "clear-gnome-shortcuts-inhibitor-permission" {
         std::thread::spawn(move || {
             let (success, msg) =

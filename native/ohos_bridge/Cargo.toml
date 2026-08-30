@@ -1,0 +1,14 @@
+[package]
+name = "rustdesk-ohos-flutter-bridge"
+version = "1.4.9"
+edition = "2021"
+rust-version = "1.75"
+
+[lib]
+name = "rustdesk_ohos_flutter_bridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+flutter_rust_bridge = { version = "=1.80", features = ["uuid"] }
+librustdesk_core = { package = "rustdesk", path = "../..", features = ["ohos-flutter"] }
+uuid = { version = "1.3", features = ["v4"] }

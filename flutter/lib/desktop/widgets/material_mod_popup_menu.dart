@@ -1060,6 +1060,7 @@ Future<T?> showMenu<T>({
     case TargetPlatform.macOS:
       break;
     case TargetPlatform.android:
+    case TargetPlatform.ohos:
     case TargetPlatform.fuchsia:
     case TargetPlatform.linux:
     case TargetPlatform.windows:

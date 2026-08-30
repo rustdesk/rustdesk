@@ -2562,7 +2562,7 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
- "rdev",
+ "rdev 0.5.0-2 (git+https://github.com/rustdesk-org/rdev)",
  "serde 1.0.228",
  "serde_derive",
  "tfc",
@@ -4568,8 +4568,7 @@ dependencies = [
 [[package]]
 name = "libsodium-sys"
 version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b779387cd56adfbc02ea4a668e704f729be8d6a6abd2c27ca5ee537849a92fd"
+source = "git+https://github.com/FrankHan052176/sodiumoxide?rev=a09de89d843f88a7bfccd80266150fe5d33e1eee#a09de89d843f88a7bfccd80266150fe5d33e1eee"
 dependencies = [
  "cc",
  "libc",
@@ -6860,6 +6859,30 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
+source = "git+https://github.com/FrankHan052176/rdev?rev=f15c2046cf9ed8e7cfd8ceb7379e4559274b732d#f15c2046cf9ed8e7cfd8ceb7379e4559274b732d"
+dependencies = [
+ "cocoa 0.24.1",
+ "core-foundation 0.9.4",
+ "core-foundation-sys 0.8.7",
+ "core-graphics 0.22.3",
+ "dispatch",
+ "enum-map",
+ "epoll",
+ "inotify",
+ "lazy_static",
+ "libc",
+ "log",
+ "mio 0.8.11",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "widestring",
+ "winapi 0.3.9",
+ "x11 2.21.0",
+]
+
+[[package]]
+name = "rdev"
+version = "0.5.0-2"
 source = "git+https://github.com/rustdesk-org/rdev#23e24dd6b35452a495dae0ae6d99395e9755ab0f"
 dependencies = [
  "cocoa 0.24.1",
@@ -7241,7 +7264,8 @@ dependencies = [
  "piet-coregraphics",
  "portable-pty",
  "qrcode-generator",
- "rdev",
+ "rdev 0.5.0-2 (git+https://github.com/FrankHan052176/rdev?rev=f15c2046cf9ed8e7cfd8ceb7379e4559274b732d)",
+ "rdev 0.5.0-2 (git+https://github.com/rustdesk-org/rdev)",
  "remote_printer",
  "repng",
  "reqwest",
@@ -7283,6 +7307,16 @@ dependencies = [
  "wol-rs",
  "x11-clipboard 0.8.1",
  "x11rb 0.12.0",
+ "zstd",
+]
+
+[[package]]
+name = "rustdesk-ohos-flutter-bridge"
+version = "1.4.9"
+dependencies = [
+ "flutter_rust_bridge",
+ "rustdesk",
+ "uuid",
 ]
 
 [[package]]

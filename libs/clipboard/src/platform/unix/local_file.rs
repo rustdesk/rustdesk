@@ -15,14 +15,20 @@ use hbb_common::{
 };
 use std::{
     collections::HashSet,
-    fs::File,
+    fs::{File, OpenOptions},
     io::{BufRead, BufReader, Read, Seek},
-    os::unix::prelude::PermissionsExt,
+    os::unix::{
+        fs::OpenOptionsExt,
+        prelude::{MetadataExt, PermissionsExt},
+    },
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::SystemTime,
 };
 use utf16string::WString;
+
+const MAX_CLIPBOARD_FILE_ENTRIES: usize = 16_384;
+const MAX_CLIPBOARD_DIRECTORY_DEPTH: usize = 64;
 
 const FILE_DESCRIPTOR_SIZE: usize = 592;
 const MAX_FILE_NAME_CODE_UNITS: usize = FILE_NAME_CODE_UNITS - 1;
@@ -46,6 +52,8 @@ pub(super) struct LocalFile {
     pub system: bool,
     pub archive: bool,
     pub normal: bool,
+    device: u64,
+    inode: u64,
 }
 
 impl LocalFile {
@@ -81,10 +89,15 @@ impl LocalFile {
 
     pub fn try_open(relative_root: &Path, path: &Path) -> Result<Self, CliprdrError> {
         let descriptor_name = Self::validated_descriptor_name(relative_root, path)?;
-        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
+        let mt = std::fs::symlink_metadata(path).map_err(|e| CliprdrError::FileError {
             path: path.to_string_lossy().to_string(),
             err: e,
         })?;
+        if mt.file_type().is_symlink() {
+            return Err(CliprdrError::InvalidRequest {
+                description: "clipboard symlinks are not supported".to_string(),
+            });
+        }
         let size = mt.len() as u64;
         let is_dir = mt.is_dir();
         let read_only = mt.permissions().readonly();
@@ -121,6 +134,8 @@ impl LocalFile {
             perm,
             archive,
             normal,
+            device: mt.dev(),
+            inode: mt.ino(),
         })
     }
 
@@ -207,10 +222,23 @@ impl LocalFile {
     #[inline]
     pub fn load_handle(&mut self) -> Result<(), CliprdrError> {
         if !self.is_dir && self.handle.is_none() {
-            let handle = std::fs::File::open(&self.path).map_err(|e| CliprdrError::FileError {
+            let handle = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW)
+                .open(&self.path)
+                .map_err(|e| CliprdrError::FileError {
+                    path: self.path.to_string_lossy().to_string(),
+                    err: e,
+                })?;
+            let metadata = handle.metadata().map_err(|e| CliprdrError::FileError {
                 path: self.path.to_string_lossy().to_string(),
                 err: e,
             })?;
+            if metadata.dev() != self.device || metadata.ino() != self.inode {
+                return Err(CliprdrError::InvalidRequest {
+                    description: "clipboard file changed identity after selection".to_string(),
+                });
+            }
             let mut reader = BufReader::with_capacity(BLOCK_SIZE as usize * 2, handle);
             reader.fill_buf().map_err(|e| CliprdrError::FileError {
                 path: self.path.to_string_lossy().to_string(),
@@ -269,7 +297,20 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         path: &Path,
         file_list: &mut Vec<LocalFile>,
         visited: &mut HashSet<PathBuf>,
+        depth: usize,
     ) -> Result<(), CliprdrError> {
+        if depth > MAX_CLIPBOARD_DIRECTORY_DEPTH {
+            return Err(CliprdrError::InvalidRequest {
+                description: "clipboard directory exceeds the maximum depth".to_string(),
+            });
+        }
+        if file_list.len() >= MAX_CLIPBOARD_FILE_ENTRIES {
+            return Err(CliprdrError::InvalidRequest {
+                description: format!(
+                    "clipboard directory exceeds {MAX_CLIPBOARD_FILE_ENTRIES} entries"
+                ),
+            });
+        }
         // prevent fs loop
         if visited.contains(path) {
             return Ok(());
@@ -279,7 +320,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
         let local_file = LocalFile::try_open(relative_root, path)?;
         file_list.push(local_file);
 
-        let mt = std::fs::metadata(path).map_err(|e| CliprdrError::FileError {
+        let mt = std::fs::symlink_metadata(path).map_err(|e| CliprdrError::FileError {
             path: path.to_string_lossy().to_string(),
             err: e,
         })?;
@@ -295,7 +336,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
                     err: e,
                 })?;
                 let path = entry.path();
-                constr_file_lst(relative_root, &path, file_list, visited)?;
+                constr_file_lst(relative_root, &path, file_list, visited, depth + 1)?;
             }
         }
         Ok(())
@@ -313,7 +354,7 @@ pub(super) fn construct_file_list(paths: &[PathBuf]) -> Result<Vec<LocalFile>, C
             description: "empty parent".to_string(),
         })?;
         let mut visited = HashSet::new();
-        constr_file_lst(relative_root, path, &mut file_list, &mut visited)?;
+        constr_file_lst(relative_root, path, &mut file_list, &mut visited, 0)?;
     }
     Ok(file_list)
 }
@@ -355,6 +396,8 @@ mod file_list_test {
                 system: false,
                 archive: false,
                 normal: false,
+                device: 0,
+                inode: 0,
             }
         }
 
@@ -438,6 +481,45 @@ mod file_list_test {
             file.as_bin(),
             Err(CliprdrError::InvalidRequest { .. })
         ));
+    }
+
+    #[test]
+    fn rejects_clipboard_symlink() -> Result<(), Box<dyn std::error::Error>> {
+        let root =
+            std::env::temp_dir().join(format!("rustdesk-clipboard-symlink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root)?;
+        let target = root.join("target.txt");
+        let link = root.join("link.txt");
+        std::fs::write(&target, b"private")?;
+        std::os::unix::fs::symlink(&target, &link)?;
+
+        let result = LocalFile::try_open(&root, &link);
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(matches!(result, Err(CliprdrError::InvalidRequest { .. })));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_file_replaced_after_clipboard_selection() -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!(
+            "rustdesk-clipboard-replaced-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root)?;
+        let selected = root.join("selected.txt");
+        let private = root.join("private.txt");
+        std::fs::write(&selected, b"selected")?;
+        std::fs::write(&private, b"private")?;
+        let mut file = LocalFile::try_open(&root, &selected)?;
+        std::fs::remove_file(&selected)?;
+        std::os::unix::fs::symlink(&private, &selected)?;
+
+        let result = file.load_handle();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(result.is_err());
+        Ok(())
     }
 
     #[test]

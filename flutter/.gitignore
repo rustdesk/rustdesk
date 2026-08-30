@@ -30,6 +30,7 @@
 .pub-cache/
 .pub/
 /build/
+/ohos/entry/libs/
 
 # Web related
 

@@ -1,7 +1,7 @@
 use super::*;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 use crate::clipboard::clipboard_listener;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 pub use crate::clipboard::{ClipboardContext, ClipboardSide};
 pub use crate::clipboard::{CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME};
 #[cfg(windows)]
@@ -13,11 +13,11 @@ pub use crate::{
 };
 #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
 use clipboard::platform::unix::fuse::{init_fuse_context, uninit_fuse_context};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 use clipboard_master::CallbackResult;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 use hbb_common::config::{keys, option2bool};
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     io,
@@ -27,10 +27,10 @@ use std::{
 #[cfg(windows)]
 use tokio::runtime::Runtime;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 static CLIPBOARD_SERVICE_OK: AtomicBool = AtomicBool::new(false);
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 struct Handler {
     ctx: Option<ClipboardContext>,
     #[cfg(target_os = "windows")]
@@ -39,7 +39,7 @@ struct Handler {
     rt: Option<Runtime>,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn is_clipboard_service_ok() -> bool {
     CLIPBOARD_SERVICE_OK.load(Ordering::SeqCst)
 }
@@ -50,7 +50,7 @@ pub fn new(name: String) -> GenericService {
     svc.sp
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     #[cfg(all(feature = "unix-file-copy-paste", target_os = "linux"))]
     let _fuse_call_on_ret = {
@@ -109,11 +109,11 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 const WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES: usize =
     super::input_service::WAYLAND_CLIPBOARD_INPUT_MAX_TEXT_CHARS * 4;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
     let end = bytes.len().min(WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES);
     let slice = &bytes[..end];
@@ -131,7 +131,7 @@ fn decode_utf8_prefix(bytes: &[u8]) -> Option<String> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     if clipboard.format.enum_value() != Ok(ClipboardFormat::Text) {
         return None;
@@ -143,7 +143,7 @@ fn decode_text_clipboard(clipboard: &Clipboard) -> Option<String> {
     decode_utf8_prefix(&clipboard.content)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn should_skip_wayland_clipboard_sync(msg: &Message) -> bool {
     if crate::platform::linux::is_x11() {
         return false;
@@ -165,7 +165,7 @@ fn should_skip_wayland_clipboard_sync(msg: &Message) -> bool {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_env = "ohos")))]
 impl Handler {
     #[cfg(feature = "unix-file-copy-paste")]
     fn check_clipboard_file(&mut self) {
@@ -228,7 +228,7 @@ impl Handler {
             }
         }
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             let msg = crate::clipboard::peek_clipboard(&mut self.ctx, ClipboardSide::Host, false)?;
             if should_skip_wayland_clipboard_sync(&msg) {
@@ -328,7 +328,7 @@ impl Handler {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
     CLIPBOARD_SERVICE_OK.store(sp.ok(), Ordering::SeqCst);
     while sp.ok() {
@@ -342,7 +342,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 mod tests {
     use super::{decode_utf8_prefix, WAYLAND_CLIPBOARD_SKIP_CHECK_MAX_UTF8_BYTES};
 

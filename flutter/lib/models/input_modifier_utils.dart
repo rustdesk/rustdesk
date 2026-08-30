@@ -142,6 +142,7 @@ bool shouldHandleTerminalPasteShortcut({
     case TargetPlatform.macOS:
       return !controlPressed && metaPressed && !shiftPressed;
     case TargetPlatform.android:
+    case TargetPlatform.ohos:
     case TargetPlatform.fuchsia:
     case TargetPlatform.windows:
       return controlPressed && !metaPressed && !shiftPressed;

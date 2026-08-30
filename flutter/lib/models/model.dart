@@ -1452,6 +1452,11 @@ class FfiModel with ChangeNotifier {
           debugPrint('Failed to decode platformAdditions $e');
         }
       }
+      if (isOhos && !isCache) {
+        // Match the ArkTS client: re-apply the persisted codec preference after authentication
+        // so the active Windows stream renegotiates instead of remaining on its initial Auto codec.
+        await bind.sessionChangePreferCodec(sessionId: sessionId);
+      }
     }
 
     _pi.isSet.value = true;
@@ -1948,7 +1953,7 @@ class ImageModel with ChangeNotifier {
       rgba,
       rect?.width.toInt() ?? 0,
       rect?.height.toInt() ?? 0,
-      isWeb | isWindows | isLinux
+      isWeb | isWindows | isLinux | isOhos
           ? ui.PixelFormat.rgba8888
           : ui.PixelFormat.bgra8888,
     );

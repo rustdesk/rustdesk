@@ -36,13 +36,23 @@ cfg_if! {
     } else if #[cfg(target_os = "android")] {
         mod android;
         pub use self::android::*;
-    }else {
+    } else if #[cfg(target_env = "ohos")] {
+        pub use self::ohos::{Capturer, Display, PixelBuffer};
+    } else {
         //TODO: Fallback implementation.
     }
 }
 
 pub mod codec;
 pub mod convert;
+#[cfg(target_env = "ohos")]
+pub mod ohos;
+#[cfg(target_env = "ohos")]
+pub use self::ohos::{
+    configure_screen_size, enter_direct_render_context, lookup_direct_render_target,
+    push_screen_frame_rgba, register_direct_render_target_lookup, screen_size,
+    DirectRenderContextGuard, DirectRenderTarget, DirectRenderTargetLookup,
+};
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]
@@ -56,6 +66,10 @@ pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
 pub mod aom;
 #[cfg(not(any(target_os = "ios")))]
+#[cfg(not(target_env = "ohos"))]
+pub mod camera;
+#[cfg(target_env = "ohos")]
+#[path = "ohos/camera.rs"]
 pub mod camera;
 pub mod record;
 mod vpx;

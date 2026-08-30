@@ -45,6 +45,7 @@ class AudioInput extends StatelessWidget {
   static Future<void> setDevice(
       String device, bool isCm, bool isVoiceCall) async {
     if (device == getDefault()) device = '';
+    await platformFFI.selectSoundInput(device);
     if (isVoiceCall) {
       await bind.setVoiceCallInputDevice(isCm: isCm, device: device);
     } else {
@@ -54,7 +55,7 @@ class AudioInput extends StatelessWidget {
 
   static Future<Map<String, Object>> getDevicesInfo(
       bool isCm, bool isVoiceCall) async {
-    List<String> devices = (await bind.mainGetSoundInputs()).toList();
+    List<String> devices = await platformFFI.getSoundInputs();
     if (bind.mainAudioSupportLoopback()) {
       devices.insert(0, translate(_kSystemSound));
     }

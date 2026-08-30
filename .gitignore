@@ -1,5 +1,8 @@
 /build
 /target
+/native/ohos_bridge/target/
+/native/ohos_bridge/src/bridge_generated.rs
+/native/ohos_bridge/src/bridge_generated.io.rs
 .vscode
 .idea
 .DS_Store
@@ -58,3 +61,8 @@ libsciter.dylib
 flutter/web/
 # libdrmtap is cloned at build time by build.py (not a submodule)
 /third_party/libdrmtap/
+/.codegraph/
+/.dsh/
+/.hvigor/
+/dist/
+/logs/

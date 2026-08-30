@@ -5,9 +5,9 @@ use crate::platform::windows::{get_char_from_vk, get_unicode_from_vk};
 #[cfg(not(feature = "flutter"))]
 use crate::ui::CUR_SESSION;
 use crate::ui_session_interface::{InvokeUiSession, Session};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::{client::get_key_state, common::GrabState};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::log;
 use hbb_common::message_proto::*;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -60,7 +60,7 @@ pub fn set_relative_mouse_mode_state(active: bool) {
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 static IS_RDEV_ENABLED: AtomicBool = AtomicBool::new(false);
 
 lazy_static::lazy_static! {
@@ -105,7 +105,7 @@ pub mod client {
 
     /// How long after a grab acquisition we suppress Wait from the same session.
     /// Must exceed one full X11 feedback cycle (~100 ms: 50 ms enable + 50 ms disable).
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     const GRAB_DEBOUNCE_MS: u128 = 300;
 
     lazy_static::lazy_static! {
@@ -113,12 +113,12 @@ pub mod client {
         static ref GRAB_STATE: Arc<Mutex<GrabOwnerState>> = Arc::new(Mutex::new(GrabOwnerState::default()));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     lazy_static::lazy_static! {
         static ref GRAB_OP_LOCK: Mutex<()> = Mutex::new(());
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn apply_run_grab_if_owner(session_id: u128, disable_first: bool) {
         let _lock = GRAB_OP_LOCK.lock().unwrap();
         let gs = GRAB_STATE.lock().unwrap();
@@ -133,7 +133,7 @@ pub mod client {
         rdev::enable_grab();
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     fn disable_grab_if_released() {
         let _lock = GRAB_OP_LOCK.lock().unwrap();
         let should_disable = {
@@ -154,7 +154,7 @@ pub mod client {
         *lock = true;
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str, session_id: u128) {
         #[cfg(feature = "flutter")]
         if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
@@ -163,9 +163,9 @@ pub mod client {
         // Serialize transitions so a stale `Wait` from a previous owner cannot
         // clobber a fresh `Run` from a different session window.
         let mut release_after_unlock = None;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut run_grab_after_unlock = None;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let mut disable_after_unlock = false;
         let mut gs = GRAB_STATE.lock().unwrap();
         match state {
@@ -200,14 +200,14 @@ pub mod client {
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
                 KEYBOARD_HOOKED.store(true, Ordering::SeqCst);
 
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 let had_owner = gs.owner.is_some();
                 gs.owner = Some(session_id);
                 gs.last_grab = Some(std::time::Instant::now());
                 // Invalidate any in-flight deferred release from the previous
                 // owner so it cannot suppress a fresh timer for the new owner.
                 gs.deferred_pending = false;
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     run_grab_after_unlock = Some(had_owner);
                 }
@@ -232,7 +232,7 @@ pub mod client {
                 // by this same session -- it is X11 feedback, not a real leave.
                 // A deferred release is scheduled so that a genuine leave within
                 // the debounce window is not permanently lost.
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 if let Some(t) = gs.last_grab {
                     let elapsed = t.elapsed().as_millis();
                     if elapsed < GRAB_DEBOUNCE_MS {
@@ -296,7 +296,7 @@ pub mod client {
                 gs.last_grab = None;
                 gs.deferred_pending = false;
                 release_after_unlock = Some(take_remote_keys());
-                #[cfg(target_os = "linux")]
+                #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
                 {
                     disable_after_unlock = true;
                 }
@@ -304,7 +304,7 @@ pub mod client {
             GrabState::Exit => {}
         }
         drop(gs);
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         {
             if disable_after_unlock {
                 disable_grab_if_released();
@@ -425,7 +425,7 @@ pub mod client {
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn lock_screen() {
         send_key_event(&event_lock_screen());
     }
@@ -445,7 +445,7 @@ pub mod client {
     }
 
     #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn ctrl_alt_del() {
         send_key_event(&event_ctrl_alt_del());
     }
@@ -467,7 +467,7 @@ static mut IS_0X021D_DOWN: bool = false;
 #[cfg(target_os = "macos")]
 static mut IS_LEFT_OPTION_DOWN: bool = false;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn get_keyboard_mode() -> String {
     #[cfg(not(feature = "flutter"))]
     if let Some(session) = CUR_SESSION.lock().unwrap().as_ref() {
@@ -683,7 +683,7 @@ fn start_grab_loop() {
         }
     });
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
             let is_press = matches!(event.event_type, EventType::KeyPress(_));
@@ -709,7 +709,7 @@ fn start_grab_loop() {
 fn stop_grab_loop() -> Result<(), rdev::GrabError> {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     rdev::exit_grab()?;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     rdev::exit_grab_listen();
     Ok(())
 }
@@ -888,7 +888,7 @@ fn parse_add_lock_modes_modifiers(
     // }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn add_lock_modes_modifiers(key_event: &mut KeyEvent, is_numpad_key: bool, is_letter_key: bool) {
     if is_letter_key && get_key_state(enigo::Key::CapsLock) {
         key_event.modifiers.push(ControlKey::CapsLock.into());
@@ -898,7 +898,7 @@ fn add_lock_modes_modifiers(key_event: &mut KeyEvent, is_numpad_key: bool, is_le
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn convert_numpad_keys(key: Key) -> Key {
     if get_key_state(enigo::Key::NumLock) {
         return key;
@@ -964,11 +964,11 @@ pub fn event_to_key_events(
         KeyboardMode::Map => map_keyboard_mode(peer.as_str(), event, key_event),
         KeyboardMode::Translate => translate_keyboard_mode(peer.as_str(), event, key_event),
         _ => {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             {
                 legacy_keyboard_mode(event, key_event)
             }
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
             {
                 Vec::new()
             }
@@ -982,7 +982,7 @@ pub fn event_to_key_events(
             if let Some(lock_modes) = _lock_modes {
                 parse_add_lock_modes_modifiers(key_event, lock_modes, is_numpad_key, is_letter_key);
             } else {
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
                 add_lock_modes_modifiers(key_event, is_numpad_key, is_letter_key);
             }
         }
@@ -1014,7 +1014,7 @@ pub fn get_peer_platform() -> String {
     "Windows".to_string()
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEvent> {
     let mut events = Vec::new();
     // legacy mode(0): Generate characters locally, look for keycode on other side.
@@ -1326,7 +1326,7 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
         OS_LOWER_ANDROID => rdev::macos_code_to_android_key_code(event.platform_code as _)?,
         _ => rdev::macos_code_to_linux_code(event.platform_code as _)?,
     };
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::linux_code_to_win_scancode(event.position_code as _)?,
         OS_LOWER_MACOS => {
@@ -1339,7 +1339,7 @@ fn _map_keyboard_mode(_peer: &str, event: &Event, mut key_event: KeyEvent) -> Op
         OS_LOWER_ANDROID => rdev::linux_code_to_android_key_code(event.position_code as _)?,
         _ => event.position_code as _,
     };
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let keycode = match _peer {
         OS_LOWER_WINDOWS => rdev::usb_hid_code_to_win_scancode(event.usb_hid as _)?,
         OS_LOWER_LINUX => rdev::usb_hid_code_to_linux_code(event.usb_hid as _)?,
@@ -1434,7 +1434,7 @@ fn is_hot_key_modifiers_down() -> bool {
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn is_altgr(event: &Event) -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if event.platform_code == 0xFE03 {
         true
     } else {
@@ -1447,10 +1447,13 @@ fn is_altgr(event: &Event) -> bool {
     } else {
         false
     }
+
+    #[cfg(target_env = "ohos")]
+    false
 }
 
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "windows", target_env = "ohos"))]
 fn is_press(event: &Event) -> bool {
     matches!(event.event_type, EventType::KeyPress(_))
 }
@@ -1478,7 +1481,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if is_numpad_key(&event) {
         events.append(&mut map_keyboard_mode(peer, event, key_event));
         return events;
@@ -1503,7 +1506,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     #[cfg(target_os = "windows")]
     try_fill_win2win_hotkey(peer, event, &key_event, &mut events);
 
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "windows", target_env = "ohos"))]
     if events.is_empty() && is_press(event) {
         try_fill_unicode(peer, event, &key_event, &mut events);
     }
@@ -1540,7 +1543,7 @@ pub fn keycode_to_rdev_key(keycode: u32) -> Key {
 }
 
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub mod input_source {
     #[cfg(target_os = "macos")]
     use hbb_common::log;
@@ -1559,7 +1562,7 @@ pub mod input_source {
     pub const CONFIG_INPUT_SOURCE_DEFAULT: &str = CONFIG_INPUT_SOURCE_1;
 
     pub fn init_input_source() {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if !crate::platform::linux::is_x11() {
             // If switching from X11 to Wayland, the grab loop will not be started.
             // Do not change the config here.
@@ -1606,7 +1609,7 @@ pub mod input_source {
 
     #[inline]
     pub fn get_cur_session_input_source() -> String {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if !crate::platform::linux::is_x11() {
             return CONFIG_INPUT_SOURCE_2.to_string();
         }
@@ -1620,7 +1623,7 @@ pub mod input_source {
 
     #[inline]
     pub fn get_supported_input_source() -> Vec<(String, String)> {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         if !crate::platform::linux::is_x11() {
             return vec![(
                 CONFIG_INPUT_SOURCE_2.to_string(),

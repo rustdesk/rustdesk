@@ -52,6 +52,7 @@ final navigationBarKey = GlobalKey();
 
 final isAndroid = isAndroid_;
 final isIOS = isIOS_;
+final isOhos = isOhos_;
 final isWindows = isWindows_;
 final isMacOS = isMacOS_;
 final isLinux = isLinux_;
@@ -61,7 +62,11 @@ final isWebDesktop = isWebDesktop_;
 final isWebOnWindows = isWebOnWindows_;
 final isWebOnLinux = isWebOnLinux_;
 final isWebOnMacOs = isWebOnMacOS_;
-var isMobile = isAndroid || isIOS;
+var isMobile = isAndroid || isIOS || isOhos;
+String ohosDeviceType = '';
+double ohosTitleButtonReservedWidth = 0;
+bool get isOhosDesktop => isOhos && ohosDeviceType == '2in1';
+bool get isDesktopUi => isDesktop || isOhosDesktop;
 var version = '';
 int androidVersion = 0;
 
@@ -379,7 +384,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -410,7 +415,7 @@ class MyTheme {
     cardColor: grayBg,
     hintColor: Color(0xFFAAAAAA),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: Colors.black87,
     ),
     tooltipTheme: tooltipTheme(),
@@ -477,7 +482,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -511,7 +516,7 @@ class MyTheme {
     ),
     cardColor: Color(0xFF24252B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarTheme(
+    tabBarTheme: const TabBarThemeData(
       labelColor: Colors.white70,
     ),
     tooltipTheme: tooltipTheme(),
@@ -700,7 +705,7 @@ String formatDurationToTime(Duration duration) {
 }
 
 closeConnection({String? id}) {
-  if (isAndroid || isIOS) {
+  if (isAndroid || isIOS || (isOhos && !isOhosDesktop)) {
     () async {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: SystemUiOverlay.values);
@@ -2196,7 +2201,7 @@ var webInitialLink = "";
 /// initUniLinks should only be used on macos/windows.
 /// we use dbus for linux currently.
 Future<bool> initUniLinks() async {
-  if (isLinux) {
+  if (isLinux || isOhos) {
     return false;
   }
   // check cold boot
@@ -2224,7 +2229,7 @@ Future<bool> initUniLinks() async {
 ///
 /// Returns a [StreamSubscription] which can listen the uni links.
 StreamSubscription? listenUniLinks({handleByFlutter = true}) {
-  if (isLinux || isWeb) {
+  if (isLinux || isOhos || isWeb) {
     return null;
   }
 
@@ -2777,24 +2782,34 @@ class WakelockManager {
         return; // Don't enable wakelock if user disabled keep awake
       }
     }
-    if (isDesktop) {
+    if (isDesktopUi) {
       _enabledKeys.add(key);
     }
     if (!_enabled) {
       _enabled = true;
-      WakelockPlus.enable();
+      if (isOhos) {
+        platformFFI.setKeepScreenOn(true).catchError(
+            (error) => debugPrint('Failed to keep OHOS screen on: $error'));
+      } else {
+        WakelockPlus.enable();
+      }
     }
   }
 
   static void disable(UniqueKey key) {
-    if (isDesktop) {
+    if (isDesktopUi) {
       _enabledKeys.remove(key);
       if (_enabledKeys.isNotEmpty) {
         return;
       }
     }
     if (_enabled) {
-      WakelockPlus.disable();
+      if (isOhos) {
+        platformFFI.setKeepScreenOn(false).catchError((error) =>
+            debugPrint('Failed to release OHOS screen lock: $error'));
+      } else {
+        WakelockPlus.disable();
+      }
       _enabled = false;
     }
   }
@@ -3140,6 +3155,14 @@ Future<bool> callMainCheckSuperUserPermission() async {
 }
 
 Future<void> start_service(bool is_start) async {
+  if (isOhos) {
+    if (is_start) {
+      await gFFI.serverModel.startService();
+    } else {
+      await gFFI.serverModel.stopService();
+    }
+    return;
+  }
   bool checked = !bind.mainIsInstalled() ||
       !isMacOS ||
       await callMainCheckSuperUserPermission();

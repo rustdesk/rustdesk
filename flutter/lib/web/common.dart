@@ -4,6 +4,7 @@ import 'package:flutter_hbb/consts.dart';
 
 final isAndroid_ = false;
 final isIOS_ = false;
+final isOhos_ = false;
 final isWindows_ = false;
 final isMacOS_ = false;
 final isLinux_ = false;

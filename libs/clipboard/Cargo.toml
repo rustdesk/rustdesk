@@ -11,15 +11,19 @@ cc = "1.0"
 
 [features]
 default = []
+cliprdr-file-service = [
+"dep:dashmap",
+"dep:libc",
+"dep:utf16string"
+]
 unix-file-copy-paste = [
+"cliprdr-file-service",
 "dep:x11rb",
 "dep:x11-clipboard",
 "dep:rand",
 "dep:fuser",
 "dep:libc",
-"dep:dashmap",
 "dep:percent-encoding",
-"dep:utf16string",
 "dep:once_cell",
 "dep:cacao"
 ]

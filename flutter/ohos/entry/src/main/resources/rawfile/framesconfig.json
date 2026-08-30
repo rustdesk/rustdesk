@@ -1,0 +1,37 @@
+{
+    "SWITCH": 1,
+    "TRANSLATE": [
+        {
+            "serial_number": 1,
+            "min": 800,
+            "max": -1,
+            "preferred_fps": 90
+        },
+        {
+            "serial_number": 2,
+            "min": 77,
+            "max": 800,
+            "preferred_fps": 120
+        },
+        {
+            "serial_number": 3,
+            "min": 46,
+            "max": 77,
+            "preferred_fps": 90
+        },
+        {
+            "serial_number": 4,
+            "min": 10,
+            "max": 46,
+            "preferred_fps": 72
+        },
+        {
+            "serial_number": 5,
+            "min": 0,
+            "max": 10,
+            "preferred_fps": 60
+        }
+    ],
+    "SCALE": [],
+    "ROTATION": []
+}

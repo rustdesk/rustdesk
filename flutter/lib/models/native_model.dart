@@ -22,6 +22,8 @@ final class RgbaFrame extends Struct {
   external Pointer<Uint8> data;
 }
 
+const _kOhosHostInputCapable = 'ohos-host-input-capable';
+
 typedef F3 = Pointer<Uint8> Function(Pointer<Utf8>, int);
 typedef F3Dart = Pointer<Uint8> Function(Pointer<Utf8>, Int32);
 typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
@@ -46,9 +48,13 @@ DynamicLibrary _openLinuxCoreLib() {
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
 class PlatformFFI {
+  static String _ohosLocaleName = '';
   String _dir = '';
   // _homeDir is only needed for Android and IOS.
   String _homeDir = '';
+  int _ohosDisplayId = 0;
+  int _ohosDisplayWidth = 0;
+  int _ohosDisplayHeight = 0;
   final _eventHandlers = <String, Map<String, HandleEvent>>{};
   late RustdeskImpl _ffiBind;
   late String _appType;
@@ -58,11 +64,15 @@ class PlatformFFI {
 
   static final PlatformFFI instance = PlatformFFI._();
   final _toAndroidChannel = const MethodChannel('mChannel');
+  final _toOhosChannel =
+      const MethodChannel('top.frankhan.resk.flutter/platform');
 
   RustdeskImpl get ffiBind => _ffiBind;
   F3? _session_get_rgba;
 
-  static get localeName => Platform.localeName;
+  static String get localeName => isOhos && _ohosLocaleName.isNotEmpty
+      ? _ohosLocaleName
+      : Platform.localeName;
 
   static get isMain => instance._appType == kAppTypeMain;
 
@@ -73,12 +83,16 @@ class PlatformFFI {
   static void setByName(String name, [String value = '']) {}
 
   static Future<String> getVersion() async {
+    if (isOhos) {
+      return await instance._ffiBind.mainGetVersion();
+    }
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;
   }
 
   bool registerEventHandler(
-      String eventName, String handlerName, HandleEvent handler, {bool replace = false}) {
+      String eventName, String handlerName, HandleEvent handler,
+      {bool replace = false}) {
     debugPrint('registerEventHandler $eventName $handlerName');
     var handlers = _eventHandlers[eventName];
     if (handlers == null) {
@@ -135,27 +149,52 @@ class PlatformFFI {
   /// Init the FFI class, loads the native Rust core library.
   Future<void> init(String appType) async {
     _appType = appType;
-    final dylib = isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
-        : isLinux
-            ? _openLinuxCoreLib()
-            : isWindows
-                ? DynamicLibrary.open('librustdesk.dll')
-                :
-                // Use executable itself as the dynamic library for MacOS.
-                // Multiple dylib instances will cause some global instances to be invalid.
-                // eg. `lazy_static` objects in rust side, will be created more than once, which is not expected.
-                //
-                // isMacOS? DynamicLibrary.open("liblibrustdesk.dylib") :
-                DynamicLibrary.process();
+    final dylib = isOhos
+        ? DynamicLibrary.open('liblibrustdesk.so')
+        : isAndroid
+            ? DynamicLibrary.open('librustdesk.so')
+            : isLinux
+                ? _openLinuxCoreLib()
+                : isWindows
+                    ? DynamicLibrary.open('librustdesk.dll')
+                    :
+                    // Use executable itself as the dynamic library for MacOS.
+                    // Multiple dylib instances will cause some global instances to be invalid.
+                    // eg. `lazy_static` objects in rust side, will be created more than once, which is not expected.
+                    //
+                    // isMacOS? DynamicLibrary.open("liblibrustdesk.dylib") :
+                    DynamicLibrary.process();
     debugPrint('initializing FFI $_appType');
     try {
       _session_get_rgba = dylib.lookupFunction<F3Dart, F3>("session_get_rgba");
       try {
-        // SYSTEM user failed
-        _dir = (await getApplicationDocumentsDirectory()).path;
+        if (isOhos) {
+          _dir = await _toOhosChannel.invokeMethod<String>('getFilesDir') ?? '';
+          ohosDeviceType =
+              await _toOhosChannel.invokeMethod<String>('getDeviceType') ?? '';
+          _ohosLocaleName =
+              await _toOhosChannel.invokeMethod<String>('getSystemLocale') ??
+                  '';
+          final displayInfo = await _toOhosChannel
+              .invokeMapMethod<String, dynamic>('getDefaultDisplayInfo');
+          _ohosDisplayId = displayInfo?['displayId'] as int? ?? 0;
+          _ohosDisplayWidth = displayInfo?['width'] as int? ?? 0;
+          _ohosDisplayHeight = displayInfo?['height'] as int? ?? 0;
+          if (ohosDeviceType == '2in1') {
+            ohosTitleButtonReservedWidth =
+                (await _toOhosChannel.invokeMethod<num>('prepareWindow'))
+                        ?.toDouble() ??
+                    0;
+          }
+        } else {
+          // SYSTEM user failed
+          _dir = (await getApplicationDocumentsDirectory()).path;
+        }
       } catch (e) {
         debugPrint('Failed to get documents directory: $e');
+      }
+      if (_dir.isEmpty) {
+        throw StateError('Application files directory is unavailable');
       }
       _ffiBind = RustdeskImpl(dylib);
 
@@ -178,6 +217,8 @@ class PlatformFFI {
           // which provided the `downloads` path in the sandbox.
           // It is unclear why we now use the `data` directory in the sandbox instead.
           _homeDir = _ffiBind.mainGetDataDirIos(appDir: _dir);
+        } else if (isOhos) {
+          _homeDir = _dir;
         } else {
           // no need to set home dir
         }
@@ -196,6 +237,9 @@ class PlatformFFI {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
+      } else if (isOhos) {
+        name = Platform.localHostname;
+        id = name.hashCode.toString();
       } else if (isLinux) {
         LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
         name = linuxInfo.name;
@@ -217,7 +261,7 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? '';
       }
-      if (isAndroid || isIOS) {
+      if (isAndroid || isIOS || isOhos) {
         debugPrint(
             '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       } else {
@@ -234,6 +278,22 @@ class PlatformFFI {
         appDir: _dir,
         customClientConfig: '',
       );
+      if (isOhos && isMain) {
+        await _ffiBind.mainSetLocalOption(
+          key: _kOhosHostInputCapable,
+          value: isOhosDesktop ? 'Y' : 'N',
+        );
+        final configured = await _ffiBind.mainConfigureOhosHostDisplay(
+          width: _ohosDisplayWidth,
+          height: _ohosDisplayHeight,
+          displayId: _ohosDisplayId,
+        );
+        debugPrint('OHOS host display configured: $configured');
+        final stopError = await _ffiBind.mainStopOhosHost();
+        if (stopError.isNotEmpty) {
+          debugPrint('Failed to initialize OHOS host state: $stopError');
+        }
+      }
     } catch (e) {
       debugPrintStack(label: 'initialize failed: $e');
     }
@@ -293,6 +353,126 @@ class PlatformFFI {
   void startDesktopWebListener() {}
 
   void stopDesktopWebListener() {}
+
+  Future<List<String>> getSoundInputs() async {
+    if (isOhos) {
+      return (await _toOhosChannel
+                  .invokeListMethod<String>('getAudioInputDevices') ??
+              <String>[])
+          .where((device) => device.isNotEmpty)
+          .toList();
+    }
+    return (await _ffiBind.mainGetSoundInputs())
+        .where((device) => device.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> selectSoundInput(String device) async {
+    if (!isOhos) return;
+    await _toOhosChannel
+        .invokeMethod<void>('selectAudioInputDevice', {'device': device});
+  }
+
+  Future<bool> isWindowMaximized() async {
+    if (!isOhos) return false;
+    return await _toOhosChannel.invokeMethod<bool>('isWindowMaximized') ??
+        false;
+  }
+
+  Future<void> minimizeWindow() async {
+    if (!isOhos) return;
+    await _toOhosChannel.invokeMethod<void>('minimizeWindow');
+  }
+
+  Future<bool> toggleMaximizeWindow() async {
+    if (!isOhos) return false;
+    return await _toOhosChannel.invokeMethod<bool>('toggleMaximizeWindow') ??
+        false;
+  }
+
+  Future<void> startMovingWindow() async {
+    if (!isOhos) return;
+    await _toOhosChannel.invokeMethod<void>('startMovingWindow');
+  }
+
+  Future<void> setKeepScreenOn(bool enabled) async {
+    if (!isOhos) return;
+    await _toOhosChannel
+        .invokeMethod<void>('setKeepScreenOn', {'enabled': enabled});
+  }
+
+  Future<String> startOhosHost() async {
+    if (!isOhos) return 'OHOS host is unavailable';
+    await _ffiBind.mainSetLocalOption(
+      key: _kOhosHostInputCapable,
+      value: isOhosDesktop ? 'Y' : 'N',
+    );
+    try {
+      final displayInfo = await _toOhosChannel
+          .invokeMapMethod<String, dynamic>('getDefaultDisplayInfo');
+      final displayId = displayInfo?['displayId'] as int? ?? 0;
+      final width = displayInfo?['width'] as int? ?? 0;
+      final height = displayInfo?['height'] as int? ?? 0;
+      if (width > 0 && height > 0) {
+        _ohosDisplayId = displayId;
+        _ohosDisplayWidth = width;
+        _ohosDisplayHeight = height;
+        final configured = await _ffiBind.mainConfigureOhosHostDisplay(
+          width: width,
+          height: height,
+          displayId: displayId,
+        );
+        if (!configured) {
+          return 'Failed to configure the HarmonyOS host display';
+        }
+      }
+    } catch (error) {
+      return 'Failed to read the HarmonyOS display: $error';
+    }
+    try {
+      final microphoneGranted = await _toOhosChannel
+              .invokeMethod<bool>('ensureMicrophonePermission') ??
+          false;
+      if (!microphoneGranted) {
+        return 'Microphone permission is required for HarmonyOS hosting';
+      }
+    } catch (error) {
+      return 'Failed to request HarmonyOS microphone permission: $error';
+    }
+    // READ_PASTEBOARD is a restricted ACL permission. Keep host clipboard
+    // fail-closed until the Flutter bundle has a matching privileged profile.
+    await _ffiBind.mainSetOhosHostClipboardEnabled(enabled: false);
+    final error = await _ffiBind.mainStartOhosHost();
+    if (error.isNotEmpty) {
+      await _ffiBind.mainSetOhosHostClipboardEnabled(enabled: false);
+      return error;
+    }
+    try {
+      await _toOhosChannel.invokeMethod<void>('startContinuousTask');
+      return '';
+    } catch (error) {
+      await _ffiBind.mainStopOhosHost();
+      return 'Failed to start the HarmonyOS continuous task: $error';
+    }
+  }
+
+  Future<String> stopOhosHost() async {
+    if (!isOhos) return '';
+    final error = await _ffiBind.mainStopOhosHost();
+    try {
+      await _toOhosChannel.invokeMethod<void>('stopContinuousTask');
+    } catch (backgroundError) {
+      if (error.isEmpty) {
+        return 'Failed to stop the HarmonyOS continuous task: $backgroundError';
+      }
+    }
+    return error;
+  }
+
+  Future<void> closeWindow() async {
+    if (!isOhos) return;
+    await _toOhosChannel.invokeMethod<void>('closeWindow');
+  }
 
   void setMethodCallHandler(FMethod callback) {
     _toAndroidChannel.setMethodCallHandler((call) async {
