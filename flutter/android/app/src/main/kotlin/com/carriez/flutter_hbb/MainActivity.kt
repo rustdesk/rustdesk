@@ -65,6 +65,11 @@ class MainActivity : FlutterActivity() {
         ) : PendingPicker()
     }
 
+    private data class ExportSource(
+        val file: File,
+        val children: List<ExportSource>?
+    )
+
     private var pendingPicker: PendingPicker? = null
 
     private var isAudioStart = false
@@ -172,12 +177,13 @@ class MainActivity : FlutterActivity() {
                 pending.result.success(null)
                 return
             }
-            pending.result.success(
-                mapOf(
+            thread {
+                val selected = mapOf(
                     "uri" to treeUri.toString(),
                     "name" to (treeDisplayName(treeUri) ?: "Imported")
                 )
-            )
+                runOnUiThread { pending.result.success(selected) }
+            }
             return
         }
         if (requestCode == REQ_EXPORT_FILES) {
@@ -193,13 +199,12 @@ class MainActivity : FlutterActivity() {
                 var failed = pending.rejected
                 var processed = 0
                 try {
+                    val sources = pending.sources.map { snapshotExportSource(it) }
                     val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
-                    pending.sources.forEach { source ->
-                        val ok = if (source.isDirectory) {
-                            copyDirToTree(treeUri, rootDocId, source)
-                        } else {
-                            copyFileToTree(treeUri, rootDocId, source)
-                        }
+                    sources.forEach { source ->
+                        val ok = source?.let {
+                            copyExportSourceToTree(treeUri, rootDocId, it)
+                        } ?: false
                         if (ok) exported++ else failed++
                         processed++
                     }
@@ -669,6 +674,31 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun snapshotExportSource(source: File): ExportSource? {
+        val safeSource = canonicalExportSource(source.path) ?: return null
+        if (safeSource.isFile) return ExportSource(safeSource, null)
+        val sourceChildren = safeSource.listFiles() ?: return null
+        val children = ArrayList<ExportSource>(sourceChildren.size)
+        for (child in sourceChildren) {
+            val snapshot = snapshotExportSource(child) ?: return null
+            children.add(snapshot)
+        }
+        return ExportSource(safeSource, children)
+    }
+
+    private fun copyExportSourceToTree(
+        treeUri: Uri,
+        parentDocId: String,
+        source: ExportSource
+    ): Boolean {
+        val children = source.children
+        return if (children == null) {
+            copyFileToTree(treeUri, parentDocId, source.file)
+        } else {
+            copyDirToTree(treeUri, parentDocId, source)
+        }
+    }
+
     private fun treeDisplayName(treeUri: Uri): String? {
         return try {
             val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
@@ -753,7 +783,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun copyFileToTree(treeUri: Uri, parentDocId: String, source: File): Boolean {
-        val safeSource = canonicalExportSource(source.path) ?: return false
+        val safeSource = canonicalExportSource(source.path)?.takeIf { it.isFile } ?: return false
         return try {
             val mime = MimeTypeMap.getSingleton()
                 .getMimeTypeFromExtension(safeSource.extension.lowercase())
@@ -775,8 +805,14 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun copyDirToTree(treeUri: Uri, parentDocId: String, source: File): Boolean {
-        val safeSource = canonicalExportSource(source.path) ?: return false
+    private fun copyDirToTree(
+        treeUri: Uri,
+        parentDocId: String,
+        source: ExportSource
+    ): Boolean {
+        val children = source.children ?: return false
+        val safeSource = canonicalExportSource(source.file.path)?.takeIf { it.isDirectory }
+            ?: return false
         val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId)
         var dirDocId = findChildDocId(treeUri, parentDocId, safeSource.name)
         if (dirDocId == null) {
@@ -795,13 +831,8 @@ class MainActivity : FlutterActivity() {
         if (dirDocId == null) return false
 
         var ok = true
-        val children = safeSource.listFiles() ?: return false
         children.forEach { child ->
-            val childOk = if (child.isDirectory) {
-                copyDirToTree(treeUri, dirDocId, child)
-            } else {
-                copyFileToTree(treeUri, dirDocId, child)
-            }
+            val childOk = copyExportSourceToTree(treeUri, dirDocId, child)
             if (!childOk) ok = false
         }
         return ok

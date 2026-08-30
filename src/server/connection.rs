@@ -2021,11 +2021,17 @@ impl Connection {
         self.update_scoped_login_options().await;
         if let Some((dir, show_hidden)) = self.file_transfer.clone() {
             self.keyboard = false;
-            let dir = if !dir.is_empty() && std::path::Path::new(&dir).is_dir() {
-                &dir
-            } else {
-                ""
-            };
+            let is_existing_dir = !dir.is_empty() && std::path::Path::new(&dir).is_dir();
+            let is_allowed_dir =
+                is_existing_dir && crate::common::is_peer_path_allowed(&dir, false);
+            #[cfg(target_os = "android")]
+            if is_existing_dir && !is_allowed_dir {
+                log::warn!(
+                    "Use the app workspace because the initial file-transfer directory is outside it: {}",
+                    dir
+                );
+            }
+            let dir = if is_allowed_dir { &dir } else { "" };
             if !wait_session_id_confirm {
                 self.read_dir(dir, show_hidden);
             } else {
@@ -3324,7 +3330,7 @@ impl Connection {
                                     Some((rd.path.as_str(), -1, false))
                                 }
                                 Some(file_action::Union::ReadDir(rd)) => {
-                                    Some((rd.path.as_str(), -1, true))
+                                    Some((rd.path.as_str(), 0, true))
                                 }
                                 Some(file_action::Union::AllFiles(f)) => {
                                     Some((f.path.as_str(), f.id, false))
