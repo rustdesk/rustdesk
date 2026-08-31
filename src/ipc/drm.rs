@@ -900,7 +900,6 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     let mut credit: i32 = DRM_FRAME_CREDIT;
     let mut credit_since = std::time::Instant::now();
     let mut held_frame: Option<DrmProducerMsg> = None;
-    let mut last_cursor_pos_sent: Option<(i32, i32)> = None;
     loop {
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
         // While gated the worker does not grab, so it cannot advance its own MAX_STALLED watchdog: a
@@ -995,13 +994,12 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     conn.send_raw(Bytes::from(colors)).await?;
                 }
                 DrmProducerMsg::CursorPos { .. } => {
-                    // The payload is only a wakeup; the slot holds the freshest position, and a
-                    // value already sent never goes out again.
+                    // The payload is only a wakeup; the slot holds the freshest position, which
+                    // goes out on every wakeup, REPEATS INCLUDED: consecutive equal positions
+                    // are the consumer's stillness signal for the hotspot calibration, so
+                    // deduplicating here would keep it from ever settling.
                     if let Some((x, y)) = cursor_pos_slot.take() {
-                        if last_cursor_pos_sent != Some((x, y)) {
-                            last_cursor_pos_sent = Some((x, y));
-                            conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
-                        }
+                        conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
                     }
                 }
                 DrmProducerMsg::Displays(_) => {}
@@ -1010,10 +1008,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         }
         // Wakeups may drop on a full queue, so the slot is read once more after every drain.
         if let Some((x, y)) = cursor_pos_slot.take() {
-            if last_cursor_pos_sent != Some((x, y)) {
-                last_cursor_pos_sent = Some((x, y));
-                conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
-            }
+            conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
         }
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
         if credit <= 0 {
