@@ -164,6 +164,9 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
                 return false
             }
             recorder.startRecording()
+            if (recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                throw IllegalStateException("AudioRecord failed to enter recording state")
+            }
             audioRecordStat = true
             val captureThread = thread(start = false) { captureAudio(reader, recorder) }
             acquireAudioFramePublisher()
@@ -206,11 +209,9 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         if (!isSupportVoiceCall()) {
             return true
         }
-        if (isVideoStart()) {
-            switchOutVoiceCall(mediaProjection)
-        }
+        val switched = !isVideoStart() || switchOutVoiceCall(mediaProjection)
         tryReleaseAudio()
-        return true
+        return switched
     }
 
     @RequiresApi(Build.VERSION_CODES.M)

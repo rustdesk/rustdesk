@@ -467,6 +467,7 @@ class MainService : Service() {
         val hadProjection = mediaProjection != null
         if (!setMediaProjectionForegroundService(true)) {
             if (!hadProjection) {
+                cancelMediaProjectionRecovery()
                 _isReady = false
                 checkMediaPermission()
             }
@@ -476,6 +477,7 @@ class MainService : Service() {
             mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, resultIntent)
         if (projection == null) {
             if (!hadProjection) {
+                cancelMediaProjectionRecovery()
                 _isReady = false
                 setMediaProjectionForegroundService(false)
                 checkMediaPermission()
@@ -519,10 +521,9 @@ class MainService : Service() {
 
     @Synchronized
     private fun stopMicrophoneCapture(stopAudio: () -> Boolean): Boolean {
-        if (!stopAudio()) {
-            return false
-        }
-        return setMicrophoneForegroundService(false)
+        val stopped = stopAudio()
+        val foregroundServiceUpdated = setMicrophoneForegroundService(false)
+        return stopped && foregroundServiceUpdated
     }
 
     @Synchronized
