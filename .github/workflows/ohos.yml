@@ -12,7 +12,7 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-rustdesk-ohos-flutter:
