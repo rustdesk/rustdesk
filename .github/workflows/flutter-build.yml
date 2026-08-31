@@ -31,7 +31,7 @@ env:
   # engine is 3.44. Every other platform stays on FLUTTER_VERSION (3.24.5) until Windows 7
   # support is restored after the upstream-wide Flutter bump. The arm64 job patches the few
   # 3.44-only source/pubspec changes on the fly (see "Patch RustDesk sources for Flutter 3.44").
-  FLUTTER_WINDOWS_ARM_VERSION: "3.44.8"
+  FLUTTER_WINDOWS_ARM_VERSION: "3.44.9"
   # for arm64 linux because official Dart SDK does not work
   FLUTTER_ELINUX_VERSION: "3.16.9"
   TAG_NAME: "${{ inputs.upload-tag }}"
