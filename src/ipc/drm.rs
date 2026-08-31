@@ -1180,7 +1180,6 @@ fn drm_capture_worker(
                 // can never block this thread away from grabbing frames. The cadence below only
                 // bounds wakeups for a still cursor; a stale streak decimates to one in eight,
                 // which the late-input reopen path tolerates (it needs SOME tick, not every one).
-                cursor_pos.store(pos.0, pos.1);
                 let changed = last_pos_sent != Some(pos);
                 if changed {
                     pos_streak = 0;
@@ -1189,6 +1188,11 @@ fn drm_capture_worker(
                     pos_streak = pos_streak.saturating_add(1);
                 }
                 if changed || pos_streak <= 40 || pos_streak % 8 == 0 {
+                    // The store lives INSIDE the cadence gate: the connection loop iterates per
+                    // frame and re-reads the slot after every drain, so a store on every tick
+                    // would defeat the one-in-eight idle decimation the wire contract documents.
+                    // Nothing is lost - a skipped store always carries the value already stored.
+                    cursor_pos.store(pos.0, pos.1);
                     let _ = frame_tx.try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 });
                 }
             }
