@@ -1650,8 +1650,15 @@ class FfiModel with ChangeNotifier {
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
+        parent.target?.imageModel.reconcileDisplays(newDisplays.length);
+        bind.sessionSwitchDisplay(
+          isDesktop: isDesktop,
+          sessionId: sessionId,
+          value: Int32List.fromList(
+              List.generate(newDisplays.length, (index) => index)),
+        );
+        sessionRefreshVideo(sessionId, _pi);
         updateCurDisplay(sessionId);
-        // to-do: What if the displays are changed?
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
@@ -1930,6 +1937,17 @@ class ImageModel with ChangeNotifier {
       return _images[display];
     }
     return _images.isEmpty ? _image : null;
+  }
+
+  void reconcileDisplays(int newDisplayCount) {
+    final invalidKeys =
+        _images.keys.where((k) => k >= newDisplayCount).toList();
+    for (final k in invalidKeys) {
+      final img = _images.remove(k);
+      if (img != null) {
+        _scheduleDispose(img);
+      }
+    }
   }
 
   String id = '';
