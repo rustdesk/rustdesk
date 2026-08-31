@@ -182,19 +182,41 @@ struct EnumerationTrust {
     uninspected: bool,
 }
 
-/// Card nodes visible in /dev/dri, whether or not they can be opened.
-fn dri_card_count() -> usize {
-    std::fs::read_dir("/dev/dri")
+/// Card nodes that can DRIVE an output: a card with no `/sys/class/drm/cardN-*` connector
+/// directory (a render-only node like v3d or tegra) is display-incapable by construction, and
+/// counting it would keep absence unprovable forever on every split render/display SoC.
+fn dri_display_card_count() -> usize {
+    let Ok(rd) = std::fs::read_dir("/sys/class/drm") else {
+        return 0;
+    };
+    let mut cards = std::collections::HashSet::new();
+    let mut with_connector = std::collections::HashSet::new();
+    for e in rd.filter_map(|e| e.ok()) {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if let Some((card, _)) = name.split_once('-') {
+            if card.starts_with("card") {
+                with_connector.insert(card.to_owned());
+            }
+        } else if name.starts_with("card") && name[4..].chars().all(|c| c.is_ascii_digit()) {
+            cards.insert(name);
+        }
+    }
+    cards.intersection(&with_connector).count()
+}
+
+/// Whether `/dev/dri/cardN` has any sysfs connector: a failed open of a connector-less card says
+/// nothing about display presence.
+fn dev_card_has_connectors(path: &str) -> bool {
+    let Some(card) = std::path::Path::new(path).file_name().and_then(|n| n.to_str()) else {
+        return true;
+    };
+    let prefix = format!("{card}-");
+    std::fs::read_dir("/sys/class/drm")
         .map(|rd| {
             rd.filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_name()
-                        .to_str()
-                        .is_some_and(|n| n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()))
-                })
-                .count()
+                .any(|e| e.file_name().to_string_lossy().starts_with(&prefix))
         })
-        .unwrap_or(0)
+        .unwrap_or(true)
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
@@ -220,8 +242,9 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         let mut undriven_total = Vec::new();
         let mut any_opened = false;
         // list_devices silently skips card nodes it cannot open, so absence is only proven when
-        // its list covers every node /dev/dri shows.
-        let mut uninspected = devices.len() < dri_card_count();
+        // its list covers every card that could drive an output (render-only nodes are skipped
+        // by design and prove nothing).
+        let mut uninspected = devices.len() < dri_display_card_count();
         let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
@@ -284,7 +307,8 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
                 }
                 None => uninspected = true,
             }
-        } else {
+        } else if dev_card_has_connectors(path) {
+            // A render-only card (v3d, tegra) fails this open by design and proves nothing.
             uninspected = true;
         }
     }
@@ -446,6 +470,7 @@ fn drm_wake_displays(reason: &str) -> bool {
 /// back to the portal, which then asks for consent on a screen nobody can look at. Said on the
 /// edge rather than every poll.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 enum PresenceVerdict {
     /// Nothing completed an enumeration; presence is unknowable this round.
     Unknown,
@@ -470,40 +495,34 @@ fn presence_verdict(any_display: bool, any_undriven: bool, trust: EnumerationTru
 }
 
 fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String], trust: EnumerationTrust) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static NO_OUTPUT: AtomicBool = AtomicBool::new(false);
-    static NO_PROBE: AtomicBool = AtomicBool::new(false);
-    match presence_verdict(!displays.is_empty(), !undriven.is_empty(), trust) {
-        PresenceVerdict::Unknown => {
-            if !NO_PROBE.swap(true, Ordering::Relaxed) {
-                log::warn!(
-                    "drm: no DRM device completed a connector enumeration, so display presence is \
-                     unknown (each failure logged its own error above)"
-                );
-            }
-        }
-        PresenceVerdict::UnprovenAbsence => {
-            // Not the dummy-plug advice: an uninspected sibling card may be driving a display.
-            if !NO_PROBE.swap(true, Ordering::Relaxed) {
-                log::warn!(
-                    "drm: every card that could be enumerated reports no display, but at least one \
-                     card could not be inspected; display presence is unknown"
-                );
-            }
-        }
-        PresenceVerdict::NoOutput => {
-            NO_PROBE.store(false, Ordering::Relaxed);
-            if !NO_OUTPUT.swap(true, Ordering::Relaxed) {
-                log::warn!(
-                    "drm: no connector reports a display, so this machine has no scanout to capture. \
-                     Attach a display or a dummy plug; a headless box can also force a connector on \
-                     (echo on > /sys/class/drm/<card>-<connector>/status)"
-                );
-            }
-        }
+    use std::sync::atomic::{AtomicU8, Ordering};
+    // One latch holding the LAST verdict, not per-state booleans: every transition between the
+    // four states is a different diagnosis and each deserves its line, exactly once.
+    static LAST: AtomicU8 = AtomicU8::new(u8::MAX);
+    let verdict = presence_verdict(!displays.is_empty(), !undriven.is_empty(), trust);
+    let prev = LAST.swap(verdict as u8, Ordering::Relaxed);
+    if prev == verdict as u8 {
+        return;
+    }
+    match verdict {
+        PresenceVerdict::Unknown => log::warn!(
+            "drm: no DRM device completed a connector enumeration, so display presence is \
+             unknown (each failure logged its own error above)"
+        ),
+        // Not the dummy-plug advice: an uninspected sibling card may be driving a display.
+        PresenceVerdict::UnprovenAbsence => log::warn!(
+            "drm: every card that could be enumerated reports no display, but at least one \
+             card could not be inspected; display presence is unknown"
+        ),
+        PresenceVerdict::NoOutput => log::warn!(
+            "drm: no connector reports a display, so this machine has no scanout to capture. \
+             Attach a display or a dummy plug; a headless box can also force a connector on \
+             (echo on > /sys/class/drm/<card>-<connector>/status)"
+        ),
         PresenceVerdict::SomeOutput => {
-            NO_PROBE.store(false, Ordering::Relaxed);
-            if NO_OUTPUT.swap(false, Ordering::Relaxed) {
+            // The very first verdict of the process being SomeOutput is the ordinary boot; only
+            // a RETURN to it closes an earlier warning.
+            if prev != u8::MAX {
                 log::info!("drm: an output is present again");
             }
         }
@@ -649,10 +668,15 @@ fn schedule_drm_cache_refresh() {
                         EnumerationTrust { enumerated: false, uninspected: true },
                     )
                 });
-            // The hotplug edge reports presence too; the edge-latched statics keep it idempotent
+            // The hotplug edge reports presence too; the verdict latch keeps it idempotent
             // across this worker and the handshake path.
             note_output_presence(&fresh, &undriven, trust);
-            let changed = {
+            let changed = if !trust.enumerated {
+                // A round that measured nothing must not wipe a good cache: the stale topology
+                // beats an empty one that only means the measurement failed.
+                log::debug!("drm: keeping the cached topology through a failed enumeration");
+                false
+            } else {
                 let mut cache = match DRM_DISPLAY_CACHE.lock() {
                     Ok(g) => g,
                     Err(poisoned) => poisoned.into_inner(),
