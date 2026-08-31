@@ -746,6 +746,17 @@ fn tick(state: &mut State) {
         return;
     }
 
+    // Reaching here with our firmware entry still present means ownership could not be attributed
+    // to ANY connector: not by EDID, not by a unique name, not by this process's record (a restart
+    // cleared it, and a rebind can have twinned the name since). An unattributable hold cannot be
+    // managed - left alone it counts as a real output and wedges both arming and release - so give
+    // it back; the next tick re-forces cleanly if the machine is truly headless.
+    if state.forced.is_none() && !connectors_named_by_our_entries().is_empty() {
+        log::info!("headless display: releasing a hold this process cannot attribute");
+        let _ = disable(state);
+        return;
+    }
+
     match state.last_failure {
         Some(t) if t.elapsed() < RETRY_AFTER_FAILURE => return,
         Some(_) => state.last_failure = None,
