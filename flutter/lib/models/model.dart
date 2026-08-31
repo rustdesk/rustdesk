@@ -1646,18 +1646,24 @@ class FfiModel with ChangeNotifier {
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
+      final oldDisplays = List<Display>.of(_pi.displays);
+      final topologyChanged = !listEquals(oldDisplays, newDisplays);
+      if (topologyChanged) {
+        parent.target?.imageModel.invalidateDisplayImages();
+      }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
-        parent.target?.imageModel.reconcileDisplays(newDisplays.length);
-        bind.sessionSwitchDisplay(
-          isDesktop: isDesktop,
-          sessionId: sessionId,
-          value: Int32List.fromList(
-              List.generate(newDisplays.length, (index) => index)),
-        );
-        sessionRefreshVideo(sessionId, _pi);
+        if (topologyChanged) {
+          bind.sessionSwitchDisplay(
+            isDesktop: isDesktop,
+            sessionId: sessionId,
+            value: Int32List.fromList(
+                List.generate(newDisplays.length, (index) => index)),
+          );
+          sessionRefreshVideo(sessionId, _pi);
+        }
         updateCurDisplay(sessionId);
       } else {
         if (_pi.currentDisplay >= 0 &&
@@ -1939,15 +1945,11 @@ class ImageModel with ChangeNotifier {
     return _images.isEmpty ? _image : null;
   }
 
-  void reconcileDisplays(int newDisplayCount) {
-    final invalidKeys =
-        _images.keys.where((k) => k >= newDisplayCount).toList();
-    for (final k in invalidKeys) {
-      final img = _images.remove(k);
-      if (img != null) {
-        _scheduleDispose(img);
-      }
+  void invalidateDisplayImages() {
+    for (final img in _images.values) {
+      _scheduleDispose(img);
     }
+    _images.clear();
   }
 
   String id = '';
@@ -1969,20 +1971,14 @@ class ImageModel with ChangeNotifier {
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
   clearImage() {
-    final toDispose = <ui.Image>{};
-    if (_image != null) toDispose.add(_image!);
-    toDispose.addAll(_images.values);
-    toDispose.addAll(_pendingDispose);
-    _image = null;
-    _images.clear();
-    _pendingDispose.clear();
-    for (var img in toDispose) {
-      try {
-        img.dispose();
-      } catch (e) {
-        // ignore already disposed
-      }
+    if (_image != null) {
+      _scheduleDispose(_image);
+      _image = null;
     }
+    for (final img in _images.values) {
+      _scheduleDispose(img);
+    }
+    _images.clear();
   }
 
   bool _webDecodingRgba = false;
