@@ -87,7 +87,11 @@ cargo build \
   --lib \
   "$@"
 
-artifact="$repo_root/target/aarch64-unknown-linux-ohos/release/librustdesk_ohos_flutter_bridge.so"
+cargo_target_dir="${CARGO_TARGET_DIR:-$repo_root/target}"
+if [[ "$cargo_target_dir" != /* ]]; then
+  cargo_target_dir="$repo_root/$cargo_target_dir"
+fi
+artifact="$cargo_target_dir/aarch64-unknown-linux-ohos/release/librustdesk_ohos_flutter_bridge.so"
 if [[ ! -s "$artifact" ]]; then
   echo "OHOS FFI build did not produce $artifact" >&2
   exit 1

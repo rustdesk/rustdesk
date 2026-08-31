@@ -1232,7 +1232,7 @@ fn handle_one_frame(
 
 #[inline]
 pub fn refresh() {
-    #[cfg(any(target_os = "android", target_env = "ohos"))]
+    #[cfg(target_os = "android")]
     Display::refresh_size();
 }
 

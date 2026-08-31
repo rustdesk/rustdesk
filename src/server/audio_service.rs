@@ -13,10 +13,9 @@
 // https://github.com/krruzic/pulsectl
 
 use super::*;
-#[cfg(any(
-    not(any(target_os = "linux", target_os = "android")),
-    target_env = "ohos"
-))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use hbb_common::anyhow::anyhow;
+#[cfg(target_env = "ohos")]
 use hbb_common::anyhow::anyhow;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -125,7 +124,7 @@ mod pa_impl {
         #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         #[cfg(target_os = "android")]
-        let mut mobile_data = vec![];
+        let mut android_data = vec![];
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
@@ -155,12 +154,12 @@ mod pa_impl {
             }
 
             #[cfg(target_os = "android")]
-            if scrap::android::ffi::get_audio_raw(&mut mobile_data, &mut vec![]).is_some() {
+            if scrap::android::ffi::get_audio_raw(&mut android_data, &mut vec![]).is_some() {
                 // Keep `android_data` as the reusable receive buffer: overwriting it with
                 // an exact-capacity aligned buffer only made the next `get_audio_raw`
                 // reallocate it, which dropped the alignment again.
-                let aligned = align_to_32_if_needed(&mobile_data);
-                let bytes = aligned.as_deref().unwrap_or(&mobile_data[..]);
+                let aligned = align_to_32_if_needed(&android_data);
+                let bytes = aligned.as_deref().unwrap_or(&android_data[..]);
                 // SAFETY: `bytes` is 4-byte aligned (either checked above or freshly
                 // allocated with align 4), and only whole f32s are read from it.
                 let data = unsafe {

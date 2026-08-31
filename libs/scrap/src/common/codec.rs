@@ -717,11 +717,6 @@ impl Decoder {
         self.valid
     }
 
-    #[cfg(target_env = "ohos")]
-    pub fn is_surface_mode(&self) -> bool {
-        self.ohos.is_surface_mode()
-    }
-
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn handle_video_frame(
         &mut self,

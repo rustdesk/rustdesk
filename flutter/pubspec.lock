@@ -495,10 +495,12 @@ packages:
   flex_color_picker:
     dependency: "direct main"
     description:
-      path: "third_party/flex_color_picker_ohos"
-      relative: true
-    source: path
-    version: "3.6.0+ohos.1"
+      path: "."
+      ref: "29d06e3368448ebd2eebdad4766d1cb4d688a0c2"
+      resolved-ref: "29d06e3368448ebd2eebdad4766d1cb4d688a0c2"
+      url: "https://github.com/FrankHan052176/flex_color_picker"
+    source: git
+    version: "3.6.0"
   flex_seed_scheme:
     dependency: transitive
     description:
@@ -701,10 +703,10 @@ packages:
     dependency: "direct main"
     description:
       name: google_fonts
-      sha256: e3cb3ee6b47fd2472c23de6da5744796a4da195137759ddb3fbcc9467b7b3c7d
+      sha256: ba03d03bcaa2f6cb7bd920e3b5027181db75ab524f8891c8bc3aa603885b8055
       url: "https://pub.dev"
     source: hosted
-    version: "8.2.1"
+    version: "6.3.3"
   graphs:
     dependency: transitive
     description:
@@ -1188,10 +1190,12 @@ packages:
   settings_ui:
     dependency: "direct main"
     description:
-      path: "third_party/settings_ui_ohos"
-      relative: true
-    source: path
-    version: "2.0.2+ohos.1"
+      path: "."
+      ref: "79b5c4712fc4594e94aacd9e2bc2996d8de1fd5d"
+      resolved-ref: "79b5c4712fc4594e94aacd9e2bc2996d8de1fd5d"
+      url: "https://github.com/FrankHan052176/flutter-settings-ui"
+    source: git
+    version: "2.0.2"
   shelf:
     dependency: transitive
     description:
@@ -1652,10 +1656,12 @@ packages:
   xterm:
     dependency: "direct main"
     description:
-      path: "third_party/xterm_ohos"
-      relative: true
-    source: path
-    version: "4.0.0+ohos.1"
+      path: "."
+      ref: e901d133ceba2b5e3a54f690cd45b4b0988ff158
+      resolved-ref: e901d133ceba2b5e3a54f690cd45b4b0988ff158
+      url: "https://github.com/FrankHan052176/xterm.dart"
+    source: git
+    version: "4.0.0"
   yaml:
     dependency: transitive
     description:
@@ -1689,5 +1695,5 @@ packages:
     source: hosted
     version: "0.2.4"
 sdks:
-  dart: ">=3.10.0 <4.0.0"
-  flutter: ">=3.38.0"
+  dart: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"

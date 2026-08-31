@@ -28,12 +28,14 @@ use hbb_common::{
 use rdev::{Event, EventType::*, KeyCode};
 #[cfg(all(feature = "vram", feature = "flutter"))]
 use std::ffi::c_void;
+#[cfg(target_env = "ohos")]
+use std::sync::atomic::AtomicBool;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
     time::SystemTime,
