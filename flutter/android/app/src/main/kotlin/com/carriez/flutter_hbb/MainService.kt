@@ -216,6 +216,7 @@ class MainService : Service() {
     // video
     private var mediaProjection: MediaProjection? = null
     private var mediaProjectionCallback: MediaProjection.Callback? = null
+    private var captureRestartPending = false
     private var mediaProjectionForegroundService = false
     private var microphoneForegroundService = false
     private var surface: Surface? = null
@@ -438,10 +439,11 @@ class MainService : Service() {
         mediaProjectionManager: MediaProjectionManager,
         resultIntent: Intent,
     ) {
-        val restartCapture = isStart
-        if (restartCapture) {
+        val restartCapture = isStart || captureRestartPending
+        if (isStart) {
             stopCapture()
         }
+        captureRestartPending = restartCapture
         virtualDisplay?.release()
         virtualDisplay = null
         releaseMediaProjection()
@@ -469,6 +471,7 @@ class MainService : Service() {
         _isReady = true
         checkMediaPermission()
         if (restartCapture) {
+            captureRestartPending = false
             startCapture()
         }
     }
@@ -532,10 +535,14 @@ class MainService : Service() {
         Log.d(logTag, "Start Capture")
         surface = createSurface()
 
-        if (useVP9) {
+        val videoStarted = if (useVP9) {
             startVP9VideoRecorder(mediaProjection!!)
         } else {
             startRawVideoRecorder(mediaProjection!!)
+        }
+        if (!videoStarted) {
+            releaseFailedVideoCapture()
+            return false
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -553,9 +560,23 @@ class MainService : Service() {
         return true
     }
 
+    private fun releaseFailedVideoCapture() {
+        imageReader?.close()
+        imageReader = null
+        videoEncoder?.let {
+            it.signalEndOfInputStream()
+            it.stop()
+            it.release()
+        }
+        videoEncoder = null
+        surface?.release()
+        surface = null
+    }
+
     @Synchronized
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
+        captureRestartPending = false
         FFI.setFrameRawEnable("video",false)
         _isStart = false
         MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
@@ -630,47 +651,68 @@ class MainService : Service() {
         return isReady
     }
 
-    private fun startRawVideoRecorder(mp: MediaProjection) {
+    private fun startRawVideoRecorder(mp: MediaProjection): Boolean {
         Log.d(logTag, "startRawVideoRecorder,screen info:$SCREEN_INFO")
-        if (surface == null) {
+        val captureSurface = surface
+        if (captureSurface == null) {
             Log.d(logTag, "startRawVideoRecorder failed,surface is null")
-            return
+            return false
         }
-        createOrSetVirtualDisplay(mp, surface!!)
+        return createOrSetVirtualDisplay(mp, captureSurface)
     }
 
-    private fun startVP9VideoRecorder(mp: MediaProjection) {
+    private fun startVP9VideoRecorder(mp: MediaProjection): Boolean {
         createMediaCodec()
-        videoEncoder?.let {
-            surface = it.createInputSurface()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                surface!!.setFrameRate(1F, FRAME_RATE_COMPATIBILITY_DEFAULT)
-            }
-            it.setCallback(cb)
-            it.start()
-            createOrSetVirtualDisplay(mp, surface!!)
+        val encoder = videoEncoder ?: return false
+        val inputSurface = encoder.createInputSurface()
+        surface = inputSurface
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            inputSurface.setFrameRate(1F, FRAME_RATE_COMPATIBILITY_DEFAULT)
         }
+        encoder.setCallback(cb)
+        encoder.start()
+        return createOrSetVirtualDisplay(mp, inputSurface)
     }
 
     // https://github.com/bk138/droidVNC-NG/blob/b79af62db5a1c08ed94e6a91464859ffed6f4e97/app/src/main/java/net/christianbeier/droidvnc_ng/MediaProjectionService.java#L250
     // Reuse virtualDisplay if it exists, to avoid media projection confirmation dialog every connection.
-    private fun createOrSetVirtualDisplay(mp: MediaProjection, s: Surface) {
-        try {
-            virtualDisplay?.let {
-                it.resize(SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi)
-                it.setSurface(s)
-            } ?: let {
-                virtualDisplay = mp.createVirtualDisplay(
+    private fun createOrSetVirtualDisplay(mp: MediaProjection, s: Surface): Boolean {
+        return try {
+            val existingDisplay = virtualDisplay
+            if (existingDisplay != null) {
+                existingDisplay.resize(SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi)
+                existingDisplay.setSurface(s)
+                true
+            } else {
+                val display = mp.createVirtualDisplay(
                     "RustDeskVD",
                     SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                     s, null, null
                 )
+                if (display == null) {
+                    Log.e(logTag, "createOrSetVirtualDisplay failed")
+                    handleVirtualDisplayFailure()
+                } else {
+                    virtualDisplay = display
+                    true
+                }
             }
         } catch (e: SecurityException) {
-            Log.w(logTag, "createOrSetVirtualDisplay: got SecurityException, re-requesting confirmation");
-            // This initiates a prompt dialog for the user to confirm screen projection.
-            requestMediaProjection()
+            Log.w(logTag, "createOrSetVirtualDisplay: got SecurityException", e)
+            handleVirtualDisplayFailure()
         }
+    }
+
+    private fun handleVirtualDisplayFailure(): Boolean {
+        captureRestartPending = true
+        virtualDisplay?.release()
+        virtualDisplay = null
+        releaseMediaProjection()
+        setMediaProjectionForegroundService(false)
+        _isReady = false
+        checkMediaPermission()
+        requestMediaProjection()
+        return false
     }
 
     private val cb: MediaCodec.Callback = object : MediaCodec.Callback() {
