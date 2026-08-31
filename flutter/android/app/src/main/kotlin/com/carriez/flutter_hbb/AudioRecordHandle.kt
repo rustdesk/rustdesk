@@ -186,6 +186,10 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         }
     }
 
+    fun isVoiceCallActive(): Boolean {
+        return audioRecorder?.audioSource == MediaRecorder.AudioSource.VOICE_COMMUNICATION
+    }
+
     fun onVoiceCallStarted(mediaProjection: MediaProjection?): Boolean {
         if (!isSupportVoiceCall()) {
             return false

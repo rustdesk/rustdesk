@@ -217,6 +217,7 @@ class MainService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var mediaProjectionCallback: MediaProjection.Callback? = null
     private var captureRestartPending = false
+    private var captureRestartInVoiceCall = false
     private var mediaProjectionForegroundService = false
     private var microphoneForegroundService = false
     private var surface: Surface? = null
@@ -439,27 +440,38 @@ class MainService : Service() {
         mediaProjectionManager: MediaProjectionManager,
         resultIntent: Intent,
     ) {
-        val restartCapture = isStart || captureRestartPending
-        if (isStart) {
+        val wasCapturing = isStart
+        val restartCapture = wasCapturing || captureRestartPending
+        val restartInVoiceCall = if (wasCapturing) {
+            audioRecordHandle.isVoiceCallActive()
+        } else {
+            captureRestartInVoiceCall
+        }
+        val hadProjection = mediaProjection != null
+        if (!setMediaProjectionForegroundService(true)) {
+            if (!hadProjection) {
+                _isReady = false
+                checkMediaPermission()
+            }
+            return
+        }
+        val projection =
+            mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, resultIntent)
+        if (projection == null) {
+            if (!hadProjection) {
+                _isReady = false
+                setMediaProjectionForegroundService(false)
+                checkMediaPermission()
+            }
+            return
+        }
+        if (wasCapturing) {
             stopCapture()
         }
         captureRestartPending = restartCapture
         virtualDisplay?.release()
         virtualDisplay = null
         releaseMediaProjection()
-        if (!setMediaProjectionForegroundService(true)) {
-            _isReady = false
-            checkMediaPermission()
-            return
-        }
-        val projection =
-            mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, resultIntent)
-        if (projection == null) {
-            _isReady = false
-            setMediaProjectionForegroundService(false)
-            checkMediaPermission()
-            return
-        }
         val callback = object : MediaProjection.Callback() {
             override fun onStop() {
                 handleMediaProjectionStopped(projection)
@@ -472,7 +484,7 @@ class MainService : Service() {
         checkMediaPermission()
         if (restartCapture) {
             captureRestartPending = false
-            startCapture()
+            startCapture(restartInVoiceCall)
         }
     }
 
@@ -496,7 +508,11 @@ class MainService : Service() {
         return setMicrophoneForegroundService(false)
     }
 
+    @Synchronized
     private fun switchToVoiceCall(): Boolean {
+        if (captureRestartPending) {
+            captureRestartInVoiceCall = true
+        }
         return startMicrophoneCapture {
             audioRecordHandle.switchToVoiceCall(mediaProjection)
         }
@@ -504,25 +520,36 @@ class MainService : Service() {
 
     @Synchronized
     private fun switchOutVoiceCall(): Boolean {
+        captureRestartInVoiceCall = false
         val switched = audioRecordHandle.switchOutVoiceCall(mediaProjection)
         val foregroundServiceUpdated = setMicrophoneForegroundService(false)
         return switched && foregroundServiceUpdated
     }
 
+    @Synchronized
     fun onVoiceCallStarted(): Boolean {
+        if (captureRestartPending) {
+            captureRestartInVoiceCall = true
+        }
         return startMicrophoneCapture {
             audioRecordHandle.onVoiceCallStarted(mediaProjection)
         }
     }
 
+    @Synchronized
     fun onVoiceCallClosed(): Boolean {
+        captureRestartInVoiceCall = false
         return stopMicrophoneCapture {
             audioRecordHandle.onVoiceCallClosed(mediaProjection)
         }
     }
 
-    @Synchronized
     fun startCapture(): Boolean {
+        return startCapture(false)
+    }
+
+    @Synchronized
+    private fun startCapture(inVoiceCall: Boolean): Boolean {
         if (isStart) {
             return true
         }
@@ -530,6 +557,7 @@ class MainService : Service() {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
+        captureRestartInVoiceCall = inVoiceCall
         
         updateScreenInfo(resources.configuration.orientation)
         Log.d(logTag, "Start Capture")
@@ -541,18 +569,23 @@ class MainService : Service() {
             startRawVideoRecorder(mediaProjection!!)
         }
         if (!videoStarted) {
+            if (!captureRestartPending) {
+                captureRestartInVoiceCall = false
+            }
             releaseFailedVideoCapture()
             return false
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!audioRecordHandle.createAudioRecorder(false, mediaProjection)) {
-                Log.d(logTag, "createAudioRecorder fail")
+            val audioStarted = if (inVoiceCall) {
+                switchToVoiceCall()
             } else {
-                Log.d(logTag, "audio recorder start")
-                audioRecordHandle.startAudioRecorder()
+                audioRecordHandle.createAudioRecorder(false, mediaProjection) &&
+                        audioRecordHandle.startAudioRecorder()
             }
+            Log.d(logTag, if (audioStarted) "audio recorder start" else "audio recorder start failed")
         }
+        captureRestartInVoiceCall = false
         checkMediaPermission()
         _isStart = true
         FFI.setFrameRawEnable("video",true)
@@ -577,6 +610,7 @@ class MainService : Service() {
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
         captureRestartPending = false
+        captureRestartInVoiceCall = false
         FFI.setFrameRawEnable("video",false)
         _isStart = false
         MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
