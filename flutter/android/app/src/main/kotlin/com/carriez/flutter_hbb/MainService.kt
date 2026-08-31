@@ -218,6 +218,14 @@ class MainService : Service() {
     private var mediaProjectionCallback: MediaProjection.Callback? = null
     private var captureRestartPending = false
     private var captureRestartInVoiceCall = false
+    private val mediaProjectionResultReceiver =
+        object : ResultReceiver(Handler(Looper.getMainLooper())) {
+            override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                if (resultCode == RES_FAILED) {
+                    cancelMediaProjectionRecovery()
+                }
+            }
+        }
     private var mediaProjectionForegroundService = false
     private var microphoneForegroundService = false
     private var surface: Surface? = null
@@ -367,12 +375,21 @@ class MainService : Service() {
         updateScreenInfo(newConfig.orientation)
     }
 
-    private fun requestMediaProjection() {
+    private fun requestMediaProjection(recovery: Boolean = false) {
         val intent = Intent(this, PermissionRequestTransparentActivity::class.java).apply {
             action = ACT_REQUEST_MEDIA_PROJECTION
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            if (recovery) {
+                putExtra(EXT_MEDIA_PROJECTION_RESULT_RECEIVER, mediaProjectionResultReceiver)
+            }
         }
         startActivity(intent)
+    }
+
+    @Synchronized
+    private fun cancelMediaProjectionRecovery() {
+        captureRestartPending = false
+        captureRestartInVoiceCall = false
     }
 
     @SuppressLint("WrongConstant")
@@ -745,7 +762,7 @@ class MainService : Service() {
         setMediaProjectionForegroundService(false)
         _isReady = false
         checkMediaPermission()
-        requestMediaProjection()
+        requestMediaProjection(true)
         return false
     }
 
