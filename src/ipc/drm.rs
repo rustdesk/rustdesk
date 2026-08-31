@@ -1193,7 +1193,13 @@ fn drm_capture_worker(
                     // would defeat the one-in-eight idle decimation the wire contract documents.
                     // Nothing is lost - a skipped store always carries the value already stored.
                     cursor_pos.store(pos.0, pos.1);
-                    let _ = frame_tx.try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 });
+                    // The wakeup goes out only when this tick enqueues no frame: with frames
+                    // flowing, the post-drain slot read already delivers the position, and a
+                    // wakeup would occupy a queue slot the frame's own blocking send then waits
+                    // on behind a slow peer - cursor traffic must never block the capture path.
+                    if !matches!(grabbed, Some(Ok(_))) {
+                        let _ = frame_tx.try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 });
+                    }
                 }
             }
         }
