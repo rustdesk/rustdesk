@@ -215,20 +215,9 @@ class MainService : Service() {
 
     // video
     private var mediaProjection: MediaProjection? = null
+    private var mediaProjectionCallback: MediaProjection.Callback? = null
     private var mediaProjectionForegroundService = false
     private var microphoneForegroundService = false
-    private val mediaProjectionCallback = object : MediaProjection.Callback() {
-        override fun onStop() {
-            Log.d(logTag, "MediaProjection stopped")
-            stopCapture()
-            virtualDisplay?.release()
-            virtualDisplay = null
-            mediaProjection = null
-            _isReady = false
-            updateForegroundServiceTypes(false, false)
-            checkMediaPermission()
-        }
-    }
     private var surface: Surface? = null
     private val sendVP9Thread = Executors.newSingleThreadExecutor()
     private var videoEncoder: MediaCodec? = null
@@ -350,24 +339,7 @@ class MainService : Service() {
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
             intent.getParcelableExtra<Intent>(EXT_MEDIA_PROJECTION_RES_INTENT)?.let {
-                if (!setMediaProjectionForegroundService(true)) {
-                    _isReady = false
-                    checkMediaPermission()
-                    return@let
-                }
-                releaseMediaProjection()
-                val projection =
-                    mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
-                if (projection == null) {
-                    _isReady = false
-                    setMediaProjectionForegroundService(false)
-                    checkMediaPermission()
-                    return@let
-                }
-                projection.registerCallback(mediaProjectionCallback, Handler(Looper.getMainLooper()))
-                mediaProjection = projection
-                _isReady = true
-                checkMediaPermission()
+                replaceMediaProjection(mediaProjectionManager, it)
             } ?: let {
                 Log.d(logTag, "getParcelableExtra intent null, invoke requestMediaProjection")
                 requestMediaProjection()
@@ -423,11 +395,73 @@ class MainService : Service() {
     }
 
     private fun releaseMediaProjection() {
-        mediaProjection?.unregisterCallback(mediaProjectionCallback)
-        mediaProjection?.stop()
+        val projection = mediaProjection
+        val callback = mediaProjectionCallback
         mediaProjection = null
+        mediaProjectionCallback = null
+        if (projection != null && callback != null) {
+            projection.unregisterCallback(callback)
+        }
+        projection?.stop()
     }
 
+    @Synchronized
+    private fun handleMediaProjectionStopped(stoppedProjection: MediaProjection) {
+        if (mediaProjection !== stoppedProjection) {
+            return
+        }
+        Log.d(logTag, "MediaProjection stopped")
+        setMediaProjectionForegroundService(false)
+        stopCapture()
+        virtualDisplay?.release()
+        virtualDisplay = null
+        mediaProjection = null
+        mediaProjectionCallback = null
+        _isReady = false
+        checkMediaPermission()
+    }
+
+    @Synchronized
+    private fun replaceMediaProjection(
+        mediaProjectionManager: MediaProjectionManager,
+        resultIntent: Intent,
+    ) {
+        if (!setMediaProjectionForegroundService(true)) {
+            _isReady = false
+            checkMediaPermission()
+            return
+        }
+        val restartCapture = isStart
+        if (restartCapture) {
+            stopCapture()
+        }
+        virtualDisplay?.release()
+        virtualDisplay = null
+        releaseMediaProjection()
+        val projection =
+            mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, resultIntent)
+        if (projection == null) {
+            _isReady = false
+            setMediaProjectionForegroundService(false)
+            checkMediaPermission()
+            return
+        }
+        val callback = object : MediaProjection.Callback() {
+            override fun onStop() {
+                handleMediaProjectionStopped(projection)
+            }
+        }
+        projection.registerCallback(callback, Handler(Looper.getMainLooper()))
+        mediaProjection = projection
+        mediaProjectionCallback = callback
+        _isReady = true
+        checkMediaPermission()
+        if (restartCapture) {
+            startCapture()
+        }
+    }
+
+    @Synchronized
     private fun startMicrophoneCapture(startAudio: () -> Boolean): Boolean {
         if (!setMicrophoneForegroundService(true)) {
             return false
@@ -439,6 +473,7 @@ class MainService : Service() {
         return false
     }
 
+    @Synchronized
     private fun stopMicrophoneCapture(stopAudio: () -> Boolean): Boolean {
         if (!stopAudio()) {
             return false
@@ -452,10 +487,11 @@ class MainService : Service() {
         }
     }
 
+    @Synchronized
     private fun switchOutVoiceCall(): Boolean {
-        return stopMicrophoneCapture {
-            audioRecordHandle.switchOutVoiceCall(mediaProjection)
-        }
+        val switched = audioRecordHandle.switchOutVoiceCall(mediaProjection)
+        val foregroundServiceUpdated = setMicrophoneForegroundService(false)
+        return switched && foregroundServiceUpdated
     }
 
     fun onVoiceCallStarted(): Boolean {
@@ -470,6 +506,7 @@ class MainService : Service() {
         }
     }
 
+    @Synchronized
     fun startCapture(): Boolean {
         if (isStart) {
             return true
