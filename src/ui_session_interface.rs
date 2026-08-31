@@ -33,7 +33,7 @@ use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
     time::SystemTime,
@@ -46,7 +46,7 @@ use crate::client::{
     input_os_password, send_mouse, send_pointer_device_event, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use crate::common::GrabState;
 use crate::keyboard;
 use crate::{client::Data, client::Interface};
@@ -72,6 +72,10 @@ pub struct Session<T: InvokeUiSession> {
     pub reconnect_count: Arc<AtomicUsize>,
     pub last_audit_note: Arc<Mutex<String>>,
     pub audit_guid: Arc<Mutex<String>>,
+    #[cfg(target_env = "ohos")]
+    pub core_session_id: String,
+    #[cfg(target_env = "ohos")]
+    pub ui_active: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -173,7 +177,7 @@ impl ChangeDisplayRecord {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 impl SessionPermissionConfig {
     pub fn is_text_clipboard_required(&self) -> bool {
         *self.server_clipboard_enabled.read().unwrap()
@@ -182,7 +186,7 @@ impl SessionPermissionConfig {
             && !self.lc.read().unwrap().view_only.v
     }
 
-    #[cfg(feature = "unix-file-copy-paste")]
+    #[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
     pub fn is_file_clipboard_required(&self) -> bool {
         let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
@@ -193,7 +197,7 @@ impl SessionPermissionConfig {
 }
 
 impl<T: InvokeUiSession> Session<T> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn get_permission_config(&self) -> SessionPermissionConfig {
         SessionPermissionConfig {
             lc: self.lc.clone(),
@@ -421,7 +425,11 @@ impl<T: InvokeUiSession> Session<T> {
             && !self.lc.read().unwrap().view_only.v
     }
 
-    #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+    #[cfg(any(
+        target_os = "windows",
+        feature = "unix-file-copy-paste",
+        feature = "cliprdr-file-service"
+    ))]
     pub fn is_file_clipboard_required(&self) -> bool {
         let lc = self.lc.read().unwrap();
         *self.server_keyboard_enabled.read().unwrap()
@@ -662,6 +670,9 @@ impl<T: InvokeUiSession> Session<T> {
         if is_remote {
             self.peer_platform()
         } else {
+            #[cfg(target_env = "ohos")]
+            return crate::PLATFORM_OHOS.to_owned();
+            #[cfg(not(target_env = "ohos"))]
             whoami::platform().to_string()
         }
     }
@@ -868,13 +879,13 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn enter(&self, keyboard_mode: String) {
         let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Run, &keyboard_mode, session_id);
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     pub fn leave(&self, keyboard_mode: String) {
         let session_id = self.lc.read().unwrap().session_id as u128;
         keyboard::client::change_grab_status(GrabState::Wait, &keyboard_mode, session_id);
@@ -1039,9 +1050,9 @@ impl<T: InvokeUiSession> Session<T> {
     ) {
         let key = rdev::usb_hid_key_from_code(usb_hid as _);
 
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         let position_code: KeyCode = 0;
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
         let platform_code: KeyCode = 0;
 
         #[cfg(target_os = "windows")]
@@ -1049,7 +1060,12 @@ impl<T: InvokeUiSession> Session<T> {
         #[cfg(target_os = "windows")]
         let position_code: KeyCode = rdev::win_scancode_from_key(key).unwrap_or(0) as _;
 
-        #[cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(
+            target_os = "windows",
+            target_os = "android",
+            target_os = "ios",
+            target_env = "ohos"
+        )))]
         let position_code: KeyCode = rdev::code_from_key(key).unwrap_or(0) as _;
         #[cfg(not(any(
             target_os = "windows",
@@ -1062,7 +1078,7 @@ impl<T: InvokeUiSession> Session<T> {
         // We need to set the platform code (keysym) if is AltGr.
         // https://github.com/rustdesk/rustdesk/blob/07cf1b4db5ef2f925efd3b16b87c33ce03c94809/src/keyboard.rs#L1029
         // https://github.com/flutter/flutter/issues/153811
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         let platform_code: u32 = position_code as _;
 
         let event_type = if down_or_up {
@@ -1085,9 +1101,9 @@ impl<T: InvokeUiSession> Session<T> {
             platform_code,
             position_code: position_code as _,
             event_type,
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
             usb_hid: usb_hid as _,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
             usb_hid: 0,
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
@@ -1368,6 +1384,11 @@ impl<T: InvokeUiSession> Session<T> {
     }
 
     pub fn send2fa(&self, code: String, trust_this_device: bool) {
+        log::info!(
+            "Queueing Auth2FA for active session: code_len={}, trust_this_device={}",
+            code.len(),
+            trust_this_device
+        );
         let mut msg_out = Message::new();
         let hwid = if trust_this_device {
             crate::get_hwid()
@@ -1396,6 +1417,21 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn close(&self) {
         self.send(Data::Close);
+    }
+
+    pub fn set_video_paused(&self, paused: bool) {
+        #[cfg(target_env = "ohos")]
+        self.ui_active.store(!paused, Ordering::SeqCst);
+        self.send(Data::PauseVideo(paused));
+    }
+
+    pub fn is_ui_active(&self) -> bool {
+        #[cfg(target_env = "ohos")]
+        {
+            return self.ui_active.load(Ordering::SeqCst);
+        }
+        #[cfg(not(target_env = "ohos"))]
+        true
     }
 
     pub fn continue_insecure_connection(&self, continue_insecure: bool) {
@@ -1473,11 +1509,16 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::ElevateWithLogon(username, password));
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios", not(feature = "flutter")))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "ios",
+        target_env = "ohos",
+        not(feature = "flutter")
+    ))]
     pub fn switch_sides(&self) {}
 
     #[cfg(feature = "flutter")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     #[tokio::main(flavor = "current_thread")]
     pub async fn switch_sides(&self) {
         match crate::ipc::connect(1000, "").await {
@@ -1585,7 +1626,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[inline]
     pub fn request_voice_call(&self) {
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         std::thread::spawn(crate::ipc::start_pa);
         self.send(Data::NewVoiceCall);
     }
@@ -1714,8 +1755,12 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn adapt_size(&self);
     fn on_rgba(&self, display: usize, rgba: &mut scrap::ImageRgb);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, link: &str, retry: bool);
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     fn clipboard(&self, content: String);
+    #[cfg(target_env = "ohos")]
+    fn clipboard_multi(&self, clipboards: MultiClipboards);
+    #[cfg(target_env = "ohos")]
+    fn clipboard_files(&self, paths: Vec<String>);
     fn cancel_msgbox(&self, tag: &str);
     fn switch_back(&self, id: &str);
     fn portable_service_running(&self, running: bool);
@@ -1935,14 +1980,14 @@ impl<T: InvokeUiSession> Session<T> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let token = LocalConfig::get_option("access_token");
     let key = crate::get_key(false).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     if handler.is_port_forward() {
         if handler.is_rdp() {
             let port = handler
@@ -2033,7 +2078,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let _ = remote.sync_jobs_status_to_local().await;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn start_one_port_forward<T: InvokeUiSession>(
     handler: Session<T>,
     port: i32,

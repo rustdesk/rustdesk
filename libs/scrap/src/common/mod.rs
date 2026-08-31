@@ -36,13 +36,25 @@ cfg_if! {
     } else if #[cfg(target_os = "android")] {
         mod android;
         pub use self::android::*;
-    }else {
+    } else if #[cfg(target_env = "ohos")] {
+        pub use self::ohos::{Capturer, Display, PixelBuffer};
+    } else {
         //TODO: Fallback implementation.
     }
 }
 
 pub mod codec;
 pub mod convert;
+#[cfg(target_env = "ohos")]
+pub mod ohos;
+#[cfg(target_env = "ohos")]
+pub(crate) use self::ohos::avcodec as ohos_avcodec;
+#[cfg(target_env = "ohos")]
+pub use self::ohos::{
+    configure_screen_size, lookup_direct_render_target, push_screen_frame_rgba,
+    register_direct_render_target_lookup, register_render_context, register_render_stats_callback,
+    screen_size, DirectRenderTarget, DirectRenderTargetLookup, RenderStatsCallback,
+};
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
 #[cfg(feature = "mediacodec")]

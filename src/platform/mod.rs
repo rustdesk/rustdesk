@@ -1,7 +1,9 @@
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub use linux::*;
 #[cfg(target_os = "macos")]
 pub use macos::*;
+#[cfg(target_env = "ohos")]
+pub use ohos::*;
 #[cfg(windows)]
 pub use windows::*;
 
@@ -17,18 +19,24 @@ pub mod macos;
 #[cfg(target_os = "macos")]
 pub mod delegate;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod linux;
 
-#[cfg(target_os = "linux")]
+#[cfg(target_env = "ohos")]
+pub mod ohos;
+
+#[cfg(all(target_env = "ohos", feature = "cliprdr-file-service"))]
+pub mod ohos_clipboard_file;
+
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 pub mod gtk_sudo;
 
 #[cfg(all(
     not(all(target_os = "windows", not(target_pointer_width = "64"))),
-    not(any(target_os = "android", target_os = "ios"))
+    not(any(target_os = "android", target_os = "ios", target_env = "ohos"))
 ))]
 use hbb_common::sysinfo::System;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 use hbb_common::{message_proto::CursorData, sysinfo::Pid, ResultType};
 use std::sync::{Arc, Mutex};
 #[cfg(not(any(target_os = "macos", target_os = "android", target_os = "ios")))]
@@ -54,13 +62,13 @@ pub fn is_xfce() -> bool {
 }
 
 pub fn breakdown_callback() {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     crate::input_service::clear_remapped_keycode();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     crate::input_service::release_device_modifiers();
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<()> {
     let cur_resolution = current_resolution(name)?;
     // For MacOS
@@ -78,13 +86,16 @@ pub fn change_resolution(name: &str, width: usize, height: usize) -> ResultType<
 }
 
 // Android
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub fn get_active_username() -> String {
     // TODO
-    "android".into()
+    #[cfg(target_os = "android")]
+    return "android".into();
+    #[cfg(target_env = "ohos")]
+    return "ohos".into();
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_env = "ohos"))]
 pub const PA_SAMPLE_RATE: u32 = 48000;
 
 #[cfg(target_os = "android")]
@@ -105,15 +116,21 @@ impl WakeLock {
     }
 }
 
+#[cfg(target_env = "ohos")]
+#[derive(Default)]
+pub struct WakeLock;
+
 #[cfg(not(target_os = "ios"))]
 pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");
     #[cfg(target_os = "android")]
     return crate::platform::WakeLock::new("server");
+    #[cfg(target_env = "ohos")]
+    return WakeLock;
     // display: keep screen on
     // idle: keep cpu on
     // sleep: prevent system from sleeping, even manually
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
     return crate::platform::WakeLock::new(_display, true, false);
 }
 
@@ -135,7 +152,7 @@ impl Drop for InstallingService {
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 #[inline]
 pub fn is_prelogin() -> bool {
     false
@@ -145,7 +162,7 @@ pub fn is_prelogin() -> bool {
 // It should only be called when performance is not critical.
 // If we wanted to get the command line ourselves, there would be a lot of new code.
 #[allow(dead_code)]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     args: &[S2],
@@ -178,7 +195,7 @@ fn get_pids_of_process_with_args<S1: AsRef<str>, S2: AsRef<str>>(
 
 // Note: This method is inefficient on Windows. It will get all the processes.
 // It should only be called when performance is not critical.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     name: S1,
     arg: S2,
@@ -207,7 +224,7 @@ pub fn get_pids_of_process_with_first_arg<S1: AsRef<str>, S2: AsRef<str>>(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_env = "ohos")))]
 mod tests {
     use super::*;
     #[test]
@@ -234,7 +251,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     #[test]
     fn test_resolution() {
         let name = r"\\.\DISPLAY1";

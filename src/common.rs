@@ -59,6 +59,7 @@ pub const PLATFORM_WINDOWS: &str = "Windows";
 pub const PLATFORM_LINUX: &str = "Linux";
 pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
+pub const PLATFORM_OHOS: &str = "HarmonyOS";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
@@ -122,9 +123,13 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
-    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[cfg(all(
+        target_os = "linux",
+        feature = "drm",
+        not(target_env = "ohos")
+    ))]
     crate::platform::linux::dispatch_wayland_display_probe();
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         if !crate::platform::linux::is_x11() {
             crate::server::wayland::init();
@@ -151,13 +156,13 @@ pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
 }
 
 #[inline]
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn is_support_file_copy_paste(ver: &str) -> bool {
     is_support_file_copy_paste_num(hbb_common::get_version_number(ver))
 }
 
 #[inline]
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(feature = "unix-file-copy-paste", feature = "cliprdr-file-service"))]
 pub fn is_support_file_copy_paste_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.3.8")
 }
@@ -319,7 +324,7 @@ pub fn set_sound_input(device: String) {
 
 /// Get system's default sound input device name.
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn get_default_sound_input() -> Option<String> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -335,7 +340,7 @@ pub fn get_default_sound_input() -> Option<String> {
             None
         };
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         let input = crate::platform::linux::get_default_pa_source();
         return if let Some(input) = input {
@@ -347,7 +352,7 @@ pub fn get_default_sound_input() -> Option<String> {
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 pub fn get_default_sound_input() -> Option<String> {
     None
 }
@@ -647,7 +652,7 @@ pub fn test_nat_type() {
         }
         IS_RUNNING.store(true, Ordering::SeqCst);
 
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         crate::ipc::get_socks_ws();
         let is_direct = Config::get_socks().is_none() && !config::use_ws();
         if !is_direct {
@@ -741,9 +746,9 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::get_license_from_exe_name() {
@@ -766,7 +771,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
     (
         Config::get_rendezvous_server(),
@@ -775,19 +780,19 @@ fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 async fn get_rendezvous_server_(ms_timeout: u64) -> (String, Vec<String>) {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
 #[inline]
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
 pub async fn get_nat_type(_ms_timeout: u64) -> i32 {
     Config::get_nat_type()
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
@@ -826,9 +831,9 @@ pub fn test_rendezvous_server() {
 }
 
 pub fn refresh_rendezvous_server() {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     test_rendezvous_server();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     std::thread::spawn(|| {
         if crate::ipc::test_rendezvous_server().is_err() {
             test_rendezvous_server();
@@ -837,7 +842,7 @@ pub fn refresh_rendezvous_server() {
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     if let Ok(appdir) = std::env::var("APPDIR") {
         let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
         if appimage_cmd.exists() {
@@ -877,9 +882,9 @@ pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::p
 #[inline]
 pub fn username() -> String {
     // fix bug of whoami
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     return whoami::username().trim_end_matches('\0').to_owned();
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
@@ -895,7 +900,7 @@ pub fn whoami_hostname() -> String {
 
 #[inline]
 pub fn hostname() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         #[allow(unused_mut)]
         let mut name = whoami_hostname();
@@ -906,7 +911,7 @@ pub fn hostname() -> String {
         }
         name
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
@@ -937,9 +942,9 @@ pub fn get_sysinfo() -> serde_json::Value {
         os = format!("{os} - {}", system.os_version().unwrap_or_default());
     }
     let hostname = hostname(); // sys.hostname() return localhost on android in my test
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", target_env = "ohos"))]
     let out;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     let mut out;
     out = json!({
         "cpu": format!("{cpu}{num_cpus}/{num_pcpus} cores"),
@@ -947,7 +952,7 @@ pub fn get_sysinfo() -> serde_json::Value {
         "os": os,
         "hostname": hostname,
     });
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
     {
         let username = crate::platform::get_active_username();
         if !username.is_empty() && (!cfg!(windows) || username != "SYSTEM") {
@@ -1024,11 +1029,18 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
         }
         Err(err) => {
             if is_tls_not_cached && err.is_request() {
-                let tls_type = TlsType::NativeTls;
-                let client = create_http_client_async(tls_type, false);
-                let resp = client.post(&url).json(&request).send().await?;
-                upsert_tls_cache(tls_url, tls_type, false);
-                resp
+                #[cfg(not(target_env = "ohos"))]
+                {
+                    let tls_type = TlsType::NativeTls;
+                    let client = create_http_client_async(tls_type, false);
+                    let resp = client.post(&url).json(&request).send().await?;
+                    upsert_tls_cache(tls_url, tls_type, false);
+                    resp
+                }
+                #[cfg(target_env = "ohos")]
+                {
+                    return Err(err.into());
+                }
             } else {
                 return Err(err.into());
             }
@@ -1586,17 +1598,24 @@ async fn post_request_(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
-                        post_request_(
-                            url,
-                            tls_url,
-                            body,
-                            header,
-                            Some(TlsType::NativeTls),
-                            original_danger_accept_invalid_cert,
-                            original_danger_accept_invalid_cert,
-                        )
-                        .await
+                        #[cfg(not(target_env = "ohos"))]
+                        {
+                            log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                            post_request_(
+                                url,
+                                tls_url,
+                                body,
+                                header,
+                                Some(TlsType::NativeTls),
+                                original_danger_accept_invalid_cert,
+                                original_danger_accept_invalid_cert,
+                            )
+                            .await
+                        }
+                        #[cfg(target_env = "ohos")]
+                        {
+                            Err(anyhow!("{:?}", e))
+                        }
                     }
                 } else {
                     Err(anyhow!("{:?}", e))
@@ -1694,18 +1713,25 @@ async fn get_http_response_async(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
-                        get_http_response_async(
-                            url,
-                            tls_url,
-                            method,
-                            body,
-                            header,
-                            Some(TlsType::NativeTls),
-                            original_danger_accept_invalid_cert,
-                            original_danger_accept_invalid_cert,
-                        )
-                        .await
+                        #[cfg(not(target_env = "ohos"))]
+                        {
+                            log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                            get_http_response_async(
+                                url,
+                                tls_url,
+                                method,
+                                body,
+                                header,
+                                Some(TlsType::NativeTls),
+                                original_danger_accept_invalid_cert,
+                                original_danger_accept_invalid_cert,
+                            )
+                            .await
+                        }
+                        #[cfg(target_env = "ohos")]
+                        {
+                            Err(anyhow!("{:?}", e))
+                        }
                     }
                 } else {
                     Err(anyhow!("{:?}", e))
@@ -1826,7 +1852,9 @@ pub fn is_keyboard_mode_supported(
     match keyboard_mode {
         KeyboardMode::Legacy => true,
         KeyboardMode::Map => {
-            if peer_platform.to_lowercase() == crate::PLATFORM_ANDROID.to_lowercase() {
+            if peer_platform.eq_ignore_ascii_case(crate::PLATFORM_ANDROID)
+                || peer_platform.eq_ignore_ascii_case(crate::PLATFORM_OHOS)
+            {
                 false
             } else {
                 version_number >= hbb_common::get_version_number("1.2.0")
@@ -2005,7 +2033,7 @@ pub fn check_process(arg: &str, same_session_id: bool) -> bool {
 
 #[allow(unused_mut)]
 #[cfg(not(all(target_os = "windows", not(target_pointer_width = "64"))))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 pub fn check_process(arg: &str, mut same_uid: bool) -> bool {
     #[cfg(target_os = "macos")]
     if !crate::platform::is_root() && !same_uid {

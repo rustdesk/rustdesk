@@ -1,0 +1,1 @@
+# OHOS builds share the root Cargo.lock and its pinned libsodium-sys patch.

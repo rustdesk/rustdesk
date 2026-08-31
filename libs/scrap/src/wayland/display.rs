@@ -312,9 +312,7 @@ pub fn get_layout_for_uinput_live() -> Option<((i32, i32, i32, i32), Vec<Display
         return None;
     }
     match enumerate_displays() {
-        Ok(displays) => {
-            desktop_rect_of(&displays).map(|rect| (rect, logical_rects_of(&displays)))
-        }
+        Ok(displays) => desktop_rect_of(&displays).map(|rect| (rect, logical_rects_of(&displays))),
         Err(_err) => {
             #[cfg(not(feature = "drm"))]
             warn!("Failed to get wayland displays: {}", _err);
@@ -463,7 +461,8 @@ fn map_axis(v: i32, base_origin: i32, base_extent: i32, live_origin: i32, live_e
     if base_extent <= 1 || live_extent <= 1 {
         return live_origin;
     }
-    live_origin + ((v - base_origin) as i64 * (live_extent - 1) as i64 / (base_extent - 1) as i64) as i32
+    live_origin
+        + ((v - base_origin) as i64 * (live_extent - 1) as i64 / (base_extent - 1) as i64) as i32
 }
 
 #[cfg(test)]
@@ -590,11 +589,20 @@ mod tests {
     // A point on the rescaled display itself is squeezed to its new logical width.
     #[test]
     fn test_remap_scales_within_resized_display() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2048, 1440), rect("DP-2", 2048, 0, 2560, 1440)];
+        let baseline = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 2560, 1440),
+        ];
+        let live = [
+            rect("DP-1", 0, 0, 2048, 1440),
+            rect("DP-2", 2048, 0, 2560, 1440),
+        ];
         // x=1280 across the 2560-wide baseline DP-1 -> proportionally across the 2048-wide
         // live DP-1 (endpoint-preserving scale, so ~1px off the naive midpoint).
-        assert_eq!(remap_to_live_layout(1280, 500, &baseline, &live), (1023, 500));
+        assert_eq!(
+            remap_to_live_layout(1280, 500, &baseline, &live),
+            (1023, 500)
+        );
     }
 
     // The far edge of the followed display stays reachable when it is enlarged, so hot
@@ -602,8 +610,14 @@ mod tests {
     // client's last column (2047) must map to the live last column (2559), not 2558.
     #[test]
     fn test_remap_enlarged_display_reaches_far_edge() {
-        let baseline = [rect("DP-1", 0, 0, 2048, 1440), rect("DP-2", 2048, 0, 1920, 1080)];
-        let live = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 1920, 1080)];
+        let baseline = [
+            rect("DP-1", 0, 0, 2048, 1440),
+            rect("DP-2", 2048, 0, 1920, 1080),
+        ];
+        let live = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 1920, 1080),
+        ];
         assert_eq!(remap_to_live_layout(2047, 0, &baseline, &live), (2559, 0));
         assert_eq!(remap_to_live_layout(0, 0, &baseline, &live), (0, 0));
     }
@@ -611,8 +625,14 @@ mod tests {
     // No drift: identical layouts map every point to itself.
     #[test]
     fn test_remap_identity_when_unchanged() {
-        let layout = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        assert_eq!(remap_to_live_layout(3000, 700, &layout, &layout), (3000, 700));
+        let layout = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 2560, 1440),
+        ];
+        assert_eq!(
+            remap_to_live_layout(3000, 700, &layout, &layout),
+            (3000, 700)
+        );
     }
 
     // Point outside every baseline display is left untouched.
@@ -620,16 +640,25 @@ mod tests {
     fn test_remap_point_outside_all_displays_unchanged() {
         let baseline = [rect("DP-1", 0, 0, 2560, 1440)];
         let live = [rect("DP-1", 0, 0, 2048, 1440)];
-        assert_eq!(remap_to_live_layout(9000, 9000, &baseline, &live), (9000, 9000));
+        assert_eq!(
+            remap_to_live_layout(9000, 9000, &baseline, &live),
+            (9000, 9000)
+        );
     }
 
     // Matched display gone from the live layout (e.g. unplugged): leave the point be
     // rather than mapping it somewhere wrong.
     #[test]
     fn test_remap_display_removed_unchanged() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
+        let baseline = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 2560, 1440),
+        ];
         let live = [rect("DP-1", 0, 0, 2560, 1440)];
-        assert_eq!(remap_to_live_layout(2600, 100, &baseline, &live), (2600, 100));
+        assert_eq!(
+            remap_to_live_layout(2600, 100, &baseline, &live),
+            (2600, 100)
+        );
     }
 
     // Nameless compositor: fall back to index matching while the count is unchanged.
@@ -654,9 +683,18 @@ mod tests {
     // whatever now occupies that index.
     #[test]
     fn test_remap_named_miss_equal_count_unchanged() {
-        let baseline = [rect("DP-1", 0, 0, 2560, 1440), rect("DP-2", 2560, 0, 2560, 1440)];
-        let live = [rect("DP-1", 0, 0, 2048, 1440), rect("HDMI-1", 2048, 0, 1920, 1080)];
-        assert_eq!(remap_to_live_layout(2600, 100, &baseline, &live), (2600, 100));
+        let baseline = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 2560, 1440),
+        ];
+        let live = [
+            rect("DP-1", 0, 0, 2048, 1440),
+            rect("HDMI-1", 2048, 0, 1920, 1080),
+        ];
+        assert_eq!(
+            remap_to_live_layout(2600, 100, &baseline, &live),
+            (2600, 100)
+        );
     }
 
     // A single display uses physical size in both baseline and live (scale reported as

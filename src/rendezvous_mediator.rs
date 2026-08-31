@@ -127,6 +127,8 @@ impl RendezvousMediator {
         }
         check_zombie();
         let server = new_server();
+        #[cfg(target_env = "ohos")]
+        crate::platform::ohos::register_host_server(server.clone());
         if config::option2bool("stop-service", &Config::get_option("stop-service")) {
             crate::test_rendezvous_server();
         }
@@ -136,8 +138,10 @@ impl RendezvousMediator {
         });
         #[cfg(target_os = "android")]
         let start_lan_listening = true;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
         let start_lan_listening = crate::platform::is_installed();
+        #[cfg(target_env = "ohos")]
+        let start_lan_listening = false;
         if start_lan_listening {
             std::thread::spawn(move || {
                 allow_err!(super::lan::start_listening());

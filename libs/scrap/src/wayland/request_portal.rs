@@ -6,40 +6,40 @@ use dbus::arg;
 use dbus::blocking;
 
 pub trait OrgFreedesktopPortalRequest {
-  fn close(&self) -> Result<(), dbus::Error>;
+    fn close(&self) -> Result<(), dbus::Error>;
 }
 
 impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target = T>> OrgFreedesktopPortalRequest
-  for blocking::Proxy<'a, C>
+    for blocking::Proxy<'a, C>
 {
-  fn close(&self) -> Result<(), dbus::Error> {
-      self.method_call("org.freedesktop.portal.Request", "Close", ())
-  }
+    fn close(&self) -> Result<(), dbus::Error> {
+        self.method_call("org.freedesktop.portal.Request", "Close", ())
+    }
 }
 
 #[derive(Debug)]
 pub struct OrgFreedesktopPortalRequestResponse {
-  pub response: u32,
-  pub results: arg::PropMap,
+    pub response: u32,
+    pub results: arg::PropMap,
 }
 
 impl arg::AppendAll for OrgFreedesktopPortalRequestResponse {
-  fn append(&self, i: &mut arg::IterAppend) {
-      arg::RefArg::append(&self.response, i);
-      arg::RefArg::append(&self.results, i);
-  }
+    fn append(&self, i: &mut arg::IterAppend) {
+        arg::RefArg::append(&self.response, i);
+        arg::RefArg::append(&self.results, i);
+    }
 }
 
 impl arg::ReadAll for OrgFreedesktopPortalRequestResponse {
-  fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
-      Ok(OrgFreedesktopPortalRequestResponse {
-          response: i.read()?,
-          results: i.read()?,
-      })
-  }
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(OrgFreedesktopPortalRequestResponse {
+            response: i.read()?,
+            results: i.read()?,
+        })
+    }
 }
 
 impl dbus::message::SignalArgs for OrgFreedesktopPortalRequestResponse {
-  const NAME: &'static str = "Response";
-  const INTERFACE: &'static str = "org.freedesktop.portal.Request";
+    const NAME: &'static str = "Response";
+    const INTERFACE: &'static str = "org.freedesktop.portal.Request";
 }

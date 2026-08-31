@@ -234,10 +234,7 @@ impl MouseControllable for Enigo {
         // Use saturating_sub to prevent negative thresholds on very small displays
         let right = (display_width as i32).saturating_sub(margin);
         let bottom = (display_height as i32).saturating_sub(margin);
-        let near_edge = new_x < margin
-            || new_x > right
-            || new_y < margin
-            || new_y > bottom;
+        let near_edge = new_x < margin || new_x > right || new_y < margin || new_y > bottom;
 
         if near_edge {
             // Reset cursor to screen center to allow continuous movement
@@ -510,9 +507,7 @@ impl Enigo {
 
         let dest = CGPoint::new(x as f64, y as f64);
         if let Some(src) = self.event_source.as_ref() {
-            if let Ok(event) =
-                CGEvent::new_mouse_event(src.clone(), event_type, dest, button)
-            {
+            if let Ok(event) = CGEvent::new_mouse_event(src.clone(), event_type, dest, button) {
                 // Set delta fields for relative mouse movement
                 // This is essential for Pointer Lock API in browsers
                 if let Some((dx, dy)) = delta {

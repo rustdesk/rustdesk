@@ -224,25 +224,32 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
     }
 }
 
-#[cfg(feature = "unix-file-copy-paste")]
+#[cfg(any(
+    feature = "unix-file-copy-paste",
+    all(not(target_os = "windows"), feature = "cliprdr-file-service")
+))]
 pub mod unix_file_clip {
     use super::*;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(not(target_env = "ohos"), feature = "unix-file-copy-paste"))]
+    use crate::clipboard::try_empty_clipboard_files;
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "ohos"),
+        feature = "unix-file-copy-paste"
+    ))]
     use crate::clipboard::update_clipboard_files;
-    use crate::clipboard::{try_empty_clipboard_files, ClipboardSide};
-    #[cfg(target_os = "linux")]
+    use crate::clipboard::ClipboardSide;
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "ohos"),
+        feature = "unix-file-copy-paste"
+    ))]
     use clipboard::platform::unix::fuse;
     use clipboard::platform::unix::{
         get_local_format, serv_files, FILECONTENTS_FORMAT_ID, FILECONTENTS_FORMAT_NAME,
         FILEDESCRIPTORW_FORMAT_NAME, FILEDESCRIPTOR_FORMAT_ID,
     };
     use hbb_common::log;
-    use std::sync::{Arc, Mutex};
-
-    lazy_static::lazy_static! {
-        static ref CLIPBOARD_CTX: Arc<Mutex<Option<crate::clipboard::ClipboardContext>>> = Arc::new(Mutex::new(None));
-    }
-
     pub fn get_format_list() -> ClipboardFile {
         let fd_format_name = get_local_format(FILEDESCRIPTOR_FORMAT_ID)
             .unwrap_or(FILEDESCRIPTORW_FORMAT_NAME.to_string());
@@ -314,7 +321,7 @@ pub mod unix_file_clip {
                 requested_format_id: _requested_format_id,
             } => {
                 log::debug!("requested format id: {}", _requested_format_id);
-                let format_data = serv_files::get_file_list_pdu();
+                let format_data = serv_files::get_file_list_pdu(conn_id);
                 if !format_data.is_empty() {
                     return vec![clip_2_msg(ClipboardFile::FormatDataResponse {
                         msg_flags: 1,
@@ -324,7 +331,11 @@ pub mod unix_file_clip {
                 // empty file list, send failure message
                 return vec![msg_resp_format_data_failure()];
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(
+                target_os = "linux",
+                not(target_env = "ohos"),
+                feature = "unix-file-copy-paste"
+            ))]
             ClipboardFile::FormatDataResponse {
                 msg_flags,
                 format_data,
@@ -387,7 +398,11 @@ pub mod unix_file_clip {
                 })
                 .collect::<_>();
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(
+                target_os = "linux",
+                not(target_env = "ohos"),
+                feature = "unix-file-copy-paste"
+            ))]
             ClipboardFile::FileContentsResponse {
                 msg_flags,
                 stream_id,
@@ -424,6 +439,7 @@ pub mod unix_file_clip {
                 );
             }
             ClipboardFile::TryEmpty => {
+                #[cfg(all(not(target_env = "ohos"), feature = "unix-file-copy-paste"))]
                 try_empty_clipboard_files(side, conn_id);
             }
             _ => {
