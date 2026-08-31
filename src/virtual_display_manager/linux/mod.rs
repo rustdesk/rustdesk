@@ -701,13 +701,16 @@ pub fn start_watcher() {
 /// Overlay the process's own record of what it forced onto the sysfs view: while the connector
 /// settles - or when the override never loaded on it - sysfs cannot name it ours, and without
 /// this the tick would re-force it and count it as a real output. Matched by the card-qualified
-/// sysfs name, never the bare one.
+/// sysfs name, never the bare one. Only a CONNECTED connector is adopted: a forced record whose
+/// connector reads disconnected means the kernel-side force was lost (GPU reset, an operator's
+/// detect), and adopting it would park the tick in the release-watch branch instead of letting
+/// the arming path re-force.
 fn adopt_forced(all: &mut [Connector], forced: Option<&str>) {
     let Some(forced) = forced else {
         return;
     };
     for c in all.iter_mut() {
-        if c.sysfs == forced {
+        if c.connected && c.sysfs == forced {
             c.ours = true;
         }
     }
@@ -1190,5 +1193,10 @@ mod tests {
         assert!(!all2[0].ours);
         adopt_forced(&mut all2, None);
         assert!(!all2[0].ours);
+        // A disconnected forced record means the kernel-side force was lost: not adopted, so the
+        // arming path can re-force instead of the tick parking in the release watch.
+        let mut all3 = vec![c("card1-HDMI-A-1", "HDMI-A-1", false, false)];
+        adopt_forced(&mut all3, Some("card1-HDMI-A-1"));
+        assert!(!all3[0].ours);
     }
 }

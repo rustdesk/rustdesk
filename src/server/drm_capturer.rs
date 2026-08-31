@@ -1067,7 +1067,9 @@ fn refresh_available_async() {
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
                     drop(st);
                     // A restored list must also clear the empty-debounce clock, or the NEXT
-                    // empty push demotes instantly off a stale first-sighting.
+                    // empty push demotes instantly off a stale first-sighting. Racing a hotplug
+                    // empty push in the gap is benign (its recheck re-arms within a TTL) and the
+                    // gap is what keeps the two locks un-nested - do not move this under st.
                     *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
                     if changed {
                         scrap::wayland::display::clear_wayland_displays_cache();
@@ -1076,6 +1078,8 @@ fn refresh_available_async() {
                 RefreshOutcome::Unavailable => {
                     // Through the shared debounce, DRM_STATE dropped first (the two locks never
                     // nest): the refresh path must not demote faster than the hotplug path does.
+                    // A publish landing in the gap is re-read by swap under its own lock and the
+                    // worst case is one spurious first-sighting - benign, so no gen re-check.
                     drop(st);
                     swap_available_displays(Vec::new());
                 }
@@ -1405,12 +1409,14 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
         false
     };
     let mut st = DRM_STATE.lock().unwrap();
+    let mut demoted = false;
     match &*st {
         ProbeState::Available(..) => {
             if list.is_empty() {
                 if empty_outlived_window {
                     log::info!("drm: topology empty past the settle window, marking DRM unavailable");
                     publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    demoted = true;
                 } else {
                     log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
                 }
@@ -1433,6 +1439,13 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
         _ => {}
+    }
+    drop(st);
+    // A landed demote retires its clock (locks never nest, so after DRM_STATE drops): recovery
+    // can arrive through publishers that know nothing of the debounce, and a stale first-sighting
+    // would make the NEXT transient empty demote instantly.
+    if demoted {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
     }
 }
 
