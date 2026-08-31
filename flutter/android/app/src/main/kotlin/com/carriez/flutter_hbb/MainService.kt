@@ -247,7 +247,9 @@ class MainService : Service() {
         // keep the config dir same with flutter
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
-        FFI.startServer(configPath, "")
+        val homePath = applicationContext.getExternalFilesDir(null)?.absolutePath
+            ?: applicationContext.filesDir.absolutePath
+        FFI.startServer(configPath, homePath, "")
 
         createForegroundNotification()
     }
@@ -256,6 +258,16 @@ class MainService : Service() {
         checkMediaPermission()
         stopService(Intent(this, FloatingWindowService::class.java))
         super.onDestroy()
+    }
+
+    // Swiping the app away from recents destroys the UI but this service keeps
+    // the process alive, so outgoing sessions would stay connected with no way
+    // to close them. Incoming connections are unaffected: the service keeps
+    // running so the device stays reachable.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(logTag, "onTaskRemoved, closing outgoing sessions")
+        FFI.closeAllSessions()
+        super.onTaskRemoved(rootIntent)
     }
 
     private var isHalfScale: Boolean? = null;

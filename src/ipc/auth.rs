@@ -208,6 +208,17 @@ pub(crate) fn active_uid() -> Option<u32> {
     active_uid_strict()
 }
 
+/// The active session uid read ONLY from the service-loop cache, never from a fresh (blocking) seat0
+/// lookup. `None` on a cache miss. For hot, latency-sensitive, fail-closed re-auth on an async runtime
+/// thread (the `_drm` per-frame re-auth), where a blocking `loginctl` per frame would stall the stream.
+// Gated with the feature, not just the OS: the `_drm` per-frame re-auth is its only caller, so a
+// drm-off Linux build would carry it as dead code and warn about it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+#[inline]
+pub(crate) fn active_uid_cached() -> Option<u32> {
+    crate::platform::linux::get_active_userid_cached()
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[inline]
 pub(crate) fn peer_uid_from_fd(fd: RawFd) -> Option<u32> {
@@ -654,6 +665,32 @@ pub(crate) fn authorize_service_scoped_ipc_connection(stream: &Connection, postf
         return false;
     }
     true
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn authorize_user_server_process(
+    peer_uid: Option<u32>,
+    peer_pid: Option<u32>,
+    expected_uid: u32,
+) -> bool {
+    if peer_uid != Some(expected_uid) {
+        return false;
+    }
+    let Some(peer_pid) = peer_pid else {
+        return false;
+    };
+    let Ok(peer_exe) = peer_exe_canonical_path_by_pid(peer_pid) else {
+        return false;
+    };
+    let expected_path = PathBuf::from(format!(
+        "/Applications/{}.app/Contents/MacOS/{}",
+        crate::get_app_name(),
+        crate::get_app_name()
+    ));
+    let Ok(expected_path) = fs::canonicalize(expected_path) else {
+        return false;
+    };
+    paths_refer_to_same_file(&peer_exe, &expected_path)
 }
 
 #[cfg(windows)]
