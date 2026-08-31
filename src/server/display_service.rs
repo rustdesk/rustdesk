@@ -128,10 +128,19 @@ fn refresh_wayland_uinput_rect_if_changed() {
         }
         lock.last_check = Some(std::time::Instant::now());
     }
+    // Snapshot the generation before reading the layout, so the epoch and the layout
+    // belong to the same session. Loaded after the read, an epoch could be one a reset
+    // published mid-read, and the checks below would then accept the previous
+    // session's geometry as current.
+    let epoch = WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed);
     let Some((rect, live_rects)) = scrap::wayland::display::get_layout_for_uinput_live() else {
         return;
     };
-    let epoch = WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed);
+    // A reset during the read means this geometry is the previous session's: bail before
+    // writing it to the device, not just before publishing it.
+    if WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed) != epoch {
+        return;
+    }
     // Compare against the fresh layout but publish it to `live` only once the uinput
     // range below is confirmed: until then mouse threads must keep correcting against
     // the previous (layout, range) pair, which is still what the device is using.
