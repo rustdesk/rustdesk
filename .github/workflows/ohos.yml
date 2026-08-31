@@ -1,8 +1,8 @@
-name: Flutter OpenHarmony CI
+name: HarmonyOS Apps CI
 
 on:
   push:
-    branches: [feat/ohos-unified-core-flutter]
+    branches: [master, feat/ohos-unified-core-flutter]
   workflow_dispatch:
     inputs:
       upload-artifact:
@@ -12,13 +12,76 @@ on:
         default: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-rustdesk-ohos-flutter:
+    name: Build Flutter HarmonyOS App
     uses: ./.github/workflows/flutter-ohos.yml
     with:
-      upload-artifact: ${{ github.event_name == 'workflow_dispatch' && inputs.upload-artifact }}
+      upload-artifact: ${{ github.event_name == 'push' || inputs.upload-artifact }}
       publish-release: false
       upload-tag: nightly
       version: "1.4.9"
+
+  validate-rustdesk-ohos-har:
+    name: Validate ArkTS Core / HAR compatibility
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: always
+      OHOS_COMMAND_LINE_TOOLS_VERSION: 6.1.1.280
+      OHRS_VERSION: 1.3.1
+    steps:
+      - name: Checkout current Core
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: R_RustDesk-Core
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Checkout HAR adapter
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: FrankHan052176/RustDeskHar
+          ref: main
+          path: R_RustDesk-Har
+          persist-credentials: false
+
+      - name: Install native build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake git make ninja-build perl pkg-config
+
+      - name: Setup HarmonyOS CLI tools
+        uses: ErBWs/setup-ohos@4dbb63025116eb6165ceac58a4bf47cbdc5ac721 # v2
+        with:
+          version: ${{ env.OHOS_COMMAND_LINE_TOOLS_VERSION }}
+          cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-ohos
+          components: ''
+
+      - name: Cache HAR validation build
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: ohos-har-validation
+          workspaces: R_RustDesk-Har -> target
+
+      - name: Build validation HAR
+        shell: bash
+        run: |
+          cargo install ohrs --version "$OHRS_VERSION" --locked
+          bash R_RustDesk-Har/scripts/build-har.sh
+
+      - name: Verify validation HAR
+        shell: bash
+        run: |
+          test -s R_RustDesk-Har/package.har
+          unzip -l R_RustDesk-Har/package.har \
+            | grep -q 'libs/arm64-v8a/librustdesk_native_har.so'
