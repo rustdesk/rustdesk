@@ -144,8 +144,11 @@ fn refresh_wayland_uinput_rect_if_changed() {
         static PROMOTION_OWED: std::sync::atomic::AtomicBool =
             std::sync::atomic::AtomicBool::new(false);
         // The latch fires when a capturer was built with no wayland snapshot: a later cache
-        // refill makes wayland_snapshot_missing lie, so live_changed alone would miss it.
-        if live_changed || super::drm_capturer::take_unrotated_snapshot_pending() {
+        // refill makes wayland_snapshot_missing lie, so live_changed alone would miss it. Taken
+        // UNCONDITIONALLY: short-circuiting past it on a live_changed poll would leave it set and
+        // spend a second, spurious promotion one poll later on the freshly rebuilt capturer.
+        let blind_build = super::drm_capturer::take_unrotated_snapshot_pending();
+        if live_changed || blind_build {
             PROMOTION_OWED.store(true, Ordering::Release);
         }
         if PROMOTION_OWED.load(Ordering::Acquire) && super::drm_capturer::is_available_cached() {
