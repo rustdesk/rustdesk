@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).with_name("generate_update_metadata.py")
-WORKFLOW = (SCRIPT.parents[1] / ".github/workflows/flutter-build.yml").read_text(
+WORKFLOW = (SCRIPT.parents[2] / ".github/workflows/flutter-build.yml").read_text(
     encoding="utf-8"
 )
 

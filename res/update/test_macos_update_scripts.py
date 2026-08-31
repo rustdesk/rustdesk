@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MACOS_SOURCE = (REPOSITORY_ROOT / "src/platform/macos.rs").read_text(
     encoding="utf-8"
 )

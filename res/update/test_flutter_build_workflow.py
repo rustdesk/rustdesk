@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_TEXT = (REPOSITORY_ROOT / ".github/workflows/flutter-build.yml").read_text(
     encoding="utf-8"
 )
@@ -19,10 +19,10 @@ class FlutterBuildWorkflowTests(unittest.TestCase):
         test_step = step_body("Test update metadata signer")
 
         for test_file in (
-            "res/test_generate_update_metadata.py",
-            "res/test_update_metadata_cli.py",
-            "res/test_flutter_build_workflow.py",
-            "res/test_macos_update_scripts.py",
+            "res/update/test_generate_update_metadata.py",
+            "res/update/test_update_metadata_cli.py",
+            "res/update/test_flutter_build_workflow.py",
+            "res/update/test_macos_update_scripts.py",
         ):
             self.assertIn(test_file, test_step)
 

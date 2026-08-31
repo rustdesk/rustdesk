@@ -44,7 +44,7 @@ class GenerateUpdateMetadataTest(unittest.TestCase):
             env["RUSTDESK_UPDATE_ED25519_PUBLIC_KEY"] = public_key
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
-            cwd=SCRIPT.parents[1],
+            cwd=SCRIPT.parents[2],
             env=env,
             text=True,
             capture_output=True,
