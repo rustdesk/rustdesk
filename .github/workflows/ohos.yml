@@ -83,5 +83,6 @@ jobs:
         shell: bash
         run: |
           test -s R_RustDesk-Har/package.har
-          tar -tzf R_RustDesk-Har/package.har \
-            | grep -q 'libs/arm64-v8a/librustdesk_native_har.so'
+          tar -tzf R_RustDesk-Har/package.har > "$RUNNER_TEMP/rustdesk-har-files.txt"
+          grep -Fxq 'package/libs/arm64-v8a/librustdesk_native_har.so' \
+            "$RUNNER_TEMP/rustdesk-har-files.txt"
