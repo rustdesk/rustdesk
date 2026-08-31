@@ -17,6 +17,11 @@ if ! command -v flutter >/dev/null 2>&1; then
   exit 2
 fi
 
+use_host_frb_sysroot="${OHOS_FRB_USE_HOST_SYSROOT:-0}"
+if [[ "$use_host_frb_sysroot" != 0 && "$use_host_frb_sysroot" != 1 ]]; then
+  echo "OHOS_FRB_USE_HOST_SYSROOT must be 0 or 1" >&2
+  exit 2
+fi
 frb_codegen="${FLUTTER_RUST_BRIDGE_CODEGEN:-$HOME/.cargo/bin/flutter_rust_bridge_codegen}"
 if [[ ! -x "$frb_codegen" ]]; then
   echo "Flutter Rust bridge generator is unavailable: $frb_codegen" >&2
@@ -27,11 +32,22 @@ if [[ "$frb_version" != "flutter_rust_bridge_codegen 1.80.1" ]]; then
   echo "Expected flutter_rust_bridge_codegen 1.80.1, got: $frb_version" >&2
   exit 2
 fi
-frb_llvm_opts="--sysroot=$OHOS_NDK_HOME/native/sysroot -isystem $OHOS_NDK_HOME/native/sysroot/usr/include/aarch64-linux-ohos -DWireSyncReturn=void*"
 rust_output="$repo_root/native/ohos_bridge/src/bridge_generated.rs"
 rust_tmp_dir="$(mktemp -d "$repo_root/native/ohos_bridge/.frb.XXXXXX")"
 rust_output_tmp="$rust_tmp_dir/bridge_generated.rs"
 rust_io_output_tmp="$rust_tmp_dir/bridge_generated.io.rs"
+core_rust_output="$core_root/src/bridge_generated.rs"
+core_rust_io_output="${core_rust_output%.rs}.io.rs"
+core_rust_output_existed=0
+core_rust_io_output_existed=0
+if [[ -e "$core_rust_output" ]]; then
+  cp "$core_rust_output" "$rust_tmp_dir/original-bridge_generated.rs"
+  core_rust_output_existed=1
+fi
+if [[ -e "$core_rust_io_output" ]]; then
+  cp "$core_rust_io_output" "$rust_tmp_dir/original-bridge_generated.io.rs"
+  core_rust_io_output_existed=1
+fi
 dart_output="$repo_root/flutter/lib/generated_bridge.dart"
 inline_stub="$core_root/src/ui/inline.rs"
 created_inline_stub=0
@@ -44,6 +60,16 @@ if [[ ! -e "$inline_stub" ]]; then
   created_inline_stub=1
 fi
 cleanup() {
+  if [[ "$core_rust_output_existed" == 1 ]]; then
+    cp "$rust_tmp_dir/original-bridge_generated.rs" "$core_rust_output"
+  else
+    rm -f "$core_rust_output"
+  fi
+  if [[ "$core_rust_io_output_existed" == 1 ]]; then
+    cp "$rust_tmp_dir/original-bridge_generated.io.rs" "$core_rust_io_output"
+  else
+    rm -f "$core_rust_io_output"
+  fi
   rm -rf "$rust_tmp_dir"
   if [[ "$created_inline_stub" == 1 ]]; then
     rm -f "$inline_stub"
@@ -51,15 +77,39 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$frb_codegen" \
-  --skip-deps-check \
-  --llvm-path "$OHOS_NDK_HOME/native/llvm" \
-  --llvm-compiler-opts="$frb_llvm_opts" \
-  --rust-input "$core_root/src/flutter_ffi.rs" \
-  --rust-crate-dir "$core_root" \
-  --rust-output "$rust_output_tmp" \
-  --dart-output "$dart_output" \
+frb_args=(
+  --skip-deps-check
+  --rust-input "$core_root/src/flutter_ffi.rs"
+  --rust-crate-dir "$core_root"
+  --rust-output "$core_rust_output"
+  --dart-output "$dart_output"
   --skip-add-mod-to-lib
+)
+if [[ "$use_host_frb_sysroot" == 1 ]]; then
+  frb_sysroot="${OHOS_FRB_HOST_SYSROOT:-/}"
+  frb_llvm_path="${OHOS_FRB_HOST_LLVM_PATH:-}"
+  if [[ -z "$frb_llvm_path" || ! -d "$frb_llvm_path" ]]; then
+    echo "OHOS_FRB_HOST_LLVM_PATH must point to the host LLVM root" >&2
+    exit 2
+  fi
+  frb_resource_include="$($frb_llvm_path/bin/clang -print-resource-dir)/include"
+  if [[ ! -d "$frb_resource_include" ]]; then
+    echo "Clang resource headers are unavailable: $frb_resource_include" >&2
+    exit 2
+  fi
+  echo "Generating Flutter Rust Bridge bindings with host sysroot: $frb_sysroot"
+  frb_llvm_opts="--sysroot=$frb_sysroot -isystem $frb_resource_include"
+else
+  frb_llvm_path="$OHOS_NDK_HOME/native/llvm"
+  frb_llvm_opts="--sysroot=$OHOS_NDK_HOME/native/sysroot -isystem $OHOS_NDK_HOME/native/sysroot/usr/include/aarch64-linux-ohos -DWireSyncReturn=void*"
+fi
+frb_args+=(
+  --llvm-path "$frb_llvm_path"
+  --llvm-compiler-opts="$frb_llvm_opts"
+)
+"$frb_codegen" "${frb_args[@]}"
+cp "$core_rust_output" "$rust_output_tmp"
+cp "$core_rust_io_output" "$rust_io_output_tmp"
 
 python3 "$repo_root/scripts/patch-ohos-frb-dart.py" \
   "$dart_output"

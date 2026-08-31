@@ -240,33 +240,51 @@ def main() -> int:
         raise RuntimeError(
             f"unexpectedly found only {len(sync_names)} synchronous FRB functions"
         )
+    sync_return_is_address = re.search(
+        r"void free_WireSyncReturn\(\s*int\s+\w+\s*\)", text
+    ) is not None
     for name in sync_names:
         call_re = re.compile(
             rf"(callFfi:\s*\(\)\s*=>\s*_platform\.inner\s*\.\s*"
             rf"{re.escape(name)}\([\s\S]*?\))"
             rf"(?=,\s*\n\s*parseSuccessData:)",
         )
-        text, count = call_re.subn(r"\1.cast()", text, count=1)
+        replacement = (
+            r"callFfi: () => WireSyncReturn.fromAddress(\1)"
+            if sync_return_is_address
+            else r"\1.cast()"
+        )
+        if sync_return_is_address:
+            call_re = re.compile(
+                rf"callFfi:\s*\(\)\s*=>\s*(_platform\.inner\s*\.\s*"
+                rf"{re.escape(name)}\([\s\S]*?\))"
+                rf"(?=,\s*\n\s*parseSuccessData:)",
+            )
+        text, count = call_re.subn(replacement, text, count=1)
         if count != 1:
-            raise RuntimeError(f"unable to cast synchronous result for {name}")
+            raise RuntimeError(f"unable to adapt synchronous result for {name}")
 
-    free_re = re.compile(
-        r"  void free_WireSyncReturn\(ffi\.Pointer<ffi\.Void> ptr\) \{\s*"
-        r"return _free_WireSyncReturn\(ptr\);\s*\}",
-    )
-    text, count = free_re.subn(
-        "  void free_WireSyncReturn(WireSyncReturn ptr) {\n"
-        "    return _free_WireSyncReturn(ptr.cast());\n"
-        "  }",
-        text,
-        count=1,
-    )
-    if count != 1:
-        raise RuntimeError("unable to patch free_WireSyncReturn override")
-
-    insertion_anchor = "\n  void free_WireSyncReturn(WireSyncReturn ptr) {"
-    if insertion_anchor not in text:
-        raise RuntimeError("unable to locate RustdeskWire insertion anchor")
+    if "WireSyncReturn" in text:
+        free_re = re.compile(
+            r"(?ms)^[ \t]+void free_WireSyncReturn\(.*?\)\s*"
+            r"(?:\{.*?^[ \t]+\}|=>.*?;)",
+        )
+        free_argument = "ptr.address" if sync_return_is_address else "ptr.cast()"
+        text, count = free_re.subn(
+            "\n  void free_WireSyncReturn(WireSyncReturn ptr) {\n"
+            f"    return _free_WireSyncReturn({free_argument});\n"
+            "  }",
+            text,
+            count=1,
+        )
+        if count != 1:
+            candidates = "\n".join(
+                line for line in text.splitlines() if "WireSyncReturn" in line
+            )
+            raise RuntimeError(
+                "unable to patch free_WireSyncReturn override; candidates:\n"
+                + candidates
+            )
 
     additions: list[str] = []
     if not has_wire_method(text, "init_frb_dart_api_dl"):
@@ -275,10 +293,17 @@ def main() -> int:
         if not has_wire_method(text, name):
             additions.append(binding)
     if additions:
-        text = text.replace(
-            insertion_anchor,
-            "\n" + "\n".join(additions) + insertion_anchor,
-            1,
+        class_match = re.search(
+            r"class RustdeskWire\b[^\{]*\{",
+            text,
+        )
+        if class_match is None:
+            raise RuntimeError("unable to locate RustdeskWire class")
+        text = (
+            text[: class_match.end()]
+            + "\n"
+            + "\n".join(additions)
+            + text[class_match.end() :]
         )
 
     path.write_text(text, encoding="utf-8")

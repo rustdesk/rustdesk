@@ -84,6 +84,14 @@ jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
+  build-rustdesk-ohos-flutter:
+    uses: ./.github/workflows/flutter-ohos.yml
+    with:
+      upload-artifact: ${{ inputs.upload-artifact }}
+      publish-release: ${{ inputs.upload-artifact }}
+      upload-tag: ${{ inputs.upload-tag }}
+      version: "1.4.9"
+
   build-RustDeskTempTopMostWindow:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     strategy:

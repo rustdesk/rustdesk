@@ -1,0 +1,159 @@
+name: Build Flutter OpenHarmony
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        type: boolean
+        default: true
+      publish-release:
+        type: boolean
+        default: false
+      upload-tag:
+        type: string
+        default: nightly
+      version:
+        type: string
+        default: 1.4.9
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FLUTTER_OH_VERSION: 3.41.10-ohos-0.0.2-beta
+  FLUTTER_RUST_BRIDGE_VERSION: 1.80.1
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  OHOS_COMMAND_LINE_TOOLS_VERSION: 6.1.1.280
+  VERSION: ${{ inputs.version || '1.4.9' }}
+
+jobs:
+  build-rustdesk-ohos-flutter:
+    name: Flutter OpenHarmony (aarch64)
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install native build prerequisites
+        shell: bash
+        run: |
+          brew install cmake coreutils ninja pkg-config protobuf
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Setup Java
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup HarmonyOS CLI tools
+        uses: ErBWs/setup-ohos@4dbb63025116eb6165ceac58a4bf47cbdc5ac721 # v2
+        with:
+          version: ${{ env.OHOS_COMMAND_LINE_TOOLS_VERSION }}
+          cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: aarch64-unknown-linux-ohos
+          components: ''
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: flutter-ohos-macos
+
+      - name: Install Flutter-OH and bridge generator
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_OH_VERSION" \
+            https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter-ohos"
+          echo "$RUNNER_TEMP/flutter-ohos/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter-ohos/bin/flutter" config --no-analytics
+          cargo install flutter_rust_bridge_codegen \
+            --version "$FLUTTER_RUST_BRIDGE_VERSION" \
+            --features uuid \
+            --locked
+
+      - name: Resolve Flutter dependencies
+        shell: bash
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Cross-compile OHOS Flutter bridge
+        shell: bash
+        env:
+          OHOS_FRB_USE_HOST_SYSROOT: '1'
+        run: |
+          export OHOS_FRB_HOST_LLVM_PATH="$(cd "$(dirname "$(xcrun --find clang)")/.." && pwd)"
+          export OHOS_FRB_HOST_SYSROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          bash scripts/build-ohos-ffi.sh
+
+      - name: Verify OHOS Flutter bridge
+        shell: bash
+        run: |
+          artifact=target/aarch64-unknown-linux-ohos/release/librustdesk_ohos_flutter_bridge.so
+          packaged=flutter/ohos/entry/libs/arm64-v8a/liblibrustdesk.so
+          test -s "$artifact"
+          test -s "$packaged"
+          cmp "$artifact" "$packaged"
+          file "$artifact"
+
+      - name: Package Flutter OpenHarmony HAP
+        shell: bash
+        run: |
+          rm -rf flutter/build/ohos/hap flutter/ohos/entry/build
+          set +e
+          bash scripts/build-ohos-flutter-hap.sh
+          flutter_status=$?
+          set -e
+          if [[ "$flutter_status" != 0 ]]; then
+            unsigned=flutter/ohos/entry/build/default/outputs/default/entry-default-unsigned.hap
+            test -s "$unsigned"
+            mkdir -p flutter/build/ohos/hap
+            cp "$unsigned" flutter/build/ohos/hap/entry-default-unsigned.hap
+          fi
+
+      - name: Verify Flutter OpenHarmony HAP
+        shell: bash
+        run: |
+          hap="$(find flutter/build/ohos/hap -name '*.hap' -type f -print -quit)"
+          test -n "$hap"
+          unzip -l "$hap" | grep -q 'libs/arm64-v8a/liblibrustdesk.so'
+          unzip -l "$hap" | grep -q 'libs/arm64-v8a/libc++_shared.so'
+          cp "$hap" "rustdesk-$VERSION-ohos-arm64.hap"
+          printf 'Flutter HAP: %s\n' "$hap"
+
+      - name: Upload OHOS Flutter bridge
+        if: ${{ inputs.upload-artifact }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-ohos-flutter-bridge-aarch64
+          path: flutter/ohos/entry/libs/arm64-v8a/liblibrustdesk.so
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Flutter OpenHarmony HAP
+        if: ${{ inputs.upload-artifact }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-flutter-ohos-hap
+          path: rustdesk-${{ inputs.version }}-ohos-arm64.hap
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Publish Flutter OpenHarmony HAP
+        if: ${{ inputs.publish-release }}
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+        with:
+          prerelease: true
+          tag_name: ${{ inputs.upload-tag }}
+          files: rustdesk-${{ inputs.version }}-ohos-arm64.hap
