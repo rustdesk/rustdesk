@@ -426,11 +426,6 @@ class MainService : Service() {
         mediaProjectionManager: MediaProjectionManager,
         resultIntent: Intent,
     ) {
-        if (!setMediaProjectionForegroundService(true)) {
-            _isReady = false
-            checkMediaPermission()
-            return
-        }
         val restartCapture = isStart
         if (restartCapture) {
             stopCapture()
@@ -438,6 +433,11 @@ class MainService : Service() {
         virtualDisplay?.release()
         virtualDisplay = null
         releaseMediaProjection()
+        if (!setMediaProjectionForegroundService(true)) {
+            _isReady = false
+            checkMediaPermission()
+            return
+        }
         val projection =
             mediaProjectionManager.getMediaProjection(Activity.RESULT_OK, resultIntent)
         if (projection == null) {
@@ -762,6 +762,7 @@ class MainService : Service() {
     private fun foregroundServiceType(): Int {
         var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Keep a valid FGS type while the unattended host is idle and no capture type is active.
             serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         }
         if (mediaProjectionForegroundService) {
@@ -797,6 +798,11 @@ class MainService : Service() {
             createForegroundNotification()
             true
         } catch (error: SecurityException) {
+            mediaProjectionForegroundService = previousMediaProjection
+            microphoneForegroundService = previousMicrophone
+            Log.e(logTag, "Failed to update foreground service types", error)
+            false
+        } catch (error: IllegalStateException) {
             mediaProjectionForegroundService = previousMediaProjection
             microphoneForegroundService = previousMicrophone
             Log.e(logTag, "Failed to update foreground service types", error)
