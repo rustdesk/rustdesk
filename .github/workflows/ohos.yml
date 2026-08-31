@@ -2,7 +2,7 @@ name: HarmonyOS Apps CI
 
 on:
   push:
-    branches: [master, feat/ohos-unified-core-flutter]
+    branches: [master]
   workflow_dispatch:
     inputs:
       upload-artifact:
@@ -83,5 +83,5 @@ jobs:
         shell: bash
         run: |
           test -s R_RustDesk-Har/package.har
-          unzip -l R_RustDesk-Har/package.har \
+          tar -tzf R_RustDesk-Har/package.har \
             | grep -q 'libs/arm64-v8a/librustdesk_native_har.so'
