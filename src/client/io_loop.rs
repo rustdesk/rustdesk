@@ -1466,7 +1466,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             feature = "flutter",
                             not(any(target_os = "android", target_os = "ios"))
                         ))]
-                        if crate::clipboard::is_sync_clipboard_between_sessions_enabled() {
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
                             let mut msg = Message::new();
                             msg.set_clipboard(cb.clone());
                             let session_id = self.handler.lc.read().unwrap().session_id;
@@ -1499,7 +1501,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             feature = "flutter",
                             not(any(target_os = "android", target_os = "ios"))
                         ))]
-                        if crate::clipboard::is_sync_clipboard_between_sessions_enabled() {
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
                             let mut msg = Message::new();
                             msg.set_multi_clipboards(_mcb.clone());
                             let session_id = self.handler.lc.read().unwrap().session_id;
