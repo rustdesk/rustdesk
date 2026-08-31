@@ -210,15 +210,10 @@ class ServerModel with ChangeNotifier {
       _audioOk = audioOption != 'N';
     }
 
-    // file
-    if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-      _fileOk = false;
-      bind.mainSetOption(key: kOptionEnableFileTransfer, value: "N");
-    } else {
-      final fileOption =
-          await bind.mainGetOption(key: kOptionEnableFileTransfer);
-      _fileOk = fileOption != 'N';
-    }
+    // Android file transfer is confined to app-specific storage. Files enter
+    // and leave the workspace through Android's system document picker.
+    final fileOption = await bind.mainGetOption(key: kOptionEnableFileTransfer);
+    _fileOk = fileOption != 'N';
 
     // clipboard
     final clipOption = await bind.mainGetOption(key: kOptionEnableClipboard);
@@ -319,16 +314,6 @@ class ServerModel with ChangeNotifier {
     if (clients.any((c) => !c.disconnected)) {
       await showClientsMayNotBeChangedAlert(parent.target);
     }
-    if (!_fileOk &&
-        !await AndroidPermissionManager.check(kManageExternalStorage)) {
-      final res =
-          await AndroidPermissionManager.request(kManageExternalStorage);
-      if (!res) {
-        showToast(translate('Failed'));
-        return;
-      }
-    }
-
     _fileOk = !_fileOk;
     bind.mainSetOption(
         key: kOptionEnableFileTransfer,
@@ -417,9 +402,6 @@ class ServerModel with ChangeNotifier {
       await checkRequestNotificationPermission();
       if (bind.mainGetLocalOption(key: kOptionDisableFloatingWindow) != 'Y') {
         await checkFloatingWindowPermission();
-      }
-      if (!await AndroidPermissionManager.check(kManageExternalStorage)) {
-        await AndroidPermissionManager.request(kManageExternalStorage);
       }
       final res = await parent.target?.dialogManager
           .show<bool>((setState, close, context) {

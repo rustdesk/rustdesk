@@ -381,6 +381,14 @@ class FileController {
   void set homePath(String path) => options.value.home = path;
   OverlayDialogManager? get dialogManager => rootState.target?.dialogManager;
 
+  bool _isPathAllowed(String candidate) {
+    if (!isAndroid || !isLocal) return true;
+    if (homePath.isEmpty || candidate.isEmpty) return false;
+    final home = PathUtil.posixContext.normalize(homePath);
+    final target = PathUtil.posixContext.normalize(candidate);
+    return target == home || PathUtil.posixContext.isWithin(home, target);
+  }
+
   String get shortPath {
     final dirPath = directory.value.path;
     if (dirPath.startsWith(homePath)) {
@@ -414,8 +422,13 @@ class FileController {
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final savedDir = (await bind.sessionGetPeerOption(
+    var savedDir = (await bind.sessionGetPeerOption(
         sessionId: sessionId, name: isLocal ? "local_dir" : "remote_dir"));
+    if (savedDir.isNotEmpty && !_isPathAllowed(savedDir)) {
+      savedDir = options.value.home;
+      await bind.sessionPeerOption(
+        sessionId: sessionId, name: "local_dir", value: savedDir);
+    }
     Future<bool> tryOpenReadyDirs() async {
       final dirs = <String>{
         if (directory.value.path.isNotEmpty) directory.value.path,
@@ -485,6 +498,9 @@ class FileController {
   }
 
   Future<bool> _openDirectoryPath(String path, {bool isBack = false}) async {
+    if (!_isPathAllowed(path)) {
+      return false;
+    }
     if (!isBack) {
       pushHistory();
     }
@@ -504,6 +520,7 @@ class FileController {
         return true;
       }
       fd.format(isWindows, sort: sortBy.value);
+      selectedItems.reconcile(fd.entries);
       directory.value = fd;
       return true;
     } catch (e) {
@@ -550,6 +567,9 @@ class FileController {
     final isWindows = options.value.isWindows;
     final dirPath = directory.value.path;
     var parent = PathUtil.dirname(dirPath, isWindows);
+    if (!_isPathAllowed(parent)) {
+      return true;
+    }
     // specially for C:\, D:\, goto '/'
     if (parent == dirPath && isWindows) {
       return await _openDirectoryPath('/', isBack: isBack);
@@ -1885,7 +1905,7 @@ class PathUtil {
   }
 
   static bool validName(String name, bool isWindows) {
-    final unixFileNamePattern = RegExp(r'^[^/\0]+$');
+    final unixFileNamePattern = RegExp(r'^[^/\x00]+$');
     final windowsFileNamePattern = RegExp(r'^[^<>:"/\\|?*]+$');
     final reg = isWindows ? windowsFileNamePattern : unixFileNamePattern;
     return reg.hasMatch(name);
@@ -1926,6 +1946,21 @@ class SelectedItems {
 
   void clear() {
     items.clear();
+  }
+
+  void reconcile(List<Entry> entries) {
+    if (items.isEmpty) return;
+    final currentByPath = {for (final entry in entries) entry.path: entry};
+    final reconciled = <Entry>[];
+    for (final item in items) {
+      final current = currentByPath[item.path];
+      if (current != null && current.entryType == item.entryType) {
+        reconciled.add(current);
+      }
+    }
+    items
+      ..clear()
+      ..addAll(reconciled);
   }
 
   void selectAll(List<Entry> entries) {
