@@ -283,7 +283,7 @@ jobs:
                nasm \
                yasm \
                ninja-build \
-               openjdk-11-jdk-headless \
+               openjdk-17-jdk-headless \
                pkg-config \
                tree \
                wget
@@ -365,9 +365,9 @@ jobs:
       - name: Build rustdesk
         shell: bash
         env:
-          JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
-          export PATH=/usr/lib/jvm/java-11-openjdk-amd64/bin:$PATH
+          export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # temporary use debug sign config
           sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
           case ${{ matrix.job.target }} in
