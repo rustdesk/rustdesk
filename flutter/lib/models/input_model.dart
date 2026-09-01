@@ -1278,8 +1278,14 @@ class InputModel {
       // Down alone), so a gesture that produces no scroll never becomes a
       // stationary tap/long-press on the peer.
       if (!_trackpadPanOpen) {
-        handlePointerEvent(
-            'touch', kMouseEventTypePanStart, _trackpadPanStartPos);
+        // handlePointerEvent can silently drop the start (peer control
+        // protected, or no remote rect yet). Leave the pan closed and skip the
+        // update in that case, so the next deliverable move retries the start
+        // instead of emitting an update the peer has no gesture for.
+        if (!handlePointerEvent(
+            'touch', kMouseEventTypePanStart, _trackpadPanStartPos)) {
+          return;
+        }
         _trackpadPanOpen = true;
       }
       handlePointerEvent(
@@ -1966,11 +1972,15 @@ class InputModel {
     return Offset(x, y);
   }
 
-  void handlePointerEvent(String kind, String type, Offset offset) {
+  /// Send a touch pointer event to the peer. Returns whether the event was
+  /// actually emitted — callers that open a stateful gesture (pan_start) must
+  /// check this, because the send is silently dropped when peer control is
+  /// protected, the remote rect is not ready, or the view is in camera mode.
+  bool handlePointerEvent(String kind, String type, Offset offset) {
     double x = offset.dx;
     double y = offset.dy;
     if (_checkPeerControlProtected(x, y)) {
-      return;
+      return false;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
     // to-do: handle mouse events
@@ -1991,7 +2001,7 @@ class InputModel {
         type,
       );
       if (pos == null) {
-        return;
+        return false;
       }
       evtValue = {
         'x': pos.x.toInt(),
@@ -2000,9 +2010,10 @@ class InputModel {
     }
 
     final evt = PointerEventToRust(kind, type, evtValue).toJson();
-    if (isViewCamera) return;
+    if (isViewCamera) return false;
     bind.sessionSendPointer(
         sessionId: sessionId, msg: json.encode(modify(evt)));
+    return true;
   }
 
   bool _checkPeerControlProtected(double x, double y) {
