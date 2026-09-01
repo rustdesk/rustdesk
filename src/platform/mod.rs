@@ -36,11 +36,23 @@ use std::sync::{Arc, Mutex};
 #[cfg(any(windows, target_os = "macos"))]
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
     let mut bytes = app_name.bytes();
-    if !bytes.next().is_some_and(|byte| byte.is_ascii_alphabetic())
-        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    let Some(first) = bytes.next() else {
+        hbb_common::bail!("Application name must not be empty.");
+    };
+    // Keep leading hyphens valid on Windows for existing custom clients. macOS
+    // rejects them because pgrep interprets a leading hyphen as an option.
+    let valid_first =
+        first.is_ascii_alphanumeric() || first == b'_' || (cfg!(windows) && first == b'-');
+    if !valid_first
+        || !bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
+        let valid_prefix = if cfg!(windows) {
+            "a letter, number, underscore, or hyphen"
+        } else {
+            "a letter, number, or underscore"
+        };
         hbb_common::bail!(
-            "Application name must start with a letter and contain only letters, numbers, and hyphens."
+            "Application name must start with {valid_prefix} and contain only letters, numbers, hyphens, and underscores."
         );
     }
     Ok(())
@@ -228,22 +240,26 @@ mod tests {
 
     #[cfg(any(windows, target_os = "macos"))]
     #[test]
-    fn install_app_names_require_ascii_letter_prefix() {
-        for app_name in ["RustDesk", "RustDesk-2", "A", "A-0"] {
+    fn install_app_names_enforce_ascii_command_safety() {
+        for app_name in [
+            "RustDesk",
+            "RustDesk-2",
+            "A",
+            "A-0",
+            "1RustDesk",
+            "_RustDesk",
+            "Rust_Desk",
+        ] {
             assert!(validate_install_app_name(app_name).is_ok(), "{app_name}");
         }
-        for app_name in [
-            "",
-            "1RustDesk",
-            "-RustDesk",
-            "Rust_Desk",
-            "Rust.Desk",
-            "Rust Desk",
-            "RüstDesk",
-            "RustDesk;touch",
-        ] {
+        for app_name in ["", "Rust.Desk", "Rust Desk", "RüstDesk", "RustDesk;touch"] {
             assert!(validate_install_app_name(app_name).is_err(), "{app_name}");
         }
+
+        #[cfg(windows)]
+        assert!(validate_install_app_name("-RustDesk").is_ok());
+        #[cfg(target_os = "macos")]
+        assert!(validate_install_app_name("-RustDesk").is_err());
     }
 
     #[test]
