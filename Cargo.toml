@@ -140,10 +140,12 @@ windows = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_System_Variant",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Media_Audio",
-    "Win32_Devices_Properties",
+    "Win32_Devices_FunctionDiscovery",
 ] }
 winreg = "0.11"
 windows-service = "0.6"

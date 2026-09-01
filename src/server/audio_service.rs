@@ -94,8 +94,8 @@ pub fn restart() {
 // ---------------------------------------------------------------------
 #[cfg(windows)]
 mod comms_device {
-    use windows::core::Interface;
-    use windows::Win32::Devices::Properties::DEVPKEY_Device_FriendlyName;
+    use hbb_common::log;
+    use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
     use windows::Win32::Media::Audio::{
         eCommunications, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
     };
@@ -130,7 +130,7 @@ mod comms_device {
                     CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
                 let device = enumerator.GetDefaultAudioEndpoint(eRender, eCommunications)?;
                 let store = device.OpenPropertyStore(STGM_READ)?;
-                let prop = store.GetValue(&DEVPKEY_Device_FriendlyName)?;
+                let prop = store.GetValue(&PKEY_Device_FriendlyName)?;
                 Ok(prop.to_string())
             })();
 
@@ -142,7 +142,10 @@ mod comms_device {
                 Ok(n) if !n.is_empty() => Some(n),
                 Ok(_) => None,
                 Err(e) => {
-                    log::debug!("Failed to query default communications output device: {:?}", e);
+                    log::debug!(
+                        "Failed to query default communications output device: {:?}",
+                        e
+                    );
                     None
                 }
             }
@@ -406,7 +409,10 @@ mod cpal_impl {
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
             if let Some(stripped) = audio_input.strip_suffix(super::COMMS_DEVICE_SUFFIX) {
-                for d in HOST.devices().with_context(|| "Failed to get audio devices")? {
+                for d in HOST
+                    .devices()
+                    .with_context(|| "Failed to get audio devices")?
+                {
                     if d.name().unwrap_or_default() == stripped {
                         log::info!("Communications output device: {}", stripped);
                         let format = d
