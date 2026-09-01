@@ -4222,8 +4222,7 @@ pub mod peer_online {
         let mut socket = match create_online_stream(server).await {
             Ok(s) => s,
             Err(e) => {
-                log::debug!("Failed to create peers online stream, {e}");
-                return Ok((vec![], ids.clone()));
+                bail!("Failed to create peers online stream, {e}");
             }
         };
         // TODO: Use long connections to avoid socket creation
@@ -4231,8 +4230,7 @@ pub mod peer_online {
         // we may face the following error:
         // An established connection was aborted by the software in your host machine. (os error 10053)
         if let Err(e) = socket.send(&msg_out).await {
-            log::debug!("Failed to send peers online states query, {e}");
-            return Ok((vec![], ids.clone()));
+            bail!("Failed to send peers online states query, {e}");
         }
         // Retry for 2 times to get the online response
         for _ in 0..2 {
