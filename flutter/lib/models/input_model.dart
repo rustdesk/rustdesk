@@ -1229,7 +1229,11 @@ class InputModel {
   /// Android-controlled peer. Shared by the Down path (onPointDownImage) and
   /// the defensive relatch in onPointMoveImage, so a fallback relatch cannot
   /// emit pan_update without pan_start or reuse a stale remainder.
+  /// Idempotent: if a gesture already latched (e.g. a second Down arrives
+  /// before its Up was delivered), a repeat call must not emit another
+  /// pan_start or the peer would be left with a nested, never-closed pan.
   void _beginTrackpadTwoFinger(Offset position) {
+    if (_trackpadTwoFinger) return;
     _trackpadTwoFinger = true;
     _trackpadScrollUnsent = Offset.zero;
     // Mirror the Android-peer pan lifecycle (onPointerPanZoomStart).
@@ -1374,15 +1378,18 @@ class InputModel {
     if (isAndroid &&
         (e.kind == ui.PointerDeviceKind.touch ||
             e.kind == ui.PointerDeviceKind.trackpad)) {
-      _trackpadHoverDeviceId = e.device;
       // During a 2-finger scroll gesture the device also emits hover frames;
-      // skip them so the cursor does not drift while scrolling. The latch is
-      // cleared only by an explicit PointerUp (onPointUpImage); if that is ever
-      // missed, the next trackpad move relatches the gesture (onPointMoveImage),
-      // so a pause can never strand an active scroll.
+      // skip them so the cursor does not drift while scrolling, and learn the
+      // device id only while idle — learning mid-gesture would let a
+      // concurrent pointer source (e.g. a second trackpad) overwrite it and
+      // strand the latch. The latch is cleared only by the gesture's terminal
+      // event — the Up (onPointUpImage) or a cancel (onPointCancelImage),
+      // both of which run regardless of view mode; if a platform ever loses
+      // both, only a full 2-finger Down→Up cycle clears it again.
       if (_trackpadTwoFinger) {
         return;
       }
+      _trackpadHoverDeviceId = e.device;
       // Absolute positioning: map the (Android-driven) cursor position to remote
       // canvas coords, exactly like a real mouse hover. Unlike a relative
       // move_relative, this keeps the remote cursor visible, reaches the full
@@ -1761,12 +1768,11 @@ class InputModel {
           e.device == _trackpadHoverDeviceId &&
           (e.buttons & 0x1) != 0) {
         // The Down (onPointDownImage) normally starts the gesture already;
-        // start it here too if that Down was ever missed, so interleaved
-        // hover frames stay suppressed (onPointHoverImage) and the peer sees
-        // a proper pan_start before the first pan_update.
-        if (!_trackpadTwoFinger) {
-          _beginTrackpadTwoFinger(e.position);
-        }
+        // starting it here too covers a missed Down (the helper is
+        // idempotent), so interleaved hover frames stay suppressed
+        // (onPointHoverImage) and the peer sees a proper pan_start before
+        // the first pan_update.
+        _beginTrackpadTwoFinger(e.position);
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }
       return;
