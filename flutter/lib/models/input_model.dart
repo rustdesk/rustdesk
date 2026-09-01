@@ -1686,19 +1686,21 @@ class InputModel {
     // latch before the view-mode guards below: if the session turned view-only
     // (or camera view) mid-gesture, those guards would swallow this Up and
     // strand the latch, freezing 1-finger cursor moves (onPointHoverImage)
-    // once the session is interactive again. Only sending pan_end to the peer
-    // keeps the view/camera policy. Require the learned trackpad device so an
-    // unrelated touchscreen up cannot terminate the active gesture.
+    // once the session is interactive again. Require the learned trackpad
+    // device so an unrelated touchscreen up cannot terminate the gesture.
     if (!isDesktop &&
         e.kind == ui.PointerDeviceKind.touch &&
         _trackpadHoverDeviceId != null &&
         e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
-      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd).
-      if (!(isViewOnly && !showMyCursor) &&
-          !isViewCamera &&
-          peerPlatform == kPeerPlatformAndroid) {
+      // Always close the peer's pan: pan_start was already sent while
+      // interactive, so a suppressed pan_end after a mid-gesture view-only
+      // switch would leave the Android peer with an unterminated stateful
+      // gesture. Matches onPointerPanZoomEnd / onPointCancelImage (opening a
+      // gesture is view-only-guarded, closing it is not); camera mode is
+      // still suppressed inside handlePointerEvent.
+      if (peerPlatform == kPeerPlatformAndroid) {
         handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
       }
       return;
