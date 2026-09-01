@@ -291,6 +291,10 @@ class InputService : AccessibilityService() {
     private fun startGesture(x: Int, y: Int) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             touchPath.reset()
+            // Discard a stale stroke from a previous gesture whose endGesture
+            // (TOUCH_PAN_END) was dropped; doDispatchGesture would otherwise
+            // continueStroke() on it and corrupt the next scroll.
+            stroke = null
         } else {
             touchPath = Path()
         }
