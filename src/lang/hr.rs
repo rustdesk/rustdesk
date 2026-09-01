@@ -761,5 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Nastavi"),
         ("Browser didn't open? Use the url below to sign in.", "Preglednik se nije otvorio? Za prijavu upotrijebite URL u nastavku."),
         ("Lock canvas", "Zaključaj pozadinu"),
+        ("Network interface", ""),
+        ("Default (all interfaces)", ""),
+        ("bind-interface-tip", ""),
     ].iter().cloned().collect();
 }
