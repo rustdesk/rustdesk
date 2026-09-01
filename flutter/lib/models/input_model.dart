@@ -435,6 +435,11 @@ class InputModel {
   int _trackpadSpeed = kDefaultTrackpadSpeed;
   double _trackpadSpeedInner = kDefaultTrackpadSpeed / 100.0;
   var _trackpadScrollUnsent = Offset.zero;
+  // Whether a pan was actually opened on an Android peer for the current
+  // gesture (deferred until the first scroll update that gets sent), and the
+  // canvas position that pan started at.
+  bool _trackpadPanOpen = false;
+  Offset _trackpadPanStartPos = Offset.zero;
 
   // Mobile relative mouse delta accumulators (for slow/fine movements).
   double _mobileDeltaRemainderX = 0.0;
@@ -1225,21 +1230,22 @@ class InputModel {
   }
 
   /// [FIX #15630] Start a trackpad 2-finger gesture: latch scroll mode, reset
-  /// the fractional-scroll accumulator, and open the touch pan on an
-  /// Android-controlled peer. Shared by the Down path (onPointDownImage) and
-  /// the defensive relatch in onPointMoveImage, so a fallback relatch cannot
-  /// emit pan_update without pan_start or reuse a stale remainder.
-  /// Idempotent: if a gesture already latched (e.g. a second Down arrives
-  /// before its Up was delivered), a repeat call must not emit another
-  /// pan_start or the peer would be left with a nested, never-closed pan.
+  /// the fractional-scroll accumulator, and record the (canvas) position the
+  /// gesture started at. Shared by the Down path (onPointDownImage) and the
+  /// defensive relatch in onPointMoveImage. Idempotent: a repeat call for an
+  /// already-latched gesture must not reset the accumulator or reopen a pan.
+  ///
+  /// The Android peer pan is NOT opened here — a Down/Up with no movement (or
+  /// one whose scaled accumulator never reaches a whole pixel) must not send a
+  /// bare pan_start/pan_end pair, which the peer would replay as a tap or
+  /// long-press. The pan is opened lazily by _sendTrackpadTwoFingerScroll on
+  /// the first update that actually gets sent.
   void _beginTrackpadTwoFinger(Offset position) {
     if (_trackpadTwoFinger) return;
     _trackpadTwoFinger = true;
     _trackpadScrollUnsent = Offset.zero;
-    // Mirror the Android-peer pan lifecycle (onPointerPanZoomStart).
-    if (peerPlatform == kPeerPlatformAndroid) {
-      handlePointerEvent('touch', kMouseEventTypePanStart, position);
-    }
+    _trackpadPanOpen = false;
+    _trackpadPanStartPos = position;
   }
 
   /// [FIX #15630] Send a smooth scroll for an Android trackpad 2-finger gesture.
@@ -1268,6 +1274,14 @@ class InputModel {
     // does not consume the `trackpad` mouse message. Mirror that branch so
     // Xiaomi-style synthetic input scrolls an Android peer like a native trackpad.
     if (peerPlatform == kPeerPlatformAndroid) {
+      // Open the pan on the first update that is actually sent (never on the
+      // Down alone), so a gesture that produces no scroll never becomes a
+      // stationary tap/long-press on the peer.
+      if (!_trackpadPanOpen) {
+        handlePointerEvent(
+            'touch', kMouseEventTypePanStart, _trackpadPanStartPos);
+        _trackpadPanOpen = true;
+      }
       handlePointerEvent(
           'touch', kMouseEventTypePanUpdate, Offset(x.toDouble(), y.toDouble()));
       return;
@@ -1646,7 +1660,7 @@ class InputModel {
         (e.buttons & 0x1) != 0 &&
         _trackpadHoverDeviceId != null &&
         e.device == _trackpadHoverDeviceId) {
-      _beginTrackpadTwoFinger(e.position);
+      _beginTrackpadTwoFinger(_pointerPositionForRemoteCanvas(e));
       return;
     }
 
@@ -1701,14 +1715,18 @@ class InputModel {
         e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
-      // Always close the peer's pan: pan_start was already sent while
-      // interactive, so a suppressed pan_end after a mid-gesture view-only
-      // switch would leave the Android peer with an unterminated stateful
-      // gesture. Matches onPointerPanZoomEnd / onPointCancelImage (opening a
-      // gesture is view-only-guarded, closing it is not); camera mode is
-      // still suppressed inside handlePointerEvent.
-      if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
+      // Close the peer pan only if one was actually opened (i.e. a scroll
+      // update was sent); a bare Down/Up must not emit a stationary stroke.
+      // Always close once opened — pan_start was sent while interactive, so a
+      // suppressed pan_end after a mid-gesture view-only switch would leave the
+      // Android peer with an unterminated stateful gesture. Matches
+      // onPointerPanZoomEnd / onPointCancelImage (opening a gesture is
+      // view-only-guarded, closing it is not); camera mode is still suppressed
+      // inside handlePointerEvent.
+      if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
+        handlePointerEvent(
+            'touch', kMouseEventTypePanEnd, _pointerPositionForRemoteCanvas(e));
+        _trackpadPanOpen = false;
       }
       return;
     }
@@ -1746,9 +1764,12 @@ class InputModel {
         e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
-      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd).
-      if (peerPlatform == kPeerPlatformAndroid) {
-        handlePointerEvent('touch', kMouseEventTypePanEnd, e.position);
+      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd), but only
+      // if a pan was actually opened (a scroll update was sent).
+      if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
+        handlePointerEvent(
+            'touch', kMouseEventTypePanEnd, _pointerPositionForRemoteCanvas(e));
+        _trackpadPanOpen = false;
       }
     }
   }
@@ -1772,7 +1793,7 @@ class InputModel {
         // idempotent), so interleaved hover frames stay suppressed
         // (onPointHoverImage) and the peer sees a proper pan_start before
         // the first pan_update.
-        _beginTrackpadTwoFinger(e.position);
+        _beginTrackpadTwoFinger(_pointerPositionForRemoteCanvas(e));
         _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
       }
       return;
