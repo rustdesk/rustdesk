@@ -4160,8 +4160,12 @@ pub mod peer_online {
             }
             let mut onlines = Vec::new();
             let mut offlines = Vec::new();
-            for (server, ids) in groups {
-                match query_online_states_(&ids, &server, query_timeout).await {
+            let results = hbb_common::futures::future::join_all(groups.into_iter().map(
+                |(server, ids)| async move { query_online_states_(&ids, &server, query_timeout).await },
+            ))
+            .await;
+            for result in results {
+                match result {
                     Ok((on, off)) => {
                         onlines.extend(on);
                         offlines.extend(off);
