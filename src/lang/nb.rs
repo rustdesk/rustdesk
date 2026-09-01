@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Fortsett"),
         ("Browser didn't open? Use the url below to sign in.", "Åpnet ikke nettleseren? Bruk URL-en nedenfor for å logge inn."),
         ("Lock canvas", "Lås lerret"),
+        ("Sync clipboard between sessions", "Synkroniser utklippstavlen mellom økter"),
+        ("sync-clipboard-between-sessions-tip", "Tekst eller bilder som kopieres i én ekstern økt, sendes også til utklippstavlen i de andre tilkoblede øktene dine."),
     ].iter().cloned().collect();
 }

@@ -1422,9 +1422,25 @@ pub fn update_file_clipboard_required() {
 
 #[cfg(not(target_os = "ios"))]
 pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
+    send_clipboard_msg_impl(msg, _is_file, None);
+}
+
+// `except_session_id` is the session the content came from, to avoid sending it back.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn send_clipboard_msg_to_other_sessions(msg: Message, except_session_id: u64) {
+    send_clipboard_msg_impl(msg, false, Some(except_session_id));
+}
+
+#[cfg(not(target_os = "ios"))]
+fn send_clipboard_msg_impl(msg: Message, _is_file: bool, except_session_id: Option<u64>) {
     for s in sessions::get_sessions() {
         if !s.is_default() {
             continue;
+        }
+        if let Some(except_session_id) = except_session_id {
+            if s.lc.read().unwrap().session_id == except_session_id {
+                continue;
+            }
         }
         #[cfg(feature = "unix-file-copy-paste")]
         if _is_file {

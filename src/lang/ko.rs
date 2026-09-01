@@ -761,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "계속"),
         ("Browser didn't open? Use the url below to sign in.", "브라우저가 열리지 않았나요? 아래 URL로 로그인하세요."),
         ("Lock canvas", "캔버스 잠금"),
+        ("Sync clipboard between sessions", "세션 간 클립보드 동기화"),
+        ("sync-clipboard-between-sessions-tip", "하나의 원격 세션에서 복사한 텍스트나 이미지는 연결된 다른 세션의 클립보드에도 전송됩니다."),
     ].iter().cloned().collect();
 }

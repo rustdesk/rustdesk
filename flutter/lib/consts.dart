@@ -168,6 +168,8 @@ const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
 const String kOptionEnableUdpPunch = "enable-udp-punch";
 const String kOptionEnableIpv6Punch = "enable-ipv6-punch";
+const String kOptionAllowSyncClipboardBetweenSessions =
+    "allow-sync-clipboard-between-sessions";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
