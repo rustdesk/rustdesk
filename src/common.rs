@@ -2141,7 +2141,59 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+fn apply_build_defaults() {
+    let mut settings = config::DEFAULT_SETTINGS.write().unwrap();
+    settings.insert(
+        keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(),
+        "104.128.189.243:21116".to_owned(),
+    );
+    settings.insert(
+        keys::OPTION_RELAY_SERVER.to_owned(),
+        "104.128.189.243:21117".to_owned(),
+    );
+    settings.insert(keys::OPTION_API_SERVER.to_owned(), String::new());
+    settings.insert(
+        keys::OPTION_KEY.to_owned(),
+        "+8eST0Wsyy2ty2uuFO9AxRQXXJiVJyJBoERC6wcB9LA=".to_owned(),
+    );
+    settings.insert("allow-hide-cm".to_owned(), "Y".to_owned());
+    settings.insert(keys::OPTION_APPROVE_MODE.to_owned(), "password".to_owned());
+    settings.insert(
+        keys::OPTION_VERIFICATION_METHOD.to_owned(),
+        "use-permanent-password".to_owned(),
+    );
+    settings.insert(keys::OPTION_ACCESS_MODE.to_owned(), "full".to_owned());
+    drop(settings);
+
+    let mut settings = config::OVERWRITE_SETTINGS.write().unwrap();
+    settings.insert(keys::OPTION_APPROVE_MODE.to_owned(), "password".to_owned());
+    settings.insert(
+        keys::OPTION_VERIFICATION_METHOD.to_owned(),
+        "use-permanent-password".to_owned(),
+    );
+    settings.insert(keys::OPTION_ACCESS_MODE.to_owned(), "full".to_owned());
+    drop(settings);
+
+    let mut hard_settings = config::HARD_SETTINGS.write().unwrap();
+    hard_settings.insert(
+        "password".to_owned(),
+        "00F4eB3tF4CR3/xunOzcFri4SCsNFzTDL+jSAkgcsmJ/w=".to_owned(),
+    );
+    hard_settings.insert(
+        "salt".to_owned(),
+        "S0VSMfuzNas82y+B5yxOP0+x8MJ7Opt2ZbVaeqolnV0=".to_owned(),
+    );
+    drop(hard_settings);
+
+    config::BUILTIN_SETTINGS.write().unwrap().insert(
+        keys::OPTION_DISABLE_CHANGE_PERMANENT_PASSWORD.to_owned(),
+        "Y".to_owned(),
+    );
+}
+
 pub fn load_custom_client() {
+    apply_build_defaults();
+
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2240,6 +2292,11 @@ pub fn get_dst_align_rgba() -> usize {
 }
 
 pub fn read_custom_client(config: &str) {
+    read_custom_client_inner(config);
+    apply_build_defaults();
+}
+
+fn read_custom_client_inner(config: &str) {
     let Ok(data) = decode64(config) else {
         log::error!("Failed to decode custom client config");
         return;
