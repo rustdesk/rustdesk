@@ -387,11 +387,7 @@ jobs:
           mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
 
-      - name: Build msi template for custom clients
-        # Custom client builds patch this template instead of running WiX per customer,
-        # so it is built once here with a placeholder app name, and left unsigned since
-        # the per-customer patch would invalidate a signature anyway.
-        #
+      - name: Build pre-built MSI template
         # Two things this works around: preprocess.py rewrites res/msi in place, so the
         # tree is reset around this second variant; and it locates the app as
         # <app-name>.exe inside the dist, so the dist copy is renamed to match.
@@ -405,23 +401,15 @@ jobs:
         # it also names payload that must never be renamed, such as librustdesk.dll
         # and drivers\RustDeskPrinterDriver.
         #
-        # --template also puts the files a custom client replaces in their own
-        # cabinet, so rebranding rebuilds a few hundred KB rather than recompressing
-        # the whole payload. The shipped msi above is built without it and is
-        # unaffected.
         #
-        # Building the arm64 template on the native arm64 runner is what makes ARM
-        # custom clients possible at all: the build agents are x64 and cannot run
+        # Building the arm64 template on the native arm64 runner makes the ARM
+        # package available: the build agents are x64 and cannot run
         # preprocess.py against an ARM exe.
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           git checkout -- res/msi
           cp -r ./rustdesk ./rustdesk-msi-template
           mv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe
-          # A stock build ships none of the files a custom client replaces, so the
-          # template needs a placeholder for each to have a File row to patch. The
-          # branding assets install only when the patcher says the customer supplied
-          # one, so an unused placeholder is never installed.
           Set-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline
           $assets = './rustdesk-msi-template/data/flutter_assets/assets'
           New-Item -ItemType Directory -Force -Path $assets | Out-Null
@@ -429,8 +417,6 @@ jobs:
             Set-Content -Path "$assets/$a" -Value 'placeholder' -NoNewline
           }
           pushd ./res/msi
-          # revision 0 is a sentinel: the patcher replaces the fourth version field
-          # with a fresh build number per customer, as building per customer did.
           python preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform
@@ -993,7 +979,6 @@ jobs:
           name: rustdesk-unsigned-windows-x86
           path: ./windows-x86/
 
-      # Custom client builds patch these instead of running WiX per customer.
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
