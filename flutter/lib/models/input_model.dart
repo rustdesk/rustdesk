@@ -1386,12 +1386,14 @@ class InputModel {
     // hover (only ACTION_DOWN/MOVE), so a touch-kind hover is uniquely the trackpad
     // — record its device id (used to identify 2-finger drags in onPointDownImage)
     // and route its per-frame delta to a relative cursor move.
-    // Android-only: iPadOS also reports Magic Trackpad pointers as kind=trackpad,
-    // and learning that device id here would make every wrapped recognizer drop
-    // its downs (IgnoreDeviceGestureRecognizerMixin), breaking trackpad taps.
-    if (isAndroid &&
-        (e.kind == ui.PointerDeviceKind.touch ||
-            e.kind == ui.PointerDeviceKind.trackpad)) {
+    // Android-only and touch-kind only. iPadOS also reports Magic Trackpad
+    // pointers as kind=trackpad, and a kind=trackpad device on Android would
+    // break the same way: learning its id makes every wrapped recognizer drop
+    // its downs (IgnoreDeviceGestureRecognizerMixin) while the down/move/up
+    // routing below only matches kind=touch, so its taps and 2-finger scroll
+    // would go dead. Don't learn trackpad-kind pointers — without a learned id
+    // the mixin is inert and their taps still fire through the recognizers.
+    if (isAndroid && e.kind == ui.PointerDeviceKind.touch) {
       // During a 2-finger scroll gesture the device also emits hover frames;
       // skip them so the cursor does not drift while scrolling, and learn the
       // device id only while idle — learning mid-gesture would let a
