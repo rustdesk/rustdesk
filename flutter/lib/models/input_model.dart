@@ -1977,6 +1977,10 @@ class InputModel {
   /// check this, because the send is silently dropped when peer control is
   /// protected, the remote rect is not ready, or the view is in camera mode.
   bool handlePointerEvent(String kind, String type, Offset offset) {
+    // Camera mode is a pure no-op: return before any position mapping or
+    // peer-control check, both of which mutate local cursor/canvas state
+    // (handlePointerDevicePos, _checkPeerControlProtected) without sending.
+    if (isViewCamera) return false;
     double x = offset.dx;
     double y = offset.dy;
     if (_checkPeerControlProtected(x, y)) {
@@ -2010,7 +2014,6 @@ class InputModel {
     }
 
     final evt = PointerEventToRust(kind, type, evtValue).toJson();
-    if (isViewCamera) return false;
     bind.sessionSendPointer(
         sessionId: sessionId, msg: json.encode(modify(evt)));
     return true;
