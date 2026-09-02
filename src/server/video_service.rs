@@ -101,11 +101,6 @@ impl DxgiRecoveryState {
         self.attempts += 1;
         Some(self.attempts)
     }
-
-    fn reset(&mut self) {
-        self.attempts = 0;
-        self.window_started = None;
-    }
 }
 
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
@@ -804,7 +799,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                 if frame.valid() {
                     #[cfg(windows)]
                     {
-                        dxgi_recovery_state.lock().unwrap().reset();
                         #[cfg(feature = "vram")]
                         if try_gdi == 1 && frame_from_dxgi {
                             VRamEncoder::set_fallback_gdi(sp.name(), false);
