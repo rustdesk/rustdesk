@@ -1361,7 +1361,7 @@ pub fn get_silent_install_options(printer_override: Option<bool>) -> &'static st
             let app_name = crate::get_app_name();
             let subkey = format!(".{}", app_name.to_lowercase());
             let printer = get_reg_of_hkcr(&subkey, REG_NAME_INSTALL_PRINTER);
-            printer.as_deref() == Some("1")
+            printer.as_deref() != Some("0")
         }
     };
     if install_printer && is_win_10_or_greater() {

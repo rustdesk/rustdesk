@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import os
 import glob
 import contextlib
@@ -34,6 +35,74 @@ else:
     flutter_build_dir = 'build/linux/x64/release/bundle/'
 flutter_build_dir_2 = f'flutter/{flutter_build_dir}'
 skip_cargo = False
+
+# Windows driver payload, shipped next to rustdesk.exe and copied into the install dir as-is.
+# - usbmmidd_v2/: Amyuni virtual display driver. The service installs it from usbmmIdd.inf via
+#   SetupAPI the first time privacy mode 2 / a virtual display is used (src/virtual_display_manager.rs).
+# - drivers/RustDeskPrinterDriver/ + printer_driver_adapter.dll: remote printer, installed by
+#   `--install-remote-printer` at install time (libs/remote_printer).
+# Layout matches what the upstream release workflow used to assemble by hand. sha256 is pinned:
+# a changed or partial download fails the build instead of shipping a client whose drivers can't install.
+WINDOWS_DRIVERS = [
+    {
+        'url': 'https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip',
+        'sha256': '629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51',
+        # x64 build installs through SetupAPI, so the Win32 dll, the standalone installer exes
+        # and the helper .bat are not shipped (same set upstream CI dropped).
+        'exclude': re.compile(r'usbmmidd_v2/(Win32/|deviceinstaller(64)?\.exe$|usbmmidd\.bat$)'),
+    },
+    {
+        'url': 'https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4-1.4.zip',
+        'sha256': 'c4cf4d3b48c4d9079b243edc43bb1db03b076282bc259c9f49883e9db20fa8b5',
+        # libs/remote_printer looks for drivers/RustDeskPrinterDriver/RustDeskPrinterDriver.inf
+        'rename': {'rustdesk_printer_driver_v4-1.4/': 'drivers/RustDeskPrinterDriver/'},
+    },
+    {
+        'url': 'https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip',
+        'sha256': 'e90e5d52c8807b4c6293c78a52479338715e0bf396b1b34802777b8c452e6781',
+    },
+]
+# Files the Rust side opens by path; if any is missing the feature silently degrades at runtime.
+WINDOWS_DRIVER_FILES = (
+    'usbmmidd_v2/usbmmIdd.inf',
+    'usbmmidd_v2/x64/usbmmIdd.dll',
+    'drivers/RustDeskPrinterDriver/RustDeskPrinterDriver.inf',
+    'printer_driver_adapter.dll',
+)
+
+
+def stage_windows_drivers(dest_dir):
+    """Download, verify and unpack WINDOWS_DRIVERS into dest_dir (the folder that becomes the installer)."""
+    os.makedirs(dest_dir, exist_ok=True)
+    for spec in WINDOWS_DRIVERS:
+        name = spec['url'].rsplit('/', 1)[-1]
+        print(f'{name}: downloading')
+        data = urllib.request.urlopen(spec['url'], timeout=120).read()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest != spec['sha256']:
+            raise Exception(f'{name}: sha256 mismatch, got {digest}, want {spec["sha256"]}')
+        exclude = spec.get('exclude')
+        rename = spec.get('rename', {})
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for info in zf.infolist():
+                if info.is_dir() or (exclude and exclude.match(info.filename)):
+                    continue
+                rel = info.filename
+                for old, new in rename.items():
+                    if rel.startswith(old):
+                        rel = new + rel[len(old):]
+                parts = rel.split('/')
+                if '..' in parts or rel.startswith('/'):
+                    raise Exception(f'{name}: refusing to extract {info.filename}')
+                target = os.path.join(dest_dir, *parts)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(info) as src, open(target, 'wb') as dst:
+                    shutil.copyfileobj(src, dst)
+                print(f'  {rel}')
+    for required in WINDOWS_DRIVER_FILES:
+        if not os.path.isfile(os.path.join(dest_dir, *required.split('/'))):
+            raise Exception(f'driver staging incomplete: {required} is missing in {dest_dir}')
+    print(f'Windows driver payload staged in {os.path.abspath(dest_dir)}')
 
 
 def get_deb_arch() -> str:
@@ -166,6 +235,18 @@ def make_parser():
     parser.add_argument(
         "--package",
         type=str
+    )
+    parser.add_argument(
+        '--stage-drivers',
+        metavar='DIR',
+        help='Download the Windows driver payload (virtual display + remote printer) into DIR '
+             'and exit. The flutter Windows build does this by itself; this is for CI steps and checks.'
+    )
+    parser.add_argument(
+        '--skip-drivers',
+        action='store_true',
+        help='Windows flutter build: do not bundle the driver payload (offline dev builds only; '
+             'privacy mode 2, virtual displays and the remote printer will not install from such a build).'
     )
     if osx:
         parser.add_argument(
@@ -926,7 +1007,7 @@ def build_flutter_arch_manjaro(version, features):
     system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
 
 
-def build_flutter_windows(version, features, skip_portable_pack):
+def build_flutter_windows(version, features, skip_portable_pack, skip_drivers=False):
     if not skip_cargo:
         system2(f'cargo build --locked --features {features} --lib --release')
         if not os.path.exists("target/release/librustdesk.dll"):
@@ -937,6 +1018,9 @@ def build_flutter_windows(version, features, skip_portable_pack):
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    # Before the early return: CI builds with --skip-portable-pack and packs this folder itself.
+    if not skip_drivers:
+        stage_windows_drivers(flutter_build_dir_2)
     if skip_portable_pack:
         return
     os.chdir('libs/portable')
@@ -975,6 +1059,10 @@ def main():
         print(feats)
         return
 
+    if args.stage_drivers:
+        stage_windows_drivers(args.stage_drivers)
+        return
+
     if os.path.exists(exe_path):
         os.unlink(exe_path)
     if os.path.isfile('/usr/bin/pacman'):
@@ -1001,7 +1089,7 @@ def main():
         os.chdir('../../..')
 
         if flutter:
-            build_flutter_windows(version, features, args.skip_portable_pack)
+            build_flutter_windows(version, features, args.skip_portable_pack, args.skip_drivers)
             return
         system2('cargo build --locked --release --features ' + features)
         # system2('upx.exe target/release/rustdesk.exe')

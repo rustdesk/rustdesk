@@ -11,6 +11,9 @@ on:
 
 jobs:
   run-flutter-tag-build:
+    # Forks default GITHUB_TOKEN to read-only; Publish Release needs contents: write.
+    permissions:
+      contents: write
     uses: ./.github/workflows/flutter-build.yml
     secrets: inherit
     with:
