@@ -736,8 +736,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                         // With another wayland stream active, exiting alone rebuilds NOTHING:
                         // the shared state survives and the retry reuses the same stale
                         // rectangle. Ask every wayland service to drain so the last one clears.
+                        // Monitors only: the flag is process-global, and a camera owns nothing in
+                        // that shared state, so raising it there would tear down unrelated screen
+                        // sharing. A camera still bails and rebuilds its own capturer and encoder.
                         #[cfg(target_os = "linux")]
-                        super::wayland::request_restart();
+                        if vs.source.is_monitor() {
+                            super::wayland::request_restart();
+                        }
                         bail!(
                             "frame {}x{} is not the {}x{} this capturer was built with; rebuilding",
                             f.width(),
