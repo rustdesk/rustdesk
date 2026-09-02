@@ -857,6 +857,14 @@ impl Display {
 
 fn wrap_hresult(x: HRESULT) -> io::Result<()> {
     use std::io::ErrorKind::*;
+    if x == DXGI_ERROR_ACCESS_LOST {
+        eprintln!(
+            "DXGI call failed: DXGI_ERROR_ACCESS_LOST (0x{:08X})",
+            x as u32
+        );
+    } else if x != S_OK && x != DXGI_ERROR_WAIT_TIMEOUT {
+        eprintln!("DXGI call failed: HRESULT=0x{:08X}", x as u32);
+    }
     Err((match x {
         S_OK => return Ok(()),
         DXGI_ERROR_ACCESS_LOST => ConnectionReset,
