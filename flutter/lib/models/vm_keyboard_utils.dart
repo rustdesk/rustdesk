@@ -45,19 +45,24 @@ class VmKeyEvent {
       'VmKeyEvent(usbHid: 0x${usbHid.toRadixString(16)}, down: $down)';
 }
 
-/// Builds a balanced physical event sequence with active toolbar modifiers.
+/// Builds a balanced physical event sequence without releasing modifiers that
+/// are already held by a physical keyboard.
 List<VmKeyEvent> vmKeyEventsForStroke(
   VmKeyStroke stroke, {
   required bool ctrl,
   required bool shift,
   required bool alt,
   required bool command,
+  bool ctrlAlreadyDown = false,
+  bool shiftAlreadyDown = false,
+  bool altAlreadyDown = false,
+  bool commandAlreadyDown = false,
 }) {
   final modifiers = <int>[
-    if (ctrl) vmLeftControlUsbHid,
-    if (shift || stroke.shift) vmLeftShiftUsbHid,
-    if (alt) vmLeftAltUsbHid,
-    if (command) vmLeftGuiUsbHid,
+    if (ctrl && !ctrlAlreadyDown) vmLeftControlUsbHid,
+    if ((shift || stroke.shift) && !shiftAlreadyDown) vmLeftShiftUsbHid,
+    if (alt && !altAlreadyDown) vmLeftAltUsbHid,
+    if (command && !commandAlreadyDown) vmLeftGuiUsbHid,
   ];
   return [
     for (final modifier in modifiers) VmKeyEvent(modifier, true),

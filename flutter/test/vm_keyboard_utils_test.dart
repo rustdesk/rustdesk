@@ -135,5 +135,59 @@ void main() {
         ],
       );
     });
+
+    test('does not synthesize modifiers already held by a physical keyboard',
+        () {
+      final events = vmKeyEventsForStroke(
+        const VmKeyStroke(0x04, shift: true),
+        ctrl: true,
+        shift: true,
+        alt: true,
+        command: true,
+        ctrlAlreadyDown: true,
+        shiftAlreadyDown: true,
+        altAlreadyDown: true,
+        commandAlreadyDown: true,
+      );
+
+      expect(
+        events,
+        const [
+          VmKeyEvent(0x04, true),
+          VmKeyEvent(0x04, false),
+        ],
+      );
+    });
+
+    test('keeps a physical modifier held across a VM soft-key stroke', () {
+      final vmEvents = vmKeyEventsForStroke(
+        const VmKeyStroke(0x06),
+        ctrl: true,
+        shift: false,
+        alt: false,
+        command: false,
+        ctrlAlreadyDown: true,
+      );
+
+      final completeSequence = [
+        const VmKeyEvent(vmLeftControlUsbHid, true),
+        ...vmEvents,
+        const VmKeyEvent(0x1B, true),
+        const VmKeyEvent(0x1B, false),
+        const VmKeyEvent(vmLeftControlUsbHid, false),
+      ];
+
+      expect(
+        completeSequence,
+        const [
+          VmKeyEvent(vmLeftControlUsbHid, true),
+          VmKeyEvent(0x06, true),
+          VmKeyEvent(0x06, false),
+          VmKeyEvent(0x1B, true),
+          VmKeyEvent(0x1B, false),
+          VmKeyEvent(vmLeftControlUsbHid, false),
+        ],
+      );
+    });
   });
 }

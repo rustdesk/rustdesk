@@ -300,6 +300,17 @@ class ToReleaseKeys {
   KeyEvent? lastRCommandKeyEvent;
   KeyEvent? lastSuperKeyEvent;
 
+  bool get hasCtrlKeyDown =>
+      lastLCtrlKeyEvent != null || lastRCtrlKeyEvent != null;
+  bool get hasShiftKeyDown =>
+      lastLShiftKeyEvent != null || lastRShiftKeyEvent != null;
+  bool get hasAltKeyDown =>
+      lastLAltKeyEvent != null || lastRAltKeyEvent != null;
+  bool get hasCommandKeyDown =>
+      lastLCommandKeyEvent != null ||
+      lastRCommandKeyEvent != null ||
+      lastSuperKeyEvent != null;
+
   reset() {
     lastLShiftKeyEvent = null;
     lastRShiftKeyEvent = null;
@@ -637,7 +648,7 @@ class InputModel {
       if (!alt) {
         alt = true;
       }
-      toReleaseKeys.lastLAltKeyEvent = upEvent(e);
+      toReleaseKeys.lastRAltKeyEvent = upEvent(e);
     } else if (e.logicalKey == LogicalKeyboardKey.controlLeft) {
       if (!ctrl) {
         ctrl = true;
@@ -1072,6 +1083,10 @@ class InputModel {
         shift: shift,
         alt: alt,
         command: command,
+        ctrlAlreadyDown: toReleaseKeys.hasCtrlKeyDown,
+        shiftAlreadyDown: toReleaseKeys.hasShiftKeyDown,
+        altAlreadyDown: toReleaseKeys.hasAltKeyDown,
+        commandAlreadyDown: toReleaseKeys.hasCommandKeyDown,
       );
       for (final event in events) {
         sendPhysicalKey(event.usbHid, event.down);
