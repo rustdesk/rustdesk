@@ -444,6 +444,9 @@ unsafe fn enumerate_output6(
             let mut desc: DXGI_OUTPUT_DESC = mem::zeroed();
             if (*output.0).GetDesc(&mut desc) == S_OK && wide_eq(&desc.DeviceName, device_name) {
                 let output6 = query_output6(output.0 as *mut IUnknown);
+                if output6.is_null() {
+                    return (ComPtr(ptr::null_mut()), ComPtr(ptr::null_mut()));
+                }
                 return (factory, output6);
             }
         }
