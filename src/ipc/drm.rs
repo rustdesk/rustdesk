@@ -699,7 +699,18 @@ fn schedule_drm_cache_refresh() {
                     Ok(g) => g,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                if *cache != fresh {
+                if trust.uninspected && fresh.len() < cache.len() {
+                    // A card that did not answer cannot prove ITS displays are gone. Only the
+                    // shrink is refused: growth and identity changes still land, and a real
+                    // removal takes the node out of /dev/dri and sysfs together, so the counts
+                    // fall in step and this round is no longer partial.
+                    log::debug!(
+                        "drm: keeping {} cached display(s) through a partial enumeration ({} seen)",
+                        cache.len(),
+                        fresh.len()
+                    );
+                    false
+                } else if *cache != fresh {
                     *cache = fresh;
                     true
                 } else {
