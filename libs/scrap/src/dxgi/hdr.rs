@@ -1,12 +1,18 @@
-//! HDR desktop -> SDR frame tone-map for Desktop Duplication.
+//! HDR desktop -> SDR normalization for Desktop Duplication frames.
 //!
 //! With HDR enabled Windows composes the desktop as linear scRGB in
 //! R16G16B16A16_FLOAT, and SDR "white" sits at the user's SDR content
 //! brightness (DISPLAYCONFIG_SDR_WHITE_LEVEL) rather than at 1.0. The legacy
 //! DuplicateOutput converts that to BGRA8 by clipping, which is the washed-out
 //! picture reported for HDR hosts. This pass divides by the SDR white level,
-//! clamps, and applies the sRGB transfer, so SDR content round-trips exactly
-//! and HDR highlights clip at white.
+//! clamps, and applies the sRGB transfer, so SDR content comes out exactly as
+//! it would from an SDR desktop.
+//!
+//! It is a normalization, not a tone map: anything brighter than SDR white
+//! (HDR video, HDR games) clips to white on the SDR viewer, where the local
+//! HDR display would show it brighter than white. A roll-off would have to
+//! move SDR white below 1.0 to make headroom, trading the accuracy of the SDR
+//! content this pass exists for, so it is deliberately not done.
 //!
 //! The conversion is automatic and stays on the controlled side on purpose:
 //! the controller renders through Flutter external textures, which are 8-bit
@@ -19,7 +25,7 @@ use super::ComPtr;
 use hbb_common::log;
 use std::{
     io, mem, ptr,
-    sync::atomic::AtomicBool,
+    sync::{atomic::AtomicBool, OnceLock},
     time::{Duration, Instant},
 };
 use winapi::{
@@ -45,9 +51,17 @@ use winapi::{
     },
 };
 
-/// Set once the tone-map cannot be built on this machine (no d3dcompiler, shader
-/// creation failed, ...). The capturer then stops asking DXGI for float frames.
+/// Set once the tone-map can never work in this process (no d3dcompiler, the
+/// shaders do not compile). Capturers then stop asking DXGI for float frames.
+/// Device-specific failures are not recorded here; the capturer that hit one
+/// re-duplicates without the tone-map on its own.
 pub static UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// Failures no capturer on this machine can recover from, as opposed to
+/// device-specific ones that a recreated capturer may not hit again.
+pub fn is_permanent(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::Unsupported
+}
 
 const VS_SRC: &str = "\
 float4 main(uint id : SV_VertexID) : SV_Position {
@@ -330,17 +344,26 @@ type D3DCompileFn = unsafe extern "system" fn(
     *mut *mut ID3DBlob,
 ) -> HRESULT;
 
-// Loaded on demand: the compiler DLL is only needed on HDR desktops, and an
-// import-time link would make every install depend on it.
-unsafe fn load_d3d_compile() -> io::Result<D3DCompileFn> {
+static D3D_COMPILE: OnceLock<Result<D3DCompileFn, String>> = OnceLock::new();
+
+// Loaded once per process and kept: the compiler DLL is only needed on HDR
+// desktops, and an import-time link would make every install depend on it.
+fn load_d3d_compile() -> io::Result<D3DCompileFn> {
+    D3D_COMPILE
+        .get_or_init(|| unsafe { find_d3d_compile() })
+        .clone()
+        .map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))
+}
+
+unsafe fn find_d3d_compile() -> Result<D3DCompileFn, String> {
     let name: Vec<u16> = "d3dcompiler_47.dll\0".encode_utf16().collect();
     let module = LoadLibraryW(name.as_ptr());
     if module.is_null() {
-        return Err(other("d3dcompiler_47.dll not available"));
+        return Err("d3dcompiler_47.dll not available".into());
     }
     let f = GetProcAddress(module, b"D3DCompile\0".as_ptr() as _);
     if f.is_null() {
-        return Err(other("D3DCompile not exported"));
+        return Err("D3DCompile not exported".into());
     }
     Ok(mem::transmute::<_, D3DCompileFn>(f))
 }
@@ -379,7 +402,10 @@ unsafe fn compile_shader(
         if !code.is_null() {
             (*(code as *mut IUnknown)).Release();
         }
-        return Err(other(format!("D3DCompile failed: {hr:#x} {msg}")));
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("D3DCompile failed: {hr:#x} {msg}"),
+        ));
     }
     Ok(ComPtr(code))
 }
