@@ -167,6 +167,51 @@ class UserModel {
     ]);
   }
 
+  // Sessions parked per API server while another server is in use, so that
+  // switching back restores the login instead of requiring a new one.
+  static const String _kParkedSessions = 'parked_sessions';
+
+  /// Called when the API server changes: park the session of the server being
+  /// left (the token is not invalidated, unlike [logOut]) and restore the one
+  /// parked for the server being switched to, if any.
+  Future<void> switchApiServer(
+      String oldApiServer, String newApiServer) async {
+    Map<String, dynamic> parked = {};
+    final raw = bind.mainGetLocalOption(key: _kParkedSessions);
+    if (raw.isNotEmpty) {
+      try {
+        parked = json.decode(raw);
+      } catch (e) {
+        debugPrint('Failed to decode parked sessions: $e');
+      }
+    }
+    final token = bind.mainGetLocalOption(key: 'access_token');
+    if (token.isNotEmpty) {
+      parked[oldApiServer] = {
+        'access_token': token,
+        'user_info': bind.mainGetLocalOption(key: 'user_info'),
+      };
+    } else {
+      parked.remove(oldApiServer);
+    }
+    final restored = parked.remove(newApiServer);
+    // Park before clearing the active session, so a crash in between cannot
+    // leave the session nowhere.
+    await bind.mainSetLocalOption(
+        key: _kParkedSessions, value: json.encode(parked));
+    await reset(resetOther: true);
+    if (restored is Map) {
+      await bind.mainSetLocalOption(
+          key: 'access_token',
+          value: (restored['access_token'] ?? '').toString());
+      await bind.mainSetLocalOption(
+          key: 'user_info', value: (restored['user_info'] ?? '').toString());
+      // An expired or revoked token comes back 401 here, which resets the
+      // session, so a stale parked login cleans itself up.
+      refreshCurrentUser();
+    }
+  }
+
   Future<void> logOut({String? apiServer}) async {
     final tag = gFFI.dialogManager.showLoading(translate('Waiting'));
     try {
