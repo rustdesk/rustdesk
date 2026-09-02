@@ -58,6 +58,8 @@ pub struct Capturer {
     output_texture: bool,
     adapter_desc1: DXGI_ADAPTER_DESC1,
     rotate: Rotate,
+    frame_acquired: bool,
+    frame_mapped: bool,
 }
 
 impl Capturer {
@@ -174,6 +176,8 @@ impl Capturer {
             output_texture: false,
             adapter_desc1,
             rotate,
+            frame_acquired: false,
+            frame_mapped: false,
         })
     }
 
@@ -335,6 +339,7 @@ impl Capturer {
         let mut info = mem::MaybeUninit::uninit().assume_init();
 
         wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
+        self.frame_acquired = true;
         let frame = ComPtr(frame);
 
         if *info.LastPresentTime.QuadPart() == 0 {
@@ -345,9 +350,11 @@ impl Capturer {
         let mut rect = mem::MaybeUninit::uninit().assume_init();
         if self.fastlane {
             wrap_hresult((*self.duplication.0).MapDesktopSurface(&mut rect))?;
+            self.frame_mapped = true;
         } else {
             self.surface = ComPtr(self.ohgodwhat(frame.0)?);
             wrap_hresult((*self.surface.0).Map(&mut rect, DXGI_MAP_READ))?;
+            self.frame_mapped = true;
         }
         Ok((rect.pBits, rect.Pitch))
     }
@@ -424,7 +431,7 @@ impl Capturer {
                         }
                     }
                 } else {
-                    self.unmap();
+                    self.release_frame()?;
                     let r = self.load_frame(timeout)?;
                     let rotate = match self.display.rotation() {
                         DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => kRotate0,
@@ -472,12 +479,13 @@ impl Capturer {
             if self.duplication.0.is_null() {
                 return Err(std::io::ErrorKind::AddrNotAvailable.into());
             }
-            (*self.duplication.0).ReleaseFrame();
+            self.release_frame()?;
             let mut frame = ptr::null_mut();
             #[allow(invalid_value)]
             let mut info = mem::MaybeUninit::uninit().assume_init();
 
             wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
+            self.frame_acquired = true;
             let frame = ComPtr(frame);
 
             if info.AccumulatedFrames == 0 || *info.LastPresentTime.QuadPart() == 0 {
@@ -574,16 +582,38 @@ impl Capturer {
         }
     }
 
-    fn unmap(&self) {
+    fn release_frame(&mut self) -> io::Result<()> {
+        if self.duplication.is_null() {
+            return Ok(());
+        }
+        let mut first_error = None;
         unsafe {
-            (*self.duplication.0).ReleaseFrame();
-            if self.fastlane {
-                (*self.duplication.0).UnMapDesktopSurface();
-            } else {
-                if !self.surface.is_null() {
-                    (*self.surface.0).Unmap();
+            if self.frame_mapped {
+                let result = if self.fastlane {
+                    wrap_hresult((*self.duplication.0).UnMapDesktopSurface())
+                } else if !self.surface.is_null() {
+                    wrap_hresult((*self.surface.0).Unmap())
+                } else {
+                    Ok(())
+                };
+                self.frame_mapped = false;
+                if let Err(err) = result {
+                    first_error = Some(err);
                 }
             }
+            if self.frame_acquired {
+                let result = wrap_hresult((*self.duplication.0).ReleaseFrame());
+                self.frame_acquired = false;
+                if first_error.is_none() {
+                    if let Err(err) = result {
+                        first_error = Some(err);
+                    }
+                }
+            }
+        }
+        match first_error {
+            Some(err) => Err(err),
+            None => Ok(()),
         }
     }
 
@@ -599,8 +629,8 @@ impl Capturer {
 
 impl Drop for Capturer {
     fn drop(&mut self) {
-        if !self.duplication.is_null() {
-            self.unmap();
+        if let Err(err) = self.release_frame() {
+            eprintln!("DXGI frame cleanup failed: {err}");
         }
     }
 }
