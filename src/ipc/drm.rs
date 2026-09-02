@@ -249,7 +249,11 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         // list_devices silently skips card nodes it cannot open, so absence is only proven when
         // its list covers every card that could drive an output (render-only nodes are skipped
         // by design and prove nothing).
-        let mut uninspected = dri_display_card_count().is_none_or(|n| devices.len() < n);
+        // Written out rather than `is_none_or`, which needs a newer rustc than the DRM CI image.
+        let mut uninspected = match dri_display_card_count() {
+            Some(n) => devices.len() < n,
+            None => true,
+        };
         let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
