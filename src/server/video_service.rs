@@ -731,25 +731,25 @@ fn run(vs: VideoService) -> ResultType<()> {
                 // Rebuild when a mode change hands back a frame that no longer matches the size
                 // this capturer/encoder pair was built with: convert_to_yuv only refuses LARGER
                 // sources, and a smaller one lands in the old canvas leaving stale edges.
-                if let scrap::Frame::PixelBuffer(f) = &frame {
-                    if f.width() != capture_width || f.height() != capture_height {
-                        // With another wayland stream active, exiting alone rebuilds NOTHING:
-                        // the shared state survives and the retry reuses the same stale
-                        // rectangle. Ask every wayland service to drain so the last one clears.
-                        // Monitors only: the flag is process-global, and a camera owns nothing in
-                        // that shared state, so raising it there would tear down unrelated screen
-                        // sharing. A camera still bails and rebuilds its own capturer and encoder.
-                        #[cfg(target_os = "linux")]
-                        if vs.source.is_monitor() {
+                // Monitors only. A camera's size comes from the cache `Cameras::all_info()` filled
+                // before the stream was open, and nothing refreshes it on a retry, so bailing here
+                // would rebuild with the same size that just failed and bail again forever.
+                if vs.source.is_monitor() {
+                    if let scrap::Frame::PixelBuffer(f) = &frame {
+                        if f.width() != capture_width || f.height() != capture_height {
+                            // With another wayland stream active, exiting alone rebuilds NOTHING:
+                            // the shared state survives and the retry reuses the same stale
+                            // rectangle. Ask every wayland service to drain so the last one clears.
+                            #[cfg(target_os = "linux")]
                             super::wayland::request_restart();
+                            bail!(
+                                "frame {}x{} is not the {}x{} this capturer was built with; rebuilding",
+                                f.width(),
+                                f.height(),
+                                capture_width,
+                                capture_height
+                            );
                         }
-                        bail!(
-                            "frame {}x{} is not the {}x{} this capturer was built with; rebuilding",
-                            f.width(),
-                            f.height(),
-                            capture_width,
-                            capture_height
-                        );
                     }
                 }
                 if frame.valid() {
