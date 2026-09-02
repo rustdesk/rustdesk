@@ -12,7 +12,7 @@ build = "build.rs"
 brotli = "3.4"
 dirs = "5.0"
 md5 = "0.7"
-winapi = { version = "0.3", features = ["winbase"] }
+winapi = { version = "0.3", features = ["winbase", "libloaderapi"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61", features = [

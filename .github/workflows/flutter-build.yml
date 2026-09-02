@@ -389,6 +389,54 @@ jobs:
           mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
 
+      - name: Build pre-built MSI template
+        # Two things this works around: preprocess.py rewrites res/msi in place, so the
+        # tree is reset around this second variant; and it locates the app as
+        # <app-name>.exe inside the dist, so the dist copy is renamed to match.
+        #
+        # The placeholder is chosen to keep this template as close to the shipped msi as
+        # possible: eight characters like "RustDesk", and a valid 8.3 name, so WiX
+        # derives no short name for it. A longer placeholder would get one, and a patch
+        # cannot rewrite a truncated placeholder, leaving short names pointing at it.
+        #
+        # It still has to be unique, which is why "RustDesk" itself cannot be used:
+        # it also names payload that must never be renamed, such as librustdesk.dll
+        # and drivers\RustDeskPrinterDriver.
+        #
+        #
+        # Building the arm64 template on the native arm64 runner makes the ARM
+        # package available: the build agents are x64 and cannot run
+        # preprocess.py against an ARM exe.
+        if: env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          git checkout -- res/msi
+          cp -r ./rustdesk ./rustdesk-msi-template
+          mv ./rustdesk-msi-template/rustdesk.exe ./rustdesk-msi-template/RDAPPNAM.exe
+          Set-Content -Path ./rustdesk-msi-template/custom.txt -Value 'placeholder' -NoNewline
+          $assets = './rustdesk-msi-template/data/flutter_assets/assets'
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          foreach ($a in 'icon.ico','icon.png','logo.png','logo_light.png','logo_dark.png') {
+            Set-Content -Path "$assets/$a" -Value 'placeholder' -NoNewline
+          }
+          pushd ./res/msi
+          python preprocess.py --arp --template --revision-version 0 -d ../../rustdesk-msi-template --app-name RDAPPNAM
+          $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
+          msbuild msi.sln -t:clean -p:Configuration=Release -p:Platform=$msiPlatform
+          msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
+          $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          popd
+          mkdir ./msi-template
+          mv $msi.FullName ./msi-template/rustdesk-template-${{ matrix.job.arch }}.msi
+          git checkout -- res/msi
+          rm -r -fo ./rustdesk-msi-template
+
+      - name: Upload unsigned msi template
+        if: env.UPLOAD_ARTIFACT == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-unsigned-msi-template-${{ matrix.job.arch }}
+          path: ./msi-template
+
       - name: Sign rustdesk self-extracted file
         if: env.UPLOAD_ARTIFACT == 'true' && env.SIGN_BASE_URL != '-2'
         shell: bash
@@ -928,12 +976,30 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          name: rustdesk-unsigned-windows-aarch64
+          path: ./windows-aarch64/
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
           name: rustdesk-unsigned-windows-x86
           path: ./windows-x86/
 
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rustdesk-unsigned-msi-template-x86_64
+          path: ./msi-template/
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rustdesk-unsigned-msi-template-aarch64
+          path: ./msi-template/
+
       - name: Combine unsigned app
         run: |
-          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64 windows-x86
+          tar czf rustdesk-${{ env.VERSION }}-unsigned.tar.gz *.dmg windows-x86_64 windows-aarch64 windows-x86 msi-template
 
       - name: Publish unsigned app
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
