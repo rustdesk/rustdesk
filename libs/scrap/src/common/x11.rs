@@ -23,7 +23,7 @@ impl TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         let width = self.width();
         let height = self.height();
-        let pixfmt = self.0.display().pixfmt();
+        let pixfmt = self.0.pixfmt();
         Ok(Frame::PixelBuffer(PixelBuffer::new(
             self.0.frame()?,
             pixfmt,

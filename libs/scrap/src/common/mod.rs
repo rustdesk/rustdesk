@@ -235,6 +235,8 @@ pub enum Pixfmt {
     BGRA,
     RGBA,
     RGB565LE,
+    // X11 depth 30: xRGB2101010, little endian (libyuv's AR30).
+    AR30,
     I420,
     NV12,
     I444,
@@ -243,7 +245,7 @@ pub enum Pixfmt {
 impl Pixfmt {
     pub fn bpp(&self) -> usize {
         match self {
-            Pixfmt::BGRA | Pixfmt::RGBA => 32,
+            Pixfmt::BGRA | Pixfmt::RGBA | Pixfmt::AR30 => 32,
             Pixfmt::RGB565LE => 16,
             Pixfmt::I420 | Pixfmt::NV12 => 12,
             Pixfmt::I444 => 24,

@@ -1,5 +1,6 @@
 use super::ffi::*;
 use super::Display;
+use crate::Pixfmt;
 use hbb_common::libc;
 use std::{io, ptr, slice};
 
@@ -11,6 +12,7 @@ pub struct Capturer {
 
     size: usize,
     saved_raw_data: Vec<u8>, // for faster compare and copy
+    converted: Vec<u8>,
 }
 
 impl Capturer {
@@ -64,6 +66,7 @@ impl Capturer {
             buffer,
             size,
             saved_raw_data: Vec::new(),
+            converted: Vec::new(),
         };
         Ok(c)
     }
@@ -93,11 +96,79 @@ impl Capturer {
         }
     }
 
+    /// Format of the frames `frame` returns; a depth-30 root is handed out as BGRA.
+    pub fn pixfmt(&self) -> Pixfmt {
+        match self.display.pixfmt() {
+            Pixfmt::AR30 => Pixfmt::BGRA,
+            pixfmt => pixfmt,
+        }
+    }
+
     pub fn frame<'b>(&'b mut self) -> std::io::Result<&'b [u8]> {
         self.get_image();
         let result = unsafe { slice::from_raw_parts(self.buffer, self.size) };
         crate::would_block_if_equal(&mut self.saved_raw_data, result)?;
+        if self.display.pixfmt() == Pixfmt::AR30 {
+            return self.ar30_to_bgra(result);
+        }
         Ok(result)
+    }
+
+    fn ar30_to_bgra(&mut self, ar30: &[u8]) -> io::Result<&[u8]> {
+        let rect = self.display.rect();
+        ar30_to_bgra(ar30, rect.w as _, rect.h as _, &mut self.converted)?;
+        Ok(&self.converted)
+    }
+}
+
+/// xRGB2101010 (libyuv's AR30) to BGRA. The top two bits are padding, not
+/// alpha, so the output alpha is forced opaque; libyuv has no XR30 conversion
+/// and would expand them to 0/85/170/255.
+fn ar30_to_bgra(ar30: &[u8], width: usize, height: usize, bgra: &mut Vec<u8>) -> io::Result<()> {
+    let stride = width * 4;
+    bgra.resize(stride * height, 0);
+    let ret = unsafe {
+        crate::common::AR30ToARGB(
+            ar30.as_ptr(),
+            stride as _,
+            bgra.as_mut_ptr(),
+            stride as _,
+            width as _,
+            height as _,
+        )
+    };
+    if ret != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("AR30ToARGB failed: {ret}"),
+        ));
+    }
+    for px in bgra.chunks_exact_mut(4) {
+        px[3] = 0xff;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn ar30_to_bgra_drops_padding_bits() {
+        // (padding, r, g, b) packed as X11 xRGB2101010, little endian.
+        let px =
+            |x: u32, r: u32, g: u32, b: u32| ((x << 30) | (r << 20) | (g << 10) | b).to_le_bytes();
+        let src = [
+            px(0, 1023, 0, 0),
+            px(1, 0, 1023, 0),
+            px(2, 0, 0, 1023),
+            px(3, 512, 256, 128),
+        ]
+        .concat();
+        let mut dst = Vec::new();
+        super::ar30_to_bgra(&src, 4, 1, &mut dst).unwrap();
+        assert_eq!(
+            dst,
+            [0, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255, 32, 64, 128, 255]
+        );
     }
 }
 

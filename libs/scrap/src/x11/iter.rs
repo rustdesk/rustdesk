@@ -132,6 +132,7 @@ unsafe fn get_pixfmt(conn: *mut xcb_connection_t, root: xcb_window_t) -> Option<
     // https://github.com/FFmpeg/FFmpeg/blob/a9c05eb657d0d05f3ac79fe9973581a41b265a5e/libavdevice/xcbgrab.c#L519
     match depth {
         16 => Some(Pixfmt::RGB565LE),
+        30 => Some(Pixfmt::AR30),
         32 => Some(Pixfmt::BGRA),
         _ => None,
     }
