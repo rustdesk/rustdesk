@@ -221,19 +221,40 @@ impl Capturer {
         if self.hdr.is_none() {
             match hdr::HdrToSdr::new(self.device.0, self.context.0, &self.display.desc.DeviceName) {
                 Ok(hdr) => self.hdr = Some(hdr),
-                Err(err) => {
-                    hdr::UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
-                    hbb_common::log::error!(
-                        "HDR tone-map unavailable, next capturer falls back to clipped BGRA: {err}"
-                    );
-                    return Err(err);
-                }
+                Err(err) => return self.abandon_tonemap(err),
             }
         }
-        match self.hdr.as_mut() {
+        let converted = match self.hdr.as_mut() {
             Some(hdr) => hdr.convert(source, desc),
             None => Err(io::Error::new(io::ErrorKind::Other, "no tone-map")),
+        };
+        match converted {
+            Ok(texture) => Ok(texture),
+            Err(err) => self.abandon_tonemap(err),
         }
+    }
+
+    // Drops the tone-map and re-duplicates the output the legacy way, so DXGI
+    // hands over clipped BGRA8 (the pre-HDR behaviour) and the session stays on
+    // DXGI instead of being switched to GDI by the capture loop, which treats
+    // any other error that way. The caller sees WouldBlock and asks again.
+    unsafe fn abandon_tonemap<T>(&mut self, err: io::Error) -> io::Result<T> {
+        if hdr::is_permanent(&err) {
+            hdr::UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        hbb_common::log::error!("HDR tone-map failed, re-duplicating without it: {err}");
+        self.hdr = None;
+        (*self.duplication.0).ReleaseFrame();
+        self.duplication = ComPtr(ptr::null_mut());
+        let mut duplication = ptr::null_mut();
+        wrap_hresult(
+            (*self.display.inner.0).DuplicateOutput(self.device.0 as *mut _, &mut duplication),
+        )?;
+        self.duplication = ComPtr(duplication);
+        let mut desc: DXGI_OUTDUPL_DESC = mem::zeroed();
+        (*duplication).GetDesc(&mut desc);
+        self.fastlane = desc.DesktopImageInSystemMemory == TRUE;
+        Err(io::ErrorKind::WouldBlock.into())
     }
 
     fn create_rotations(
