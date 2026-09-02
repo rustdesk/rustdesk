@@ -590,12 +590,15 @@ class _GeneralState extends State<_General> {
           kOptionEnableIpv6Punch,
           isServer: false,
         ),
+      ],
+      if (!incomingOnly)
         _OptionCheckBox(
           context,
           'Enable WebRTC P2P connection',
           kOptionEnableWebrtc,
           isServer: false,
         ),
+      if (!isWeb && !incomingOnly)
         Tooltip(
           message: translate('sync-clipboard-between-sessions-tip'),
           child: _OptionCheckBox(
@@ -605,7 +608,6 @@ class _GeneralState extends State<_General> {
             isServer: false,
           ),
         ),
-      ],
     ];
 
     // Add client-side wakelock option for desktop platforms
