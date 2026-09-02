@@ -1071,7 +1071,7 @@ pub fn is_share_rdp() -> bool {
 
 fn share_rdp_reg_command(subkey: &str, enable: bool) -> String {
     format!(
-        "reg add {} /f /v share_rdp /t REG_SZ /d \"{}\"",
+        "reg add {} /f /v share_rdp /t REG_SZ /d \"{}\" || exit /b 1",
         subkey,
         if enable { "true" } else { "false" }
     )
@@ -4863,11 +4863,11 @@ mod tests {
         let subkey = r"HKEY_LOCAL_MACHINE\Software\RustDesk";
         assert_eq!(
             share_rdp_reg_command(subkey, true),
-            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "true""#)
+            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "true" || exit /b 1"#)
         );
         assert_eq!(
             share_rdp_reg_command(subkey, false),
-            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "false""#)
+            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "false" || exit /b 1"#)
         );
     }
 

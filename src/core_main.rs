@@ -332,13 +332,20 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 return None;
             } else if args[0] == "--share-rdp" {
+                let enable = match parse_share_rdp_arg(&args) {
+                    Ok(enable) => enable,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        std::process::exit(1);
+                    }
+                };
                 if !platform::is_installed() {
                     eprintln!("Installation required!");
                     std::process::exit(1);
                 }
-                match parse_share_rdp_arg(&args) {
-                    Ok(None) => println!("{}", platform::windows::is_share_rdp()),
-                    Ok(Some(enable)) => {
+                match enable {
+                    None => println!("{}", platform::windows::is_share_rdp()),
+                    Some(enable) => {
                         if is_cli_setting_change_disabled() {
                             eprintln!("Settings are disabled!");
                             std::process::exit(1);
@@ -351,10 +358,6 @@ pub fn core_main() -> Option<Vec<String>> {
                             eprintln!("Failed to update RDP session sharing: {err}");
                             std::process::exit(1);
                         }
-                    }
-                    Err(err) => {
-                        eprintln!("{err}");
-                        std::process::exit(1);
                     }
                 }
                 return None;
