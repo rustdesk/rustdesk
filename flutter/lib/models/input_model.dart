@@ -2024,7 +2024,8 @@ class InputModel {
       };
     }
 
-    final msg = json.encode(modify(PointerEventToRust(kind, type, evtValue)));
+    final msg =
+        json.encode(modify(PointerEventToRust(kind, type, evtValue).toJson()));
     // Serialize with any pan event already in flight (see [_panEventChain]).
     // Each link swallows its own error so one failed send cannot break the
     // chain and strand later pan events.
