@@ -416,6 +416,11 @@ fn oriented_physical(d: &WaylandDisplayInfo) -> (i32, i32) {
     }
 }
 
+/// The logical rectangles of a display list, for a caller that already has the list.
+pub fn logical_rects_of_displays(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
+    logical_rects_of(displays)
+}
+
 fn logical_rects_of(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
     // Match `desktop_rect_of`: a single display uses its physical size (its scale is
     // reported as 1.0 to the client), multiple displays use logical size. This keeps a
