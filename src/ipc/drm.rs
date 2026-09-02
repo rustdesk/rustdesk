@@ -651,14 +651,21 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 /// a display that is still there, land. A real removal takes the node out of /dev/dri and sysfs
 /// together, so the counts fall in step and that round is not partial in the first place.
 ///
-/// Connector names identify: they are unique among live connectors, and the card minor is not
-/// (`/dev/dri/cardN` comes from an allocator that recycles across a rebind).
+/// Identity is the card AND the connector name. Two LIVE connectors never share a name - the index
+/// comes from a per-type ida that is global to drm.ko, measured on a 3-card machine whose DP
+/// numbering ran 1..3 on one card and 4..7 on the next - but the cache and the fresh list are not
+/// contemporaneous: the kernel returns a name to that allocator when a connector goes, so between
+/// two rounds `DP-1` can come back on another card. Matching by name alone would call that the same
+/// display and swap it in, and the consumer keys on `(device, crtc_id)`, so its stream would end.
 fn round_may_replace_cache(
     cache: &[DrmDisplayInfo],
     fresh: &[DrmDisplayInfo],
     uninspected: bool,
 ) -> bool {
-    !uninspected || cache.iter().all(|c| fresh.iter().any(|f| f.name == c.name))
+    !uninspected
+        || cache
+            .iter()
+            .all(|c| fresh.iter().any(|f| f.name == c.name && f.device == c.device))
 }
 
 /// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION), off the caller's thread and
@@ -1707,7 +1714,7 @@ mod drm_conn_tests {
             height: 1080,
             active: true,
             render_node: String::new(),
-            device: String::new(),
+            device: "/dev/dri/card1".to_owned(),
         }
     }
 
@@ -1727,6 +1734,18 @@ mod drm_conn_tests {
 
         let swapped = [display("DP-1", 3840), display("DP-4", 1280)];
         assert!(!round_may_replace_cache(&cache, &swapped, true));
+
+        // Same connector NAME, another card. Between two rounds the kernel can hand `DP-1` back
+        // out, so a name-only match would accept this and the consumer, which keys on the card and
+        // the crtc, would see its display disappear.
+        let moved = [
+            DrmDisplayInfo {
+                device: "/dev/dri/card2".to_owned(),
+                ..display("DP-1", 3840)
+            },
+            display("HDMI-A-1", 1920),
+        ];
+        assert!(!round_may_replace_cache(&cache, &moved, true));
 
         let grown = [
             display("DP-1", 3840),
