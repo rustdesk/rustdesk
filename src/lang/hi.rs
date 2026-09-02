@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "मर्ज की गई स्क्रीन के स्क्रीनशॉट समर्थित नहीं हैं।"),
         ("screenshot-action-tip", "स्क्रीनशॉट लेने के बाद की कार्रवाई"),
         ("Save as", "इस रूप में सहेजें"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "क्लिपबोर्ड पर कॉपी करें"),
         ("Enable remote printer", "रिमोट प्रिंटर सक्षम करें"),
         ("Downloading {}", "{} डाउनलोड हो रहा है"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "जारी रखें"),
         ("Browser didn't open? Use the url below to sign in.", "ब्राउज़र नहीं खुला? लॉगिन करने के लिए नीचे दिए गए URL का उपयोग करें।"),
         ("Lock canvas", "कैनवास लॉक करें"),
+        ("Sync clipboard between sessions", "सत्रों के बीच क्लिपबोर्ड सिंक करें"),
+        ("sync-clipboard-between-sessions-tip", "एक रिमोट सत्र में कॉपी किए गए टेक्स्ट या चित्र आपके अन्य जुड़े सत्रों के क्लिपबोर्ड पर भी भेजे जाते हैं।"),
     ].iter().cloned().collect();
 }

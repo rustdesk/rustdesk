@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Zlučovanie snímok obrazovky z viacerých displejov nie je momentálne podporované. Prepnite na jeden displej a skúste to znova."),
         ("screenshot-action-tip", "Vyberte, ako pokračovať so snímkou obrazovky."),
         ("Save as", "Uložiť ako"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopírovať do schránky"),
         ("Enable remote printer", "Povoliť vzdialenú tlačiareň"),
         ("Downloading {}", "Sťahuje sa {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Pokračovať"),
         ("Browser didn't open? Use the url below to sign in.", "Neotvoril sa prehliadač? Na prihlásenie použite URL nižšie."),
         ("Lock canvas", "Uzamknúť zobrazenie"),
+        ("Sync clipboard between sessions", "Synchronizovať schránku medzi reláciami"),
+        ("sync-clipboard-between-sessions-tip", "Text alebo obrázky skopírované v jednej vzdialenej relácii sa odošlú aj do schránky ostatných pripojených relácií."),
     ].iter().cloned().collect();
 }

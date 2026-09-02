@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Pantaila anitzen pantaila-argazkiak bateratzea ez da onartzen une honetan. Aldatu pantaila bakarrera eta saiatu berriro."),
         ("screenshot-action-tip", "Hautatu pantaila-argazkiarekin nola jarraitu."),
         ("Save as", "Gorde honela"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopiatu arbelera"),
         ("Enable remote printer", "Gaitu urruneko inprimagailua"),
         ("Downloading {}", "{} deskargatzen"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Jarraitu"),
         ("Browser didn't open? Use the url below to sign in.", "Nabigatzailea ez da ireki? Erabili beheko URLa saioa hasteko."),
         ("Lock canvas", "Blokeatu oihala"),
+        ("Sync clipboard between sessions", "Sinkronizatu arbela saioen artean"),
+        ("sync-clipboard-between-sessions-tip", "Urruneko saio batean kopiatutako testua edo irudiak konektatutako beste saioen arbelera ere bidaltzen dira."),
     ].iter().cloned().collect();
 }

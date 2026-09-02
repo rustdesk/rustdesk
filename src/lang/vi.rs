@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Không hỗ trợ chụp gộp nhiều màn hình."),
         ("screenshot-action-tip", "Hành động chụp màn hình"),
         ("Save as", "Lưu thành"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Sao chép vào Clipboard"),
         ("Enable remote printer", "Bật máy in từ xa"),
         ("Downloading {}", "Đang tải xuống {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Tiếp tục"),
         ("Browser didn't open? Use the url below to sign in.", "Trình duyệt không mở được? Hãy dùng URL bên dưới để đăng nhập."),
         ("Lock canvas", "Khóa khung hình"),
+        ("Sync clipboard between sessions", "Đồng bộ clipboard giữa các phiên"),
+        ("sync-clipboard-between-sessions-tip", "Văn bản hoặc hình ảnh được sao chép trong một phiên từ xa cũng được gửi đến clipboard của các phiên đã kết nối khác."),
     ].iter().cloned().collect();
 }

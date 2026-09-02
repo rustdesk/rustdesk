@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Schermopnames van meerdere schermen samenvoegen wordt momenteel niet ondersteund. Schakel over naar een enkel scherm en herhaal de actie."),
         ("screenshot-action-tip", "Kies wat je met de gemaakte schermopname wilt doen."),
         ("Save as", "Opslaan als"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopiëren naar het klembord"),
         ("Enable remote printer", "Printer op afstand inschakelen"),
         ("Downloading {}", "Downloaden {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Doorgaan"),
         ("Browser didn't open? Use the url below to sign in.", "Is de browser niet geopend? Gebruik onderstaande URL om in te loggen."),
         ("Lock canvas", "Canvas vergrendelen"),
+        ("Sync clipboard between sessions", "Klembord synchroniseren tussen sessies"),
+        ("sync-clipboard-between-sessions-tip", "Tekst of afbeeldingen die in één externe sessie worden gekopieerd, worden ook naar het klembord van uw andere verbonden sessies gestuurd."),
     ].iter().cloned().collect();
 }

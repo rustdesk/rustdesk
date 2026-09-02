@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "当前不支持多个屏幕的合并截屏，请切换到单个屏幕重试。"),
         ("screenshot-action-tip", "请选择如何继续截屏。"),
         ("Save as", "另存为"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "复制到剪贴板"),
         ("Enable remote printer", "启用远程打印机"),
         ("Downloading {}", "正在下载 {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "继续"),
         ("Browser didn't open? Use the url below to sign in.", "浏览器未打开？请使用下方网址登录。"),
         ("Lock canvas", "锁定画布"),
+        ("Sync clipboard between sessions", "在会话间同步剪贴板"),
+        ("sync-clipboard-between-sessions-tip", "在一个远程会话中复制的文本或图片也会发送到其他已连接会话的剪贴板。"),
     ].iter().cloned().collect();
 }

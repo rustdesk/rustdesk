@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Vairāku displeju ekrānuzņēmumu apvienošana pašlaik netiek atbalstīta. Lūdzu, pārslēdzieties uz vienu displeju un mēģiniet vēlreiz."),
         ("screenshot-action-tip", "Lūdzu, atlasiet, kā turpināt darbu ar ekrānuzņēmumu."),
         ("Save as", "Saglabāt kā"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopēt starpliktuvē"),
         ("Enable remote printer", "Iespējot attālo printeri"),
         ("Downloading {}", "Notiek {} lejupielāde"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Turpināt"),
         ("Browser didn't open? Use the url below to sign in.", "Pārlūkprogramma neatvērās? Izmantojiet tālāk norādīto URL, lai pieslēgtos."),
         ("Lock canvas", "Bloķēt audeklu"),
+        ("Sync clipboard between sessions", "Sinhronizēt starpliktuvi starp sesijām"),
+        ("sync-clipboard-between-sessions-tip", "Vienā attālajā sesijā nokopētais teksts vai attēli tiek nosūtīti arī uz pārējo pievienoto sesiju starpliktuvi."),
     ].iter().cloned().collect();
 }

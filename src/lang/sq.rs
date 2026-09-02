@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Bashkimi i pamjeve të ekranit nga disa ekrane aktualisht nuk mbështetet. Ju lutemi kaloni te një ekran i vetëm dhe provoni përsëri."),
         ("screenshot-action-tip", "Ju lutemi zgjidhni si të vazhdoni me pamjen e ekranit."),
         ("Save as", "Ruaj si"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopjo te clipboard"),
         ("Enable remote printer", "Aktivizo printerin në distancë"),
         ("Downloading {}", "Duke shkarkuar {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Vazhdo"),
         ("Browser didn't open? Use the url below to sign in.", "Shfletuesi nuk u hap? Përdorni URL-në më poshtë për të hyrë."),
         ("Lock canvas", "Kyç canvas"),
+        ("Sync clipboard between sessions", "Sinkronizo clipboard-in midis sesioneve"),
+        ("sync-clipboard-between-sessions-tip", "Teksti ose imazhet e kopjuara në një sesion të largët dërgohen edhe në clipboard-in e sesioneve të tjera të lidhura."),
     ].iter().cloned().collect();
 }

@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Actualment no és possible combinar captures de pantalla de diverses pantalles. Canvieu a una sola pantalla i torneu a provar."),
         ("screenshot-action-tip", "Seleccioneu com voleu continuar amb la captura de pantalla."),
         ("Save as", "Anomena i desa"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Copia al porta-retalls"),
         ("Enable remote printer", "Habilita l'impressora remota"),
         ("Downloading {}", "Descarregant {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continua"),
         ("Browser didn't open? Use the url below to sign in.", "No s'ha obert el navegador? Utilitzeu l'URL de sota per iniciar la sessió."),
         ("Lock canvas", "Bloca el llenç"),
+        ("Sync clipboard between sessions", "Sincronitza el porta-retalls entre sessions"),
+        ("sync-clipboard-between-sessions-tip", "El text o les imatges copiats en una sessió remota també s'envien al porta-retalls de les altres sessions connectades."),
     ].iter().cloned().collect();
 }

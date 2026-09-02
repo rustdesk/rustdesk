@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "La fusión de capturas de pantalla de múltiples monitores no está soportada. Por favor, cambie a un monitor e inténtelo de nuevo."),
         ("screenshot-action-tip", "Por favor, seleccione cómo continuar con la captura de pantalla."),
         ("Save as", "Guardar como"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Copiar al portapapeles"),
         ("Enable remote printer", "Habilitar impresora remota"),
         ("Downloading {}", "Descargando {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continuar"),
         ("Browser didn't open? Use the url below to sign in.", "¿No se abrió el navegador? Usa la URL de abajo para iniciar sesión."),
         ("Lock canvas", "Bloquear lienzo"),
+        ("Sync clipboard between sessions", "Sincronizar portapapeles entre sesiones"),
+        ("sync-clipboard-between-sessions-tip", "El texto o las imágenes copiados en una sesión remota también se envían al portapapeles de tus otras sesiones conectadas."),
     ].iter().cloned().collect();
 }

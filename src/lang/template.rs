@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", ""),
         ("screenshot-action-tip", ""),
         ("Save as", ""),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", ""),
         ("Enable remote printer", ""),
         ("Downloading {}", ""),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", ""),
         ("Browser didn't open? Use the url below to sign in.", ""),
         ("Lock canvas", ""),
+        ("Sync clipboard between sessions", ""),
+        ("sync-clipboard-between-sessions-tip", ""),
     ].iter().cloned().collect();
 }
