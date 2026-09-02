@@ -8,7 +8,7 @@ use winapi::{
     shared::{
         dxgi::*,
         dxgi1_2::*,
-        dxgi1_5::*,
+        dxgi1_6::*,
         dxgiformat::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT},
         dxgitype::*,
         minwindef::{DWORD, FALSE, TRUE, UINT},
@@ -184,21 +184,24 @@ impl Capturer {
 
     // Asks for the float desktop that HDR mode composes so it can be tone-mapped;
     // the legacy call would hand back DXGI's clipped BGRA8 conversion instead.
+    // Only where IDXGIOutput6 (Windows 10 1703) exists, since that is what later
+    // tells an HDR desktop from a WCG one; Microsoft's duplication sample gates
+    // the float request the same way.
     unsafe fn duplicate_output(
         display: &Display,
         device: *mut ID3D11Device,
         duplication: &mut *mut IDXGIOutputDuplication,
     ) -> HRESULT {
         if !hdr::UNAVAILABLE.load(std::sync::atomic::Ordering::Relaxed) {
-            let mut output5: *mut IDXGIOutput5 = ptr::null_mut();
+            let mut output6: *mut IDXGIOutput6 = ptr::null_mut();
             (*display.inner.0).QueryInterface(
-                &IID_IDXGIOutput5,
-                &mut output5 as *mut *mut _ as *mut *mut _,
+                &IID_IDXGIOutput6,
+                &mut output6 as *mut *mut _ as *mut *mut _,
             );
-            if !output5.is_null() {
-                let output5 = ComPtr(output5);
+            if !output6.is_null() {
+                let output6 = ComPtr(output6);
                 let formats = [DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_B8G8R8A8_UNORM];
-                let hres = (*output5.0).DuplicateOutput1(
+                let hres = (*output6.0).DuplicateOutput1(
                     device as *mut _,
                     0,
                     formats.len() as UINT,
