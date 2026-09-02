@@ -80,6 +80,14 @@ pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display:
     lock.live.clear();
 }
 
+/// The layout injected coordinates are remapped onto. Anything that compares against a coordinate
+/// the input path already remapped needs this, not the session-init snapshot. Empty before the
+/// first poll.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) fn live_wayland_layout() -> Vec<scrap::wayland::display::DisplayRect> {
+    WAYLAND_LAYOUT.lock().unwrap().live.clone()
+}
+
 // Remap an injected coordinate onto the live compositor layout when it has drifted from
 // what the client was told at session init. Lock-free no-op otherwise.
 #[cfg(target_os = "linux")]

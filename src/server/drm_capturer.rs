@@ -732,11 +732,23 @@ async fn recv_thread(
                                     scrap::wayland::display::logical_rects_of_displays(
                                         &wl.displays,
                                     );
+                                // `wl` is the session-init snapshot, but the injected point was
+                                // already moved onto the LIVE layout by the input path, so the
+                                // rect it is measured against has to be the live one. Matched the
+                                // same way the remap matches; the snapshot is the fallback while
+                                // no poll has run.
+                                let live = super::display_service::live_wayland_layout();
                                 assign_wayland_outputs(&drm_list, &wl.displays)
                                     .get(display.max(0) as usize)
                                     .copied()
                                     .flatten()
-                                    .and_then(|j| rects.get(j).map(|r| (r.x, r.y, r.w, r.h)))
+                                    .and_then(|j| {
+                                        let r = scrap::wayland::display::live_counterpart(
+                                            j, &rects, &live,
+                                        )
+                                        .or_else(|| rects.get(j))?;
+                                        Some((r.x, r.y, r.w, r.h))
+                                    })
                             };
                             let phys = display_info_of(display)
                                 .map(|d| (d.width as i32, d.height as i32));
