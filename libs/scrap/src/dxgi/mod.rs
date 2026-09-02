@@ -219,7 +219,12 @@ impl Capturer {
         desc: &D3D11_TEXTURE2D_DESC,
     ) -> io::Result<*mut ID3D11Texture2D> {
         if self.hdr.is_none() {
-            match hdr::HdrToSdr::new(self.device.0, self.context.0, &self.display.desc.DeviceName) {
+            match hdr::HdrToSdr::new(
+                self.device.0,
+                self.context.0,
+                self.display.inner.0,
+                &self.display.desc.DeviceName,
+            ) {
                 Ok(hdr) => self.hdr = Some(hdr),
                 Err(err) => return self.abandon_tonemap(err),
             }

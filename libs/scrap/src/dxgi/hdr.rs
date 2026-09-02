@@ -14,6 +14,11 @@
 //! move SDR white below 1.0 to make headroom, trading the accuracy of the SDR
 //! content this pass exists for, so it is deliberately not done.
 //!
+//! Windows 11 22H2 also composes Advanced Color SDR (WCG) desktops in FP16,
+//! but there 1.0 is the display's reference white rather than 80 nits and no
+//! SDR white level applies. IDXGIOutput6 tells the two apart, and for a
+//! non-HDR output the pass only applies the scRGB -> sRGB transfer.
+//!
 //! The conversion is automatic and stays on the controlled side on purpose:
 //! the controller renders through Flutter external textures, which are 8-bit
 //! on every desktop platform, so there is nothing to gain from sending HDR.
@@ -31,8 +36,10 @@ use std::{
 use winapi::{
     shared::{
         basetsd::SIZE_T,
+        dxgi1_2::IDXGIOutput1,
+        dxgi1_6::{IDXGIOutput6, IID_IDXGIOutput6, DXGI_OUTPUT_DESC1},
         dxgiformat::DXGI_FORMAT_B8G8R8A8_UNORM,
-        dxgitype::DXGI_SAMPLE_DESC,
+        dxgitype::{DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, DXGI_SAMPLE_DESC},
         minwindef::{LPCVOID, UINT, ULONG},
         ntdef::{LONG, LPCSTR, WCHAR},
         winerror::S_OK,
@@ -79,8 +86,6 @@ float4 main(float4 pos : SV_Position) : SV_Target {
     return float4(lerp(hi, lo, step(lin, 0.0031308)), 1.0);
 }";
 
-/// DISPLAYCONFIG units: 1000 == 80 nits == scRGB 1.0.
-const DEFAULT_SDR_WHITE_LEVEL: u32 = 1000;
 const SDR_WHITE_LEVEL_REFRESH: Duration = Duration::from_secs(1);
 
 pub struct HdrToSdr {
@@ -98,7 +103,10 @@ pub struct HdrToSdr {
     width: u32,
     height: u32,
     device_name: [WCHAR; 32],
-    sdr_white_level: u32,
+    is_hdr: bool,
+    // DISPLAYCONFIG units (1000 == 80 nits == scRGB 1.0). `None` when it could
+    // not be read, in which case 80 nits is assumed until it can.
+    sdr_white_level: Option<u32>,
     queried_at: Instant,
 }
 
@@ -106,6 +114,7 @@ impl HdrToSdr {
     pub fn new(
         device: *mut ID3D11Device,
         context: *mut ID3D11DeviceContext,
+        output: *mut IDXGIOutput1,
         device_name: &[WCHAR; 32],
     ) -> io::Result<Self> {
         unsafe {
@@ -143,8 +152,18 @@ impl HdrToSdr {
             )?;
             let ps = ComPtr(ps);
 
-            let sdr_white_level =
-                query_sdr_white_level(device_name).unwrap_or(DEFAULT_SDR_WHITE_LEVEL);
+            let is_hdr = output_is_hdr(output);
+            let sdr_white_level = if is_hdr {
+                query_sdr_white_level(device_name)
+            } else {
+                None
+            };
+            if is_hdr && sdr_white_level.is_none() {
+                log::warn!(
+                    "HDR output but the SDR white level cannot be read (needs Windows 10 1709+), \
+                     assuming 80 nits until it can"
+                );
+            }
             let init = params_data(sdr_white_level);
             let desc = D3D11_BUFFER_DESC {
                 ByteWidth: mem::size_of_val(&init) as _,
@@ -165,7 +184,9 @@ impl HdrToSdr {
                 "CreateBuffer",
             )?;
             let params = ComPtr(params);
-            log::info!("HDR tone-map ready, sdr white level {sdr_white_level}");
+            log::info!(
+                "scRGB desktop conversion ready, hdr {is_hdr}, sdr white level {sdr_white_level:?}"
+            );
 
             Ok(Self {
                 device,
@@ -180,6 +201,7 @@ impl HdrToSdr {
                 width: 0,
                 height: 0,
                 device_name: *device_name,
+                is_hdr,
                 sdr_white_level,
                 queried_at: Instant::now(),
             })
@@ -285,18 +307,16 @@ impl HdrToSdr {
     }
 
     unsafe fn refresh_sdr_white_level(&mut self) {
-        if self.queried_at.elapsed() < SDR_WHITE_LEVEL_REFRESH {
+        if !self.is_hdr || self.queried_at.elapsed() < SDR_WHITE_LEVEL_REFRESH {
             return;
         }
         self.queried_at = Instant::now();
-        let Some(level) = query_sdr_white_level(&self.device_name) else {
-            return;
-        };
-        if level == self.sdr_white_level || level == 0 {
+        let level = query_sdr_white_level(&self.device_name);
+        if level.is_none() || level == self.sdr_white_level {
             return;
         }
         log::info!(
-            "sdr white level changed {} -> {level}",
+            "sdr white level changed {:?} -> {level:?}",
             self.sdr_white_level
         );
         self.sdr_white_level = level;
@@ -312,8 +332,39 @@ impl HdrToSdr {
     }
 }
 
-fn params_data(sdr_white_level: u32) -> [f32; 4] {
-    [1000.0 / sdr_white_level.max(1) as f32, 0.0, 0.0, 0.0]
+// `None` is either a non-HDR (WCG) output, where 1.0 already is the display's
+// reference white, or an HDR output whose level is unknown; both use 1.0.
+fn params_data(sdr_white_level: Option<u32>) -> [f32; 4] {
+    [
+        1000.0 / sdr_white_level.unwrap_or(1000) as f32,
+        0.0,
+        0.0,
+        0.0,
+    ]
+}
+
+// FP16 desktop composition means either HDR (scene-referred, 1.0 == 80 nits)
+// or, since Windows 11 22H2, Advanced Color SDR (display-referred). Only
+// IDXGIOutput6 tells them apart; where it does not exist (before Windows 10
+// 1803) FP16 can only mean HDR.
+unsafe fn output_is_hdr(output: *mut IDXGIOutput1) -> bool {
+    if output.is_null() {
+        return true;
+    }
+    let mut output6: *mut IDXGIOutput6 = ptr::null_mut();
+    (*output).QueryInterface(
+        &IID_IDXGIOutput6,
+        &mut output6 as *mut *mut _ as *mut *mut _,
+    );
+    if output6.is_null() {
+        return true;
+    }
+    let output6 = ComPtr(output6);
+    let mut desc: DXGI_OUTPUT_DESC1 = mem::zeroed();
+    if (*output6.0).GetDesc1(&mut desc) != S_OK {
+        return true;
+    }
+    desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
 }
 
 fn other(msg: impl Into<String>) -> io::Error {
@@ -439,7 +490,8 @@ extern "system" {
 }
 
 /// SDR white level of the output whose GDI name is `device_name`
-/// (e.g. `\\.\DISPLAY1`), in DISPLAYCONFIG units (1000 == 80 nits).
+/// (e.g. `\\.\DISPLAY1`), in DISPLAYCONFIG units (1000 == 80 nits). `None`
+/// when the query fails (before Windows 10 1709) or reports 0.
 fn query_sdr_white_level(device_name: &[WCHAR; 32]) -> Option<u32> {
     unsafe {
         let mut n_paths = 0u32;
@@ -476,7 +528,7 @@ fn query_sdr_white_level(device_name: &[WCHAR; 32]) -> Option<u32> {
             white.header.size = mem::size_of::<DISPLAYCONFIG_SDR_WHITE_LEVEL>() as _;
             white.header.adapterId = path.targetInfo.adapterId;
             white.header.id = path.targetInfo.id;
-            if DisplayConfigGetDeviceInfo(&mut white.header) == 0 {
+            if DisplayConfigGetDeviceInfo(&mut white.header) == 0 && white.SDRWhiteLevel != 0 {
                 return Some(white.SDRWhiteLevel);
             }
         }
