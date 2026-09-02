@@ -107,7 +107,10 @@ const Map<int, VmKeyStroke> _specialAsciiStrokes = {
   0x7E: VmKeyStroke(0x35, shift: true),
 };
 
-/// Converts an ASCII rune to a physical US keyboard stroke.
+/// Converts an ASCII rune to a physical US-layout keyboard stroke.
+///
+/// The receiving VM guest must use a US-compatible keyboard layout. Returning
+/// null leaves the character on the existing Unicode/IME input path.
 VmKeyStroke? vmKeyStrokeForRune(int rune) {
   if (rune >= 0x61 && rune <= 0x7A) {
     return VmKeyStroke(0x04 + rune - 0x61);

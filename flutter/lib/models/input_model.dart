@@ -1044,7 +1044,8 @@ class InputModel {
         command: command);
   }
 
-  /// Sends supported iOS soft-keyboard text as physical keys in VM mode.
+  /// Sends supported iOS soft-keyboard text as physical US-layout keys in VM
+  /// mode. The guest keyboard layout must be US-compatible.
   /// Returns false when the caller should use the normal text-input path.
   bool inputVmKeyboardText(String text) {
     if (!vmKeyboardMode ||
@@ -1059,12 +1060,9 @@ class InputModel {
     if (strokes == null) return false;
 
     void sendPhysicalKey(int usbHid, bool down) {
-      bind.sessionHandleFlutterKeyEvent(
-          sessionId: sessionId,
-          character: 'flutter_key_map',
-          usbHid: usbHid,
-          lockModes: 0,
-          downOrUp: down);
+      // Reuse the normal physical-key dispatch entry point. The sentinel only
+      // overrides the Rust-side keyboard mode for this explicit VM event.
+      newKeyboardMode('flutter_key_map', usbHid, down, false);
     }
 
     for (final stroke in strokes) {

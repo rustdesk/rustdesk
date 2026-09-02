@@ -56,6 +56,46 @@ void main() {
       );
     });
 
+    test('wraps a VM stroke in the active Alt modifier', () {
+      final events = vmKeyEventsForStroke(
+        const VmKeyStroke(0x2B),
+        ctrl: false,
+        shift: false,
+        alt: true,
+        command: false,
+      );
+
+      expect(
+        events,
+        const [
+          VmKeyEvent(vmLeftAltUsbHid, true),
+          VmKeyEvent(0x2B, true),
+          VmKeyEvent(0x2B, false),
+          VmKeyEvent(vmLeftAltUsbHid, false),
+        ],
+      );
+    });
+
+    test('wraps a VM stroke in the active Command or Win modifier', () {
+      final events = vmKeyEventsForStroke(
+        const VmKeyStroke(0x0F),
+        ctrl: false,
+        shift: false,
+        alt: false,
+        command: true,
+      );
+
+      expect(
+        events,
+        const [
+          VmKeyEvent(vmLeftGuiUsbHid, true),
+          VmKeyEvent(0x0F, true),
+          VmKeyEvent(0x0F, false),
+          VmKeyEvent(vmLeftGuiUsbHid, false),
+        ],
+      );
+    });
+
     test('does not duplicate toolbar and character shift', () {
       final events = vmKeyEventsForStroke(
         const VmKeyStroke(0x1D, shift: true),
