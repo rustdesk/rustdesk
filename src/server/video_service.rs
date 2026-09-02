@@ -54,10 +54,7 @@ use scrap::{
 #[cfg(windows)]
 use std::io::ErrorKind::ConnectionReset;
 #[cfg(windows)]
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Once,
-};
+use std::sync::Once;
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
@@ -68,9 +65,48 @@ use std::{
 pub const OPTION_REFRESH: &'static str = "refresh";
 
 #[cfg(windows)]
-const DXGI_INITIAL_FRAME_GRACE: Duration = Duration::from_secs(2);
+const DXGI_RECOVERY_LIMIT: usize = 3;
 #[cfg(windows)]
-const DXGI_RECOVERY_RESTARTS: usize = 3;
+const DXGI_RECOVERY_WINDOW: Duration = Duration::from_secs(10);
+#[cfg(windows)]
+const DXGI_INITIAL_FRAME_GRACE: Duration = Duration::from_secs(2);
+
+#[cfg(windows)]
+struct DxgiRecoveryState {
+    attempts: usize,
+    window_started: Option<Instant>,
+}
+
+#[cfg(windows)]
+impl DxgiRecoveryState {
+    fn new() -> Self {
+        Self {
+            attempts: 0,
+            window_started: None,
+        }
+    }
+
+    fn next_attempt(&mut self) -> Option<usize> {
+        if self
+            .window_started
+            .map(|started| started.elapsed() > DXGI_RECOVERY_WINDOW)
+            .unwrap_or(true)
+        {
+            self.attempts = 0;
+            self.window_started = Some(Instant::now());
+        }
+        if self.attempts >= DXGI_RECOVERY_LIMIT {
+            return None;
+        }
+        self.attempts += 1;
+        Some(self.attempts)
+    }
+
+    fn reset(&mut self) {
+        self.attempts = 0;
+        self.window_started = None;
+    }
+}
 
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
 type FrameFetchedNotifierReceiver = Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>;
@@ -231,7 +267,7 @@ pub struct VideoService {
     idx: usize,
     source: VideoSource,
     #[cfg(windows)]
-    dxgi_recovery_count: Arc<AtomicUsize>,
+    dxgi_recovery_state: Arc<Mutex<DxgiRecoveryState>>,
 }
 
 impl Deref for VideoService {
@@ -266,7 +302,7 @@ pub fn new(source: VideoSource, idx: usize) -> GenericService {
         idx,
         source,
         #[cfg(windows)]
-        dxgi_recovery_count: Arc::new(AtomicUsize::new(0)),
+        dxgi_recovery_state: Arc::new(Mutex::new(DxgiRecoveryState::new())),
     };
     GenericService::run(&vs, run);
     vs.sp
@@ -580,7 +616,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     let display_idx = vs.idx;
     #[cfg(windows)]
-    let dxgi_recovery_count = vs.dxgi_recovery_count.clone();
+    let dxgi_recovery_state = vs.dxgi_recovery_state.clone();
     let sp = vs.sp;
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
@@ -675,7 +711,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
-    let mut try_gdi = true;
+    let mut try_gdi: usize = 1;
     #[cfg(windows)]
     let dxgi_started = Instant::now();
     #[cfg(windows)]
@@ -768,12 +804,12 @@ fn run(vs: VideoService) -> ResultType<()> {
                 if frame.valid() {
                     #[cfg(windows)]
                     {
-                        dxgi_recovery_count.store(0, Ordering::Relaxed);
+                        dxgi_recovery_state.lock().unwrap().reset();
                         #[cfg(feature = "vram")]
-                        if try_gdi && frame_from_dxgi {
+                        if try_gdi == 1 && frame_from_dxgi {
                             VRamEncoder::set_fallback_gdi(sp.name(), false);
                         }
-                        try_gdi = false;
+                        try_gdi = 0;
                     }
                     let screenshot_key = (vs.source, display_idx);
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
@@ -846,14 +882,27 @@ fn run(vs: VideoService) -> ResultType<()> {
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
                 #[cfg(windows)]
-                if try_gdi && !c.is_gdi() {
-                    if dxgi_started.elapsed() >= DXGI_INITIAL_FRAME_GRACE {
-                        if c.set_gdi() {
-                            try_gdi = false;
-                            log::info!("No image, fall back to gdi");
-                        } else {
+                if try_gdi > 0 && !c.is_gdi() {
+                    if try_gdi == 1 {
+                        log::info!(
+                            "dxgi has no initial frame, wait up to {} ms before gdi fallback",
+                            DXGI_INITIAL_FRAME_GRACE.as_millis()
+                        );
+                    }
+                    if try_gdi > 3 && dxgi_started.elapsed() >= DXGI_INITIAL_FRAME_GRACE {
+                        let attempts = try_gdi;
+                        let elapsed = dxgi_started.elapsed();
+                        if !c.set_gdi() {
                             bail!("Failed to fall back to gdi");
                         }
+                        try_gdi = 0;
+                        log::info!(
+                            "No dxgi image after {} ms and {} attempts, fall back to gdi",
+                            elapsed.as_millis(),
+                            attempts
+                        );
+                    } else {
+                        try_gdi = try_gdi.saturating_add(1);
                     }
                 }
                 #[cfg(target_os = "linux")]
@@ -903,16 +952,16 @@ fn run(vs: VideoService) -> ResultType<()> {
                 #[cfg(windows)]
                 if !c.is_gdi() {
                     if err.kind() == ConnectionReset {
-                        let recovery_count =
-                            dxgi_recovery_count.fetch_add(1, Ordering::Relaxed) + 1;
-                        if recovery_count <= DXGI_RECOVERY_RESTARTS {
+                        let recovery_attempt = dxgi_recovery_state.lock().unwrap().next_attempt();
+                        if let Some(attempt) = recovery_attempt {
                             log::info!(
-                                "dxgi duplication invalidated, restart capture: attempt {recovery_count}, error: {err:?}"
+                                "dxgi access lost, restart capture: attempt {attempt}, error: {err:?}"
                             );
                             bail!("SWITCH");
                         }
                         log::warn!(
-                            "dxgi duplication invalid after {DXGI_RECOVERY_RESTARTS} restarts, fall back to gdi: {err:?}"
+                            "dxgi access lost after {DXGI_RECOVERY_LIMIT} restarts in {} seconds, fall back to gdi: {err:?}",
+                            DXGI_RECOVERY_WINDOW.as_secs()
                         );
                     }
                     if !c.set_gdi() {
