@@ -642,6 +642,21 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     cur
 }
 
+/// Whether a refresh round may replace the cache. A round that could not inspect every card cannot
+/// prove a display is GONE, so one that drops a cached connector is refused; growth, and changes to
+/// a display that is still there, land. A real removal takes the node out of /dev/dri and sysfs
+/// together, so the counts fall in step and that round is not partial in the first place.
+///
+/// Connector names identify: they are unique among live connectors, and the card minor is not
+/// (`/dev/dri/cardN` comes from an allocator that recycles across a rebind).
+fn round_may_replace_cache(
+    cache: &[DrmDisplayInfo],
+    fresh: &[DrmDisplayInfo],
+    uninspected: bool,
+) -> bool {
+    !uninspected || cache.iter().all(|c| fresh.iter().any(|f| f.name == c.name))
+}
+
 /// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION), off the caller's thread and
 /// SINGLE-FLIGHT: a request arriving during a run coalesces into exactly one follow-up.
 fn schedule_drm_cache_refresh() {
@@ -699,11 +714,7 @@ fn schedule_drm_cache_refresh() {
                     Ok(g) => g,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                if trust.uninspected && fresh.len() < cache.len() {
-                    // A card that did not answer cannot prove ITS displays are gone. Only the
-                    // shrink is refused: growth and identity changes still land, and a real
-                    // removal takes the node out of /dev/dri and sysfs together, so the counts
-                    // fall in step and this round is no longer partial.
+                if !round_may_replace_cache(&cache, &fresh, trust.uninspected) {
                     log::debug!(
                         "drm: keeping {} cached display(s) through a partial enumeration ({} seen)",
                         cache.len(),
@@ -1680,6 +1691,50 @@ mod drm_conn_tests {
             PresenceVerdict::SomeOutput,
             "an undriven connector is still evidence of a display"
         );
+    }
+
+    fn display(name: &str, width: u32) -> DrmDisplayInfo {
+        DrmDisplayInfo {
+            name: name.to_owned(),
+            crtc_id: 0,
+            x: 0,
+            y: 0,
+            width,
+            height: 1080,
+            active: true,
+            render_node: String::new(),
+            device: String::new(),
+        }
+    }
+
+    // A round where one card answers and a sibling does not cannot prove the sibling's displays
+    // are gone. Refusing only a SHORTER list was not enough: the failing card can lose one while
+    // another gains one, and the count is unchanged.
+    #[test]
+    fn a_partial_round_may_not_drop_a_cached_display() {
+        let cache = [display("DP-1", 3840), display("HDMI-A-1", 1920)];
+
+        let shrunk = [display("DP-1", 3840)];
+        assert!(!round_may_replace_cache(&cache, &shrunk, true));
+        assert!(
+            round_may_replace_cache(&cache, &shrunk, false),
+            "a complete round measured the removal and must land"
+        );
+
+        let swapped = [display("DP-1", 3840), display("DP-4", 1280)];
+        assert!(!round_may_replace_cache(&cache, &swapped, true));
+
+        let grown = [
+            display("DP-1", 3840),
+            display("HDMI-A-1", 1920),
+            display("DP-4", 1280),
+        ];
+        assert!(round_may_replace_cache(&cache, &grown, true));
+
+        // A mode change on a display that is still there is not a loss, so a partial round must
+        // not freeze it out: uninspected can stay pinned true (an unreadable /sys/class/drm).
+        let resized = [display("DP-1", 2560), display("HDMI-A-1", 1920)];
+        assert!(round_may_replace_cache(&cache, &resized, true));
     }
 
     // Added to the wire later: an older peer's message must still decode.
