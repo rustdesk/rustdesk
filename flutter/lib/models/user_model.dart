@@ -50,8 +50,13 @@ class UserModel {
     });
   }
 
+  // Bumped on every server switch, so a refresh that was in flight against
+  // the previous server cannot apply its late response to the new session.
+  int _sessionEpoch = 0;
+
   void refreshCurrentUser() async {
     if (bind.isDisableAccount()) return;
+    final epoch = _sessionEpoch;
     networkError.value = '';
     networkErrorFromServer.value = false;
     final token = bind.mainGetLocalOption(key: 'access_token');
@@ -81,6 +86,11 @@ class UserModel {
         rethrow;
       }
       refreshingUser = false;
+      if (epoch != _sessionEpoch) {
+        // The response belongs to the session this refresh started with,
+        // not to the one now active.
+        return;
+      }
       final status = response.statusCode;
       if (status == 401 || status == 400) {
         reset(resetOther: status == 401);
@@ -176,6 +186,7 @@ class UserModel {
   /// parked for the server being switched to, if any.
   Future<void> switchApiServer(
       String oldApiServer, String newApiServer) async {
+    _sessionEpoch++;
     Map<String, dynamic> parked = {};
     final raw = bind.mainGetLocalOption(key: _kParkedSessions);
     if (raw.isNotEmpty) {
