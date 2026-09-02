@@ -610,8 +610,9 @@ fn disable(state: &mut State) -> ResultType<()> {
     }
     // Read the parameter while it still exists. A force whose EDID never loaded leaves no other
     // trace, and `uninstall_edid` below is about to erase this one - which would leave the connector
-    // forced for the rest of the boot with nothing able to name it. Writing `detect` to a connector
-    // that turns out not to have been forced is a no-op, so a name that matches on two cards is free.
+    // forced for the rest of the boot with nothing able to name it. The name resolves against the
+    // live list, and connector indices come from a per-type ida that is global to drm.ko, so two
+    // live connectors never share a name and this matches the one connector we forced.
     for name in connectors_named_by_our_entries() {
         for c in all.iter().filter(|c| c.name == name) {
             if !targets.contains(&c.sysfs) {

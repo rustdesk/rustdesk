@@ -599,8 +599,15 @@ pub fn core_main() -> Option<Vec<String>> {
                         println!("Unknown argument {other}; expected enable, disable or status")
                     }
                 }
+                return None;
             }
-            return None;
+            // Gating the `else if` itself would drop the flag through to the end of the chain and
+            // launch the UI, so the arm stays and only its answer changes.
+            #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
+            {
+                println!("Headless display support is not compiled in!");
+                std::process::exit(1);
+            }
         } else if args[0] == "--assign" {
             if config::Config::no_register_device() {
                 println!("Cannot assign an unregistrable device!");

@@ -764,6 +764,12 @@ fn empty_topology_ready(since: &mut Option<Instant>, window: Duration) -> bool {
     }
 }
 
+/// A non-empty observation retires the debounce clock. Callers must hold no `DRM_STATE` guard:
+/// `swap_available_displays` takes that lock first, so the two must never nest.
+fn clear_empty_topology_clock() {
+    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+}
+
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -972,6 +978,10 @@ fn probe_and_publish() -> Availability {
         }
     };
     drop(st);
+    // A successful probe is a non-empty observation, so it retires any pending debounce clock.
+    if answer == Availability::Available {
+        clear_empty_topology_clock();
+    }
     answer
 }
 
@@ -1015,6 +1025,7 @@ fn refresh_unavailable_async() {
                     DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
                     drop(st);
+                    clear_empty_topology_clock();
                     scrap::wayland::display::clear_wayland_displays_cache();
                 }
                 _ => {
@@ -1169,6 +1180,7 @@ pub(super) async fn refresh_displays_for_login() {
                     _ => return,
                 }
             };
+            clear_empty_topology_clock();
             if changed {
                 scrap::wayland::display::clear_wayland_displays_cache();
             }
