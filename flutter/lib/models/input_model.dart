@@ -1068,13 +1068,15 @@ class InputModel {
     }
 
     for (final stroke in strokes) {
-      if (stroke.shift) {
-        sendPhysicalKey(vmLeftShiftUsbHid, true);
-      }
-      sendPhysicalKey(stroke.usbHid, true);
-      sendPhysicalKey(stroke.usbHid, false);
-      if (stroke.shift) {
-        sendPhysicalKey(vmLeftShiftUsbHid, false);
+      final events = vmKeyEventsForStroke(
+        stroke,
+        ctrl: ctrl,
+        shift: shift,
+        alt: alt,
+        command: command,
+      );
+      for (final event in events) {
+        sendPhysicalKey(event.usbHid, event.down);
       }
     }
     return true;

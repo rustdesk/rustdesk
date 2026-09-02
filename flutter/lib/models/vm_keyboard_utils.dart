@@ -21,7 +21,51 @@ class VmKeyStroke {
 
 // USB HID usages from the Keyboard/Keypad usage page (0x07). Flutter's
 // PhysicalKeyboardKey.usbHidUsage exposes the same values in its low 16 bits.
+const vmLeftControlUsbHid = 0xE0;
 const vmLeftShiftUsbHid = 0xE1;
+const vmLeftAltUsbHid = 0xE2;
+const vmLeftGuiUsbHid = 0xE3;
+
+/// One physical key transition sent by VM keyboard mode.
+class VmKeyEvent {
+  const VmKeyEvent(this.usbHid, this.down);
+
+  final int usbHid;
+  final bool down;
+
+  @override
+  bool operator ==(Object other) =>
+      other is VmKeyEvent && other.usbHid == usbHid && other.down == down;
+
+  @override
+  int get hashCode => Object.hash(usbHid, down);
+
+  @override
+  String toString() =>
+      'VmKeyEvent(usbHid: 0x${usbHid.toRadixString(16)}, down: $down)';
+}
+
+/// Builds a balanced physical event sequence with active toolbar modifiers.
+List<VmKeyEvent> vmKeyEventsForStroke(
+  VmKeyStroke stroke, {
+  required bool ctrl,
+  required bool shift,
+  required bool alt,
+  required bool command,
+}) {
+  final modifiers = <int>[
+    if (ctrl) vmLeftControlUsbHid,
+    if (shift || stroke.shift) vmLeftShiftUsbHid,
+    if (alt) vmLeftAltUsbHid,
+    if (command) vmLeftGuiUsbHid,
+  ];
+  return [
+    for (final modifier in modifiers) VmKeyEvent(modifier, true),
+    VmKeyEvent(stroke.usbHid, true),
+    VmKeyEvent(stroke.usbHid, false),
+    for (final modifier in modifiers.reversed) VmKeyEvent(modifier, false),
+  ];
+}
 
 const Map<int, VmKeyStroke> _specialAsciiStrokes = {
   0x08: VmKeyStroke(0x2A),
