@@ -8,8 +8,6 @@ use std::{
 // The generic payload, shared by every customer and compiled in once per release.
 #[cfg(windows)]
 const BIN_DATA: &[u8] = include_bytes!("../data.bin");
-#[cfg(not(windows))]
-const BIN_DATA: &[u8] = &[];
 
 // The per-customer payload, injected into the RCDATA resource after the template
 // has been built, so that customizing a client needs no recompilation.
@@ -44,7 +42,7 @@ impl BinaryReader {
     pub fn new() -> Result<Self, String> {
         let package = read_package()?;
         let package_paths = package.0.iter().map(|f| f.path.clone()).collect();
-        let (files, exe) = merge(read_embedded(), package);
+        let (files, exe) = merge(read_embedded()?, package);
         Ok(Self {
             files,
             exe,
@@ -139,13 +137,13 @@ fn parse(blob: &'static [u8]) -> Option<(Vec<BinaryData>, String)> {
 }
 
 #[cfg(windows)]
-fn read_embedded() -> (Vec<BinaryData>, String) {
-    parse(BIN_DATA).expect("bin file is not valid!")
+fn read_embedded() -> Result<(Vec<BinaryData>, String), String> {
+    parse(BIN_DATA).ok_or_else(|| "bin file is not valid!".to_owned())
 }
 
 #[cfg(not(windows))]
-fn read_embedded() -> (Vec<BinaryData>, String) {
-    parse(BIN_DATA).unwrap_or_default()
+fn read_embedded() -> Result<(Vec<BinaryData>, String), String> {
+    Ok(Default::default())
 }
 
 fn parse_package_blob(blob: Option<&'static [u8]>) -> Result<(Vec<BinaryData>, String), String> {
