@@ -464,6 +464,7 @@ class _RawTouchGestureDetectorRegionState
     final isMoved = await ffi.cursorModel
         .move(panStartPosition.dx, panStartPosition.dy);
     if (!isMoved ||
+        panState.ended ||
         panState.cancelled ||
         panState.touchSequence != _touchModeGestureTracker.sequence) {
       return;
@@ -473,7 +474,8 @@ class _RawTouchGestureDetectorRegionState
       await inputModel.sendMouse('down', MouseButtons.left);
       panState.mouseDownSent = true;
     }
-    if (panState.cancelled ||
+    if (panState.ended ||
+        panState.cancelled ||
         panState.touchSequence != _touchModeGestureTracker.sequence) {
       return;
     }
