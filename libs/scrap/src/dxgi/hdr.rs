@@ -34,13 +34,15 @@ use std::{
     time::{Duration, Instant},
 };
 use winapi::{
+    ctypes::c_void,
     shared::{
         basetsd::SIZE_T,
+        dxgi::{CreateDXGIFactory1, IDXGIFactory1, IID_IDXGIFactory1, DXGI_OUTPUT_DESC},
         dxgi1_2::IDXGIOutput1,
         dxgi1_6::{IDXGIOutput6, IID_IDXGIOutput6, DXGI_OUTPUT_DESC1},
         dxgiformat::DXGI_FORMAT_B8G8R8A8_UNORM,
         dxgitype::{DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, DXGI_SAMPLE_DESC},
-        minwindef::{LPCVOID, UINT, ULONG},
+        minwindef::{FALSE, LPCVOID, UINT, ULONG},
         ntdef::{LONG, LPCSTR, WCHAR},
         winerror::S_OK,
     },
@@ -86,7 +88,7 @@ float4 main(float4 pos : SV_Position) : SV_Target {
     return float4(lerp(hi, lo, step(lin, 0.0031308)), 1.0);
 }";
 
-const SDR_WHITE_LEVEL_REFRESH: Duration = Duration::from_secs(1);
+const OUTPUT_STATE_REFRESH: Duration = Duration::from_secs(1);
 
 pub struct HdrToSdr {
     device: ComPtr<ID3D11Device>,
@@ -103,6 +105,10 @@ pub struct HdrToSdr {
     width: u32,
     height: u32,
     device_name: [WCHAR; 32],
+    // Advanced Color state is read from `output6`, which is re-enumerated from a
+    // fresh factory whenever `factory` stops being current.
+    factory: ComPtr<IDXGIFactory1>,
+    output6: ComPtr<IDXGIOutput6>,
     is_hdr: bool,
     // DISPLAYCONFIG units (1000 == 80 nits == scRGB 1.0). `None` when it could
     // not be read, in which case 80 nits is assumed until it can.
@@ -152,7 +158,13 @@ impl HdrToSdr {
             )?;
             let ps = ComPtr(ps);
 
-            let is_hdr = output_is_hdr(output);
+            let (factory, mut output6) = enumerate_output6(device_name);
+            if output6.is_null() {
+                output6 = query_output6(output as *mut IUnknown);
+            }
+            // Float frames are only requested where IDXGIOutput6 exists, so an
+            // unreadable description still comes from an HDR-capable stack.
+            let is_hdr = output_is_hdr(output6.0).unwrap_or(true);
             let sdr_white_level = if is_hdr {
                 query_sdr_white_level(device_name)
             } else {
@@ -201,6 +213,8 @@ impl HdrToSdr {
                 width: 0,
                 height: 0,
                 device_name: *device_name,
+                factory,
+                output6,
                 is_hdr,
                 sdr_white_level,
                 queried_at: Instant::now(),
@@ -217,7 +231,7 @@ impl HdrToSdr {
         desc: &D3D11_TEXTURE2D_DESC,
     ) -> io::Result<*mut ID3D11Texture2D> {
         unsafe {
-            self.refresh_sdr_white_level();
+            self.refresh_output_state();
             self.ensure_target(desc.Width, desc.Height)?;
             self.ensure_source_view(source)?;
 
@@ -306,19 +320,44 @@ impl HdrToSdr {
         Ok(())
     }
 
-    unsafe fn refresh_sdr_white_level(&mut self) {
-        if !self.is_hdr || self.queried_at.elapsed() < SDR_WHITE_LEVEL_REFRESH {
+    // Advanced Color state is dynamic: HDR can be switched on or off, or a WCG
+    // desktop can turn into an HDR one, without the duplication being lost. An
+    // output's description is a snapshot, so once the factory is no longer
+    // current a new factory and output are needed to see the new state, as the
+    // GetDesc1 docs require.
+    unsafe fn refresh_output_state(&mut self) {
+        if self.queried_at.elapsed() < OUTPUT_STATE_REFRESH {
             return;
         }
         self.queried_at = Instant::now();
-        let level = query_sdr_white_level(&self.device_name);
-        if level.is_none() || level == self.sdr_white_level {
+        if self.factory.is_null() || (*self.factory.0).IsCurrent() == FALSE {
+            let (factory, output6) = enumerate_output6(&self.device_name);
+            self.factory = factory;
+            if !output6.is_null() {
+                self.output6 = output6;
+            }
+        }
+        let is_hdr = output_is_hdr(self.output6.0).unwrap_or(self.is_hdr);
+        let level = if is_hdr {
+            query_sdr_white_level(&self.device_name)
+        } else {
+            None
+        };
+        // A transiently unreadable level keeps the last known one.
+        if is_hdr == self.is_hdr && (level.is_none() || level == self.sdr_white_level) {
             return;
         }
         log::info!(
-            "sdr white level changed {:?} -> {level:?}",
+            "output changed: hdr {} -> {is_hdr}, sdr white level {:?} -> {level:?}",
+            self.is_hdr,
             self.sdr_white_level
         );
+        if is_hdr && level.is_none() {
+            log::warn!(
+                "HDR output but the SDR white level cannot be read, assuming 80 nits until it can"
+            );
+        }
+        self.is_hdr = is_hdr;
         self.sdr_white_level = level;
         let data = params_data(level);
         (*self.context.0).UpdateSubresource(
@@ -344,27 +383,65 @@ fn params_data(sdr_white_level: Option<u32>) -> [f32; 4] {
 }
 
 // FP16 desktop composition means either HDR (scene-referred, 1.0 == 80 nits)
-// or, since Windows 11 22H2, Advanced Color SDR (display-referred). Only
-// IDXGIOutput6 tells them apart; where it does not exist (before Windows 10
-// 1803) FP16 can only mean HDR.
-unsafe fn output_is_hdr(output: *mut IDXGIOutput1) -> bool {
-    if output.is_null() {
-        return true;
-    }
-    let mut output6: *mut IDXGIOutput6 = ptr::null_mut();
-    (*output).QueryInterface(
-        &IID_IDXGIOutput6,
-        &mut output6 as *mut *mut _ as *mut *mut _,
-    );
+// or, since Windows 11 22H2, Advanced Color SDR (display-referred), and only
+// IDXGIOutput6 (Windows 10 1703) tells them apart. `None` when it cannot be
+// read right now.
+unsafe fn output_is_hdr(output6: *mut IDXGIOutput6) -> Option<bool> {
     if output6.is_null() {
-        return true;
+        return None;
     }
-    let output6 = ComPtr(output6);
     let mut desc: DXGI_OUTPUT_DESC1 = mem::zeroed();
-    if (*output6.0).GetDesc1(&mut desc) != S_OK {
-        return true;
+    if (*output6).GetDesc1(&mut desc) != S_OK {
+        return None;
     }
-    desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+    Some(desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+}
+
+unsafe fn query_output6(object: *mut IUnknown) -> ComPtr<IDXGIOutput6> {
+    let mut output6: *mut IDXGIOutput6 = ptr::null_mut();
+    if !object.is_null() {
+        (*object).QueryInterface(
+            &IID_IDXGIOutput6,
+            &mut output6 as *mut *mut _ as *mut *mut _,
+        );
+    }
+    ComPtr(output6)
+}
+
+// A fresh factory sees the current display configuration; the output is found
+// by its GDI name because the outputs of a stale factory keep stale descriptions.
+unsafe fn enumerate_output6(
+    device_name: &[WCHAR; 32],
+) -> (ComPtr<IDXGIFactory1>, ComPtr<IDXGIOutput6>) {
+    let mut factory: *mut c_void = ptr::null_mut();
+    if CreateDXGIFactory1(&IID_IDXGIFactory1, &mut factory) != S_OK {
+        return (ComPtr(ptr::null_mut()), ComPtr(ptr::null_mut()));
+    }
+    let factory = ComPtr(factory as *mut IDXGIFactory1);
+    let mut adapter_index = 0;
+    loop {
+        let mut adapter = ptr::null_mut();
+        if (*factory.0).EnumAdapters1(adapter_index, &mut adapter) != S_OK {
+            break;
+        }
+        let adapter = ComPtr(adapter);
+        adapter_index += 1;
+        let mut output_index = 0;
+        loop {
+            let mut output = ptr::null_mut();
+            if (*adapter.0).EnumOutputs(output_index, &mut output) != S_OK {
+                break;
+            }
+            let output = ComPtr(output);
+            output_index += 1;
+            let mut desc: DXGI_OUTPUT_DESC = mem::zeroed();
+            if (*output.0).GetDesc(&mut desc) == S_OK && wide_eq(&desc.DeviceName, device_name) {
+                let output6 = query_output6(output.0 as *mut IUnknown);
+                return (factory, output6);
+            }
+        }
+    }
+    (factory, ComPtr(ptr::null_mut()))
 }
 
 fn other(msg: impl Into<String>) -> io::Error {
