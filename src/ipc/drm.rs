@@ -122,6 +122,10 @@ enum DrmProducerMsg {
 struct CursorPosSlot {
     dirty: std::sync::atomic::AtomicBool,
     packed: std::sync::atomic::AtomicU64,
+    /// One wakeup may be in flight at a time. Without it a stalled peer lets wakeups from
+    /// successive ticks fill the two-slot queue, and the next frame's blocking send waits behind
+    /// them - the queue must never hold cursor traffic that the capture path can block on.
+    wakeup_queued: std::sync::atomic::AtomicBool,
 }
 
 impl CursorPosSlot {
@@ -129,7 +133,18 @@ impl CursorPosSlot {
         Self {
             dirty: std::sync::atomic::AtomicBool::new(false),
             packed: std::sync::atomic::AtomicU64::new(0),
+            wakeup_queued: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+    /// True when this caller now owns the single wakeup token.
+    fn claim_wakeup(&self) -> bool {
+        !self
+            .wakeup_queued
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+    }
+    fn release_wakeup(&self) {
+        self.wakeup_queued
+            .store(false, std::sync::atomic::Ordering::Release);
     }
     fn store(&self, x: i32, y: i32) {
         use std::sync::atomic::Ordering;
@@ -994,6 +1009,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     conn.send_raw(Bytes::from(colors)).await?;
                 }
                 DrmProducerMsg::CursorPos { .. } => {
+                    cursor_pos_slot.release_wakeup();
                     // The payload is only a wakeup; the slot holds the freshest position, which
                     // goes out on every wakeup, REPEATS INCLUDED: consecutive equal positions
                     // are the consumer's stillness signal for the hotspot calibration, so
@@ -1197,8 +1213,16 @@ fn drm_capture_worker(
                     // flowing, the post-drain slot read already delivers the position, and a
                     // wakeup would occupy a queue slot the frame's own blocking send then waits
                     // on behind a slow peer - cursor traffic must never block the capture path.
-                    if !matches!(grabbed, Some(Ok(_))) {
-                        let _ = frame_tx.try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 });
+                    // At most one wakeup outstanding: a second one would only occupy a queue
+                    // slot the next frame has to wait on, and the slot already carries the
+                    // freshest position for whenever the consumer gets there.
+                    if !matches!(grabbed, Some(Ok(_))) && cursor_pos.claim_wakeup() {
+                        if frame_tx
+                            .try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
+                            .is_err()
+                        {
+                            cursor_pos.release_wakeup();
+                        }
                     }
                 }
             }
@@ -1608,6 +1632,17 @@ mod drm_conn_tests {
         slot.store(30, 40);
         assert_eq!(slot.take(), Some((30, 40)), "the newest store wins");
         assert_eq!(slot.take(), None, "and a take clears the slot");
+    }
+
+    #[test]
+    fn only_one_cursor_wakeup_is_outstanding_at_a_time() {
+        // A stalled peer must never accumulate wakeups in the frame queue: the next frame's
+        // blocking send would wait behind them.
+        let slot = CursorPosSlot::new();
+        assert!(slot.claim_wakeup(), "the first tick owns the token");
+        assert!(!slot.claim_wakeup(), "a later tick cannot enqueue a second");
+        slot.release_wakeup();
+        assert!(slot.claim_wakeup(), "the consumer's release re-arms it");
     }
 
     // Added to the wire later: an older peer's message must still decode.
