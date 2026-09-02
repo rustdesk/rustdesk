@@ -90,7 +90,7 @@ fn merge(
     (files, exe)
 }
 
-fn normalize_path(path: &str) -> String {
+pub(crate) fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
         .trim_start_matches("./")
         .to_lowercase()

@@ -133,11 +133,16 @@ if __name__ == '__main__':
     # So we need to check if the executable is in the folder, and if so, concat again.
     if os.path.exists(os.path.join(folder, options.executable)):
         options.executable = os.path.join(folder, options.executable)
+    folder_path = os.path.abspath(folder)
     exe: str = os.path.abspath(options.executable)
-    if not exe.startswith(os.path.abspath(folder)):
+    try:
+        in_source_folder = os.path.commonpath([folder_path, exe]) == folder_path
+    except ValueError:
+        in_source_folder = False
+    if not in_source_folder:
         print("The executable must locate in source folder")
         exit(-1)
-    exe = '.' + exe[len(os.path.abspath(folder)):]
+    exe = '.' + exe[len(folder_path):]
     print("Executable path: " + exe)
     print("Compression level: " + str(options.level))
     md5_table = generate_md5_table(

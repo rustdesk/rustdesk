@@ -5,7 +5,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use bin_reader::BinaryReader;
+use bin_reader::{normalize_path, BinaryReader};
 
 pub mod bin_reader;
 #[cfg(windows)]
@@ -84,12 +84,6 @@ fn previous_package_files(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn normalized(path: &str) -> String {
-    path.replace('\\', "/")
-        .trim_start_matches("./")
-        .to_lowercase()
-}
-
 // meta.toml is plain text in a user-writable directory, and it now drives deletion,
 // so the path is rebuilt from plain components rather than joined as written. A
 // prefix, root or parent component would otherwise escape the extraction directory:
@@ -133,10 +127,11 @@ fn remove_dropped_package_files_with<F>(
 where
     F: FnMut(&Path) -> std::io::Result<()>,
 {
-    let keep: std::collections::HashSet<String> = current.iter().map(|p| normalized(p)).collect();
+    let keep: std::collections::HashSet<String> =
+        current.iter().map(|p| normalize_path(p)).collect();
     let mut failed = Vec::new();
     for previous in previous_package_files(dir) {
-        if keep.contains(&normalized(&previous)) {
+        if keep.contains(&normalize_path(&previous)) {
             continue;
         }
         let Some(path) = resolve_within(dir, &previous) else {
