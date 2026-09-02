@@ -73,9 +73,12 @@ struct Connector {
     connected: bool,
     /// The connector is reporting our own synthetic EDID, so this is one we forced.
     ours: bool,
-    /// The card's stable bus identity, see `device_id`. Ownership is recorded against this and
-    /// not against the connector name alone, which the kernel re-issues after a rebind.
-    device: String,
+    /// The card's stable bus identity, see `device_id`. `None` when sysfs does not say, and a
+    /// connector with no identity is never claimed.
+    device: Option<String>,
+    /// The connector's KMS object id, see `connector_instance_id`. With `device` it names the
+    /// connector INSTANCE; the pair is what a marker records.
+    id: Option<String>,
     /// A compositor can actually drive this output: its card has a render node, or the whole
     /// machine splits scanout and rendering between cards (`promote_split_topology`).
     drivable: bool,
@@ -100,28 +103,39 @@ fn card_is_renderable(card: &str) -> bool {
         .any(|e| e.file_name().to_string_lossy().starts_with("renderD"))
 }
 
-/// The stable identity of the DRM device a card sits on: the name of the bus device it hangs off
-/// (`0000:01:00.0` on PCI, `fec00000.v3d` on a SoC), sanitised so it can live in a file name.
+/// A stable identity for the DRM device a card sits on, as a short token that can live in a file
+/// name. The FULL symlink target is hashed rather than trimmed: two different bus paths can share a
+/// basename, and a lossy transformation would let them collide into one identity.
+///
+/// `None` when sysfs does not say. A hold is then refused rather than recorded against an identity
+/// that other cards could share.
+///
 /// `cardN` cannot play this role - the minor comes from an allocator that recycles, measured on a
 /// MacBook whose Touch Bar connector was `card0-USB-1` one boot and `card3-USB-2` the next.
-///
-/// `unknown` when sysfs does not say. Two such cards then share an identity, which is the
-/// unqualified behaviour rather than a refusal to work.
-fn device_id(card: &str) -> String {
-    let sanitised = std::fs::read_link(Path::new(DRM_CLASS).join(card).join("device"))
-        .ok()
-        .and_then(|t| t.file_name().map(|n| n.to_string_lossy().into_owned()))
-        .map(|n| {
-            n.chars()
-                .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-                .collect::<String>()
-        })
-        .unwrap_or_default();
-    if sanitised.is_empty() {
-        "unknown".to_owned()
-    } else {
-        sanitised
+fn device_id(card: &str) -> Option<String> {
+    let target = std::fs::read_link(Path::new(DRM_CLASS).join(card).join("device")).ok()?;
+    Some(fnv1a(target.to_string_lossy().as_bytes()))
+}
+
+/// FNV-1a, written out because the marker has to be readable by a LATER build: `DefaultHasher` is
+/// explicitly not stable across releases, so a hold recorded with it would stop being recognised
+/// after an upgrade.
+fn fnv1a(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in bytes {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
     }
+    format!("{h:016x}")
+}
+
+/// The connector's KMS object id - the number `drmModeGetConnector` takes, exposed as
+/// `connector_id` in sysfs. This is what identifies the connector INSTANCE: the kernel returns a
+/// connector's name to its type allocator when the connector goes, so a later connector on the same
+/// card can carry the same name, and the device id alone would not tell them apart. Measured on an
+/// Iris Xe: 508/518/528 for the three connectors, unchanged across a re-probe.
+fn connector_instance_id(sysfs: &str) -> Option<String> {
+    read_trim(&Path::new(DRM_CLASS).join(sysfs).join("connector_id")).filter(|s| !s.is_empty())
 }
 
 /// Every connector of every card, with the facts the rest of this module decides on.
@@ -152,7 +166,7 @@ fn connectors() -> Vec<Connector> {
         *name_count.entry(name.clone()).or_default() += 1;
         raw.push((dir, sysfs, card, name));
     }
-    let mut device_cache: HashMap<String, String> = HashMap::new();
+    let mut device_cache: HashMap<String, Option<String>> = HashMap::new();
     for (dir, sysfs, card, name) in raw {
         let connected = read_trim(&dir.join("status")).as_deref() == Some("connected");
         let drivable = *renderable_cache
@@ -162,12 +176,14 @@ fn connectors() -> Vec<Connector> {
             .entry(card)
             .or_insert_with_key(|c| device_id(c))
             .clone();
+        let id = connector_instance_id(&sysfs);
         out.push(Connector {
             ours: connector_is_ours(
                 connected,
                 &std::fs::read(dir.join("edid")).unwrap_or_default(),
                 &name,
-                &device,
+                device.as_deref(),
+                id.as_deref(),
                 &named,
                 name_count.get(&name).copied().unwrap_or(1) == 1,
             ),
@@ -175,6 +191,7 @@ fn connectors() -> Vec<Connector> {
             sysfs,
             connected,
             device,
+            id,
             drivable,
         });
     }
@@ -361,8 +378,9 @@ fn connector_is_ours(
     connected: bool,
     edid: &[u8],
     name: &str,
-    device: &str,
-    named: &[(String, String)],
+    device: Option<&str>,
+    id: Option<&str>,
+    named: &[(String, Marker)],
     name_unique: bool,
 ) -> bool {
     connected
@@ -370,7 +388,7 @@ fn connector_is_ours(
             || (name_unique
                 && named
                     .iter()
-                    .any(|(n, d)| n == name && (d.is_empty() || d == device))))
+                    .any(|(n, m)| n == name && m.claims(device, id))))
 }
 
 #[allow(dead_code)]
@@ -394,22 +412,13 @@ fn edid_bytes_are_ours(bytes: &[u8]) -> bool {
         && bytes[d + 5..].starts_with(EDID_MONITOR_NAME)
 }
 
-/// One firmware file per device, so the entry itself says which device the hold is on. The bare
-/// name is what an earlier build wrote; it is still ours, it just carries no device.
-fn edid_file_name(device: &str) -> String {
-    if device.is_empty() {
-        format!("{EDID_NAME_PREFIX}.bin")
-    } else {
-        format!("{EDID_NAME_PREFIX}-{device}.bin")
-    }
+/// One firmware file per connector instance, so the entry itself says what the hold is on.
+fn edid_firmware_ref(marker: &Marker) -> String {
+    format!("{EDID_DIR_REF}{}", marker.file_name())
 }
 
-fn edid_firmware_ref(device: &str) -> String {
-    format!("{EDID_DIR_REF}{}", edid_file_name(device))
-}
-
-fn edid_path(device: &str) -> PathBuf {
-    Path::new(EDID_DIR).join(edid_file_name(device))
+fn edid_path(marker: &Marker) -> PathBuf {
+    Path::new(EDID_DIR).join(marker.file_name())
 }
 
 /// `edid_firmware` is a comma-separated list of `[<connector>:]<file>` entries, so the value has to
@@ -431,20 +440,58 @@ fn entry_connector(entry: &str) -> Option<&str> {
     entry.split_once(':').map(|(target, _)| target)
 }
 
-/// The device an entry records the hold against, or `None` when the entry is not ours at all.
-/// `Some("")` is the unqualified form an earlier build wrote: ours, but not device-checkable.
-fn entry_device(entry: &str) -> Option<&str> {
-    let file = entry_file(entry).strip_prefix(EDID_DIR_REF)?;
-    let rest = file.strip_prefix(EDID_NAME_PREFIX)?.strip_suffix(".bin")?;
-    match rest.strip_prefix('-') {
-        Some(device) if !device.is_empty() => Some(device),
-        _ if rest.is_empty() => Some(""),
-        _ => None,
+/// What one of our markers records about the connector it holds.
+///
+/// `Legacy` is the unqualified form an earlier build wrote. It is still ours, so a machine upgraded
+/// mid-hold can still give the connector back, but it names no instance - so the first pass that
+/// can attribute it rewrites it, and a pass that cannot drops it. It is never left standing as a
+/// permanent wildcard.
+#[derive(Clone, Debug, PartialEq)]
+enum Marker {
+    Legacy,
+    Instance { device: String, id: String },
+}
+
+impl Marker {
+    /// Does this marker claim the connector with this identity? A connector that cannot state its
+    /// own identity is claimed by nothing.
+    fn claims(&self, device: Option<&str>, id: Option<&str>) -> bool {
+        match self {
+            Marker::Legacy => true,
+            Marker::Instance { device: d, id: i } => {
+                device == Some(d.as_str()) && id == Some(i.as_str())
+            }
+        }
+    }
+
+    fn file_name(&self) -> String {
+        match self {
+            Marker::Legacy => format!("{EDID_NAME_PREFIX}.bin"),
+            Marker::Instance { device, id } => format!("{EDID_NAME_PREFIX}-{device}-{id}.bin"),
+        }
     }
 }
 
+/// The marker an entry carries, or `None` when the entry is not ours at all.
+fn entry_marker(entry: &str) -> Option<Marker> {
+    let file = entry_file(entry).strip_prefix(EDID_DIR_REF)?;
+    let rest = file.strip_prefix(EDID_NAME_PREFIX)?.strip_suffix(".bin")?;
+    if rest.is_empty() {
+        return Some(Marker::Legacy);
+    }
+    // `<device>-<id>`: both halves are our own alphanumeric tokens, so the LAST dash splits them.
+    let (device, id) = rest.strip_prefix('-')?.rsplit_once('-')?;
+    if device.is_empty() || id.is_empty() {
+        return None;
+    }
+    Some(Marker::Instance {
+        device: device.to_owned(),
+        id: id.to_owned(),
+    })
+}
+
 fn entry_is_ours(entry: &str) -> bool {
-    entry_device(entry).is_some()
+    entry_marker(entry).is_some()
 }
 
 /// Does an entry we did not write already govern this connector? An entry with no `<connector>:`
@@ -481,15 +528,15 @@ fn write_edid_param(value: &str) -> ResultType<()> {
 /// Add our entry for one connector, keeping every entry somebody else put there. Refuses if a
 /// foreign entry already governs this connector: overriding it would change what that connector
 /// reports, which is not ours to do.
-fn install_edid(connector: &str, device: &str) -> ResultType<()> {
+fn install_edid(connector: &str, marker: &Marker) -> ResultType<()> {
     let existing = read_edid_param();
     let entries = edid_entries(&existing);
     if let Some(theirs) = entries.iter().find(|e| foreign_entry_covers(e, connector)) {
         bail!("edid_firmware entry '{theirs}' already covers {connector}, leaving it alone");
     }
     std::fs::create_dir_all(EDID_DIR)?;
-    std::fs::write(edid_path(device), synthetic_edid())?;
-    let mine = format!("{connector}:{}", edid_firmware_ref(device));
+    std::fs::write(edid_path(marker), synthetic_edid())?;
+    let mine = format!("{connector}:{}", edid_firmware_ref(marker));
     // Only our entry for THIS connector is replaced. A release that fails on several connectors
     // has to be able to record every one of them, and dropping the rest here would lose all but
     // the last.
@@ -519,14 +566,14 @@ fn drop_our_entries(mut which: impl FnMut(&str) -> bool) {
         return;
     }
     for e in &mine {
-        let Some(device) = entry_device(e) else {
+        let Some(marker) = entry_marker(e) else {
             continue;
         };
         // Another entry of ours can still point at the same file.
-        if keep.iter().any(|k| entry_device(k) == Some(device)) {
+        if keep.iter().any(|k| entry_marker(k).as_ref() == Some(&marker)) {
             continue;
         }
-        let _ = std::fs::remove_file(edid_path(device));
+        let _ = std::fs::remove_file(edid_path(&marker));
     }
 }
 
@@ -539,13 +586,10 @@ fn uninstall_edid() {
 /// This is the only record left of a force whose EDID never actually loaded: the connector reads
 /// `connected` either way, so nothing marks it as ours, and `State` is empty after a service
 /// restart. Reading it back before the entries are removed is what keeps such a force releasable.
-fn connectors_named_by_our_entries() -> Vec<(String, String)> {
+fn connectors_named_by_our_entries() -> Vec<(String, Marker)> {
     edid_entries(&read_edid_param())
         .into_iter()
-        .filter_map(|e| {
-            let device = entry_device(e)?;
-            Some((entry_connector(e)?.to_owned(), device.to_owned()))
-        })
+        .filter_map(|e| Some((entry_connector(e)?.to_owned(), entry_marker(e)?)))
         .collect()
 }
 
@@ -617,8 +661,9 @@ struct State {
     /// The connectors this process forced, so a release does not depend only on the kernel still
     /// reporting our EDID. If a driver drops the override, the marker goes with it and nothing else
     /// would remember which connector to give back. A list, because a release that fails on more
-    /// than one must not remember only the first.
-    forced: Vec<String>,
+    /// than one must not remember only the first, and each entry carries the full identity: the
+    /// sysfs name alone is recycled, so a bare record would re-adopt a stranger.
+    forced: Vec<Held>,
     /// When the machine first reported no output, which is what the stable period is measured from.
     no_output_since: Option<Instant>,
     /// When forcing last failed, so a host where it cannot work is not retried every poll.
@@ -626,6 +671,26 @@ struct State {
     /// When a real display was first seen while we were holding a connector. The release waits for
     /// it, see `REAL_OUTPUT_STABLE`.
     real_since: Option<Instant>,
+}
+
+/// One connector this process holds, with everything needed to recognise it again. The sysfs
+/// directory is what a write targets, the name is what `edid_firmware` matches, and the marker is
+/// what says WHICH connector instance - both halves of it get recycled on their own.
+#[derive(Clone, Debug, PartialEq)]
+struct Held {
+    sysfs: String,
+    name: String,
+    marker: Marker,
+}
+
+/// The identity of a live connector, or `None` when it cannot state one. A connector that cannot be
+/// identified is never forced and never adopted: a marker recorded against a shared identity would
+/// follow the name onto a stranger, which is the whole failure the marker exists to prevent.
+fn marker_of(c: &Connector) -> Option<Marker> {
+    Some(Marker::Instance {
+        device: c.device.clone()?,
+        id: c.id.clone()?,
+    })
 }
 
 /// Install our EDID on one connector and force it on. No policy: the caller has already decided.
@@ -638,8 +703,9 @@ struct State {
 /// `status == connected` is as far as this can go. Binding a CRTC to the connector is the
 /// compositor's decision, and there is no sysfs attribute to wait on for it, so the log says what
 /// was forced and not that anything is being scanned out.
-fn force_on(state: &mut State, name: &str, sysfs: &str, device: &str) -> ResultType<()> {
-    install_edid(name, device)?;
+fn force_on(state: &mut State, held: &Held) -> ResultType<()> {
+    let (name, sysfs) = (held.name.as_str(), held.sysfs.as_str());
+    install_edid(name, &held.marker)?;
     if let Err(e) = write_status(sysfs, "on") {
         // Roll back, or the override outlives the attempt: nothing would be forced, so nothing would
         // look like ours, and a monitor later plugged into that connector would be described by an
@@ -647,7 +713,7 @@ fn force_on(state: &mut State, name: &str, sysfs: &str, device: &str) -> ResultT
         uninstall_edid();
         return Err(e);
     }
-    state.forced = vec![sysfs.to_owned()];
+    state.forced = vec![held.clone()];
     let settled = wait_for(sysfs, true);
     log::info!(
         "headless display: forced {sysfs} on with a 1920x1080 edid{}",
@@ -665,7 +731,7 @@ fn force_on(state: &mut State, name: &str, sysfs: &str, device: &str) -> ResultT
             "headless display: {sysfs} is on but is not reporting our edid, so the kernel did not \
              load {} (check the firmware search path). The display works with the kernel default \
              modes; releasing it relies on the edid_firmware entry instead.",
-            edid_firmware_ref(device)
+            edid_firmware_ref(&held.marker)
         );
     }
     Ok(())
@@ -678,20 +744,35 @@ fn enable(state: &mut State) -> ResultType<String> {
         bail!("no DRM connectors on this machine");
     }
     if let Some(c) = all.iter().find(|c| c.ours) {
-        state.forced = vec![c.sysfs.clone()];
+        if let Some(marker) = marker_of(c) {
+            state.forced = vec![Held {
+                sysfs: c.sysfs.clone(),
+                name: c.name.clone(),
+                marker,
+            }];
+        }
         return Ok(c.sysfs.clone());
     }
     if all.iter().any(is_real_output) {
         bail!("a display is already attached, nothing to force");
     }
     let target = pick_connector(&all).ok_or_else(|| anyhow!("no connector to force"))?;
-    let (name, sysfs, device) = (
-        target.name.clone(),
-        target.sysfs.clone(),
-        target.device.clone(),
-    );
-    force_on(state, &name, &sysfs, &device)?;
-    Ok(sysfs)
+    // A connector that cannot state its identity is not forced at all: the marker would have to be
+    // written against something other cards could share, and it would then follow the name onto a
+    // stranger after a rebind.
+    let marker = marker_of(target).ok_or_else(|| {
+        anyhow!(
+            "{} cannot be identified (no device link or connector_id in sysfs), refusing to force it",
+            target.sysfs
+        )
+    })?;
+    let held = Held {
+        sysfs: target.sysfs.clone(),
+        name: target.name.clone(),
+        marker,
+    };
+    force_on(state, &held)?;
+    Ok(held.sysfs)
 }
 
 /// Release what we forced, and only that: connectors still carrying our EDID, plus the one this
@@ -703,26 +784,25 @@ fn disable(state: &mut State) -> ResultType<()> {
     for c in all.iter().filter(|c| c.ours) {
         add_target(&mut targets, &all, &c.sysfs);
     }
-    for sysfs in std::mem::take(&mut state.forced) {
-        add_target(&mut targets, &all, &sysfs);
+    for h in std::mem::take(&mut state.forced) {
+        add_target(&mut targets, &all, &h.sysfs);
     }
     // Read the parameter while it still exists. A force whose EDID never loaded leaves no other
     // trace, and the entries below are about to go - which would leave the connector forced for the
-    // rest of the boot with nothing able to name it. The name resolves against the live list, and
-    // connector indices come from a per-type ida that is global to drm.ko, so two live connectors
-    // never share a name; the device qualifier is what keeps a name the kernel re-issued after a
-    // rebind from resolving to somebody else's connector.
-    for (name, device) in connectors_named_by_our_entries() {
+    // rest of the boot with nothing able to name it. A marker only resolves to the connector it
+    // actually names: both the card minor and the connector name get recycled, so the device and
+    // the KMS object id are what keep it from landing on somebody else's connector.
+    for (name, marker) in connectors_named_by_our_entries() {
         for c in all
             .iter()
-            .filter(|c| c.name == name && (device.is_empty() || c.device == device))
+            .filter(|c| c.name == name && marker.claims(c.device.as_deref(), c.id.as_deref()))
         {
             add_target(&mut targets, &all, &c.sysfs);
         }
     }
     let mut last_err = None;
     let mut released: Vec<String> = Vec::new();
-    let mut held: Vec<String> = Vec::new();
+    let mut still_held: Vec<String> = Vec::new();
     for t in &targets {
         // The override comes off before the unforce, or the re-probe would read our EDID straight
         // back and a real monitor on that connector would keep being described by it. One entry at
@@ -732,17 +812,31 @@ fn disable(state: &mut State) -> ResultType<()> {
         if let Err(e) = write_status(&t.sysfs, "detect") {
             log::warn!("headless display: cannot release {}: {e}", t.sysfs);
             // Put the marker back. The parameter entry is what survives this process and, for a
-            // force whose override never loaded, it is the only record there is. If this write
-            // fails too the hold lives on in `state.forced` alone and a restart loses it, which is
-            // as far as a machine refusing both writes can be carried.
-            if let Err(e) = install_edid(&t.name, &t.device) {
-                log::warn!(
-                    "headless display: cannot re-record the hold on {}: {e}",
+            // force whose override never loaded, it is the only record there is. A target whose
+            // connector is gone has no identity to record, and an unqualified marker would follow
+            // the name onto whatever appears next, so that one is left to the process record alone.
+            match &t.marker {
+                Some(marker) => {
+                    if let Err(e) = install_edid(&t.name, marker) {
+                        log::warn!(
+                            "headless display: cannot re-record the hold on {}: {e}",
+                            t.sysfs
+                        );
+                    } else {
+                        still_held.push(t.name.clone());
+                    }
+                    state.forced.push(Held {
+                        sysfs: t.sysfs.clone(),
+                        name: t.name.clone(),
+                        marker: marker.clone(),
+                    });
+                }
+                None => log::warn!(
+                    "headless display: {} could not be released and is gone from sysfs, so there \
+                     is nothing left to record the hold against",
                     t.sysfs
-                );
+                ),
             }
-            state.forced.push(t.sysfs.clone());
-            held.push(t.name.clone());
             last_err = Some(e);
         } else {
             released.push(t.sysfs.clone());
@@ -751,7 +845,7 @@ fn disable(state: &mut State) -> ResultType<()> {
     // Whatever is left of ours names no connector this pass could act on - an override orphaned by
     // an earlier failure, or one whose card is gone - and it would keep painting our EDID on the
     // next probe of that name.
-    drop_our_entries(|e| !entry_connector(e).is_some_and(|c| held.iter().any(|h| h == c)));
+    drop_our_entries(|e| !entry_connector(e).is_some_and(|c| still_held.iter().any(|h| h == c)));
     if !released.is_empty() {
         log::info!("headless display: released {}", released.join(", "));
     }
@@ -762,10 +856,11 @@ fn disable(state: &mut State) -> ResultType<()> {
 }
 
 /// One connector a release has to act on, carried with the facts needed to put its marker back.
+/// `marker` is `None` for a connector that is gone from sysfs: there is nothing left to identify.
 struct Target {
     sysfs: String,
     name: String,
-    device: String,
+    marker: Option<Marker>,
 }
 
 fn add_target(targets: &mut Vec<Target>, all: &[Connector], sysfs: &str) {
@@ -776,17 +871,17 @@ fn add_target(targets: &mut Vec<Target>, all: &[Connector], sysfs: &str) {
         Some(c) => targets.push(Target {
             sysfs: c.sysfs.clone(),
             name: c.name.clone(),
-            device: c.device.clone(),
+            marker: marker_of(c),
         }),
-        // Gone from sysfs since the record was made. Still worth the write, and the sysfs directory
-        // name carries the connector name; the device is no longer knowable.
+        // Gone from sysfs since the record was made. Still worth the write - the connector may be
+        // forced on with nothing else able to name it - but no marker can be written for it.
         None => targets.push(Target {
             sysfs: sysfs.to_owned(),
             name: sysfs
                 .split_once('-')
                 .map(|(_, name)| name.to_owned())
                 .unwrap_or_default(),
-            device: String::new(),
+            marker: None,
         }),
     }
 }
@@ -851,48 +946,118 @@ pub fn start_watcher() {
 /// connector reads disconnected means the kernel-side force was lost (GPU reset, an operator's
 /// detect), and adopting it would park the tick in the release-watch branch instead of letting
 /// the arming path re-force.
-fn adopt_forced(all: &mut [Connector], forced: &[String]) {
+fn adopt_forced(all: &mut [Connector], forced: &[Held]) {
     for c in all.iter_mut() {
-        if c.connected && forced.iter().any(|f| *f == c.sysfs) {
+        // The full identity, not the sysfs name: both the card minor and the connector name are
+        // recycled, so a name-only record would re-adopt whatever appeared in the old one's place
+        // and then hide it from `is_real_output`.
+        if c.connected
+            && forced.iter().any(|h| {
+                h.sysfs == c.sysfs && h.marker.claims(c.device.as_deref(), c.id.as_deref())
+            })
+        {
             c.ours = true;
         }
     }
 }
 
-/// Drop a marker whose device is not the one that connector sits on now, and re-probe what it named.
+/// Bring the markers back in line with the machine, in one pass with enumerated outcomes.
 ///
-/// Connector names are unique among LIVE connectors, but `drm_connector_cleanup()` frees the index,
-/// so an unbind and rebind can hand `DP-3` to a different card. `edid_firmware` has no card syntax,
-/// so the entry would follow the name onto that stranger, paint our EDID on it and make it look
-/// like ours - which hides a real display behind our own. The `detect` write is what stops it
-/// reporting our EDID; without it the connector keeps the blob it already probed.
+/// Two things go wrong on their own. A marker can name a connector INSTANCE that no longer exists:
+/// `drm_connector_cleanup()` returns the name to its allocator, so a later connector - on another
+/// card, or on the same one - can carry it, and `edid_firmware` has no syntax to say which. Such a
+/// marker is dropped and whatever now holds that name is re-probed, because without the `detect`
+/// write it keeps serving the blob it already read. And a marker written by an older build carries
+/// no identity at all; leaving it would make it a permanent wildcard, so it is either rewritten
+/// against the one connector it can be attributed to, or dropped like any other unattributable
+/// hold.
 ///
-/// Returns whether anything was dropped, so the caller can re-read a topology this just changed.
-fn prune_foreign_markers(all: &[Connector]) -> bool {
-    let stale: Vec<(String, String)> = connectors_named_by_our_entries()
-        .into_iter()
-        .filter(|(name, device)| {
-            !device.is_empty() && !all.iter().any(|c| &c.name == name && &c.device == device)
-        })
-        .collect();
-    if stale.is_empty() {
+/// Returns whether anything changed, so the caller can re-read a topology this just moved.
+fn reconcile_markers(all: &[Connector]) -> bool {
+    let mut drop_names: Vec<String> = Vec::new();
+    let mut reprobe: Vec<String> = Vec::new();
+    let mut upgrade: Vec<(String, Marker)> = Vec::new();
+    for (name, marker) in connectors_named_by_our_entries() {
+        match marker_action(&name, &marker, all) {
+            MarkerAction::Keep => {}
+            MarkerAction::Upgrade(m) => upgrade.push((name, m)),
+            MarkerAction::Drop { reprobe: probe } => {
+                log::info!("headless display: dropping the hold on {name} ({marker:?})");
+                if probe {
+                    reprobe.push(name.clone());
+                }
+                drop_names.push(name);
+            }
+        }
+    }
+    if drop_names.is_empty() && upgrade.is_empty() {
         return false;
     }
-    for (name, device) in &stale {
-        log::info!("headless display: dropping the hold on {name}, no longer on {device}");
+    if !drop_names.is_empty() {
+        drop_our_entries(|e| entry_connector(e).is_some_and(|c| drop_names.iter().any(|n| n == c)));
     }
-    drop_our_entries(|e| {
-        entry_connector(e).is_some_and(|c| stale.iter().any(|(name, _)| name == c))
-    });
+    for (name, marker) in &upgrade {
+        if let Err(e) = install_edid(name, marker) {
+            log::warn!("headless display: cannot re-record the hold on {name}: {e}");
+        } else {
+            log::info!("headless display: the hold on {name} now records which connector it is");
+        }
+    }
     for c in all
         .iter()
-        .filter(|c| stale.iter().any(|(name, _)| *name == c.name))
+        .filter(|c| reprobe.iter().any(|name| *name == c.name))
     {
         if let Err(e) = write_status(&c.sysfs, "detect") {
             log::warn!("headless display: cannot re-probe {}: {e}", c.sysfs);
         }
     }
     true
+}
+
+/// What has to happen to one marker. Four outcomes and no fifth, which is the point of naming them:
+/// the bug this replaced came from a marker that fell through every branch and stayed forever.
+#[derive(Debug, PartialEq)]
+enum MarkerAction {
+    Keep,
+    /// A marker from an older build, attributed to exactly one connector that can identify itself.
+    Upgrade(Marker),
+    /// Give the hold back. `reprobe` when a live connector still carries the name: it is serving
+    /// the EDID the kernel already handed it, and only a `detect` write makes it read the wire.
+    Drop {
+        reprobe: bool,
+    },
+}
+
+fn marker_action(name: &str, marker: &Marker, all: &[Connector]) -> MarkerAction {
+    match marker {
+        // No identity at all. Left alone it would claim any connector that ever carries this name,
+        // which is the failure the qualified form exists to prevent, so it does not survive a pass.
+        Marker::Legacy => {
+            let mut candidates = all.iter().filter(|c| c.name == name);
+            match (candidates.next(), candidates.next()) {
+                (Some(c), None) => match marker_of(c) {
+                    Some(m) => MarkerAction::Upgrade(m),
+                    None => MarkerAction::Drop { reprobe: true },
+                },
+                // None: nothing to attribute it to. Several: attributing it would be a guess.
+                (found, _) => MarkerAction::Drop {
+                    reprobe: found.is_some(),
+                },
+            }
+        }
+        Marker::Instance { .. } => {
+            if all
+                .iter()
+                .any(|c| c.name == name && marker.claims(c.device.as_deref(), c.id.as_deref()))
+            {
+                MarkerAction::Keep
+            } else {
+                MarkerAction::Drop {
+                    reprobe: all.iter().any(|c| c.name == name),
+                }
+            }
+        }
+    }
 }
 
 fn tick(state: &mut State) {
@@ -910,7 +1075,7 @@ fn tick(state: &mut State) {
     }
 
     let mut all = connectors();
-    if prune_foreign_markers(&all) {
+    if reconcile_markers(&all) {
         all = connectors();
     }
     adopt_forced(&mut all, &state.forced);
@@ -995,7 +1160,10 @@ pub fn status_text(enabled: bool) -> String {
             "forced by rustdesk: {} (our edid did not load; released by name)\n",
             named
                 .iter()
-                .map(|(name, device)| format!("{name} on {device}"))
+                .map(|(name, marker)| match marker {
+                    Marker::Legacy => format!("{name} (recorded by an older build)"),
+                    Marker::Instance { device, id } => format!("{name} on {device} #{id}"),
+                })
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
@@ -1101,98 +1269,165 @@ mod tests {
     fn our_entries_name_the_connectors_a_release_has_to_reach() {
         // The parse behind the only recovery path for a force whose EDID never loaded. It has to
         // survive a foreign entry, either ordering, and an entry with no connector prefix.
-        let dev = "0000-01-00-0";
-        let mine = |c: &str| format!("{c}:edid/rustdesk-headless-{dev}.bin");
+        let inst = |d: &str, i: &str| Marker::Instance {
+            device: d.to_owned(),
+            id: i.to_owned(),
+        };
+        let mine = |c: &str, d: &str, i: &str| format!("{c}:edid/rustdesk-headless-{d}-{i}.bin");
         let names = |v: &str| {
             edid_entries(v)
                 .into_iter()
-                .filter_map(|e| Some((entry_connector(e)?.to_owned(), entry_device(e)?.to_owned())))
+                .filter_map(|e| Some((entry_connector(e)?.to_owned(), entry_marker(e)?)))
                 .collect::<Vec<_>>()
         };
+        let d = "a1b2c3d4e5f60718";
         assert_eq!(
-            names(&format!("DP-1:edid/theirs.bin,{}", mine("HDMI-A-1"))),
-            vec![("HDMI-A-1".to_owned(), dev.to_owned())]
+            names(&format!("DP-1:edid/theirs.bin,{}", mine("HDMI-A-1", d, "508"))),
+            vec![("HDMI-A-1".to_owned(), inst(d, "508"))]
         );
         assert_eq!(
-            names(&format!("{},DP-1:edid/theirs.bin", mine("HDMI-A-1"))),
-            vec![("HDMI-A-1".to_owned(), dev.to_owned())]
+            names(&format!("{},DP-1:edid/theirs.bin", mine("HDMI-A-1", d, "508"))),
+            vec![("HDMI-A-1".to_owned(), inst(d, "508"))]
         );
         // Two of ours, which is what a machine that forced one connector and then another leaves.
         assert_eq!(
-            names(&format!("{},{}", mine("HDMI-A-1"), mine("DP-2"))),
+            names(&format!(
+                "{},{}",
+                mine("HDMI-A-1", d, "508"),
+                mine("DP-2", d, "528")
+            )),
             vec![
-                ("HDMI-A-1".to_owned(), dev.to_owned()),
-                ("DP-2".to_owned(), dev.to_owned())
+                ("HDMI-A-1".to_owned(), inst(d, "508")),
+                ("DP-2".to_owned(), inst(d, "528"))
             ]
         );
         assert!(names("DP-1:edid/theirs.bin").is_empty());
         assert!(names("").is_empty());
-        // What an earlier build wrote: still ours, so still releasable, with no device to check.
+        // What an earlier build wrote: still ours, so still releasable, with no identity to check.
         assert_eq!(
             names("HDMI-A-1:edid/rustdesk-headless.bin"),
-            vec![("HDMI-A-1".to_owned(), String::new())]
+            vec![("HDMI-A-1".to_owned(), Marker::Legacy)]
         );
         // A file that merely starts like ours is not ours.
         assert!(names("HDMI-A-1:edid/rustdesk-headless-thing.png").is_empty());
+    }
+
+    // rustdesk#15908: every marker has to leave one pass with a decision. The bug this replaces was
+    // a marker that matched no branch and stayed valid for the rest of the boot.
+    #[test]
+    fn every_marker_leaves_a_pass_with_a_decision() {
+        let inst = |d: &str, i: &str| Marker::Instance {
+            device: d.to_owned(),
+            id: i.to_owned(),
+        };
+        let live = vec![c("card1-HDMI-A-1", "HDMI-A-1", true, false)];
+        let mine = marker_of(&live[0]).unwrap();
+
+        // The connector it names is there: nothing to do.
+        assert_eq!(
+            marker_action("HDMI-A-1", &mine, &live),
+            MarkerAction::Keep
+        );
+        // Same name, another connector instance: give it back AND re-probe, because that connector
+        // is already serving the EDID the kernel handed it.
+        assert_eq!(
+            marker_action("HDMI-A-1", &inst("card1", "card1-HDMI-A-9"), &live),
+            MarkerAction::Drop { reprobe: true }
+        );
+        // The connector is gone entirely: give it back, with nothing to re-probe.
+        assert_eq!(
+            marker_action("DP-4", &inst("card9", "card9-DP-4"), &live),
+            MarkerAction::Drop { reprobe: false }
+        );
+        // An older build's marker, attributable to exactly one connector: record what it is.
+        assert_eq!(
+            marker_action("HDMI-A-1", &Marker::Legacy, &live),
+            MarkerAction::Upgrade(mine)
+        );
+        // The same marker with the name on two cards cannot be attributed, so it is not kept.
+        let twins = vec![
+            c("card1-DP-1", "DP-1", true, false),
+            c("card2-DP-1", "DP-1", true, false),
+        ];
+        assert_eq!(
+            marker_action("DP-1", &Marker::Legacy, &twins),
+            MarkerAction::Drop { reprobe: true }
+        );
+        // And one that names nothing live is dropped rather than left as a wildcard.
+        assert_eq!(
+            marker_action("DP-9", &Marker::Legacy, &live),
+            MarkerAction::Drop { reprobe: false }
+        );
+    }
+
+    // rustdesk#15908: a device identity has to survive being put in a file name without two
+    // different devices ever landing on the same value.
+    #[test]
+    fn two_devices_never_share_an_identity() {
+        // Same basename, different bus path: trimming to the basename would have merged these.
+        let a = fnv1a(b"../../devices/pci0000:00/0000:00:02.0");
+        let b = fnv1a(b"../../devices/pci0000:80/0000:00:02.0");
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 16);
+        // Stable, because a marker written by one build is read by the next.
+        assert_eq!(a, fnv1a(b"../../devices/pci0000:00/0000:00:02.0"));
     }
 
     // rustdesk#15908: the kernel frees a connector's name when the connector goes, so a rebind can
     // hand `HDMI-A-1` to a different card - and `edid_firmware` has no card syntax to stop our
     // entry following it there. The device the entry records is what refuses the stranger.
     #[test]
-    fn a_marker_does_not_follow_its_name_onto_another_device() {
-        let named = vec![("HDMI-A-1".to_owned(), "0000-01-00-0".to_owned())];
-        assert!(connector_is_ours(
-            true,
-            &[],
-            "HDMI-A-1",
-            "0000-01-00-0",
-            &named,
-            true
-        ));
-        // Same connector name, different card: not ours.
-        assert!(!connector_is_ours(
-            true,
-            &[],
-            "HDMI-A-1",
-            "0000-02-00-0",
-            &named,
-            true
-        ));
-        // An unqualified entry from an earlier build still resolves by name alone, or a machine
-        // upgraded mid-hold could never give the connector back.
-        let legacy = vec![("HDMI-A-1".to_owned(), String::new())];
-        assert!(connector_is_ours(
-            true,
-            &[],
-            "HDMI-A-1",
-            "0000-02-00-0",
-            &legacy,
-            true
-        ));
+    fn a_marker_does_not_follow_its_name_onto_another_connector() {
+        let inst = |d: &str, i: &str| Marker::Instance {
+            device: d.to_owned(),
+            id: i.to_owned(),
+        };
+        let named = vec![("HDMI-A-1".to_owned(), inst("devA", "508"))];
+        let ours = |device, id, named: &[(String, Marker)]| {
+            connector_is_ours(true, &[], "HDMI-A-1", device, id, named, true)
+        };
+        assert!(ours(Some("devA"), Some("508"), &named));
+        // Same name, another card: the device half refuses it.
+        assert!(!ours(Some("devB"), Some("508"), &named));
+        // Same name and the SAME card, but a connector created later - the kernel returns a
+        // connector's name to its allocator when it goes, so the device alone would accept this.
+        assert!(!ours(Some("devA"), Some("531"), &named));
+        // A connector that cannot state its own identity is claimed by nothing.
+        assert!(!ours(None, Some("508"), &named));
+        assert!(!ours(Some("devA"), None, &named));
+        // An entry from an earlier build carries no identity, so it still resolves by name - it is
+        // rewritten or dropped by `reconcile_markers`, never left standing as a wildcard.
+        let legacy = vec![("HDMI-A-1".to_owned(), Marker::Legacy)];
+        assert!(ours(Some("devB"), Some("999"), &legacy));
     }
 
     #[test]
     fn a_force_whose_edid_never_loaded_is_still_ours() {
         let mine = synthetic_edid();
-        let dev = "0000-01-00-0";
-        let named = vec![("HDMI-A-1".to_owned(), dev.to_owned())];
+        let (dev, id) = (Some("devA"), Some("508"));
+        let named = vec![(
+            "HDMI-A-1".to_owned(),
+            Marker::Instance {
+                device: "devA".to_owned(),
+                id: "508".to_owned(),
+            },
+        )];
 
         // The ordinary case: our EDID came back, and the name is not even needed.
-        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, &[], true));
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, id, &[], true));
         // The case this exists for: forced on, override never loaded, so the connector reports
         // nothing of ours. Only our own edid_firmware entry still names it.
-        assert!(connector_is_ours(true, &[], "HDMI-A-1", dev, &named, true));
+        assert!(connector_is_ours(true, &[], "HDMI-A-1", dev, id, &named, true));
         // A real monitor on a connector we never named is never ours, either way round.
-        assert!(!connector_is_ours(true, &[], "DP-2", dev, &named, true));
-        assert!(!connector_is_ours(true, &[], "DP-2", dev, &[], true));
+        assert!(!connector_is_ours(true, &[], "DP-2", dev, id, &named, true));
+        assert!(!connector_is_ours(true, &[], "DP-2", dev, id, &[], true));
         // And a disconnected connector is nobody's, whatever the parameter says.
-        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", dev, &named, true));
+        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", dev, id, &named, true));
         // A duplicated name claims nothing by name alone: with DP-1 on two cards, the fallback
         // would mark both ours and a real display behind one of them would never release ours.
-        assert!(!connector_is_ours(true, &[], "HDMI-A-1", dev, &named, false));
+        assert!(!connector_is_ours(true, &[], "HDMI-A-1", dev, id, &named, false));
         // The EDID still decides when it does read back, duplicated name or not.
-        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, &named, false));
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, id, &named, false));
     }
 
     #[test]
@@ -1214,13 +1449,27 @@ mod tests {
     }
 
     fn c(sysfs: &str, name: &str, connected: bool, ours: bool) -> Connector {
+        // The card stands in for the device identity and the sysfs name for the instance id, so a
+        // test connector is as distinguishable as a real one.
         Connector {
             name: name.to_owned(),
             sysfs: sysfs.to_owned(),
             connected,
             ours,
-            device: sysfs.split_once('-').map(|(card, _)| card).unwrap_or("").to_owned(),
+            device: sysfs.split_once('-').map(|(card, _)| card.to_owned()),
+            id: Some(sysfs.to_owned()),
             drivable: true,
+        }
+    }
+
+    fn held(sysfs: &str, name: &str) -> Held {
+        Held {
+            sysfs: sysfs.to_owned(),
+            name: name.to_owned(),
+            marker: Marker::Instance {
+                device: sysfs.split_once('-').map(|(card, _)| card).unwrap_or("").to_owned(),
+                id: sysfs.to_owned(),
+            },
         }
     }
 
@@ -1424,19 +1673,19 @@ mod tests {
             c("card1-HDMI-A-1", "HDMI-A-1", true, false),
             c("card1-HDMI-A-2", "HDMI-A-2", false, false),
         ];
-        adopt_forced(&mut all, &["card1-HDMI-A-1".to_owned()]);
+        adopt_forced(&mut all, &[held("card1-HDMI-A-1", "HDMI-A-1")]);
         assert!(all[0].ours, "the held connector is adopted by sysfs name");
         assert!(!all[1].ours);
         // And the bare name must not match: the record is card-qualified.
         let mut all2 = vec![c("card1-HDMI-A-1", "HDMI-A-1", true, false)];
-        adopt_forced(&mut all2, &["HDMI-A-1".to_owned()]);
+        adopt_forced(&mut all2, &[held("HDMI-A-1", "HDMI-A-1")]);
         assert!(!all2[0].ours);
         adopt_forced(&mut all2, &[]);
         assert!(!all2[0].ours);
         // A disconnected forced record means the kernel-side force was lost: not adopted, so the
         // arming path can re-force instead of the tick parking in the release watch.
         let mut all3 = vec![c("card1-HDMI-A-1", "HDMI-A-1", false, false)];
-        adopt_forced(&mut all3, &["card1-HDMI-A-1".to_owned()]);
+        adopt_forced(&mut all3, &[held("card1-HDMI-A-1", "HDMI-A-1")]);
         assert!(!all3[0].ours);
         // A release that failed on two connectors remembers both, or the second is never retried.
         let mut all4 = vec![
@@ -1445,7 +1694,7 @@ mod tests {
         ];
         adopt_forced(
             &mut all4,
-            &["card1-HDMI-A-1".to_owned(), "card1-DP-2".to_owned()],
+            &[held("card1-HDMI-A-1", "HDMI-A-1"), held("card1-DP-2", "DP-2")],
         );
         assert!(all4.iter().all(|c| c.ours));
     }
