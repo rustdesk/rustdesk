@@ -1105,9 +1105,17 @@ class InputModel {
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
+  void resetPointerDevices() {
+    _physicalPointerDevices.clear();
+    _activeMousePointers.clear();
+    _ignoredTouchPointers.clear();
+    isPhysicalMouse.value = false;
+  }
+
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    resetPointerDevices();
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.

@@ -531,26 +531,30 @@ class _RawTouchGestureDetectorRegionState
         };
 
   makeGestures(BuildContext context) {
+    final isPhysical = inputModel.isPhysicalPointerDeviceId;
     return <Type, GestureRecognizerFactory>{
       // Official
-      TapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-              () => TapGestureRecognizer(), (instance) {
+      TouchTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<TouchTapGestureRecognizer>(
+              () => TouchTapGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical), (instance) {
         instance
           ..onTapDown = onTapDown
           ..onTapUp = onTapUp
           ..onTap = onTap;
       }),
-      DoubleTapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
-              () => DoubleTapGestureRecognizer(), (instance) {
+      TouchDoubleTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<TouchDoubleTapGestureRecognizer>(
+              () => TouchDoubleTapGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical), (instance) {
         instance
           ..onDoubleTapDown = onDoubleTapDown
           ..onDoubleTap = onDoubleTap;
       }),
-      LongPressGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-              () => LongPressGestureRecognizer(), (instance) {
+      TouchLongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<TouchLongPressGestureRecognizer>(
+              () => TouchLongPressGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical), (instance) {
         instance
           ..onLongPressDown = onLongPressDown
           ..onLongPressUp = onLongPressUp
@@ -560,7 +564,8 @@ class _RawTouchGestureDetectorRegionState
       // Customized
       HoldTapMoveGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
-              () => HoldTapMoveGestureRecognizer(),
+              () => HoldTapMoveGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical),
               (instance) => instance
                 ..onHoldDragStart = onHoldDragStart
                 ..onHoldDragUpdate = onHoldDragUpdate
@@ -568,14 +573,16 @@ class _RawTouchGestureDetectorRegionState
                 ..onHoldDragEnd = onHoldDragEnd),
       DoubleFinerTapGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
-              () => DoubleFinerTapGestureRecognizer(), (instance) {
+              () => DoubleFinerTapGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical), (instance) {
         instance
           ..onDoubleFinerTap = onDoubleFinerTap
           ..onDoubleFinerTapDown = onDoubleFinerTapDown;
       }),
       CustomTouchGestureRecognizer:
           GestureRecognizerFactoryWithHandlers<CustomTouchGestureRecognizer>(
-              () => CustomTouchGestureRecognizer(), (instance) {
+              () => CustomTouchGestureRecognizer(
+                  isPhysicalPointerDevice: isPhysical), (instance) {
         instance.onOneFingerPanStart =
             (DragStartDetails d) => onOneFingerPanStart(context, d);
         instance
