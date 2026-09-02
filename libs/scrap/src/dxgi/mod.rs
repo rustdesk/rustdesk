@@ -592,6 +592,10 @@ impl Capturer {
             return Ok(());
         }
         let mut first_error = None;
+        // Unmap before ReleaseFrame invalidates the desktop surface; use the same
+        // order for staging surfaces. Cleanup advances Mapped -> Acquired -> Idle,
+        // while Idle is a no-op. Advance state even on errors to avoid retrying
+        // cleanup, but still attempt ReleaseFrame if unmapping fails.
         unsafe {
             if self.frame_state == FrameState::Mapped {
                 let result = if self.fastlane {
