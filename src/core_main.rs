@@ -331,6 +331,33 @@ pub fn core_main() -> Option<Vec<String>> {
                     log::info!("Remote printer uninstalled");
                 }
                 return None;
+            } else if args[0] == "--share-rdp" {
+                if !platform::is_installed() {
+                    eprintln!("Installation required!");
+                    std::process::exit(1);
+                }
+                match parse_share_rdp_arg(&args) {
+                    Ok(None) => println!("{}", platform::windows::is_share_rdp()),
+                    Ok(Some(enable)) => {
+                        if is_cli_setting_change_disabled() {
+                            eprintln!("Settings are disabled!");
+                            std::process::exit(1);
+                        }
+                        if !is_root() {
+                            eprintln!("Administrative privileges required!");
+                            std::process::exit(1);
+                        }
+                        if let Err(err) = platform::windows::set_share_rdp(enable) {
+                            eprintln!("Failed to update RDP session sharing: {err}");
+                            std::process::exit(1);
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("{err}");
+                        std::process::exit(1);
+                    }
+                }
+                return None;
             }
         }
         #[cfg(target_os = "macos")]
@@ -912,6 +939,16 @@ fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
     (printer_override, debug)
 }
 
+#[cfg(any(windows, test))]
+fn parse_share_rdp_arg(args: &[String]) -> Result<Option<bool>, &'static str> {
+    match args {
+        [_] => Ok(None),
+        [_, value] if value == "true" => Ok(Some(true)),
+        [_, value] if value == "false" => Ok(Some(false)),
+        _ => Err("Usage: rustdesk --share-rdp [true|false]"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -945,6 +982,21 @@ mod tests {
         ] {
             assert!(!is_user_main_ipc_scope_cli_command(&args(&[command])));
         }
+    }
+
+    #[test]
+    fn share_rdp_argument_is_optional_and_strict() {
+        assert_eq!(parse_share_rdp_arg(&args(&["--share-rdp"])), Ok(None));
+        assert_eq!(
+            parse_share_rdp_arg(&args(&["--share-rdp", "true"])),
+            Ok(Some(true))
+        );
+        assert_eq!(
+            parse_share_rdp_arg(&args(&["--share-rdp", "false"])),
+            Ok(Some(false))
+        );
+        assert!(parse_share_rdp_arg(&args(&["--share-rdp", "yes"])).is_err());
+        assert!(parse_share_rdp_arg(&args(&["--share-rdp", "true", "extra"])).is_err());
     }
 }
 

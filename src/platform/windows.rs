@@ -1069,14 +1069,17 @@ pub fn is_share_rdp() -> bool {
     share_rdp() == TRUE
 }
 
-pub fn set_share_rdp(enable: bool) {
-    let (subkey, _, _, _) = get_install_info();
-    let cmd = format!(
+fn share_rdp_reg_command(subkey: &str, enable: bool) -> String {
+    format!(
         "reg add {} /f /v share_rdp /t REG_SZ /d \"{}\"",
         subkey,
         if enable { "true" } else { "false" }
-    );
-    run_cmds(cmd, false, "share_rdp").ok();
+    )
+}
+
+pub fn set_share_rdp(enable: bool) -> ResultType<()> {
+    let (subkey, _, _, _) = get_install_info();
+    run_cmds(share_rdp_reg_command(&subkey, enable), false, "share_rdp")
 }
 
 pub fn get_current_process_session_id() -> Option<u32> {
@@ -4853,6 +4856,19 @@ mod tests {
                 "unsafe application name was accepted: {app_name}"
             );
         }
+    }
+
+    #[test]
+    fn share_rdp_registry_command_uses_requested_state() {
+        let subkey = r"HKEY_LOCAL_MACHINE\Software\RustDesk";
+        assert_eq!(
+            share_rdp_reg_command(subkey, true),
+            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "true""#)
+        );
+        assert_eq!(
+            share_rdp_reg_command(subkey, false),
+            format!(r#"reg add {subkey} /f /v share_rdp /t REG_SZ /d "false""#)
+        );
     }
 
     #[test]

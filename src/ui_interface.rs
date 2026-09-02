@@ -557,7 +557,9 @@ pub fn is_share_rdp() -> bool {
 #[inline]
 pub fn set_share_rdp(_enable: bool) {
     #[cfg(windows)]
-    crate::platform::windows::set_share_rdp(_enable);
+    if let Err(err) = crate::platform::windows::set_share_rdp(_enable) {
+        log::error!("Failed to update RDP session sharing: {err}");
+    }
 }
 
 #[inline]
