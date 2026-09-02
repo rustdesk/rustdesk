@@ -441,6 +441,14 @@ class InputModel {
   bool _trackpadPanOpen = false;
   Offset _trackpadPanStartPos = Offset.zero;
 
+  /// The last pan_start payload after full mapping (peer-screen units),
+  /// stashed by handlePointerEvent, and the cumulative whole-pixel deltas
+  /// queued as pan_updates for the current gesture. Together they replay the
+  /// receiver's stored mouseX/mouseY arithmetic (see
+  /// [_queuePanEndUnconditionally]).
+  Point? _trackpadPanStartMapped;
+  Offset _trackpadPanSentDelta = Offset.zero;
+
   /// Serializes touch pan event sends (pan_start → pan_update(s) → pan_end)
   /// from every sender (synthetic trackpad path and native pan-zoom path).
   /// sessionSendPointer is an frb Normal task dispatched to a multi-worker
@@ -1254,6 +1262,7 @@ class InputModel {
     _trackpadTwoFinger = true;
     _trackpadScrollUnsent = Offset.zero;
     _trackpadPanOpen = false;
+    _trackpadPanSentDelta = Offset.zero;
     _trackpadPanStartPos = position;
   }
 
@@ -1297,8 +1306,14 @@ class InputModel {
         }
         _trackpadPanOpen = true;
       }
-      handlePointerEvent(
-          'touch', kMouseEventTypePanUpdate, Offset(x.toDouble(), y.toDouble()));
+      final delta = Offset(x.toDouble(), y.toDouble());
+      // Track exactly what was queued — an update rejected by peer-control
+      // protection must not count, or the terminal reconstruction
+      // (_queuePanEndUnconditionally) would drift from the receiver's
+      // stored-position arithmetic by the unapplied delta sum.
+      if (handlePointerEvent('touch', kMouseEventTypePanUpdate, delta)) {
+        _trackpadPanSentDelta += delta;
+      }
       return;
     }
     bind.sessionSendMouse(
@@ -1738,9 +1753,11 @@ class InputModel {
       // dispatched willContinue=true on the peer, and only pan_end dispatches
       // the willContinue=false release — letting the eligibility checks reject
       // it (peer-control protection, no remote rect, camera mode) would leave
-      // the remote app with a held touch / unintended long-press.
+      // the remote app with a held touch / unintended long-press. Its payload
+      // reconstructs the receiver's stored position (see the helper), so the
+      // release cannot relocate the remote pointer.
       if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
-        _queuePanEndUnconditionally(_pointerPositionForRemoteCanvas(e));
+        _queuePanEndUnconditionally();
         _trackpadPanOpen = false;
       }
       return;
@@ -1780,9 +1797,10 @@ class InputModel {
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
       // Mirror onPointUpImage: queue the terminal pan_end unconditionally —
-      // only if a pan was actually opened (a scroll update was queued).
+      // only if a pan was actually opened (a scroll update was queued); its
+      // payload reconstructs the receiver's stored position (see the helper).
       if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
-        _queuePanEndUnconditionally(_pointerPositionForRemoteCanvas(e));
+        _queuePanEndUnconditionally();
         _trackpadPanOpen = false;
       }
     }
@@ -2015,6 +2033,12 @@ class InputModel {
       if (pos == null) {
         return false;
       }
+      if (type == kMouseEventTypePanStart) {
+        // The unconditional terminal path (_queuePanEndUnconditionally)
+        // reuses the mapped start to reconstruct the receiver's stored
+        // pointer position.
+        _trackpadPanStartMapped = pos;
+      }
       evtValue = {
         'x': pos.x.toInt(),
         'y': pos.y.toInt(),
@@ -2043,15 +2067,34 @@ class InputModel {
   /// terminal event dispatches the willContinue=false continuation. The
   /// eligibility checks should suppress new input, not the release of input
   /// this client already pressed; a rejected terminal event leaves the remote
-  /// app with a held touch / unintended long-press. The payload position is
-  /// irrelevant: the receiver's endGesture() continues from its stored
-  /// position, and the next pan_start resets it — so a raw canvas position is
-  /// fine even when the remote rect is unavailable.
-  void _queuePanEndUnconditionally(Offset canvasPosition) {
+  /// app with a held touch / unintended long-press.
+  ///
+  /// The payload position is NOT ignored by the receiver: TOUCH_PAN_END
+  /// overwrites the shared mouseX/mouseY with it, and subsequent
+  /// positionless events (button down/up are encoded with x=0,y=0; Android
+  /// only updates the position on a move) act at that stored position — so
+  /// an unmapped controller-canvas coordinate would relocate the remote
+  /// pointer. Reconstruct the receiver's stored position instead: pan_start
+  /// set it from the mapped start payload, and every queued pan_update
+  /// subtracted its delta — replay that arithmetic ([_trackpadPanStartMapped]
+  /// minus [_trackpadPanSentDelta]). A single final clamp mirrors the
+  /// receiver's per-update clamping except when a gesture pins the top/left
+  /// edge and reverses; that divergence is bounded by the clamped-away
+  /// distance and the payload stays a valid non-negative coordinate.
+  void _queuePanEndUnconditionally() {
+    // Null is unreachable while _trackpadPanOpen is true: opening requires a
+    // queued pan_start, which stashed the mapped payload.
+    final start = _trackpadPanStartMapped;
+    final end = start == null
+        ? Offset.zero
+        : Offset(
+            (start.x - _trackpadPanSentDelta.dx).clamp(0, double.infinity),
+            (start.y - _trackpadPanSentDelta.dy).clamp(0, double.infinity),
+          );
     final msg = json.encode(modify(PointerEventToRust('touch',
             kMouseEventTypePanEnd, {
-          'x': canvasPosition.dx.toInt(),
-          'y': canvasPosition.dy.toInt(),
+          'x': end.dx.toInt(),
+          'y': end.dy.toInt(),
         }).toJson()));
     _panEventChain = _panEventChain.then((_) async {
       try {
