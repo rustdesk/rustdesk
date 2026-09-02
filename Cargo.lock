@@ -9707,7 +9707,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sctp"
 version = "0.12.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=65fbe090326bf3abe8480d159b6bb07b5f509c22#65fbe090326bf3abe8480d159b6bb07b5f509c22"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=825a0a4862818f74406d8e1cc25be72259228235#825a0a4862818f74406d8e1cc25be72259228235"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -9747,7 +9747,7 @@ dependencies = [
 [[package]]
 name = "webrtc-util"
 version = "0.11.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=65fbe090326bf3abe8480d159b6bb07b5f509c22#65fbe090326bf3abe8480d159b6bb07b5f509c22"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=825a0a4862818f74406d8e1cc25be72259228235#825a0a4862818f74406d8e1cc25be72259228235"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",

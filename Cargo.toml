@@ -223,8 +223,8 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
 # a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "65fbe090326bf3abe8480d159b6bb07b5f509c22" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "65fbe090326bf3abe8480d159b6bb07b5f509c22" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "825a0a4862818f74406d8e1cc25be72259228235" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "825a0a4862818f74406d8e1cc25be72259228235" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
