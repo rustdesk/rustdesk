@@ -119,6 +119,11 @@ class UserModel {
       }
     } finally {
       refreshingUser = false;
+      if (epoch != _sessionEpoch) {
+        // A refresh for the session that took over meanwhile was suppressed
+        // by refreshingUser while this one ran, so issue it now.
+        refreshCurrentUser();
+      }
       await updateOtherModels();
     }
   }
