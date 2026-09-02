@@ -53,6 +53,47 @@ struct WaylandUinputRect {
 struct WaylandLayout {
     baseline: Vec<scrap::wayland::display::DisplayRect>,
     live: Vec<scrap::wayland::display::DisplayRect>,
+    // What the live capturers were built against. Separate from `baseline` because a session
+    // init resets that one, and the generation detector needs a memory that a reset cannot
+    // erase: two inits straddling a rotation would otherwise leave nothing to compare against.
+    seen: Vec<scrap::wayland::display::DisplayRect>,
+}
+
+#[cfg(target_os = "linux")]
+impl WaylandLayout {
+    // Replace the per-session input baseline. Before the first poll the outgoing baseline is
+    // the only record of the layout the capturers were built against, so it seeds `seen`.
+    fn reset_baseline(&mut self, baseline: Vec<scrap::wayland::display::DisplayRect>) {
+        if self.seen.is_empty() {
+            let previous = std::mem::take(&mut self.baseline);
+            self.seen = previous;
+        }
+        self.baseline = baseline;
+        self.live.clear();
+    }
+
+    // An EDGE (live vs the layout the capturers were built against), not a level: comparing
+    // against the baseline latches true for the whole session. With nothing observed yet the
+    // baseline is that record, and a missing snapshot at init makes the first success the edge,
+    // or transform=0 sticks.
+    fn edge(
+        &self,
+        live: &[scrap::wayland::display::DisplayRect],
+        snapshot_missing: bool,
+    ) -> bool {
+        if !self.seen.is_empty() {
+            return self.seen != live;
+        }
+        if self.baseline.is_empty() {
+            return snapshot_missing;
+        }
+        self.baseline != live
+    }
+
+    fn observe(&mut self, live: &[scrap::wayland::display::DisplayRect]) {
+        self.live = live.to_vec();
+        self.seen = live.to_vec();
+    }
 }
 
 // Whether `live` differs from `baseline`. Read on every mouse move, so it is an atomic:
@@ -72,25 +113,10 @@ pub(super) fn wayland_uinput_rect() -> Option<(i32, i32, i32, i32)> {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect
 }
 
-/// A layout change the poll has not consumed yet. Module scope because the setter below can be the
-/// one that observes it: whoever sees the edge must be able to hand it over.
-#[cfg(all(target_os = "linux", feature = "drm"))]
-static PROMOTION_OWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
     WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
-    let mut lock = WAYLAND_LAYOUT.lock().unwrap();
-    // `live` is the edge detector's only memory of the previous layout and it dies here. A second
-    // video service starting between a rotation and the next poll would otherwise record the
-    // rotated layout as the baseline, and the change would never be seen. An empty incoming
-    // baseline is the DRM-union fallback, which proves nothing.
-    #[cfg(feature = "drm")]
-    if !lock.live.is_empty() && !baseline.is_empty() && lock.live != baseline {
-        PROMOTION_OWED.store(true, Ordering::Release);
-    }
-    lock.baseline = baseline;
-    lock.live.clear();
+    WAYLAND_LAYOUT.lock().unwrap().reset_baseline(baseline);
 }
 
 // Remap an injected coordinate onto the live compositor layout when it has drifted from
@@ -130,30 +156,24 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // path needs the current per-display geometry to correct coordinates.
     let (live_changed, mut drifted) = {
         let mut layout = WAYLAND_LAYOUT.lock().unwrap();
-        // An EDGE (live vs previous live), not a level: a baseline comparison latches true for
-        // the whole session. First poll: compare against the baseline, and a missing snapshot
-        // (enumeration failed at init) makes the first success the edge, or transform=0 sticks.
-        let live_changed = if layout.live.is_empty() {
-            #[cfg(feature = "drm")]
-            let failed_init = layout.baseline.is_empty()
-                && scrap::wayland::display::wayland_snapshot_missing();
-            #[cfg(not(feature = "drm"))]
-            let failed_init = false;
-            layout.baseline != live_rects && !layout.baseline.is_empty() || failed_init
-        } else {
-            layout.live != live_rects
-        };
+        #[cfg(feature = "drm")]
+        let snapshot_missing = scrap::wayland::display::wayland_snapshot_missing();
+        #[cfg(not(feature = "drm"))]
+        let snapshot_missing = false;
+        let live_changed = layout.edge(&live_rects, snapshot_missing);
         let drifted = !layout.baseline.is_empty()
             && !live_rects.is_empty()
             && layout.baseline != live_rects;
-        layout.live = live_rects.clone();
+        layout.observe(&live_rects);
         (live_changed, drifted)
     };
     // Single owner of the generation bump: on the cache clear it let every session init tear
-    // down every other live capturer. Baseline promotes with the clear (rustdesk#15601), and an
-    // edge seen while DRM is transiently non-Available stays OWED rather than consumed.
+    // down every other live capturer. Baseline promotes with the clear (rustdesk#15601).
     #[cfg(feature = "drm")]
     {
+        // An edge seen while DRM is transiently non-Available stays OWED rather than consumed.
+        static PROMOTION_OWED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
         // The latch fires when a capturer was built with no wayland snapshot: a later cache
         // refill makes wayland_snapshot_missing lie, so live_changed alone would miss it. Taken
         // UNCONDITIONALLY: short-circuiting past it on a live_changed poll would leave it set and
@@ -770,5 +790,71 @@ mod tests {
         assert_eq!(normalize_primary_display_idx(0, 2), 0);
         assert_eq!(normalize_primary_display_idx(1, 2), 1);
         assert_eq!(normalize_primary_display_idx(2, 2), 0);
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod wayland_layout_tests {
+    use super::WaylandLayout;
+    use scrap::wayland::display::DisplayRect;
+
+    fn layout(w: i32, h: i32, transform: i32) -> Vec<DisplayRect> {
+        vec![DisplayRect {
+            name: "DP-1".into(),
+            x: 0,
+            y: 0,
+            w,
+            h,
+            transform,
+        }]
+    }
+
+    // rustdesk#15886: a video service starts, the output rotates, and a retry starts before the
+    // 1.5 s poll. The baseline is reset on both, so it cannot be the edge detector's memory.
+    #[test]
+    fn a_rotation_between_two_session_inits_is_still_an_edge() {
+        let upright = layout(1920, 1080, 0);
+        let rotated = layout(1080, 1920, 1);
+        let mut l = WaylandLayout::default();
+        l.reset_baseline(upright.clone());
+        l.observe(&upright);
+        l.reset_baseline(upright.clone());
+        l.reset_baseline(rotated.clone());
+        assert!(l.edge(&rotated, false));
+    }
+
+    // The same, with no poll ever having run: the outgoing baseline is the only record of what
+    // the first capturer was built against.
+    #[test]
+    fn a_rotation_between_two_inits_before_the_first_poll_is_still_an_edge() {
+        let upright = layout(1920, 1080, 0);
+        let rotated = layout(1080, 1920, 1);
+        let mut l = WaylandLayout::default();
+        l.reset_baseline(upright.clone());
+        l.reset_baseline(rotated.clone());
+        assert!(l.edge(&rotated, false));
+    }
+
+    // Control: without it the asserts above would pass on a detector that always fires.
+    #[test]
+    fn repeated_baseline_resets_without_a_rotation_are_not_an_edge() {
+        let upright = layout(1920, 1080, 0);
+        let mut l = WaylandLayout::default();
+        l.reset_baseline(upright.clone());
+        l.observe(&upright);
+        l.reset_baseline(upright.clone());
+        l.reset_baseline(upright.clone());
+        assert!(!l.edge(&upright, false));
+    }
+
+    // A promotion consumes the edge: the next poll sees the same layout and must stay quiet.
+    #[test]
+    fn a_promoted_layout_is_not_an_edge_again() {
+        let rotated = layout(1080, 1920, 1);
+        let mut l = WaylandLayout::default();
+        l.reset_baseline(layout(1920, 1080, 0));
+        l.observe(&rotated);
+        l.reset_baseline(rotated.clone());
+        assert!(!l.edge(&rotated, false));
     }
 }
