@@ -185,13 +185,14 @@ struct EnumerationTrust {
 /// Card nodes that can DRIVE an output: a card with no `/sys/class/drm/cardN-*` connector
 /// directory (a render-only node like v3d or tegra) is display-incapable by construction, and
 /// counting it would keep absence unprovable forever on every split render/display SoC.
-fn dri_display_card_count() -> usize {
-    let Ok(rd) = std::fs::read_dir("/sys/class/drm") else {
-        return 0;
-    };
+/// `None` when the inventory could not be read, which is a different fact from zero cards.
+fn dri_display_card_count() -> Option<usize> {
+    let rd = std::fs::read_dir("/sys/class/drm").ok()?;
     let mut cards = std::collections::HashSet::new();
     let mut with_connector = std::collections::HashSet::new();
-    for e in rd.filter_map(|e| e.ok()) {
+    for e in rd {
+        // A partial listing cannot bound the inventory, so it must not answer as if it did.
+        let e = e.ok()?;
         let name = e.file_name().to_string_lossy().into_owned();
         if let Some((card, _)) = name.split_once('-') {
             if card.starts_with("card") {
@@ -201,7 +202,7 @@ fn dri_display_card_count() -> usize {
             cards.insert(name);
         }
     }
-    cards.intersection(&with_connector).count()
+    Some(cards.intersection(&with_connector).count())
 }
 
 /// Whether `/dev/dri/cardN` has any sysfs connector: a failed open of a connector-less card says
@@ -244,7 +245,7 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         // list_devices silently skips card nodes it cannot open, so absence is only proven when
         // its list covers every card that could drive an output (render-only nodes are skipped
         // by design and prove nothing).
-        let mut uninspected = devices.len() < dri_display_card_count();
+        let mut uninspected = dri_display_card_count().is_none_or(|n| devices.len() < n);
         let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
@@ -277,9 +278,17 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
     // the panel idle-disabled it binds card0 (the Touch Bar); the panel on card2 is invisible to it.
     let mut all = Vec::new();
     let mut undriven_total = Vec::new();
+    let mut inventory_failed = false;
     let mut paths: Vec<std::path::PathBuf> = match std::fs::read_dir("/dev/dri") {
         Ok(rd) => rd
-            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter_map(|e| match e {
+                Ok(e) => Some(e.path()),
+                Err(err) => {
+                    log::debug!("drm: cannot read a /dev/dri entry: {err}");
+                    inventory_failed = true;
+                    None
+                }
+            })
             .filter(|p| {
                 p.file_name()
                     .and_then(|n| n.to_str())
@@ -288,13 +297,16 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
             .collect(),
         Err(err) => {
             log::debug!("drm: cannot read /dev/dri to enumerate cards: {err}");
+            // An inventory we could not read is not an empty one: the reader below can still
+            // auto-detect a card, and the siblings it never saw stay unaccounted for.
+            inventory_failed = true;
             Vec::new()
         }
     };
     // Deterministic order, so the display list does not depend on directory order.
     paths.sort();
     let n_paths = paths.len();
-    let mut uninspected = false;
+    let mut uninspected = inventory_failed;
     let mut enumerated = false;
     for p in paths {
         let Some(path) = p.to_str() else { continue };
@@ -305,10 +317,11 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
                     all.append(&mut got);
                     undriven_total.append(&mut undriven);
                 }
-                None => uninspected = true,
+                // Measured on a split SoC (pi 5): the render-only node OPENS and fails here,
+                // so this arm needs the same connector filter as the failed-open one below.
+                None => uninspected |= dev_card_has_connectors(path),
             }
         } else if dev_card_has_connectors(path) {
-            // A render-only card (v3d, tegra) fails this open by design and proves nothing.
             uninspected = true;
         }
     }
@@ -323,11 +336,12 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
             log::info!("drm: no card enumerated by path; falling back to the auto-detected reader");
             if let Some((got, undriven)) = drm_displays_from_reader(&mut r, "") {
-                // Auto-detect inspects one card; with siblings around, absence stays unproven.
+                // The loop above already recorded every card it could not account for; the raw
+                // path count would re-add render-only siblings that prove nothing.
                 return (
                     got,
                     undriven,
-                    EnumerationTrust { enumerated: true, uninspected: uninspected || n_paths > 1 },
+                    EnumerationTrust { enumerated: true, uninspected },
                 );
             }
             uninspected = true;
