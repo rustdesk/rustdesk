@@ -213,9 +213,13 @@ fn dev_card_has_connectors(path: &str) -> bool {
     };
     let prefix = format!("{card}-");
     std::fs::read_dir("/sys/class/drm")
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .any(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+        .map(|mut rd| {
+            rd.any(|e| match e {
+                // An entry we could not read might BE this card's connector, and the answer this
+                // function owes is the conservative one: could this card drive an output.
+                Err(_) => true,
+                Ok(e) => e.file_name().to_string_lossy().starts_with(&prefix),
+            })
         })
         .unwrap_or(true)
 }
