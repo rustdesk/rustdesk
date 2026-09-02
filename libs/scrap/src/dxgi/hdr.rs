@@ -158,6 +158,8 @@ impl HdrToSdr {
             )?;
             let ps = ComPtr(ps);
 
+            // Not found leaves the factory null, so the first refresh enumerates
+            // again instead of trusting the capturer's possibly stale output.
             let (factory, mut output6) = enumerate_output6(device_name);
             if output6.is_null() {
                 output6 = query_output6(output as *mut IUnknown);
@@ -332,9 +334,12 @@ impl HdrToSdr {
         self.queried_at = Instant::now();
         if self.factory.is_null() || (*self.factory.0).IsCurrent() == FALSE {
             let (factory, output6) = enumerate_output6(&self.device_name);
-            self.factory = factory;
             if !output6.is_null() {
+                self.factory = factory;
                 self.output6 = output6;
+            } else {
+                // Keep reading the old output, but enumerate again next time.
+                self.factory = ComPtr(ptr::null_mut());
             }
         }
         let is_hdr = output_is_hdr(self.output6.0).unwrap_or(self.is_hdr);
@@ -410,6 +415,8 @@ unsafe fn query_output6(object: *mut IUnknown) -> ComPtr<IDXGIOutput6> {
 
 // A fresh factory sees the current display configuration; the output is found
 // by its GDI name because the outputs of a stale factory keep stale descriptions.
+// Returns both or neither: a non-null factory guarantees the output came from
+// its topology, so a caller that sees a null factory knows to enumerate again.
 unsafe fn enumerate_output6(
     device_name: &[WCHAR; 32],
 ) -> (ComPtr<IDXGIFactory1>, ComPtr<IDXGIOutput6>) {
@@ -441,7 +448,7 @@ unsafe fn enumerate_output6(
             }
         }
     }
-    (factory, ComPtr(ptr::null_mut()))
+    (ComPtr(ptr::null_mut()), ComPtr(ptr::null_mut()))
 }
 
 fn other(msg: impl Into<String>) -> io::Error {
