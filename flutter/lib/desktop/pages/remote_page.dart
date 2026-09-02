@@ -182,7 +182,6 @@ class _RemotePageState extends State<RemotePage>
     WakelockManager.enable(_uniqueKey);
 
     _ffi.ffiModel.updateEventListener(sessionId, widget.id);
-    if (!isWeb) bind.pluginSyncUi(syncTo: kAppTypeDesktopRemote);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
     _ffi.dialogManager.loadMobileActionsOverlayVisible();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -273,6 +272,11 @@ class _RemotePageState extends State<RemotePage>
         selected < tabState.tabs.length &&
         tabState.tabs[selected].key == widget.id;
   }
+
+  // Every Windows requestFocus() must pass this, or a blocking dialog or an
+  // inactive tab could hand remote input to this page.
+  bool get _windowsCanFocusRemoteInput =>
+      _isSelectedTab && _blockableOverlayState.middleBlocked.isFalse;
 
   bool get _isMacOSKeyboardContextActive {
     return stateGlobal.isFocused.value && !_isWindowBlur && _isSelectedTab;
@@ -514,6 +518,15 @@ class _RemotePageState extends State<RemotePage>
       _queueMacOSKeyboardAfterFullScreen(allowHiddenLifecycle: true);
     }
 
+    // Refocus without PointerEnter: the cursor already hovers the image when
+    // focus returns (Alt+Tab, taskbar), so enterView() never fires again.
+    if (isWindows &&
+        _cursorOverImage.value &&
+        _windowsCanFocusRemoteInput &&
+        !_rawKeyFocusNode.hasFocus) {
+      _rawKeyFocusNode.requestFocus();
+    }
+
     // Restore relative mouse mode constraints when window regains focus.
     if (_ffi.inputModel.relativeMouseMode.value) {
       if (isMacOS) {
@@ -524,7 +537,7 @@ class _RemotePageState extends State<RemotePage>
           _cursorOverImage.value = true;
           _macOSLocalFocusLost = false;
         }
-      } else {
+      } else if (!isWindows || _windowsCanFocusRemoteInput) {
         _rawKeyFocusNode.requestFocus();
       }
       _ffi.inputModel.onWindowFocus();
@@ -836,7 +849,16 @@ class _RemotePageState extends State<RemotePage>
       _macOSLocalFocusLost = false;
       stateGlobal.getInputSource(force: true);
       _syncMacOSKeyboardGrab(reassert: true, allowInactiveLifecycle: true);
-    } else if (!isWindows) {
+    } else if (isWindows) {
+      // Blur unfocuses this node and nothing restores it, so the keyboard stayed
+      // dead until a click. Focus only while the window is really active, or a
+      // background window would grab system keys. onFocusChange does enterOrLeave.
+      if (!_isWindowBlur &&
+          _windowsCanFocusRemoteInput &&
+          !_rawKeyFocusNode.hasFocus) {
+        _rawKeyFocusNode.requestFocus();
+      }
+    } else {
       if (!_rawKeyFocusNode.hasFocus) {
         _rawKeyFocusNode.requestFocus();
       }

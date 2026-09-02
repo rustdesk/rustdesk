@@ -410,7 +410,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             || !self.is_connected
                             || !(server_file_transfer_enabled && file_transfer_enabled));
                     log::debug!(
-                        "Process clipboard message from system, stop: {}, is_stopping_allowed: {}, view_only: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}",
+                        "Process clipboard message from system, view_only: {}, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}",
                         view_only, stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled
                     );
                     if stop {
@@ -1353,9 +1353,13 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
-                    self.handler
+                    if !self
+                        .handler
                         .handle_hash(&self.handler.password.clone(), hash, peer)
-                        .await;
+                        .await
+                    {
+                        return false;
+                    }
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
@@ -1433,14 +1437,6 @@ impl<T: InvokeUiSession> Remote<T> {
 
                             #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
                             crate::flutter::update_file_clipboard_required();
-
-                            // on connection established client
-                            #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            crate::plugin::handle_listen_event(
-                                crate::plugin::EVENT_ON_CONN_CLIENT.to_owned(),
-                                self.handler.get_id(),
-                            );
                         }
 
                         if self.handler.is_file_transfer() {
@@ -1466,6 +1462,18 @@ impl<T: InvokeUiSession> Remote<T> {
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
                     if clipboard_allowed {
+                        #[cfg(all(
+                            feature = "flutter",
+                            not(any(target_os = "android", target_os = "ios"))
+                        ))]
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
+                            let mut msg = Message::new();
+                            msg.set_clipboard(cb.clone());
+                            let session_id = self.handler.lc.read().unwrap().session_id;
+                            crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
+                        }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
@@ -1489,6 +1497,18 @@ impl<T: InvokeUiSession> Remote<T> {
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
                     if clipboard_allowed {
+                        #[cfg(all(
+                            feature = "flutter",
+                            not(any(target_os = "android", target_os = "ios"))
+                        ))]
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
+                            let mut msg = Message::new();
+                            msg.set_multi_clipboards(_mcb.clone());
+                            let session_id = self.handler.lc.read().unwrap().session_id;
+                            crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
+                        }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
@@ -1984,26 +2004,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             );
                         }
                     }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::PluginRequest(p)) => {
-                        allow_err!(crate::plugin::handle_server_event(
-                            &p.id,
-                            &self.handler.get_id(),
-                            &p.content
-                        ));
-                        // to-do: show message box on UI when error occurs?
-                    }
-                    #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                    Some(misc::Union::PluginFailure(p)) => {
-                        let name = if p.name.is_empty() {
-                            "plugin".to_string()
-                        } else {
-                            p.name
-                        };
-                        self.handler.msgbox("custom-nocancel", &name, &p.msg, "");
-                    }
                     Some(misc::Union::SupportedEncoding(e)) => {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
@@ -2284,12 +2284,8 @@ impl<T: InvokeUiSession> Remote<T> {
                     .msgbox("custom-error", "Privacy mode", "Peer denied", "");
                 self.update_privacy_mode(impl_key, false);
             }
-            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Please install plugins", "");
-                self.update_privacy_mode(impl_key, false);
-            }
-            back_notification::PrivacyModeState::PrvOnFailed => {
+            back_notification::PrivacyModeState::PrvOnFailedPlugin
+            | back_notification::PrivacyModeState::PrvOnFailed => {
                 self.handler.msgbox(
                     "custom-error",
                     "Privacy mode",

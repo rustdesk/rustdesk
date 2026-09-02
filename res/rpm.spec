@@ -1,11 +1,11 @@
 Name:       rustdesk
-Version:    1.4.9
+Version:    1.5.0
 Release:    0
 Summary:    RPM package
 License:    GPL-3.0
 URL:        https://rustdesk.com
 Vendor:     rustdesk <info@rustdesk.com>
-Requires:   gtk3 libxcb libXfixes alsa-lib libva2 pam gstreamer1-plugins-base
+Requires:   gtk3 libxcb libXfixes alsa-lib libva2 gstreamer1-plugins-base
 Recommends: libayatana-appindicator-gtk3 libxdo
 
 # https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/
