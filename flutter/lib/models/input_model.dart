@@ -441,6 +441,15 @@ class InputModel {
   bool _trackpadPanOpen = false;
   Offset _trackpadPanStartPos = Offset.zero;
 
+  /// Serializes touch pan event sends (pan_start → pan_update(s) → pan_end)
+  /// from every sender (synthetic trackpad path and native pan-zoom path).
+  /// sessionSendPointer is an frb Normal task dispatched to a multi-worker
+  /// thread pool on the Rust side, so back-to-back submissions can execute
+  /// out of order — and the Android peer's startGesture/continueGesture/
+  /// endGesture sequence is order-dependent. Chaining each send onto the
+  /// previous one's Future preserves submission order.
+  Future<void> _panEventChain = Future.value();
+
   // Mobile relative mouse delta accumulators (for slow/fine movements).
   double _mobileDeltaRemainderX = 0.0;
   double _mobileDeltaRemainderY = 0.0;
@@ -1973,9 +1982,11 @@ class InputModel {
   }
 
   /// Send a touch pointer event to the peer. Returns whether the event was
-  /// actually emitted — callers that open a stateful gesture (pan_start) must
-  /// check this, because the send is silently dropped when peer control is
+  /// accepted and queued — callers that open a stateful gesture (pan_start)
+  /// must check this, because the event is dropped when peer control is
   /// protected, the remote rect is not ready, or the view is in camera mode.
+  /// The actual send is chained onto [_panEventChain] so pan_start /
+  /// pan_update / pan_end reach the peer in submission order.
   bool handlePointerEvent(String kind, String type, Offset offset) {
     // Camera mode is a pure no-op: return before any position mapping or
     // peer-control check, both of which mutate local cursor/canvas state
@@ -2013,9 +2024,17 @@ class InputModel {
       };
     }
 
-    final evt = PointerEventToRust(kind, type, evtValue).toJson();
-    bind.sessionSendPointer(
-        sessionId: sessionId, msg: json.encode(modify(evt)));
+    final msg = json.encode(modify(PointerEventToRust(kind, type, evtValue)));
+    // Serialize with any pan event already in flight (see [_panEventChain]).
+    // Each link swallows its own error so one failed send cannot break the
+    // chain and strand later pan events.
+    _panEventChain = _panEventChain.then((_) async {
+      try {
+        await bind.sessionSendPointer(sessionId: sessionId, msg: msg);
+      } catch (e) {
+        debugPrint('[InputModel] failed to send pan event $type: $e');
+      }
+    });
     return true;
   }
 
