@@ -256,9 +256,8 @@ impl Capturer {
     }
 
     // Drops the tone-map and re-duplicates the output the legacy way, so DXGI
-    // hands over clipped BGRA8 (the pre-HDR behaviour) and the session stays on
-    // DXGI instead of being switched to GDI by the capture loop, which treats
-    // any other error that way. The caller sees WouldBlock and asks again.
+    // hands over clipped BGRA8 (the pre-HDR behaviour). If re-duplication fails,
+    // switch to GDI before returning. The caller sees WouldBlock and asks again.
     unsafe fn abandon_tonemap<T>(&mut self, err: io::Error) -> io::Result<T> {
         if hdr::is_permanent(&err) {
             hdr::UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -268,9 +267,15 @@ impl Capturer {
         (*self.duplication.0).ReleaseFrame();
         self.duplication = ComPtr(ptr::null_mut());
         let mut duplication = ptr::null_mut();
-        wrap_hresult(
+        let result = wrap_hresult(
             (*self.display.inner.0).DuplicateOutput(self.device.0 as *mut _, &mut duplication),
-        )?;
+        );
+        if let Err(err) = result {
+            if self.set_gdi() {
+                return Err(io::ErrorKind::WouldBlock.into());
+            }
+            return Err(err);
+        }
         self.duplication = ComPtr(duplication);
         let mut desc: DXGI_OUTDUPL_DESC = mem::zeroed();
         (*duplication).GetDesc(&mut desc);
@@ -431,6 +436,9 @@ impl Capturer {
     }
 
     unsafe fn load_frame(&mut self, timeout: UINT) -> io::Result<(*const u8, i32)> {
+        if self.duplication.0.is_null() {
+            return Err(io::ErrorKind::AddrNotAvailable.into());
+        }
         let mut frame = ptr::null_mut();
         #[allow(invalid_value)]
         let mut info = mem::MaybeUninit::uninit().assume_init();
