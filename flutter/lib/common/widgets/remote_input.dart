@@ -199,23 +199,27 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      if (isIOS &&
-          (touchSequence == null ||
-              !_touchModeGestureTracker.shouldHandleTap(touchSequence))) {
-        return;
-      }
-      final isMoved =
-          await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      if (isIOS &&
-          !_touchModeGestureTracker.shouldHandleTap(touchSequence!)) {
-        return;
-      }
-      if (isMoved) {
+      Future<void> sendTap() async {
         // If pan already handled 'down', don't send it again.
         if (lastTapDownDetails != null && !_touchModePanStarted) {
           await inputModel.tapDown(MouseButtons.left);
         }
         await inputModel.tapUp(MouseButtons.left);
+      }
+      if (isIOS) {
+        if (touchSequence == null) {
+          return;
+        }
+        await handleTrackedTap(
+          tracker: _touchModeGestureTracker,
+          sequence: touchSequence,
+          move: () =>
+              ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy),
+          sendTap: sendTap,
+        );
+      } else if (await ffi.cursorModel
+          .move(d.localPosition.dx, d.localPosition.dy)) {
+        await sendTap();
       }
     }
   }

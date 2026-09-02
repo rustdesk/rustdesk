@@ -33,29 +33,35 @@ void main() {
       expect(tracker.shouldHandleTap(secondSequence), isTrue);
     });
 
-    test('rejects a tap if a newer touch starts while work is pending',
+    test('does not send a tap if a newer touch starts while move is pending',
         () async {
       final tracker = TouchModeGestureTracker();
       tracker.pointerDown(1);
       final firstSequence = tracker.recordTapDown();
       final started = Completer<void>();
       final resume = Completer<void>();
+      var clicks = 0;
 
-      final result = () async {
-        if (!tracker.shouldHandleTap(firstSequence)) {
-          return false;
-        }
-        started.complete();
-        await resume.future;
-        return tracker.shouldHandleTap(firstSequence);
-      }();
+      final result = handleTrackedTap(
+        tracker: tracker,
+        sequence: firstSequence,
+        move: () async {
+          started.complete();
+          await resume.future;
+          return true;
+        },
+        sendTap: () async {
+          clicks++;
+        },
+      );
 
       await started.future;
       tracker.pointerEnd(1);
       tracker.pointerDown(2);
       resume.complete();
 
-      expect(await result, isFalse);
+      await result;
+      expect(clicks, 0);
     });
 
     test('additional pointers stay in the same touch sequence', () {
