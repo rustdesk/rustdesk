@@ -226,6 +226,12 @@ class UserModel {
       parked.remove(newApiServer);
       await bind.mainSetLocalOption(
           key: _kParkedSessions, value: json.encode(parked));
+    }
+    // Bump again now that the switch is complete: a refresh that a stale one
+    // re-issued while this was awaiting saw the new server with the old token,
+    // and its 401 must not reset the session restored here.
+    _sessionEpoch++;
+    if (restored is Map) {
       // An expired or revoked token comes back 401 here, which resets the
       // session, so a stale parked login cleans itself up.
       refreshCurrentUser();
