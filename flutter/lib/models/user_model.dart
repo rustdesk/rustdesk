@@ -56,6 +56,9 @@ class UserModel {
 
   void refreshCurrentUser() async {
     if (bind.isDisableAccount()) return;
+    // Wait out a server switch in progress, so that the token read below is
+    // never the previous server's while the API server is already the new one.
+    await _sessionWrites;
     final epoch = _sessionEpoch;
     networkError.value = '';
     networkErrorFromServer.value = false;
