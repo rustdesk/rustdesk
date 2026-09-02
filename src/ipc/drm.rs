@@ -479,6 +479,35 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     cur
 }
 
+/// How many capture readers are open right now.
+///
+/// The headless watcher reads this. Its probe of a connector it holds costs a topology blip, and a
+/// blip while somebody is capturing restarts their video service, so the probe waits for a machine
+/// nobody is looking at. A counter rather than a flag because several displays can be captured at
+/// once.
+static DRM_CAPTURES_OPEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub(crate) fn drm_capture_active() -> bool {
+    DRM_CAPTURES_OPEN.load(Ordering::Relaxed) > 0
+}
+
+/// Decrements on Drop, so every way out of the capture loop is covered - including the panic path,
+/// which a manual decrement at the end would miss and leave the machine looking busy forever.
+struct CaptureGuard;
+
+impl CaptureGuard {
+    fn new() -> Self {
+        DRM_CAPTURES_OPEN.fetch_add(1, Ordering::Relaxed);
+        Self
+    }
+}
+
+impl Drop for CaptureGuard {
+    fn drop(&mut self) {
+        DRM_CAPTURES_OPEN.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION), off the caller's thread and
 /// SINGLE-FLIGHT: a request arriving during a run coalesces into exactly one follow-up.
 fn schedule_drm_cache_refresh() {
@@ -1013,6 +1042,7 @@ fn drm_capture_worker(
         }
     };
     schedule_drm_cache_refresh();
+    let _capturing = CaptureGuard::new();
     log::debug!(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",
         t_open.elapsed()

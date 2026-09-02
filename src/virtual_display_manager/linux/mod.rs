@@ -59,6 +59,10 @@ const SETTLE_STEP: Duration = Duration::from_millis(50);
 /// CRTC-bound: on single-CRTC hardware the compositor cannot bind it until ours is released, so that
 /// condition would never come true.
 const REAL_OUTPUT_STABLE: Duration = Duration::from_secs(2);
+
+/// How often a held connector is re-probed to see whether a display has been plugged into it.
+/// Bounds how long such a display stays invisible; see `real_display_probe_due`.
+const HELD_CONNECTOR_PROBE_INTERVAL: Duration = Duration::from_secs(300);
 /// Backoff after a failed attempt. Nothing that makes `enable` fail is transient - a topology with
 /// no forceable connector stays that way - so retrying on the next poll would only produce a warning
 /// every few seconds for the life of the service.
@@ -671,6 +675,9 @@ struct State {
     /// When a real display was first seen while we were holding a connector. The release waits for
     /// it, see `REAL_OUTPUT_STABLE`.
     real_since: Option<Instant>,
+    /// When the held connector was last re-probed for a display of its own, see
+    /// `real_display_probe_due`.
+    last_probe: Option<Instant>,
 }
 
 /// One connector this process holds, with everything needed to recognise it again. The sysfs
@@ -961,6 +968,54 @@ fn adopt_forced(all: &mut [Connector], forced: &[Held]) {
     }
 }
 
+/// Whether the held connector is due a probe of its own.
+///
+/// Never while a capture is open: the probe drops the force for a moment, and on a single-output
+/// machine that empties the topology, which restarts the video service of whoever is watching. So
+/// this waits for a machine nobody is looking at - which is also exactly when it matters, since the
+/// display it is looking for is no use to anybody while a remote session is already running.
+fn real_display_probe_due(last: Option<Instant>, capture_active: bool) -> bool {
+    if capture_active {
+        return false;
+    }
+    match last {
+        None => true,
+        Some(t) => t.elapsed() >= HELD_CONNECTOR_PROBE_INTERVAL,
+    }
+}
+
+/// Drop the force on each held connector for one probe and see what it says on its own.
+///
+/// Only the FORCE comes off; the override stays installed, so a connector with a display on it
+/// comes back `connected` and one with nothing comes back `disconnected`. That is the whole
+/// question, and it is answered without touching the parameter, so nothing else has to be undone if
+/// this fails halfway.
+fn probe_held_connectors(state: &mut State) {
+    let held: Vec<String> = connectors()
+        .into_iter()
+        .filter(|c| c.ours)
+        .map(|c| c.sysfs)
+        .collect();
+    for sysfs in held {
+        if let Err(e) = write_status(&sysfs, "detect") {
+            log::warn!("headless display: cannot probe {sysfs} for a display of its own: {e}");
+            continue;
+        }
+        let connected = wait_for(&sysfs, true);
+        if connected {
+            log::info!(
+                "headless display: {sysfs} reports a display of its own; giving the connector back"
+            );
+            let _ = disable(state);
+            return;
+        }
+        // Nothing there. Put the force back; the override never came off, so this is one write.
+        if let Err(e) = write_status(&sysfs, "on") {
+            log::warn!("headless display: cannot re-force {sysfs} after probing it: {e}");
+        }
+    }
+}
+
 /// Bring the markers back in line with the machine, in one pass with enumerated outcomes.
 ///
 /// Two things go wrong on their own. A marker can name a connector INSTANCE that no longer exists:
@@ -1069,8 +1124,10 @@ fn tick(state: &mut State) {
         state.no_output_since = None;
         state.last_failure = None;
         // A release timer started before the toggle must not survive it, or a later re-enable
-        // skips the stability delay.
+        // skips the stability delay. The probe clock goes with it, so a re-enable looks at once
+        // rather than waiting out an interval that started under the old setting.
         state.real_since = None;
+        state.last_probe = None;
         return;
     }
 
@@ -1081,10 +1138,18 @@ fn tick(state: &mut State) {
     adopt_forced(&mut all, &state.forced);
     if all.iter().any(|c| c.ours) {
         // A real display takes precedence over ours: release it, and the machine goes back to the
-        // output the operator actually plugged in. Only visible for a connector other than the one we
-        // are holding, because ours is what that connector reports.
+        // output the operator actually plugged in. A connector OTHER than the one we hold shows
+        // that by itself; the one we hold cannot, because the kernel serves our override for it -
+        // so a monitor plugged into that port would stay invisible for the rest of the boot, and on
+        // a machine with one output, which is the machine this feature is for, that is its only
+        // display. Measured on such a box: it had a monitor attached the whole time and our EDID
+        // was what everything read. So the held connector gets re-probed on its own.
         if !all.iter().any(is_real_output) {
             state.real_since = None;
+            if real_display_probe_due(state.last_probe, crate::ipc::drm_capture_active()) {
+                state.last_probe = Some(Instant::now());
+                probe_held_connectors(state);
+            }
             return;
         }
         if state.real_since.get_or_insert_with(Instant::now).elapsed() < REAL_OUTPUT_STABLE {
@@ -1358,6 +1423,24 @@ mod tests {
             marker_action("DP-9", &Marker::Legacy, &live),
             MarkerAction::Drop { reprobe: false }
         );
+    }
+
+    // rustdesk#15908: the connector we hold is the one place a display can appear without us being
+    // able to see it, because the kernel serves our override for it. So it gets probed - but never
+    // while somebody is capturing, since the probe empties the topology for a moment and that
+    // restarts their video service.
+    #[test]
+    fn the_held_connector_is_probed_only_while_nobody_is_watching() {
+        let long_ago = Instant::now() - HELD_CONNECTOR_PROBE_INTERVAL;
+        // Never probed: look now.
+        assert!(real_display_probe_due(None, false));
+        // ...but not with a capture open, however overdue it is.
+        assert!(!real_display_probe_due(None, true));
+        assert!(!real_display_probe_due(Some(long_ago), true));
+        // Interval elapsed on an idle machine: look.
+        assert!(real_display_probe_due(Some(long_ago), false));
+        // Just looked: leave it alone, or every poll would blip the topology.
+        assert!(!real_display_probe_due(Some(Instant::now()), false));
     }
 
     // rustdesk#15908: a device identity has to survive being put in a file name without two
