@@ -1137,6 +1137,11 @@ pub(super) fn warm_availability() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
                 publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                // Warm-up runs detached, so an empty probe can have armed the clock while it was
+                // querying. Retiring it AFTER the publish is what covers that: an empty observation
+                // from before this Available cannot be allowed to time out against it. The guard
+                // above is a temporary, so no lock is held here.
+                clear_empty_topology_clock();
                 return;
             }
             _ => std::thread::sleep(Duration::from_millis(300)),
@@ -1404,10 +1409,30 @@ fn normalize_connector(name: &str) -> String {
     }
 }
 
+/// A debounce clock armed before the verdict it would demote belongs to a topology that has since
+/// been proven non-empty. Every publisher of a non-empty topology retires the clock, but that is
+/// four call sites remembering; this makes a missed one cost a settle window rather than an
+/// immediate demote.
+fn clock_predates_verdict(armed_at: Option<Instant>, available_since: Option<Instant>) -> bool {
+    match (armed_at, available_since) {
+        (Some(armed), Some(available)) => armed < available,
+        _ => false,
+    }
+}
+
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
+    // Read and released before the clock lock is taken: the two must never nest, and the order
+    // everywhere else is clock first.
+    let available_since = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(at, _) => Some(*at),
+        _ => None,
+    };
     // The empty debounce is resolved before DRM_STATE is taken so the two locks never nest.
     let empty_outlived_window = if list.is_empty() {
         let mut since = EMPTY_TOPOLOGY_SINCE.lock().unwrap();
+        if clock_predates_verdict(*since, available_since) {
+            *since = None;
+        }
         let was_first = since.is_none();
         let ready = empty_topology_ready(&mut *since, EMPTY_TOPOLOGY_DEMOTE_AFTER);
         if was_first {
@@ -1926,6 +1951,18 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+    }
+
+    #[test]
+    fn a_clock_armed_before_the_current_verdict_cannot_demote_it() {
+        let armed = Instant::now();
+        let available = armed + Duration::from_millis(1);
+        assert!(clock_predates_verdict(Some(armed), Some(available)));
+        // Armed while this verdict already stood: it is about the current topology.
+        assert!(!clock_predates_verdict(Some(available), Some(armed)));
+        assert!(!clock_predates_verdict(None, Some(available)));
+        // Nothing to be stale against.
+        assert!(!clock_predates_verdict(Some(armed), None));
     }
 
     #[test]

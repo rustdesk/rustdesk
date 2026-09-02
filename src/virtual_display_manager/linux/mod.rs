@@ -38,9 +38,9 @@ pub const OPTION_ALLOW_HEADLESS_DISPLAY: &str = "allow-headless-display";
 const DRM_CLASS: &str = "/sys/class/drm";
 const EDID_PARAM: &str = "/sys/module/drm/parameters/edid_firmware";
 const EDID_DIR: &str = "/lib/firmware/edid";
-const EDID_NAME: &str = "rustdesk-headless.bin";
+const EDID_NAME_PREFIX: &str = "rustdesk-headless";
 /// The relative name the kernel resolves under the firmware search path.
-const EDID_FIRMWARE_REF: &str = "edid/rustdesk-headless.bin";
+const EDID_DIR_REF: &str = "edid/";
 
 /// How long the machine must report no output before a connector is forced. Short enough that a
 /// headless boot is remotable quickly, long enough that a monitor waking up, a KVM switching back
@@ -73,6 +73,9 @@ struct Connector {
     connected: bool,
     /// The connector is reporting our own synthetic EDID, so this is one we forced.
     ours: bool,
+    /// The card's stable bus identity, see `device_id`. Ownership is recorded against this and
+    /// not against the connector name alone, which the kernel re-issues after a rebind.
+    device: String,
     /// A compositor can actually drive this output: its card has a render node, or the whole
     /// machine splits scanout and rendering between cards (`promote_split_topology`).
     drivable: bool,
@@ -95,6 +98,30 @@ fn card_is_renderable(card: &str) -> bool {
     entries
         .flatten()
         .any(|e| e.file_name().to_string_lossy().starts_with("renderD"))
+}
+
+/// The stable identity of the DRM device a card sits on: the name of the bus device it hangs off
+/// (`0000:01:00.0` on PCI, `fec00000.v3d` on a SoC), sanitised so it can live in a file name.
+/// `cardN` cannot play this role - the minor comes from an allocator that recycles, measured on a
+/// MacBook whose Touch Bar connector was `card0-USB-1` one boot and `card3-USB-2` the next.
+///
+/// `unknown` when sysfs does not say. Two such cards then share an identity, which is the
+/// unqualified behaviour rather than a refusal to work.
+fn device_id(card: &str) -> String {
+    let sanitised = std::fs::read_link(Path::new(DRM_CLASS).join(card).join("device"))
+        .ok()
+        .and_then(|t| t.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .map(|n| {
+            n.chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    if sanitised.is_empty() {
+        "unknown".to_owned()
+    } else {
+        sanitised
+    }
 }
 
 /// Every connector of every card, with the facts the rest of this module decides on.
@@ -125,22 +152,29 @@ fn connectors() -> Vec<Connector> {
         *name_count.entry(name.clone()).or_default() += 1;
         raw.push((dir, sysfs, card, name));
     }
+    let mut device_cache: HashMap<String, String> = HashMap::new();
     for (dir, sysfs, card, name) in raw {
         let connected = read_trim(&dir.join("status")).as_deref() == Some("connected");
         let drivable = *renderable_cache
-            .entry(card)
+            .entry(card.clone())
             .or_insert_with_key(|c| card_is_renderable(c));
+        let device = device_cache
+            .entry(card)
+            .or_insert_with_key(|c| device_id(c))
+            .clone();
         out.push(Connector {
             ours: connector_is_ours(
                 connected,
                 &std::fs::read(dir.join("edid")).unwrap_or_default(),
                 &name,
+                &device,
                 &named,
                 name_count.get(&name).copied().unwrap_or(1) == 1,
             ),
             name,
             sysfs,
             connected,
+            device,
             drivable,
         });
     }
@@ -327,10 +361,16 @@ fn connector_is_ours(
     connected: bool,
     edid: &[u8],
     name: &str,
-    named: &[String],
+    device: &str,
+    named: &[(String, String)],
     name_unique: bool,
 ) -> bool {
-    connected && (edid_bytes_are_ours(edid) || (name_unique && named.iter().any(|n| n == name)))
+    connected
+        && (edid_bytes_are_ours(edid)
+            || (name_unique
+                && named
+                    .iter()
+                    .any(|(n, d)| n == name && (d.is_empty() || d == device))))
 }
 
 #[allow(dead_code)]
@@ -354,8 +394,22 @@ fn edid_bytes_are_ours(bytes: &[u8]) -> bool {
         && bytes[d + 5..].starts_with(EDID_MONITOR_NAME)
 }
 
-fn edid_path() -> PathBuf {
-    Path::new(EDID_DIR).join(EDID_NAME)
+/// One firmware file per device, so the entry itself says which device the hold is on. The bare
+/// name is what an earlier build wrote; it is still ours, it just carries no device.
+fn edid_file_name(device: &str) -> String {
+    if device.is_empty() {
+        format!("{EDID_NAME_PREFIX}.bin")
+    } else {
+        format!("{EDID_NAME_PREFIX}-{device}.bin")
+    }
+}
+
+fn edid_firmware_ref(device: &str) -> String {
+    format!("{EDID_DIR_REF}{}", edid_file_name(device))
+}
+
+fn edid_path(device: &str) -> PathBuf {
+    Path::new(EDID_DIR).join(edid_file_name(device))
 }
 
 /// `edid_firmware` is a comma-separated list of `[<connector>:]<file>` entries, so the value has to
@@ -368,8 +422,29 @@ fn edid_entries(v: &str) -> Vec<&str> {
         .collect()
 }
 
+fn entry_file(entry: &str) -> &str {
+    entry.rsplit(':').next().unwrap_or(entry)
+}
+
+/// The connector an entry targets, or `None` for one that applies to every connector.
+fn entry_connector(entry: &str) -> Option<&str> {
+    entry.split_once(':').map(|(target, _)| target)
+}
+
+/// The device an entry records the hold against, or `None` when the entry is not ours at all.
+/// `Some("")` is the unqualified form an earlier build wrote: ours, but not device-checkable.
+fn entry_device(entry: &str) -> Option<&str> {
+    let file = entry_file(entry).strip_prefix(EDID_DIR_REF)?;
+    let rest = file.strip_prefix(EDID_NAME_PREFIX)?.strip_suffix(".bin")?;
+    match rest.strip_prefix('-') {
+        Some(device) if !device.is_empty() => Some(device),
+        _ if rest.is_empty() => Some(""),
+        _ => None,
+    }
+}
+
 fn entry_is_ours(entry: &str) -> bool {
-    entry.rsplit(':').next().unwrap_or(entry) == EDID_FIRMWARE_REF
+    entry_device(entry).is_some()
 }
 
 /// Does an entry we did not write already govern this connector? An entry with no `<connector>:`
@@ -406,18 +481,21 @@ fn write_edid_param(value: &str) -> ResultType<()> {
 /// Add our entry for one connector, keeping every entry somebody else put there. Refuses if a
 /// foreign entry already governs this connector: overriding it would change what that connector
 /// reports, which is not ours to do.
-fn install_edid(connector: &str) -> ResultType<()> {
+fn install_edid(connector: &str, device: &str) -> ResultType<()> {
     let existing = read_edid_param();
     let entries = edid_entries(&existing);
     if let Some(theirs) = entries.iter().find(|e| foreign_entry_covers(e, connector)) {
         bail!("edid_firmware entry '{theirs}' already covers {connector}, leaving it alone");
     }
     std::fs::create_dir_all(EDID_DIR)?;
-    std::fs::write(edid_path(), synthetic_edid())?;
-    let mine = format!("{connector}:{EDID_FIRMWARE_REF}");
+    std::fs::write(edid_path(device), synthetic_edid())?;
+    let mine = format!("{connector}:{}", edid_firmware_ref(device));
+    // Only our entry for THIS connector is replaced. A release that fails on several connectors
+    // has to be able to record every one of them, and dropping the rest here would lose all but
+    // the last.
     let mut wanted: Vec<String> = entries
         .iter()
-        .filter(|e| !entry_is_ours(e))
+        .filter(|e| !(entry_is_ours(e) && entry_connector(e) == Some(connector)))
         .map(|e| (*e).to_owned())
         .collect();
     wanted.push(mine);
@@ -427,18 +505,33 @@ fn install_edid(connector: &str) -> ResultType<()> {
 /// Drop our entries, keeping everyone else's, so the next probe of those connectors reads whatever
 /// is really on the wire. The firmware file goes only once the parameter no longer points at it: a
 /// pointer to a missing file would make the kernel fail the load on every probe.
-fn uninstall_edid() {
+fn drop_our_entries(mut which: impl FnMut(&str) -> bool) {
     let existing = read_edid_param();
     let entries = edid_entries(&existing);
-    if !entries.iter().any(|e| entry_is_ours(e)) {
+    let (mine, keep): (Vec<&str>, Vec<&str>) = entries
+        .into_iter()
+        .partition(|e| entry_is_ours(e) && which(e));
+    if mine.is_empty() {
         return;
     }
-    let keep: Vec<&str> = entries.into_iter().filter(|e| !entry_is_ours(e)).collect();
     if let Err(e) = write_edid_param(&keep.join(",")) {
         log::warn!("headless display: cannot clear our edid_firmware entry: {e}");
         return;
     }
-    let _ = std::fs::remove_file(edid_path());
+    for e in &mine {
+        let Some(device) = entry_device(e) else {
+            continue;
+        };
+        // Another entry of ours can still point at the same file.
+        if keep.iter().any(|k| entry_device(k) == Some(device)) {
+            continue;
+        }
+        let _ = std::fs::remove_file(edid_path(device));
+    }
+}
+
+fn uninstall_edid() {
+    drop_our_entries(|_| true)
 }
 
 /// The connector names our own `edid_firmware` entries refer to.
@@ -446,11 +539,13 @@ fn uninstall_edid() {
 /// This is the only record left of a force whose EDID never actually loaded: the connector reads
 /// `connected` either way, so nothing marks it as ours, and `State` is empty after a service
 /// restart. Reading it back before the entries are removed is what keeps such a force releasable.
-fn connectors_named_by_our_entries() -> Vec<String> {
+fn connectors_named_by_our_entries() -> Vec<(String, String)> {
     edid_entries(&read_edid_param())
         .into_iter()
-        .filter(|e| entry_is_ours(e))
-        .filter_map(|e| e.split_once(':').map(|(name, _)| name.to_owned()))
+        .filter_map(|e| {
+            let device = entry_device(e)?;
+            Some((entry_connector(e)?.to_owned(), device.to_owned()))
+        })
         .collect()
 }
 
@@ -519,10 +614,11 @@ fn pick_connector(all: &[Connector]) -> Option<&Connector> {
 /// can see.
 #[derive(Default)]
 struct State {
-    /// The connector this process forced, so a release does not depend only on the kernel still
+    /// The connectors this process forced, so a release does not depend only on the kernel still
     /// reporting our EDID. If a driver drops the override, the marker goes with it and nothing else
-    /// would remember which connector to give back.
-    forced: Option<String>,
+    /// would remember which connector to give back. A list, because a release that fails on more
+    /// than one must not remember only the first.
+    forced: Vec<String>,
     /// When the machine first reported no output, which is what the stable period is measured from.
     no_output_since: Option<Instant>,
     /// When forcing last failed, so a host where it cannot work is not retried every poll.
@@ -542,8 +638,8 @@ struct State {
 /// `status == connected` is as far as this can go. Binding a CRTC to the connector is the
 /// compositor's decision, and there is no sysfs attribute to wait on for it, so the log says what
 /// was forced and not that anything is being scanned out.
-fn force_on(state: &mut State, name: &str, sysfs: &str) -> ResultType<()> {
-    install_edid(name)?;
+fn force_on(state: &mut State, name: &str, sysfs: &str, device: &str) -> ResultType<()> {
+    install_edid(name, device)?;
     if let Err(e) = write_status(sysfs, "on") {
         // Roll back, or the override outlives the attempt: nothing would be forced, so nothing would
         // look like ours, and a monitor later plugged into that connector would be described by an
@@ -551,7 +647,7 @@ fn force_on(state: &mut State, name: &str, sysfs: &str) -> ResultType<()> {
         uninstall_edid();
         return Err(e);
     }
-    state.forced = Some(sysfs.to_owned());
+    state.forced = vec![sysfs.to_owned()];
     let settled = wait_for(sysfs, true);
     log::info!(
         "headless display: forced {sysfs} on with a 1920x1080 edid{}",
@@ -567,8 +663,9 @@ fn force_on(state: &mut State, name: &str, sysfs: &str) -> ResultType<()> {
     if settled && !edid_is_ours(&Path::new(DRM_CLASS).join(sysfs).join("edid")) {
         log::warn!(
             "headless display: {sysfs} is on but is not reporting our edid, so the kernel did not \
-             load {EDID_FIRMWARE_REF} (check the firmware search path). The display works with the \
-             kernel default modes; releasing it relies on the edid_firmware entry instead."
+             load {} (check the firmware search path). The display works with the kernel default \
+             modes; releasing it relies on the edid_firmware entry instead.",
+            edid_firmware_ref(device)
         );
     }
     Ok(())
@@ -581,15 +678,19 @@ fn enable(state: &mut State) -> ResultType<String> {
         bail!("no DRM connectors on this machine");
     }
     if let Some(c) = all.iter().find(|c| c.ours) {
-        state.forced = Some(c.sysfs.clone());
+        state.forced = vec![c.sysfs.clone()];
         return Ok(c.sysfs.clone());
     }
     if all.iter().any(is_real_output) {
         bail!("a display is already attached, nothing to force");
     }
     let target = pick_connector(&all).ok_or_else(|| anyhow!("no connector to force"))?;
-    let (name, sysfs) = (target.name.clone(), target.sysfs.clone());
-    force_on(state, &name, &sysfs)?;
+    let (name, sysfs, device) = (
+        target.name.clone(),
+        target.sysfs.clone(),
+        target.device.clone(),
+    );
+    force_on(state, &name, &sysfs, &device)?;
     Ok(sysfs)
 }
 
@@ -598,64 +699,95 @@ fn enable(state: &mut State) -> ResultType<String> {
 /// not appear in either set.
 fn disable(state: &mut State) -> ResultType<()> {
     let all = connectors();
-    let mut targets: Vec<String> = all
-        .iter()
-        .filter(|c| c.ours)
-        .map(|c| c.sysfs.clone())
-        .collect();
-    if let Some(sysfs) = state.forced.take() {
-        if !targets.contains(&sysfs) {
-            targets.push(sysfs);
-        }
+    let mut targets: Vec<Target> = Vec::new();
+    for c in all.iter().filter(|c| c.ours) {
+        add_target(&mut targets, &all, &c.sysfs);
+    }
+    for sysfs in std::mem::take(&mut state.forced) {
+        add_target(&mut targets, &all, &sysfs);
     }
     // Read the parameter while it still exists. A force whose EDID never loaded leaves no other
-    // trace, and `uninstall_edid` below is about to erase this one - which would leave the connector
-    // forced for the rest of the boot with nothing able to name it. The name resolves against the
-    // live list, and connector indices come from a per-type ida that is global to drm.ko, so two
-    // live connectors never share a name and this matches the one connector we forced.
-    for name in connectors_named_by_our_entries() {
-        for c in all.iter().filter(|c| c.name == name) {
-            if !targets.contains(&c.sysfs) {
-                targets.push(c.sysfs.clone());
-            }
+    // trace, and the entries below are about to go - which would leave the connector forced for the
+    // rest of the boot with nothing able to name it. The name resolves against the live list, and
+    // connector indices come from a per-type ida that is global to drm.ko, so two live connectors
+    // never share a name; the device qualifier is what keeps a name the kernel re-issued after a
+    // rebind from resolving to somebody else's connector.
+    for (name, device) in connectors_named_by_our_entries() {
+        for c in all
+            .iter()
+            .filter(|c| c.name == name && (device.is_empty() || c.device == device))
+        {
+            add_target(&mut targets, &all, &c.sysfs);
         }
     }
-    // The override comes off before the unforce, or the re-probe would read our EDID straight back
-    // and a real monitor on that connector would keep being described by it. It also runs when no
-    // connector is left to release, so an override orphaned by an earlier failure still gets cleaned.
-    uninstall_edid();
     let mut last_err = None;
     let mut released: Vec<String> = Vec::new();
-    for sysfs in &targets {
-        // Every connector gets its write attempted; one failure must not strand the others with the
-        // override already gone.
-        if let Err(e) = write_status(sysfs, "detect") {
-            log::warn!("headless display: cannot release {sysfs}: {e}");
-            // Put the marker back. By this point the parameter entry is already gone and, for a
-            // force whose override never loaded, so is the `ours` flag - so without this the last
-            // record of the connector disappears with the failed write and nothing ever retries.
-            state.forced.get_or_insert_with(|| sysfs.clone());
+    let mut held: Vec<String> = Vec::new();
+    for t in &targets {
+        // The override comes off before the unforce, or the re-probe would read our EDID straight
+        // back and a real monitor on that connector would keep being described by it. One entry at
+        // a time: every connector gets its write attempted, and a failure must not strand the
+        // others with their override already gone.
+        drop_our_entries(|e| entry_connector(e) == Some(t.name.as_str()));
+        if let Err(e) = write_status(&t.sysfs, "detect") {
+            log::warn!("headless display: cannot release {}: {e}", t.sysfs);
+            // Put the marker back. The parameter entry is what survives this process and, for a
+            // force whose override never loaded, it is the only record there is. If this write
+            // fails too the hold lives on in `state.forced` alone and a restart loses it, which is
+            // as far as a machine refusing both writes can be carried.
+            if let Err(e) = install_edid(&t.name, &t.device) {
+                log::warn!(
+                    "headless display: cannot re-record the hold on {}: {e}",
+                    t.sysfs
+                );
+            }
+            state.forced.push(t.sysfs.clone());
+            held.push(t.name.clone());
             last_err = Some(e);
         } else {
-            released.push(sysfs.clone());
+            released.push(t.sysfs.clone());
         }
     }
-    // The parameter entry is what survives this process, so a connector still forced needs it back.
-    // After the loop, not per failure: `install_edid` keeps only the last of our entries, and this
-    // way the parameter and `state.forced` name the same connector.
-    if let Some(stuck) = state.forced.as_deref() {
-        if let Some((_, name)) = stuck.split_once('-') {
-            if let Err(e) = install_edid(name) {
-                log::warn!("headless display: cannot re-record the hold on {stuck}: {e}");
-            }
-        }
-    }
+    // Whatever is left of ours names no connector this pass could act on - an override orphaned by
+    // an earlier failure, or one whose card is gone - and it would keep painting our EDID on the
+    // next probe of that name.
+    drop_our_entries(|e| !entry_connector(e).is_some_and(|c| held.iter().any(|h| h == c)));
     if !released.is_empty() {
         log::info!("headless display: released {}", released.join(", "));
     }
     match last_err {
         Some(e) => Err(e),
         None => Ok(()),
+    }
+}
+
+/// One connector a release has to act on, carried with the facts needed to put its marker back.
+struct Target {
+    sysfs: String,
+    name: String,
+    device: String,
+}
+
+fn add_target(targets: &mut Vec<Target>, all: &[Connector], sysfs: &str) {
+    if targets.iter().any(|t| t.sysfs == sysfs) {
+        return;
+    }
+    match all.iter().find(|c| c.sysfs == sysfs) {
+        Some(c) => targets.push(Target {
+            sysfs: c.sysfs.clone(),
+            name: c.name.clone(),
+            device: c.device.clone(),
+        }),
+        // Gone from sysfs since the record was made. Still worth the write, and the sysfs directory
+        // name carries the connector name; the device is no longer knowable.
+        None => targets.push(Target {
+            sysfs: sysfs.to_owned(),
+            name: sysfs
+                .split_once('-')
+                .map(|(_, name)| name.to_owned())
+                .unwrap_or_default(),
+            device: String::new(),
+        }),
     }
 }
 
@@ -668,7 +800,7 @@ fn disable(state: &mut State) -> ResultType<()> {
 /// parameter entry is already gone, and it costs a few page-cached kernfs reads against a service
 /// loop that reads seat0 twice a second anyway.
 fn holding_something(state: &State) -> bool {
-    state.forced.is_some()
+    !state.forced.is_empty()
         || edid_entries(&read_edid_param())
             .iter()
             .any(|e| entry_is_ours(e))
@@ -719,15 +851,48 @@ pub fn start_watcher() {
 /// connector reads disconnected means the kernel-side force was lost (GPU reset, an operator's
 /// detect), and adopting it would park the tick in the release-watch branch instead of letting
 /// the arming path re-force.
-fn adopt_forced(all: &mut [Connector], forced: Option<&str>) {
-    let Some(forced) = forced else {
-        return;
-    };
+fn adopt_forced(all: &mut [Connector], forced: &[String]) {
     for c in all.iter_mut() {
-        if c.connected && c.sysfs == forced {
+        if c.connected && forced.iter().any(|f| *f == c.sysfs) {
             c.ours = true;
         }
     }
+}
+
+/// Drop a marker whose device is not the one that connector sits on now, and re-probe what it named.
+///
+/// Connector names are unique among LIVE connectors, but `drm_connector_cleanup()` frees the index,
+/// so an unbind and rebind can hand `DP-3` to a different card. `edid_firmware` has no card syntax,
+/// so the entry would follow the name onto that stranger, paint our EDID on it and make it look
+/// like ours - which hides a real display behind our own. The `detect` write is what stops it
+/// reporting our EDID; without it the connector keeps the blob it already probed.
+///
+/// Returns whether anything was dropped, so the caller can re-read a topology this just changed.
+fn prune_foreign_markers(all: &[Connector]) -> bool {
+    let stale: Vec<(String, String)> = connectors_named_by_our_entries()
+        .into_iter()
+        .filter(|(name, device)| {
+            !device.is_empty() && !all.iter().any(|c| &c.name == name && &c.device == device)
+        })
+        .collect();
+    if stale.is_empty() {
+        return false;
+    }
+    for (name, device) in &stale {
+        log::info!("headless display: dropping the hold on {name}, no longer on {device}");
+    }
+    drop_our_entries(|e| {
+        entry_connector(e).is_some_and(|c| stale.iter().any(|(name, _)| name == c))
+    });
+    for c in all
+        .iter()
+        .filter(|c| stale.iter().any(|(name, _)| *name == c.name))
+    {
+        if let Err(e) = write_status(&c.sysfs, "detect") {
+            log::warn!("headless display: cannot re-probe {}: {e}", c.sysfs);
+        }
+    }
+    true
 }
 
 fn tick(state: &mut State) {
@@ -745,7 +910,10 @@ fn tick(state: &mut State) {
     }
 
     let mut all = connectors();
-    adopt_forced(&mut all, state.forced.as_deref());
+    if prune_foreign_markers(&all) {
+        all = connectors();
+    }
+    adopt_forced(&mut all, &state.forced);
     if all.iter().any(|c| c.ours) {
         // A real display takes precedence over ours: release it, and the machine goes back to the
         // output the operator actually plugged in. Only visible for a connector other than the one we
@@ -768,7 +936,7 @@ fn tick(state: &mut State) {
     // cleared it, and a rebind can have twinned the name since). An unattributable hold cannot be
     // managed - left alone it counts as a real output and wedges both arming and release - so give
     // it back; the next tick re-forces cleanly if the machine is truly headless.
-    if state.forced.is_none() && !connectors_named_by_our_entries().is_empty() {
+    if state.forced.is_empty() && !connectors_named_by_our_entries().is_empty() {
         log::info!("headless display: releasing a hold this process cannot attribute");
         let _ = disable(state);
         return;
@@ -825,7 +993,11 @@ pub fn status_text(enabled: bool) -> String {
         // machine that looks untouched while holding a connector on.
         None if !named.is_empty() => s.push_str(&format!(
             "forced by rustdesk: {} (our edid did not load; released by name)\n",
-            named.join(", ")
+            named
+                .iter()
+                .map(|(name, device)| format!("{name} on {device}"))
+                .collect::<Vec<_>>()
+                .join(", ")
         )),
         None => s.push_str("forced by rustdesk: none\n"),
     }
@@ -929,50 +1101,98 @@ mod tests {
     fn our_entries_name_the_connectors_a_release_has_to_reach() {
         // The parse behind the only recovery path for a force whose EDID never loaded. It has to
         // survive a foreign entry, either ordering, and an entry with no connector prefix.
+        let dev = "0000-01-00-0";
+        let mine = |c: &str| format!("{c}:edid/rustdesk-headless-{dev}.bin");
         let names = |v: &str| {
             edid_entries(v)
                 .into_iter()
-                .filter(|e| entry_is_ours(e))
-                .filter_map(|e| e.split_once(':').map(|(n, _)| n.to_owned()))
+                .filter_map(|e| Some((entry_connector(e)?.to_owned(), entry_device(e)?.to_owned())))
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            names("DP-1:edid/theirs.bin,HDMI-A-1:edid/rustdesk-headless.bin"),
-            vec!["HDMI-A-1"]
+            names(&format!("DP-1:edid/theirs.bin,{}", mine("HDMI-A-1"))),
+            vec![("HDMI-A-1".to_owned(), dev.to_owned())]
         );
         assert_eq!(
-            names("HDMI-A-1:edid/rustdesk-headless.bin,DP-1:edid/theirs.bin"),
-            vec!["HDMI-A-1"]
+            names(&format!("{},DP-1:edid/theirs.bin", mine("HDMI-A-1"))),
+            vec![("HDMI-A-1".to_owned(), dev.to_owned())]
         );
         // Two of ours, which is what a machine that forced one connector and then another leaves.
         assert_eq!(
-            names("HDMI-A-1:edid/rustdesk-headless.bin,DP-2:edid/rustdesk-headless.bin"),
-            vec!["HDMI-A-1", "DP-2"]
+            names(&format!("{},{}", mine("HDMI-A-1"), mine("DP-2"))),
+            vec![
+                ("HDMI-A-1".to_owned(), dev.to_owned()),
+                ("DP-2".to_owned(), dev.to_owned())
+            ]
         );
         assert!(names("DP-1:edid/theirs.bin").is_empty());
         assert!(names("").is_empty());
+        // What an earlier build wrote: still ours, so still releasable, with no device to check.
+        assert_eq!(
+            names("HDMI-A-1:edid/rustdesk-headless.bin"),
+            vec![("HDMI-A-1".to_owned(), String::new())]
+        );
+        // A file that merely starts like ours is not ours.
+        assert!(names("HDMI-A-1:edid/rustdesk-headless-thing.png").is_empty());
+    }
+
+    // rustdesk#15908: the kernel frees a connector's name when the connector goes, so a rebind can
+    // hand `HDMI-A-1` to a different card - and `edid_firmware` has no card syntax to stop our
+    // entry following it there. The device the entry records is what refuses the stranger.
+    #[test]
+    fn a_marker_does_not_follow_its_name_onto_another_device() {
+        let named = vec![("HDMI-A-1".to_owned(), "0000-01-00-0".to_owned())];
+        assert!(connector_is_ours(
+            true,
+            &[],
+            "HDMI-A-1",
+            "0000-01-00-0",
+            &named,
+            true
+        ));
+        // Same connector name, different card: not ours.
+        assert!(!connector_is_ours(
+            true,
+            &[],
+            "HDMI-A-1",
+            "0000-02-00-0",
+            &named,
+            true
+        ));
+        // An unqualified entry from an earlier build still resolves by name alone, or a machine
+        // upgraded mid-hold could never give the connector back.
+        let legacy = vec![("HDMI-A-1".to_owned(), String::new())];
+        assert!(connector_is_ours(
+            true,
+            &[],
+            "HDMI-A-1",
+            "0000-02-00-0",
+            &legacy,
+            true
+        ));
     }
 
     #[test]
     fn a_force_whose_edid_never_loaded_is_still_ours() {
         let mine = synthetic_edid();
-        let named = vec!["HDMI-A-1".to_owned()];
+        let dev = "0000-01-00-0";
+        let named = vec![("HDMI-A-1".to_owned(), dev.to_owned())];
 
         // The ordinary case: our EDID came back, and the name is not even needed.
-        assert!(connector_is_ours(true, &mine, "HDMI-A-1", &[], true));
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, &[], true));
         // The case this exists for: forced on, override never loaded, so the connector reports
         // nothing of ours. Only our own edid_firmware entry still names it.
-        assert!(connector_is_ours(true, &[], "HDMI-A-1", &named, true));
+        assert!(connector_is_ours(true, &[], "HDMI-A-1", dev, &named, true));
         // A real monitor on a connector we never named is never ours, either way round.
-        assert!(!connector_is_ours(true, &[], "DP-2", &named, true));
-        assert!(!connector_is_ours(true, &[], "DP-2", &[], true));
+        assert!(!connector_is_ours(true, &[], "DP-2", dev, &named, true));
+        assert!(!connector_is_ours(true, &[], "DP-2", dev, &[], true));
         // And a disconnected connector is nobody's, whatever the parameter says.
-        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", &named, true));
+        assert!(!connector_is_ours(false, &mine, "HDMI-A-1", dev, &named, true));
         // A duplicated name claims nothing by name alone: with DP-1 on two cards, the fallback
         // would mark both ours and a real display behind one of them would never release ours.
-        assert!(!connector_is_ours(true, &[], "HDMI-A-1", &named, false));
+        assert!(!connector_is_ours(true, &[], "HDMI-A-1", dev, &named, false));
         // The EDID still decides when it does read back, duplicated name or not.
-        assert!(connector_is_ours(true, &mine, "HDMI-A-1", &named, false));
+        assert!(connector_is_ours(true, &mine, "HDMI-A-1", dev, &named, false));
     }
 
     #[test]
@@ -982,6 +1202,11 @@ mod tests {
         // No connector prefix means every connector, so it covers whatever we would pick.
         assert!(foreign_entry_covers("edid/theirs.bin", "HDMI-A-1"));
         // Our own entry never blocks us.
+        assert!(!foreign_entry_covers(
+            "HDMI-A-1:edid/rustdesk-headless-0000-01-00-0.bin",
+            "HDMI-A-1"
+        ));
+        // And the unqualified form an earlier build wrote is still ours, not a stranger's.
         assert!(!foreign_entry_covers(
             "HDMI-A-1:edid/rustdesk-headless.bin",
             "HDMI-A-1"
@@ -994,6 +1219,7 @@ mod tests {
             sysfs: sysfs.to_owned(),
             connected,
             ours,
+            device: sysfs.split_once('-').map(|(card, _)| card).unwrap_or("").to_owned(),
             drivable: true,
         }
     }
@@ -1198,19 +1424,29 @@ mod tests {
             c("card1-HDMI-A-1", "HDMI-A-1", true, false),
             c("card1-HDMI-A-2", "HDMI-A-2", false, false),
         ];
-        adopt_forced(&mut all, Some("card1-HDMI-A-1"));
+        adopt_forced(&mut all, &["card1-HDMI-A-1".to_owned()]);
         assert!(all[0].ours, "the held connector is adopted by sysfs name");
         assert!(!all[1].ours);
         // And the bare name must not match: the record is card-qualified.
         let mut all2 = vec![c("card1-HDMI-A-1", "HDMI-A-1", true, false)];
-        adopt_forced(&mut all2, Some("HDMI-A-1"));
+        adopt_forced(&mut all2, &["HDMI-A-1".to_owned()]);
         assert!(!all2[0].ours);
-        adopt_forced(&mut all2, None);
+        adopt_forced(&mut all2, &[]);
         assert!(!all2[0].ours);
         // A disconnected forced record means the kernel-side force was lost: not adopted, so the
         // arming path can re-force instead of the tick parking in the release watch.
         let mut all3 = vec![c("card1-HDMI-A-1", "HDMI-A-1", false, false)];
-        adopt_forced(&mut all3, Some("card1-HDMI-A-1"));
+        adopt_forced(&mut all3, &["card1-HDMI-A-1".to_owned()]);
         assert!(!all3[0].ours);
+        // A release that failed on two connectors remembers both, or the second is never retried.
+        let mut all4 = vec![
+            c("card1-HDMI-A-1", "HDMI-A-1", true, false),
+            c("card1-DP-2", "DP-2", true, false),
+        ];
+        adopt_forced(
+            &mut all4,
+            &["card1-HDMI-A-1".to_owned(), "card1-DP-2".to_owned()],
+        );
+        assert!(all4.iter().all(|c| c.ours));
     }
 }
