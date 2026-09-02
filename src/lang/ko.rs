@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "현재 다중 디스플레이의 스크린샷 병합이 지원되지 않습니다. 단일 디스플레이로 전환한 후 다시 시도해 주세요."),
         ("screenshot-action-tip", "스크린샷을 계속 진행할 방법을 선택해 주세요."),
         ("Save as", "다른 이름으로 저장"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "클립보드에 복사"),
         ("Enable remote printer", "원격 프린터 허용"),
         ("Downloading {}", "{} 다운로드 중"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "계속"),
         ("Browser didn't open? Use the url below to sign in.", "브라우저가 열리지 않았나요? 아래 URL로 로그인하세요."),
         ("Lock canvas", "캔버스 잠금"),
+        ("Sync clipboard between sessions", "세션 간 클립보드 동기화"),
+        ("sync-clipboard-between-sessions-tip", "하나의 원격 세션에서 복사한 텍스트나 이미지는 연결된 다른 세션의 클립보드에도 전송됩니다."),
     ].iter().cloned().collect();
 }

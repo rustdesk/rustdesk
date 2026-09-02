@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "ஸ்கிரீன்ஷாட்_இணைக்கப்பட்ட_திரை_ஆதரவற்ற_குறிப்பு"),
         ("screenshot-action-tip", "ஸ்கிரீன்ஷாட்_செயல்_குறிப்பு"),
         ("Save as", "இப்படி சேமி"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "கிளிப்போர்டில் நகல்"),
         ("Enable remote printer", "தொலை அச்சுப்பொறி இயக்கு"),
         ("Downloading {}", "{} பதிவிறக்குகிறது"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "தொடர்க"),
         ("Browser didn't open? Use the url below to sign in.", "உலாவி திறக்கவில்லையா? உள்நுழைய கீழே உள்ள URL ஐப் பயன்படுத்தவும்."),
         ("Lock canvas", "கேன்வாஸைப் பூட்டு"),
+        ("Sync clipboard between sessions", "அமர்வுகளுக்கு இடையே கிளிப்போர்டை ஒத்திசைக்கவும்"),
+        ("sync-clipboard-between-sessions-tip", "ஒரு தொலை அமர்வில் நகலெடுக்கப்பட்ட உரை அல்லது படங்கள் உங்கள் பிற இணைக்கப்பட்ட அமர்வுகளின் கிளிப்போர்டுக்கும் அனுப்பப்படும்."),
     ].iter().cloned().collect();
 }

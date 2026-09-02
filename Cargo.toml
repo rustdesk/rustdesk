@@ -1,7 +1,7 @@
 [package]
 name = "rustdesk"
-version = "1.4.9"
-authors = ["BurgerTop <clam@clamshampc.com>"]
+version = "1.5.0"
+authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "BurgerTop Remote Desktop (RustDesk fork)"

@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "لقطة الشاشة للشاشات المدمجة غير مدعومة"),
         ("screenshot-action-tip", "إجراء لقطة الشاشة"),
         ("Save as", "حفظ باسم"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "نسخ إلى الحافظة"),
         ("Enable remote printer", "تمكين الطابعة عن بُعد"),
         ("Downloading {}", "جارٍ تنزيل {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "متابعة"),
         ("Browser didn't open? Use the url below to sign in.", "لم يفتح المتصفح؟ استخدم الرابط أدناه لتسجيل الدخول."),
         ("Lock canvas", "قفل اللوحة"),
+        ("Sync clipboard between sessions", "مزامنة الحافظة بين الجلسات"),
+        ("sync-clipboard-between-sessions-tip", "النص أو الصور المنسوخة في جلسة بعيدة واحدة تُرسَل أيضًا إلى حافظة جلساتك المتصلة الأخرى."),
     ].iter().cloned().collect();
 }

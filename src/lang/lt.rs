@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Kelių ekranų nuotraukų sujungimas šiuo metu nepalaikomas. Perjunkite į vieną ekraną ir bandykite dar kartą."),
         ("screenshot-action-tip", "Pasirinkite, ką daryti su ekrano nuotrauka."),
         ("Save as", "Įrašyti kaip"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopijuoti į iškarpinę"),
         ("Enable remote printer", "Įgalinti nuotolinį spausdintuvą"),
         ("Downloading {}", "Atsisiunčiama {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Tęsti"),
         ("Browser didn't open? Use the url below to sign in.", "Naršyklė neatsidarė? Prisijunkite naudodami toliau pateiktą URL."),
         ("Lock canvas", "Užrakinti drobę"),
+        ("Sync clipboard between sessions", "Sinchronizuoti iškarpinę tarp seansų"),
+        ("sync-clipboard-between-sessions-tip", "Viename nuotoliniame seanse nukopijuotas tekstas ar vaizdai taip pat siunčiami į kitų prijungtų seansų iškarpinę."),
     ].iter().cloned().collect();
 }

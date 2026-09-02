@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Yhdistetyn näytön kuvakaappaus ei ole tuettu"),
         ("screenshot-action-tip", "Valitse, mitä haluat tehdä kuvakaappaukselle"),
         ("Save as", "Tallenna nimellä"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopioi leikepöydälle"),
         ("Enable remote printer", "Ota etätulostin käyttöön"),
         ("Downloading {}", "Ladataan {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Jatka"),
         ("Browser didn't open? Use the url below to sign in.", "Eikö selain avautunut? Kirjaudu sisään alla olevan osoitteen kautta."),
         ("Lock canvas", "Lukitse näkymä"),
+        ("Sync clipboard between sessions", "Synkronoi leikepöytä istuntojen välillä"),
+        ("sync-clipboard-between-sessions-tip", "Yhdessä etäistunnossa kopioitu teksti tai kuvat lähetetään myös muiden yhdistettyjen istuntojen leikepöydälle."),
     ].iter().cloned().collect();
 }

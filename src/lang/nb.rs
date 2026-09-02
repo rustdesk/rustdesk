@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Sammenslåing av skjermbilder fra flere skjermer støttes for øyeblikket ikke. Bytt til én enkelt skjerm og prøv igjen."),
         ("screenshot-action-tip", "Velg hvordan du vil fortsette med skjermbildet."),
         ("Save as", "Lagre som"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Kopier til utklipstavlen"),
         ("Enable remote printer", "Aktiver fjernskriver"),
         ("Downloading {}", "Laster ned {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Fortsett"),
         ("Browser didn't open? Use the url below to sign in.", "Åpnet ikke nettleseren? Bruk URL-en nedenfor for å logge inn."),
         ("Lock canvas", "Lås lerret"),
+        ("Sync clipboard between sessions", "Synkroniser utklippstavlen mellom økter"),
+        ("sync-clipboard-between-sessions-tip", "Tekst eller bilder som kopieres i én ekstern økt, sendes også til utklippstavlen i de andre tilkoblede øktene dine."),
     ].iter().cloned().collect();
 }

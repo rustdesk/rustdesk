@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Η συγχώνευση στιγμιότυπων οθόνης από πολλές οθόνες δεν υποστηρίζεται προς το παρόν. Αλλάξτε σε μία μόνο οθόνη και δοκιμάστε ξανά."),
         ("screenshot-action-tip", "Επιλέξτε πώς θα συνεχίσετε με το στιγμιότυπο οθόνης."),
         ("Save as", "Αποθήκευση ως"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Αντιγραφή στο πρόχειρο"),
         ("Enable remote printer", "Ενεργοποίηση απομακρυσμένου εκτυπωτή"),
         ("Downloading {}", "Γίνεται Λήψη {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Συνέχεια"),
         ("Browser didn't open? Use the url below to sign in.", "Δεν άνοιξε το πρόγραμμα περιήγησης; Χρησιμοποιήστε τον παρακάτω σύνδεσμο για να συνδεθείτε."),
         ("Lock canvas", "Κλείδωμα καμβά"),
+        ("Sync clipboard between sessions", "Συγχρονισμός προχείρου μεταξύ συνεδριών"),
+        ("sync-clipboard-between-sessions-tip", "Κείμενο ή εικόνες που αντιγράφονται σε μία απομακρυσμένη συνεδρία αποστέλλονται και στο πρόχειρο των άλλων συνδεδεμένων συνεδριών σας."),
     ].iter().cloned().collect();
 }

@@ -1462,6 +1462,18 @@ impl<T: InvokeUiSession> Remote<T> {
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
                     if clipboard_allowed {
+                        #[cfg(all(
+                            feature = "flutter",
+                            not(any(target_os = "android", target_os = "ios"))
+                        ))]
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
+                            let mut msg = Message::new();
+                            msg.set_clipboard(cb.clone());
+                            let session_id = self.handler.lc.read().unwrap().session_id;
+                            crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
+                        }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(vec![cb], ClipboardSide::Client);
                         #[cfg(target_os = "ios")]
@@ -1485,6 +1497,18 @@ impl<T: InvokeUiSession> Remote<T> {
                         !lc.disable_clipboard.v && !lc.view_only.v
                     };
                     if clipboard_allowed {
+                        #[cfg(all(
+                            feature = "flutter",
+                            not(any(target_os = "android", target_os = "ios"))
+                        ))]
+                        if self.handler.is_text_clipboard_required()
+                            && crate::clipboard::is_sync_clipboard_between_sessions_enabled()
+                        {
+                            let mut msg = Message::new();
+                            msg.set_multi_clipboards(_mcb.clone());
+                            let session_id = self.handler.lc.read().unwrap().session_id;
+                            crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
+                        }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         update_clipboard(_mcb.clipboards, ClipboardSide::Client);
                         #[cfg(target_os = "ios")]

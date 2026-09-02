@@ -659,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "S'unione de sa catura de ischermadas de prus ischermos como no est suportada.\nCola a un'ischermu ebbia e torra a proare."),
         ("screenshot-action-tip", "Seletziona comente sighire cun s'ischermada."),
         ("Save as", "Sarva comente"),
+        ("Export", ""),
+        ("Export Logs", ""),
+        ("Import Folder", ""),
         ("Copy to clipboard", "Còpia in punta de billete"),
         ("Enable remote printer", "Abìlita imprentadora remota"),
         ("Downloading {}", "Iscarrighende {}"),
@@ -758,5 +761,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Sighi"),
         ("Browser didn't open? Use the url below to sign in.", "Non s'est abertu su navigadore? Imprea s'URL inoghe in suta pro intrare."),
         ("Lock canvas", "Bloca sa tela"),
+        ("Sync clipboard between sessions", "Sincroniza sa punta de billete intre is sessiones"),
+        ("sync-clipboard-between-sessions-tip", "Su testu o is immàgines copiadas in una sessione remota sunt imbiadas fintzas a sa punta de billete de is àteras sessiones connètidas."),
     ].iter().cloned().collect();
 }
