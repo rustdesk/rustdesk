@@ -52,7 +52,7 @@ use scrap::{
     CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
-use std::io::ErrorKind::ConnectionReset;
+use std::io::ErrorKind::{ConnectionReset, InvalidData};
 #[cfg(windows)]
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -70,7 +70,7 @@ pub const OPTION_REFRESH: &'static str = "refresh";
 #[cfg(windows)]
 const DXGI_INITIAL_FRAME_GRACE: Duration = Duration::from_secs(2);
 #[cfg(windows)]
-const DXGI_ACCESS_LOST_RESTARTS: usize = 3;
+const DXGI_RECOVERY_RESTARTS: usize = 3;
 
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
 type FrameFetchedNotifierReceiver = Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>;
@@ -231,7 +231,7 @@ pub struct VideoService {
     idx: usize,
     source: VideoSource,
     #[cfg(windows)]
-    dxgi_access_lost_count: Arc<AtomicUsize>,
+    dxgi_recovery_count: Arc<AtomicUsize>,
 }
 
 impl Deref for VideoService {
@@ -266,7 +266,7 @@ pub fn new(source: VideoSource, idx: usize) -> GenericService {
         idx,
         source,
         #[cfg(windows)]
-        dxgi_access_lost_count: Arc::new(AtomicUsize::new(0)),
+        dxgi_recovery_count: Arc::new(AtomicUsize::new(0)),
     };
     GenericService::run(&vs, run);
     vs.sp
@@ -580,7 +580,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
     let display_idx = vs.idx;
     #[cfg(windows)]
-    let dxgi_access_lost_count = vs.dxgi_access_lost_count.clone();
+    let dxgi_recovery_count = vs.dxgi_recovery_count.clone();
     let sp = vs.sp;
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
@@ -768,7 +768,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 if frame.valid() {
                     #[cfg(windows)]
                     {
-                        dxgi_access_lost_count.store(0, Ordering::Relaxed);
+                        dxgi_recovery_count.store(0, Ordering::Relaxed);
                         #[cfg(feature = "vram")]
                         if try_gdi && frame_from_dxgi {
                             VRamEncoder::set_fallback_gdi(sp.name(), false);
@@ -902,17 +902,17 @@ fn run(vs: VideoService) -> ResultType<()> {
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
-                    if err.kind() == ConnectionReset {
-                        let access_lost_count =
-                            dxgi_access_lost_count.fetch_add(1, Ordering::Relaxed) + 1;
-                        if access_lost_count <= DXGI_ACCESS_LOST_RESTARTS {
+                    if matches!(err.kind(), ConnectionReset | InvalidData) {
+                        let recovery_count =
+                            dxgi_recovery_count.fetch_add(1, Ordering::Relaxed) + 1;
+                        if recovery_count <= DXGI_RECOVERY_RESTARTS {
                             log::info!(
-                                "dxgi access lost, restart capture: attempt {access_lost_count}"
+                                "dxgi duplication invalidated, restart capture: attempt {recovery_count}, error: {err:?}"
                             );
                             bail!("SWITCH");
                         }
                         log::warn!(
-                            "dxgi access lost after {DXGI_ACCESS_LOST_RESTARTS} restarts, fall back to gdi"
+                            "dxgi duplication invalid after {DXGI_RECOVERY_RESTARTS} restarts, fall back to gdi: {err:?}"
                         );
                     }
                     if !c.set_gdi() {
