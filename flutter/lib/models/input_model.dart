@@ -1692,6 +1692,19 @@ class InputModel {
         (e.buttons & 0x1) != 0 &&
         _trackpadHoverDeviceId != null &&
         e.device == _trackpadHoverDeviceId) {
+      // The synthetic 2-finger Down is touch-kind input, not mouse: clear
+      // the physical-mouse flag exactly like the generic touch branch below
+      // would, so remote_page remounts the touch gesture region. Without
+      // this, tap-to-click (kind=mouse, flag -> true, region unmounted)
+      // followed by a 2-finger scroll (this early return, flag stays true)
+      // swallows the first real touchscreen tap: its Down is spent flipping
+      // the flag while the region is still unmounted, and its Up returns at
+      // the kind != mouse guard. The wrapped recognizers ignore the trackpad
+      // device (IgnoreDeviceGestureRecognizerMixin), so mounting the region
+      // here cannot fire stray gestures off the scroll itself.
+      if (isPhysicalMouse.value) {
+        isPhysicalMouse.value = false;
+      }
       _beginTrackpadTwoFinger(_pointerPositionForRemoteCanvas(e));
       return;
     }
