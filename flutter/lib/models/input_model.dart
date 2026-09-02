@@ -1733,16 +1733,14 @@ class InputModel {
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
       // Close the peer pan only if one was actually opened (i.e. a scroll
-      // update was sent); a bare Down/Up must not emit a stationary stroke.
-      // Always close once opened — pan_start was sent while interactive, so a
-      // suppressed pan_end after a mid-gesture view-only switch would leave the
-      // Android peer with an unterminated stateful gesture. Matches
-      // onPointerPanZoomEnd / onPointCancelImage (opening a gesture is
-      // view-only-guarded, closing it is not); camera mode is still suppressed
-      // inside handlePointerEvent.
+      // update was queued); a bare Down/Up must not emit a stationary stroke.
+      // The terminal event is queued unconditionally: every queued pan_update
+      // dispatched willContinue=true on the peer, and only pan_end dispatches
+      // the willContinue=false release — letting the eligibility checks reject
+      // it (peer-control protection, no remote rect, camera mode) would leave
+      // the remote app with a held touch / unintended long-press.
       if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
-        handlePointerEvent(
-            'touch', kMouseEventTypePanEnd, _pointerPositionForRemoteCanvas(e));
+        _queuePanEndUnconditionally(_pointerPositionForRemoteCanvas(e));
         _trackpadPanOpen = false;
       }
       return;
@@ -1781,11 +1779,10 @@ class InputModel {
         e.device == _trackpadHoverDeviceId &&
         _trackpadTwoFinger) {
       _trackpadTwoFinger = false;
-      // Mirror the Android-peer pan lifecycle (onPointerPanZoomEnd), but only
-      // if a pan was actually opened (a scroll update was sent).
+      // Mirror onPointUpImage: queue the terminal pan_end unconditionally —
+      // only if a pan was actually opened (a scroll update was queued).
       if (peerPlatform == kPeerPlatformAndroid && _trackpadPanOpen) {
-        handlePointerEvent(
-            'touch', kMouseEventTypePanEnd, _pointerPositionForRemoteCanvas(e));
+        _queuePanEndUnconditionally(_pointerPositionForRemoteCanvas(e));
         _trackpadPanOpen = false;
       }
     }
@@ -2037,6 +2034,32 @@ class InputModel {
       }
     });
     return true;
+  }
+
+  /// [FIX #15630] Queue a pan_end with no eligibility checks (peer-control
+  /// protection, remote-rect availability, camera mode) and no position
+  /// mapping: once a pan was opened, the peer's injected touch must be
+  /// released — every pan_update dispatched willContinue=true, and only this
+  /// terminal event dispatches the willContinue=false continuation. The
+  /// eligibility checks should suppress new input, not the release of input
+  /// this client already pressed; a rejected terminal event leaves the remote
+  /// app with a held touch / unintended long-press. The payload position is
+  /// irrelevant: the receiver's endGesture() continues from its stored
+  /// position, and the next pan_start resets it — so a raw canvas position is
+  /// fine even when the remote rect is unavailable.
+  void _queuePanEndUnconditionally(Offset canvasPosition) {
+    final msg = json.encode(modify(PointerEventToRust('touch',
+            kMouseEventTypePanEnd, {
+          'x': canvasPosition.dx.toInt(),
+          'y': canvasPosition.dy.toInt(),
+        }).toJson()));
+    _panEventChain = _panEventChain.then((_) async {
+      try {
+        await bind.sessionSendPointer(sessionId: sessionId, msg: msg);
+      } catch (e) {
+        debugPrint('[InputModel] failed to send pan event PanEnd: $e');
+      }
+    });
   }
 
   bool _checkPeerControlProtected(double x, double y) {
