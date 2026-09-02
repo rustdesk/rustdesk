@@ -72,10 +72,23 @@ pub(super) fn wayland_uinput_rect() -> Option<(i32, i32, i32, i32)> {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect
 }
 
+/// A layout change the poll has not consumed yet. Module scope because the setter below can be the
+/// one that observes it: whoever sees the edge must be able to hand it over.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+static PROMOTION_OWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display::DisplayRect>) {
     WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
     let mut lock = WAYLAND_LAYOUT.lock().unwrap();
+    // `live` is the edge detector's only memory of the previous layout and it dies here. A second
+    // video service starting between a rotation and the next poll would otherwise record the
+    // rotated layout as the baseline, and the change would never be seen. An empty incoming
+    // baseline is the DRM-union fallback, which proves nothing.
+    #[cfg(feature = "drm")]
+    if !lock.live.is_empty() && !baseline.is_empty() && lock.live != baseline {
+        PROMOTION_OWED.store(true, Ordering::Release);
+    }
     lock.baseline = baseline;
     lock.live.clear();
 }
@@ -141,8 +154,6 @@ fn refresh_wayland_uinput_rect_if_changed() {
     // edge seen while DRM is transiently non-Available stays OWED rather than consumed.
     #[cfg(feature = "drm")]
     {
-        static PROMOTION_OWED: std::sync::atomic::AtomicBool =
-            std::sync::atomic::AtomicBool::new(false);
         // The latch fires when a capturer was built with no wayland snapshot: a later cache
         // refill makes wayland_snapshot_missing lie, so live_changed alone would miss it. Taken
         // UNCONDITIONALLY: short-circuiting past it on a live_changed poll would leave it set and
