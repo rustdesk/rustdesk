@@ -211,6 +211,10 @@ impl Capturer {
                 if hres == S_OK {
                     return hres;
                 }
+                hbb_common::log::warn!(
+                    "HDR DuplicateOutput1 failed: hr={:#x}, fallback=DuplicateOutput",
+                    hres as u32
+                );
             }
         }
         (*display.inner.0).DuplicateOutput(device as *mut _, duplication)
