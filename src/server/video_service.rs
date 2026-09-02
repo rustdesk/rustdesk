@@ -52,7 +52,7 @@ use scrap::{
     CodecFormat, Display, EncodeInput, TraitCapturer, TraitPixelBuffer,
 };
 #[cfg(windows)]
-use std::io::ErrorKind::{ConnectionReset, InvalidData};
+use std::io::ErrorKind::ConnectionReset;
 #[cfg(windows)]
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -902,7 +902,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
                 #[cfg(windows)]
                 if !c.is_gdi() {
-                    if matches!(err.kind(), ConnectionReset | InvalidData) {
+                    if err.kind() == ConnectionReset {
                         let recovery_count =
                             dxgi_recovery_count.fetch_add(1, Ordering::Relaxed) + 1;
                         if recovery_count <= DXGI_RECOVERY_RESTARTS {
