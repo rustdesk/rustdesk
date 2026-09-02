@@ -1,18 +1,20 @@
 use std::{io, mem, ptr, slice};
 pub mod gdi;
 pub use gdi::CapturerGDI;
+pub mod hdr;
 pub mod mag;
 
 use winapi::{
     shared::{
         dxgi::*,
         dxgi1_2::*,
+        dxgi1_5::*,
+        dxgiformat::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT},
         dxgitype::*,
         minwindef::{DWORD, FALSE, TRUE, UINT},
         ntdef::LONG,
         windef::{HMONITOR, RECT},
         winerror::*,
-        // dxgiformat::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE},
     },
     um::{
         d3d11::*, d3dcommon::D3D_DRIVER_TYPE_UNKNOWN, unknwnbase::IUnknown, wingdi::*,
@@ -58,6 +60,7 @@ pub struct Capturer {
     output_texture: bool,
     adapter_desc1: DXGI_ADAPTER_DESC1,
     rotate: Rotate,
+    hdr: Option<hdr::HdrToSdr>,
 }
 
 impl Capturer {
@@ -105,7 +108,7 @@ impl Capturer {
             }
         } else {
             res = wrap_hresult(unsafe {
-                let hres = (*display.inner.0).DuplicateOutput(device.0 as *mut _, &mut duplication);
+                let hres = Self::duplicate_output(&display, device.0, &mut duplication);
                 if hres != S_OK {
                     gdi_capturer = display.create_gdi();
                     println!("Fallback to GDI");
@@ -161,7 +164,8 @@ impl Capturer {
             device,
             context,
             duplication: ComPtr(duplication),
-            fastlane: desc.DesktopImageInSystemMemory == TRUE,
+            fastlane: desc.DesktopImageInSystemMemory == TRUE
+                && desc.ModeDesc.Format != DXGI_FORMAT_R16G16B16A16_FLOAT,
             surface: ComPtr(ptr::null_mut()),
             texture: ComPtr(ptr::null_mut()),
             width: display.width() as usize,
@@ -174,7 +178,62 @@ impl Capturer {
             output_texture: false,
             adapter_desc1,
             rotate,
+            hdr: None,
         })
+    }
+
+    // Asks for the float desktop that HDR mode composes so it can be tone-mapped;
+    // the legacy call would hand back DXGI's clipped BGRA8 conversion instead.
+    unsafe fn duplicate_output(
+        display: &Display,
+        device: *mut ID3D11Device,
+        duplication: &mut *mut IDXGIOutputDuplication,
+    ) -> HRESULT {
+        if !hdr::UNAVAILABLE.load(std::sync::atomic::Ordering::Relaxed) {
+            let mut output5: *mut IDXGIOutput5 = ptr::null_mut();
+            (*display.inner.0).QueryInterface(
+                &IID_IDXGIOutput5,
+                &mut output5 as *mut *mut _ as *mut *mut _,
+            );
+            if !output5.is_null() {
+                let output5 = ComPtr(output5);
+                let formats = [DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_B8G8R8A8_UNORM];
+                let hres = (*output5.0).DuplicateOutput1(
+                    device as *mut _,
+                    0,
+                    formats.len() as UINT,
+                    formats.as_ptr(),
+                    duplication,
+                );
+                if hres == S_OK {
+                    return hres;
+                }
+            }
+        }
+        (*display.inner.0).DuplicateOutput(device as *mut _, duplication)
+    }
+
+    unsafe fn tonemap(
+        &mut self,
+        source: *mut ID3D11Texture2D,
+        desc: &D3D11_TEXTURE2D_DESC,
+    ) -> io::Result<*mut ID3D11Texture2D> {
+        if self.hdr.is_none() {
+            match hdr::HdrToSdr::new(self.device.0, self.context.0, &self.display.desc.DeviceName) {
+                Ok(hdr) => self.hdr = Some(hdr),
+                Err(err) => {
+                    hdr::UNAVAILABLE.store(true, std::sync::atomic::Ordering::Relaxed);
+                    hbb_common::log::error!(
+                        "HDR tone-map unavailable, next capturer falls back to clipped BGRA: {err}"
+                    );
+                    return Err(err);
+                }
+            }
+        }
+        match self.hdr.as_mut() {
+            Some(hdr) => hdr.convert(source, desc),
+            None => Err(io::Error::new(io::ErrorKind::Other, "no tone-map")),
+        }
     }
 
     fn create_rotations(
@@ -365,6 +424,12 @@ impl Capturer {
         let mut texture_desc = mem::MaybeUninit::uninit().assume_init();
         (*texture.0).GetDesc(&mut texture_desc);
 
+        let mut source = texture.0;
+        if texture_desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT {
+            source = self.tonemap(texture.0, &texture_desc)?;
+            (*source).GetDesc(&mut texture_desc);
+        }
+
         texture_desc.Usage = D3D11_USAGE_STAGING;
         texture_desc.BindFlags = 0;
         texture_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
@@ -385,7 +450,7 @@ impl Capturer {
             &mut surface as *mut *mut _ as *mut *mut _,
         );
 
-        (*self.context.0).CopyResource(readable.0 as *mut _, texture.0 as *mut _);
+        (*self.context.0).CopyResource(readable.0 as *mut _, source as *mut _);
 
         Ok(surface)
     }
@@ -491,6 +556,14 @@ impl Capturer {
             );
             let texture = ComPtr(texture);
             self.texture = texture;
+
+            let mut frame_desc: D3D11_TEXTURE2D_DESC = mem::zeroed();
+            (*self.texture.0).GetDesc(&mut frame_desc);
+            if frame_desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT {
+                let converted = self.tonemap(self.texture.0, &frame_desc)?;
+                (*converted).AddRef();
+                self.texture = ComPtr(converted);
+            }
 
             let mut final_texture = self.texture.0 as *mut c_void;
             let mut rotation = match self.display.rotation() {
