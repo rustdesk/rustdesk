@@ -220,10 +220,11 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows.
 # webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
 # and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
-# IPv6. The fork commit carries the arithmetic.
+# IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
+# a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "0a84ba37fbca940b82f230fb469d1b3a3172abf6" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "0a84ba37fbca940b82f230fb469d1b3a3172abf6" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "65fbe090326bf3abe8480d159b6bb07b5f509c22" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "65fbe090326bf3abe8480d159b6bb07b5f509c22" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
