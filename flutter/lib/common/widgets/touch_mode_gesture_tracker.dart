@@ -1,18 +1,17 @@
 /// Distinguishes callbacks from one physical touch sequence from stale ones.
 class TouchModeGestureTracker {
   final Set<int> _activePointers = <int>{};
+  final List<int> _pendingTapDowns = <int>[];
 
   int _sequence = 0;
-  int? _tapDownSequence;
-  int? _longPressSequence;
-  bool _panHandled = false;
+  int? _panSequence;
 
   int get sequence => _sequence;
 
   void pointerDown(int pointer) {
     if (_activePointers.isEmpty) {
       _sequence++;
-      _panHandled = false;
+      _panSequence = null;
     }
     _activePointers.add(pointer);
   }
@@ -21,30 +20,28 @@ class TouchModeGestureTracker {
     _activePointers.remove(pointer);
   }
 
-  void recordTapDown() {
-    _tapDownSequence = _sequence;
+  int recordTapDown() {
+    _pendingTapDowns.add(_sequence);
+    return _sequence;
   }
 
-  bool takeCurrentTapDown(int sequence) {
-    final isCurrent = _tapDownSequence == sequence;
-    _tapDownSequence = null;
-    return isCurrent;
+  int? takeNextTapDown() {
+    if (_pendingTapDowns.isEmpty) {
+      return null;
+    }
+    return _pendingTapDowns.removeAt(0);
   }
 
-  void clearTapDown() {
-    _tapDownSequence = null;
+  void clearTapDowns() {
+    _pendingTapDowns.clear();
   }
 
-  void recordLongPress() {
-    _longPressSequence = _sequence;
-  }
-
-  bool isCurrentLongPress(int sequence) => _longPressSequence == sequence;
-
-  void claimPan() {
-    _panHandled = true;
+  void claimPan(int sequence) {
+    if (sequence == _sequence) {
+      _panSequence = sequence;
+    }
   }
 
   bool shouldHandleTap(int sequence) =>
-      sequence == _sequence && !_panHandled;
+      sequence == _sequence && sequence != _panSequence;
 }

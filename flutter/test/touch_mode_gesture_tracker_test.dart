@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_hbb/common/widgets/touch_mode_gesture_tracker.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -6,31 +8,54 @@ void main() {
     test('suppresses a late tap after the pan recognizer wins', () {
       final tracker = TouchModeGestureTracker();
       tracker.pointerDown(1);
-      final sequence = tracker.sequence;
-      tracker.recordTapDown();
+      final sequence = tracker.recordTapDown();
 
-      tracker.claimPan();
+      tracker.claimPan(sequence);
       tracker.pointerEnd(1);
 
-      expect(tracker.takeCurrentTapDown(sequence), isTrue);
+      expect(tracker.takeNextTapDown(), sequence);
       expect(tracker.shouldHandleTap(sequence), isFalse);
     });
 
-    test('a new physical touch invalidates cached gesture state', () {
+    test('a delayed callback does not consume a newer tap-down', () {
       final tracker = TouchModeGestureTracker();
       tracker.pointerDown(1);
-      final firstSequence = tracker.sequence;
-      tracker.recordTapDown();
-      tracker.recordLongPress();
+      final firstSequence = tracker.recordTapDown();
       tracker.pointerEnd(1);
 
       tracker.pointerDown(2);
-      final secondSequence = tracker.sequence;
+      final secondSequence = tracker.recordTapDown();
 
       expect(secondSequence, firstSequence + 1);
-      expect(tracker.takeCurrentTapDown(secondSequence), isFalse);
-      expect(tracker.isCurrentLongPress(secondSequence), isFalse);
+      expect(tracker.takeNextTapDown(), firstSequence);
+      expect(tracker.shouldHandleTap(firstSequence), isFalse);
+      expect(tracker.takeNextTapDown(), secondSequence);
       expect(tracker.shouldHandleTap(secondSequence), isTrue);
+    });
+
+    test('rejects a tap if a newer touch starts while work is pending',
+        () async {
+      final tracker = TouchModeGestureTracker();
+      tracker.pointerDown(1);
+      final firstSequence = tracker.recordTapDown();
+      final started = Completer<void>();
+      final resume = Completer<void>();
+
+      final result = () async {
+        if (!tracker.shouldHandleTap(firstSequence)) {
+          return false;
+        }
+        started.complete();
+        await resume.future;
+        return tracker.shouldHandleTap(firstSequence);
+      }();
+
+      await started.future;
+      tracker.pointerEnd(1);
+      tracker.pointerDown(2);
+      resume.complete();
+
+      expect(await result, isFalse);
     });
 
     test('additional pointers stay in the same touch sequence', () {
