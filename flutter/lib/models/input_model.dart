@@ -1302,6 +1302,11 @@ class InputModel {
         // instead of emitting an update the peer has no gesture for.
         if (!handlePointerEvent(
             'touch', kMouseEventTypePanStart, _trackpadPanStartPos)) {
+          // The whole-pixel part was already taken out of the accumulator:
+          // put it back so it is retried with the next deliverable move
+          // instead of being dropped — a fast flick during the blocked
+          // window would otherwise lose every frame's pixels.
+          _trackpadScrollUnsent += Offset(x.toDouble(), y.toDouble());
           return;
         }
         _trackpadPanOpen = true;
@@ -1310,9 +1315,13 @@ class InputModel {
       // Track exactly what was queued — an update rejected by peer-control
       // protection must not count, or the terminal reconstruction
       // (_queuePanEndUnconditionally) would drift from the receiver's
-      // stored-position arithmetic by the unapplied delta sum.
+      // stored-position arithmetic by the unapplied delta sum. Give rejected
+      // pixels back to the accumulator for the same reason the start path
+      // does: they are scroll the user performed, not scroll to discard.
       if (handlePointerEvent('touch', kMouseEventTypePanUpdate, delta)) {
         _trackpadPanSentDelta += delta;
+      } else {
+        _trackpadScrollUnsent += delta;
       }
       return;
     }
