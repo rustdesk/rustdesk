@@ -82,7 +82,9 @@ class UserModel {
             },
             body: json.encode(body));
       } catch (e) {
-        networkError.value = e.toString();
+        if (epoch == _sessionEpoch) {
+          networkError.value = e.toString();
+        }
         rethrow;
       }
       refreshingUser = false;
@@ -114,7 +116,7 @@ class UserModel {
       // retry. Anything not flagged above -- transport errors, non-JSON or
       // unexpected-schema bodies (e.g. a filter's block page) -- keeps the
       // check-your-network tip.
-      if (networkError.value.isEmpty) {
+      if (epoch == _sessionEpoch && networkError.value.isEmpty) {
         networkError.value = e.toString();
       }
     } finally {
