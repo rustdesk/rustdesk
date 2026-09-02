@@ -122,6 +122,7 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    brand_init();
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
@@ -131,6 +132,15 @@ pub fn global_init() -> bool {
         }
     }
     true
+}
+
+// BurgerTop identity. Config dir, IPC names, service name, install dir and every `{$appName}`
+// string derive from APP_NAME, so this one override rebrands the runtime without forking
+// hbb_common. It also turns `is_custom_client()` on, which is what an unattended build wants.
+// Idempotent; called from both entry paths so nothing reads the name before it is set.
+fn brand_init() {
+    *config::APP_NAME.write().unwrap() = "BurgerTop".to_owned();
+    *config::ORG.write().unwrap() = "com.burgertop".to_owned();
 }
 
 pub fn global_clean() {}
@@ -2192,6 +2202,7 @@ fn apply_build_defaults() {
 }
 
 pub fn load_custom_client() {
+    brand_init();
     apply_build_defaults();
 
     #[cfg(debug_assertions)]
