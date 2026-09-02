@@ -205,9 +205,10 @@ class UserModel {
     } else {
       parked.remove(oldApiServer);
     }
-    final restored = parked.remove(newApiServer);
-    // Park before clearing the active session, so a crash in between cannot
-    // leave the session nowhere.
+    final restored = parked[newApiServer];
+    // Park before clearing the active session, and unpark only after the
+    // restored one is active again, so a crash in between cannot leave
+    // either session nowhere.
     await bind.mainSetLocalOption(
         key: _kParkedSessions, value: json.encode(parked));
     await reset(resetOther: true);
@@ -217,6 +218,9 @@ class UserModel {
           value: (restored['access_token'] ?? '').toString());
       await bind.mainSetLocalOption(
           key: 'user_info', value: (restored['user_info'] ?? '').toString());
+      parked.remove(newApiServer);
+      await bind.mainSetLocalOption(
+          key: _kParkedSessions, value: json.encode(parked));
       // An expired or revoked token comes back 401 here, which resets the
       // session, so a stale parked login cleans itself up.
       refreshCurrentUser();
