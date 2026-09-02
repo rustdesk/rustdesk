@@ -994,6 +994,16 @@ impl<T: InvokeUiSession> Session<T> {
     ) {
         if character == "flutter_key" {
             self._handle_key_flutter_simulation(keyboard_mode, usb_hid, down_or_up);
+        } else if character == "flutter_key_map" {
+            // VM consoles require physical map-mode events even when the
+            // surrounding session uses legacy Unicode input.
+            self._handle_key_non_flutter_simulation(
+                "map",
+                "",
+                usb_hid,
+                lock_modes,
+                down_or_up,
+            );
         } else {
             self._handle_key_non_flutter_simulation(
                 keyboard_mode,

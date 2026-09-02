@@ -18,6 +18,7 @@ import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
+import 'vm_keyboard_utils.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -407,6 +408,9 @@ class InputModel {
 
   final WeakReference<FFI> parent;
   String keyboardMode = '';
+  // Physical US-key input is opt-in because normal host input should keep its
+  // Unicode and IME behavior.
+  bool vmKeyboardMode = false;
 
   // keyboard
   var shift = false;
@@ -1038,6 +1042,42 @@ class InputModel {
         ctrl: ctrl,
         shift: shift,
         command: command);
+  }
+
+  /// Sends supported iOS soft-keyboard text as physical keys in VM mode.
+  /// Returns false when the caller should use the normal text-input path.
+  bool inputVmKeyboardText(String text) {
+    if (!vmKeyboardMode ||
+        !isIOS ||
+        peerPlatform != kPeerPlatformWindows ||
+        !keyboardPerm ||
+        isViewCamera) {
+      return false;
+    }
+
+    final strokes = vmKeyStrokesForText(text);
+    if (strokes == null) return false;
+
+    void sendPhysicalKey(int usbHid, bool down) {
+      bind.sessionHandleFlutterKeyEvent(
+          sessionId: sessionId,
+          character: 'flutter_key_map',
+          usbHid: usbHid,
+          lockModes: 0,
+          downOrUp: down);
+    }
+
+    for (final stroke in strokes) {
+      if (stroke.shift) {
+        sendPhysicalKey(vmLeftShiftUsbHid, true);
+      }
+      sendPhysicalKey(stroke.usbHid, true);
+      sendPhysicalKey(stroke.usbHid, false);
+      if (stroke.shift) {
+        sendPhysicalKey(vmLeftShiftUsbHid, false);
+      }
+    }
+    return true;
   }
 
   static Map<String, dynamic> getMouseEventMove() => {

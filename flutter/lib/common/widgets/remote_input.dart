@@ -45,8 +45,15 @@ class RawKeyFocusScope extends StatelessWidget {
                 : null,
             onKeyEvent: useRawKeyEvents
                 ? null
-                : (FocusNode node, KeyEvent event) =>
-                    inputModel.handleKeyEvent(event),
+                : (FocusNode node, KeyEvent event) {
+                    if (isIOS &&
+                        inputModel.vmKeyboardMode &&
+                        inputModel.peerPlatform == kPeerPlatformWindows &&
+                        !node.hasPrimaryFocus) {
+                      return KeyEventResult.skipRemainingHandlers;
+                    }
+                    return inputModel.handleKeyEvent(event);
+                  },
             child: child));
   }
 }
