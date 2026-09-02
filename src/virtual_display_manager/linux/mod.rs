@@ -625,6 +625,7 @@ fn disable(state: &mut State) -> ResultType<()> {
     // connector is left to release, so an override orphaned by an earlier failure still gets cleaned.
     uninstall_edid();
     let mut last_err = None;
+    let mut released: Vec<String> = Vec::new();
     for sysfs in &targets {
         // Every connector gets its write attempted; one failure must not strand the others with the
         // override already gone.
@@ -635,10 +636,22 @@ fn disable(state: &mut State) -> ResultType<()> {
             // record of the connector disappears with the failed write and nothing ever retries.
             state.forced.get_or_insert_with(|| sysfs.clone());
             last_err = Some(e);
+        } else {
+            released.push(sysfs.clone());
         }
     }
-    if !targets.is_empty() {
-        log::info!("headless display: released {}", targets.join(", "));
+    // The parameter entry is what survives this process, so a connector still forced needs it back.
+    // After the loop, not per failure: `install_edid` keeps only the last of our entries, and this
+    // way the parameter and `state.forced` name the same connector.
+    if let Some(stuck) = state.forced.as_deref() {
+        if let Some((_, name)) = stuck.split_once('-') {
+            if let Err(e) = install_edid(name) {
+                log::warn!("headless display: cannot re-record the hold on {stuck}: {e}");
+            }
+        }
+    }
+    if !released.is_empty() {
+        log::info!("headless display: released {}", released.join(", "));
     }
     match last_err {
         Some(e) => Err(e),
