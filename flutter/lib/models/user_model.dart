@@ -95,7 +95,13 @@ class UserModel {
       }
       final status = response.statusCode;
       if (status == 401 || status == 400) {
-        reset(resetOther: status == 401);
+        // Queued behind a server switch in progress and re-checked, so a
+        // reset that began before the switch cannot clear the session the
+        // switch restores.
+        _serializeSessionWrite(() async {
+          if (epoch != _sessionEpoch) return;
+          await reset(resetOther: status == 401);
+        });
         return;
       }
       final data = json.decode(decode_http_response(response));
@@ -188,10 +194,24 @@ class UserModel {
   // switching back restores the login instead of requiring a new one.
   static const String _kParkedSessions = 'parked_sessions';
 
+  // Writes to the active session are serialized, so that a switch and a
+  // 401 reset cannot interleave their multi-step storage updates.
+  Future<void> _sessionWrites = Future.value();
+
+  Future<T> _serializeSessionWrite<T>(Future<T> Function() write) {
+    final result = _sessionWrites.then((_) => write());
+    _sessionWrites = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
   /// Called when the API server changes: park the session of the server being
   /// left (the token is not invalidated, unlike [logOut]) and restore the one
   /// parked for the server being switched to, if any.
-  Future<void> switchApiServer(
+  Future<void> switchApiServer(String oldApiServer, String newApiServer) =>
+      _serializeSessionWrite(
+          () => _switchApiServer(oldApiServer, newApiServer));
+
+  Future<void> _switchApiServer(
       String oldApiServer, String newApiServer) async {
     _sessionEpoch++;
     Map<String, dynamic> parked = {};
