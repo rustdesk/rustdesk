@@ -43,6 +43,7 @@ env:
   #  https://github.com/rustdesk/rustdesk/actions/runs/14414119794/job/40427970174
   # 2. Update the `VCPKG_COMMIT_ID` in `ci.yml` and `playground.yml`.
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_CMAKE_VERSION: "4.3.0"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
   VERSION: "1.5.0"
   NDK_VERSION: "r28c"
@@ -1570,6 +1571,15 @@ jobs:
         with:
           name: bridge-artifact
           path: ./
+
+      # vcpkg 2026.07.29's SPDX scripts require CMake 4.3+, but this ARM64 runner selects CMake 3.31.
+      - name: Install CMake for vcpkg on Linux ARM64
+        if: matrix.job.arch == 'aarch64' && env.UPLOAD_ARTIFACT == 'true'
+        run: |
+          python3 -m pip install --user "cmake==${VCPKG_CMAKE_VERSION}"
+          user_base="$(python3 -m site --user-base)"
+          "${user_base}/bin/cmake" --version
+          echo "${user_base}/bin" >> "${GITHUB_PATH}"
 
       - name: Setup vcpkg with Github Actions binary cache
         if: matrix.job.arch == 'x86_64' || env.UPLOAD_ARTIFACT == 'true'
