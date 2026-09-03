@@ -265,7 +265,7 @@ async fn connect_and_login(
     }
     let mut buffer = Vec::new();
     let mut local_eof = false;
-    let mut mux = false;
+    let mux;
     let mut received = false;
 
     let _keep_it = hc_connection(feedback, rendezvous_server, token).await;
@@ -387,8 +387,11 @@ mod tests {
     #[test]
     fn port_forward_mux_defaults_to_on() {
         use hbb_common::config::{keys, option2bool};
-        // The `enable-` prefix is what makes an unset value mean on. Getting the
-        // key's name wrong silently flips the default, so pin it here.
+        // option2bool's fallback branch is also "on unless N", so the value
+        // assertions below would pass for a prefixless key too. The `enable-`
+        // prefix is what actually guarantees the default, and renaming the key
+        // to an `allow-` one would silently flip it — pin the prefix itself.
+        assert!(keys::OPTION_ENABLE_PORT_FORWARD_MUX.starts_with("enable-"));
         assert!(option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, ""));
         assert!(option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, "Y"));
         assert!(!option2bool(keys::OPTION_ENABLE_PORT_FORWARD_MUX, "N"));
