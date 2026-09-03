@@ -49,7 +49,7 @@ use winapi::{
     um::{
         d3d11::*,
         d3dcommon::{ID3DBlob, ID3DInclude, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D_SHADER_MACRO},
-        libloaderapi::{GetProcAddress, LoadLibraryW},
+        libloaderapi::{GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32},
         unknwnbase::IUnknown,
         wingdi::{
             DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
@@ -495,7 +495,7 @@ fn load_d3d_compile() -> io::Result<D3DCompileFn> {
 
 unsafe fn find_d3d_compile() -> Result<D3DCompileFn, String> {
     let name: Vec<u16> = "d3dcompiler_47.dll\0".encode_utf16().collect();
-    let module = LoadLibraryW(name.as_ptr());
+    let module = LoadLibraryExW(name.as_ptr(), ptr::null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32);
     if module.is_null() {
         return Err("d3dcompiler_47.dll not available".into());
     }
