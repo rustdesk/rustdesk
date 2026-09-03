@@ -55,6 +55,8 @@ static PRIVILEGES_SCRIPTS_DIR: Dir =
 static mut LATEST_SEED: i32 = 0;
 const UPDATE_CLEANUP_FAILED_AFTER_COMMIT: &str = "UPDATE_CLEANUP_FAILED_AFTER_COMMIT";
 // `kill -9` may not work without administrator privileges.
+// App-only update transaction used when launchd jobs are absent or intentionally stopped.
+// Keep its verification, staging, bundle rollback, and cleanup aligned with update.scpt.
 const PRIVILEGED_UPDATE_BODY: &str = r#"
 	on run {app_name, cur_pid, source_path, user_name, restore_owner, expected_sha256}
 	    set app_bundle to "/Applications/" & app_name & ".app"
@@ -1010,6 +1012,7 @@ fn update_me_from_source(update_source: UpdateSource) -> ResultType<()> {
         &crate::ui_interface::get_option(option_stop_service),
     );
 
+    // Include launchd jobs in the transaction only while the installed service is enabled.
     if is_installed_daemon && !is_service_stopped {
         let agent = format!("{}_server.plist", crate::get_full_name());
         let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
