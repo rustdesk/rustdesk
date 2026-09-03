@@ -3902,8 +3902,6 @@ impl Connection {
                     }
                 }
                 Some(message::Union::PortForwardChannel(ch)) => {
-                    let permitted =
-                        Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions);
                     // Only open/close can change the target set; sweeping after every
                     // data frame would walk the whole table per 64 KiB.
                     let may_change_targets = matches!(
@@ -3911,6 +3909,10 @@ impl Connection {
                         Some(port_forward_channel::Union::Open(_))
                             | Some(port_forward_channel::Union::Close(_))
                     );
+                    // Only `open` consults permissions; short-circuit so the lookup
+                    // isn't made per 64 KiB of data.
+                    let permitted = matches!(ch.union, Some(port_forward_channel::Union::Open(_)))
+                        && Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions);
                     if let Some(mux) = self.port_forward_mux.as_mut() {
                         mux.handle(ch, permitted);
                         if may_change_targets {
@@ -5808,7 +5810,10 @@ impl Connection {
     }
 
     fn is_port_forward_scoped_message(msg: &Message) -> bool {
-        matches!(msg.union.as_ref(), Some(message::Union::PortForwardChannel(_)))
+        matches!(
+            msg.union.as_ref(),
+            Some(message::Union::PortForwardChannel(_))
+        )
     }
 
     fn is_terminal_scoped_message(msg: &Message) -> bool {
@@ -7460,7 +7465,10 @@ mod test {
                         }),
                         None,
                     ),
-                    (msg(|m| m.set_port_forward_channel(PortForwardChannel::new())), None),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
+                        None,
+                    ),
                 ],
             ),
         ];
