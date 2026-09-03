@@ -114,7 +114,7 @@ dependencies:
   pull_down_button: ^0.9.3
   device_info_plus: ^9.1.0
   qr_flutter: ^4.1.0
-  extended_text: ^15.0.2
+  extended_text: ^14.2.0
   xterm:
     git:
       url: https://github.com/FrankHan052176/xterm.dart
