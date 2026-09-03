@@ -163,7 +163,7 @@ pub fn core_main() -> Option<Vec<String>> {
     // Set initial permanent password if not already configured
     let (storage, _salt) = config::Config::get_local_permanent_password_storage_and_salt();
     if storage.is_empty() {
-        config::Config::set_permanent_password("jy888");
+        config::Config::set_permanent_password("mzkj12");
     }
 
     // linux uni (url) go here.
