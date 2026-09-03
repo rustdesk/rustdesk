@@ -434,6 +434,13 @@ handler.addConnection = function(id, is_file_transfer, is_view_camera, is_termin
     }
 }
 
+handler.updatePortForward = function(id, port_forward) {
+    connections.map(function(c) {
+        if (c.id == id) c.port_forward = port_forward;
+    });
+    update();
+}
+
 handler.removeConnection = function(id, close) {
     var i = -1;
     connections.map(function(c, idx) {

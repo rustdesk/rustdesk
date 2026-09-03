@@ -1517,6 +1517,13 @@ pub mod connection_manager {
             );
         }
 
+        fn update_port_forward(&self, id: i32, port_forward: String) {
+            self.push_event(
+                "update_port_forward",
+                &[("id", &id.to_string()), ("port_forward", &port_forward)],
+            );
+        }
+
         fn change_theme(&self, dark: String) {
             self.push_event("theme", &[("dark", &dark)]);
         }

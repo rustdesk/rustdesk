@@ -196,6 +196,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn update_voice_call_state(&self, client: &Client);
 
     fn file_transfer_log(&self, action: &str, log: &str);
+
+    fn update_port_forward(&self, id: i32, port_forward: String);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -600,6 +602,17 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                             // existing rows (authorized/privacy_mode) for this fallback path.
                                             self.cm.ui_handler.add_connection(&client);
                                         }
+                                    }
+                                }
+                                Data::UpdatePortForward(port_forward) => {
+                                    let updated = {
+                                        let mut clients = CLIENTS.write().unwrap();
+                                        clients.get_mut(&self.conn_id).map(|c| {
+                                            c.port_forward = port_forward.clone();
+                                        })
+                                    };
+                                    if updated.is_some() {
+                                        self.cm.ui_handler.update_port_forward(self.conn_id, port_forward);
                                     }
                                 }
                                 Data::FS(mut fs) => {
