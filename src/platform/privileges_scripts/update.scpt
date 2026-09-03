@@ -1,5 +1,7 @@
 on run {user, cur_pid, source_path, expected_sha256}
 
+  -- RustDesk identifiers in this script are templates. correct_app_name()
+  -- rewrites them for the installed client before osascript executes it.
   set agent_plist to "/Library/LaunchAgents/com.carriez.RustDesk_server.plist"
   set daemon_plist to "/Library/LaunchDaemons/com.carriez.RustDesk_service.plist"
   set app_bundle to "/Applications/RustDesk.app"
@@ -23,6 +25,12 @@ on run {user, cur_pid, source_path, expected_sha256}
   set unload_service to "launchctl unload -w " & daemon_plist_q & " || true;"
   set kill_others to "pids=$(pgrep -x 'RustDesk' | grep -vx " & cur_pid & " || true); if [ -n \"$pids\" ]; then echo \"$pids\" | xargs kill -9 || true; fi;"
 
+  -- Update transaction:
+  -- source -> root-owned verified_app -> .new -> installed app
+  -- old installed app -> .old
+  -- failure before transaction starts: clean temporary files; installed state is unchanged
+  -- failure after transaction starts but before commit: restore app, plists, service, and agent
+  -- failure after commit: keep the new app and report cleanup errors only
   set prepare_swap_paths to "temp_bundle=" & quoted form of app_bundle & ".new.$$; old_bundle=" & quoted form of app_bundle & ".old.$$;"
   set cleanup_swap_paths to "rm -rf \"$temp_bundle\" \"$old_bundle\";"
   set backup_plists to "daemon_plist_backup=\"$verified_dir/daemon.plist\"; agent_plist_backup=\"$verified_dir/agent.plist\"; daemon_plist_existed=0; agent_plist_existed=0; if [ -e " & daemon_plist_q & " ]; then cp -p " & daemon_plist_q & " \"$daemon_plist_backup\"; daemon_plist_existed=1; fi; if [ -e " & quoted form of agent_plist & " ]; then cp -p " & quoted form of agent_plist & " \"$agent_plist_backup\"; agent_plist_existed=1; fi;"
