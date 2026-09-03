@@ -51,7 +51,8 @@ pub fn update_to_verified(file: &str, expected_sha256: &str, expected_size: u64)
 
     let result = launch_verified_update(&extension, &update_path, expected_sha256);
     clear_custom_client_staging_after_launch_failure(&custom_client_staging_dir, &result);
-    finish_verified_update_launch(update_file, result)
+    update_file.cleanup();
+    result
 }
 
 fn launch_verified_update(
@@ -111,6 +112,8 @@ fn verified_msi_install_commands(
     expected_sha256: &str,
     quiet: bool,
 ) -> ResultType<String> {
+    // The open source handle prevents replacing that file, but not retargeting an
+    // ancestor junction. Copy and reverify it in the protected runner directory.
     let source = path_for_cmd_environment(msi)?;
     let hash_pattern = verified_update_hash_pattern(expected_sha256)?;
     let quiet_args = if quiet { " /qn LAUNCH_TRAY_APP=N" } else { "" };
@@ -150,15 +153,6 @@ fn clear_custom_client_staging_after_launch_failure(
             err
         );
     }
-}
-
-// Each caller waits until the installer no longer needs the verified source.
-pub fn finish_verified_update_launch(
-    update_file: VerifiedUpdateFile,
-    result: ResultType<()>,
-) -> ResultType<()> {
-    update_file.cleanup();
-    result
 }
 
 pub fn schedule_current_verified_update_file_cleanup() -> ResultType<()> {
@@ -215,28 +209,6 @@ mod tests {
         ] {
             assert!(!should_schedule_verified_update_cleanup(Path::new(path)));
         }
-    }
-
-    #[test]
-    fn finishing_successful_msi_update_removes_verified_copy() {
-        let source_path = std::env::temp_dir().join(format!(
-            "rustdesk-update-msi-cleanup-test-{}-{}.msi",
-            std::process::id(),
-            hbb_common::rand::random::<u64>()
-        ));
-        std::fs::write(&source_path, b"rustdesk").unwrap();
-        let verified_file = copy_and_verify_update_file_sha256(
-            source_path.to_str().unwrap(),
-            "304ca1638c5effa6832e0e15b958a8f74847efe4df9c3f3187216e921c168fed",
-        )
-        .unwrap();
-        let verified_path = Path::new(verified_file.path_str().unwrap()).to_owned();
-        assert!(verified_path.exists());
-
-        assert!(finish_verified_update_launch(verified_file, Ok(())).is_ok());
-
-        assert!(!verified_path.exists());
-        std::fs::remove_file(source_path).unwrap();
     }
 
     #[test]

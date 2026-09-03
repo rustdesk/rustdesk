@@ -2758,14 +2758,16 @@ pub fn main_set_common(_key: String, _value: String) {
     }
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        use crate::updater::get_download_file_from_url;
+        use crate::updater::get_update_download_file_from_url;
         if _key == "download-new-version" {
             let download_url = _value.clone();
             let event_key = "download-new-version".to_owned();
             let data =
                 match crate::updater::verified_update_artifact_for_download_url(&download_url) {
                     Ok(artifact) => {
-                        if let Some(download_file) = get_download_file_from_url(&artifact.url) {
+                        if let Some(download_file) =
+                            get_update_download_file_from_url(&artifact.url)
+                        {
                             let options = crate::hbbs_http::downloader::DownloadOptions {
                                 expected_size: artifact.size,
                                 artifact_sha256: artifact.sha256,
@@ -2807,7 +2809,7 @@ pub fn main_set_common(_key: String, _value: String) {
                     return;
                 }
             };
-            let Some(new_version_file) = get_download_file_from_url(&artifact.url) else {
+            let Some(new_version_file) = get_update_download_file_from_url(&artifact.url) else {
                 let error = "Failed to resolve downloaded update file path".to_owned();
                 log::error!("{}", error);
                 push_update_me_error(error);

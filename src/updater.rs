@@ -12,7 +12,7 @@ use download::ensure_verified_update_artifact;
 pub(crate) use download::remove_update_file;
 use hbb_common::{bail, config, log, ResultType};
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
         mpsc::{channel, Receiver, Sender},
@@ -20,6 +20,9 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
 
 #[cfg(target_os = "macos")]
 use std::os::{
@@ -218,7 +221,7 @@ fn check_update(manually: bool) -> ResultType<()> {
         let version = artifact.version.as_str();
         #[cfg(target_os = "windows")]
         log::debug!("New version available: {}", &version);
-        let Some(file_path) = get_download_file_from_url(download_url) else {
+        let Some(file_path) = get_update_download_file_from_url(download_url) else {
             bail!("Failed to get the file path from the URL: {}", download_url);
         };
         ensure_verified_update_artifact(download_url, &file_path, artifact.size, &artifact.sha256)?;
@@ -287,7 +290,8 @@ fn update_new_version(update_msi: bool, version: &str, file_path: &PathBuf, expe
                     return;
                 };
                 let result = crate::platform::update_me_msi(&update_path, expected_sha256, true);
-                match crate::platform::finish_verified_update_launch(update_file, result) {
+                update_file.cleanup();
+                match result {
                     Ok(_) => {
                         log::debug!("New version \"{}\" updated.", version);
                     }
@@ -374,10 +378,6 @@ fn update_new_version(update_msi: bool, version: &str, file_path: &PathBuf, expe
             file_path.display()
         );
     }
-}
-
-pub fn get_download_file_from_url(url: &str) -> Option<PathBuf> {
-    get_update_download_file_from_url(url)
 }
 
 /// Queries all active connections (remote, file-transfer, port-forward, camera, terminal)

@@ -114,8 +114,8 @@ use installer_shell::{
     shortcut_bytes, validate_install_value,
 };
 pub use verified_update::{
-    copy_and_verify_update_file_sha256, finish_verified_update_launch,
-    schedule_current_verified_update_file_cleanup, update_to_verified, VerifiedUpdateFile,
+    copy_and_verify_update_file_sha256, schedule_current_verified_update_file_cleanup,
+    update_to_verified, VerifiedUpdateFile,
 };
 
 pub const FLUTTER_RUNNER_WIN32_WINDOW_CLASS: &'static str = "FLUTTER_RUNNER_WIN32_WINDOW"; // main window, install window
