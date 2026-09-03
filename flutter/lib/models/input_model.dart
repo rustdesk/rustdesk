@@ -441,13 +441,12 @@ class InputModel {
   bool _trackpadPanOpen = false;
   Offset _trackpadPanStartPos = Offset.zero;
 
-  /// The last pan_start payload after full mapping (peer-screen units),
-  /// stashed by handlePointerEvent, and the cumulative whole-pixel deltas
-  /// queued as pan_updates for the current gesture. Together they replay the
-  /// receiver's stored mouseX/mouseY arithmetic (see
-  /// [_queuePanEndUnconditionally]).
-  Point? _trackpadPanStartMapped;
-  Offset _trackpadPanSentDelta = Offset.zero;
+  /// Mirror of the receiver's stored pointer position (peer-screen units,
+  /// unscaled — the receiver multiplies by a constant positive scale, which
+  /// cancels): seeded from the mapped pan_start payload, then advanced by
+  /// the receiver's exact per-update arithmetic (subtract the delta, clamp
+  /// at zero). [_queuePanEndUnconditionally] sends it as the pan_end payload.
+  Point? _trackpadPanPos;
 
   /// Serializes touch pan event sends (pan_start → pan_update(s) → pan_end)
   /// from every sender (synthetic trackpad path and native pan-zoom path).
@@ -1262,7 +1261,7 @@ class InputModel {
     _trackpadTwoFinger = true;
     _trackpadScrollUnsent = Offset.zero;
     _trackpadPanOpen = false;
-    _trackpadPanSentDelta = Offset.zero;
+    _trackpadPanPos = null;
     _trackpadPanStartPos = position;
   }
 
@@ -1312,14 +1311,21 @@ class InputModel {
         _trackpadPanOpen = true;
       }
       final delta = Offset(x.toDouble(), y.toDouble());
-      // Track exactly what was queued — an update rejected by peer-control
-      // protection must not count, or the terminal reconstruction
-      // (_queuePanEndUnconditionally) would drift from the receiver's
-      // stored-position arithmetic by the unapplied delta sum. Give rejected
-      // pixels back to the accumulator for the same reason the start path
-      // does: they are scroll the user performed, not scroll to discard.
+      // Advance the receiver-position mirror with the receiver's exact
+      // per-update arithmetic — subtract the delta, then clamp at zero. A
+      // cumulative net delta clamped once at the end would diverge whenever
+      // the receiver clamps at the top/left edge mid-gesture and the gesture
+      // then reverses. An update that is not queued counts nowhere: the
+      // receiver did not apply it either. Give rejected pixels back to the
+      // accumulator for the same reason the start path does: they are
+      // scroll the user performed, not scroll to discard.
       if (handlePointerEvent('touch', kMouseEventTypePanUpdate, delta)) {
-        _trackpadPanSentDelta += delta;
+        // Null is unreachable while the pan is open: opening requires a
+        // queued pan_start, which seeded the mirror.
+        _trackpadPanPos = Point(
+          max(0.0, _trackpadPanPos!.x - delta.dx),
+          max(0.0, _trackpadPanPos!.y - delta.dy),
+        );
       } else {
         _trackpadScrollUnsent += delta;
       }
@@ -2067,10 +2073,10 @@ class InputModel {
         return false;
       }
       if (type == kMouseEventTypePanStart) {
-        // The unconditional terminal path (_queuePanEndUnconditionally)
-        // reuses the mapped start to reconstruct the receiver's stored
-        // pointer position.
-        _trackpadPanStartMapped = pos;
+        // Seed the receiver-position mirror from the mapped start payload:
+        // the terminal path (_queuePanEndUnconditionally) replays the
+        // receiver's stored pointer arithmetic from here.
+        _trackpadPanPos = pos;
       }
       evtValue = {
         'x': pos.x.toInt(),
@@ -2107,28 +2113,22 @@ class InputModel {
   /// positionless events (button down/up are encoded with x=0,y=0; Android
   /// only updates the position on a move) act at that stored position — so
   /// an unmapped controller-canvas coordinate would relocate the remote
-  /// pointer. Reconstruct the receiver's stored position instead: pan_start
-  /// set it from the mapped start payload, and every queued pan_update
-  /// subtracted its delta — replay that arithmetic ([_trackpadPanStartMapped]
-  /// minus [_trackpadPanSentDelta]). A single final clamp mirrors the
-  /// receiver's per-update clamping except when a gesture pins the top/left
-  /// edge and reverses; that divergence is bounded by the clamped-away
-  /// distance and the payload stays a valid non-negative coordinate.
+  /// pointer. Send the receiver-position mirror instead
+  /// ([_trackpadPanPos]): it replays the receiver's exact arithmetic — the
+  /// mapped pan_start payload, then the same subtract-and-clamp per queued
+  /// pan_update — so gestures that pin the top/left edge and reverse stay
+  /// in sync.
   void _queuePanEndUnconditionally() {
     // Null is unreachable while _trackpadPanOpen is true: opening requires a
-    // queued pan_start, which stashed the mapped payload.
-    final start = _trackpadPanStartMapped;
-    final end = start == null
-        ? Offset.zero
-        : Offset(
-            (start.x - _trackpadPanSentDelta.dx).clamp(0, double.infinity),
-            (start.y - _trackpadPanSentDelta.dy).clamp(0, double.infinity),
-          );
-    final msg = json.encode(modify(PointerEventToRust('touch',
-            kMouseEventTypePanEnd, {
-          'x': end.dx.toInt(),
-          'y': end.dy.toInt(),
-        }).toJson()));
+    // queued pan_start, which seeded the mirror.
+    final pos = _trackpadPanPos;
+    final end =
+        pos == null ? Offset.zero : Offset(pos.x.toDouble(), pos.y.toDouble());
+    final msg =
+        json.encode(modify(PointerEventToRust('touch', kMouseEventTypePanEnd, {
+      'x': end.dx.toInt(),
+      'y': end.dy.toInt(),
+    }).toJson()));
     _panEventChain = _panEventChain.then((_) async {
       try {
         await bind.sessionSendPointer(sessionId: sessionId, msg: msg);
