@@ -57,6 +57,11 @@ struct WaylandLayout {
     // init resets that one, and the generation detector needs a memory that a reset cannot
     // erase: two inits straddling a rotation would otherwise leave nothing to compare against.
     seen: Vec<scrap::wayland::display::DisplayRect>,
+    // A capturer recorded a build layout other than `seen`: the poll observed the live layout
+    // between that capturer's snapshot read and its record, so one of the two is stale and the
+    // next poll owes an edge whatever it sees. Consumed by `observe`, which the poll runs right
+    // after `edge`; a session init's baseline reset leaves it alone.
+    unseen_build: bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -81,6 +86,9 @@ impl WaylandLayout {
         live: &[scrap::wayland::display::DisplayRect],
         snapshot_missing: bool,
     ) -> bool {
+        if self.unseen_build {
+            return true;
+        }
         if !self.seen.is_empty() {
             return self.seen != live;
         }
@@ -93,16 +101,26 @@ impl WaylandLayout {
     fn observe(&mut self, live: &[scrap::wayland::display::DisplayRect]) {
         self.live = live.to_vec();
         self.seen = live.to_vec();
+        self.unseen_build = false;
     }
 
     // What a capturer was built against, which seeds the memory when nothing else has. A session
     // init whose wayland query failed leaves an EMPTY baseline, and the capturer's own retry can
     // then succeed - so the capturer is the only thing that knows the layout it is showing, and
     // without this a rotation before the first poll is invisible to `edge`. Only when empty: a
-    // capturer built later must not overwrite the memory the poll is keeping.
+    // capturer built later must not overwrite the memory the poll is keeping, since on a
+    // multi-display session that memory is what the OTHER capturers were built against. A build
+    // that disagrees with it is flagged instead: the capturer's snapshot read and this record
+    // are two steps, and a poll landing between them observes the live layout first, which
+    // would otherwise drop the record and leave the capturer on a transform nothing compares.
     fn note_capturer(&mut self, built_on: &[scrap::wayland::display::DisplayRect]) {
-        if self.seen.is_empty() && !built_on.is_empty() {
+        if built_on.is_empty() {
+            return;
+        }
+        if self.seen.is_empty() {
             self.seen = built_on.to_vec();
+        } else if self.seen != built_on {
+            self.unseen_build = true;
         }
     }
 }
@@ -905,6 +923,44 @@ mod wayland_layout_tests {
         l.observe(&upright);
         l.note_capturer(&rotated);
         assert!(l.edge(&rotated, false), "the poll's memory still says upright");
+    }
+
+    // The constructor's snapshot read and its `note_capturer` are two steps, and the poll can
+    // land between them. After a failed init (empty baseline) the constructor takes A and
+    // publishes it; the output rotates; the poll reads B live, finds nothing recorded and the
+    // snapshot present, so no edge, and observes B. The late `note_capturer(A)` then met a
+    // non-empty memory and was dropped: the capturer showed A while the detector held B, and B
+    // against B never bumped the generation.
+    #[test]
+    fn a_capturer_record_that_lost_the_race_with_the_first_poll_is_still_an_edge() {
+        let upright = layout(1920, 1080, 0);
+        let rotated = layout(1080, 1920, 1);
+        let mut l = WaylandLayout::default();
+        l.reset_baseline(Vec::new());
+        assert!(!l.edge(&rotated, false), "nothing recorded and the snapshot is present");
+        l.observe(&rotated);
+        l.note_capturer(&upright);
+        assert!(l.edge(&rotated, false), "the capturer is built on upright, live is rotated");
+
+        // The promotion consumes it: the next poll sees the same layout and stays quiet.
+        l.observe(&rotated);
+        l.reset_baseline(rotated.clone());
+        assert!(!l.edge(&rotated, false));
+
+        // The same with a session init between the late record and the poll.
+        let mut l2 = WaylandLayout::default();
+        l2.reset_baseline(Vec::new());
+        l2.observe(&rotated);
+        l2.note_capturer(&upright);
+        l2.reset_baseline(rotated.clone());
+        assert!(l2.edge(&rotated, false));
+
+        // Control: a late record that agrees with the poll's memory is not an edge.
+        let mut l3 = WaylandLayout::default();
+        l3.reset_baseline(Vec::new());
+        l3.observe(&upright);
+        l3.note_capturer(&upright);
+        assert!(!l3.edge(&upright, false));
     }
 
     // A promotion consumes the edge: the next poll sees the same layout and must stay quiet.
