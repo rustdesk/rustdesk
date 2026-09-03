@@ -2761,6 +2761,7 @@ impl LoginConfigHandler {
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
+                multiplex: crate::common::get_port_forward_mux_enabled(),
                 ..Default::default()
             }),
             ConnType::TERMINAL => {
