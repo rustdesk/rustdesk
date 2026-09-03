@@ -69,12 +69,13 @@ const DXGI_RECOVERY_LIMIT: usize = 3;
 #[cfg(windows)]
 const DXGI_RECOVERY_WINDOW: Duration = Duration::from_secs(10);
 #[cfg(windows)]
-const DXGI_INITIAL_FRAME_GRACE: Duration = Duration::from_secs(2);
+const DXGI_RECOVERY_FRAME_GRACE: Duration = Duration::from_secs(2);
 
 #[cfg(windows)]
 struct DxgiRecoveryState {
     attempts: usize,
     window_started: Option<Instant>,
+    restart_pending: bool,
 }
 
 #[cfg(windows)]
@@ -83,6 +84,7 @@ impl DxgiRecoveryState {
         Self {
             attempts: 0,
             window_started: None,
+            restart_pending: false,
         }
     }
 
@@ -99,7 +101,12 @@ impl DxgiRecoveryState {
             return None;
         }
         self.attempts += 1;
+        self.restart_pending = true;
         Some(self.attempts)
+    }
+
+    fn take_restart_pending(&mut self) -> bool {
+        std::mem::take(&mut self.restart_pending)
     }
 }
 
@@ -615,6 +622,15 @@ fn run(vs: VideoService) -> ResultType<()> {
     let sp = vs.sp;
     let mut c = get_capturer(vs.source, display_idx, last_portable_service_running)?;
     #[cfg(windows)]
+    // ACCESS_LOST marks the next successful capturer creation as a recovery. This timestamp is
+    // consumed once and temporarily holds off the normal WouldBlock-to-GDI fallback, giving the
+    // replacement DXGI capturer time to produce its first frame. Normal startup is unaffected.
+    let dxgi_recovery_started = dxgi_recovery_state
+        .lock()
+        .unwrap()
+        .take_restart_pending()
+        .then(Instant::now);
+    #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
         c.set_gdi();
@@ -662,27 +678,6 @@ fn run(vs: VideoService) -> ResultType<()> {
     };
     #[cfg(feature = "vram")]
     c.set_output_texture(encoder.input_texture());
-    #[cfg(all(windows, feature = "vram"))]
-    log::info!(
-        "capture initialized: display={}, dimensions={}x{}, backend={}, frame_path={}",
-        display_idx,
-        c.width,
-        c.height,
-        if c.is_gdi() { "gdi" } else { "dxgi" },
-        if encoder.input_texture() {
-            "texture"
-        } else {
-            "pixel-buffer"
-        },
-    );
-    #[cfg(all(windows, not(feature = "vram")))]
-    log::info!(
-        "capture initialized: display={}, dimensions={}x{}, backend={}, frame_path=pixel-buffer",
-        display_idx,
-        c.width,
-        c.height,
-        if c.is_gdi() { "gdi" } else { "dxgi" },
-    );
     #[cfg(target_os = "android")]
     if vs.source.is_monitor() {
         if let Err(e) = check_change_scale(encoder.is_hardware()) {
@@ -706,9 +701,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
-    let mut try_gdi: usize = 1;
-    #[cfg(windows)]
-    let dxgi_started = Instant::now();
+    let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     #[cfg(windows)]
@@ -791,20 +784,10 @@ fn run(vs: VideoService) -> ResultType<()> {
 
         let time = now - start;
         let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-        #[cfg(windows)]
-        let frame_from_dxgi = !c.is_gdi();
         let res = match c.frame(spf) {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
-                    #[cfg(windows)]
-                    {
-                        #[cfg(feature = "vram")]
-                        if try_gdi == 1 && frame_from_dxgi {
-                            VRamEncoder::set_fallback_gdi(sp.name(), false);
-                        }
-                        try_gdi = 0;
-                    }
                     let screenshot_key = (vs.source, display_idx);
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
                     if let Some(mut screenshot) = screenshot {
@@ -868,6 +851,14 @@ fn run(vs: VideoService) -> ResultType<()> {
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }
+                #[cfg(windows)]
+                {
+                    #[cfg(feature = "vram")]
+                    if try_gdi == 1 && !c.is_gdi() {
+                        VRamEncoder::set_fallback_gdi(sp.name(), false);
+                    }
+                    try_gdi = 0;
+                }
                 Ok(())
             }
             Err(err) => Err(err),
@@ -876,27 +867,17 @@ fn run(vs: VideoService) -> ResultType<()> {
         match res {
             Err(ref e) if e.kind() == WouldBlock => {
                 #[cfg(windows)]
-                if try_gdi > 0 && !c.is_gdi() {
-                    if try_gdi == 1 {
-                        log::info!(
-                            "dxgi has no initial frame, wait up to {} ms before gdi fallback",
-                            DXGI_INITIAL_FRAME_GRACE.as_millis()
-                        );
-                    }
-                    if try_gdi > 3 && dxgi_started.elapsed() >= DXGI_INITIAL_FRAME_GRACE {
-                        let attempts = try_gdi;
-                        let elapsed = dxgi_started.elapsed();
-                        if !c.set_gdi() {
-                            bail!("Failed to fall back to gdi");
+                if dxgi_recovery_started
+                    .map(|started| started.elapsed() >= DXGI_RECOVERY_FRAME_GRACE)
+                    .unwrap_or(true)
+                {
+                    if try_gdi > 0 && !c.is_gdi() {
+                        if try_gdi > 3 {
+                            c.set_gdi();
+                            try_gdi = 0;
+                            log::info!("No image, fall back to gdi");
                         }
-                        try_gdi = 0;
-                        log::info!(
-                            "No dxgi image after {} ms and {} attempts, fall back to gdi",
-                            elapsed.as_millis(),
-                            attempts
-                        );
-                    } else {
-                        try_gdi = try_gdi.saturating_add(1);
+                        try_gdi += 1;
                     }
                 }
                 #[cfg(target_os = "linux")]
@@ -958,9 +939,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             DXGI_RECOVERY_WINDOW.as_secs()
                         );
                     }
-                    if !c.set_gdi() {
-                        bail!("Failed to fall back to gdi");
-                    }
+                    c.set_gdi();
                     log::info!("dxgi error, fall back to gdi: {:?}", err);
                     continue;
                 }
