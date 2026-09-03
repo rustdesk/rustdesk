@@ -1271,7 +1271,12 @@ mod tests {
                 };
                 let bulk_writer = {
                     let bulk = bulk.clone();
-                    tokio::spawn(async move { bulk_wr.write_all(&bulk).await.unwrap() })
+                    tokio::spawn(async move {
+                        bulk_wr.write_all(&bulk).await.unwrap();
+                        // Hold the write half open: dropping it half-closes the
+                        // socket, which ends the whole channel by design.
+                        bulk_wr
+                    })
                 };
                 for (i, app) in apps.iter_mut().enumerate() {
                     let mut b = [0u8; 1];
@@ -1281,8 +1286,24 @@ mod tests {
                         .unwrap();
                     assert_eq!(b[0], (i + 1) as u8);
                 }
-                bulk_writer.await.unwrap();
                 bulk_reader.await.unwrap();
+                let _bulk_wr = bulk_writer.await.unwrap();
+            });
+        }
+
+        #[test]
+        fn a_local_half_close_ends_the_whole_channel() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                let (app, sock) = local_pair().await;
+                h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
+                let (mut rd, wr) = app.into_split();
+                // Dropping the write half is a shutdown(SHUT_WR). Supporting it
+                // needs a direction flag on the close frame; today's raw pipe
+                // drops both directions on either EOF too, and this matches it.
+                drop(wr);
+                let mut buf = [0u8; 1];
+                assert_eq!(rd.read(&mut buf).await.unwrap(), 0);
             });
         }
 
