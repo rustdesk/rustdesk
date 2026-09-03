@@ -679,7 +679,7 @@ mod tunnel {
                         match msg.union {
                             Some(message::Union::PortForwardChannel(ch)) => {
                                 if let Some(err) = handle.on_frame(ch) {
-                                    interface.msgbox("error", "Error", &err, "");
+                                    interface.on_error(&err);
                                 }
                             }
                             Some(message::Union::TestDelay(t)) => {
