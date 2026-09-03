@@ -25,6 +25,10 @@ pub const MAX_FRAME: usize = 64 * 1024;
 pub const UPDATE_THRESHOLD: u32 = CHANNEL_WINDOW / 2;
 pub const MAX_CHANNELS: usize = 256;
 pub const DATA_QUEUE_FRAMES: usize = 128;
+/// Never keep more than our own advertised window in flight, whatever the peer
+/// offers. The controlled side's sink is unbounded, so credit is the only bound
+/// on how much target data it buffers, and the peer chooses that number.
+pub const MAX_SEND_CREDIT: u32 = CHANNEL_WINDOW;
 
 pub fn effective_window(advertised: u32) -> u32 {
     advertised.max(INITIAL_WINDOW)
@@ -86,7 +90,7 @@ pub struct SendCredit {
 impl SendCredit {
     pub fn new(initial: u32) -> Self {
         Self {
-            credit: Mutex::new(initial),
+            credit: Mutex::new(initial.min(MAX_SEND_CREDIT)),
             notify: Notify::new(),
         }
     }
@@ -112,7 +116,7 @@ impl SendCredit {
     pub fn add(&self, n: u32) {
         {
             let mut credit = self.credit.lock().unwrap();
-            *credit = credit.saturating_add(n);
+            *credit = credit.saturating_add(n).min(MAX_SEND_CREDIT);
         }
         self.notify.notify_waiters();
         self.notify.notify_one();
@@ -758,6 +762,19 @@ mod tests {
     }
 
     #[test]
+    fn send_credit_is_capped_whatever_the_peer_advertises() {
+        rt().block_on(async {
+            let credit = SendCredit::new(u32::MAX);
+            assert_eq!(credit.take(usize::MAX).await, MAX_SEND_CREDIT as usize);
+            // A flood of window updates cannot lift it past the cap either.
+            for _ in 0..10 {
+                credit.add(u32::MAX);
+            }
+            assert_eq!(credit.take(usize::MAX).await, MAX_SEND_CREDIT as usize);
+        });
+    }
+
+    #[test]
     fn raise_initial_rebases_credit_from_initial_window() {
         rt().block_on(async {
             let credit = SendCredit::new(INITIAL_WINDOW);
@@ -1246,7 +1263,7 @@ mod tests {
         }
 
         #[test]
-        fn many_channels_echo_concurrently_and_a_bulk_one_does_not_starve_them() {
+        fn many_channels_echo_concurrently() {
             rt().block_on(async {
                 let (h, port) = muxed_tunnel().await;
                 let mut apps = Vec::new();
@@ -1255,7 +1272,8 @@ mod tests {
                     h.open("127.0.0.1", port as i32, sock, vec![i]).unwrap();
                     apps.push(app);
                 }
-                // Channel 0 streams 4 MiB; the others each expect their one byte back promptly.
+                // Twenty channels round-trip concurrently: channel 0 streams 4 MiB
+                // while the other nineteen each exchange one byte.
                 // Read and write the bulk socket from separate tasks: the echo can only
                 // drain if this side keeps reading while it writes.
                 let bulk = vec![0xAB; 4 << 20];
@@ -1287,6 +1305,41 @@ mod tests {
                     assert_eq!(b[0], (i + 1) as u8);
                 }
                 bulk_reader.await.unwrap();
+                let _bulk_wr = bulk_writer.await.unwrap();
+            });
+        }
+
+        #[test]
+        fn a_channel_opened_during_a_bulk_transfer_is_served_promptly() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                let (bulk_app, bulk_sock) = local_pair().await;
+                h.open("127.0.0.1", port as i32, bulk_sock, vec![]).unwrap();
+                let bulk = vec![0xAB; 4 << 20];
+                let (mut bulk_rd, mut bulk_wr) = bulk_app.into_split();
+                let bulk_writer = {
+                    let bulk = bulk.clone();
+                    tokio::spawn(async move {
+                        bulk_wr.write_all(&bulk).await.unwrap();
+                        // Holding the write half open: dropping it half-closes
+                        // the socket, which ends the channel by design.
+                        bulk_wr
+                    })
+                };
+                // Wait until a mebibyte is back, so the bulk channel is
+                // demonstrably mid-flight before anything else is opened.
+                let mut back = vec![0u8; 1 << 20];
+                bulk_rd.read_exact(&mut back).await.unwrap();
+                let (mut app, sock) = local_pair().await;
+                h.open("127.0.0.1", port as i32, sock, vec![42]).unwrap();
+                let mut b = [0u8; 1];
+                tokio::time::timeout(std::time::Duration::from_secs(2), app.read_exact(&mut b))
+                    .await
+                    .expect("a channel opened during a bulk transfer starved")
+                    .unwrap();
+                assert_eq!(b[0], 42);
+                let mut rest = vec![0u8; bulk.len() - (1 << 20)];
+                bulk_rd.read_exact(&mut rest).await.unwrap();
                 let _bulk_wr = bulk_writer.await.unwrap();
             });
         }
