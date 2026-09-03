@@ -183,6 +183,25 @@ class PointerEventToRust {
   }
 }
 
+/// Why [InputModel.handlePointerEvent] did (or did not) send an event.
+/// Callers that open a stateful gesture (pan_start) use this to pick the
+/// right recovery: a transient drop is worth retrying with the next event,
+/// while a protected drop is the peer-control arbitration deliberately
+/// suppressing this input — it must not be replayed later.
+enum PointerEventSendResult {
+  /// The event was accepted and queued onto the pan event chain.
+  sent,
+
+  /// Dropped because peer control is protected (the timeout window after
+  /// peer cursor activity) or the arbitration did not grant control —
+  /// input suppression is intentional, the input must not be replayed.
+  droppedProtected,
+
+  /// Dropped because the event could not be admitted yet (e.g. the remote
+  /// rect is not ready) — a transient condition worth retrying.
+  droppedTransient,
+}
+
 class ToReleaseRawKeys {
   RawKeyEvent? lastLShiftKeyEvent;
   RawKeyEvent? lastRShiftKeyEvent;
@@ -1299,13 +1318,19 @@ class InputModel {
         // protected, or no remote rect yet). Leave the pan closed and skip the
         // update in that case, so the next deliverable move retries the start
         // instead of emitting an update the peer has no gesture for.
-        if (!handlePointerEvent(
-            'touch', kMouseEventTypePanStart, _trackpadPanStartPos)) {
-          // The whole-pixel part was already taken out of the accumulator:
-          // put it back so it is retried with the next deliverable move
-          // instead of being dropped — a fast flick during the blocked
-          // window would otherwise lose every frame's pixels.
-          _trackpadScrollUnsent += Offset(x.toDouble(), y.toDouble());
+        final start = handlePointerEvent(
+            'touch', kMouseEventTypePanStart, _trackpadPanStartPos);
+        if (start != PointerEventSendResult.sent) {
+          // The whole-pixel part was already taken out of the accumulator.
+          // A transient drop (no remote rect yet) is worth retrying: put the
+          // pixels back so they go out with the next deliverable move — a
+          // fast flick during the blocked window would otherwise lose every
+          // frame's pixels. A protected drop is the peer-control arbitration
+          // suppressing this input: the pixels must be discarded, not
+          // replayed as a jump when the protection window expires.
+          if (start == PointerEventSendResult.droppedTransient) {
+            _trackpadScrollUnsent += Offset(x.toDouble(), y.toDouble());
+          }
           return;
         }
         _trackpadPanOpen = true;
@@ -1316,19 +1341,25 @@ class InputModel {
       // cumulative net delta clamped once at the end would diverge whenever
       // the receiver clamps at the top/left edge mid-gesture and the gesture
       // then reverses. An update that is not queued counts nowhere: the
-      // receiver did not apply it either. Give rejected pixels back to the
-      // accumulator for the same reason the start path does: they are
-      // scroll the user performed, not scroll to discard.
-      if (handlePointerEvent('touch', kMouseEventTypePanUpdate, delta)) {
+      // receiver did not apply it either.
+      final result =
+          handlePointerEvent('touch', kMouseEventTypePanUpdate, delta);
+      if (result == PointerEventSendResult.sent) {
         // Null is unreachable while the pan is open: opening requires a
         // queued pan_start, which seeded the mirror.
         _trackpadPanPos = Point(
           max(0.0, _trackpadPanPos!.x - delta.dx),
           max(0.0, _trackpadPanPos!.y - delta.dy),
         );
-      } else {
+      } else if (result == PointerEventSendResult.droppedTransient) {
+        // An admission failure (not currently reachable for pan_update —
+        // only the start maps positions): retry with the next frame.
         _trackpadScrollUnsent += delta;
       }
+      // droppedProtected: discard. The pixels were already taken out of the
+      // accumulator, and the arbitration suppressed this input on purpose —
+      // replaying it after the protection window expires would bypass the
+      // control arbitration that rejected it.
       return;
     }
     bind.sessionSendMouse(
@@ -2024,17 +2055,19 @@ class InputModel {
     return Offset(x, y);
   }
 
-  /// Send a touch pointer event to the peer. Returns whether the event was
-  /// accepted and queued — callers that open a stateful gesture (pan_start)
-  /// must check this, because the event is dropped when peer control is
-  /// protected, the remote rect is not ready, or the view is in camera mode.
-  /// The actual send is chained onto [_panEventChain] so pan_start /
-  /// pan_update / pan_end reach the peer in submission order.
-  bool handlePointerEvent(String kind, String type, Offset offset) {
+  /// Send a touch pointer event to the peer. The result distinguishes why a
+  /// dropped event was dropped — callers that open a stateful gesture
+  /// (pan_start) must check it: a transient drop (remote rect not ready) is
+  /// worth retrying with the next event, while a protected drop means the
+  /// peer-control arbitration suppressed this input, which must not be
+  /// replayed later. The actual send is chained onto [_panEventChain] so
+  /// pan_start / pan_update / pan_end reach the peer in submission order.
+  PointerEventSendResult handlePointerEvent(
+      String kind, String type, Offset offset) {
     // Camera mode is a pure no-op: return before any position mapping or
     // peer-control check, both of which mutate local cursor/canvas state
     // (handlePointerDevicePos, _checkPeerControlProtected) without sending.
-    if (isViewCamera) return false;
+    if (isViewCamera) return PointerEventSendResult.droppedTransient;
     double x = offset.dx;
     double y = offset.dy;
     if (type == kMouseEventTypePanUpdate) {
@@ -2046,10 +2079,10 @@ class InputModel {
       // only the hard protection flag here — the pan_start already ran the
       // full check with a real position.
       if (parent.target!.cursorModel.isPeerControlProtected) {
-        return false;
+        return PointerEventSendResult.droppedProtected;
       }
     } else if (_checkPeerControlProtected(x, y)) {
-      return false;
+      return PointerEventSendResult.droppedProtected;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
     // to-do: handle mouse events
@@ -2070,7 +2103,7 @@ class InputModel {
         type,
       );
       if (pos == null) {
-        return false;
+        return PointerEventSendResult.droppedTransient;
       }
       if (type == kMouseEventTypePanStart) {
         // Seed the receiver-position mirror from the mapped start payload:
@@ -2096,7 +2129,7 @@ class InputModel {
         debugPrint('[InputModel] failed to send pan event $type: $e');
       }
     });
-    return true;
+    return PointerEventSendResult.sent;
   }
 
   /// [FIX #15630] Queue a pan_end with no eligibility checks (peer-control
