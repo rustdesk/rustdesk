@@ -395,7 +395,6 @@ mod tunnel {
     };
 
     // Internal state only; `Claim` and `Ready` are the API listeners see.
-    #[derive(Clone)]
     enum TunnelState {
         Unset,
         Establishing,
@@ -479,8 +478,11 @@ mod tunnel {
                 next_id: AtomicI32::new(1),
             });
             let state = self.state.clone();
-            tokio::spawn(tunnel_loop(stream, handle.clone(), data_rx, control_rx, interface, state));
+            // Publish before spawning: if the loop exits first and resets the
+            // state, a later publish here would pin it at Muxed with a dead
+            // handle and the window could never re-establish.
             self.state.send_replace(TunnelState::Muxed(handle.clone()));
+            tokio::spawn(tunnel_loop(stream, handle.clone(), data_rx, control_rx, interface, state));
             handle
         }
 
@@ -1068,6 +1070,46 @@ mod tests {
                 assert_eq!(&buf, b"HTTP/1.0 200 OK\r\n");
                 peer.send(&close_msg(id)).await.unwrap();
                 assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+            });
+        }
+
+        #[test]
+        fn every_open_precedes_its_own_channels_first_data() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                let h = t.set_muxed(ours, NoUi);
+                // Twenty channels, each with one byte of pipelined data behind
+                // its open. An open on the control queue can lose the loop's
+                // random tie-break to a data frame, so one channel would be a
+                // coin flip; twenty make a wrong implementation fail every run.
+                const N: usize = 20;
+                let mut apps = Vec::new();
+                for i in 0..N {
+                    let (app, sock) = local_pair().await;
+                    h.open("localhost", 1, sock, vec![i as u8]).unwrap();
+                    apps.push(app);
+                }
+                let mut opened = std::collections::HashSet::new();
+                let mut seen_data = 0;
+                while seen_data < N {
+                    let ch = recv_frame(&mut peer).await;
+                    match &ch.union {
+                        Some(port_forward_channel::Union::Open(o)) => {
+                            assert!(opened.insert(o.channel_id), "duplicate open");
+                        }
+                        Some(port_forward_channel::Union::Data(d)) => {
+                            assert!(
+                                opened.contains(&d.channel_id),
+                                "data for channel {} arrived before its open",
+                                d.channel_id
+                            );
+                            seen_data += 1;
+                        }
+                        other => panic!("unexpected {:?}", other),
+                    }
+                }
             });
         }
 
