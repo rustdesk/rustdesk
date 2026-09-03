@@ -87,7 +87,8 @@ jobs:
         run: |
           # The committed constraint targets the default Flutter 3.24 matrix. Flutter-OH 3.41
           # exposes newer SelectionHandler APIs implemented by extended_text 15.x.
-          sed -i -E 's/^([[:space:]]*extended_text:).*/\1 ^15.0.2/' pubspec.yaml
+          sed -i.bak 's/^[[:space:]]*extended_text:.*/  extended_text: ^15.0.2/' pubspec.yaml
+          rm -f pubspec.yaml.bak
           flutter pub get
 
       - name: Cross-compile OHOS Flutter bridge
