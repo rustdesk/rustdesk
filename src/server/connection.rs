@@ -257,6 +257,7 @@ pub struct Connection {
     view_camera: bool,
     terminal: bool,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
+    port_forward_mux: Option<super::port_forward_mux::PortForwardMux>,
     port_forward_address: String,
     tx_to_cm: mpsc::UnboundedSender<ipc::Data>,
     authorized: bool,
@@ -469,6 +470,7 @@ impl Connection {
             view_camera: false,
             terminal: false,
             port_forward_socket: None,
+            port_forward_mux: None,
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
@@ -1044,6 +1046,7 @@ impl Connection {
                         conn.on_close("Timeout", true).await;
                         break;
                     }
+                    conn.push_port_forward_label();
                     // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
                     if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
                         conn.last_test_delay = Some(Instant::now());
@@ -1665,6 +1668,18 @@ impl Connection {
         let Some(login_request::Union::PortForward(pf)) = self.lr.union.as_ref() else {
             return true;
         };
+        if pf.multiplex {
+            if let Some(tx) = self.inner.tx.clone() {
+                self.port_forward_mux = Some(super::port_forward_mux::PortForwardMux::new(
+                    tx,
+                    self.port_forward_address.clone(),
+                ));
+                return true;
+            }
+            // Without a sender there is no way to answer channel frames: fall
+            // through to the raw pipe below rather than return with neither
+            // flag set, which would make the connection look like remote desktop.
+        }
         let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
         self.port_forward_address = addr.clone();
@@ -1752,7 +1767,7 @@ impl Connection {
         self.clear_id_whitelist_failures();
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
             (1, AuthConnType::FileTransfer)
-        } else if self.port_forward_socket.is_some() {
+        } else if self.is_port_forward() {
             (2, AuthConnType::PortForward)
         } else if self.view_camera {
             (3, AuthConnType::ViewCamera)
@@ -1865,7 +1880,12 @@ impl Connection {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
-        if self.port_forward_socket.is_some() {
+        if self.is_port_forward() {
+            pi.features = Some(Features {
+                port_forward_mux: self.port_forward_mux.is_some(),
+                ..Default::default()
+            })
+            .into();
             let mut msg_out = Message::new();
             res.set_peer_info(pi);
             msg_out.set_login_response(res);
@@ -2063,9 +2083,14 @@ impl Connection {
     #[inline]
     fn is_remote(&self) -> bool {
         self.file_transfer.is_none()
-            && self.port_forward_socket.is_none()
+            && !self.is_port_forward()
             && !self.view_camera
             && !self.terminal
+    }
+
+    #[inline]
+    fn is_port_forward(&self) -> bool {
+        self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
     }
 
     fn try_sub_monitor_services(&mut self) {
@@ -2209,6 +2234,14 @@ impl Connection {
     #[inline]
     fn send_to_cm(&mut self, data: ipc::Data) {
         self.tx_to_cm.send(data).ok();
+    }
+
+    fn push_port_forward_label(&mut self) {
+        let Some(label) = self.port_forward_mux.as_mut().and_then(|m| m.sweep()) else {
+            return;
+        };
+        self.port_forward_address = label.clone();
+        log::debug!("port forward targets now {}", label);
     }
 
     #[inline]
@@ -3867,6 +3900,25 @@ impl Connection {
                         self.refresh_video_display(Some(request.display as usize));
                     }
                 }
+                Some(message::Union::PortForwardChannel(ch)) => {
+                    let permitted =
+                        Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions);
+                    // Only open/close can change the target set; sweeping after every
+                    // data frame would walk the whole table per 64 KiB.
+                    let may_change_targets = matches!(
+                        ch.union,
+                        Some(port_forward_channel::Union::Open(_))
+                            | Some(port_forward_channel::Union::Close(_))
+                    );
+                    if let Some(mux) = self.port_forward_mux.as_mut() {
+                        mux.handle(ch, permitted);
+                        if may_change_targets {
+                            self.push_port_forward_label();
+                        }
+                    } else {
+                        log::debug!("port forward channel frame on a non-multiplexed connection");
+                    }
+                }
                 Some(message::Union::TerminalAction(action)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
@@ -5076,6 +5128,9 @@ impl Connection {
         let data = ipc::Data::Close;
         self.tx_to_cm.send(data).ok();
         self.port_forward_socket.take();
+        if let Some(mut mux) = self.port_forward_mux.take() {
+            mux.close_all();
+        }
     }
 
     // The `reason` should be consistent with `check_if_retry` if not empty
@@ -5677,7 +5732,7 @@ impl Connection {
         let allowed = match conn_type {
             AuthConnType::Remote => true,
             AuthConnType::FileTransfer => Self::is_file_transfer_scoped_message(msg),
-            AuthConnType::PortForward => false,
+            AuthConnType::PortForward => Self::is_port_forward_scoped_message(msg),
             AuthConnType::ViewCamera => Self::is_view_camera_scoped_message(msg),
             AuthConnType::Terminal => Self::is_terminal_scoped_message(msg),
         };
@@ -5749,6 +5804,10 @@ impl Connection {
         #[cfg(not(windows))]
         let _ = misc;
         false
+    }
+
+    fn is_port_forward_scoped_message(msg: &Message) -> bool {
+        matches!(msg.union.as_ref(), Some(message::Union::PortForwardChannel(_)))
     }
 
     fn is_terminal_scoped_message(msg: &Message) -> bool {
@@ -5901,6 +5960,7 @@ impl Connection {
             Some(message::Union::ScreenshotResponse(_)) => "screenshot_response",
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::TerminalResponse(_)) => "terminal_response",
+            Some(message::Union::PortForwardChannel(_)) => "port_forward_channel",
             Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
             Some(_) => "message.other",
             None => "empty",
@@ -7230,6 +7290,10 @@ mod test {
                         }),
                         Some("misc.option"),
                     ),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
+                        Some("port_forward_channel"),
+                    ),
                 ],
             ),
             (
@@ -7290,6 +7354,10 @@ mod test {
                             o.disable_audio = BoolOption::Yes.into();
                         }),
                         Some("misc.option"),
+                    ),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
+                        Some("port_forward_channel"),
                     ),
                 ],
             ),
@@ -7391,6 +7459,7 @@ mod test {
                         }),
                         None,
                     ),
+                    (msg(|m| m.set_port_forward_channel(PortForwardChannel::new())), None),
                 ],
             ),
         ];
