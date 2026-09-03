@@ -27,7 +27,7 @@ pub enum CoreMainAction {
     ExitFailure(hbb_common::anyhow::Error),
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 fn finish_macos_update(result: hbb_common::ResultType<()>) -> Option<CoreMainAction> {
     match result {
         Ok(()) => None,
@@ -859,7 +859,7 @@ fn is_root() -> bool {
     crate::platform::is_root()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", test))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
     matches!(
         args.first().map(String::as_str),
@@ -907,6 +907,7 @@ mod tests {
         values.iter().map(|value| value.to_string()).collect()
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn user_main_ipc_scope_cli_command_matches_management_commands_only() {
         for command in [
@@ -934,6 +935,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn macos_manual_update_result_preserves_failure() {
         let failure =

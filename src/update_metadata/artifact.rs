@@ -8,7 +8,7 @@ use url::Url;
 #[derive(Clone, Copy)]
 pub(super) enum ArtifactUrlPolicy<'a> {
     ExactPrefix(&'a str),
-    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
     SignedHttps,
 }
 
@@ -51,7 +51,7 @@ fn validate_artifact_url_policy(
                 ));
             }
         }
-        #[cfg(any(target_os = "macos", test))]
+        #[cfg(target_os = "macos")]
         ArtifactUrlPolicy::SignedHttps => {
             if _parsed_url.scheme() != "https"
                 || _parsed_url.host_str().is_none()

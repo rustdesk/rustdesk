@@ -1,15 +1,12 @@
-#[cfg(target_os = "macos")]
-use hbb_common::{anyhow::Context, log};
-use hbb_common::{bail, ResultType};
-#[cfg(target_os = "macos")]
+use hbb_common::{
+    anyhow::{anyhow, Context},
+    bail, log, ResultType,
+};
 use std::{io::Read, path::Path};
 
-#[cfg(target_os = "macos")]
 const UPDATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
-#[cfg(any(target_os = "macos", test))]
 const PUBLIC_MACOS_BUNDLE_ID: &str = "com.carriez.rustdesk";
 const MACOS_UPDATE_USAGE: &str = "Usage: --update [update.dmg --metadata rustdesk-update.json --signature rustdesk-update.json.sig]";
-#[cfg(target_os = "macos")]
 const LEGACY_UPDATE_WARNING: &str =
     "legacy offline update: signed metadata not found; release hash was not verified";
 
@@ -46,21 +43,19 @@ fn parse_macos_update_args(args: &[String]) -> ResultType<MacosUpdateArguments<'
     }
 }
 
-#[cfg(any(target_os = "macos", test))]
 fn expected_update_package_id(
     is_custom_client: bool,
     bundle_id: Option<String>,
 ) -> ResultType<String> {
     let bundle_id = bundle_id
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| hbb_common::anyhow::anyhow!("client bundle identifier is missing"))?;
+        .ok_or_else(|| anyhow!("client bundle identifier is missing"))?;
     if !is_custom_client && bundle_id == PUBLIC_MACOS_BUNDLE_ID {
         return Ok(crate::update_metadata::PUBLIC_UPDATE_PACKAGE_ID.to_owned());
     }
     Ok(bundle_id)
 }
 
-#[cfg(target_os = "macos")]
 fn installed_update_package_id() -> ResultType<String> {
     expected_update_package_id(
         crate::common::is_custom_client(),
@@ -68,7 +63,6 @@ fn installed_update_package_id() -> ResultType<String> {
     )
 }
 
-#[cfg(target_os = "macos")]
 fn read_update_sidecar(path: &str) -> ResultType<Vec<u8>> {
     let path_metadata = std::fs::symlink_metadata(path)
         .with_context(|| format!("failed to inspect update sidecar {path}"))?;
@@ -89,7 +83,6 @@ fn read_update_sidecar(path: &str) -> ResultType<Vec<u8>> {
     Ok(bytes)
 }
 
-#[cfg(target_os = "macos")]
 fn update_current_app() -> ResultType<()> {
     println!("Starting update process...");
     log::info!("Starting update process...");
@@ -102,17 +95,15 @@ fn update_current_app() -> ResultType<()> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 fn update_legacy_dmg(dmg_path: &str) -> ResultType<()> {
     eprintln!("Warning: {LEGACY_UPDATE_WARNING}");
-    hbb_common::log::warn!("{LEGACY_UPDATE_WARNING}");
+    log::warn!("{LEGACY_UPDATE_WARNING}");
     println!("Updating from DMG: {dmg_path}");
     crate::platform::update_from_dmg(dmg_path)?;
     println!("Update process from DMG started successfully.");
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 fn update_verified_dmg(
     dmg_path: &str,
     metadata_path: &str,
@@ -121,7 +112,7 @@ fn update_verified_dmg(
     let file_name = Path::new(dmg_path)
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| hbb_common::anyhow::anyhow!("invalid update DMG file name"))?;
+        .ok_or_else(|| anyhow!("invalid update DMG file name"))?;
     let metadata = read_update_sidecar(metadata_path)?;
     let signature = read_update_sidecar(signature_path)?;
     let expected_package_id = installed_update_package_id()?;
@@ -144,7 +135,6 @@ fn update_verified_dmg(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn execute_macos_update(args: &[String]) -> ResultType<()> {
     match parse_macos_update_args(args)? {
         MacosUpdateArguments::CurrentApp => update_current_app(),

@@ -1,4 +1,7 @@
 use super::*;
+use crate::update_metadata::offline::{
+    verify_offline_update_metadata_with_options, OfflineVerificationOptions,
+};
 
 fn verify_offline(fixture: &Fixture, local_file_name: &str) -> ResultType<VerifiedUpdateArtifact> {
     verify_offline_for_package(fixture, local_file_name, PUBLIC_UPDATE_PACKAGE_ID)
