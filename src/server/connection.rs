@@ -2241,7 +2241,8 @@ impl Connection {
             return;
         };
         self.port_forward_address = label.clone();
-        log::debug!("port forward targets now {}", label);
+        log::info!("port forward targets now {}", label);
+        self.send_to_cm(ipc::Data::UpdatePortForward(label));
     }
 
     #[inline]

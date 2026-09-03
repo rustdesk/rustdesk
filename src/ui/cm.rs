@@ -72,6 +72,10 @@ impl InvokeUiCM for SciterHandler {
         );
     }
 
+    fn update_port_forward(&self, id: i32, port_forward: String) {
+        self.call("updatePortForward", &make_args!(id, port_forward));
+    }
+
     fn file_transfer_log(&self, _action: &str, _log: &str) {}
 }
 

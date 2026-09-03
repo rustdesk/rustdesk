@@ -348,6 +348,7 @@ pub enum Data {
         name: String,
         enabled: bool,
     },
+    UpdatePortForward(String),
     SystemInfo(Option<String>),
     ClickTime(i64),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
