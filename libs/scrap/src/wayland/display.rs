@@ -407,6 +407,15 @@ pub fn get_display_rects_for_uinput() -> Vec<DisplayRect> {
     logical_rects_of(&get_displays().displays)
 }
 
+/// The rects `get_display_rects_for_uinput` would produce for a GIVEN snapshot, for a caller
+/// that must derive several values from ONE consistent view instead of re-fetching (a refresh
+/// between two fetches would misalign the indices).
+pub fn logical_rects_of_displays(
+    displays: &[hbb_common::platform::linux::WaylandDisplayInfo],
+) -> Vec<DisplayRect> {
+    logical_rects_of(displays)
+}
+
 /// Remap an injected coordinate from the layout the client still believes in
 /// (`baseline`, captured at session init) to the current compositor layout (`live`).
 ///
@@ -420,6 +429,26 @@ pub fn get_display_rects_for_uinput() -> Vec<DisplayRect> {
 /// Returns the input unchanged when the point is outside every baseline display or the
 /// matched display is gone, so a failed match never moves the cursor further off than
 /// leaving it alone. https://github.com/rustdesk/rustdesk/issues/15601
+/// The live counterpart of `baseline[bi]`: matched by connector name, or by index while the
+/// compositor reports no names and the display count is unchanged. A named display that is simply
+/// gone from the live layout has none, rather than being matched to whatever now sits at its index.
+pub fn live_counterpart<'a>(
+    bi: usize,
+    baseline: &[DisplayRect],
+    live: &'a [DisplayRect],
+) -> Option<&'a DisplayRect> {
+    let b = baseline.get(bi)?;
+    if b.name.is_empty() {
+        if baseline.len() == live.len() {
+            live.get(bi)
+        } else {
+            None
+        }
+    } else {
+        live.iter().find(|r| r.name == b.name)
+    }
+}
+
 pub fn remap_to_live_layout(
     x: i32,
     y: i32,
@@ -433,19 +462,7 @@ pub fn remap_to_live_layout(
     else {
         return (x, y);
     };
-    let matched = if b.name.is_empty() {
-        // Nameless compositor: index-match, but only while the count is unchanged. A
-        // named display that is simply gone from the live layout must fall through to
-        // "unchanged" below, not get index-matched to whatever now sits at its index.
-        if baseline.len() == live.len() {
-            live.get(bi)
-        } else {
-            None
-        }
-    } else {
-        live.iter().find(|r| r.name == b.name)
-    };
-    let Some(l) = matched else {
+    let Some(l) = live_counterpart(bi, baseline, live) else {
         return (x, y);
     };
     // Map the point into the live rectangle, preserving position within the display so a
@@ -561,6 +578,26 @@ mod tests {
             w,
             h,
         }
+    }
+
+    // The hotspot calibration measures an injected point that the input path has ALREADY
+    // remapped, so the rect it measures against has to come from the live layout too. Same
+    // rescale as the case below: DP-2 has shifted, and the init snapshot still says 2560.
+    #[test]
+    fn test_live_counterpart_follows_a_shifted_display() {
+        let baseline = [
+            rect("DP-1", 0, 0, 2560, 1440),
+            rect("DP-2", 2560, 0, 2560, 1440),
+        ];
+        let live = [
+            rect("DP-1", 0, 0, 2048, 1440),
+            rect("DP-2", 2048, 0, 2560, 1440),
+        ];
+        assert_eq!(live_counterpart(1, &baseline, &live).map(|r| r.x), Some(2048));
+        // A display the live layout no longer carries has no counterpart, so the caller can
+        // fall back rather than measure against a stranger.
+        let gone = [rect("DP-1", 0, 0, 2048, 1440)];
+        assert!(live_counterpart(1, &baseline, &gone).is_none());
     }
 
     // The reported failure: connect to the second display, rescale the primary.

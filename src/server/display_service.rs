@@ -80,6 +80,25 @@ pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display:
     lock.live.clear();
 }
 
+/// The layout injected coordinates are actually in, which is the only thing a consumer that
+/// measures such a coordinate may compare against.
+///
+/// It is NOT simply `live`: the poll writes `live` before it knows whether the uinput range could
+/// be reprogrammed, and until that succeeds `remap_wayland_uinput_coord` is still a no-op, so the
+/// points it records are in the baseline space. A range apply can take up to three seconds and can
+/// fail outright, and a reader that took `live` through that window would measure a point against
+/// a rectangle it was never mapped into. Reading the same flag the remap reads keeps the two in one
+/// space by construction.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(super) fn wayland_layout_of_injected_coords() -> Vec<scrap::wayland::display::DisplayRect> {
+    let lock = WAYLAND_LAYOUT.lock().unwrap();
+    if WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed) {
+        lock.live.clone()
+    } else {
+        lock.baseline.clone()
+    }
+}
+
 // Remap an injected coordinate onto the live compositor layout when it has drifted from
 // what the client was told at session init. Lock-free no-op otherwise.
 #[cfg(target_os = "linux")]
@@ -719,5 +738,48 @@ mod tests {
         assert_eq!(normalize_primary_display_idx(0, 2), 0);
         assert_eq!(normalize_primary_display_idx(1, 2), 1);
         assert_eq!(normalize_primary_display_idx(2, 2), 0);
+    }
+}
+
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+mod injected_space_tests {
+    use super::*;
+    use scrap::wayland::display::{remap_to_live_layout, DisplayRect};
+
+    fn rect(name: &str, x: i32, w: i32) -> DisplayRect {
+        DisplayRect {
+            name: name.to_owned(),
+            x,
+            y: 0,
+            w,
+            h: 1440,
+        }
+    }
+
+    // rustdesk#15897: whatever measures an injected coordinate has to read the same space the input
+    // path put it in. The poll writes `live` before it knows the uinput range could be reprogrammed,
+    // and until then the remap is still a no-op, so `live` alone is the wrong answer.
+    #[test]
+    fn the_calibration_reads_the_space_the_remap_writes() {
+        let baseline = vec![rect("DP-1", 0, 2560), rect("DP-2", 2560, 2560)];
+        let live = vec![rect("DP-1", 0, 2048), rect("DP-2", 2048, 2560)];
+        {
+            let mut lock = WAYLAND_LAYOUT.lock().unwrap();
+            lock.baseline = baseline.clone();
+            lock.live = live.clone();
+        }
+
+        // Range not applied yet: the remap leaves the point alone, so the point is in the baseline.
+        WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
+        assert_eq!(remap_to_live_layout(2560, 0, &baseline, &live), (2048, 0));
+        assert_eq!(remap_wayland_uinput_coord(2560, 0), (2560, 0));
+        assert_eq!(wayland_layout_of_injected_coords(), baseline);
+
+        // Range applied: now the remap moves it, and the accessor has to follow.
+        WAYLAND_LAYOUT_DRIFTED.store(true, Ordering::Relaxed);
+        assert_eq!(remap_wayland_uinput_coord(2560, 0), (2048, 0));
+        assert_eq!(wayland_layout_of_injected_coords(), live);
+
+        WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
     }
 }

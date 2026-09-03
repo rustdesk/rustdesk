@@ -77,6 +77,14 @@ fn connector_key(d: &DrmDisplayInfo) -> String {
 }
 
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
+fn available_drm_display_list() -> Vec<DrmDisplayInfo> {
+    match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => list.clone(),
+        _ => Vec::new(),
+    }
+}
+
+/// Takes DRM_STATE: never call it while holding one of the per-display maps below.
 fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
     match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.get(display.max(0) as usize).cloned(),
@@ -450,6 +458,7 @@ async fn recv_thread(
             &Data::DrmStart {
                 display: wire_idx as i32,
                 need_cpu,
+                want_cursor_pos: true,
             },
             None,
         )
@@ -460,6 +469,29 @@ async fn recv_thread(
     }
     let _ = tx.send(Ok((displays, wire_idx)));
 
+    // Cursor hotspot calibration state for THIS stream (see `calibrated_hotspot`): the last
+    // visible shape as the wire delivered it, whether its hotspot is kernel truth, how long the
+    // plane has sat still, and the per-settle-window bookkeeping. `cal_rect_phys` snapshots the
+    // display-rect lookup ONCE per settle window: the enumeration behind it is backed off and
+    // fork-heavy on failure, so it must not be polled per tick from this loop.
+    let mut cal_wire: Option<DrmCursorData> = None;
+    let mut cal_from_property = false;
+    let mut cal_plane: Option<(i32, i32)> = None;
+    let mut cal_plane_stable: u32 = 0;
+    let mut cal_applied: Option<(i32, i32)> = None;
+    let mut cal_rect_phys: Option<((i32, i32, i32, i32), (i32, i32))> = None;
+    let mut cal_window: u64 = 0;
+    // A measurement only enters the cross-shape cache once a SECOND settle window agrees, so a
+    // one-off race (a local user parking the mouse near the peer's stale point) cannot poison it.
+    let mut cal_pending_cache: Option<((i32, i32), u64)> = None;
+    // Reopen trigger: the peer's last injected point at the last attempt window, so input that
+    // arrives AFTER the ~1 s window closed (without moving the plane) re-arms one window.
+    let mut cal_seen_inj: Option<(i32, i32)> = None;
+    // Stale-producer diagnostic: a service that predates the calibration decodes DrmStart fine
+    // (serde default) and simply never streams DrmCursorPos - say so once instead of never firing.
+    let mut cal_pos_seen = false;
+    let mut cal_frames_without_pos: u32 = 0;
+
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
@@ -469,6 +501,21 @@ async fn recv_thread(
             Some(Ok(pair)) => pair,
             Some(Err(err)) => break format!("recv: {err}"),
         };
+        // A service that predates the calibration decodes our DrmStart fine (serde default) and
+        // simply never streams DrmCursorPos; frames keep flowing, so count them and say so ONCE
+        // instead of leaving "hotspot stays the guess" unattributable.
+        if matches!(msg, Data::DrmFrameDmabuf(_) | Data::DrmFrame { .. })
+            && cal_wire.is_some()
+            && !cal_pos_seen
+        {
+            cal_frames_without_pos = cal_frames_without_pos.saturating_add(1);
+            if cal_frames_without_pos == 90 {
+                log::info!(
+                    "drm: 90 frames with a visible cursor and no cursor-position stream; \
+                     the service predates cursor calibration, hotspots stay the reader guess"
+                );
+            }
+        }
         match msg {
             Data::DrmFrameDmabuf(desc) => {
                 let conv = match converter.as_mut() {
@@ -562,6 +609,9 @@ async fn recv_thread(
                 height,
                 hotx,
                 hoty,
+                x,
+                y,
+                hot_from_property,
             } => {
                 // get_cursor_data() hands `colors` straight to the client, which renders
                 // width*height*4 RGBA bytes: a short body would make it READ PAST THE BUFFER. A
@@ -580,20 +630,199 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        set_drm_cursor(
-                            display,
-                            cursor_epoch,
-                            DrmCursorData {
-                                id,
-                                width: width as i32,
-                                height: height as i32,
-                                hotx,
-                                hoty,
-                                colors: raw,
-                            },
-                        );
+                        let mut data = DrmCursorData {
+                            id,
+                            width: width as i32,
+                            height: height as i32,
+                            hotx,
+                            hoty,
+                            colors: raw,
+                        };
+                        if id == scrap::drm_reader::HIDDEN_CURSOR_ID {
+                            cal_wire = None;
+                            cal_plane = None;
+                            cal_pending_cache = None;
+                        } else {
+                            cal_from_property = hot_from_property;
+                            // The position frozen at the shape-change instant is the FIRST
+                            // stability sample, not a measurement: the pointer usually moves at
+                            // the moment the shape flips (that is what flipped it).
+                            cal_plane = Some((x, y));
+                            cal_plane_stable = 0;
+                            cal_rect_phys = None;
+                            cal_applied = None;
+                            cal_pending_cache = None;
+                            cal_frames_without_pos = 0;
+                            if hot_from_property {
+                                cal_wire = None;
+                            } else {
+                                cal_wire = Some(data.clone());
+                                // A shape the compositor re-uses keeps its wire id, so a cached
+                                // measurement corrects it from its first frame.
+                                if let Some((cx, cy)) = cached_cursor_cal(id) {
+                                    if cx < data.width && cy < data.height {
+                                        cal_applied = Some((cx, cy));
+                                        data.hotx = cx;
+                                        data.hoty = cy;
+                                        data.id = remix_cursor_id(id, cx, cy);
+                                    }
+                                }
+                            }
+                        }
+                        set_drm_cursor(display, cursor_epoch, data);
                     }
                     Ok(Err(err)) => break format!("cursor body: {err}"),
+                }
+            }
+            Data::DrmCursorPos { x, y } => {
+                // Position-only header, no raw body; only sent because DrmStart asked for it.
+                // One arrives per capture tick while the cursor is visible; consecutive equal
+                // positions are the stillness signal.
+                cal_pos_seen = true;
+                if cal_plane == Some((x, y)) {
+                    cal_plane_stable = cal_plane_stable.saturating_add(1);
+                } else {
+                    cal_plane = Some((x, y));
+                    cal_plane_stable = 0;
+                    cal_rect_phys = None;
+                }
+                if cal_from_property || cal_wire.is_none() {
+                    // Kernel truth, or no visible shape: nothing to measure.
+                } else {
+                    // Cheap gate first (one mutex): the display lookups below must not run for
+                    // an idle pointer or before the peer ever moved the mouse.
+                    let injected =
+                        crate::server::input_service::last_peer_input_pos_and_age_ms();
+                    // Reopen: input that arrives AFTER the window closed, without moving the
+                    // plane (the peer parked the pointer, then came back), re-arms one window.
+                    if cal_plane_stable > CURSOR_CAL_STABLE_TICKS + CURSOR_CAL_WINDOW_TICKS {
+                        if let Some((pos, age)) = injected {
+                            if (CURSOR_CAL_MIN_INPUT_AGE_MS..=CURSOR_CAL_MAX_INPUT_AGE_MS)
+                                .contains(&age)
+                                && cal_seen_inj != Some(pos)
+                            {
+                                cal_plane_stable = CURSOR_CAL_STABLE_TICKS;
+                                cal_rect_phys = None;
+                            }
+                        }
+                    }
+                    let in_window = (CURSOR_CAL_STABLE_TICKS
+                        ..=CURSOR_CAL_STABLE_TICKS + CURSOR_CAL_WINDOW_TICKS)
+                        .contains(&cal_plane_stable);
+                    if in_window {
+                        if cal_plane_stable == CURSOR_CAL_STABLE_TICKS {
+                            // ONCE per settle window: resolve THIS stream's monitor in the space
+                            // the peer injects in. The wayland output list drives the uinput
+                            // mapping, but its ORDER is not the DRM list's (measured on a T2
+                            // with a cloned external: index 1 named the wrong output), so map
+                            // through the same connector-identity assignment the advertised
+                            // geometry uses; clone layouts overlap at (0,0), which is why
+                            // containment alone cannot pick the rect. At a greeter the wayland
+                            // list is empty and the advertised layout IS the DRM physical one,
+                            // so fall back to it (the mapping degenerates to scale 1).
+                            cal_window = cal_window.wrapping_add(1);
+                            cal_seen_inj = injected.map(|(pos, _)| pos);
+                            let drm_list = available_drm_display_list();
+                            let wl = scrap::wayland::display::get_displays();
+                            let rect = if wl.displays.is_empty() {
+                                display_info_of(display)
+                                    .map(|d| (d.x, d.y, d.width as i32, d.height as i32))
+                            } else {
+                                let rects =
+                                    scrap::wayland::display::logical_rects_of_displays(
+                                        &wl.displays,
+                                    );
+                                // `wl` is the session-init snapshot, but the input path may have
+                                // moved the point onto a different layout, so the rect it is
+                                // measured against has to come from wherever the point actually
+                                // is. Matched the same way the remap matches; the snapshot is the
+                                // fallback while no poll has run.
+                                let live =
+                                    super::display_service::wayland_layout_of_injected_coords();
+                                assign_wayland_outputs(&drm_list, &wl.displays)
+                                    .get(display.max(0) as usize)
+                                    .copied()
+                                    .flatten()
+                                    .and_then(|j| {
+                                        let r = scrap::wayland::display::live_counterpart(
+                                            j, &rects, &live,
+                                        )
+                                        .or_else(|| rects.get(j))?;
+                                        Some((r.x, r.y, r.w, r.h))
+                                    })
+                            };
+                            let phys = display_info_of(display)
+                                .map(|d| (d.width as i32, d.height as i32));
+                            cal_rect_phys = rect.zip(phys);
+                            // One diagnostic line per settle: every input the decision reads,
+                            // so a silent non-calibration is attributable from a log.
+                            if let Some(wire) = &cal_wire {
+                                log::debug!(
+                                    "drm: cursor cal probe d{}: plane=({}, {}) wire={}x{} hot({},{}) prop={} inj={:?} rect_phys={:?}",
+                                    display,
+                                    x,
+                                    y,
+                                    wire.width,
+                                    wire.height,
+                                    wire.hotx,
+                                    wire.hoty,
+                                    cal_from_property,
+                                    injected,
+                                    cal_rect_phys,
+                                );
+                            }
+                        }
+                        let measured = cal_rect_phys.zip(cal_wire.as_ref()).and_then(
+                            |((rect, phys), wire)| {
+                                calibrated_hotspot(
+                                    cal_from_property,
+                                    (wire.width, wire.height),
+                                    injected,
+                                    rect,
+                                    phys,
+                                    (x, y),
+                                    cal_plane_stable,
+                                )
+                            },
+                        );
+                        if let (Some(h), Some(wire)) = (measured, &cal_wire) {
+                            let close = |a: (i32, i32), b: (i32, i32)| {
+                                (a.0 - b.0).abs() <= CURSOR_CAL_TOLERANCE
+                                    && (a.1 - b.1).abs() <= CURSOR_CAL_TOLERANCE
+                            };
+                            let current = cal_applied.unwrap_or((wire.hotx, wire.hoty));
+                            if close(current, h) {
+                                // Converged. A correction only enters the cross-shape cache once
+                                // a SECOND, later window agrees with it.
+                                if cal_applied.is_some() {
+                                    if let Some((p, w)) = cal_pending_cache {
+                                        if w != cal_window && close(p, current) {
+                                            store_cursor_cal(wire.id, current);
+                                        }
+                                    }
+                                }
+                            } else {
+                                log::info!(
+                                    "drm: cursor {:#x} hotspot measured ({}, {}), replacing ({}, {})",
+                                    wire.id,
+                                    h.0,
+                                    h.1,
+                                    current.0,
+                                    current.1
+                                );
+                                // Republish under a remixed id even when h equals the reader's
+                                // guess: this branch also REPAIRS a wrong applied correction,
+                                // and only a new id makes the dedup layers resend the shape.
+                                cal_applied = Some(h);
+                                cal_pending_cache = Some((h, cal_window));
+                                let mut data = wire.clone();
+                                data.hotx = h.0;
+                                data.hoty = h.1;
+                                data.id = remix_cursor_id(wire.id, h.0, h.1);
+                                set_drm_cursor(display, cursor_epoch, data);
+                            }
+                        }
+                    }
                 }
             }
             Data::DrmDisplaysChanged(list) => {
@@ -715,6 +944,102 @@ fn remove_drm_cursor(display: i32, epoch: u64) {
     if map.get(&display).map(|(e, _)| *e) == Some(epoch) {
         map.remove(&display);
     }
+}
+
+// ---- Cursor hotspot calibration ----
+// The kernel only exposes a cursor hotspot on DRIVER_CURSOR_HOTSPOT drivers (VMs), so on real
+// hardware the wire carries the reader's bounding-box guess - wrong by half a glyph for a wide
+// center-hotspot shape like the horizontal resize arrow, which the client then draws visibly
+// off target. But `plane_origin = pointer_tip - hotspot`, this process INJECTS the tip itself,
+// and the service streams the plane position every tick: once both sit still, the difference IS
+// the hotspot, measured rather than guessed.
+
+/// The plane must hold one position this many consecutive ticks before it counts as settled.
+const CURSOR_CAL_STABLE_TICKS: u32 = 3;
+/// Measurement attempts run for this many ticks (~1 s) after a settle, then stop until the
+/// plane moves again or fresh peer input reopens one window.
+const CURSOR_CAL_WINDOW_TICKS: u32 = 30;
+/// Corrections within this many px of what the client already renders are jitter, not news:
+/// the peer coordinate is quantized to LOGICAL px, so at a fractional scale the measurement
+/// legitimately wobbles +/- ceil(scale) physical px between windows, and re-publishing inside
+/// that band would only mint ids and churn the client's shape caches.
+const CURSOR_CAL_TOLERANCE: i32 = 2;
+/// The last injected move must be at least this old (the compositor has consumed it) ...
+const CURSOR_CAL_MIN_INPUT_AGE_MS: i64 = 150;
+/// ... and at most this old: on a seated box a LOCAL user may have moved the pointer since the
+/// peer last did, and the stale injected point would calibrate garbage.
+const CURSOR_CAL_MAX_INPUT_AGE_MS: i64 = 10_000;
+
+/// Measured hotspots per WIRE cursor id: a shape the compositor re-uses (arrow -> beam ->
+/// arrow) keeps its id, so it is corrected again from its first frame. Bounded by wholesale
+/// clearing; ids churn on theme/size changes, and re-measuring is cheap.
+static CURSOR_CAL_CACHE: Mutex<BTreeMap<u64, (i32, i32)>> = Mutex::new(BTreeMap::new());
+const CURSOR_CAL_CACHE_CAP: usize = 64;
+
+fn cached_cursor_cal(wire_id: u64) -> Option<(i32, i32)> {
+    CURSOR_CAL_CACHE.lock().unwrap().get(&wire_id).copied()
+}
+
+fn store_cursor_cal(wire_id: u64, h: (i32, i32)) {
+    let mut cache = CURSOR_CAL_CACHE.lock().unwrap();
+    if cache.len() >= CURSOR_CAL_CACHE_CAP && !cache.contains_key(&wire_id) {
+        cache.clear();
+    }
+    cache.insert(wire_id, h);
+}
+
+/// Domain-separated from the reader's FNV fold, so a corrected id cannot collide with a wire id
+/// and the client's shape cache treats the corrected cursor as new.
+fn remix_cursor_id(wire_id: u64, hotx: i32, hoty: i32) -> u64 {
+    let mut id = wire_id ^ 0x9e37_79b9_7f4a_7c15;
+    for v in [hotx as u32 as u64, hoty as u32 as u64] {
+        id ^= v;
+        id = id.wrapping_mul(1099511628211);
+    }
+    id
+}
+
+/// Measure the hotspot, or say why not: kernel truth is never overridden, the plane and the
+/// injected point must both be settled, and the answer must lie inside the bitmap (anything
+/// else is a race, an edge clip, or a local user having moved the pointer). Pure, so every gate
+/// is testable.
+///
+/// SPACES, measured on a kwin panel at scale 1.45: the peer injects in the ADVERTISED layout
+/// (`get_display_rects_for_uinput` - logical px on a multi-display session), while the plane is
+/// PHYSICAL scanout px of one CRTC. The point is first required to fall inside this display's
+/// advertised rect (otherwise the cursor is on another monitor and that stream calibrates), then
+/// scaled into scanout space; only then is the plane subtracted. On a scale-1 single display the
+/// mapping degenerates to a plain subtraction.
+fn calibrated_hotspot(
+    hot_from_property: bool,
+    dims: (i32, i32),
+    injected: Option<((i32, i32), i64)>,
+    advertised_rect: (i32, i32, i32, i32),
+    physical_size: (i32, i32),
+    plane: (i32, i32),
+    plane_stable_ticks: u32,
+) -> Option<(i32, i32)> {
+    if hot_from_property || plane_stable_ticks < CURSOR_CAL_STABLE_TICKS {
+        return None;
+    }
+    let ((ix, iy), age_ms) = injected?;
+    if !(CURSOR_CAL_MIN_INPUT_AGE_MS..=CURSOR_CAL_MAX_INPUT_AGE_MS).contains(&age_ms) {
+        return None;
+    }
+    let (ax, ay, aw, ah) = advertised_rect;
+    if aw <= 0 || ah <= 0 || physical_size.0 <= 0 || physical_size.1 <= 0 {
+        return None;
+    }
+    if ix < ax || ix >= ax + aw || iy < ay || iy >= ay + ah {
+        return None;
+    }
+    let tipx = ((ix - ax) as f64 * physical_size.0 as f64 / aw as f64).round() as i32;
+    let tipy = ((iy - ay) as f64 * physical_size.1 as f64 / ah as f64).round() as i32;
+    let h = (tipx - plane.0, tipy - plane.1);
+    if h.0 < 0 || h.1 < 0 || h.0 >= dims.0 || h.1 >= dims.1 {
+        return None;
+    }
+    Some(h)
 }
 
 fn with_drm_cursor<T>(f: impl Fn(&DrmCursorData) -> T) -> Option<T> {
@@ -1844,5 +2169,125 @@ mod drm_capturer_tests {
         let burn = Duration::from_secs(5); // four failed sessions
         assert!(demote_cooldown(1) + burn < Duration::from_secs(40));
         assert!(demote_cooldown(5) + burn > Duration::from_secs(8 * 60));
+    }
+}
+
+#[cfg(test)]
+mod cursor_calibration_tests {
+    use super::*;
+
+    const DIMS: (i32, i32) = (32, 32);
+    const SETTLED: Option<((i32, i32), i64)> = Some(((500, 300), 400));
+    // A scale-1 single display: advertised rect == scanout.
+    const RECT1: (i32, i32, i32, i32) = (0, 0, 1920, 1080);
+    const PHYS1: (i32, i32) = (1920, 1080);
+
+    #[test]
+    fn a_settled_pointer_and_plane_yield_the_difference() {
+        // Plane origin at (488, 288), tip injected at (500, 300): hotspot (12, 12).
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 3),
+            Some((12, 12))
+        );
+    }
+
+    #[test]
+    fn a_scaled_display_maps_the_injected_point_into_scanout_space() {
+        // The T2 measurement that found the space mismatch: kwin panel 2880x1800 advertised
+        // as 1986x1241 (scale ~1.4502). inj (1643, 577) -> tip (2383, 837); plane (2357, 814)
+        // under a resize glyph whose real hotspot is its center.
+        assert_eq!(
+            calibrated_hotspot(
+                false,
+                (128, 128),
+                Some(((1643, 577), 400)),
+                (0, 0, 1986, 1241),
+                (2880, 1800),
+                (2357, 814),
+                3
+            ),
+            Some((26, 23))
+        );
+    }
+
+    #[test]
+    fn a_point_on_another_display_is_not_this_streams_to_measure() {
+        // The advertised rect of THIS display starts at x=1920; the peer sits left of it.
+        assert_eq!(
+            calibrated_hotspot(
+                false,
+                DIMS,
+                SETTLED,
+                (1920, 0, 1920, 1080),
+                PHYS1,
+                (488, 288),
+                3
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_degenerate_advertised_rect_measures_nothing() {
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, (0, 0, 0, 0), PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn kernel_truth_is_never_overridden() {
+        assert_eq!(
+            calibrated_hotspot(true, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn an_unsettled_plane_is_not_measured() {
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 2),
+            None
+        );
+    }
+
+    #[test]
+    fn input_too_fresh_or_too_stale_is_rejected() {
+        let fresh = Some(((500, 300), 50));
+        let stale = Some(((500, 300), 60_000));
+        assert_eq!(calibrated_hotspot(false, DIMS, fresh, RECT1, PHYS1, (488, 288), 3), None);
+        assert_eq!(calibrated_hotspot(false, DIMS, stale, RECT1, PHYS1, (488, 288), 3), None);
+        assert_eq!(calibrated_hotspot(false, DIMS, None, RECT1, PHYS1, (488, 288), 3), None);
+    }
+
+    #[test]
+    fn an_answer_outside_the_bitmap_is_a_race_not_a_hotspot() {
+        // Injected point far from the plane (a local user moved the mouse).
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, Some(((900, 300), 400)), RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+        // Negative: plane ahead of the injected point.
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, Some(((480, 300), 400)), RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn a_corrected_id_differs_from_the_wire_id_and_is_deterministic() {
+        let wire = 0xabcdef0123456789u64;
+        let a = remix_cursor_id(wire, 12, 12);
+        assert_ne!(a, wire);
+        assert_eq!(a, remix_cursor_id(wire, 12, 12));
+        assert_ne!(a, remix_cursor_id(wire, 13, 12));
+    }
+
+    #[test]
+    fn the_calibration_cache_is_bounded() {
+        for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
+            store_cursor_cal(i, (1, 1));
+        }
+        assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
     }
 }

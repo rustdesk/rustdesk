@@ -525,7 +525,16 @@ pub enum Data {
     // (drmtap_open_render failed, e.g. no /dev/dri/renderD* access). The service then streams the
     // CPU-converted `DrmFrame` path for this connection instead of a dma-buf fd the consumer cannot
     // detile, so a render-node-less seat still captures instead of losing the stream.
-    DrmStart { display: i32, need_cpu: bool },
+    // `want_cursor_pos` is the consumer opting in to the per-tick `DrmCursorPos` stream. It
+    // defaults false so a NEW service never sends the variant to an OLD `--server` that cannot
+    // decode it (serde_json errors on an unknown variant and would kill the stream every tick);
+    // an OLD service ignores the unknown field. Keeps the `_drm` protocol append-only.
+    DrmStart {
+        display: i32,
+        need_cpu: bool,
+        #[serde(default)]
+        want_cursor_pos: bool,
+    },
     /// Service -> client: the enumerated DRM displays (sent once, before frames).
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmDisplayList(Vec<DrmDisplayInfo>),
@@ -547,6 +556,9 @@ pub enum Data {
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmFrameDmabuf(DmabufDesc),
     /// Service -> client: a hardware-cursor header; the RGBA pixels follow via `send_raw()`.
+    /// `x`/`y` are the cursor PLANE position (scanout px of the streamed display) at read time;
+    /// `hot_from_property` says whether hotx/hoty are kernel truth (the HOTSPOT_X/Y plane
+    /// property, VM drivers only) or the reader's bounding-box guess the consumer may correct.
     #[cfg(all(target_os = "linux", feature = "drm"))]
     DrmCursor {
         id: u64,
@@ -554,7 +566,21 @@ pub enum Data {
         height: u32,
         hotx: i32,
         hoty: i32,
+        #[serde(default)]
+        x: i32,
+        #[serde(default)]
+        y: i32,
+        #[serde(default)]
+        hot_from_property: bool,
     },
+    /// Service -> client: the cursor plane position while the cursor is visible (same scanout
+    /// space as `DrmCursor.x/y`), only when `DrmStart.want_cursor_pos` asked for it. Cadence:
+    /// every capture tick through a position change, a shape transition and the ~40 ticks a
+    /// consumer needs to see it settle, then one tick in eight while still. NO `send_raw()`
+    /// body. The consumer pairs a settled position with the last peer-injected point to MEASURE
+    /// the hotspot the kernel does not expose on non-VM drivers (see drm_capturer's calibration).
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    DrmCursorPos { x: i32, y: i32 },
 }
 
 #[tokio::main(flavor = "current_thread")]

@@ -107,8 +107,66 @@ enum DrmProducerMsg {
         height: u32,
         hotx: i32,
         hoty: i32,
+        x: i32,
+        y: i32,
+        hot_from_property: bool,
         colors: Vec<u8>,
     },
+    /// Wakeup only: the freshest position lives in `CursorPosSlot`, never in this queue, so a
+    /// slow consumer cannot backpressure the capture worker through position traffic.
+    CursorPos { x: i32, y: i32 },
+}
+
+/// Latest-wins cursor position shared between the capture worker and the connection task: the
+/// worker overwrites, the connection takes, and a dropped wakeup costs nothing.
+struct CursorPosSlot {
+    dirty: std::sync::atomic::AtomicBool,
+    packed: std::sync::atomic::AtomicU64,
+    /// One wakeup may be in flight at a time. Without it a stalled peer lets wakeups from
+    /// successive ticks fill the two-slot queue, and the next frame's blocking send waits behind
+    /// them - the queue must never hold cursor traffic that the capture path can block on.
+    wakeup_queued: std::sync::atomic::AtomicBool,
+}
+
+impl CursorPosSlot {
+    fn new() -> Self {
+        Self {
+            dirty: std::sync::atomic::AtomicBool::new(false),
+            packed: std::sync::atomic::AtomicU64::new(0),
+            wakeup_queued: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+    /// True when this caller now owns the single wakeup token.
+    fn claim_wakeup(&self) -> bool {
+        !self
+            .wakeup_queued
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+    }
+    fn release_wakeup(&self) {
+        self.wakeup_queued
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+    fn store(&self, x: i32, y: i32) {
+        use std::sync::atomic::Ordering;
+        self.packed.store(pack_cursor_pos(x, y), Ordering::Release);
+        self.dirty.store(true, Ordering::Release);
+    }
+    fn take(&self) -> Option<(i32, i32)> {
+        use std::sync::atomic::Ordering;
+        if self.dirty.swap(false, Ordering::AcqRel) {
+            Some(unpack_cursor_pos(self.packed.load(Ordering::Acquire)))
+        } else {
+            None
+        }
+    }
+}
+
+fn pack_cursor_pos(x: i32, y: i32) -> u64 {
+    ((x as u32 as u64) << 32) | y as u32 as u64
+}
+
+fn unpack_cursor_pos(p: u64) -> (i32, i32) {
+    ((p >> 32) as u32 as i32, p as u32 as i32)
 }
 
 struct DrmStopGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
@@ -793,15 +851,19 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     drop(stream);
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<DrmProducerMsg>(2);
-    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
+    let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool, bool)>();
     let stop = Arc::new(AtomicBool::new(false));
     let _stop_guard = DrmStopGuard(stop.clone());
     let worker_stop = stop.clone();
     let frames_gated = Arc::new(AtomicBool::new(false));
     let worker_gate = frames_gated.clone();
+    let cursor_pos_slot = Arc::new(CursorPosSlot::new());
+    let worker_cursor_pos = cursor_pos_slot.clone();
     std::thread::Builder::new()
         .name("drm-capture".into())
-        .spawn(move || drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate))
+        .spawn(move || {
+            drm_capture_worker(frame_tx, crtc_rx, worker_stop, worker_gate, worker_cursor_pos)
+        })
         .map_err(|err| anyhow::anyhow!("could not spawn the drm capture worker: {err}"))?;
 
     let displays = match frame_rx.recv().await {
@@ -813,8 +875,15 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
     };
     conn.send_msg(&Data::DrmDisplayList(displays.clone()), None).await?;
 
-    let (display_idx, need_cpu) = match conn.recv_msg_timeout2(10_000).await {
-        Some(Ok((Data::DrmStart { display, need_cpu }, _fd))) => (display, need_cpu),
+    let (display_idx, need_cpu, want_cursor_pos) = match conn.recv_msg_timeout2(10_000).await {
+        Some(Ok((
+            Data::DrmStart {
+                display,
+                need_cpu,
+                want_cursor_pos,
+            },
+            _fd,
+        ))) => (display, need_cpu, want_cursor_pos),
         Some(Ok((_, _fd))) => {
             log::info!("drm: peer sent something other than DrmStart in the handshake; closing");
             return Ok(());
@@ -834,7 +903,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
         );
         return Ok(());
     }
-    if crtc_tx.send((target_device, target_crtc, need_cpu)).is_err() {
+    if crtc_tx
+        .send((target_device, target_crtc, need_cpu, want_cursor_pos))
+        .is_err()
+    {
         return Ok(());
     }
 
@@ -915,6 +987,9 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     height,
                     hotx,
                     hoty,
+                    x,
+                    y,
+                    hot_from_property,
                     colors,
                 } => {
                     conn.send_msg(
@@ -924,15 +999,32 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
+                            x,
+                            y,
+                            hot_from_property,
                         },
                         None,
                     )
                     .await?;
                     conn.send_raw(Bytes::from(colors)).await?;
                 }
+                DrmProducerMsg::CursorPos { .. } => {
+                    cursor_pos_slot.release_wakeup();
+                    // The payload is only a wakeup; the slot holds the freshest position, which
+                    // goes out on every wakeup, REPEATS INCLUDED: consecutive equal positions
+                    // are the consumer's stillness signal for the hotspot calibration, so
+                    // deduplicating here would keep it from ever settling.
+                    if let Some((x, y)) = cursor_pos_slot.take() {
+                        conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
+                    }
+                }
                 DrmProducerMsg::Displays(_) => {}
             }
             msg = frame_rx.try_recv().ok();
+        }
+        // Wakeups may drop on a full queue, so the slot is read once more after every drain.
+        if let Some((x, y)) = cursor_pos_slot.take() {
+            conn.send_msg(&Data::DrmCursorPos { x, y }, None).await?;
         }
         conn.drain_frame_acks(&mut credit, DRM_FRAME_CREDIT)?;
         if credit <= 0 {
@@ -970,9 +1062,10 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
 
 fn drm_capture_worker(
     frame_tx: tokio::sync::mpsc::Sender<DrmProducerMsg>,
-    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool)>,
+    crtc_rx: std::sync::mpsc::Receiver<(String, u32, bool, bool)>,
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     frames_gated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cursor_pos: std::sync::Arc<CursorPosSlot>,
 ) {
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -991,7 +1084,7 @@ fn drm_capture_worker(
         return;
     }
 
-    let (target_device, target_crtc, need_cpu) = match crtc_rx.recv() {
+    let (target_device, target_crtc, need_cpu, want_cursor_pos) = match crtc_rx.recv() {
         Ok(c) => c,
         Err(_) => return,
     };
@@ -1024,6 +1117,8 @@ fn drm_capture_worker(
     let mut use_dmabuf = !need_cpu;
 
     let mut last_cursor_id: u64 = 0;
+    let mut last_pos_sent: Option<(i32, i32)> = None;
+    let mut pos_streak: u32 = 0;
     let mut stalled: u32 = 0;
     let mut logged_first = false;
     while !stop.load(Ordering::Relaxed) {
@@ -1063,6 +1158,77 @@ fn drm_capture_worker(
                 Err(err) => Err(err),
             })
         };
+        // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel),
+        // and - when the consumer opted in via DrmStart - the PLANE POSITION every tick while
+        // visible: the consumer needs a settled position, not the racy one frozen at the
+        // shape-change instant, to measure the real hotspot. This runs BEFORE the grab result is
+        // examined, so an EAGAIN/gated stretch (no new frame) still streams cursor state.
+        if let Some(c) = reader.cursor() {
+            let visible = c.id != scrap::drm_reader::HIDDEN_CURSOR_ID;
+            let pos = (c.x, c.y);
+            if c.id != last_cursor_id {
+                last_cursor_id = c.id;
+                // A shape transition restarts the position cadence even at an unchanged
+                // position (hidden -> visible in place, or a hover morph while still), or the
+                // consumer's fresh settling window would wait on a decimated stream.
+                last_pos_sent = None;
+                pos_streak = 0;
+                if frame_tx
+                    .blocking_send(DrmProducerMsg::Cursor {
+                        id: c.id,
+                        width: c.width,
+                        height: c.height,
+                        hotx: c.hotx,
+                        hoty: c.hoty,
+                        x: c.x,
+                        y: c.y,
+                        hot_from_property: c.hot_from_property,
+                        colors: c.colors,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            if want_cursor_pos && visible {
+                // Latest-wins: the slot always carries the freshest position, and the channel
+                // message is only a wakeup that may drop on a full queue - so position traffic
+                // can never block this thread away from grabbing frames. The cadence below only
+                // bounds wakeups for a still cursor; a stale streak decimates to one in eight,
+                // which the late-input reopen path tolerates (it needs SOME tick, not every one).
+                let changed = last_pos_sent != Some(pos);
+                if changed {
+                    pos_streak = 0;
+                    last_pos_sent = Some(pos);
+                } else {
+                    pos_streak = pos_streak.saturating_add(1);
+                }
+                if changed || pos_streak <= 40 || pos_streak % 8 == 0 {
+                    // The store lives INSIDE the cadence gate: the connection loop iterates per
+                    // frame and re-reads the slot after every drain, so a store on every tick
+                    // would defeat the one-in-eight idle decimation the wire contract documents.
+                    // Nothing is lost - a skipped store always carries the value already stored.
+                    cursor_pos.store(pos.0, pos.1);
+                    // The wakeup goes out only when this tick enqueues no frame: with frames
+                    // flowing, the post-drain slot read already delivers the position, and a
+                    // wakeup would occupy a queue slot the frame's own blocking send then waits
+                    // on behind a slow peer - cursor traffic must never block the capture path.
+                    // At most one wakeup outstanding: a second one would only occupy a queue
+                    // slot the next frame has to wait on, and the slot already carries the
+                    // freshest position for whenever the consumer gets there.
+                    if !matches!(grabbed, Some(Ok(_))) && cursor_pos.claim_wakeup() {
+                        if frame_tx
+                            .try_send(DrmProducerMsg::CursorPos { x: pos.0, y: pos.1 })
+                            .is_err()
+                        {
+                            cursor_pos.release_wakeup();
+                        }
+                    }
+                }
+            }
+        }
+
+
         match grabbed {
             None => {}
             Some(Ok(msg)) => {
@@ -1101,26 +1267,6 @@ fn drm_capture_worker(
             Some(Err(err)) => {
                 log::warn!("drm: capture error: {err}; closing _drm connection");
                 break;
-            }
-        }
-
-        // Ship the cursor shape only when it changes (id is a content hash or the hidden sentinel).
-        if let Some(c) = reader.cursor() {
-            if c.id != last_cursor_id {
-                last_cursor_id = c.id;
-                if frame_tx
-                    .blocking_send(DrmProducerMsg::Cursor {
-                        id: c.id,
-                        width: c.width,
-                        height: c.height,
-                        hotx: c.hotx,
-                        hoty: c.hoty,
-                        colors: c.colors,
-                    })
-                    .is_err()
-                {
-                    break;
-                }
             }
         }
 
@@ -1473,6 +1619,31 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    #[test]
+    fn the_cursor_pos_slot_is_latest_wins_and_survives_negatives() {
+        // Cursor plane coordinates go negative when partially offscreen; the packing must
+        // round-trip the full i32 range.
+        assert_eq!(unpack_cursor_pos(pack_cursor_pos(-1, -1)), (-1, -1));
+        assert_eq!(unpack_cursor_pos(pack_cursor_pos(i32::MIN, i32::MAX)), (i32::MIN, i32::MAX));
+        let slot = CursorPosSlot::new();
+        assert_eq!(slot.take(), None, "an untouched slot yields nothing");
+        slot.store(10, 20);
+        slot.store(30, 40);
+        assert_eq!(slot.take(), Some((30, 40)), "the newest store wins");
+        assert_eq!(slot.take(), None, "and a take clears the slot");
+    }
+
+    #[test]
+    fn only_one_cursor_wakeup_is_outstanding_at_a_time() {
+        // A stalled peer must never accumulate wakeups in the frame queue: the next frame's
+        // blocking send would wait behind them.
+        let slot = CursorPosSlot::new();
+        assert!(slot.claim_wakeup(), "the first tick owns the token");
+        assert!(!slot.claim_wakeup(), "a later tick cannot enqueue a second");
+        slot.release_wakeup();
+        assert!(slot.claim_wakeup(), "the consumer's release re-arms it");
+    }
 
     // Added to the wire later: an older peer's message must still decode.
     #[test]
