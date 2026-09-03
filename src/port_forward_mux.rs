@@ -394,9 +394,13 @@ mod tunnel {
         Stream,
     };
     use std::{
-        collections::HashMap,
+        collections::{HashMap, HashSet},
         sync::atomic::{AtomicI32, Ordering},
     };
+
+    /// One dialog per distinct reason, and never an unbounded number: the
+    /// message text comes from the peer.
+    const MAX_REPORTED_OPEN_ERRORS: usize = 8;
 
     // Internal state only; `Claim` and `Ready` are the API listeners see.
     enum TunnelState {
@@ -480,6 +484,7 @@ mod tunnel {
                 sink: FrameSink::Queued { data: data_tx, control: control_tx },
                 channels: Mutex::new(HashMap::new()),
                 next_id: AtomicI32::new(1),
+                reported: Default::default(),
             });
             let state = self.state.clone();
             // Publish before spawning: if the loop exits first and resets the
@@ -510,6 +515,7 @@ mod tunnel {
         sink: FrameSink,
         channels: Mutex<HashMap<i32, ChannelEntry>>,
         next_id: AtomicI32,
+        reported: Mutex<HashSet<String>>,
     }
 
     impl TunnelHandle {
@@ -559,28 +565,35 @@ mod tunnel {
             Ok(())
         }
 
-        fn on_frame(&self, ch: PortForwardChannel) {
+        fn on_frame(&self, ch: PortForwardChannel) -> Option<String> {
             match ch.union {
                 Some(port_forward_channel::Union::Opened(o)) => {
-                    let mut channels = self.channels.lock().unwrap();
-                    if o.success {
-                        // A repeated `opened` must not raise the credit again.
-                        if let Some(e) = channels.get_mut(&o.channel_id) {
-                            if !e.opened {
-                                e.opened = true;
-                                e.credit.raise_initial(o.window);
+                    let refused = {
+                        let mut channels = self.channels.lock().unwrap();
+                        if o.success {
+                            // A repeated `opened` must not raise the credit again.
+                            if let Some(e) = channels.get_mut(&o.channel_id) {
+                                if !e.opened {
+                                    e.opened = true;
+                                    e.credit.raise_initial(o.window);
+                                }
                             }
+                            None
+                        } else if let Some(e) = channels.remove(&o.channel_id) {
+                            log::debug!("port forward channel {} refused: {}", o.channel_id, o.message);
+                            e.inbound.send(Inbound::Close).ok();
+                            Some(o.message)
+                        } else {
+                            None
                         }
-                    } else if let Some(e) = channels.remove(&o.channel_id) {
-                        log::debug!("port forward channel {} refused: {}", o.channel_id, o.message);
-                        e.inbound.send(Inbound::Close).ok();
-                    }
+                    };
+                    refused.and_then(|message| self.first_report(message))
                 }
                 Some(port_forward_channel::Union::Data(d)) => {
                     let mut channels = self.channels.lock().unwrap();
                     let Some(e) = channels.get(&d.channel_id) else {
                         log::debug!("port forward data for unknown channel {}", d.channel_id);
-                        return;
+                        return None;
                     };
                     let msg = if e.window.lock().unwrap().accept(d.data.len()) {
                         Inbound::Data(d.data)
@@ -591,22 +604,40 @@ mod tunnel {
                     if e.inbound.send(msg).is_err() {
                         channels.remove(&d.channel_id);
                     }
+                    None
                 }
                 Some(port_forward_channel::Union::Close(c)) => {
                     if let Some(e) = self.channels.lock().unwrap().remove(&c.channel_id) {
                         e.inbound.send(Inbound::Close).ok();
                     }
+                    None
                 }
                 Some(port_forward_channel::Union::WindowUpdate(u)) => {
                     if let Some(e) = self.channels.lock().unwrap().get(&u.channel_id) {
                         e.credit.add(u.add);
                     }
+                    None
                 }
                 Some(port_forward_channel::Union::Open(o)) => {
                     log::debug!("ignoring open for channel {} on the controller", o.channel_id);
+                    None
                 }
-                _ => {}
+                _ => None,
             }
+        }
+
+        /// The peer's reason for refusing a channel, the first time we see it.
+        /// One page load can have a dozen connections refused for the same
+        /// reason, and the user needs one dialog, not a dozen.
+        fn first_report(&self, message: String) -> Option<String> {
+            if message.is_empty() {
+                return None;
+            }
+            let mut reported = self.reported.lock().unwrap();
+            if reported.len() >= MAX_REPORTED_OPEN_ERRORS || !reported.insert(message.clone()) {
+                return None;
+            }
+            Some(message)
         }
 
         fn close_all(&self) {
@@ -646,7 +677,11 @@ mod tunnel {
                     Some(Ok(bytes)) => {
                         let Ok(msg) = Message::parse_from_bytes(&bytes) else { continue };
                         match msg.union {
-                            Some(message::Union::PortForwardChannel(ch)) => handle.on_frame(ch),
+                            Some(message::Union::PortForwardChannel(ch)) => {
+                                if let Some(err) = handle.on_frame(ch) {
+                                    interface.msgbox("error", "Error", &err, "");
+                                }
+                            }
                             Some(message::Union::TestDelay(t)) => {
                                 interface.handle_test_delay(t, &mut stream).await;
                             }
@@ -1064,7 +1099,7 @@ mod tests {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
                 assert!(matches!(t.try_claim(), Claim::Claimed));
-                let h = t.set_muxed(ours, NoUi);
+                let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 80, sock, b"GET / HTTP/1.0\r\n\r\n".to_vec()).unwrap();
                 let open = recv_frame(&mut peer).await;
@@ -1096,7 +1131,7 @@ mod tests {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
                 assert!(matches!(t.try_claim(), Claim::Claimed));
-                let h = t.set_muxed(ours, NoUi);
+                let h = t.set_muxed(ours, NoUi::default());
                 // Twenty channels, each with one byte of pipelined data behind
                 // its open. An open on the control queue can lose the loop's
                 // random tie-break to a data frame, so one channel would be a
@@ -1136,7 +1171,7 @@ mod tests {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
                 t.try_claim();
-                let h = t.set_muxed(ours, NoUi);
+                let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 1, sock, vec![]).unwrap();
                 let id = match recv_frame(&mut peer).await.union {
@@ -1150,12 +1185,40 @@ mod tests {
         }
 
         #[test]
+        fn a_refused_channel_is_reported_once_per_reason() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                let ui = NoUi::default();
+                let h = t.set_muxed(ours, ui.clone());
+                for reason in ["unreachable", "unreachable", "no permission"] {
+                    let (mut app, sock) = local_pair().await;
+                    h.open("localhost", 1, sock, vec![]).unwrap();
+                    let id = match recv_frame(&mut peer).await.union {
+                        Some(port_forward_channel::Union::Open(o)) => o.channel_id,
+                        other => panic!("expected open, got {:?}", other),
+                    };
+                    peer.send(&opened_msg(id, false, reason, 0)).await.unwrap();
+                    let mut buf = [0u8; 1];
+                    assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+                }
+                // A page load can have a dozen connections refused for one
+                // reason; the user gets one dialog per reason, not per socket.
+                assert_eq!(
+                    ui.messages(),
+                    vec!["unreachable".to_owned(), "no permission".to_owned()]
+                );
+            });
+        }
+
+        #[test]
         fn tunnel_death_closes_channels_and_resets_state() {
             rt().block_on(async {
                 let (ours, peer) = stream_pair().await;
                 let t = Tunnel::new();
                 t.try_claim();
-                let h = t.set_muxed(ours, NoUi);
+                let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 1, sock, vec![]).unwrap();
                 drop(peer);
@@ -1167,16 +1230,23 @@ mod tests {
             });
         }
 
-        /// An `Interface` that does nothing; the tunnel only needs it for
-        /// `handle_test_delay`, which echoes like `Session::handle_test_delay`
-        /// (`src/ui_session_interface.rs:1894`) minus the UI stats.
-        #[derive(Clone)]
-        pub struct NoUi;
+        /// An `Interface` that records the dialogs it was asked to show. The
+        /// tunnel needs it for `handle_test_delay` and for refusal messages.
+        #[derive(Clone, Default)]
+        pub struct NoUi(Arc<Mutex<Vec<String>>>);
+
+        impl NoUi {
+            fn messages(&self) -> Vec<String> {
+                self.0.lock().unwrap().clone()
+            }
+        }
 
         #[async_trait::async_trait]
         impl crate::client::Interface for NoUi {
             fn send(&self, _data: crate::client::Data) {}
-            fn msgbox(&self, _msgtype: &str, _title: &str, _text: &str, _link: &str) {}
+            fn msgbox(&self, _msgtype: &str, _title: &str, text: &str, _link: &str) {
+                self.0.lock().unwrap().push(text.to_owned());
+            }
             fn handle_login_error(&self, _err: &str) -> bool {
                 false
             }
@@ -1259,7 +1329,7 @@ mod tests {
             fake_controlled(theirs, format!("127.0.0.1:{}", port));
             let t = Tunnel::new();
             t.try_claim();
-            (t.set_muxed(ours, NoUi), port)
+            (t.set_muxed(ours, NoUi::default()), port)
         }
 
         #[test]
