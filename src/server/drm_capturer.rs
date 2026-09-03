@@ -352,7 +352,7 @@ impl IpcDrmCapturer {
         let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
         // This capturer now shows that layout. If the session init's own wayland query failed it
         // saved an empty baseline, so this is the only record of what the stream is built on.
-        super::display_service::note_capturer_layout(&wl.displays);
+        super::display_service::note_capturer_layout(&wl.displays, snapshot_gen);
         shared
             .transform
             .store(transform, std::sync::atomic::Ordering::Release);
