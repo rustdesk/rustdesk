@@ -1186,5 +1186,170 @@ mod tests {
                 Arc::new(std::sync::RwLock::new(Default::default()))
             }
         }
+
+        use crate::server::port_forward_mux::PortForwardMux;
+        use hbb_common::tokio::time::Instant;
+
+        /// Stands in for `Connection`: one task owning the stream, draining
+        /// `inner.tx` into it and dispatching inbound frames to the mux.
+        fn fake_controlled(mut stream: Stream, login_target: String) {
+            tokio::spawn(async move {
+                let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
+                let mut mux = PortForwardMux::new(tx, login_target);
+                let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
+                loop {
+                    tokio::select! {
+                        Some((_, m)) = rx.recv() => {
+                            if stream.send(&*m).await.is_err() { return; }
+                        }
+                        res = stream.next() => match res {
+                            Some(Ok(bytes)) => {
+                                let Ok(m) = Message::parse_from_bytes(&bytes) else { continue };
+                                if let Some(message::Union::PortForwardChannel(ch)) = m.union {
+                                    mux.handle(ch, true);
+                                    mux.sweep();
+                                }
+                            }
+                            _ => return,
+                        },
+                        _ = tick.tick() => { mux.sweep(); }
+                    }
+                }
+            });
+        }
+
+        async fn echo_target() -> u16 {
+            let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = l.local_addr().unwrap().port();
+            tokio::spawn(async move {
+                loop {
+                    let (mut s, _) = l.accept().await.unwrap();
+                    tokio::spawn(async move {
+                        let mut buf = vec![0u8; 64 * 1024];
+                        loop {
+                            let n = s.read(&mut buf).await.unwrap_or(0);
+                            if n == 0 || s.write_all(&buf[..n]).await.is_err() { return; }
+                        }
+                    });
+                }
+            });
+            port
+        }
+
+        async fn muxed_tunnel() -> (Arc<TunnelHandle>, u16) {
+            let (ours, theirs) = stream_pair().await;
+            let port = echo_target().await;
+            fake_controlled(theirs, format!("127.0.0.1:{}", port));
+            let t = Tunnel::new();
+            t.try_claim();
+            (t.set_muxed(ours, NoUi), port)
+        }
+
+        #[test]
+        fn many_channels_echo_concurrently_and_a_bulk_one_does_not_starve_them() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                let mut apps = Vec::new();
+                for i in 0..20u8 {
+                    let (app, sock) = local_pair().await;
+                    h.open("127.0.0.1", port as i32, sock, vec![i]).unwrap();
+                    apps.push(app);
+                }
+                // Channel 0 streams 4 MiB; the others each expect their one byte back promptly.
+                // Read and write the bulk socket from separate tasks: the echo can only
+                // drain if this side keeps reading while it writes.
+                let bulk = vec![0xAB; 4 << 20];
+                let (mut bulk_rd, mut bulk_wr) = apps.remove(0).into_split();
+                let bulk_reader = {
+                    let bulk = bulk.clone();
+                    tokio::spawn(async move {
+                        let mut back = vec![0u8; bulk.len() + 1];
+                        bulk_rd.read_exact(&mut back).await.unwrap();
+                        assert_eq!(back[0], 0);
+                        assert_eq!(&back[1..], &bulk[..]);
+                    })
+                };
+                let bulk_writer = {
+                    let bulk = bulk.clone();
+                    tokio::spawn(async move { bulk_wr.write_all(&bulk).await.unwrap() })
+                };
+                for (i, app) in apps.iter_mut().enumerate() {
+                    let mut b = [0u8; 1];
+                    tokio::time::timeout(std::time::Duration::from_secs(2), app.read_exact(&mut b))
+                        .await
+                        .expect("small channel starved")
+                        .unwrap();
+                    assert_eq!(b[0], (i + 1) as u8);
+                }
+                bulk_writer.await.unwrap();
+                bulk_reader.await.unwrap();
+            });
+        }
+
+        #[test]
+        fn tail_before_close_is_delivered_in_both_directions() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                let (app, sock) = local_pair().await;
+                h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
+                let payload = vec![7u8; 300 * 1024];
+                let (mut rd, mut wr) = app.into_split();
+                let reader = {
+                    let payload = payload.clone();
+                    tokio::spawn(async move {
+                        let mut back = vec![0u8; payload.len()];
+                        rd.read_exact(&mut back).await.unwrap();
+                        assert_eq!(back, payload);
+                        rd
+                    })
+                };
+                wr.write_all(&payload).await.unwrap();
+                // The full echo proves every byte reached the target ahead of anything
+                // else; only then close, and the peer's `close` must follow cleanly.
+                let mut rd = reader.await.unwrap();
+                drop(wr);
+                let mut one = [0u8; 1];
+                assert_eq!(rd.read(&mut one).await.unwrap(), 0);
+            });
+        }
+
+        #[test]
+        fn one_byte_frames_never_trip_the_window() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                let (mut app, sock) = local_pair().await;
+                h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
+                for i in 0..5000u32 {
+                    app.write_all(&[(i % 251) as u8]).await.unwrap();
+                    app.flush().await.unwrap();
+                }
+                let mut back = vec![0u8; 5000];
+                app.read_exact(&mut back).await.unwrap();
+                for (i, b) in back.iter().enumerate() {
+                    assert_eq!(*b, (i as u32 % 251) as u8);
+                }
+            });
+        }
+
+        #[test]
+        fn sequential_connections_far_beyond_max_channels_all_succeed() {
+            rt().block_on(async {
+                let (h, port) = muxed_tunnel().await;
+                for i in 0..(MAX_CHANNELS * 3) {
+                    let (mut app, sock) = local_pair().await;
+                    h.open("127.0.0.1", port as i32, sock, vec![i as u8]).unwrap();
+                    let mut b = [0u8; 1];
+                    app.read_exact(&mut b).await.unwrap();
+                    assert_eq!(b[0], i as u8);
+                    drop(app);
+                    // The controller's entry goes when its coordinator task exits,
+                    // which takes a cancel and a join; wait for it rather than
+                    // trusting a single yield, or the cap trips around round 256.
+                    while h.live_channels() != 0 {
+                        tokio::task::yield_now().await;
+                    }
+                }
+            });
+        }
     }
 }
