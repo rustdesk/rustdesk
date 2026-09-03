@@ -2576,11 +2576,13 @@ impl Connection {
                 let PortForward {
                     host,
                     port,
+                    multiplex,
                     special_fields: _,
                 } = pf;
                 push(b"port_forward");
                 push(host.as_bytes());
                 push(&port.to_le_bytes());
+                push(&[*multiplex as u8]);
             }
             // Variants this build does not know execute as remote, so they latch as remote.
             None | Some(_) => push(b"remote"),
