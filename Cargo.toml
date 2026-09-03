@@ -31,6 +31,7 @@ hwcodec = ["scrap/hwcodec"]
 vram = ["scrap/vram"]
 mediacodec = ["scrap/mediacodec"]
 drm = ["scrap/drm"]
+gnome-mutter = ["scrap/gnome-mutter"]
 # The display wake, as its OWN compile gate on top of `drm`. Everything else in the drm backend
 # READS (it captures a scanout); the wake WRITES, injecting one synthetic pointer event from the
 # root service so a compositor that idle-disabled its outputs re-enables them. That is a different

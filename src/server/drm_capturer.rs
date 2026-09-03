@@ -5,8 +5,8 @@ use crate::ipc::{connect_drm, Data, DrmDisplayInfo};
 use hbb_common::{anyhow::anyhow, bail, log, message_proto::DisplayInfo, tokio, ResultType};
 use scrap::drm_render::RenderConverter;
 use scrap::drmtap_dl::drmtap_dmabuf_desc;
-use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
-use std::collections::BTreeMap;
+use scrap::{Frame, PixelBuffer, Pixfmt, TraitCapturer};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +21,7 @@ const DISPLAY_LIST_TIMEOUT_MS: u64 = HANDSHAKE_TIMEOUT_MS + 4000;
 /// (first byte, then body). The render-node open and the DrmStart send can still overrun it.
 const HANDSHAKE_WAIT_MS: u64 = DRM_CONNECT_TIMEOUT_MS + DISPLAY_LIST_TIMEOUT_MS * 2 + 500;
 /// Only the header read rechecks `stop`, so bound the body read here rather than relying on
-    /// `next_raw_into`'s own cap.
+/// `next_raw_into`'s own cap.
 const BODY_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct FrameSlot {
@@ -85,7 +85,7 @@ fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
 }
 
 /// A delivered frame resets the streak verdicts (`zero_frame_streak`, `demotes`, `since`) and
-    /// nothing else.
+/// nothing else.
 #[derive(Clone, Copy)]
 struct DisplayHealth {
     zero_frame_streak: u32,
@@ -185,7 +185,8 @@ fn render_node_count() -> usize {
 }
 
 static UINPUT_REFRESH_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 impl IpcDrmCapturer {
     /// The service resolves indices against ITS OWN enumeration, so the receive thread re-resolves
@@ -480,7 +481,8 @@ async fn recv_thread(
                     match recv_fd.as_ref() {
                         Some(f) => f.as_raw_fd(),
                         None => {
-                            break "dma-buf frame set has_fd but carried no SCM_RIGHTS fd".to_owned()
+                            break "dma-buf frame set has_fd but carried no SCM_RIGHTS fd"
+                                .to_owned()
                         }
                     }
                 } else {
@@ -629,35 +631,35 @@ async fn recv_thread(
                     let spawned = std::thread::Builder::new()
                         .name("drm-uinput-refresh".into())
                         .spawn(move || {
-                        let rt = match tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                        {
-                            Ok(rt) => rt,
-                            Err(err) => {
-                                log::warn!(
+                            let rt = match tokio::runtime::Builder::new_current_thread()
+                                .enable_all()
+                                .build()
+                            {
+                                Ok(rt) => rt,
+                                Err(err) => {
+                                    log::warn!(
                                     "drm: uinput refresh worker could not build a runtime: {err}"
                                 );
-                                return; // the guard hands the slot back
+                                    return; // the guard hands the slot back
+                                }
+                            };
+                            let mut served = 0u64;
+                            loop {
+                                let g = UINPUT_REFRESH_GEN.load(Ordering::Acquire);
+                                if g != served {
+                                    served = g;
+                                    rt.block_on(super::wayland::update_uinput_resolution());
+                                    continue;
+                                }
+                                busy.release();
+                                if UINPUT_REFRESH_GEN.load(Ordering::Acquire) == served {
+                                    break;
+                                }
+                                if !busy.retake() {
+                                    break; // another handler already started a fresh worker
+                                }
                             }
-                        };
-                        let mut served = 0u64;
-                        loop {
-                            let g = UINPUT_REFRESH_GEN.load(Ordering::Acquire);
-                            if g != served {
-                                served = g;
-                                rt.block_on(super::wayland::update_uinput_resolution());
-                                continue;
-                            }
-                            busy.release();
-                            if UINPUT_REFRESH_GEN.load(Ordering::Acquire) == served {
-                                break;
-                            }
-                            if !busy.retake() {
-                                break; // another handler already started a fresh worker
-                            }
-                        }
-                    });
+                        });
                     if let Err(err) = spawned {
                         log::error!("drm: could not spawn the uinput refresh worker: {err}");
                     }
@@ -743,6 +745,12 @@ enum ProbeState {
 }
 
 static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
+/// A preserved login-screen server cannot open the user's Mutter socket after GDM exits. Keep the
+/// last compositor layout that this same process successfully observed, so connector origins and
+/// the uinput desktop range do not collapse to DRM's ambiguous all-at-(0,0) geometry mid-handoff.
+static LOGIN_SERVER_WAYLAND_LAYOUT: Mutex<Option<Arc<scrap::wayland::display::Displays>>> =
+    Mutex::new(None);
+static LOGIN_SERVER_LAYOUT_FALLBACK_LOGGED: AtomicBool = AtomicBool::new(false);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
@@ -779,13 +787,14 @@ const DRM_PROBE_MAX_FAILURES: u32 = 5;
 static DRM_REFRESH_FAILURES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 const DRM_REFRESH_MAX_FAILURES: u32 = 3;
 // Single-flight, so is_available() never calls query_displays() (~4s of IPC) holding DRM_STATE.
-static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DRM_PROBE_IN_FLIGHT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Advanced by every publish, so a slow UNLOCKED probe can tell a newer verdict landed meanwhile.
 static DRM_STATE_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// EVERY verdict change to DRM_STATE goes through here so the generation stays truthful; the TTL
-    /// restamp in `refresh_available_async` is the one direct write.
+/// restamp in `refresh_available_async` is the one direct write.
 #[inline]
 fn publish_probe_state(st: &mut ProbeState, next: ProbeState) {
     *st = next;
@@ -825,6 +834,30 @@ impl Drop for UinputRefreshGuard {
 /// enumeration, where seconds of IPC would trip "deadline has elapsed".
 pub(crate) fn is_available_cached() -> bool {
     matches!(&*DRM_STATE.lock().unwrap(), ProbeState::Available(..))
+}
+
+#[inline]
+fn prefer_drm_for_session(login_screen: bool, mutter_requested: bool) -> bool {
+    login_screen || !mutter_requested
+}
+
+#[inline]
+fn prefer_drm_for_current_session() -> bool {
+    #[cfg(feature = "gnome-mutter")]
+    let mutter_requested = scrap::wayland::mutter::option_enabled();
+    #[cfg(not(feature = "gnome-mutter"))]
+    let mutter_requested = false;
+
+    prefer_drm_for_session(
+        crate::platform::linux::is_login_screen_wayland_cached(),
+        mutter_requested,
+    )
+}
+
+/// Non-blocking capture-routing gate. A configured GNOME user session uses Mutter; the Wayland
+/// greeter still uses DRM because it has no user session bus or portal.
+pub(crate) fn should_use_cached() -> bool {
+    prefer_drm_for_current_session() && is_available_cached()
 }
 
 /// A tri-state assessment of DRM capture availability.
@@ -934,7 +967,10 @@ fn probe_and_publish() -> Availability {
             Availability::Available
         }
         Ok(_) => {
-            log::info!("drm: availability probe -> no displays in {:?}", t.elapsed());
+            log::info!(
+                "drm: availability probe -> no displays in {:?}",
+                t.elapsed()
+            );
             publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
             Availability::Unavailable
         }
@@ -961,6 +997,12 @@ fn probe_and_publish() -> Availability {
 /// route the same way (into the non-DRM fallback).
 pub(crate) fn is_available() -> bool {
     availability() == Availability::Available
+}
+
+/// Blocking capture-build gate. This mirrors `should_use_cached`, but may settle a cold DRM probe
+/// on the plain video thread.
+pub(crate) fn should_use() -> bool {
+    prefer_drm_for_current_session() && is_available()
 }
 
 /// The negative mirror of `refresh_available_async`: re-verify a stale Unavailable without ever
@@ -1097,8 +1139,14 @@ pub(super) fn warm_availability() {
         }
         match query_displays() {
             Ok(list) if !list.is_empty() => {
-                log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
-                publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                log::info!(
+                    "drm: consumer cache warmed ({} displays) at startup",
+                    list.len()
+                );
+                publish_probe_state(
+                    &mut DRM_STATE.lock().unwrap(),
+                    ProbeState::Available(Instant::now(), list),
+                );
                 return;
             }
             _ => std::thread::sleep(Duration::from_millis(300)),
@@ -1206,18 +1254,156 @@ fn primary_index_from_assignment(assignment: &[Option<usize>], primary: usize) -
         .unwrap_or(0)
 }
 
+fn xml_element_blocks<'a>(xml: &'a str, tag: &str) -> Vec<&'a str> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let mut blocks = Vec::new();
+    let mut cursor = 0;
+    while let Some(open_offset) = xml[cursor..].find(&open) {
+        let content_start = cursor + open_offset + open.len();
+        let Some(close_offset) = xml[content_start..].find(&close) else {
+            break;
+        };
+        let content_end = content_start + close_offset;
+        blocks.push(&xml[content_start..content_end]);
+        cursor = content_end + close.len();
+    }
+    blocks
+}
+
+fn first_xml_element_text<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
+    xml_element_blocks(xml, tag)
+        .into_iter()
+        .next()
+        .map(str::trim)
+}
+
+/// GDM's Wayland session is deliberately not exposed to the login `--server` through D-Bus or a
+/// compositor socket, so Mutter's `GetCurrentState` primary lookup cannot work there. Read the
+/// persisted monitor profile instead, but only accept a configuration whose complete set of active
+/// connectors matches the DRM snapshot. That prevents a stale profile for a dock or a different
+/// monitor set from selecting the wrong physical output.
+fn primary_index_from_monitors_xml(xml: &str, drm: &[DrmDisplayInfo]) -> Option<usize> {
+    let active: BTreeSet<String> = drm
+        .iter()
+        .map(|display| normalize_connector(&display.name))
+        .collect();
+    if active.is_empty() {
+        return None;
+    }
+
+    for configuration in xml_element_blocks(xml, "configuration") {
+        let mut configured = BTreeSet::new();
+        let mut primary_connector = None;
+        for logical_monitor in xml_element_blocks(configuration, "logicalmonitor") {
+            let connectors: Vec<&str> = xml_element_blocks(logical_monitor, "connector")
+                .into_iter()
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .collect();
+            configured.extend(connectors.iter().map(|name| normalize_connector(name)));
+            if first_xml_element_text(logical_monitor, "primary") == Some("yes") {
+                // A mirrored logical monitor can name more than one physical connector. Pick the
+                // first one that is actually present in this DRM snapshot.
+                primary_connector = connectors
+                    .into_iter()
+                    .find(|name| active.contains(&normalize_connector(name)))
+                    .map(str::to_owned);
+            }
+        }
+        if configured == active {
+            if let Some(primary_connector) = primary_connector {
+                let primary = normalize_connector(&primary_connector);
+                if let Some(index) = drm
+                    .iter()
+                    .position(|display| normalize_connector(&display.name) == primary)
+                {
+                    return Some(index);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn gdm_primary_index(drm: &[DrmDisplayInfo]) -> Option<usize> {
+    if !crate::platform::linux::is_login_server_process() {
+        return None;
+    }
+    // GDM 50 uses a per-seat persistent config for its dynamic greeter uid; older GDM releases use
+    // the account's traditional ~/.config. Both paths are fixed system locations and the parser
+    // above still requires an exact connector-set match before trusting either file.
+    const CANDIDATES: [&str; 4] = [
+        "/var/lib/gdm/seat0/config/monitors.xml",
+        "/var/lib/gdm/.config/monitors.xml",
+        "/var/lib/gdm3/seat0/config/monitors.xml",
+        "/var/lib/gdm3/.config/monitors.xml",
+    ];
+    for path in CANDIDATES {
+        let Ok(xml) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        if let Some(primary) = primary_index_from_monitors_xml(&xml, drm) {
+            log::info!(
+                "drm: selecting GDM primary connector {} from its persisted monitor profile",
+                drm[primary].name
+            );
+            return Some(primary);
+        }
+    }
+    None
+}
+
+fn select_wayland_layout_for_login_handoff(
+    live: Arc<scrap::wayland::display::Displays>,
+    login_server: bool,
+    saved: &mut Option<Arc<scrap::wayland::display::Displays>>,
+) -> (Arc<scrap::wayland::display::Displays>, bool) {
+    if !login_server {
+        return (live, false);
+    }
+    if !live.displays.is_empty() {
+        *saved = Some(live.clone());
+        return (live, false);
+    }
+    match saved.as_ref() {
+        Some(saved) => (saved.clone(), true),
+        None => (live, false),
+    }
+}
+
+fn wayland_layout_for_drm_augmentation() -> Arc<scrap::wayland::display::Displays> {
+    let live = scrap::wayland::display::get_displays();
+    let (layout, used_saved) = select_wayland_layout_for_login_handoff(
+        live,
+        crate::platform::linux::is_login_server_process(),
+        &mut LOGIN_SERVER_WAYLAND_LAYOUT.lock().unwrap(),
+    );
+    if used_saved {
+        if !LOGIN_SERVER_LAYOUT_FALLBACK_LOGGED.swap(true, Ordering::Relaxed) {
+            log::info!(
+                "drm: GDM compositor is gone; preserving its last display geometry for handoff"
+            );
+        }
+    } else {
+        LOGIN_SERVER_LAYOUT_FALLBACK_LOGGED.store(false, Ordering::Relaxed);
+    }
+    layout
+}
+
 /// Releases DRM_STATE before taking the Wayland and health locks.
 pub(super) fn get_display_infos_and_primary() -> Option<(Vec<DisplayInfo>, usize)> {
     let list = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
-    let wl = scrap::wayland::display::get_displays();
+    let wl = wayland_layout_for_drm_augmentation();
     let assignment = assign_wayland_outputs(&list, &wl.displays);
     let mut infos = augment_with_wayland_geometry_from(&list, &wl, &assignment);
     mark_demoted_displays(&list, &mut infos);
     // Primary and geometry must use the same connector assignment snapshot.
-    let primary = primary_index_from_assignment(&assignment, wl.primary);
+    let primary = gdm_primary_index(&list)
+        .unwrap_or_else(|| primary_index_from_assignment(&assignment, wl.primary));
     Some((infos, primary))
 }
 
@@ -1238,7 +1424,7 @@ pub(super) fn get_display_infos() -> Option<Vec<DisplayInfo>> {
 /// cannot answer, the list comes back empty and everything stays unaugmented, which is what the
 /// old is-login-screen gate produced unconditionally.
 fn augment_with_wayland_geometry(drm: &[DrmDisplayInfo]) -> Vec<DisplayInfo> {
-    let wl = scrap::wayland::display::get_displays();
+    let wl = wayland_layout_for_drm_augmentation();
     let assignment = assign_wayland_outputs(drm, &wl.displays);
     augment_with_wayland_geometry_from(drm, &wl, &assignment)
 }
@@ -1308,10 +1494,9 @@ fn assign_wayland_outputs(
         if matched[i].is_some() {
             continue;
         }
-        let free_same_size = wl
-            .iter()
-            .enumerate()
-            .position(|(j, w)| !taken[j] && w.width == d.width as i32 && w.height == d.height as i32);
+        let free_same_size = wl.iter().enumerate().position(|(j, w)| {
+            !taken[j] && w.width == d.width as i32 && w.height == d.height as i32
+        });
         let Some(j) = free_same_size.or_else(|| taken.iter().position(|t| !t)) else {
             continue; // more connectors than outputs; leave the rest unaugmented
         };
@@ -1358,7 +1543,8 @@ fn match_wayland_display(
 /// Only a *letter* folds: a single *digit* is an MST port index, so "DP-1-2" is not "DP-2".
 fn normalize_connector(name: &str) -> String {
     let parts: Vec<&str> = name.split('-').collect();
-    if parts.len() == 3 && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic()) {
+    if parts.len() == 3 && parts[1].len() == 1 && parts[1].chars().all(|c| c.is_ascii_alphabetic())
+    {
         format!("{}-{}", parts[0], parts[2])
     } else {
         name.to_string()
@@ -1379,8 +1565,11 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
 }
 
 fn display_info_from_drm(d: &DrmDisplayInfo) -> DisplayInfo {
-    let original_resolution =
-        super::display_service::get_original_resolution(&d.name, d.width as usize, d.height as usize);
+    let original_resolution = super::display_service::get_original_resolution(
+        &d.name,
+        d.width as usize,
+        d.height as usize,
+    );
     DisplayInfo {
         x: d.x,
         y: d.y,
@@ -1467,6 +1656,14 @@ pub(super) fn get_capturer_info(
 mod drm_capturer_tests {
     use super::*;
 
+    #[test]
+    fn mutter_is_used_only_for_a_logged_in_user_session() {
+        assert!(!prefer_drm_for_session(false, true));
+        assert!(prefer_drm_for_session(true, true));
+        assert!(prefer_drm_for_session(false, false));
+        assert!(prefer_drm_for_session(true, false));
+    }
+
     fn capturer_with(session: Option<(usize, usize)>) -> IpcDrmCapturer {
         capturer_named(session, None)
     }
@@ -1506,7 +1703,13 @@ mod drm_capturer_tests {
     }
 
     fn put_frame(c: &IpcDrmCapturer, w: usize, h: usize) {
-        let mut buf = c.shared.slot.lock().unwrap().take_free().unwrap_or_default();
+        let mut buf = c
+            .shared
+            .slot
+            .lock()
+            .unwrap()
+            .take_free()
+            .unwrap_or_default();
         buf.clear();
         buf.resize(w * h * 4, 0);
         let mut slot = c.shared.slot.lock().unwrap();
@@ -1533,16 +1736,23 @@ mod drm_capturer_tests {
         // process-wide DRM_DISPLAY_HEALTH poisons the mutex for every sibling test.
         let h = {
             let map = DRM_DISPLAY_HEALTH.lock().unwrap();
-            *map.get(key).expect("the entry must SURVIVE a delivered frame")
+            *map.get(key)
+                .expect("the entry must SURVIVE a delivered frame")
         };
-        assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
+        assert_eq!(
+            h.zero_frame_streak, 0,
+            "a delivered frame refutes the zero-frame streak"
+        );
         assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
         assert_eq!(
             h.rapid_builds, 3,
             "but it says NOTHING about the rebuild cadence: keeping it is what lets the flap guard \
              reach RAPID_REBUILD_MAX for a display that delivers a first frame and then fails"
         );
-        assert!(h.last_build.is_some(), "same for the timestamp the cadence is measured from");
+        assert!(
+            h.last_build.is_some(),
+            "same for the timestamp the cadence is measured from"
+        );
         assert!(
             h.prefer_cpu,
             "and nothing about which GPU exports the scanout: only a topology change may clear it"
@@ -1590,8 +1800,13 @@ mod drm_capturer_tests {
             Err(e) => e,
             Ok(_) => panic!("a first frame off the advertised geometry must be a hard error"),
         };
-        assert!(err.to_string().contains("never matched its advertised geometry"));
-        assert!(!c.got_frame, "no frame reached the encoder, so none was produced");
+        assert!(err
+            .to_string()
+            .contains("never matched its advertised geometry"));
+        assert!(
+            !c.got_frame,
+            "no frame reached the encoder, so none was produced"
+        );
         assert_eq!(
             zero_frame_streak_of(&c),
             1,
@@ -1645,6 +1860,63 @@ mod drm_capturer_tests {
         }
     }
 
+    fn wl_layout(
+        displays: Vec<hbb_common::platform::linux::WaylandDisplayInfo>,
+    ) -> Arc<scrap::wayland::display::Displays> {
+        Arc::new(scrap::wayland::display::Displays {
+            primary: 0,
+            displays,
+        })
+    }
+
+    #[test]
+    fn login_handoff_keeps_the_last_nonempty_compositor_layout() {
+        let original = wl_layout(vec![
+            wl_display("DP-1", 0, 0, 1920, 1080),
+            wl_display("DP-2", 1920, 0, 1920, 1080),
+            wl_display("DP-3", 3840, 0, 1920, 1080),
+        ]);
+        let mut saved = None;
+        let (selected, used_saved) =
+            select_wayland_layout_for_login_handoff(original.clone(), true, &mut saved);
+        assert!(Arc::ptr_eq(&selected, &original));
+        assert!(!used_saved);
+
+        let missing = wl_layout(Vec::new());
+        let (selected, used_saved) =
+            select_wayland_layout_for_login_handoff(missing, true, &mut saved);
+        assert!(used_saved);
+        assert_eq!(selected.displays.len(), 3);
+        assert_eq!(selected.displays[2].x, 3840);
+
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+            drm_display("DP-3", 1920, 1080),
+        ];
+        let assignment = assign_wayland_outputs(&drm, &selected.displays);
+        let infos = augment_with_wayland_geometry_from(&drm, &selected, &assignment);
+        assert_eq!(
+            infos.iter().map(|display| display.x).collect::<Vec<_>>(),
+            vec![0, 1920, 3840]
+        );
+        assert_eq!(
+            infos.iter().map(|display| display.x + display.width).max(),
+            Some(5760)
+        );
+    }
+
+    #[test]
+    fn ordinary_session_does_not_reuse_a_login_layout() {
+        let remembered = wl_layout(vec![wl_display("DP-1", 0, 0, 1920, 1080)]);
+        let mut saved = Some(remembered);
+        let missing = wl_layout(Vec::new());
+        let (selected, used_saved) =
+            select_wayland_layout_for_login_handoff(missing.clone(), false, &mut saved);
+        assert!(Arc::ptr_eq(&selected, &missing));
+        assert!(!used_saved);
+    }
+
     #[test]
     fn one_connector_assignment_drives_geometry_and_primary() {
         let drm = [
@@ -1663,6 +1935,70 @@ mod drm_capturer_tests {
         let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
         assert_eq!((infos[0].x, infos[1].x), (0, 1920));
         assert_eq!(primary_index_from_assignment(&assignment, wl.primary), 1);
+    }
+
+    #[test]
+    fn gdm_monitor_profile_selects_the_declared_primary_connector() {
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+            drm_display("DP-3", 1920, 1080),
+        ];
+        let xml = r#"
+            <monitors version="2">
+              <configuration>
+                <logicalmonitor>
+                  <x>3840</x>
+                  <monitor><monitorspec><connector>DP-1</connector></monitorspec></monitor>
+                </logicalmonitor>
+                <logicalmonitor>
+                  <x>0</x>
+                  <monitor><monitorspec><connector>DP-2</connector></monitorspec></monitor>
+                </logicalmonitor>
+                <logicalmonitor>
+                  <x>1920</x>
+                  <primary>yes</primary>
+                  <monitor><monitorspec><connector>DP-3</connector></monitorspec></monitor>
+                </logicalmonitor>
+              </configuration>
+            </monitors>
+        "#;
+
+        assert_eq!(primary_index_from_monitors_xml(xml, &drm), Some(2));
+    }
+
+    #[test]
+    fn gdm_monitor_profile_ignores_a_stale_connector_set() {
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+            drm_display("DP-3", 1920, 1080),
+        ];
+        let xml = r#"
+            <monitors version="2">
+              <configuration>
+                <logicalmonitor>
+                  <primary>yes</primary>
+                  <monitor><monitorspec><connector>HDMI-1</connector></monitorspec></monitor>
+                </logicalmonitor>
+              </configuration>
+              <configuration>
+                <logicalmonitor>
+                  <monitor><monitorspec><connector>DP-1</connector></monitorspec></monitor>
+                </logicalmonitor>
+                <logicalmonitor>
+                  <monitor><monitorspec><connector>DP-2</connector></monitorspec></monitor>
+                </logicalmonitor>
+                <logicalmonitor>
+                  <primary>yes</primary>
+                  <monitor><monitorspec><connector>DP-3</connector></monitorspec></monitor>
+                </logicalmonitor>
+              </configuration>
+            </monitors>
+        "#;
+
+        assert_eq!(primary_index_from_monitors_xml(xml, &drm), Some(2));
+        assert_eq!(primary_index_from_monitors_xml(xml, &drm[..2]), None);
     }
 
     #[test]
@@ -1697,7 +2033,13 @@ mod drm_capturer_tests {
         );
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
         assert!(
-            c.shared.slot.lock().unwrap().free.iter().any(|b| b.is_some()),
+            c.shared
+                .slot
+                .lock()
+                .unwrap()
+                .free
+                .iter()
+                .any(|b| b.is_some()),
             "the buffer the encoder finished with must be handed back to the receive path"
         );
     }
@@ -1727,15 +2069,24 @@ mod drm_capturer_tests {
 
     #[test]
     fn outputs_are_matched_by_name_across_the_drm_naming_difference() {
-        let drm = [drm_display("HDMI-A-1", 1920, 1080), drm_display("DP-1", 2560, 1440)];
-        let wl = [wl_display("DP-1", 1920, 0, 2560, 1440), wl_display("HDMI-1", 0, 0, 1920, 1080)];
+        let drm = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let wl = [
+            wl_display("DP-1", 1920, 0, 2560, 1440),
+            wl_display("HDMI-1", 0, 0, 1920, 1080),
+        ];
         assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(1), Some(0)]);
     }
 
     // The M10 case: same model and resolution, names that do not normalize to the compositor's.
     #[test]
     fn identical_monitors_that_match_no_name_take_layout_order() {
-        let drm = [drm_display("DP-1", 1920, 1080), drm_display("DP-2", 1920, 1080)];
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+        ];
         let wl = [
             wl_display("Unknown-1", 0, 0, 1920, 1080),
             wl_display("Unknown-2", 1920, 0, 1920, 1080),
@@ -1745,7 +2096,10 @@ mod drm_capturer_tests {
 
     #[test]
     fn one_output_is_never_claimed_by_two_connectors() {
-        let drm = [drm_display("DP-1", 1920, 1080), drm_display("DP-2", 1920, 1080)];
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("DP-2", 1920, 1080),
+        ];
         let wl = [
             wl_display("Unknown-1", 0, 0, 1920, 1080),
             wl_display("Unknown-2", 1920, 0, 3840, 2160),
@@ -1757,7 +2111,10 @@ mod drm_capturer_tests {
 
     #[test]
     fn a_name_match_beats_the_positional_fallback() {
-        let drm = [drm_display("DP-1", 1920, 1080), drm_display("HDMI-A-1", 1920, 1080)];
+        let drm = [
+            drm_display("DP-1", 1920, 1080),
+            drm_display("HDMI-A-1", 1920, 1080),
+        ];
         let wl = [
             wl_display("Unknown-1", 0, 0, 1920, 1080),
             wl_display("HDMI-1", 1920, 0, 1920, 1080),
@@ -1776,7 +2133,10 @@ mod drm_capturer_tests {
             wl_display("Unknown-1", 0, 0, 1920, 1080),
             wl_display("Unknown-2", 1920, 0, 1920, 1080),
         ];
-        assert_eq!(assign_wayland_outputs(&drm, &wl), vec![Some(0), Some(1), None]);
+        assert_eq!(
+            assign_wayland_outputs(&drm, &wl),
+            vec![Some(0), Some(1), None]
+        );
     }
 
     #[test]
@@ -1817,14 +2177,23 @@ mod drm_capturer_tests {
         let mut h = DisplayHealth::new();
         assert!(!h.demoted(), "a fresh display is not demoted");
         h.zero_frame_streak = DRM_GRAB_MAX_FAILURES - 1;
-        assert!(!h.demoted(), "one session short of the threshold is not demoted");
+        assert!(
+            !h.demoted(),
+            "one session short of the threshold is not demoted"
+        );
         h.zero_frame_streak = DRM_GRAB_MAX_FAILURES;
         h.demotes = 1;
         assert!(h.demoted(), "at the threshold, inside the cooldown");
         h.since = Instant::now() - demote_cooldown(h.demotes) - Duration::from_secs(1);
-        assert!(!h.demoted(), "past the cooldown the display must be retried");
+        assert!(
+            !h.demoted(),
+            "past the cooldown the display must be retried"
+        );
         h.demotes = 4;
-        assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+        assert!(
+            h.demoted(),
+            "the backoff must still be holding it at demotion 4"
+        );
     }
 
     #[test]

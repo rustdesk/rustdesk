@@ -345,7 +345,7 @@ fn check_get_displays_changed_msg() -> Option<Message> {
             // from the DRM display list here. Without this the display service broadcasts an empty
             // list that overwrites the login peer-info displays and the client shows "No displays".
             #[cfg(feature = "drm")]
-            if super::drm_capturer::is_available_cached() {
+            if super::drm_capturer::should_use_cached() {
                 let synced = !SYNC_DISPLAYS.lock().unwrap().displays.is_empty();
                 let stamped_before = scrap::wayland::display::wayland_failure_stamped();
                 // With nothing published yet, even the unaugmented DRM list beats the empty

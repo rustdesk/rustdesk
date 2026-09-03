@@ -198,6 +198,72 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn file_transfer_log(&self, action: &str, log: &str);
 }
 
+/// A connection manager without a compositor-bound window.
+///
+/// The GDM Wayland compositor is destroyed as soon as login completes. A Flutter CM that was
+/// created inside that greeter then loses its EGL context and aborts, even though the unattended
+/// connection itself does not need an approval window. Keep the CM IPC/state machine alive for
+/// password-authorized greeter sessions, but deliberately attach no graphical UI to it.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Default)]
+struct HeadlessUiCM;
+
+#[cfg(target_os = "linux")]
+impl InvokeUiCM for HeadlessUiCM {
+    fn add_connection(&self, _client: &Client) {}
+
+    fn remove_connection(&self, _id: i32, _close: bool) {}
+
+    fn new_message(&self, _id: i32, _text: String) {}
+
+    fn change_theme(&self, _dark: String) {}
+
+    fn change_language(&self) {}
+
+    fn show_elevation(&self, _show: bool) {}
+
+    fn update_voice_call_state(&self, _client: &Client) {}
+
+    fn file_transfer_log(&self, _action: &str, _log: &str) {}
+}
+
+/// Run the CM IPC loop on Linux without initializing Flutter, GTK, EGL, PulseAudio, or a tray.
+#[cfg(target_os = "linux")]
+pub fn start_headless_cm() {
+    // This process is spawned and owned by the login-screen `--server`. The root service stops
+    // that server with SIGKILL after the remote session ends, which skips Rust destructors and
+    // would otherwise leave the headless CM orphaned under the transient GDM uid. Ask the kernel
+    // to terminate us when that exact parent disappears; the second getppid closes the race where
+    // the parent exits immediately before PR_SET_PDEATHSIG is armed.
+    // SAFETY: `getppid` has no pointer arguments and no preconditions.
+    let parent_pid = unsafe { hbb_common::libc::getppid() };
+    if parent_pid > 1 {
+        // SAFETY: PR_SET_PDEATHSIG accepts a signal number as its only variadic argument.
+        let result = unsafe {
+            hbb_common::libc::prctl(
+                hbb_common::libc::PR_SET_PDEATHSIG,
+                hbb_common::libc::SIGTERM,
+            )
+        };
+        if result != 0 {
+            log::warn!(
+                "failed to arm headless CM parent-death signal: {}",
+                std::io::Error::last_os_error()
+            );
+        // SAFETY: `getppid` has no pointer arguments and no preconditions.
+        } else if unsafe { hbb_common::libc::getppid() } != parent_pid {
+            log::info!("headless CM parent exited while parent-death signal was being armed");
+            return;
+        }
+    } else {
+        log::warn!("headless CM started without a live owning server process");
+    }
+
+    start_ipc(ConnectionManager {
+        ui_handler: HeadlessUiCM,
+    });
+}
+
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
     type Target = T;
 

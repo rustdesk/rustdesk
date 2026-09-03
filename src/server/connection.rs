@@ -6098,18 +6098,29 @@ async fn start_ipc(
 ) -> ResultType<()> {
     use hbb_common::anyhow::anyhow;
 
-    loop {
-        if !crate::platform::is_prelogin() {
-            break;
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    let login_server = crate::platform::linux::is_login_server_process();
+    #[cfg(not(all(target_os = "linux", feature = "drm")))]
+    let login_server = false;
+
+    if !login_server {
+        loop {
+            if !crate::platform::is_prelogin() {
+                break;
+            }
+            sleep(1.).await;
         }
-        sleep(1.).await;
     }
     let mut stream = None;
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);
     }
     if stream.is_none() {
-        let args = vec!["--cm"];
+        let args = if login_server {
+            vec!["--cm-headless"]
+        } else {
+            vec!["--cm"]
+        };
         let run_done;
         if crate::platform::is_root() {
             let mut res = Ok(None);

@@ -11,6 +11,9 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "zbus"]
+# Direct integration with GNOME Mutter's private ScreenCast/RemoteDesktop API.
+# Runtime-gated and falls back to the XDG portal when the API is unavailable.
+gnome-mutter = ["wayland"]
 # `drm` is a pure runtime-dlopen backend: rustdesk loads `libdrmtap.so.0` at runtime (`drmtap_dl.rs`)
 # and NEVER link-time links it, so the graceful PipeWire fallback when the .so or EGL is absent is
 # preserved and the drm build pulls in no libdrm/seccomp/cap/EGL link-time deps. The .so is pinned by
@@ -75,4 +78,3 @@ optional = true
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 nokhwa = { git = "https://github.com/rustdesk-org/nokhwa.git", branch = "fix_from_raw_parts", features = ["input-native"] }
-

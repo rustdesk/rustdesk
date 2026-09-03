@@ -398,12 +398,20 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(target_os = "linux")]
             {
                 hbb_common::allow_err!(crate::platform::check_autostart_config());
-                std::process::Command::new("pkill")
-                    .arg("-f")
-                    .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
-                    .status()
-                    .ok();
-                hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+                #[cfg(feature = "drm")]
+                let login_server = crate::platform::linux::is_login_server_process();
+                #[cfg(not(feature = "drm"))]
+                let login_server = false;
+                if !login_server {
+                    std::process::Command::new("pkill")
+                        .arg("-f")
+                        .arg(&format!("{} --tray", crate::get_app_name().to_lowercase()))
+                        .status()
+                        .ok();
+                    hbb_common::allow_err!(crate::run_me(vec!["--tray"]));
+                } else {
+                    log::info!("login-screen server: graphical tray is disabled");
+                }
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true, false);
@@ -709,6 +717,13 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
             }
             return None;
+        } else if args[0] == "--cm-headless" {
+            #[cfg(target_os = "linux")]
+            {
+                log::info!("start headless connection manager");
+                crate::ui_cm_interface::start_headless_cm();
+            }
+            return None;
         } else if args[0] == "--cm" {
             // call connection manager to establish connections
             // meanwhile, return true to call flutter window to show control panel
@@ -940,6 +955,7 @@ mod tests {
             "--server",
             "--tray",
             "--cm",
+            "--cm-headless",
             "--check-hwcodec-config",
             "--connect",
         ] {

@@ -23,7 +23,7 @@ use gstreamer_app::AppSink;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-use hbb_common::{bail, config, platform::linux::CMD_SH, serde_json, tokio, ResultType};
+use hbb_common::{bail, config, platform::linux::CMD_SH, serde_json, ResultType};
 
 use super::capturable::PixelProvider;
 use super::capturable::{Capturable, Recorder};
@@ -84,7 +84,7 @@ pub fn try_close_session() {
     let mut close = false;
     if let Some(rdp_info) = &*rdp_info {
         // If is server running and restore token is supported, there's no need to keep the session.
-        if is_server_running() && rdp_info.is_support_restore_token {
+        if is_server_running() && (rdp_info.is_support_restore_token || rdp_info.close_when_idle) {
             close = true;
         }
     }
@@ -98,17 +98,27 @@ pub fn try_close_session() {
 pub struct RdpSessionInfo {
     pub conn: Arc<SyncConnection>,
     pub streams: Vec<PwStreamInfo>,
-    pub fd: OwnedFd,
+    pub fd: Option<OwnedFd>,
     pub session: dbus::Path<'static>,
+    pub input_backend: RdpInputBackend,
+    pub close_when_idle: bool,
     pub is_support_restore_token: bool,
     pub resolution: Arc<Mutex<Option<(usize, usize)>>>,
 }
-#[derive(Debug, Clone, Copy)]
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RdpInputBackend {
+    Portal,
+    Mutter,
+}
+
+#[derive(Debug, Clone)]
 pub struct PwStreamInfo {
     pub path: u64,
     source_type: u64,
     position: (i32, i32),
     size: (usize, usize),
+    mutter_path: Option<dbus::Path<'static>>,
 }
 
 impl PwStreamInfo {
@@ -119,6 +129,36 @@ impl PwStreamInfo {
     pub fn get_position(&self) -> (i32, i32) {
         self.position
     }
+
+    pub fn get_mutter_path(&self) -> Option<&dbus::Path<'static>> {
+        self.mutter_path.as_ref()
+    }
+
+    #[cfg(feature = "gnome-mutter")]
+    pub(super) fn new_mutter(
+        node_id: u64,
+        object_path: dbus::Path<'static>,
+        position: (i32, i32),
+        size: (usize, usize),
+    ) -> Self {
+        Self {
+            path: node_id,
+            source_type: 1,
+            position,
+            size,
+            mutter_path: Some(object_path),
+        }
+    }
+}
+
+#[inline]
+pub fn is_mutter_session() -> bool {
+    RDP_SESSION_INFO
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|session| session.input_backend == RdpInputBackend::Mutter)
+        .unwrap_or(false)
 }
 
 #[derive(Debug)]
@@ -149,7 +189,7 @@ impl Error for GStreamerError {}
 pub struct PipeWireCapturable {
     // connection needs to be kept alive for recording
     dbus_conn: Arc<SyncConnection>,
-    fd: OwnedFd,
+    fd: Option<OwnedFd>,
     path: u64,
     source_type: u64,
     pub primary: bool,
@@ -161,7 +201,7 @@ pub struct PipeWireCapturable {
 impl PipeWireCapturable {
     fn new(
         conn: Arc<SyncConnection>,
-        fd: OwnedFd,
+        fd: Option<OwnedFd>,
         resolution: Arc<Mutex<Option<(usize, usize)>>>,
         stream: &PwStreamInfo,
     ) -> Self {
@@ -198,7 +238,7 @@ impl std::fmt::Debug for PipeWireCapturable {
             f,
             "PipeWireCapturable {{dbus: {}, fd: {}, path: {}, source_type: {}}}",
             self.dbus_conn.unique_name(),
-            self.fd.as_raw_fd(),
+            self.fd.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(-1),
             self.path,
             self.source_type
         )
@@ -265,10 +305,16 @@ pub struct PipeWireRecorder {
 
 impl PipeWireRecorder {
     pub fn new(capturable: PipeWireCapturable) -> ResultType<Self> {
-        let pipeline = gst::Pipeline::new(None);
+        // The portal path initializes GStreamer while opening its session, but
+        // the direct Mutter path intentionally bypasses that portal call. Keep
+        // initialization at the pipeline boundary so every capture backend is
+        // safe, including a freshly started server's first Mutter connection.
+        let pipeline = new_initialized_pipeline()?;
 
         let src = gst::ElementFactory::make("pipewiresrc", None)?;
-        src.set_property("fd", &capturable.fd.as_raw_fd())?;
+        if let Some(fd) = capturable.fd.as_ref() {
+            src.set_property("fd", &fd.as_raw_fd())?;
+        }
         src.set_property("path", &format!("{}", capturable.path))?;
         src.set_property("keepalive_time", &1_000.as_raw_fd())?;
 
@@ -313,7 +359,7 @@ impl PipeWireRecorder {
         // Adding a short sleep period can also reduce the probability of crashes.
         debug!(
             "[gstreamer] Setting pipeline {} to PLAYING state...",
-            capturable.fd.as_raw_fd()
+            capturable.fd.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(-1)
         );
         pipeline.set_state(gst::State::Playing)?;
 
@@ -327,13 +373,13 @@ impl PipeWireRecorder {
                 (Ok(_), gst::State::Playing, _) => {
                     debug!(
                         "[gstreamer] Pipeline {} state confirmed as PLAYING.",
-                        capturable.fd.as_raw_fd()
+                        capturable.fd.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(-1)
                     );
                 }
                 (result, state, pending) => {
                     warn!(
                     "[gstreamer] Pipeline {} state change incomplete: result={:?}, state={:?}, pending={:?}",
-                    capturable.fd.as_raw_fd(), result, state, pending
+                    capturable.fd.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(-1), result, state, pending
                 );
                 }
             }
@@ -352,6 +398,13 @@ impl PipeWireRecorder {
             saved_raw_data: Vec::new(),
         })
     }
+}
+
+fn new_initialized_pipeline() -> ResultType<gst::Pipeline> {
+    // gst_init_check is thread-safe and idempotent. Calling it here also removes
+    // the data race from the former process-global `static mut INIT` guard.
+    gst::init()?;
+    Ok(gst::Pipeline::new(None))
 }
 
 impl Recorder for PipeWireRecorder {
@@ -565,6 +618,7 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
                             .map_or(Some(0), |v| v.as_u64())?,
                         position: (0, 0),
                         size: (0, 0),
+                        mutter_path: None,
                     };
                     let v = attributes
                         .get("size")?
@@ -610,7 +664,6 @@ fn streams_from_response(response: OrgFreedesktopPortalRequestResponse) -> Vec<P
     .unwrap_or_default()
 }
 
-static mut INIT: bool = false;
 const RESTORE_TOKEN: &str = "restore_token";
 const RESTORE_TOKEN_CONF_KEY: &str = "wayland-restore-token";
 const PIPEWIRE_DISPLAY_OFFSET_CONF_KEY: &str = "wayland-pipewire-display-offset";
@@ -631,12 +684,7 @@ pub fn request_remote_desktop(
     dbus::Path<'static>,
     bool,
 )> {
-    unsafe {
-        if !INIT {
-            gstreamer::init()?;
-            INIT = true;
-        }
-    }
+    gst::init()?;
     let conn = SyncConnection::new_session()?;
     let portal = get_portal(&conn);
     let mut args: PropMap = HashMap::new();
@@ -960,18 +1008,39 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
     };
 
     if rdp_connection.is_none() {
-        let (conn, fd, streams, session, is_support_restore_token) = request_remote_desktop(false)?;
-        let conn = Arc::new(conn);
+        #[cfg(feature = "gnome-mutter")]
+        if is_server_running() && super::mutter::option_enabled() {
+            match super::mutter::request_session() {
+                Ok(rdp_info) => {
+                    HAS_POSITION_ATTR.store(true, Ordering::SeqCst);
+                    *rdp_connection = Some(rdp_info);
+                    debug!("Using direct GNOME Mutter ScreenCast/RemoteDesktop session");
+                }
+                Err(err) => {
+                    warn!(
+                        "Direct GNOME Mutter session is unavailable, falling back to XDG Portal: {err}"
+                    );
+                }
+            }
+        }
 
-        let rdp_info = RdpSessionInfo {
-            conn,
-            streams,
-            fd,
-            session,
-            is_support_restore_token,
-            resolution: Arc::new(Mutex::new(None)),
-        };
-        *rdp_connection = Some(rdp_info);
+        if rdp_connection.is_none() {
+            let (conn, fd, streams, session, is_support_restore_token) =
+                request_remote_desktop(false)?;
+            let conn = Arc::new(conn);
+
+            let rdp_info = RdpSessionInfo {
+                conn,
+                streams,
+                fd: Some(fd),
+                session,
+                input_backend: RdpInputBackend::Portal,
+                close_when_idle: false,
+                is_support_restore_token,
+                resolution: Arc::new(Mutex::new(None)),
+            };
+            *rdp_connection = Some(rdp_info);
+        }
     }
 
     let rdp_info = match rdp_connection.as_mut() {
@@ -1255,6 +1324,19 @@ fn save_positions_to_cache(displays: &Arc<Displays>, shared_displays: &Vec<crate
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::new_initialized_pipeline;
+
+    #[test]
+    fn pipeline_constructor_initializes_gstreamer_and_is_idempotent() {
+        let first = new_initialized_pipeline().expect("first pipeline should initialize GStreamer");
+        let second = new_initialized_pipeline().expect("repeated initialization should be safe");
+
+        drop((first, second));
+    }
+}
+
 fn compare_left_up_corner(w: usize, d1: &[u8], d2: &[u8]) -> bool {
     if w == 0 {
         return false;
@@ -1424,7 +1506,7 @@ fn fill_multi_matched_positions_cursor(
 
                 let mut rec = PipeWireRecorder::new(PipeWireCapturable {
                     dbus_conn: conn.clone(),
-                    fd: fd.clone(),
+                    fd: Some(fd.clone()),
                     path: pw_stream_with_cursor.path,
                     source_type: pw_stream_with_cursor.source_type,
                     primary: false,

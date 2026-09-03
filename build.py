@@ -146,6 +146,12 @@ def make_parser():
              'dlopen-ed in-process by the root service). Off by default.'
     )
     parser.add_argument(
+        '--gnome-mutter',
+        action='store_true',
+        help='Linux only: build direct GNOME Mutter ScreenCast/RemoteDesktop support. '
+             'Runtime opt-in; falls back to XDG Portal.'
+    )
+    parser.add_argument(
         '--print-features',
         action='store_true',
         help='Print the cargo feature list these flags select, and exit without building. For a '
@@ -322,6 +328,10 @@ def get_features(args):
         features.append('flutter')
     if args.unix_file_copy_paste:
         features.append('unix-file-copy-paste')
+    if args.gnome_mutter:
+        if windows or osx:
+            raise Exception('--gnome-mutter is Linux only')
+        features.append('gnome-mutter')
     if args.drm:
         # Say so rather than quietly handing back a stock build: the backend is Linux-only, so on
         # any other host the flag cannot be honoured and the resulting binary would look like a

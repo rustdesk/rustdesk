@@ -22,6 +22,8 @@ use hbb_common::{
     users::{get_user_by_name, os::unix::UserExt},
 };
 use libxdo_sys::{self, xdo_t, Window};
+#[cfg(feature = "drm")]
+use std::sync::atomic::AtomicU32;
 use std::{
     cell::RefCell,
     ffi::{OsStr, OsString},
@@ -53,6 +55,17 @@ const TERM_SCREEN_256COLOR: &str = "screen-256color";
 const TERM_XTERM: &str = "xterm";
 
 #[cfg(feature = "drm")]
+const LOGIN_SERVER_ENV: &str = "RUSTDESK_LOGIN_SERVER";
+
+#[cfg(feature = "drm")]
+const NO_LOGIN_HANDOFF_UID: u32 = u32::MAX;
+
+/// UID of the greeter `--server` that is temporarily allowed to keep consuming DRM frames while
+/// an already-authorized remote connection crosses from GDM into the user's desktop.
+#[cfg(feature = "drm")]
+static LOGIN_HANDOFF_UID: AtomicU32 = AtomicU32::new(NO_LOGIN_HANDOFF_UID);
+
+#[cfg(any(feature = "drm", feature = "gnome-mutter"))]
 lazy_static::lazy_static! {
     /// Only for per-frame callers; see `is_login_screen_wayland_cached`.
     /// Own block because `#[cfg]` on one item inside a shared one breaks the macro.
@@ -374,9 +387,17 @@ pub struct xcb_xfixes_get_cursor_image {
 }
 
 #[inline]
+fn is_login_manager_user(username: &str) -> bool {
+    // Current GDM releases use a dynamically-created `gdm-greeter` account, while older
+    // installations use `gdm`. Keep hbb_common's SDDM handling and recognize both GDM forms.
+    username == "gdm-greeter" || is_gdm_user(username)
+}
+
+#[inline]
 pub fn is_login_screen_wayland() -> bool {
     let values = get_values_of_seat0_with_gdm_wayland(&[0, 2]);
-    is_gdm_user(&values[1]) && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
+    is_login_manager_user(&values[1])
+        && get_display_server_of_session(&values[0]) == DISPLAY_SERVER_WAYLAND
 }
 
 /// An explicit `RUSTDESK_FORCED_DISPLAY_SERVER` is an operator override, and the root service
@@ -401,10 +422,31 @@ pub fn is_x11_for_drm() -> bool {
 ///
 /// Only from the per-session `--server`: it is spawned after the session is identified, so the
 /// answer is settled. Anything that can run mid-boot must use the uncached form.
-#[cfg(feature = "drm")]
+#[cfg(any(feature = "drm", feature = "gnome-mutter"))]
 #[inline]
 pub fn is_login_screen_wayland_cached() -> bool {
     *IS_LOGIN_SCREEN_WAYLAND
+}
+
+/// Stable for the lifetime of a per-session server. The live seat0 answer changes immediately
+/// after a successful login, so it cannot by itself tell the outgoing greeter server that it was
+/// born for the login screen.
+#[cfg(feature = "drm")]
+pub fn is_login_server_process() -> bool {
+    std::env::var(LOGIN_SERVER_ENV).as_deref() == Ok("1") || is_login_screen_wayland_cached()
+}
+
+#[cfg(feature = "drm")]
+pub(crate) fn set_login_handoff_uid(uid: Option<u32>) {
+    LOGIN_HANDOFF_UID.store(uid.unwrap_or(NO_LOGIN_HANDOFF_UID), Ordering::Release);
+}
+
+#[cfg(feature = "drm")]
+pub(crate) fn login_handoff_uid() -> Option<u32> {
+    match LOGIN_HANDOFF_UID.load(Ordering::Acquire) {
+        NO_LOGIN_HANDOFF_UID => None,
+        uid => Some(uid),
+    }
 }
 
 #[inline]
@@ -895,15 +937,14 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             if !desktop.dbus.is_empty() {
                 envs.push(("DBUS_SESSION_BUS_ADDRESS", desktop.dbus.clone()));
             }
-            if let Ok(forced_display_server) =
-                std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER")
-            {
+            if let Ok(forced_display_server) = std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER") {
                 if !forced_display_server.is_empty() {
-                    envs.push((
-                        "RUSTDESK_FORCED_DISPLAY_SERVER",
-                        forced_display_server,
-                    ));
+                    envs.push(("RUSTDESK_FORCED_DISPLAY_SERVER", forced_display_server));
                 }
+            }
+            #[cfg(feature = "drm")]
+            if desktop.is_login_wayland() {
+                envs.push((LOGIN_SERVER_ENV, "1".to_owned()));
             }
             envs.push((
                 "TERM",
@@ -1065,6 +1106,88 @@ fn force_stop_server() {
     sleep_millis(super::SERVICE_INTERVAL);
 }
 
+#[cfg(feature = "drm")]
+fn child_is_running(server: &mut Option<Child>) -> bool {
+    let Some(child) = server.as_mut() else {
+        return false;
+    };
+    match child.try_wait() {
+        Ok(None) => true,
+        Ok(Some(status)) => {
+            log::info!("login-screen --server exited during handoff: {status}");
+            *server = None;
+            false
+        }
+        Err(err) => {
+            log::warn!("could not inspect login-screen --server during handoff: {err}");
+            true
+        }
+    }
+}
+
+#[cfg(feature = "drm")]
+fn login_server_has_active_connections(uid: u32) -> ResultType<bool> {
+    const IPC_TIMEOUT_MS: u64 = 300;
+    let runtime = hbb_common::tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let mut connection = crate::ipc::connect_for_uid(IPC_TIMEOUT_MS, uid, "").await?;
+        connection
+            .send(&crate::ipc::Data::HasNoActiveConns(None))
+            .await?;
+        match connection.next_timeout(IPC_TIMEOUT_MS).await? {
+            Some(crate::ipc::Data::HasNoActiveConns(Some(has_none))) => Ok(!has_none),
+            _ => bail!("login-screen --server returned no connection-state reply"),
+        }
+    })
+}
+
+/// Keep the greeter server only while it has a live remote session. An IPC failure is treated as
+/// active for a short grace so a transient socket race cannot cut the session at the exact login
+/// boundary, but it cannot pin a dead greeter process forever.
+#[cfg(feature = "drm")]
+fn should_keep_login_server_for_handoff(
+    server: &mut Option<Child>,
+    query_failed_since: &mut Option<Instant>,
+) -> bool {
+    const QUERY_FAILURE_GRACE: Duration = Duration::from_secs(5);
+    if !child_is_running(server) {
+        *query_failed_since = None;
+        return false;
+    }
+    let Some(uid) = login_handoff_uid() else {
+        *query_failed_since = None;
+        return false;
+    };
+    match login_server_has_active_connections(uid) {
+        Ok(true) => {
+            *query_failed_since = None;
+            true
+        }
+        Ok(false) => {
+            *query_failed_since = None;
+            false
+        }
+        Err(err) => {
+            let failed_since = query_failed_since.get_or_insert_with(|| {
+                log::warn!(
+                    "could not query login-screen connection state; preserving it for {QUERY_FAILURE_GRACE:?}: {err}"
+                );
+                Instant::now()
+            });
+            if failed_since.elapsed() < QUERY_FAILURE_GRACE {
+                true
+            } else {
+                log::warn!(
+                    "login-screen connection-state query failed for {QUERY_FAILURE_GRACE:?}; ending handoff"
+                );
+                false
+            }
+        }
+    }
+}
+
 pub fn start_os_service() {
     check_if_stop_service();
     stop_rustdesk_servers();
@@ -1105,6 +1228,10 @@ pub fn start_os_service() {
     let mut uid = "".to_owned();
     let mut server: Option<Child> = None;
     let mut user_server: Option<Child> = None;
+    #[cfg(feature = "drm")]
+    let mut handoff_query_failed_since: Option<Instant> = None;
+    #[cfg(feature = "drm")]
+    let mut handoff_logged = false;
     if let Err(err) = ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     }) {
@@ -1119,6 +1246,11 @@ pub fn start_os_service() {
 
         // Duplicate logic here with should_start_server.
         if desktop.username == "root" || desktop.is_login_wayland() {
+            #[cfg(feature = "drm")]
+            {
+                handoff_query_failed_since = None;
+                handoff_logged = false;
+            }
             // try kill subprocess "--server"
             stop_server(&mut user_server);
             // try start subprocess "--server"
@@ -1166,28 +1298,69 @@ pub fn start_os_service() {
                     start_server(None, &mut server);
                 }
             }
+            #[cfg(feature = "drm")]
+            if server.is_some() {
+                let server_uid = if desktop.username == "root" {
+                    Some(0)
+                } else {
+                    desktop.uid.parse::<u32>().ok()
+                };
+                set_login_handoff_uid(server_uid);
+            }
         } else if desktop.username != "" {
-            // try kill subprocess "--server"
-            stop_server(&mut server);
+            #[cfg(feature = "drm")]
+            let keep_login_server =
+                should_keep_login_server_for_handoff(&mut server, &mut handoff_query_failed_since);
+            #[cfg(not(feature = "drm"))]
+            let keep_login_server = false;
 
-            let is_display_changed = desktop.display != display || desktop.xauth != xauth;
-            display = desktop.display.clone();
-            xauth = desktop.xauth.clone();
+            if keep_login_server {
+                // The established phone connection owns this greeter server. Its DRM and uinput
+                // channels remain valid across the login boundary, so replacing the process here
+                // would only turn a working handoff into an avoidable TCP reset.
+                stop_server(&mut user_server);
+                #[cfg(feature = "drm")]
+                if !handoff_logged {
+                    log::info!(
+                        "preserving active login-screen connection across the desktop handoff"
+                    );
+                    handoff_logged = true;
+                }
+            } else {
+                #[cfg(feature = "drm")]
+                if handoff_logged {
+                    log::info!(
+                        "login-screen connection ended; switching to the user Wayland server"
+                    );
+                    handoff_logged = false;
+                }
 
-            // try start subprocess "--server"
-            if should_start_server(
-                !desktop.is_wayland(),
-                is_display_changed,
-                &mut uid,
-                &desktop,
-                &mut cm0,
-                &mut last_restart,
-                &mut user_server,
-            ) {
-                force_stop_server();
-                start_server(Some(&desktop), &mut user_server);
+                // try kill subprocess "--server"
+                stop_server(&mut server);
+                #[cfg(feature = "drm")]
+                set_login_handoff_uid(None);
+
+                let is_display_changed = desktop.display != display || desktop.xauth != xauth;
+                display = desktop.display.clone();
+                xauth = desktop.xauth.clone();
+
+                // try start subprocess "--server"
+                if should_start_server(
+                    !desktop.is_wayland(),
+                    is_display_changed,
+                    &mut uid,
+                    &desktop,
+                    &mut cm0,
+                    &mut last_restart,
+                    &mut user_server,
+                ) {
+                    force_stop_server();
+                    start_server(Some(&desktop), &mut user_server);
+                }
             }
         } else {
+            #[cfg(feature = "drm")]
+            set_login_handoff_uid(None);
             force_stop_server();
             stop_server(&mut user_server);
             stop_server(&mut server);
@@ -1209,6 +1382,8 @@ pub fn start_os_service() {
     if let Some(ps) = server.take().as_mut() {
         allow_err!(ps.kill());
     }
+    #[cfg(feature = "drm")]
+    set_login_handoff_uid(None);
     log::info!("Exit");
 }
 
@@ -2031,7 +2206,7 @@ mod desktop {
 
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
-            super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
+            super::is_login_manager_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
         }
 
         fn get_display_xauth_wayland(&mut self) {
@@ -2403,11 +2578,8 @@ mod desktop {
                 // which is the entire reason it works at a login screen. `try_start_server_` skips
                 // empty entries, so the greeter child simply does not get them.
                 //
-                // `is_login_wayland` needs `is_gdm_user(username)`, and a current GDM runs its
-                // greeter as `gdm-greeter`, which that helper does not match -- measured on the
-                // test host, where the greeter server therefore takes the branch below and gets a
-                // fully populated environment. This is for the display managers whose greeter user
-                // does match.
+                // `is_login_wayland` accepts both GDM's legacy `gdm` account and the current
+                // dynamically-created `gdm-greeter` account, as well as SDDM's greeter account.
                 #[cfg(feature = "drm")]
                 self.get_home();
                 return;
@@ -2430,6 +2602,14 @@ mod desktop {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn recognizes_current_and_legacy_gdm_greeter_users() {
+            assert!(super::super::is_login_manager_user("gdm"));
+            assert!(super::super::is_login_manager_user("gdm-greeter"));
+            assert!(super::super::is_login_manager_user("sddm"));
+            assert!(!super::super::is_login_manager_user("greeter"));
+        }
 
         #[test]
         fn test_desktop_env() {
@@ -2508,11 +2688,8 @@ impl SessionIdleInhibit {
         let mut refused = Vec::new();
         for target in SESSION_INHIBIT_TARGETS {
             let res: Result<(u32,), dbus::Error> = {
-                let proxy = conn.with_proxy(
-                    target.dest,
-                    target.path,
-                    std::time::Duration::from_secs(3),
-                );
+                let proxy =
+                    conn.with_proxy(target.dest, target.path, std::time::Duration::from_secs(3));
                 if target.gnome_shape {
                     // Inhibit(s app_id, u xid, s reason, u flags) -> u cookie; xid 0 = no window.
                     proxy.method_call(
