@@ -787,6 +787,15 @@ pub fn discover() {
     #[cfg(feature = "flutter")]
     crate::flutter_ffi::main_update_lan_discovery("scanning", false, false);
     std::thread::spawn(move || {
+        struct LanDiscoveryRunningGuard;
+
+        impl Drop for LanDiscoveryRunningGuard {
+            fn drop(&mut self) {
+                LAN_DISCOVERY_RUNNING.store(false, Ordering::Release);
+            }
+        }
+
+        let _running_guard = LanDiscoveryRunningGuard;
         let result = crate::lan::discover(get_id());
         #[cfg(feature = "flutter")]
         match &result {
@@ -797,7 +806,6 @@ pub fn discover() {
             ),
             Err(_) => crate::flutter_ffi::main_update_lan_discovery("failed", false, false),
         }
-        LAN_DISCOVERY_RUNNING.store(false, Ordering::Release);
         allow_err!(result);
     });
 }
