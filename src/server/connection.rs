@@ -42,7 +42,7 @@ use hbb_common::{
     sleep, timeout,
     tokio::{
         net::TcpStream,
-        sync::mpsc,
+        sync::{mpsc, Notify},
         time::{self, Duration, Instant},
     },
     tokio_util::codec::{BytesCodec, Framed},
@@ -55,7 +55,7 @@ use serde_json::{json, value::Value};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::atomic::Ordering;
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     net::Ipv6Addr,
     num::NonZeroI64,
     path::PathBuf,
@@ -70,6 +70,111 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(windows)]
 use crate::virtual_display_manager;
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
+
+type VideoMessage = (Instant, Arc<Message>);
+const MAX_PENDING_VIDEO_MESSAGES: usize = 2;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VideoMessageKind {
+    Frame,
+    SwitchDisplay,
+}
+
+struct PendingVideoMessage {
+    value: VideoMessage,
+    kind: VideoMessageKind,
+}
+
+struct VideoChannelState {
+    pending: Mutex<VecDeque<PendingVideoMessage>>,
+    notify: Notify,
+    receiver_closed: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Clone)]
+pub struct VideoSender {
+    state: Arc<VideoChannelState>,
+}
+
+struct VideoReceiver {
+    state: Arc<VideoChannelState>,
+}
+
+fn video_channel() -> (VideoSender, VideoReceiver) {
+    let state = Arc::new(VideoChannelState {
+        pending: Mutex::new(VecDeque::with_capacity(MAX_PENDING_VIDEO_MESSAGES)),
+        notify: Notify::new(),
+        receiver_closed: std::sync::atomic::AtomicBool::new(false),
+    });
+    (
+        VideoSender {
+            state: state.clone(),
+        },
+        VideoReceiver { state },
+    )
+}
+
+impl VideoSender {
+    fn send(&self, value: VideoMessage, kind: VideoMessageKind) -> Result<(), &'static str> {
+        if self
+            .state
+            .receiver_closed
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err("video receiver closed");
+        }
+
+        let mut pending = self.state.pending.lock().unwrap();
+        match kind {
+            VideoMessageKind::Frame => {
+                if let Some(index) = pending
+                    .iter()
+                    .rposition(|queued| queued.kind == VideoMessageKind::Frame)
+                {
+                    pending[index] = PendingVideoMessage { value, kind };
+                } else {
+                    if pending.len() >= MAX_PENDING_VIDEO_MESSAGES {
+                        pending.pop_front();
+                    }
+                    pending.push_back(PendingVideoMessage { value, kind });
+                }
+            }
+            VideoMessageKind::SwitchDisplay => {
+                // Frames and older display switches are stale after a new display switch.
+                pending.clear();
+                pending.push_back(PendingVideoMessage { value, kind });
+            }
+        }
+        drop(pending);
+        self.state.notify.notify_one();
+        Ok(())
+    }
+}
+
+impl VideoReceiver {
+    async fn recv(&mut self) -> Option<VideoMessage> {
+        loop {
+            // Register before checking the queue so a send between the check and
+            // await cannot be missed.
+            let notified = self.state.notify.notified();
+            let queued = { self.state.pending.lock().unwrap().pop_front() };
+            if let Some(queued) = queued {
+                return Some(queued.value);
+            }
+            notified.await;
+        }
+    }
+}
+
+impl Drop for VideoReceiver {
+    fn drop(&mut self) {
+        self.state
+            .receiver_closed
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state.pending.lock().unwrap().clear();
+        self.state.notify.notify_waiters();
+    }
+}
 
 const FAILURE_IDX_ID_WHITELIST: usize = 2;
 // How long a rejection counts, so also how long a blocked address stays blocked. Longer
@@ -132,7 +237,7 @@ pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 pub struct ConnInner {
     id: i32,
     tx: Option<Sender>,
-    tx_video: Option<Sender>,
+    tx_video: Option<VideoSender>,
 }
 
 struct InputMouse {
@@ -353,7 +458,7 @@ pub struct Connection {
 }
 
 impl ConnInner {
-    pub fn new(id: i32, tx: Option<Sender>, tx_video: Option<Sender>) -> Self {
+    pub fn new(id: i32, tx: Option<Sender>, tx_video: Option<VideoSender>) -> Self {
         Self { id, tx, tx_video }
     }
 }
@@ -367,22 +472,23 @@ impl Subscriber for ConnInner {
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
         // Send SwitchDisplay on the same channel as VideoFrame to avoid send order problems.
-        let tx_by_video = match &msg.union {
-            Some(message::Union::VideoFrame(_)) => true,
+        let video_kind = match &msg.union {
+            Some(message::Union::VideoFrame(_)) => Some(VideoMessageKind::Frame),
             Some(message::Union::Misc(misc)) => match &misc.union {
-                Some(misc::Union::SwitchDisplay(_)) => true,
-                _ => false,
+                Some(misc::Union::SwitchDisplay(_)) => Some(VideoMessageKind::SwitchDisplay),
+                _ => None,
             },
-            _ => false,
+            _ => None,
         };
-        let tx = if tx_by_video {
-            self.tx_video.as_mut()
+        if let Some(kind) = video_kind {
+            if let Some(tx) = self.tx_video.as_mut() {
+                allow_err!(tx.send((Instant::now(), msg), kind));
+            }
         } else {
-            self.tx.as_mut()
-        };
-        tx.map(|tx| {
-            allow_err!(tx.send((Instant::now(), msg)));
-        });
+            self.tx.as_mut().map(|tx| {
+                allow_err!(tx.send((Instant::now(), msg)));
+            });
+        }
     }
 }
 
@@ -437,7 +543,7 @@ impl Connection {
         let tx_from_cm = tx_from_cm_holder.clone();
         let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
-        let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
+        let (tx_video, mut rx_video) = video_channel();
         let (tx_input, _rx_input) = std_mpsc::channel();
         let (tx_from_authed, mut rx_from_authed) = mpsc::unbounded_channel::<ipc::Data>();
         let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
@@ -6888,6 +6994,98 @@ fn wildcard_match(pattern: &str, text: &str) -> bool {
 mod test {
     #[allow(unused)]
     use super::*;
+
+    #[test]
+    fn video_channel_keeps_only_latest_pending_frame() {
+        let (sender, _receiver) = video_channel();
+        let first = Arc::new(Message::new());
+        let latest = Arc::new(Message::new());
+
+        sender
+            .send((Instant::now(), first), VideoMessageKind::Frame)
+            .unwrap();
+        sender
+            .send((Instant::now(), latest.clone()), VideoMessageKind::Frame)
+            .unwrap();
+
+        let pending = sender.state.pending.lock().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(Arc::ptr_eq(&pending[0].value.1, &latest));
+    }
+
+    #[test]
+    fn video_channel_preserves_switch_before_latest_frame() {
+        let (sender, _receiver) = video_channel();
+        let display_switch = Arc::new(Message::new());
+        let old_frame = Arc::new(Message::new());
+        let latest_frame = Arc::new(Message::new());
+
+        sender
+            .send(
+                (Instant::now(), display_switch.clone()),
+                VideoMessageKind::SwitchDisplay,
+            )
+            .unwrap();
+        sender
+            .send((Instant::now(), old_frame), VideoMessageKind::Frame)
+            .unwrap();
+        sender
+            .send(
+                (Instant::now(), latest_frame.clone()),
+                VideoMessageKind::Frame,
+            )
+            .unwrap();
+
+        let pending = sender.state.pending.lock().unwrap();
+        assert_eq!(pending.len(), MAX_PENDING_VIDEO_MESSAGES);
+        assert_eq!(pending[0].kind, VideoMessageKind::SwitchDisplay);
+        assert!(Arc::ptr_eq(&pending[0].value.1, &display_switch));
+        assert_eq!(pending[1].kind, VideoMessageKind::Frame);
+        assert!(Arc::ptr_eq(&pending[1].value.1, &latest_frame));
+    }
+
+    #[test]
+    fn video_channel_new_switch_discards_stale_messages() {
+        let (sender, _receiver) = video_channel();
+        let stale_switch = Arc::new(Message::new());
+        let stale_frame = Arc::new(Message::new());
+        let latest_switch = Arc::new(Message::new());
+
+        sender
+            .send(
+                (Instant::now(), stale_switch),
+                VideoMessageKind::SwitchDisplay,
+            )
+            .unwrap();
+        sender
+            .send((Instant::now(), stale_frame), VideoMessageKind::Frame)
+            .unwrap();
+        sender
+            .send(
+                (Instant::now(), latest_switch.clone()),
+                VideoMessageKind::SwitchDisplay,
+            )
+            .unwrap();
+
+        let pending = sender.state.pending.lock().unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].kind, VideoMessageKind::SwitchDisplay);
+        assert!(Arc::ptr_eq(&pending[0].value.1, &latest_switch));
+    }
+
+    #[test]
+    fn video_channel_rejects_messages_after_receiver_closes() {
+        let (sender, receiver) = video_channel();
+        drop(receiver);
+
+        assert!(sender
+            .send(
+                (Instant::now(), Arc::new(Message::new())),
+                VideoMessageKind::Frame,
+            )
+            .is_err());
+        assert!(sender.state.pending.lock().unwrap().is_empty());
+    }
 
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
