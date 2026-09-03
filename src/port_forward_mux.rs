@@ -376,6 +376,298 @@ pub async fn run_channel<R, W>(
     log::debug!("port forward channel {} ended: {:?} / {:?}", id, first, second);
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use tunnel::{Claim, Ready, Tunnel, TunnelHandle};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod tunnel {
+    use super::*;
+    use crate::client::Interface;
+    use hbb_common::{
+        config::READ_TIMEOUT,
+        protobuf::Message as _,
+        tokio::net::TcpStream,
+        Stream,
+    };
+    use std::{
+        collections::HashMap,
+        sync::atomic::{AtomicI32, Ordering},
+    };
+
+    // Internal state only; `Claim` and `Ready` are the API listeners see.
+    #[derive(Clone)]
+    enum TunnelState {
+        Unset,
+        Establishing,
+        Muxed(Arc<TunnelHandle>),
+        Legacy,
+        Failed,
+    }
+
+    pub enum Claim {
+        Claimed,
+        Wait,
+        Muxed(Arc<TunnelHandle>),
+        Legacy,
+    }
+
+    pub enum Ready {
+        Muxed(Arc<TunnelHandle>),
+        Legacy,
+        Failed,
+    }
+
+    /// One per port-forward window. `watch::Sender::send_if_modified` is the
+    /// atomic claim; nothing is ever awaited while it runs.
+    pub struct Tunnel {
+        state: watch::Sender<TunnelState>,
+    }
+
+    impl Tunnel {
+        pub fn new() -> Self {
+            let (state, _) = watch::channel(TunnelState::Unset);
+            Self { state }
+        }
+
+        pub fn try_claim(&self) -> Claim {
+            let mut outcome = Claim::Wait;
+            self.state.send_if_modified(|s| match s {
+                TunnelState::Unset | TunnelState::Failed => {
+                    *s = TunnelState::Establishing;
+                    outcome = Claim::Claimed;
+                    true
+                }
+                TunnelState::Establishing => false,
+                TunnelState::Muxed(h) => {
+                    outcome = Claim::Muxed(h.clone());
+                    false
+                }
+                TunnelState::Legacy => {
+                    outcome = Claim::Legacy;
+                    false
+                }
+            });
+            outcome
+        }
+
+        pub async fn wait_ready(&self) -> Ready {
+            let mut rx = self.state.subscribe();
+            loop {
+                let ready = match &*rx.borrow_and_update() {
+                    TunnelState::Muxed(h) => Some(Ready::Muxed(h.clone())),
+                    TunnelState::Legacy => Some(Ready::Legacy),
+                    // `Unset` here means the tunnel died between the claim
+                    // and this wait; the waiter treats it as a failure.
+                    TunnelState::Failed | TunnelState::Unset => Some(Ready::Failed),
+                    TunnelState::Establishing => None,
+                };
+                if let Some(r) = ready {
+                    return r;
+                }
+                if rx.changed().await.is_err() {
+                    return Ready::Failed;
+                }
+            }
+        }
+
+        pub fn set_muxed(&self, stream: Stream, interface: impl Interface) -> Arc<TunnelHandle> {
+            let (data_tx, data_rx) = mpsc::channel(DATA_QUEUE_FRAMES);
+            let (control_tx, control_rx) = mpsc::unbounded_channel();
+            let handle = Arc::new(TunnelHandle {
+                sink: FrameSink::Queued { data: data_tx, control: control_tx },
+                channels: Mutex::new(HashMap::new()),
+                next_id: AtomicI32::new(1),
+            });
+            let state = self.state.clone();
+            tokio::spawn(tunnel_loop(stream, handle.clone(), data_rx, control_rx, interface, state));
+            self.state.send_replace(TunnelState::Muxed(handle.clone()));
+            handle
+        }
+
+        pub fn set_legacy(&self) {
+            self.state.send_replace(TunnelState::Legacy);
+        }
+
+        pub fn set_failed(&self) {
+            self.state.send_replace(TunnelState::Failed);
+        }
+    }
+
+    struct ChannelEntry {
+        inbound: mpsc::UnboundedSender<Inbound>,
+        credit: Arc<SendCredit>,
+        window: Arc<Mutex<RecvWindow>>,
+        opened: bool,
+    }
+
+    pub struct TunnelHandle {
+        sink: FrameSink,
+        channels: Mutex<HashMap<i32, ChannelEntry>>,
+        next_id: AtomicI32,
+    }
+
+    impl TunnelHandle {
+        /// `open` leaves from inside the channel's own task, down the ordered
+        /// data queue, ahead of the channel's first `data`. On the control
+        /// queue it could be overtaken by that `data` whenever the tunnel loop
+        /// resumes with both queues non-empty.
+        pub fn open(
+            self: &Arc<Self>,
+            host: &str,
+            port: i32,
+            socket: TcpStream,
+            prebuf: Vec<u8>,
+        ) -> ResultType<()> {
+            if self.sink.is_closed() {
+                hbb_common::bail!("port forward tunnel is gone");
+            }
+            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+            let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
+            let credit = Arc::new(SendCredit::new(INITIAL_WINDOW));
+            let window = Arc::new(Mutex::new(RecvWindow::new(CHANNEL_WINDOW)));
+            {
+                let mut channels = self.channels.lock().unwrap();
+                if channels.len() >= MAX_CHANNELS {
+                    hbb_common::bail!("too many port forward channels");
+                }
+                channels.insert(
+                    id,
+                    ChannelEntry {
+                        inbound: inbound_tx,
+                        credit: credit.clone(),
+                        window: window.clone(),
+                        opened: false,
+                    },
+                );
+            }
+            let open = open_msg(id, host, port, CHANNEL_WINDOW);
+            let (reader, writer) = socket.into_split();
+            let sink = self.sink.clone();
+            let handle = self.clone();
+            tokio::spawn(async move {
+                if sink.send_ordered(open).await.is_ok() {
+                    run_channel(id, reader, writer, prebuf, Vec::new(), credit, window, inbound_rx, sink).await;
+                }
+                handle.channels.lock().unwrap().remove(&id);
+            });
+            Ok(())
+        }
+
+        fn on_frame(&self, ch: PortForwardChannel) {
+            match ch.union {
+                Some(port_forward_channel::Union::Opened(o)) => {
+                    let mut channels = self.channels.lock().unwrap();
+                    if o.success {
+                        // A repeated `opened` must not raise the credit again.
+                        if let Some(e) = channels.get_mut(&o.channel_id) {
+                            if !e.opened {
+                                e.opened = true;
+                                e.credit.raise_initial(o.window);
+                            }
+                        }
+                    } else if let Some(e) = channels.remove(&o.channel_id) {
+                        log::debug!("port forward channel {} refused: {}", o.channel_id, o.message);
+                        e.inbound.send(Inbound::Close).ok();
+                    }
+                }
+                Some(port_forward_channel::Union::Data(d)) => {
+                    let mut channels = self.channels.lock().unwrap();
+                    let Some(e) = channels.get(&d.channel_id) else {
+                        log::debug!("port forward data for unknown channel {}", d.channel_id);
+                        return;
+                    };
+                    let msg = if e.window.lock().unwrap().accept(d.data.len()) {
+                        Inbound::Data(d.data)
+                    } else {
+                        log::warn!("port forward channel {} overran its window", d.channel_id);
+                        Inbound::Violation
+                    };
+                    if e.inbound.send(msg).is_err() {
+                        channels.remove(&d.channel_id);
+                    }
+                }
+                Some(port_forward_channel::Union::Close(c)) => {
+                    if let Some(e) = self.channels.lock().unwrap().remove(&c.channel_id) {
+                        e.inbound.send(Inbound::Close).ok();
+                    }
+                }
+                Some(port_forward_channel::Union::WindowUpdate(u)) => {
+                    if let Some(e) = self.channels.lock().unwrap().get(&u.channel_id) {
+                        e.credit.add(u.add);
+                    }
+                }
+                Some(port_forward_channel::Union::Open(o)) => {
+                    log::debug!("ignoring open for channel {} on the controller", o.channel_id);
+                }
+                _ => {}
+            }
+        }
+
+        fn close_all(&self) {
+            self.channels.lock().unwrap().clear();
+        }
+
+        #[cfg(test)]
+        pub fn live_channels(&self) -> usize {
+            self.channels.lock().unwrap().len()
+        }
+    }
+
+    /// The only task that touches the stream. The three arms keep tokio's
+    /// default random fairness: a `biased` control -> read -> data order would
+    /// starve outbound data whenever inbound is saturated (a LAN-speed
+    /// download keeps the read arm ready on every poll), and the reverse would
+    /// starve the reads that carry the peer's window updates and pings.
+    /// Random order is safe only because nothing order-sensitive is split
+    /// across the queues: `open`, `data` and `close` share the data queue and
+    /// the control queue carries `window_update` alone.
+    async fn tunnel_loop(
+        mut stream: Stream,
+        handle: Arc<TunnelHandle>,
+        mut data_rx: mpsc::Receiver<Message>,
+        mut control_rx: mpsc::UnboundedReceiver<Message>,
+        interface: impl Interface,
+        state: watch::Sender<TunnelState>,
+    ) {
+        let err = loop {
+            tokio::select! {
+                Some(msg) = control_rx.recv() => {
+                    if let Err(e) = stream.send(&msg).await {
+                        break format!("send failed: {}", e);
+                    }
+                }
+                res = stream.next_timeout(READ_TIMEOUT) => match res {
+                    Some(Ok(bytes)) => {
+                        let Ok(msg) = Message::parse_from_bytes(&bytes) else { continue };
+                        match msg.union {
+                            Some(message::Union::PortForwardChannel(ch)) => handle.on_frame(ch),
+                            Some(message::Union::TestDelay(t)) => {
+                                interface.handle_test_delay(t, &mut stream).await;
+                            }
+                            Some(message::Union::Misc(misc)) => {
+                                if let Some(misc::Union::CloseReason(r)) = misc.union {
+                                    break format!("closed by peer: {}", r);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(Err(e)) => break format!("read failed: {}", e),
+                    None => break "timeout or reset by the peer".to_owned(),
+                },
+                Some(msg) = data_rx.recv() => {
+                    if let Err(e) = stream.send(&msg).await {
+                        break format!("send failed: {}", e);
+                    }
+                }
+            }
+        };
+        log::info!("port forward tunnel ended: {}", err);
+        handle.close_all();
+        state.send_replace(TunnelState::Unset);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,5 +980,169 @@ mod tests {
             h.task.await.unwrap();
             assert!(h.data_rx.try_recv().is_err());
         });
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    mod tunnel {
+        use super::*;
+        use crate::port_forward_mux::{Claim, Ready, Tunnel, TunnelHandle};
+        use hbb_common::{
+            protobuf::Message as _,
+            tcp::FramedStream,
+            tokio::net::{TcpListener, TcpStream},
+            Stream,
+        };
+
+        /// A loopback TCP pair wrapped as two `Stream`s: one for the tunnel,
+        /// one for the fake peer.
+        async fn stream_pair() -> (Stream, Stream) {
+            let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = l.local_addr().unwrap();
+            let client = TcpStream::connect(addr).await.unwrap();
+            let (server, _) = l.accept().await.unwrap();
+            (
+                Stream::Tcp(FramedStream::from(client, addr)),
+                Stream::Tcp(FramedStream::from(server, addr)),
+            )
+        }
+
+        async fn recv_frame(s: &mut Stream) -> PortForwardChannel {
+            let bytes = s.next().await.unwrap().unwrap();
+            let m = Message::parse_from_bytes(&bytes).unwrap();
+            match m.union {
+                Some(message::Union::PortForwardChannel(ch)) => ch,
+                other => panic!("unexpected {:?}", other),
+            }
+        }
+
+        async fn local_pair() -> (TcpStream, TcpStream) {
+            let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = l.local_addr().unwrap();
+            let a = TcpStream::connect(addr).await.unwrap();
+            let (b, _) = l.accept().await.unwrap();
+            (a, b)
+        }
+
+        #[test]
+        fn claim_is_exclusive_and_waiters_see_the_outcome() {
+            rt().block_on(async {
+                let t = Arc::new(Tunnel::new());
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.try_claim(), Claim::Wait));
+                let w = { let t = t.clone(); tokio::spawn(async move { t.wait_ready().await }) };
+                t.set_failed();
+                assert!(matches!(w.await.unwrap(), Ready::Failed));
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                t.set_legacy();
+                assert!(matches!(t.try_claim(), Claim::Legacy));
+                assert!(matches!(t.wait_ready().await, Ready::Legacy));
+            });
+        }
+
+        #[test]
+        fn open_sends_open_then_pipelined_data_and_relays_replies() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                let h = t.set_muxed(ours, NoUi);
+                let (mut app, sock) = local_pair().await;
+                h.open("localhost", 80, sock, b"GET / HTTP/1.0\r\n\r\n".to_vec()).unwrap();
+                let open = recv_frame(&mut peer).await;
+                let id = match &open.union {
+                    Some(port_forward_channel::Union::Open(o)) => {
+                        assert_eq!((o.host.as_str(), o.port, o.window), ("localhost", 80, CHANNEL_WINDOW));
+                        o.channel_id
+                    }
+                    other => panic!("expected open, got {:?}", other),
+                };
+                let d = recv_frame(&mut peer).await;
+                match &d.union {
+                    Some(port_forward_channel::Union::Data(d)) => assert_eq!(d.data, b"GET / HTTP/1.0\r\n\r\n".to_vec()),
+                    other => panic!("expected data, got {:?}", other),
+                }
+                peer.send(&opened_msg(id, true, "", CHANNEL_WINDOW)).await.unwrap();
+                peer.send(&data_msg(id, Bytes::from_static(b"HTTP/1.0 200 OK\r\n"))).await.unwrap();
+                let mut buf = [0u8; 17];
+                app.read_exact(&mut buf).await.unwrap();
+                assert_eq!(&buf, b"HTTP/1.0 200 OK\r\n");
+                peer.send(&close_msg(id)).await.unwrap();
+                assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+            });
+        }
+
+        #[test]
+        fn failed_open_closes_the_local_socket() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                t.try_claim();
+                let h = t.set_muxed(ours, NoUi);
+                let (mut app, sock) = local_pair().await;
+                h.open("localhost", 1, sock, vec![]).unwrap();
+                let id = match recv_frame(&mut peer).await.union {
+                    Some(port_forward_channel::Union::Open(o)) => o.channel_id,
+                    other => panic!("expected open, got {:?}", other),
+                };
+                peer.send(&opened_msg(id, false, "refused", 0)).await.unwrap();
+                let mut buf = [0u8; 1];
+                assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+            });
+        }
+
+        #[test]
+        fn tunnel_death_closes_channels_and_resets_state() {
+            rt().block_on(async {
+                let (ours, peer) = stream_pair().await;
+                let t = Tunnel::new();
+                t.try_claim();
+                let h = t.set_muxed(ours, NoUi);
+                let (mut app, sock) = local_pair().await;
+                h.open("localhost", 1, sock, vec![]).unwrap();
+                drop(peer);
+                let mut buf = [0u8; 1];
+                assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(h.open("localhost", 1, local_pair().await.1, vec![]).is_err());
+            });
+        }
+
+        /// An `Interface` that does nothing; the tunnel only needs it for
+        /// `handle_test_delay`, which echoes like `Session::handle_test_delay`
+        /// (`src/ui_session_interface.rs:1894`) minus the UI stats.
+        #[derive(Clone)]
+        pub struct NoUi;
+
+        #[async_trait::async_trait]
+        impl crate::client::Interface for NoUi {
+            fn send(&self, _data: crate::client::Data) {}
+            fn msgbox(&self, _msgtype: &str, _title: &str, _text: &str, _link: &str) {}
+            fn handle_login_error(&self, _err: &str) -> bool {
+                false
+            }
+            fn handle_peer_info(&self, _pi: PeerInfo) {}
+            fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
+            async fn handle_hash(&self, _pass: &str, _hash: Hash, _peer: &mut Stream) -> bool {
+                false
+            }
+            async fn handle_login_from_ui(
+                &self,
+                _os_username: String,
+                _os_password: String,
+                _password: String,
+                _remember: bool,
+                _peer: &mut Stream,
+            ) {
+            }
+            async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream) {
+                if !t.from_client {
+                    crate::client::handle_test_delay(t, peer).await;
+                }
+            }
+            fn get_lch(&self) -> Arc<std::sync::RwLock<crate::client::LoginConfigHandler>> {
+                Arc::new(std::sync::RwLock::new(Default::default()))
+            }
+        }
     }
 }
