@@ -28,46 +28,43 @@ pub fn charge(len: usize) -> u32 {
     u32::try_from(len).unwrap_or(u32::MAX).max(MIN_FRAME_CHARGE)
 }
 
-/// Receiver-side accounting: what we granted, what arrived, what we have
-/// drained to the local socket since the last `window_update`.
+/// Receiver-side accounting: the credit the peer still has, and what we have
+/// drained to the local socket since the last `window_update`. Both are
+/// bounded — a cumulative counter would wear out on a long transfer.
 pub struct RecvWindow {
-    granted: u32,
-    received: u32,
+    remaining: u32,
     drained_since_update: u32,
 }
 
 impl RecvWindow {
     pub fn new(granted: u32) -> Self {
         Self {
-            granted: effective_window(granted),
-            received: 0,
+            remaining: effective_window(granted),
             drained_since_update: 0,
         }
     }
 
     /// False means the peer overran the window: a protocol violation.
     pub fn accept(&mut self, len: usize) -> bool {
-        let len = charge(len);
-        match self.received.checked_add(len) {
-            Some(total) if total <= self.granted => {
-                self.received = total;
+        match self.remaining.checked_sub(charge(len)) {
+            Some(left) => {
+                self.remaining = left;
                 true
             }
-            _ => false,
+            None => false,
         }
     }
 
     /// Returns the amount to advertise in a `window_update` once enough has
-    /// been drained; the grant is extended by the same amount.
+    /// been drained; the same amount is credited back.
     pub fn drained(&mut self, n: usize) -> Option<u32> {
-        let n = charge(n);
-        self.drained_since_update = self.drained_since_update.saturating_add(n);
+        self.drained_since_update = self.drained_since_update.saturating_add(charge(n));
         if self.drained_since_update < UPDATE_THRESHOLD {
             return None;
         }
         let add = self.drained_since_update;
         self.drained_since_update = 0;
-        self.granted = self.granted.saturating_add(add);
+        self.remaining = self.remaining.saturating_add(add);
         Some(add)
     }
 }
@@ -225,6 +222,19 @@ mod tests {
         assert!(w.accept(CHANNEL_WINDOW as usize));
         assert!(w.accept(UPDATE_THRESHOLD as usize));
         assert!(!w.accept(1));
+    }
+
+    #[test]
+    fn accounting_survives_a_transfer_far_larger_than_the_window() {
+        // Cumulative counters used to overflow around 4 GiB on one channel and
+        // read as a protocol violation mid-transfer.
+        let mut w = RecvWindow::new(CHANNEL_WINDOW);
+        let mut moved: u64 = 0;
+        while moved < 8 * 1024 * 1024 * 1024 {
+            assert!(w.accept(MAX_FRAME));
+            w.drained(MAX_FRAME);
+            moved += MAX_FRAME as u64;
+        }
     }
 
     #[test]
