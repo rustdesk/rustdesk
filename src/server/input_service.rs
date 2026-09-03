@@ -5,6 +5,11 @@ use crate::input::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::whiteboard;
 #[cfg(target_os = "macos")]
+use core_graphics::{
+    event::{CGEvent, CGEventFlags, CGEventTapLocation as CoreCGEventTapLocation, EventField},
+    event_source::CGEventSource,
+};
+#[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{
@@ -608,12 +613,76 @@ lazy_static::lazy_static! {
 #[cfg(target_os = "macos")]
 struct VirtualInputState {
     virtual_input: VirtualInput,
+    event_source: CGEventSource,
     capslock_down: bool,
+    modifier_state: MacModifierState,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+struct MacModifierState {
+    left_shift: bool,
+    right_shift: bool,
+    left_control: bool,
+    right_control: bool,
+    left_option: bool,
+    right_option: bool,
+    left_command: bool,
+    right_command: bool,
+}
+
+#[cfg(target_os = "macos")]
+impl MacModifierState {
+    fn update(&mut self, keycode: u16, down: bool) {
+        match keycode {
+            rdev::kVK_Shift => self.left_shift = down,
+            rdev::kVK_RightShift => self.right_shift = down,
+            rdev::kVK_Control => self.left_control = down,
+            rdev::kVK_RightControl => self.right_control = down,
+            rdev::kVK_Option => self.left_option = down,
+            rdev::kVK_RightOption => self.right_option = down,
+            rdev::kVK_Command => self.left_command = down,
+            rdev::kVK_RightCommand => self.right_command = down,
+            _ => {}
+        }
+    }
+
+    fn flags(&self) -> CGEventFlags {
+        let mut flags = CGEventFlags::CGEventFlagNull;
+        if self.left_shift || self.right_shift {
+            flags |= CGEventFlags::CGEventFlagShift;
+        }
+        if self.left_control || self.right_control {
+            flags |= CGEventFlags::CGEventFlagControl;
+        }
+        if self.left_option || self.right_option {
+            flags |= CGEventFlags::CGEventFlagAlternate;
+        }
+        if self.left_command || self.right_command {
+            flags |= CGEventFlags::CGEventFlagCommand;
+        }
+        flags
+    }
+
+    fn is_modifier(keycode: u16) -> bool {
+        matches!(
+            keycode,
+            rdev::kVK_Shift
+                | rdev::kVK_RightShift
+                | rdev::kVK_Control
+                | rdev::kVK_RightControl
+                | rdev::kVK_Option
+                | rdev::kVK_RightOption
+                | rdev::kVK_Command
+                | rdev::kVK_RightCommand
+        )
+    }
 }
 
 #[cfg(target_os = "macos")]
 impl VirtualInputState {
     fn new() -> Option<Self> {
+        let event_source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
         VirtualInput::new(
             CGEventSourceStateID::CombinedSessionState,
             // Note: `CGEventTapLocation::Session` will be affected by the mouse events.
@@ -633,7 +702,9 @@ impl VirtualInputState {
         )
         .map(|virtual_input| Self {
             virtual_input,
+            event_source,
             capslock_down: false,
+            modifier_state: MacModifierState::default(),
         })
         .ok()
     }
@@ -641,6 +712,73 @@ impl VirtualInputState {
     #[inline]
     fn simulate(&self, event_type: &EventType) -> ResultType<()> {
         Ok(self.virtual_input.simulate(&event_type)?)
+    }
+
+    fn simulate_raw_key(&mut self, keycode: KeyCode, keydown: bool) -> ResultType<()> {
+        let keycode = keycode as u16;
+        let current_flags = self.modifier_state.flags();
+        let use_flagged_event = MacModifierState::is_modifier(keycode)
+            || current_flags != CGEventFlags::CGEventFlagNull;
+
+        if !use_flagged_event {
+            let rawkey = RawKey::MacVirtualKeycode(keycode as _);
+            let event_type = if keydown {
+                EventType::KeyPress(RdevKey::RawKey(rawkey))
+            } else {
+                EventType::KeyRelease(RdevKey::RawKey(rawkey))
+            };
+            return self.simulate(&event_type);
+        }
+
+        // Raw map events carry the physical key code, but the active modifier
+        // state must also be present in CGEventFlags for macOS to interpret a
+        // chord such as right-Control+C as a control character.
+        let mut event =
+            match CGEvent::new_keyboard_event(self.event_source.clone(), keycode, keydown) {
+                Ok(event) => event,
+                Err(_) => return Ok(()),
+            };
+
+        if keydown {
+            self.modifier_state.update(keycode, true);
+        }
+        event.set_flags(self.modifier_state.flags());
+        event.set_integer_value_field(
+            EventField::EVENT_SOURCE_USER_DATA,
+            enigo::ENIGO_INPUT_EXTRA_VALUE,
+        );
+        event.post(CoreCGEventTapLocation::Session);
+        if !keydown {
+            self.modifier_state.update(keycode, false);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod mac_modifier_state_tests {
+    use super::{CGEventFlags, MacModifierState};
+
+    #[test]
+    fn right_control_sets_and_clears_control_flag() {
+        let mut state = MacModifierState::default();
+
+        state.update(rdev::kVK_RightControl, true);
+        assert!(state.flags().contains(CGEventFlags::CGEventFlagControl));
+
+        state.update(rdev::kVK_RightControl, false);
+        assert_eq!(state.flags(), CGEventFlags::CGEventFlagNull);
+    }
+
+    #[test]
+    fn releasing_one_control_keeps_flag_for_the_other() {
+        let mut state = MacModifierState::default();
+
+        state.update(rdev::kVK_Control, true);
+        state.update(rdev::kVK_RightControl, true);
+        state.update(rdev::kVK_RightControl, false);
+
+        assert!(state.flags().contains(CGEventFlags::CGEventFlagControl));
     }
 }
 
@@ -1438,6 +1576,17 @@ pub fn reset_input_ondisconn() {
 }
 
 fn sim_rdev_rawkey_position(code: KeyCode, keydown: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        unsafe {
+            let _lock = VIRTUAL_INPUT_MTX.lock();
+            if let Some(input) = VIRTUAL_INPUT_STATE.as_mut() {
+                let _ = input.simulate_raw_key(code, keydown);
+            }
+        }
+        return;
+    }
+
     #[cfg(target_os = "windows")]
     let rawkey = RawKey::ScanCode(code);
     #[cfg(target_os = "linux")]
@@ -1445,8 +1594,6 @@ fn sim_rdev_rawkey_position(code: KeyCode, keydown: bool) {
     // // to-do: test android
     // #[cfg(target_os = "android")]
     // let rawkey = RawKey::LinuxConsoleKeycode(code);
-    #[cfg(target_os = "macos")]
-    let rawkey = RawKey::MacVirtualKeycode(code);
 
     // map mode(1): Send keycode according to the peer platform.
     record_pressed_key(KeysDown::RdevKey(rawkey), keydown);
