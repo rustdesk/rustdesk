@@ -297,6 +297,30 @@ pub fn clear_wayland_displays_cache() {
     // capturer rebuild loop clears about once a second.
 }
 
+// Bumped ONLY by the layout-drift edge in display_service (its single owner), never by cache
+// clears: session inits and hotplug workers clear the cache too, and a bump there tears down
+// every OTHER live capturer on a multi-display session. A capturer records this at build and
+// treats a later bump as "the layout changed under me, rebuild" — the only trigger a rotation
+// has, since it changes neither the CRTC mode nor the framebuffer size (rustdesk#15886).
+static SNAPSHOT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether no snapshot has been cached: the signature of an enumeration that failed at session
+/// build (an `Err` is deliberately not cached), as opposed to a session that started healthy.
+#[cfg(feature = "drm")]
+pub fn wayland_snapshot_missing() -> bool {
+    DISPLAYS.lock().unwrap().is_none()
+}
+
+#[cfg(any(test, feature = "drm"))]
+pub fn bump_layout_generation() {
+    SNAPSHOT_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Release);
+}
+
+#[cfg(feature = "drm")]
+pub fn wayland_snapshot_generation() -> u64 {
+    SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire)
+}
+
 // Return (min_x, max_x, min_y, max_y)
 pub fn get_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
     let wayland_displays = get_displays();
@@ -332,7 +356,8 @@ fn desktop_rect_of(displays: &[WaylandDisplayInfo]) -> Option<(i32, i32, i32, i3
     // Otherwise, we use the logical size for `uinput`.
     if displays.len() == 1 {
         let d = &displays[0];
-        return Some((d.x, d.x + d.width, d.y, d.y + d.height));
+        let (w, h) = oriented_physical(d);
+        return Some((d.x, d.x + w, d.y, d.y + h));
     }
 
     let mut min_x = i32::MAX;
@@ -344,6 +369,8 @@ fn desktop_rect_of(displays: &[WaylandDisplayInfo]) -> Option<(i32, i32, i32, i3
         min_y = min_y.min(d.y);
         let size = if let Some(logical_size) = d.logical_size {
             logical_size
+        } else if d.transform == 90 || d.transform == 270 {
+            oriented_physical(d)
         } else {
             // When `logical_size` is None, we cannot obtain the correct desktop rectangle.
             // This may occur if the Wayland compositor does not provide logical size information,
@@ -374,6 +401,24 @@ pub struct DisplayRect {
     pub y: i32,
     pub w: i32,
     pub h: i32,
+    // Carried so the drift comparison sees 0<->180 and 90<->270 flips, whose rects are
+    // otherwise identical; the remap itself matches by name and containment, never by this.
+    pub transform: i32,
+}
+
+/// Physical size in delivered orientation: a 90/270 output scans out WxH but is captured,
+/// advertised and pointed at as HxW.
+fn oriented_physical(d: &WaylandDisplayInfo) -> (i32, i32) {
+    if d.transform == 90 || d.transform == 270 {
+        (d.height, d.width)
+    } else {
+        (d.width, d.height)
+    }
+}
+
+/// The logical rectangles of a display list, for a caller that already has the list.
+pub fn logical_rects_of_displays(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
+    logical_rects_of(displays)
 }
 
 fn logical_rects_of(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
@@ -386,9 +431,9 @@ fn logical_rects_of(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
         .iter()
         .map(|d| {
             let (w, h) = if single {
-                (d.width, d.height)
+                oriented_physical(d)
             } else {
-                d.logical_size.unwrap_or((d.width, d.height))
+                d.logical_size.unwrap_or_else(|| oriented_physical(d))
             };
             DisplayRect {
                 name: d.name.clone(),
@@ -396,6 +441,7 @@ fn logical_rects_of(displays: &[WaylandDisplayInfo]) -> Vec<DisplayRect> {
                 y: d.y,
                 w,
                 h,
+                transform: d.transform,
             }
         })
         .collect()
@@ -495,8 +541,8 @@ mod tests {
     #[test]
     fn test_clear_keeps_the_failure_stamp() {
         // The stamp describes the seat, not the cache: the ~1/s capturer rebuild loop clears,
-        // and dropping the stamp with it would defeat the backoff. Sole test touching these
-        // statics; serialize before adding another.
+        // and dropping the stamp with it would defeat the backoff. The generation test also
+        // calls clear now; both only assert monotonic/unchanged state, so they can interleave.
         *LAST_FAILED_LOOKUP.lock().unwrap() = Some(Instant::now());
         clear_wayland_displays_cache();
         let stamp = *LAST_FAILED_LOOKUP.lock().unwrap();
@@ -519,6 +565,7 @@ mod tests {
             height,
             logical_size,
             refresh_rate: 60,
+            transform: 0,
         }
     }
 
@@ -553,6 +600,42 @@ mod tests {
         assert_eq!(desktop_rect_of(&displays), Some((0, 5120, 0, 1440)));
     }
 
+    #[test]
+    fn a_single_rotated_display_swaps_the_uinput_rect() {
+        // Review finding 1 on rustdesk#15889: the single-display branch served the unrotated
+        // mode, so the pointer could not reach ~44% of a portrait screen.
+        let mut d = display(0, 0, 1920, 1080, None);
+        d.transform = 90;
+        assert_eq!(desktop_rect_of(&[d.clone()]), Some((0, 1080, 0, 1920)));
+        let rects = logical_rects_of(&[d]);
+        assert_eq!((rects[0].w, rects[0].h), (1080, 1920));
+    }
+
+    #[test]
+    fn a_transform_flip_is_visible_to_the_drift_comparison() {
+        // Review finding 5: 0<->180 and 90<->270 leave every rect identical; the transform
+        // field is what lets `baseline != live` fire on them.
+        let mut a = display(0, 0, 1920, 1080, Some((1920, 1080)));
+        let mut b = a.clone();
+        a.transform = 90;
+        b.transform = 270;
+        assert_ne!(logical_rects_of(&[a.clone(), a.clone()]), logical_rects_of(&[b.clone(), b]));
+    }
+
+    #[test]
+    fn only_the_explicit_bump_moves_the_generation() {
+        // A cache clear must NOT bump: session inits clear too, and a bump there rebuilds
+        // every other live capturer (adversarial finding on the first version of this).
+        let before = SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire);
+        clear_wayland_displays_cache();
+        assert_eq!(
+            SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire),
+            before
+        );
+        bump_layout_generation();
+        assert!(SNAPSHOT_GENERATION.load(std::sync::atomic::Ordering::Acquire) > before);
+    }
+
     fn rect(name: &str, x: i32, y: i32, w: i32, h: i32) -> DisplayRect {
         DisplayRect {
             name: name.to_owned(),
@@ -560,6 +643,7 @@ mod tests {
             y,
             w,
             h,
+            transform: 0,
         }
     }
 

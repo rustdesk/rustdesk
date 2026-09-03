@@ -52,9 +52,17 @@ impl FrameSlot {
     }
 }
 
+/// `Shared.transform` before new() stores the real value: a cursor arriving this early is held
+/// back and replayed once the session transform is in, because the producer will not resend it
+/// until the shape changes.
+const TRANSFORM_PENDING: i32 = i32::MIN;
+
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
+    // Session transform, TRANSFORM_PENDING until new() stores it post-handshake; the receive
+    // thread turns cursor bitmaps with it and defers any cursor that races the store.
+    transform: std::sync::atomic::AtomicI32,
 }
 
 pub struct IpcDrmCapturer {
@@ -63,7 +71,14 @@ pub struct IpcDrmCapturer {
     display: i32,
     connector: Option<String>,
     // What the encoder was sized from: CapturerInfo{width,height} is read once, at build time.
+    // With a rotated output these are the ROTATED dimensions, matching the frames delivered.
     session_size: Option<(usize, usize)>,
+    // Output rotation in degrees: a rotated scanout holds the desktop drawn sideways, so frames
+    // are turned back before delivery. Fixed per session; a rotation rebuilds the capturer.
+    transform: i32,
+    // The wayland snapshot generation this session was built from: a later invalidation means
+    // the layout (a rotation included) may have changed, and frame() asks for a rebuild.
+    snapshot_gen: u64,
     cur: Vec<u8>,
     cur_w: usize,
     cur_h: usize,
@@ -74,6 +89,102 @@ pub struct IpcDrmCapturer {
 /// A list index is NOT an identity: `drm_enumerate_all_displays` concatenates per-card lists.
 fn connector_key(d: &DrmDisplayInfo) -> String {
     format!("{}:{}", d.device, d.name)
+}
+
+/// Frame dimensions after undoing `transform` degrees of output rotation.
+fn rotated_dims(transform: i32, w: usize, h: usize) -> (usize, usize) {
+    if transform == 90 || transform == 270 {
+        (h, w)
+    } else {
+        (w, h)
+    }
+}
+
+/// Hotspot of a rotated cursor bitmap: the same point mapping `unrotate_bgra` applies to
+/// pixels, applied to the one coordinate that must keep naming the click point.
+fn unrotate_hotspot(transform: i32, w: i32, h: i32, hotx: i32, hoty: i32) -> (i32, i32) {
+    match transform {
+        90 => (h - 1 - hoty, hotx),
+        180 => (w - 1 - hotx, h - 1 - hoty),
+        270 => (hoty, w - 1 - hotx),
+        _ => (hotx, hoty),
+    }
+}
+
+/// Turn a 4-byte-pixel frame upright into tightly packed `dst`, undoing `transform` degrees;
+/// padded `src` rows ok (stride = len/h). Direction pinned by the tests to the measured anchor
+/// of rustdesk#15886; libyuv walks pixels, so channel order does not matter.
+fn unrotate_bgra(src: &[u8], w: usize, h: usize, transform: i32, dst: &mut Vec<u8>) {
+    const PX: usize = 4;
+    let stride = if h > 0 { src.len() / h } else { 0 };
+    let (dw, dh) = rotated_dims(transform, w, h);
+    dst.resize(
+        dw.checked_mul(dh).and_then(|p| p.checked_mul(PX)).unwrap_or(0),
+        0,
+    );
+    if dst.is_empty() || stride < w * PX {
+        log::error!("unrotate: rejected geometry {w}x{h} stride {stride}; frame left blank");
+        return;
+    }
+    let mode = match transform {
+        90 => scrap::RotationMode::kRotate90,
+        180 => scrap::RotationMode::kRotate180,
+        270 => scrap::RotationMode::kRotate270,
+        _ => scrap::RotationMode::kRotate0,
+    };
+    unsafe {
+        scrap::ARGBRotate(
+            src.as_ptr(),
+            stride as i32,
+            dst.as_mut_ptr(),
+            (dw * PX) as i32,
+            w as i32,
+            h as i32,
+            mode,
+        );
+    }
+}
+
+/// Transform and augmented origin for one wire entry, derived from ONE wayland snapshot so both
+/// reflect the same output assignment; two `get_displays()` reads could straddle a cache
+/// invalidation. `None` origin means nothing to augment with (caller keeps the DRM origin).
+fn transform_and_origin(
+    drm: &[DrmDisplayInfo],
+    wire_idx: usize,
+    wl: &scrap::wayland::display::Displays,
+) -> (i32, Option<(i32, i32)>) {
+    if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
+        if wl.displays.is_empty() && !drm.is_empty() {
+            // A later successful enumeration refills the cache and hides this state from
+            // wayland_snapshot_missing, so the layout poll needs this durable record to know a
+            // capturer was built blind and owes a rebuild.
+            UNROTATED_SNAPSHOT_PENDING.store(true, Ordering::Release);
+            log::warn!(
+                "drm: no wayland snapshot at capturer build for display {:?}; assuming unrotated",
+                drm.get(wire_idx).map(|d| d.name.as_str()).unwrap_or("?")
+            );
+        }
+        return (0, None);
+    }
+    let assignment = assign_wayland_outputs(drm, &wl.displays);
+    // The transform comes ONLY from an identity match (name, or unique resolution), through the
+    // SAME progressive-taken pass the advertise side keys its swap off: the layout-order
+    // fallback is fine for an origin guess, but a rotation pinned on a guess splits the
+    // advertised dimensions from the delivered ones.
+    let transform = identity_matches(drm, &wl.displays)
+        .get(wire_idx)
+        .copied()
+        .flatten()
+        .map(|j| wl.displays[j].transform)
+        // Hardware-rotated 180 scans out already upright (i915 advertises rotate-180 and
+        // mutter uses it), and wl_output cannot tell hardware from software rotation, so 180
+        // keeps master behavior until the plane rotation property travels the wire.
+        .map(|t| if t == 90 || t == 270 { t } else { 0 })
+        .unwrap_or(0);
+    let origin = augment_with_wayland_geometry_from(drm, wl, &assignment)
+        .get(wire_idx)
+        .map(|di| (di.x, di.y));
+    (transform, origin)
 }
 
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
@@ -96,6 +207,9 @@ struct DisplayHealth {
     /// The dma-buf convert failed for this display. The COMMON cause is multi-GPU: our render node
     /// is not the GPU that exported the scanout. Follows the monitor for the process run.
     prefer_cpu: bool,
+    /// The PipeWire fallback for this display was rejected on geometry (a transposed stream), so
+    /// the lone-display carve-out in `mark_demoted_displays` must not keep advertising it online.
+    fallback_rejected: bool,
 }
 
 impl DisplayHealth {
@@ -107,6 +221,7 @@ impl DisplayHealth {
             last_build: None,
             rapid_builds: 0,
             prefer_cpu: false,
+            fallback_rejected: false,
         }
     }
 
@@ -185,6 +300,14 @@ fn render_node_count() -> usize {
 }
 
 static UINPUT_REFRESH_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// A capturer was built with no wayland snapshot and runs unrotated; the layout poll consumes
+/// this to bump the generation once a live snapshot exists.
+static UNROTATED_SNAPSHOT_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub(super) fn take_unrotated_snapshot_pending() -> bool {
+    UNROTATED_SNAPSHOT_PENDING.swap(false, std::sync::atomic::Ordering::AcqRel)
+}
 static UINPUT_REFRESH_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 impl IpcDrmCapturer {
@@ -193,7 +316,7 @@ impl IpcDrmCapturer {
     pub fn new(
         display: i32,
         expected: Option<DrmDisplayInfo>,
-    ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize)> {
+    ) -> ResultType<(IpcDrmCapturer, Vec<DrmDisplayInfo>, usize, Option<(i32, i32)>)> {
         let shared = Arc::new(Shared {
             slot: Mutex::new(FrameSlot {
                 latest: None,
@@ -201,6 +324,7 @@ impl IpcDrmCapturer {
                 ended: None,
             }),
             cv: Condvar::new(),
+            transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -220,6 +344,18 @@ impl IpcDrmCapturer {
                 bail!("drm capture handshake timed out");
             }
         };
+        // One snapshot for the session: transform, origin and the advertised swap must all
+        // reflect the same output assignment. The generation is read BEFORE the snapshot, so a
+        // clear racing the build rebuilds once instead of running a session on stale geometry.
+        let snapshot_gen = scrap::wayland::display::wayland_snapshot_generation();
+        let wl = scrap::wayland::display::get_displays();
+        let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
+        // This capturer now shows that layout. If the session init's own wayland query failed it
+        // saved an empty baseline, so this is the only record of what the stream is built on.
+        super::display_service::note_capturer_layout(&wl.displays, snapshot_gen);
+        shared
+            .transform
+            .store(transform, std::sync::atomic::Ordering::Release);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -228,7 +364,9 @@ impl IpcDrmCapturer {
                 connector: displays.get(wire_idx).map(connector_key),
                 session_size: displays
                     .get(wire_idx)
-                    .map(|d| (d.width as usize, d.height as usize)),
+                    .map(|d| rotated_dims(transform, d.width as usize, d.height as usize)),
+                transform,
+                snapshot_gen,
                 cur: Vec::new(),
                 cur_w: 0,
                 cur_h: 0,
@@ -237,6 +375,7 @@ impl IpcDrmCapturer {
             },
             displays,
             wire_idx,
+            origin,
         ))
     }
 
@@ -294,10 +433,21 @@ impl TraitCapturer for IpcDrmCapturer {
             }
             if let Some((w, h, fmt, buf)) = slot.latest.take() {
                 drop(slot);
-                // convert_to_yuv only refuses a source LARGER than its destination, so a smaller
-                // frame leaves stale edges on screen. On the FIRST frame nothing changed: the list
-                // carries the CRTC mode, a frame the scanout fb, different when a CRTC scales.
-                if self.session_size.is_some_and(|(sw, sh)| (w, h) != (sw, sh)) {
+                // A layout change bumps the generation and is otherwise invisible here (mode
+                // and framebuffer keep their size). Rebuild for the new transform; not counted
+                // against health: the layout moved, the display did not fail.
+                if scrap::wayland::display::wayland_snapshot_generation() != self.snapshot_gen {
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("drm: display {} layout changed; rebuilding", self.display),
+                    ));
+                }
+                // Frames arrive in scanout orientation, the session was sized rotated, so the
+                // guard compares rotated dims. convert_to_yuv only refuses a LARGER source (a
+                // smaller one leaves stale edges); first frame: CRTC mode vs scanout fb.
+                let (fw, fh) = rotated_dims(self.transform, w, h);
+                if self.session_size.is_some_and(|(sw, sh)| (fw, fh) != (sw, sh)) {
                     self.shared.slot.lock().unwrap().recycle(buf);
                     if !self.got_frame {
                         self.note_session_without_frame();
@@ -311,15 +461,35 @@ impl TraitCapturer for IpcDrmCapturer {
                     return Err(io::Error::new(
                         io::ErrorKind::Other,
                         format!(
-                            "drm: display {} {what} ({sw}x{sh} -> {w}x{h}); rebuilding",
+                            "drm: display {} {what} ({sw}x{sh} -> {fw}x{fh}); rebuilding",
                             self.display
                         ),
                     ));
                 }
-                let previous = std::mem::replace(&mut self.cur, buf);
-                self.shared.slot.lock().unwrap().recycle(previous);
-                self.cur_w = w;
-                self.cur_h = h;
+                if self.transform == 0 {
+                    let previous = std::mem::replace(&mut self.cur, buf);
+                    self.shared.slot.lock().unwrap().recycle(previous);
+                } else if !matches!(fmt, Pixfmt::BGRA | Pixfmt::RGBA) {
+                    // Unreachable with today's producers (the convert path emits 4-byte pixels
+                    // and the CPU path hardcodes BGRA); kept so a future non-4-byte producer
+                    // fails the session instead of shearing the image.
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                    if !self.got_frame {
+                        self.note_session_without_frame();
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "drm: display {} delivered {fmt:?} on a rotated output; rebuilding",
+                            self.display
+                        ),
+                    ));
+                } else {
+                    unrotate_bgra(&buf, w, h, self.transform, &mut self.cur);
+                    self.shared.slot.lock().unwrap().recycle(buf);
+                }
+                self.cur_w = fw;
+                self.cur_h = fh;
                 self.cur_fmt = fmt;
                 if !self.got_frame {
                     // Clear ONLY the streak: `rapid_builds` is for a display that delivers a first
@@ -330,6 +500,7 @@ impl TraitCapturer for IpcDrmCapturer {
                             h.zero_frame_streak = 0;
                             h.demotes = 0;
                             h.since = Instant::now();
+                            h.fallback_rejected = false;
                         }
                     }
                 }
@@ -460,9 +631,20 @@ async fn recv_thread(
     }
     let _ = tx.send(Ok((displays, wire_idx)));
 
+    // A cursor that arrived before new() stored the session transform, held for replay. Only the
+    // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
+    let mut pending_cursor: Option<(u64, u32, u32, i32, i32, Vec<u8>)> = None;
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
+        }
+        if pending_cursor.is_some() {
+            let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+            if t != TRANSFORM_PENDING {
+                if let Some((id, width, height, hotx, hoty, raw)) = pending_cursor.take() {
+                    deliver_drm_cursor(display, cursor_epoch, id, width, height, hotx, hoty, raw, t);
+                }
+            }
         }
         let (msg, recv_fd) = match conn.recv_msg_timeout2(200).await {
             None => continue, // timeout: re-check stop at the loop top
@@ -580,18 +762,23 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        set_drm_cursor(
-                            display,
-                            cursor_epoch,
-                            DrmCursorData {
+                        let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+                        if t == TRANSFORM_PENDING {
+                            pending_cursor = Some((id, width, height, hotx, hoty, raw));
+                        } else {
+                            pending_cursor = None;
+                            deliver_drm_cursor(
+                                display,
+                                cursor_epoch,
                                 id,
-                                width: width as i32,
-                                height: height as i32,
+                                width,
+                                height,
                                 hotx,
                                 hoty,
-                                colors: raw,
-                            },
-                        );
+                                raw,
+                                t,
+                            );
+                        }
                     }
                     Ok(Err(err)) => break format!("cursor body: {err}"),
                 }
@@ -714,6 +901,56 @@ fn remove_drm_cursor(display: i32, epoch: u64) {
     let mut map = DRM_CURSOR.lock().unwrap();
     if map.get(&display).map(|(e, _)| *e) == Some(epoch) {
         map.remove(&display);
+    }
+}
+
+/// Unrotate a wire cursor into the session orientation and publish it. The compositor
+/// pre-rotates the bitmap it programs into the cursor plane, so over the unrotated video the
+/// cursor alone would stay turned and its hotspot transposed (review finding 11 on
+/// rustdesk#15889). The wire id hashes only the plane pixels and geometry, so a stream rebuilt
+/// under a new transform resends the SAME id and the client's by-id cursor cache would keep the
+/// old orientation: fold the transform in (the producer's own FNV step) so id and orientation
+/// can never disagree. The hidden sentinel must survive untouched.
+#[allow(clippy::too_many_arguments)]
+fn deliver_drm_cursor(
+    display: i32,
+    cursor_epoch: u64,
+    id: u64,
+    width: u32,
+    height: u32,
+    hotx: i32,
+    hoty: i32,
+    raw: Vec<u8>,
+    t: i32,
+) {
+    let (width, height, hotx, hoty, colors) = if t == 90 || t == 270 {
+        let mut turned = Vec::new();
+        unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
+        let (hx, hy) = unrotate_hotspot(t, width as i32, height as i32, hotx, hoty);
+        (height as i32, width as i32, hx, hy, turned)
+    } else {
+        (width as i32, height as i32, hotx, hoty, raw)
+    };
+    let id = fold_cursor_id(id, t);
+    set_drm_cursor(
+        display,
+        cursor_epoch,
+        DrmCursorData {
+            id,
+            width,
+            height,
+            hotx,
+            hoty,
+            colors,
+        },
+    );
+}
+
+fn fold_cursor_id(id: u64, t: i32) -> u64 {
+    if id == scrap::drm_reader::HIDDEN_CURSOR_ID {
+        id
+    } else {
+        (id ^ t as u32 as u64).wrapping_mul(1099511628211)
     }
 }
 
@@ -1183,12 +1420,22 @@ pub(super) fn display_count_and_any_demoted() -> Option<(usize, bool)> {
 }
 
 // A multi-display portal stream cannot replace one demoted connector. Keep its index but mark it
-// offline; a single connector remains usable through the whole-desktop fallback.
+// offline; a single connector remains usable through the whole-desktop fallback - unless that
+// fallback itself was rejected on geometry, in which case advertising the lone display online
+// would restart-loop the video service against a stream nothing can serve.
 fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
+    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
     if list.len() <= 1 {
+        if let (Some(display), Some(info)) = (list.first(), infos.first_mut()) {
+            if health
+                .get(&connector_key(display))
+                .is_some_and(|health| health.demoted() && health.fallback_rejected)
+            {
+                info.online = false;
+            }
+        }
         return;
     }
-    let health = DRM_DISPLAY_HEALTH.lock().unwrap();
     for (display, info) in list.iter().zip(infos.iter_mut()) {
         if health
             .get(&connector_key(display))
@@ -1197,6 +1444,21 @@ fn mark_demoted_displays(list: &[DrmDisplayInfo], infos: &mut [DisplayInfo]) {
             info.online = false;
         }
     }
+}
+
+/// The PipeWire fallback for this display was rejected on geometry; recorded so the lone-display
+/// carve-out above stops advertising a display nothing can serve. Cleared by a delivered frame
+/// and by the demote-cooldown re-arm.
+pub(super) fn mark_fallback_rejected(display_idx: usize) {
+    let Some(expected) = display_info_of(display_idx as i32) else {
+        return;
+    };
+    DRM_DISPLAY_HEALTH
+        .lock()
+        .unwrap()
+        .entry(connector_key(&expected))
+        .or_insert_with(DisplayHealth::new)
+        .fallback_rejected = true;
 }
 
 fn primary_index_from_assignment(assignment: &[Option<usize>], primary: usize) -> usize {
@@ -1266,18 +1528,36 @@ fn augment_with_wayland_geometry_from(
     if origin_only && drm.len() > 1 {
         return infos;
     }
+    let identity = identity_matches(drm, &wl.displays);
     for (i, info) in infos.iter_mut().enumerate() {
         let Some(w) = matched[i].map(|j| &wl.displays[j]) else {
             continue;
         };
         info.x = w.x;
         info.y = w.y;
+        // Rotated size before the origin-only cut: a lone rotated output still delivers rotated
+        // frames, so it must advertise them; only the logical-scale adoption stays multi-output.
+        // original_resolution follows in the same motion, or the client reads the transposed
+        // current size against an untransposed original as a third-party resolution change.
+        // Identity matches ONLY, the same rule the capturer's transform follows: swapping on a
+        // layout-order guess advertises dimensions the capturer will not deliver.
+        let is_identity = identity[i].is_some() && identity[i] == matched[i];
+        if is_identity && (w.transform == 90 || w.transform == 270) {
+            std::mem::swap(&mut info.width, &mut info.height);
+            info.original_resolution = super::display_service::get_original_resolution(
+                &drm[i].name,
+                info.width as usize,
+                info.height as usize,
+            );
+        }
         if origin_only {
             continue;
         }
         if let Some((lw, lh)) = w.logical_size {
             if lw > 0 && lh > 0 {
-                info.scale = drm[i].width as f64 / lw as f64;
+                // Post-swap width over logical width, which arrives already swapped when rotated:
+                // the unrotated numerator made a rotated 1:1 monitor advertise scale 16/9.
+                info.scale = info.width as f64 / lw as f64;
                 info.original_resolution = super::display_service::get_original_resolution(
                     &drm[i].name,
                     lw as usize,
@@ -1292,17 +1572,61 @@ fn augment_with_wayland_geometry_from(
 /// Each output goes to at most one connector; unmatched ones take the next free output of the same
 /// size, else the next free one in layout order, since leaving them unaugmented keeps them all at
 /// DRM's (0,0).
-fn assign_wayland_outputs(
+/// The identity half of the assignment (name, or unique resolution), same progressive `taken`
+/// as the full one. Rotation keys off THIS on both sides: swapping or turning on a layout-order
+/// guess splits the advertised dimensions from the delivered frames.
+/// Identity assignment in two GLOBAL passes: every exact name match is reserved first, then
+/// resolution pairing runs on the unmatched remainder, and only when it is forced - exactly one
+/// free output AND exactly one unmatched connector at that resolution. A resolution guess for an
+/// earlier connector must never steal an exact name match from a later one.
+fn identity_matches(
     drm: &[DrmDisplayInfo],
     wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
 ) -> Vec<Option<usize>> {
     let mut taken = vec![false; wl.len()];
     let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
     for (i, d) in drm.iter().enumerate() {
-        if let Some(j) = match_wayland_display(d, wl, &taken) {
+        let dn = normalize_connector(&d.name);
+        if let Some((j, _)) = wl
+            .iter()
+            .enumerate()
+            .find(|(j, w)| !taken[*j] && normalize_connector(&w.name) == dn)
+        {
             matched[i] = Some(j);
             taken[j] = true;
         }
+    }
+    for (i, d) in drm.iter().enumerate() {
+        if matched[i].is_some() {
+            continue;
+        }
+        let free_same: Vec<usize> = wl
+            .iter()
+            .enumerate()
+            .filter(|(j, w)| !taken[*j] && w.width == d.width as i32 && w.height == d.height as i32)
+            .map(|(j, _)| j)
+            .collect();
+        let unmatched_same = drm
+            .iter()
+            .enumerate()
+            .filter(|(k, o)| matched[*k].is_none() && o.width == d.width && o.height == d.height)
+            .count();
+        if free_same.len() == 1 && unmatched_same == 1 {
+            matched[i] = Some(free_same[0]);
+            taken[free_same[0]] = true;
+        }
+    }
+    matched
+}
+
+fn assign_wayland_outputs(
+    drm: &[DrmDisplayInfo],
+    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+) -> Vec<Option<usize>> {
+    let mut matched = identity_matches(drm, wl);
+    let mut taken = vec![false; wl.len()];
+    for m in matched.iter().flatten() {
+        taken[*m] = true;
     }
     for (i, d) in drm.iter().enumerate() {
         if matched[i].is_some() {
@@ -1329,30 +1653,6 @@ fn assign_wayland_outputs(
     matched
 }
 
-fn match_wayland_display(
-    d: &DrmDisplayInfo,
-    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
-    taken: &[bool],
-) -> Option<usize> {
-    let dn = normalize_connector(&d.name);
-    if let Some((j, _)) = wl
-        .iter()
-        .enumerate()
-        .find(|(j, w)| !taken[*j] && normalize_connector(&w.name) == dn)
-    {
-        return Some(j);
-    }
-    let same_res: Vec<usize> = wl
-        .iter()
-        .enumerate()
-        .filter(|(j, w)| !taken[*j] && w.width == d.width as i32 && w.height == d.height as i32)
-        .map(|(j, _)| j)
-        .collect();
-    if same_res.len() == 1 {
-        return Some(same_res[0]);
-    }
-    None
-}
 
 /// DRM inserts a single-letter type discriminator the compositor drops ("HDMI-A-1" -> "HDMI-1").
 /// Only a *letter* folds: a single *digit* is an MST port index, so "DP-1-2" is not "DP-2".
@@ -1413,11 +1713,13 @@ pub(super) fn get_capturer_info(
                 }
                 h.zero_frame_streak = 0;
                 h.since = Instant::now();
+                // The cooldown re-arms DRM for this display, so the fallback verdict restarts too.
+                h.fallback_rejected = false;
             }
         }
     }
     // Built FIRST: a transient `_drm` outage must NOT count toward the flap threshold below.
-    let (capturer, displays, wire_idx) = IpcDrmCapturer::new(display_idx as i32, expected)?;
+    let (capturer, displays, wire_idx, origin) = IpcDrmCapturer::new(display_idx as i32, expected)?;
     // The initial build counts 0, so demotion fires on the (RAPID_REBUILD_MAX + 1)-th in a window.
     if let Some(key) = key.clone() {
         let now = Instant::now();
@@ -1445,16 +1747,14 @@ pub(super) fn get_capturer_info(
         .get(wire_idx)
         .ok_or_else(|| anyhow!("drm display index {wire_idx} out of range ({ndisplay})"))?
         .clone();
-    // Publish the compositor's LOGICAL origin (what get_display_infos advertises) so the origin
-    // matches the reported geometry; KEEP the raw PHYSICAL dimensions for the capture buffer.
-    let origin = augment_with_wayland_geometry(&displays)
-        .get(wire_idx)
-        .map(|di| (di.x, di.y))
-        .unwrap_or((d.x, d.y));
+    // Origin and transform come from the ONE snapshot new() resolved, so both reflect the
+    // same output assignment; dimensions stay PHYSICAL, rotated to frame orientation.
+    let origin = origin.unwrap_or((d.x, d.y));
+    let (cap_w, cap_h) = rotated_dims(capturer.transform, d.width as usize, d.height as usize);
     Ok(super::video_service::CapturerInfo {
         origin,
-        width: d.width as usize,
-        height: d.height as usize,
+        width: cap_w,
+        height: cap_h,
         ndisplay,
         current: display_idx,
         privacy_mode_id: 0,
@@ -1482,17 +1782,186 @@ mod drm_capturer_tests {
                     ended: None,
                 }),
                 cv: Condvar::new(),
+                transform: std::sync::atomic::AtomicI32::new(0),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
             connector,
             session_size: session,
+            transform: 0,
+            snapshot_gen: scrap::wayland::display::wayland_snapshot_generation(),
             cur: Vec::new(),
             cur_w: 0,
             cur_h: 0,
             cur_fmt: Pixfmt::BGRA,
             got_frame: false,
         }
+    }
+
+    /// One BGRA pixel per label byte, so a rotation result reads as a matrix of labels.
+    fn px_frame(labels: &[&[u8]], pad_bytes: usize) -> (Vec<u8>, usize, usize) {
+        let h = labels.len();
+        let w = labels[0].len();
+        let mut buf = Vec::new();
+        for row in labels {
+            for &l in *row {
+                buf.extend_from_slice(&[l, l, l, 255]);
+            }
+            buf.extend(std::iter::repeat(0u8).take(pad_bytes));
+        }
+        (buf, w, h)
+    }
+
+    fn labels_of(buf: &[u8], w: usize, h: usize) -> Vec<Vec<u8>> {
+        (0..h)
+            .map(|y| (0..w).map(|x| buf[(y * w + x) * 4]).collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_lone_display_goes_offline_only_when_its_fallback_was_rejected() {
+        // Unique name = unique health key; DRM_DISPLAY_HEALTH is process-wide.
+        let list = vec![drm_display("TEST-lone-fallback", 1080, 1920)];
+        let key = connector_key(&list[0]);
+        let demoted = DisplayHealth {
+            zero_frame_streak: DRM_GRAB_MAX_FAILURES,
+            demotes: 1,
+            ..DisplayHealth::new()
+        };
+        // Demoted alone keeps the lone display online: the whole-desktop fallback is usable.
+        DRM_DISPLAY_HEALTH.lock().unwrap().insert(key.clone(), demoted);
+        let mut infos = vec![DisplayInfo {
+            online: true,
+            ..Default::default()
+        }];
+        mark_demoted_displays(&list, &mut infos);
+        assert!(infos[0].online, "the lone-display carve-out must survive");
+        // A rejected fallback ends the carve-out: advertising online would restart-loop.
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get_mut(&key)
+            .expect("just inserted")
+            .fallback_rejected = true;
+        mark_demoted_displays(&list, &mut infos);
+        assert!(!infos[0].online, "a rejected fallback must take the lone display offline");
+        // Once the demotion cooldown lapses the display is no longer demoted, and online returns
+        // even with the rejection still latched (the re-arm will clear it on the next build).
+        DRM_DISPLAY_HEALTH
+            .lock()
+            .unwrap()
+            .get_mut(&key)
+            .expect("still there")
+            .since = Instant::now() - demote_cooldown(1) - Duration::from_secs(1);
+        infos[0].online = true;
+        mark_demoted_displays(&list, &mut infos);
+        assert!(infos[0].online, "past the cooldown the verdict is DRM's to retry");
+    }
+
+    #[test]
+    fn the_cursor_id_names_the_orientation_too() {
+        // Same wire cursor under two transforms must publish as two ids, or the client's by-id
+        // cache serves the previous orientation after a mid-session rotation.
+        let wire = 0xDEAD_BEEF_u64;
+        assert_ne!(fold_cursor_id(wire, 0), fold_cursor_id(wire, 90));
+        assert_ne!(fold_cursor_id(wire, 90), fold_cursor_id(wire, 270));
+        // Deterministic per (id, transform), so an unchanged cursor is still deduped.
+        assert_eq!(fold_cursor_id(wire, 90), fold_cursor_id(wire, 90));
+        // The hidden sentinel is compared by VALUE at the consumers, so it must pass unfolded.
+        let hidden = scrap::drm_reader::HIDDEN_CURSOR_ID;
+        assert_eq!(fold_cursor_id(hidden, 90), hidden);
+    }
+
+    #[test]
+    fn unrotate_hotspot_follows_the_pixel_mapping() {
+        // 3 wide x 2 tall, hotspot at (2,0) (top-right): after the 90 turn (left column to top
+        // row) that pixel sits at (1,2) in the 2x3 result; 270 sends it to (0,0).
+        assert_eq!(unrotate_hotspot(90, 3, 2, 2, 0), (1, 2));
+        assert_eq!(unrotate_hotspot(270, 3, 2, 2, 0), (0, 0));
+        assert_eq!(unrotate_hotspot(180, 3, 2, 2, 0), (0, 1));
+        assert_eq!(unrotate_hotspot(0, 3, 2, 2, 0), (2, 0));
+    }
+
+    #[test]
+    fn a_stale_snapshot_generation_asks_for_a_rebuild_without_blaming_the_display() {
+        let mut c = capturer_named(Some((64, 32)), Some("test:gen-rebuild"));
+        c.snapshot_gen = c.snapshot_gen.wrapping_sub(1);
+        put_frame(&c, 64, 32);
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a stale generation must rebuild, not deliver"),
+        };
+        assert!(err.to_string().contains("layout changed"), "{err}");
+        assert!(!c.got_frame);
+        assert_eq!(
+            zero_frame_streak_of(&c),
+            0,
+            "a layout rebuild must not count against display health"
+        );
+    }
+
+    #[test]
+    fn unrotate_90_maps_the_left_column_to_the_top_row() {
+        // The measured anchor from rustdesk#15886: mutter transform=1 carries the panel bar down
+        // the scanout's LEFT edge, and upright means that edge becomes the TOP row.
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut dst);
+        // src left column top-to-bottom = [1, 4]; clockwise puts it on the top row as [4, 1].
+        assert_eq!(labels_of(&dst, h, w), vec![vec![4, 1], vec![5, 2], vec![6, 3]]);
+    }
+
+    #[test]
+    fn unrotate_270_is_the_inverse_of_90() {
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut once = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut once);
+        let mut back = Vec::new();
+        unrotate_bgra(&once, h, w, 270, &mut back);
+        assert_eq!(back, src);
+    }
+
+    #[test]
+    fn unrotate_180_reverses_both_axes() {
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 0);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 180, &mut dst);
+        assert_eq!(labels_of(&dst, w, h), vec![vec![6, 5, 4], vec![3, 2, 1]]);
+    }
+
+    #[test]
+    fn unrotate_reads_padded_strides_and_writes_tight() {
+        // Row stride is derived from len/h, so a padded source must not shear the result.
+        let (src, w, h) = px_frame(&[&[1, 2, 3], &[4, 5, 6]], 8);
+        let mut dst = Vec::new();
+        unrotate_bgra(&src, w, h, 90, &mut dst);
+        assert_eq!(dst.len(), w * h * 4);
+        assert_eq!(labels_of(&dst, h, w), vec![vec![4, 1], vec![5, 2], vec![6, 3]]);
+        let mut plain = Vec::new();
+        unrotate_bgra(&src, w, h, 0, &mut plain);
+        assert_eq!(labels_of(&plain, w, h), vec![vec![1, 2, 3], vec![4, 5, 6]]);
+    }
+
+    #[test]
+    fn a_rotated_session_delivers_rotated_frames_and_guards_in_rotated_dims() {
+        use scrap::TraitPixelBuffer;
+        let mut c = capturer_with(Some((32, 64))); // rotated session of a 64x32 scanout
+        c.transform = 90;
+        put_frame(&c, 64, 32);
+        match c.frame(Duration::from_millis(50)) {
+            Ok(Frame::PixelBuffer(pb)) => {
+                assert_eq!((pb.width(), pb.height()), (32, 64));
+            }
+            Ok(_) => panic!("expected a pixel-buffer frame"),
+            Err(err) => panic!("expected a delivered frame, got {err}"),
+        }
+        // A scanout change still ends the session, reported in rotated dimensions.
+        put_frame(&c, 32, 64);
+        let err = match c.frame(Duration::from_millis(50)) {
+            Err(e) => e,
+            Ok(_) => panic!("a scanout change must end a rotated session too"),
+        };
+        assert!(err.to_string().contains("(32x64 -> 64x32)"), "{err}");
     }
 
     fn zero_frame_streak_of(c: &IpcDrmCapturer) -> u32 {
@@ -1525,6 +1994,7 @@ mod drm_capturer_tests {
             h.rapid_builds = 3;
             h.last_build = Some(Instant::now());
             h.prefer_cpu = true;
+            h.fallback_rejected = true;
         }
         put_frame(&c, 64, 32);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
@@ -1537,6 +2007,10 @@ mod drm_capturer_tests {
         };
         assert_eq!(h.zero_frame_streak, 0, "a delivered frame refutes the zero-frame streak");
         assert_eq!(h.demotes, 0, "and the demotion count that streak drove");
+        assert!(
+            !h.fallback_rejected,
+            "a delivered frame also refutes the rejected-fallback verdict"
+        );
         assert_eq!(
             h.rapid_builds, 3,
             "but it says NOTHING about the rebuild cadence: keeping it is what lets the flap guard \
@@ -1642,7 +2116,51 @@ mod drm_capturer_tests {
             height: h,
             logical_size: Some((w, h)),
             refresh_rate: 60,
+            transform: 0,
         }
+    }
+
+    #[test]
+    fn a_lone_rotated_output_advertises_delivered_dimensions() {
+        // Fix for the origin-only cut: one connector, one rotated output. The capturer will
+        // deliver rotated frames, so the advertised size must swap even in the origin-only case,
+        // while the logical scale is still not adopted (stays 1.0).
+        let drm = [drm_display("HDMI-A-1", 1920, 1080)];
+        let mut out = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        out.transform = 90;
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![out],
+        };
+        let assignment = assign_wayland_outputs(&drm, &wl.displays);
+        let infos = augment_with_wayland_geometry_from(&drm, &wl, &assignment);
+        assert_eq!((infos[0].width, infos[0].height), (1080, 1920));
+        assert_eq!(infos[0].scale, 1.0);
+    }
+
+    #[test]
+    fn transform_and_origin_come_from_the_same_snapshot() {
+        // Both derive from ONE Displays snapshot: the rotated output's transform and its origin
+        // must belong to the same assignment, and the multi-connector one-output guard zeroes
+        // both rather than mixing a guessed origin with a real transform.
+        let drm = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let mut rotated = wl_display("DP-1", 1920, 0, 2560, 1440);
+        rotated.transform = 270;
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![rotated, wl_display("HDMI-1", 0, 0, 1920, 1080)],
+        };
+        let (t, origin) = transform_and_origin(&drm, 1, &wl);
+        assert_eq!(t, 270);
+        assert_eq!(origin, Some((1920, 0)));
+        let lone = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![wl_display("HDMI-1", 0, 0, 1920, 1080)],
+        };
+        assert_eq!(transform_and_origin(&drm, 1, &lone), (0, None));
     }
 
     #[test]
@@ -1723,6 +2241,32 @@ mod drm_capturer_tests {
             2,
             "both idle buffers must be kept; a single slot dropped the older one"
         );
+    }
+
+    #[test]
+    fn a_resolution_guess_never_steals_an_exact_name_match() {
+        // The review's scenario: an earlier connector with an unmatchable name shares the
+        // resolution of a later connector's exact name match. Names reserve globally first.
+        let drm = vec![
+            drm_display("DSI-1", 1920, 1080),
+            drm_display("HDMI-A-1", 1920, 1080),
+        ];
+        let wl = vec![
+            wl_display("HDMI-1", 0, 0, 1920, 1080),
+            wl_display("Unknown-9", 1920, 0, 2560, 1440),
+        ];
+        let m = identity_matches(&drm, &wl);
+        assert_eq!(m[1], Some(0), "the exact name match must win globally");
+        assert_eq!(m[0], None, "the leftover pairing is not forced, so no identity");
+        // Two unmatched connectors at the lone free resolution: ambiguous on the DRM side too,
+        // so rotation must not be pinned on either.
+        let drm2 = vec![
+            drm_display("DSI-1", 1920, 1080),
+            drm_display("DSI-2", 1920, 1080),
+        ];
+        let wl2 = vec![wl_display("HDMI-1", 0, 0, 1920, 1080)];
+        let m2 = identity_matches(&drm2, &wl2);
+        assert!(m2[0].is_none() && m2[1].is_none());
     }
 
     #[test]

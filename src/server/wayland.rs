@@ -108,7 +108,8 @@ struct CapDisplayInfo {
 }
 
 /// Uinput desktop rect from the DRM display list, for a login screen where no compositor can be
-/// asked. `(minx, maxx, miny, maxy)`, in scanout pixels: no compositor here applied a scale, so
+/// asked. `(minx, maxx, miny, maxy)`, in delivered-orientation physical pixels (a rotated
+/// output counts transposed, matching its frames): no compositor here applied a scale, so
 /// unlike `desktop_rect_of` there is no logical size to handle.
 #[cfg(feature = "drm")]
 fn drm_desktop_rect_for_uinput() -> Option<(i32, i32, i32, i32)> {
@@ -521,11 +522,13 @@ pub(super) fn get_capturer_for_display(
                     // (scrap `common/wayland.rs`), i.e. `PipeWireCapturable.physical_size`.
                     // `try_fix_logical_size` only repairs the capturable's SEPARATE
                     // `logical_size` field and never touches `physical_size`, so the rect is not
-                    // logical. The advertised DRM geometry is physical too
-                    // (`augment_with_wayland_geometry` sets x/y/scale and deliberately leaves
-                    // width/height as the DRM mode). Dividing one side by the scale therefore
-                    // compares logical against physical and rejects the valid stream on exactly
-                    // the scaled outputs it was meant to rescue.
+                    // logical. The advertised DRM geometry is physical too, in DELIVERED
+                    // orientation: `augment_with_wayland_geometry` transposes width/height for a
+                    // 90/270 output (rustdesk#15886). Whether the portal's caps arrive rotated
+                    // is UNMEASURED on a rotated display (pipewiresrc does not apply
+                    // SPA_META_VideoTransform), so the size half accepts either orientation
+                    // rather than gambling a permanent offline on one of them. Dividing a side
+                    // by the scale would still be wrong: logical against physical.
                     //
                     // The size check is what tells one connector apart from the whole-desktop
                     // rect the portal usually exposes. It is skipped only when BOTH sides say
@@ -537,15 +540,35 @@ pub(super) fn get_capturer_for_display(
                     // a monitor on a card the service cannot open is missing from the DRM list
                     // while the compositor still drives it.
                     let single_display = single_display && cap_display_info.num == 1;
+                    // Exact orientation only: a transposed stream would be encoded at the
+                    // PipeWire dimensions while the client keeps the advertised (rotated) ones,
+                    // and no wayland path ever reconciles the two, so every frame would be
+                    // rejected client-side. Falling into the bail instead advertises the display
+                    // offline, which the client recovers from by re-enumerating.
+                    let size_matches = advertised.width as usize == rect.1
+                        && advertised.height as usize == rect.2;
+                    let transposed = advertised.width as usize == rect.2
+                        && advertised.height as usize == rect.1;
+                    // The single-display carve-out forgives a size DIFFERENCE (a Full Workspace
+                    // stream may report the workspace, not the mode), but never a transposed
+                    // pair: that is the same served-vs-advertised orientation split as above,
+                    // and it blanks the client the same way.
                     let consistent = advertised.x == rect.0 .0
                         && advertised.y == rect.0 .1
-                        && (single_display
-                            || (advertised.width as usize == rect.1
-                                && advertised.height as usize == rect.2));
+                        && (size_matches || (single_display && !transposed));
                     if !consistent {
+                        // Recorded so the lone-display carve-out in `mark_demoted_displays` makes
+                        // the "advertised offline" below true for a single display too, instead of
+                        // restart-looping against a stream nothing can serve.
+                        super::drm_capturer::mark_fallback_rejected(display_idx);
                         bail!(
-                            "drm display {} demoted with no geometry-consistent PipeWire stream (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
+                            "drm display {} demoted with no geometry-consistent PipeWire stream{} (advertised {}x{}+{}+{} vs stream {}x{}+{}+{}); advertised offline",
                             display_idx,
+                            if transposed {
+                                " - stream is transposed vs advertised"
+                            } else {
+                                ""
+                            },
                             advertised.width,
                             advertised.height,
                             advertised.x,
