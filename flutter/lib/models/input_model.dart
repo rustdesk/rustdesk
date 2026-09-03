@@ -1290,7 +1290,8 @@ class InputModel {
   /// ACTION_SCROLL / pan-zoom signal), so we translate the per-frame delta into the
   /// same `trackpad` message the desktop 2-finger path emits, consumed server-side
   /// as smooth scrolling. Scaled by the user-tunable trackpad speed.
-  void _sendTrackpadTwoFingerScroll(double dx, double dy, Offset canvasPosition) {
+  void _sendTrackpadTwoFingerScroll(
+      double dx, double dy, Offset canvasPosition) {
     if (isViewOnly || isViewCamera) return;
     var delta = Offset(dx, dy) * _trackpadSpeedInner;
     delta = _filterTrackpadDeltaAxis(delta);
@@ -1328,7 +1329,10 @@ class InputModel {
           // fast flick during the blocked window would otherwise lose every
           // frame's pixels. A protected drop is the peer-control arbitration
           // suppressing this input: the pixels must be discarded, not
-          // replayed as a jump when the protection window expires.
+          // replayed as a jump when the protection window expires. (That
+          // protected case is itself currently unreachable: an Android peer
+          // never reports cursor position — see handlePointerEvent's note —
+          // so it is kept purely as defense.)
           if (start == PointerEventSendResult.droppedTransient) {
             _trackpadScrollUnsent += Offset(x.toDouble(), y.toDouble());
           }
@@ -1347,11 +1351,17 @@ class InputModel {
           handlePointerEvent('touch', kMouseEventTypePanUpdate, delta);
       if (result == PointerEventSendResult.sent) {
         // Null is unreachable while the pan is open: opening requires a
-        // queued pan_start, which seeded the mirror.
-        _trackpadPanPos = Point(
-          max(0.0, _trackpadPanPos!.x - delta.dx),
-          max(0.0, _trackpadPanPos!.y - delta.dy),
-        );
+        // queued pan_start, which seeded the mirror. Guard rather than
+        // assert — this runs on the per-frame pointer path, so a broken
+        // invariant must skip the mirror update instead of throwing a
+        // null-check error on every move.
+        final prev = _trackpadPanPos;
+        if (prev != null) {
+          _trackpadPanPos = Point(
+            max(0.0, prev.x - delta.dx),
+            max(0.0, prev.y - delta.dy),
+          );
+        }
       } else if (result == PointerEventSendResult.droppedTransient) {
         // An admission failure (not currently reachable for pan_update —
         // only the start maps positions): retry with the next frame.
@@ -1360,7 +1370,9 @@ class InputModel {
       // droppedProtected: discard. The pixels were already taken out of the
       // accumulator, and the arbitration suppressed this input on purpose —
       // replaying it after the protection window expires would bypass the
-      // control arbitration that rejected it.
+      // control arbitration that rejected it. (Not currently reachable for
+      // an Android peer — isPeerControlProtected stays false; see
+      // handlePointerEvent's note.)
       return;
     }
     bind.sessionSendMouse(
@@ -2068,6 +2080,14 @@ class InputModel {
   /// [checkPos] overrides only the position fed to the peer-control distance
   /// check; the payload is still mapped from [offset]. Used by the trackpad
   /// scroll path, whose pan anchor is fixed while the finger keeps moving.
+  ///
+  /// Note: when the peer is Android, its server stubs input_service::NAME_POS
+  /// (server.rs), so it never reports cursor position and the peer-control
+  /// check is inert for it (isPeerControlProtected stays false, gotMouseControl
+  /// stays true). The distance reclaim this parameter enables is therefore
+  /// defensive — it becomes live only if an Android peer starts reporting a
+  /// cursor. Non-Android peers do report cursor position, so the check is live
+  /// there.
   PointerEventSendResult handlePointerEvent(
       String kind, String type, Offset offset,
       {Offset? checkPos}) {
@@ -2164,10 +2184,18 @@ class InputModel {
   /// in sync.
   void _queuePanEndUnconditionally() {
     // Null is unreachable while _trackpadPanOpen is true: opening requires a
-    // queued pan_start, which seeded the mirror.
+    // queued pan_start, which seeded the mirror. If it is ever null, sending
+    // (0,0) would relocate the receiver's pointer to the top-left — make the
+    // invariant break loud rather than silently misplacing the cursor.
     final pos = _trackpadPanPos;
-    final end =
-        pos == null ? Offset.zero : Offset(pos.x.toDouble(), pos.y.toDouble());
+    final Offset end;
+    if (pos == null) {
+      debugPrint(
+          '[InputModel] pan_end with a null position mirror, sending (0,0)');
+      end = Offset.zero;
+    } else {
+      end = Offset(pos.x.toDouble(), pos.y.toDouble());
+    }
     final msg =
         json.encode(modify(PointerEventToRust('touch', kMouseEventTypePanEnd, {
       'x': end.dx.toInt(),
