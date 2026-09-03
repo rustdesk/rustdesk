@@ -2,9 +2,10 @@
 # Applies the Flutter 3.44-only source/pubspec changes on the fly, in CI only.
 #
 # Windows arm64 needs Flutter >= 3.44 (the first stable release shipping an arm64 Dart SDK +
-# engine), which renamed DialogTheme/TabBarTheme -> *Data and needs newer extended_text/
-# google_fonts. Every other platform is still on Flutter 3.24.5, where the old names/versions
-# are required, so these changes are kept OUT of the committed sources and applied here instead.
+# engine), which needs DialogThemeData/TabBarThemeData, explicit dialog colors, and newer
+# extended_text/google_fonts constraints. The committed source can independently pick up part of
+# that migration during upstream syncs, so this script deliberately accepts both the older source
+# state and the current partially-converged state.
 #
 # Used by BOTH the Windows arm64 build (flutter-build.yml) and its dedicated bridge artifact
 # (bridge.yml) so they share an identical 3.44 source state -- the generated *.freezed.dart must
@@ -78,31 +79,16 @@ is_complete_patch_state() {
     has_exact_count "$THEME_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
     has_exact_count "$SINGLE_MATCH" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&
     has_exact_count "$SINGLE_MATCH" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&
-    has_exact_count "$SINGLE_MATCH" 'extended_text: 15.0.2' flutter/pubspec.yaml &&
+    has_exact_count "$SINGLE_MATCH" 'extended_text: ^15.0.2' flutter/pubspec.yaml &&
     has_exact_count "$SINGLE_MATCH" 'google_fonts: ^8.1.0' flutter/pubspec.yaml &&
     has_exact_count "$NO_MATCHES" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&
     has_exact_count "$NO_MATCHES" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&
-    has_exact_count "$NO_MATCHES" 'extended_text: 14.0.0' flutter/pubspec.yaml &&
-    has_exact_count "$NO_MATCHES" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&
     has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \
       'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \
       flutter/lib/common.dart &&
     has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
       'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \
       flutter/lib/common.dart
-}
-
-is_unpatched_state() {
-  has_exact_count "$THEME_MATCHES" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&
-    has_exact_count "$THEME_MATCHES" 'tabBarTheme: const TabBarTheme(' flutter/lib/common.dart &&
-    has_exact_count "$SINGLE_MATCH" 'extended_text: 14.0.0' flutter/pubspec.yaml &&
-    has_exact_count "$SINGLE_MATCH" 'google_fonts: ^6.2.1' flutter/pubspec.yaml &&
-    has_exact_count "$NO_MATCHES" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&
-    has_exact_count "$NO_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
-    has_exact_count "$NO_MATCHES" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&
-    has_exact_count "$NO_MATCHES" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&
-    has_exact_count "$NO_MATCHES" 'extended_text: 15.0.2' flutter/pubspec.yaml &&
-    has_exact_count "$NO_MATCHES" 'google_fonts: ^8.1.0' flutter/pubspec.yaml
 }
 
 if ! validate_patch_inputs; then
@@ -115,21 +101,24 @@ if is_complete_patch_state; then
   exit 0
 fi
 
-if ! is_unpatched_state; then
-  echo "Flutter 3.44 source patches are partially applied or their anchors have drifted." >&2
-  exit 1
-fi
-
 # ThemeData API renames (Flutter 3.27+):
 sed -i 's/dialogTheme: DialogTheme(/dialogTheme: DialogThemeData(/g' flutter/lib/common.dart
 sed -i 's/tabBarTheme: const TabBarTheme(/tabBarTheme: const TabBarThemeData(/g' flutter/lib/common.dart
-sed -i '/static ThemeData lightTheme = ThemeData(/,/static ThemeData darkTheme = ThemeData(/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\
+if ! has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \
+  'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \
+  flutter/lib/common.dart; then
+  sed -i '/static ThemeData lightTheme = ThemeData(/,/static ThemeData darkTheme = ThemeData(/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\
       backgroundColor: Colors.white,/' flutter/lib/common.dart
-sed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThemeDark,/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\
+fi
+if ! has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
+  'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \
+  flutter/lib/common.dart; then
+  sed -i '/static ThemeData darkTheme = ThemeData(/,/scrollbarTheme: scrollbarThemeDark,/s/dialogTheme: DialogThemeData(/dialogTheme: DialogThemeData(\
       backgroundColor: Color(0xFF18191E),/' flutter/lib/common.dart
+fi
 # Dependency bumps required by the newer Dart/Flutter:
-sed -i 's/extended_text: 14.0.0/extended_text: 15.0.2/' flutter/pubspec.yaml
-sed -i 's/google_fonts: \^6.2.1/google_fonts: ^8.1.0/' flutter/pubspec.yaml
+sed -i -E 's/^([[:space:]]*extended_text:).*/\1 ^15.0.2/' flutter/pubspec.yaml
+sed -i -E 's/^([[:space:]]*google_fonts:).*/\1 ^8.1.0/' flutter/pubspec.yaml
 
 # Fail loudly if any expected substitution did not produce the complete state.
 if ! is_complete_patch_state; then

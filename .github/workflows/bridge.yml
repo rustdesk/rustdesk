@@ -90,7 +90,10 @@ jobs:
           cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
           if [[ "${{ matrix.job.flutter-version }}" == "3.22.3" ]]; then
             # Default Flutter 3.22.3: extended_text 14 needs a newer Dart, so downgrade for resolution.
-            sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' flutter/pubspec.yaml
+            # Match the dependency key rather than one historical version so routine pubspec bumps
+            # do not silently break the bridge-only compatibility override.
+            sed -i -E -e 's/^([[:space:]]*extended_text:).*/\1 13.0.0/' flutter/pubspec.yaml
+            grep -qE '^[[:space:]]*extended_text:[[:space:]]*13\.0\.0[[:space:]]*$' flutter/pubspec.yaml
           else
             # Flutter 3.44 bridge for Windows arm64: match that build's source/pubspec state so the
             # generated *.freezed.dart compiles against the same Flutter/freezed it resolves.
