@@ -84,7 +84,11 @@ jobs:
       - name: Resolve Flutter dependencies
         shell: bash
         working-directory: flutter
-        run: flutter pub get
+        run: |
+          # The committed constraint targets the default Flutter 3.24 matrix. Flutter-OH 3.41
+          # exposes newer SelectionHandler APIs implemented by extended_text 15.x.
+          sed -i -E 's/^([[:space:]]*extended_text:).*/\1 ^15.0.2/' pubspec.yaml
+          flutter pub get
 
       - name: Cross-compile OHOS Flutter bridge
         shell: bash
