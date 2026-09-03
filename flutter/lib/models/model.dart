@@ -3769,7 +3769,10 @@ class FFI {
         loadEvent: LoadEvent.favorite,
         getInitPeers: null);
     lanPeersModel = Peers(
-        name: PeersModelName.lan, loadEvent: LoadEvent.lan, getInitPeers: null);
+        name: PeersModelName.lan,
+        loadEvent: LoadEvent.lan,
+        discoveryEvent: 'update_lan_discovery',
+        getInitPeers: null);
   }
 
   /// Mobile reuse FFI

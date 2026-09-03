@@ -46,6 +46,103 @@ struct ActiveUserLookupCache {
 
 const INVALID_TERM_VALUES: [&str; 3] = ["", "unknown", "dumb"];
 const SHELL_PROCESSES: [&str; 4] = ["bash", "zsh", "fish", "sh"];
+const LAN_DISCOVERY_FIREWALL_LOG_MAX_BYTES: usize = 1024 * 1024;
+
+fn has_ufw_blocked_lan_discovery_reply(data: &[u8], response_ports: &[u16]) -> bool {
+    String::from_utf8_lossy(data).lines().any(|line| {
+        if !line.contains("[UFW BLOCK]") {
+            return false;
+        }
+        let mut udp = false;
+        let mut source_port = None;
+        let mut destination_port = None;
+        for field in line.split_ascii_whitespace() {
+            if field == "PROTO=UDP" {
+                udp = true;
+            } else if let Some(value) = field.strip_prefix("SPT=") {
+                source_port = value.parse::<u16>().ok();
+            } else if let Some(value) = field.strip_prefix("DPT=") {
+                destination_port = value.parse::<u16>().ok();
+            }
+        }
+        udp && source_port == Some((hbb_common::config::RENDEZVOUS_PORT + 3) as u16)
+            && destination_port
+                .map(|port| response_ports.contains(&port))
+                .unwrap_or(false)
+    })
+}
+
+pub async fn lan_discovery_firewall_blocked(
+    scan_started: std::time::SystemTime,
+    response_ports: &[u16],
+) -> bool {
+    use hbb_common::tokio::{io::AsyncReadExt, process::Command, time::timeout};
+    use std::{process::Stdio, time::UNIX_EPOCH};
+
+    let Ok(started) = scan_started.duration_since(UNIX_EPOCH) else {
+        return false;
+    };
+    let since = format!("@{}", started.as_secs());
+    let mut child = match Command::new("journalctl")
+        .args(["--dmesg", "--since", &since, "--output=cat", "--no-pager"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(err) => {
+            log::debug!("Failed to inspect firewall logs: {err}");
+            return false;
+        }
+    };
+    let Some(stdout) = child.stdout.take() else {
+        return false;
+    };
+    let read = async {
+        let mut data = Vec::new();
+        stdout
+            .take((LAN_DISCOVERY_FIREWALL_LOG_MAX_BYTES + 1) as u64)
+            .read_to_end(&mut data)
+            .await?;
+        if data.len() > LAN_DISCOVERY_FIREWALL_LOG_MAX_BYTES {
+            child.kill().await.ok();
+            bail!("Firewall log output exceeds limit");
+        }
+        let status = child.wait().await?;
+        if !status.success() {
+            bail!("journalctl failed");
+        }
+        Ok::<Vec<u8>, hbb_common::anyhow::Error>(data)
+    };
+    match timeout(Duration::from_secs(1), read).await {
+        Ok(Ok(data)) => has_ufw_blocked_lan_discovery_reply(&data, response_ports),
+        Ok(Err(err)) => {
+            log::debug!("Failed to inspect firewall logs: {err}");
+            false
+        }
+        Err(_) => {
+            child.kill().await.ok();
+            log::debug!("Timed out while inspecting firewall logs");
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod lan_discovery_firewall_tests {
+    use super::*;
+
+    #[test]
+    fn matches_only_blocked_replies_to_this_scan() {
+        let data = b"[UFW BLOCK] IN=wlan0 PROTO=UDP SPT=21119 DPT=33287 LEN=85\n\
+                     [UFW BLOCK] IN=wlan0 PROTO=UDP SPT=21119 DPT=40000 LEN=85\n\
+                     [UFW BLOCK] IN=wlan0 PROTO=TCP SPT=21119 DPT=33287 LEN=85";
+
+        assert!(has_ufw_blocked_lan_discovery_reply(data, &[33287]));
+        assert!(!has_ufw_blocked_lan_discovery_reply(data, &[50000]));
+    }
+}
 
 // Terminal type constants
 const TERM_XTERM_256COLOR: &str = "xterm-256color";

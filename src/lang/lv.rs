@@ -763,5 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Bloķēt audeklu"),
         ("Sync clipboard between sessions", "Sinhronizēt starpliktuvi starp sesijām"),
         ("sync-clipboard-between-sessions-tip", "Vienā attālajā sesijā nokopētais teksts vai attēli tiek nosūtīti arī uz pārējo pievienoto sesiju starpliktuvi."),
+        ("No devices responded. Make sure RustDesk is running on other devices and allowed to answer LAN discovery requests. A firewall or network isolation can prevent replies.", ""),
+        ("This device's firewall blocked LAN discovery. Some available devices may not appear in this list.", ""),
+        ("This device will not answer LAN discovery requests because \"Deny LAN discovery\" is enabled. It can still discover other devices.", ""),
     ].iter().cloned().collect();
 }

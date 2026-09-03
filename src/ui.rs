@@ -567,8 +567,9 @@ impl UI {
     }
 
     fn discover(&self) {
+        let id = self.get_id();
         std::thread::spawn(move || {
-            allow_err!(crate::lan::discover());
+            allow_err!(crate::lan::discover(id));
         });
     }
 

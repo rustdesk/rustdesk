@@ -1552,6 +1552,24 @@ pub fn main_load_lan_peers() {
     );
 }
 
+pub(crate) fn main_update_lan_discovery(status: &str, found_peers: bool, firewall_blocked: bool) {
+    let discovery_enabled = config::option2bool(
+        "enable-lan-discovery",
+        &config::Config::get_option("enable-lan-discovery"),
+    );
+    let data = HashMap::from([
+        ("name", "update_lan_discovery".to_owned()),
+        ("status", status.to_owned()),
+        ("found_peers", found_peers.to_string()),
+        ("firewall_blocked", firewall_blocked.to_string()),
+        ("discovery_enabled", discovery_enabled.to_string()),
+    ]);
+    let _res = flutter::push_global_event(
+        flutter::APP_TYPE_MAIN,
+        serde_json::ser::to_string(&data).unwrap_or_default(),
+    );
+}
+
 pub fn main_remove_discovered(id: String) {
     remove_discovered(id);
 }

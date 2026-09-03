@@ -20,7 +20,10 @@ use serde_derive::Serialize;
 use std::process::Child;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use crate::common::SOFTWARE_UPDATE_URL;
@@ -30,6 +33,8 @@ use crate::hbbs_http::account;
 use crate::ipc;
 
 type Message = RendezvousMessage;
+
+static LAN_DISCOVERY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub type Children = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
@@ -776,8 +781,24 @@ pub fn create_shortcut(_id: String) {
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 #[inline]
 pub fn discover() {
+    if LAN_DISCOVERY_RUNNING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    #[cfg(feature = "flutter")]
+    crate::flutter_ffi::main_update_lan_discovery("scanning", false, false);
     std::thread::spawn(move || {
-        allow_err!(crate::lan::discover());
+        let result = crate::lan::discover(get_id());
+        #[cfg(feature = "flutter")]
+        match &result {
+            Ok(result) => crate::flutter_ffi::main_update_lan_discovery(
+                "completed",
+                result.found_peers,
+                result.firewall_blocked,
+            ),
+            Err(_) => crate::flutter_ffi::main_update_lan_discovery("failed", false, false),
+        }
+        LAN_DISCOVERY_RUNNING.store(false, Ordering::Release);
+        allow_err!(result);
     });
 }
 

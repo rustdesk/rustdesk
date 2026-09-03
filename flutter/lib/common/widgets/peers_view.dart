@@ -115,7 +115,21 @@ class _PeersViewState extends State<_PeersView>
   void initState() {
     windowManager.addListener(this);
     WidgetsBinding.instance.addObserver(this);
+    if (widget.peerTabIndex == PeerTabIndex.lan) {
+      bind.mainLoadLanPeers();
+      bind.mainDiscover();
+    }
     super.initState();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PeersView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.peerTabIndex != PeerTabIndex.lan &&
+        widget.peerTabIndex == PeerTabIndex.lan) {
+      bind.mainLoadLanPeers();
+      bind.mainDiscover();
+    }
   }
 
   @override
@@ -187,6 +201,16 @@ class _PeersViewState extends State<_PeersView>
       child: Consumer<Peers>(builder: (context, peers, child) {
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+          if (widget.peerTabIndex == PeerTabIndex.lan) {
+            return LanDiscoveryResultView(
+              state: peers.discoveryState,
+              foundPeers: false,
+              firewallBlocked: peers.discoveryFirewallBlocked,
+              discoveryEnabled: peers.discoveryEnabled,
+              onRetry: bind.mainDiscover,
+              child: LanDiscoveryEmptyState(state: peers.discoveryState),
+            );
+          }
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -209,7 +233,18 @@ class _PeersViewState extends State<_PeersView>
             ),
           );
         } else {
-          return _buildPeersView(peers);
+          final child = _buildPeersView(peers);
+          if (widget.peerTabIndex == PeerTabIndex.lan) {
+            return LanDiscoveryResultView(
+              state: peers.discoveryState,
+              foundPeers: peers.discoveryFoundPeers,
+              firewallBlocked: peers.discoveryFirewallBlocked,
+              discoveryEnabled: peers.discoveryEnabled,
+              onRetry: bind.mainDiscover,
+              child: child,
+            );
+          }
+          return child;
         }
       }),
     );
@@ -501,13 +536,155 @@ class DiscoveredPeersView extends BasePeersView {
             menuPadding: menuPadding,
           ),
         );
+}
+
+const _lanDiscoveryNoResponseMessage =
+    'No devices responded. Make sure RustDesk is running on other devices and allowed to answer LAN discovery requests. A firewall or network isolation can prevent replies.';
+const _lanDiscoveryFirewallBlockedMessage =
+    "This device's firewall blocked LAN discovery. Some available devices may not appear in this list.";
+const _lanDiscoveryDisabledMessage =
+    'This device will not answer LAN discovery requests because "Deny LAN discovery" is enabled. It can still discover other devices.';
+
+class LanDiscoveryResultView extends StatelessWidget {
+  const LanDiscoveryResultView({
+    required this.state,
+    required this.foundPeers,
+    required this.firewallBlocked,
+    required this.discoveryEnabled,
+    required this.onRetry,
+    required this.child,
+    this.translateText = translate,
+    super.key,
+  });
+
+  final DiscoveryState state;
+  final bool foundPeers;
+  final bool firewallBlocked;
+  final bool discoveryEnabled;
+  final VoidCallback onRetry;
+  final Widget child;
+  final F translateText;
 
   @override
   Widget build(BuildContext context) {
-    final widget = super.build(context);
-    bind.mainLoadLanPeers();
-    bind.mainDiscover();
-    return widget;
+    final messages = <String>[];
+    if (state == DiscoveryState.failed) {
+      messages.add('Failed');
+    } else if (firewallBlocked) {
+      messages.add(_lanDiscoveryFirewallBlockedMessage);
+    } else if (state == DiscoveryState.completed && !foundPeers) {
+      messages.add(_lanDiscoveryNoResponseMessage);
+    }
+    if (!discoveryEnabled) {
+      messages.add(_lanDiscoveryDisabledMessage);
+    }
+    if (messages.isEmpty) {
+      return child;
+    }
+    final canRetry = state == DiscoveryState.failed ||
+        firewallBlocked ||
+        (state == DiscoveryState.completed && !foundPeers);
+
+    return Column(
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final message = Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 20)
+                    .paddingOnly(right: 10),
+                Expanded(
+                  child: Text(messages.map(translateText).join('\n\n')),
+                ),
+              ],
+            );
+            final retry = canRetry
+                ? OutlinedButton(
+                    onPressed: onRetry,
+                    child: Text(translateText('Retry')),
+                  )
+                : null;
+            return Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: retry == null
+                    ? message
+                    : constraints.maxWidth < 600
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              message,
+                              retry.paddingOnly(top: 8),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: message),
+                              retry.paddingOnly(left: 12),
+                            ],
+                          ),
+              ),
+            );
+          },
+        ).paddingOnly(bottom: 12),
+        Expanded(child: child),
+      ],
+    );
+  }
+}
+
+class LanDiscoveryEmptyState extends StatelessWidget {
+  const LanDiscoveryEmptyState({
+    required this.state,
+    this.translateText = translate,
+    super.key,
+  });
+
+  final DiscoveryState state;
+  final F translateText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state == DiscoveryState.scanning) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(),
+            ).paddingOnly(bottom: 12),
+            Text(translateText('Waiting')),
+          ],
+        ),
+      );
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sentiment_very_dissatisfied_rounded,
+              color: Theme.of(context).tabBarTheme.labelColor,
+              size: 40,
+            ).paddingOnly(bottom: 10),
+            if (state == DiscoveryState.idle)
+              Text(
+                translateText('empty_lan_tip'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).tabBarTheme.labelColor,
+                ),
+              ).paddingSymmetric(horizontal: 24),
+          ],
+        ),
+      ),
+    );
   }
 }
 

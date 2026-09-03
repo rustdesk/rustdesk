@@ -169,11 +169,14 @@ class Peer {
 
 enum UpdateEvent { online, load }
 
+enum DiscoveryState { idle, scanning, completed, failed }
+
 typedef GetInitPeers = RxList<Peer> Function();
 
 class Peers extends ChangeNotifier {
   final String name;
   final String loadEvent;
+  final String? discoveryEvent;
   List<Peer> peers = List.empty(growable: true);
   // Part of the peers that are not in the rest peers list.
   // When there're too many peers, we may want to load the front 100 peers first,
@@ -182,12 +185,17 @@ class Peers extends ChangeNotifier {
   List<String> restPeerIds = List.empty(growable: true);
   final GetInitPeers? getInitPeers;
   UpdateEvent event = UpdateEvent.load;
+  DiscoveryState discoveryState = DiscoveryState.idle;
+  bool discoveryFoundPeers = false;
+  bool discoveryFirewallBlocked = false;
+  bool discoveryEnabled = true;
   static const _cbQueryOnlines = 'callback_query_onlines';
 
   Peers(
       {required this.name,
       required this.getInitPeers,
-      required this.loadEvent}) {
+      required this.loadEvent,
+      this.discoveryEvent}) {
     peers = getInitPeers?.call() ?? [];
     platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) async {
       _updateOnlineState(evt);
@@ -195,12 +203,29 @@ class Peers extends ChangeNotifier {
     platformFFI.registerEventHandler(loadEvent, name, (evt) async {
       _updatePeers(evt);
     });
+    if (discoveryEvent != null) {
+      platformFFI.registerEventHandler(discoveryEvent!, name, (evt) async {
+        discoveryState = switch (evt['status']) {
+          'scanning' => DiscoveryState.scanning,
+          'completed' => DiscoveryState.completed,
+          'failed' => DiscoveryState.failed,
+          _ => DiscoveryState.idle,
+        };
+        discoveryFoundPeers = evt['found_peers'] == 'true';
+        discoveryFirewallBlocked = evt['firewall_blocked'] == 'true';
+        discoveryEnabled = evt['discovery_enabled'] != 'false';
+        notifyListeners();
+      });
+    }
   }
 
   @override
   void dispose() {
     platformFFI.unregisterEventHandler(_cbQueryOnlines, name);
     platformFFI.unregisterEventHandler(loadEvent, name);
+    if (discoveryEvent != null) {
+      platformFFI.unregisterEventHandler(discoveryEvent!, name);
+    }
     super.dispose();
   }
 
