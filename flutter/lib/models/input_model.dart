@@ -1290,7 +1290,7 @@ class InputModel {
   /// ACTION_SCROLL / pan-zoom signal), so we translate the per-frame delta into the
   /// same `trackpad` message the desktop 2-finger path emits, consumed server-side
   /// as smooth scrolling. Scaled by the user-tunable trackpad speed.
-  void _sendTrackpadTwoFingerScroll(double dx, double dy) {
+  void _sendTrackpadTwoFingerScroll(double dx, double dy, Offset canvasPosition) {
     if (isViewOnly || isViewCamera) return;
     var delta = Offset(dx, dy) * _trackpadSpeedInner;
     delta = _filterTrackpadDeltaAxis(delta);
@@ -1319,7 +1319,8 @@ class InputModel {
         // update in that case, so the next deliverable move retries the start
         // instead of emitting an update the peer has no gesture for.
         final start = handlePointerEvent(
-            'touch', kMouseEventTypePanStart, _trackpadPanStartPos);
+            'touch', kMouseEventTypePanStart, _trackpadPanStartPos,
+            checkPos: canvasPosition);
         if (start != PointerEventSendResult.sent) {
           // The whole-pixel part was already taken out of the accumulator.
           // A transient drop (no remote rect yet) is worth retrying: put the
@@ -1884,8 +1885,9 @@ class InputModel {
         // idempotent), so interleaved hover frames stay suppressed
         // (onPointHoverImage) and the peer sees a proper pan_start before
         // the first pan_update.
-        _beginTrackpadTwoFinger(_pointerPositionForRemoteCanvas(e));
-        _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy);
+        final canvasPos = _pointerPositionForRemoteCanvas(e);
+        _beginTrackpadTwoFinger(canvasPos);
+        _sendTrackpadTwoFingerScroll(e.delta.dx, e.delta.dy, canvasPos);
       }
       return;
     }
@@ -2062,8 +2064,13 @@ class InputModel {
   /// peer-control arbitration suppressed this input, which must not be
   /// replayed later. The actual send is chained onto [_panEventChain] so
   /// pan_start / pan_update / pan_end reach the peer in submission order.
+  ///
+  /// [checkPos] overrides only the position fed to the peer-control distance
+  /// check; the payload is still mapped from [offset]. Used by the trackpad
+  /// scroll path, whose pan anchor is fixed while the finger keeps moving.
   PointerEventSendResult handlePointerEvent(
-      String kind, String type, Offset offset) {
+      String kind, String type, Offset offset,
+      {Offset? checkPos}) {
     // Camera mode is a pure no-op: return before any position mapping or
     // peer-control check, both of which mutate local cursor/canvas state
     // (handlePointerDevicePos, _checkPeerControlProtected) without sending.
@@ -2081,7 +2088,8 @@ class InputModel {
       if (parent.target!.cursorModel.isPeerControlProtected) {
         return PointerEventSendResult.droppedProtected;
       }
-    } else if (_checkPeerControlProtected(x, y)) {
+    } else if (_checkPeerControlProtected(
+        checkPos?.dx ?? x, checkPos?.dy ?? y)) {
       return PointerEventSendResult.droppedProtected;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
@@ -2108,8 +2116,11 @@ class InputModel {
       if (type == kMouseEventTypePanStart) {
         // Seed the receiver-position mirror from the mapped start payload:
         // the terminal path (_queuePanEndUnconditionally) replays the
-        // receiver's stored pointer arithmetic from here.
-        _trackpadPanPos = pos;
+        // receiver's stored pointer arithmetic from here. Clamp at zero like
+        // the receiver's TOUCH_PAN_START (mouseX = max(0, _x) * scale), so a
+        // negative mapped coordinate (a monitor left/above the primary) seeds
+        // the same origin the receiver stored.
+        _trackpadPanPos = Point(max(0.0, pos.x), max(0.0, pos.y));
       }
       evtValue = {
         'x': pos.x.toInt(),
