@@ -1645,7 +1645,7 @@ impl Connection {
         }
     }
 
-    fn normalize_port_forward_target(pf: &mut PortForward) -> (String, bool) {
+    pub(super) fn normalize_port_forward_target(pf: &mut PortForward) -> (String, bool) {
         let mut is_rdp = false;
         if pf.host == "RDP" && pf.port == 0 {
             pf.host = "localhost".to_owned();
