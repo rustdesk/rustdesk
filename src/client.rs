@@ -4279,7 +4279,7 @@ pub mod peer_online {
         ids: Vec<String>,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
         let query_timeout = std::time::Duration::from_millis(3_000);
-        query_online_states_(&ids, query_timeout, false).await
+        query_online_states_(&ids, query_timeout, true).await
     }
 
     async fn create_online_stream() -> ResultType<Stream> {

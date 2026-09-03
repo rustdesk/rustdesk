@@ -20,14 +20,14 @@ use std::{
     },
 };
 
-pub fn discover_lan_blocking() -> Result<(), String> {
-    crate::lan::discover().map_err(|err| err.to_string())
-}
-
 pub async fn query_online_states_result(
     ids: Vec<String>,
 ) -> ResultType<(Vec<String>, Vec<String>)> {
     crate::client::peer_online::query_online_states_result(ids).await
+}
+
+pub fn discover_lan_blocking() -> ResultType<()> {
+    crate::lan::discover()
 }
 
 pub fn validate_api_server(api_server: &str, use_proxy: bool) -> ResultType<()> {
