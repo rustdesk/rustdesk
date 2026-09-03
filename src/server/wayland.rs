@@ -260,9 +260,22 @@ pub(super) async fn check_init() -> ResultType<()> {
                 // The cached layout may predate compositor changes made while no session
                 // was active, https://github.com/rustdesk/rustdesk/issues/15601
                 scrap::wayland::display::clear_wayland_displays_cache();
+                // Reset before the refresh, not in its success arm: if the refresh
+                // fails, the previous session's baseline and drift flag must not
+                // survive into this one.
+                super::display_service::reset_wayland_layout();
                 if let Some((minx, maxx, miny, maxy)) =
                     scrap::wayland::display::get_desktop_rect_for_uinput()
                 {
+                    // Snapshot the per-display layout the client's coordinates will be
+                    // based on, so the mouse path can correct them if the compositor
+                    // moves a monitor mid-session. Snapshotted before the refresh, not
+                    // in its success arm: the layout is local data, and a failed
+                    // refresh is retried by the periodic check, which needs this
+                    // baseline to re-enable the correction.
+                    super::display_service::set_wayland_layout_baseline(
+                        scrap::wayland::display::get_display_rects_for_uinput(),
+                    );
                     log::info!(
                         "update mouse resolution: ({}, {}), ({}, {})",
                         minx,
@@ -282,12 +295,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                             super::display_service::set_wayland_uinput_rect((
                                 minx, maxx, miny, maxy,
                             ));
-                            // Snapshot the per-display layout the client's coordinates
-                            // will be based on, so the mouse path can correct them if
-                            // the compositor moves a monitor mid-session.
-                            super::display_service::set_wayland_layout_baseline(
-                                scrap::wayland::display::get_display_rects_for_uinput(),
-                            );
                         }
                         Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
                         Err(err) => log::error!("Failed to update mouse resolution: {}", err),

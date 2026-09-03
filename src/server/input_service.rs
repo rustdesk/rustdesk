@@ -705,24 +705,86 @@ pub async fn setup_rdp_input() -> ResultType<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// When a refresh outlives its caller's timeout, the blocking task below keeps waiting
+// on the enigo lock or the IPC; it cannot be cancelled. Marks the launch time so
+// retries don't stack a new blocked thread on the same lock every poll: the task
+// clears the marker when it finishes, and the age bound recovers if it never runs.
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    static ref UINPUT_REFRESH_INFLIGHT_SINCE: std::sync::Mutex<Option<Instant>> = Default::default();
+}
+#[cfg(target_os = "linux")]
+const UINPUT_REFRESH_GIVE_UP: Duration = Duration::from_secs(60);
+
+// Ownership of the refresh slot, held across the whole update. `set_resolution()` writes
+// the resolution the uinput service recreates the mouse from, so setting the range and
+// the refresh that installs it have to be one transaction against that shared state;
+// otherwise a concurrent update's range gets installed under this caller's ack and the
+// caller caches a range the device is not using.
+//
+// Releasing on drop makes the claim cancellation-safe: if `set_resolution()` errors, or
+// the caller's timeout drops this future before the refresh starts, the slot frees. Once
+// the guard is moved into the blocking task it belongs to that task instead, so a caller
+// timeout cannot free a slot whose refresh is still running.
+#[cfg(target_os = "linux")]
+struct UinputRefreshGuard(Instant);
+
+#[cfg(target_os = "linux")]
+impl UinputRefreshGuard {
+    // None while another update owns the slot and has not passed the age bound.
+    fn acquire() -> Option<Self> {
+        let started = Instant::now();
+        let mut inflight = UINPUT_REFRESH_INFLIGHT_SINCE.lock().unwrap();
+        if let Some(since) = *inflight {
+            if since.elapsed() < UINPUT_REFRESH_GIVE_UP {
+                return None;
+            }
+        }
+        *inflight = Some(started);
+        Some(Self(started))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for UinputRefreshGuard {
+    fn drop(&mut self) {
+        // Clear only our own marker: an update that outlived the age bound must not
+        // release the slot a newer one has since claimed.
+        let mut inflight = UINPUT_REFRESH_INFLIGHT_SINCE.lock().unwrap();
+        if *inflight == Some(self.0) {
+            *inflight = None;
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub async fn update_mouse_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
+    // Claimed before the range is written, so a concurrent update cannot land its own
+    // range in the shared resolution between this write and the refresh below.
+    let Some(guard) = UinputRefreshGuard::acquire() else {
+        bail!("previous uinput refresh still in flight");
+    };
     set_uinput_resolution(minx, maxx, miny, maxy).await?;
 
     // Confirm the device adopted the new range before the caller caches it.
     // spawn_blocking because ENIGO is a std Mutex and send_refresh blocks on IPC.
     tokio::task::spawn_blocking(move || {
-        if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
-            if let Some(mouse) = mouse
-                .as_mut_any()
-                .downcast_mut::<super::uinput::client::UInputMouse>()
-            {
-                return mouse.send_refresh();
+        // Owned by this task now: dropped when the refresh returns, however it returns.
+        let _guard = guard;
+        let res = (|| {
+            if let Some(mouse) = ENIGO.lock().unwrap().get_custom_mouse() {
+                if let Some(mouse) = mouse
+                    .as_mut_any()
+                    .downcast_mut::<super::uinput::client::UInputMouse>()
+                {
+                    return mouse.send_refresh();
+                }
+                bail!("failed to downcast custom mouse to UInputMouse");
             }
-            bail!("failed to downcast custom mouse to UInputMouse");
-        }
-        // No custom mouse: nothing to refresh.
-        Ok(())
+            // No custom mouse: nothing to refresh.
+            Ok(())
+        })();
+        res
     })
     .await?
 }

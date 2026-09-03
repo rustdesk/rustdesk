@@ -60,6 +60,12 @@ struct WaylandLayout {
 #[cfg(target_os = "linux")]
 static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 
+// Bumped on every session reset. A periodic poll that was blocked in the range refresh
+// across a session change must discard its snapshot instead of republishing the old
+// session's layout over the new session's state.
+#[cfg(target_os = "linux")]
+static WAYLAND_LAYOUT_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
@@ -78,6 +84,26 @@ pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display:
     let mut lock = WAYLAND_LAYOUT.lock().unwrap();
     lock.baseline = baseline;
     lock.live.clear();
+}
+
+// Drop all layout state from the previous session. Called at session init before the
+// resolution refresh, so a failed refresh cannot leave a stale baseline or drift flag
+// that would remap coordinates of a client initialized to the current layout.
+#[cfg(target_os = "linux")]
+pub(super) fn reset_wayland_layout() {
+    WAYLAND_LAYOUT_EPOCH.fetch_add(1, Ordering::Relaxed);
+    WAYLAND_LAYOUT_DRIFTED.store(false, Ordering::Relaxed);
+    {
+        let mut lock = WAYLAND_LAYOUT.lock().unwrap();
+        lock.baseline.clear();
+        lock.live.clear();
+    }
+    // Drop the recorded rect too: if the init refresh fails, the periodic check must
+    // see a mismatch and retry, not trust a rect applied for the previous session.
+    // Clearing last_check lets that retry run on the first poll.
+    let mut lock = WAYLAND_UINPUT_RECT.lock().unwrap();
+    lock.rect = None;
+    lock.last_check = None;
 }
 
 // Remap an injected coordinate onto the live compositor layout when it has drifted from
@@ -114,25 +140,32 @@ fn refresh_wayland_uinput_rect_if_changed() {
         }
         lock.last_check = Some(std::time::Instant::now());
     }
+    // Snapshot the generation before reading the layout, so the epoch and the layout
+    // belong to the same session. Loaded after the read, an epoch could be one a reset
+    // published mid-read, and the checks below would then accept the previous
+    // session's geometry as current.
+    let epoch = WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed);
     let Some((rect, live_rects)) = scrap::wayland::display::get_layout_for_uinput_live() else {
         return;
     };
-    // Refresh the per-display layout every poll: monitor origins can shift (e.g. two
-    // displays swap positions) without changing the overall desktop rect, and the mouse
-    // path needs the current per-display geometry to correct coordinates.
+    // A reset during the read means this geometry is the previous session's: bail before
+    // writing it to the device, not just before publishing it.
+    if WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed) != epoch {
+        return;
+    }
+    // Compare against the fresh layout but publish it to `live` only once the uinput
+    // range below is confirmed: until then mouse threads must keep correcting against
+    // the previous (layout, range) pair, which is still what the device is using.
     let drifted = {
-        let mut layout = WAYLAND_LAYOUT.lock().unwrap();
-        let drifted = !layout.baseline.is_empty()
-            && !live_rects.is_empty()
-            && layout.baseline != live_rects;
-        layout.live = live_rects;
-        drifted
+        let layout = WAYLAND_LAYOUT.lock().unwrap();
+        !layout.baseline.is_empty() && !live_rects.is_empty() && layout.baseline != live_rects
     };
     // The remap corrects for per-display origin shifts; the uinput ABS range corrects for
     // the overall bounding box. Only enable the remap once the range matches the live
     // layout, otherwise moves would be remapped into a range the device is not yet using.
     // A drift with no bbox change (origins swapped) needs no range update and enables now.
     let mut range_ok = WAYLAND_UINPUT_RECT.lock().unwrap().rect == Some(rect);
+    let mut applied = false;
     if !range_ok {
         let (minx, maxx, miny, maxy) = rect;
         log::info!(
@@ -151,17 +184,21 @@ fn refresh_wayland_uinput_rect_if_changed() {
                 // `set_resolution()` has no timeout on the response read.
                 // timeout must be built inside the runtime, or it panics
                 // "there is no reactor running". See clipboard_service.rs.
-                match rt.block_on(async {
+                let res = rt.block_on(async {
                     timeout(
                         3_000,
                         crate::input_service::update_mouse_resolution(minx, maxx, miny, maxy),
                     )
                     .await
-                }) {
-                    // Record the rect only after a successful apply, so a transient
-                    // failure is retried on the next check.
+                });
+                // The timeout cannot cancel the spawn_blocking inside
+                // update_mouse_resolution, and dropping the runtime waits for it.
+                // Detach instead, so a refresh stuck on the enigo lock or the IPC
+                // cannot hang this loop past the timeout.
+                rt.shutdown_background();
+                match res {
                     Ok(Ok(())) => {
-                        WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+                        applied = true;
                         range_ok = true;
                     }
                     Ok(Err(err)) => log::error!("Failed to update mouse resolution: {}", err),
@@ -172,6 +209,19 @@ fn refresh_wayland_uinput_rect_if_changed() {
                 log::error!("Failed to build tokio runtime: {}", err);
             }
         }
+    }
+    // A session reset while this poll was blocked in the refresh means the snapshot
+    // above belongs to the previous session; discard it, the next poll starts fresh.
+    if WAYLAND_LAYOUT_EPOCH.load(Ordering::Relaxed) != epoch {
+        return;
+    }
+    if applied {
+        // Record the rect only after a successful apply, so a transient failure is
+        // retried on the next check.
+        WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
+    }
+    if range_ok {
+        WAYLAND_LAYOUT.lock().unwrap().live = live_rects;
     }
     // Publish the flag last: a `true` read is always backed by a current `live` and a
     // matching uinput range. A failed range apply leaves this false and retries next poll.
