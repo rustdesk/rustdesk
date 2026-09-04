@@ -63,7 +63,7 @@ pub struct Session<T: InvokeUiSession> {
     /// The `Hash` this connection was challenged with. A session's clones
     /// share it, as they share the connection; a port-forward accept's clone
     /// gets its own, since every accept is a connection of its own.
-    pub login_hash: Arc<RwLock<Hash>>,
+    pub login_hash: Arc<RwLock<Option<Hash>>>,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
@@ -1883,7 +1883,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 
     async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
-        *self.login_hash.write().unwrap() = hash.clone();
+        *self.login_hash.write().unwrap() = Some(hash.clone());
         handle_hash(self.lc.clone(), pass, hash, self.port_forward.clone(), self, peer).await
     }
 
