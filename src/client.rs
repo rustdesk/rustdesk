@@ -1752,6 +1752,14 @@ pub struct LoginConfigHandler {
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
     config: PeerConfig,
+    pub port_forward: (String, i32),
+    /// Set once per window, before its mappings start: the claim and the
+    /// login of every accept must agree on it.
+    pub(crate) port_forward_mux: bool,
+    /// Held by a port-forward mapping from filling `port_forward` and `hash`
+    /// until its login is built from them; a window's mappings log in
+    /// concurrently.
+    pub(crate) port_forward_login_turn: Arc<hbb_common::tokio::sync::Mutex<()>>,
     pub version: i64,
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
@@ -2665,7 +2673,6 @@ impl LoginConfigHandler {
         os_username: String,
         os_password: String,
         password: Vec<u8>,
-        port_forward: PortForward,
     ) -> Message {
         let my_id = Config::get_id();
         let (my_id, pure_id) = if let Some((id, _, _)) = self.other_server.as_ref() {
@@ -2762,7 +2769,12 @@ impl LoginConfigHandler {
                 ..Default::default()
             }),
             ConnType::VIEW_CAMERA => lr.set_view_camera(Default::default()),
-            ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(port_forward),
+            ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
+                host: self.port_forward.0.clone(),
+                port: self.port_forward.1,
+                multiplex: self.port_forward_mux,
+                ..Default::default()
+            }),
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
                 terminal.service_id = self.get_option(self.get_key_terminal_service_id());
@@ -3496,7 +3508,6 @@ pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password_preset: &str,
     hash: Hash,
-    port_forward: PortForward,
     interface: &impl Interface,
     peer: &mut Stream,
 ) -> bool {
@@ -3616,7 +3627,7 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    send_login(lc.clone(), String::new(), String::new(), password, port_forward, peer).await;
+    send_login(lc.clone(), String::new(), String::new(), password, peer).await;
     lc.write().unwrap().hash = hash;
     true
 }
@@ -3654,20 +3665,18 @@ fn try_get_password_from_personal_ab(lc: Arc<RwLock<LoginConfigHandler>>, passwo
 /// * `os_username` - OS username.
 /// * `os_password` - OS password.
 /// * `password` - Password.
-/// * `port_forward` - Target of a port-forward login; ignored by other types.
 /// * `peer` - [`Stream`] for communicating with peer.
 async fn send_login(
     lc: Arc<RwLock<LoginConfigHandler>>,
     os_username: String,
     os_password: String,
     password: Vec<u8>,
-    port_forward: PortForward,
     peer: &mut Stream,
 ) {
     let msg_out = lc
         .read()
         .unwrap()
-        .create_login_msg(os_username, os_password, password, port_forward);
+        .create_login_msg(os_username, os_password, password);
     allow_err!(peer.send(&msg_out).await);
 }
 
@@ -3680,8 +3689,6 @@ async fn send_login(
 /// * `os_password` - OS password.
 /// * `password` - Password.
 /// * `remember` - Whether to remember password.
-/// * `port_forward` - Target of a port-forward login; ignored by other types.
-/// * `hash` - The challenge this connection was given, if it has one yet.
 /// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
@@ -3689,20 +3696,8 @@ pub async fn handle_login_from_ui(
     os_password: String,
     password: String,
     remember: bool,
-    port_forward: PortForward,
-    hash: Option<Hash>,
     peer: &mut Stream,
 ) {
-    // The window's password prompt is broadcast to every port-forward
-    // mapping, and can reach one whose own `Hash` has not arrived. It has
-    // nothing to answer with: a digest over an empty challenge is refused
-    // and counted as a failed attempt. The mapping that prompted stores the
-    // salted password in the shared handler, and `handle_hash` logs this one
-    // in with it when its `Hash` comes.
-    let Some(hash) = hash else {
-        log::info!("login from UI before this connection's hash, waiting for it");
-        return;
-    };
     let mut hash_password = if password.is_empty() {
         let mut password2 = lc.read().unwrap().password.clone();
         if password2.is_empty() {
@@ -3716,7 +3711,7 @@ pub async fn handle_login_from_ui(
         lc.write().unwrap().password_source = Default::default();
         let mut hasher = Sha256::new();
         hasher.update(password);
-        hasher.update(&hash.salt);
+        hasher.update(&lc.read().unwrap().hash.salt);
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
         res[..].into()
@@ -3724,10 +3719,10 @@ pub async fn handle_login_from_ui(
     lc.write().unwrap().password = hash_password.clone();
     let mut hasher2 = Sha256::new();
     hasher2.update(&hash_password[..]);
-    hasher2.update(&hash.challenge);
+    hasher2.update(&lc.read().unwrap().hash.challenge);
     hash_password = hasher2.finalize()[..].to_vec();
 
-    send_login(lc.clone(), os_username, os_password, hash_password, port_forward, peer).await;
+    send_login(lc.clone(), os_username, os_password, hash_password, peer).await;
 }
 
 async fn send_switch_login_request(
@@ -3741,7 +3736,7 @@ async fn send_switch_login_request(
         lr: hbb_common::protobuf::MessageField::some(
             lc.read()
                 .unwrap()
-                .create_login_msg("".to_owned(), "".to_owned(), vec![], Default::default())
+                .create_login_msg("".to_owned(), "".to_owned(), vec![])
                 .login_request()
                 .to_owned(),
         ),
@@ -3774,11 +3769,6 @@ pub trait Interface: Send + Clone + 'static + Sized {
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
 
     fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>>;
-    /// A clone whose port-forward login asks for this target. The target
-    /// travels with the clone, never through the shared
-    /// `LoginConfigHandler`, so mappings logging in at the same time cannot
-    /// overwrite each other's target between the accept and the peer's `Hash`.
-    fn with_port_forward(&self, port_forward: PortForward) -> Self;
 
     fn get_id(&self) -> String {
         self.get_lch().read().unwrap().id.clone()
@@ -4081,207 +4071,22 @@ mod retry_tests {
 }
 
 #[cfg(test)]
-mod login_scope_tests {
+mod port_forward_mux_tests {
     use super::*;
-    use hbb_common::{
-        tcp::FramedStream,
-        tokio::{
-            self,
-            time::{timeout, Duration},
-        },
-        Stream,
-    };
 
-    fn target(host: &str, port: i32) -> PortForward {
-        PortForward {
-            host: host.to_owned(),
-            port,
-            ..Default::default()
-        }
-    }
-
-    fn hash(challenge: &str) -> Hash {
-        Hash {
-            salt: "salt".to_owned(),
-            challenge: challenge.to_owned(),
-            ..Default::default()
-        }
-    }
-
-    /// What the peer expects for password `pw` under `hash(challenge)`.
-    fn digest(challenge: &str) -> Vec<u8> {
-        let mut h = Sha256::new();
-        h.update("pw");
-        h.update("salt");
-        let salted = h.finalize();
-        let mut h2 = Sha256::new();
-        h2.update(&salted[..]);
-        h2.update(challenge);
-        h2.finalize()[..].to_vec()
-    }
-
-    /// (our end, the peer's end) of one connection.
-    async fn loopback() -> (Stream, Stream) {
-        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = l.local_addr().unwrap();
-        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
-        let (server, _) = l.accept().await.unwrap();
-        (
-            Stream::Tcp(FramedStream::from(client, addr)),
-            Stream::Tcp(FramedStream::from(server, addr)),
-        )
-    }
-
-    async fn next_login(peer: &mut Stream) -> LoginRequest {
-        let bytes = peer.next().await.unwrap().unwrap();
-        Message::parse_from_bytes(&bytes)
-            .unwrap()
-            .login_request()
-            .clone()
-    }
-
-    /// An `Interface` that records the dialogs it was asked to show.
-    #[derive(Clone, Default)]
-    struct NoUi(Arc<Mutex<Vec<String>>>);
-
-    #[async_trait]
-    impl Interface for NoUi {
-        fn send(&self, _data: Data) {}
-        fn msgbox(&self, msgtype: &str, _title: &str, _text: &str, _link: &str) {
-            self.0.lock().unwrap().push(msgtype.to_owned());
-        }
-        fn handle_login_error(&self, _err: &str) -> bool {
-            false
-        }
-        fn handle_peer_info(&self, _pi: PeerInfo) {}
-        fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
-        async fn handle_hash(&self, _pass: &str, _hash: Hash, _peer: &mut Stream) -> bool {
-            false
-        }
-        async fn handle_login_from_ui(
-            &self,
-            _os_username: String,
-            _os_password: String,
-            _password: String,
-            _remember: bool,
-            _peer: &mut Stream,
-        ) {
-        }
-        async fn handle_test_delay(&self, _t: TestDelay, _peer: &mut Stream) {}
-        fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
-            Default::default()
-        }
-        fn with_port_forward(&self, _port_forward: PortForward) -> Self {
-            self.clone()
-        }
-    }
-
-    /// The target rides in the call, never in the shared handler: two accepts
-    /// building their logins off one handler cannot see each other's target.
     #[test]
-    fn a_port_forward_login_carries_the_callers_target() {
+    fn a_multiplexed_window_asks_for_the_tunnel() {
         let mut lc = LoginConfigHandler::default();
         lc.conn_type = ConnType::PORT_FORWARD;
-        let muxed = |host: &str, port: i32| PortForward {
-            multiplex: true,
-            ..target(host, port)
+        let asks = |lc: &LoginConfigHandler| {
+            lc.create_login_msg(String::new(), String::new(), vec![])
+                .login_request()
+                .port_forward()
+                .multiplex
         };
-        let a = lc.create_login_msg(String::new(), String::new(), vec![], muxed("a", 1));
-        let b = lc.create_login_msg(String::new(), String::new(), vec![], muxed("b", 2));
-        let pf = |m: &Message| m.login_request().port_forward().clone();
-        assert_eq!((pf(&a).host.as_str(), pf(&a).port), ("a", 1));
-        assert_eq!((pf(&b).host.as_str(), pf(&b).port), ("b", 2));
-        assert!(pf(&a).multiplex);
-    }
-
-    /// Each connection answers its own challenge: the `Hash` is a parameter
-    /// of the login, not a field two accepts could overwrite in the handler.
-    #[test]
-    fn a_ui_login_answers_the_challenge_it_was_given() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let (mut ours, mut peer) = loopback().await;
-            let lc = Arc::new(RwLock::new(LoginConfigHandler::default()));
-            for challenge in ["a", "b"] {
-                handle_login_from_ui(
-                    lc.clone(),
-                    String::new(),
-                    String::new(),
-                    "pw".to_owned(),
-                    false,
-                    Default::default(),
-                    Some(hash(challenge)),
-                    &mut ours,
-                )
-                .await;
-                assert_eq!(next_login(&mut peer).await.password, digest(challenge));
-            }
-        });
-    }
-
-    /// The window's password prompt is broadcast to every mapping, and it can
-    /// reach one whose own `Hash` has not arrived. That mapping sends nothing:
-    /// a digest over an empty challenge would only be refused and counted as
-    /// a failed attempt. It logs in when its `Hash` comes, with the salted
-    /// password the mapping that prompted stored in the shared handler, and
-    /// without prompting again.
-    #[test]
-    fn a_mapping_still_waiting_for_its_hash_logs_in_when_it_comes() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            let (mut a, mut a_peer) = loopback().await;
-            let (mut b, mut b_peer) = loopback().await;
-            let lc = Arc::new(RwLock::new(LoginConfigHandler::default()));
-            lc.write().unwrap().conn_type = ConnType::PORT_FORWARD;
-
-            // A has its hash and answers the prompt.
-            handle_login_from_ui(
-                lc.clone(),
-                String::new(),
-                String::new(),
-                "pw".to_owned(),
-                false,
-                target("a", 1),
-                Some(hash("a")),
-                &mut a,
-            )
-            .await;
-            assert_eq!(next_login(&mut a_peer).await.password, digest("a"));
-
-            // The same broadcast reaches B, whose hash is still on its way.
-            handle_login_from_ui(
-                lc.clone(),
-                String::new(),
-                String::new(),
-                "pw".to_owned(),
-                false,
-                target("b", 2),
-                None,
-                &mut b,
-            )
-            .await;
-            assert!(
-                timeout(Duration::from_millis(200), b_peer.next())
-                    .await
-                    .is_err(),
-                "B logged in before it had a challenge"
-            );
-
-            // B's hash arrives.
-            let ui = NoUi::default();
-            assert!(handle_hash(lc.clone(), "", hash("b"), target("b", 2), &ui, &mut b).await);
-            let login = next_login(&mut b_peer).await;
-            assert_eq!(login.password, digest("b"));
-            let pf = login.port_forward();
-            assert_eq!((pf.host.as_str(), pf.port), ("b", 2));
-            assert!(ui.0.lock().unwrap().is_empty(), "B prompted again");
-        });
+        assert!(!asks(&lc));
+        lc.port_forward_mux = true;
+        assert!(asks(&lc));
     }
 }
 

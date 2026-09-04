@@ -1355,9 +1355,6 @@ mod tests {
             fn handle_login_error(&self, _err: &str) -> bool {
                 false
             }
-            fn with_port_forward(&self, _port_forward: PortForward) -> Self {
-                self.clone()
-            }
             fn handle_peer_info(&self, _pi: PeerInfo) {}
             fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
             async fn handle_hash(&self, _pass: &str, _hash: Hash, _peer: &mut Stream) -> bool {
