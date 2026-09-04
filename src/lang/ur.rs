@@ -747,7 +747,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("preset-password-in-use-tip", ""),
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
-        ("Enable", ""),
     ].iter().cloned().collect();
 }
 
