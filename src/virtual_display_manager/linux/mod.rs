@@ -1147,8 +1147,12 @@ fn tick(state: &mut State) {
         if !all.iter().any(is_real_output) {
             state.real_since = None;
             if real_display_probe_due(state.last_probe, crate::ipc::drm_capture_active()) {
-                state.last_probe = Some(Instant::now());
-                probe_held_connectors(state);
+                // The gate is what makes the activity check above binding: a capture cannot be
+                // admitted between it and the writes below.
+                if let Some(_gate) = crate::ipc::begin_held_connector_probe() {
+                    state.last_probe = Some(Instant::now());
+                    probe_held_connectors(state);
+                }
             }
             return;
         }
