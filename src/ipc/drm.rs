@@ -491,12 +491,32 @@ pub(crate) fn drm_capture_active() -> bool {
     DRM_CAPTURES_OPEN.load(Ordering::Relaxed) > 0
 }
 
+/// Probing a held connector and admitting a capture exclude each other. The probe drops the force
+/// on the machine's only scanout for a moment; a capture admitted in that moment would enumerate
+/// an empty topology and send its session to the portal. So a probe holds this for its whole
+/// detect-check-reforce, and admission takes it before counting itself in - a probe in flight
+/// makes the newcomer wait, and a capture already counted makes the probe stand down.
+static PROBE_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Hold the gate across a held-connector probe. `None` when a capture is already open, in which
+/// case there is nothing to probe now. The guard is a `MutexGuard`, so a panic inside the probe
+/// releases it.
+pub(crate) fn begin_held_connector_probe() -> Option<std::sync::MutexGuard<'static, ()>> {
+    let gate = PROBE_GATE.lock().unwrap_or_else(|p| p.into_inner());
+    if drm_capture_active() {
+        return None;
+    }
+    Some(gate)
+}
+
 /// Decrements on Drop, so every way out of the capture loop is covered - including the panic path,
 /// which a manual decrement at the end would miss and leave the machine looking busy forever.
 struct CaptureGuard;
 
 impl CaptureGuard {
     fn new() -> Self {
+        // Wait out a probe in flight before counting in: see PROBE_GATE.
+        let _admitted = PROBE_GATE.lock().unwrap_or_else(|p| p.into_inner());
         DRM_CAPTURES_OPEN.fetch_add(1, Ordering::Relaxed);
         Self
     }
@@ -1503,6 +1523,25 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    // rustdesk#15908: a probe of the held connector and a capture admission exclude each other, so
+    // the activity check the probe makes cannot be overtaken between the check and the writes.
+    #[test]
+    fn a_held_connector_probe_stands_down_for_an_open_capture() {
+        assert!(begin_held_connector_probe().is_some(), "idle machine: probe allowed");
+        {
+            let _open = CaptureGuard::new();
+            assert!(drm_capture_active());
+            assert!(begin_held_connector_probe().is_none(), "a capture is open: no probe");
+        }
+        assert!(!drm_capture_active(), "the guard counts itself out on drop");
+        // Both sides lock PROBE_GATE, so an admission arriving during a probe waits for it; that
+        // ordering is structural, and the gate handed out here is the same mutex.
+        let gate = begin_held_connector_probe();
+        assert!(gate.is_some());
+        drop(gate);
+        assert!(begin_held_connector_probe().is_some());
+    }
 
     // Added to the wire later: an older peer's message must still decode.
     #[test]

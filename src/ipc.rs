@@ -15,7 +15,7 @@ mod ipc_drm;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
 #[cfg(all(target_os = "linux", feature = "drm"))]
-pub(crate) use ipc_drm::drm_capture_active;
+pub(crate) use ipc_drm::{begin_held_connector_probe, drm_capture_active};
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::DrmConn;
 #[cfg(all(target_os = "linux", feature = "drm"))]
@@ -1892,7 +1892,14 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn sync_config_to_service() -> ResultType<()> {
     let mut c = connect_service(1000).await?;
-    let cfg = (Config::get(), Config2::get());
+    // From disk, not from this process's snapshot: the snapshot was taken at startup, and the
+    // service replaces its whole config with what it is sent, so anything another process saved
+    // since would be rolled back. Reading now narrows that to the moment between this read and
+    // the send; only a scoped option update on the service side would close it entirely.
+    let cfg = (
+        hbb_common::config::load_path::<Config>(Config::file()),
+        hbb_common::config::load_path::<Config2>(Config2::file()),
+    );
     c.send(&Data::SyncConfig(Some(cfg.into()))).await?;
     // The service acks a pushed config with SyncConfig(None); anything else did not apply it.
     if !matches!(c.next_timeout(1000).await?, Some(Data::SyncConfig(None))) {

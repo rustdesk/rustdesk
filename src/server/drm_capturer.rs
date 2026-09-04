@@ -1448,12 +1448,20 @@ fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
     let mut st = DRM_STATE.lock().unwrap();
     let mut demoted = false;
     match &*st {
-        ProbeState::Available(..) => {
+        ProbeState::Available(at, _) => {
+            // The verdict sampled above can have been replaced while the clock was being
+            // resolved: a non-empty publisher can install a newer Available in between, and an
+            // empty push that then acted on the OLD verdict's clock would demote the new one and
+            // clearing the clock afterwards would not bring it back. Only the verdict that was
+            // sampled may be demoted.
+            let same_verdict = available_since == Some(*at);
             if list.is_empty() {
-                if empty_outlived_window {
+                if empty_outlived_window && same_verdict {
                     log::info!("drm: topology empty past the settle window, marking DRM unavailable");
                     publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
                     demoted = true;
+                } else if !same_verdict {
+                    log::info!("drm: hotplug refresh -> 0 displays; a newer verdict landed meanwhile, keeping it");
                 } else {
                     log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
                 }
