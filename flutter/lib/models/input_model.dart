@@ -476,6 +476,13 @@ class InputModel {
   /// previous one's Future preserves submission order.
   Future<void> _panEventChain = Future.value();
 
+  /// Bumped by [invalidateQueuedPanEvents] when a new session starts. Each
+  /// queued send captures it and bails if it no longer matches: on mobile the
+  /// session ID is a constant (model.dart `_constSessionId`), so a send still
+  /// pending when the next `sessionAddSync` lands would otherwise be submitted
+  /// against the new connection.
+  int _panEventGeneration = 0;
+
   // Mobile relative mouse delta accumulators (for slow/fine movements).
   double _mobileDeltaRemainderX = 0.0;
   double _mobileDeltaRemainderY = 0.0;
@@ -2153,7 +2160,9 @@ class InputModel {
     // Serialize with any pan event already in flight (see [_panEventChain]).
     // Each link swallows its own error so one failed send cannot break the
     // chain and strand later pan events.
+    final gen = _panEventGeneration;
     _panEventChain = _panEventChain.then((_) async {
+      if (gen != _panEventGeneration) return;
       try {
         await bind.sessionSendPointer(sessionId: sessionId, msg: msg);
       } catch (e) {
@@ -2201,13 +2210,64 @@ class InputModel {
       'x': end.dx.toInt(),
       'y': end.dy.toInt(),
     }).toJson()));
+    final gen = _panEventGeneration;
     _panEventChain = _panEventChain.then((_) async {
+      if (gen != _panEventGeneration) return;
       try {
         await bind.sessionSendPointer(sessionId: sessionId, msg: msg);
       } catch (e) {
         debugPrint('[InputModel] failed to send pan event PanEnd: $e');
       }
     });
+  }
+
+  /// [FIX #15630] Drop every piece of synthetic-trackpad gesture state at a
+  /// session boundary.
+  ///
+  /// On mobile the `FFI` (and therefore this `InputModel`) is permanent and
+  /// the session ID is a constant, so a session that ends mid-gesture — its
+  /// PointerUp/PointerCancel never delivered, which Flutter does not
+  /// synthesize on widget disposal — would leak the latch into the next
+  /// connection: [_beginTrackpadTwoFinger] early-returns on the stale latch,
+  /// leaving [_trackpadPanOpen] set, so the next gesture emits
+  /// pan_update/pan_end with no pan_start. That also defeats the receiver's
+  /// stale-stroke recovery, which only runs in its TOUCH_PAN_START handler.
+  /// The stale latch additionally freezes 1-finger hover (onPointHoverImage
+  /// returns early while it is set).
+  ///
+  /// Any pan already opened is abandoned, not flushed: the mobile remote page
+  /// dispatches `sessionClose` before `FFI.close()`, so a send from here would
+  /// be too late anyway, and the receiver discards the stale stroke on the
+  /// next pan_start.
+  ///
+  /// [_trackpadHoverDeviceId] is deliberately kept: it identifies the physical
+  /// trackpad (its Android device id is stable across connections), not the
+  /// session. Clearing it would make the first 2-finger gesture after a
+  /// reconnect fall through to the touchscreen path until a hover re-learns it.
+  ///
+  /// This does NOT invalidate already queued sends — see
+  /// [invalidateQueuedPanEvents], which is the session *start* boundary.
+  void resetTrackpadGestureState() {
+    _trackpadTwoFinger = false;
+    _trackpadPanOpen = false;
+    _trackpadPanPos = null;
+    _trackpadPanStartPos = Offset.zero;
+    _trackpadScrollUnsent = Offset.zero;
+  }
+
+  /// [FIX #15630] Abandon pan sends queued by a previous session.
+  ///
+  /// Deliberately separate from [resetTrackpadGestureState] and called only at
+  /// session *start*, not at teardown. The mobile session ID is a constant, so
+  /// the only moment a stale send becomes harmful is once `sessionAddSync` has
+  /// installed the next connection — which happens after this runs. Bumping at
+  /// teardown instead would gain nothing and could discard a pan_end that a
+  /// just-completed gesture queued but whose predecessors are still draining,
+  /// leaving the peer with a held touch — the exact release
+  /// [_queuePanEndUnconditionally] exists to guarantee.
+  void invalidateQueuedPanEvents() {
+    _panEventGeneration++;
+    _panEventChain = Future.value();
   }
 
   bool _checkPeerControlProtected(double x, double y) {
