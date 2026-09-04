@@ -436,12 +436,16 @@ mod tunnel {
     /// atomic claim; nothing is ever awaited while it runs.
     pub struct Tunnel {
         state: watch::Sender<TunnelState>,
+        /// Never sent on. The loop's receiver errors when the window drops
+        /// this `Tunnel`, and that is what ends a tunnel nothing else ends.
+        lifetime: watch::Sender<()>,
     }
 
     impl Tunnel {
         pub fn new() -> Self {
             let (state, _) = watch::channel(TunnelState::Unset);
-            Self { state }
+            let (lifetime, _) = watch::channel(());
+            Self { state, lifetime }
         }
 
         pub fn try_claim(&self) -> Claim {
@@ -497,7 +501,15 @@ mod tunnel {
             // state, a later publish here would pin it at Muxed with a dead
             // handle and the window could never re-establish.
             self.state.send_replace(TunnelState::Muxed(handle.clone()));
-            tokio::spawn(tunnel_loop(stream, handle.clone(), data_rx, control_rx, interface, state));
+            tokio::spawn(tunnel_loop(
+                stream,
+                handle.clone(),
+                data_rx,
+                control_rx,
+                interface,
+                state,
+                self.lifetime.subscribe(),
+            ));
             handle
         }
 
@@ -682,6 +694,7 @@ mod tunnel {
         mut control_rx: mpsc::UnboundedReceiver<Message>,
         interface: impl Interface,
         state: watch::Sender<TunnelState>,
+        mut lifetime: watch::Receiver<()>,
     ) {
         let err = loop {
             tokio::select! {
@@ -718,6 +731,7 @@ mod tunnel {
                         break format!("send failed: {}", e);
                     }
                 }
+                _ = lifetime.changed() => break "window closed".to_owned(),
             }
         };
         log::info!("port forward tunnel ended: {}", err);
@@ -1153,6 +1167,34 @@ mod tests {
         }
 
         #[test]
+        fn dropping_the_tunnel_ends_the_peer_connection() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                assert!(matches!(t.try_claim(), Claim::Claimed));
+                let h = t.set_muxed(ours, NoUi::default());
+                let (app, sock) = local_pair().await;
+                h.open("localhost", 80, sock, Vec::new()).unwrap();
+                let id = match recv_frame(&mut peer).await.union {
+                    Some(port_forward_channel::Union::Open(o)) => o.channel_id,
+                    other => panic!("expected open, got {:?}", other),
+                };
+                peer.send(&close_msg(id)).await.unwrap();
+                drop(app);
+                // The loop holds a handle of its own, so dropping ours proves
+                // nothing; the window's `Tunnel` is what must end the peer.
+                drop(h);
+                drop(t);
+                let end = hbb_common::timeout(2000, peer.next()).await;
+                assert!(
+                    matches!(end, Ok(None) | Ok(Some(Err(_)))),
+                    "peer still connected: {:?}",
+                    end
+                );
+            });
+        }
+
+        #[test]
         fn every_open_precedes_its_own_channels_first_data() {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
@@ -1379,19 +1421,22 @@ mod tests {
             port
         }
 
-        async fn muxed_tunnel() -> (Arc<TunnelHandle>, u16) {
+        /// The `Tunnel` comes back too: dropping it is what ends the peer, so
+        /// a test that wants a live tunnel has to keep holding it.
+        async fn muxed_tunnel() -> (Tunnel, Arc<TunnelHandle>, u16) {
             let (ours, theirs) = stream_pair().await;
             let port = echo_target().await;
             fake_controlled(theirs, format!("127.0.0.1:{}", port));
             let t = Tunnel::new();
             t.try_claim();
-            (t.set_muxed(ours, NoUi::default()), port)
+            let h = t.set_muxed(ours, NoUi::default());
+            (t, h, port)
         }
 
         #[test]
         fn many_channels_echo_concurrently() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 let mut apps = Vec::new();
                 for i in 0..20u8 {
                     let (app, sock) = local_pair().await;
@@ -1438,7 +1483,7 @@ mod tests {
         #[test]
         fn a_channel_opened_during_a_bulk_transfer_is_served_promptly() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 let (bulk_app, bulk_sock) = local_pair().await;
                 h.open("127.0.0.1", port as i32, bulk_sock, vec![]).unwrap();
                 let bulk = vec![0xAB; 4 << 20];
@@ -1473,7 +1518,7 @@ mod tests {
         #[test]
         fn a_local_half_close_ends_the_whole_channel() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 let (app, sock) = local_pair().await;
                 h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
                 let (mut rd, wr) = app.into_split();
@@ -1489,7 +1534,7 @@ mod tests {
         #[test]
         fn tail_before_close_is_delivered_in_both_directions() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 let (app, sock) = local_pair().await;
                 h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
                 let payload = vec![7u8; 300 * 1024];
@@ -1516,7 +1561,7 @@ mod tests {
         #[test]
         fn one_byte_frames_never_trip_the_window() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 let (mut app, sock) = local_pair().await;
                 h.open("127.0.0.1", port as i32, sock, vec![]).unwrap();
                 for i in 0..5000u32 {
@@ -1534,7 +1579,7 @@ mod tests {
         #[test]
         fn sequential_connections_far_beyond_max_channels_all_succeed() {
             rt().block_on(async {
-                let (h, port) = muxed_tunnel().await;
+                let (_t, h, port) = muxed_tunnel().await;
                 for i in 0..(MAX_CHANNELS * 3) {
                     let (mut app, sock) = local_pair().await;
                     h.open("127.0.0.1", port as i32, sock, vec![i as u8]).unwrap();
