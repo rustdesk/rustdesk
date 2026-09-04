@@ -146,9 +146,9 @@ pub async fn listen(
                     }
                     // A `Legacy` listener stays legacy until it closes: every accept
                     // logs in on its own, asks for no tunnel, and takes the raw pipe
-                    // whatever the peer reports. Reopening the window is how a user
-                    // picks up an upgraded peer; nothing switches modes underneath
-                    // live connections.
+                    // whatever the peer reports. Re-adding the mapping, or reopening
+                    // the window, is how a user picks up an upgraded peer; nothing
+                    // switches modes underneath live connections.
                     Claim::Legacy => {
                         {
                             let mut lc = lc.write().unwrap();
