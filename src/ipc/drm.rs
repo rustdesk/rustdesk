@@ -186,7 +186,7 @@ struct EnumerationTrust {
 /// directory (a render-only node like v3d or tegra) is display-incapable by construction, and
 /// counting it would keep absence unprovable forever on every split render/display SoC.
 /// `None` when the inventory could not be read, which is a different fact from zero cards.
-fn dri_display_card_count() -> Option<usize> {
+fn dri_display_cards() -> Option<std::collections::HashSet<String>> {
     let rd = std::fs::read_dir("/sys/class/drm").ok()?;
     let mut cards = std::collections::HashSet::new();
     let mut with_connector = std::collections::HashSet::new();
@@ -202,7 +202,20 @@ fn dri_display_card_count() -> Option<usize> {
             cards.insert(name);
         }
     }
-    Some(cards.intersection(&with_connector).count())
+    Some(cards.intersection(&with_connector).cloned().collect())
+}
+
+/// Whether every connector-bearing card sysfs knows of is among the devices libdrmtap handed
+/// back. Identities, not counts: `list_devices` returns every device with KMS resources, which
+/// includes connectorless ones, so a connectorless `card1` can make the counts equal while the
+/// `card0` that carries the display is missing - and a round that then enumerates `card1` cleanly
+/// with no displays would be taken as proof of absence.
+fn inventory_is_covered(sysfs_cards: &std::collections::HashSet<String>, device_paths: &[&str]) -> bool {
+    sysfs_cards.iter().all(|card| {
+        device_paths
+            .iter()
+            .any(|p| std::path::Path::new(p).file_name().and_then(|n| n.to_str()) == Some(card))
+    })
 }
 
 /// Whether `/dev/dri/cardN` has any sysfs connector: a failed open of a connector-less card says
@@ -248,10 +261,10 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         let mut any_opened = false;
         // list_devices silently skips card nodes it cannot open, so absence is only proven when
         // its list covers every card that could drive an output (render-only nodes are skipped
-        // by design and prove nothing).
-        // Written out rather than `is_none_or`, which needs a newer rustc than the DRM CI image.
-        let mut uninspected = match dri_display_card_count() {
-            Some(n) => devices.len() < n,
+        // by design and prove nothing). Covered by identity, see `inventory_is_covered`.
+        let device_paths: Vec<&str> = devices.iter().map(|d| d.path.as_str()).collect();
+        let mut uninspected = match dri_display_cards() {
+            Some(cards) => !inventory_is_covered(&cards, &device_paths),
             None => true,
         };
         let mut enumerated = false;
@@ -1716,6 +1729,20 @@ mod drm_conn_tests {
             render_node: String::new(),
             device: "/dev/dri/card1".to_owned(),
         }
+    }
+
+    // rustdesk#15906: equal cardinality is not coverage. sysfs knows one connector-bearing card and
+    // libdrmtap returns one KMS device: only the same card counts.
+    #[test]
+    fn coverage_is_by_card_identity_not_by_count() {
+        let sysfs: std::collections::HashSet<String> = ["card0".to_owned()].into_iter().collect();
+        assert!(!inventory_is_covered(&sysfs, &["/dev/dri/card1"]));
+        assert!(inventory_is_covered(&sysfs, &["/dev/dri/card0"]));
+        assert!(inventory_is_covered(&sysfs, &["/dev/dri/card1", "/dev/dri/card0"]));
+        // Nothing to cover is covered, whatever came back.
+        let none: std::collections::HashSet<String> = Default::default();
+        assert!(inventory_is_covered(&none, &[]));
+        assert!(inventory_is_covered(&none, &["/dev/dri/card3"]));
     }
 
     // A round where one card answers and a sibling does not cannot prove the sibling's displays
