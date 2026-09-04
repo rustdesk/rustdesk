@@ -3677,6 +3677,7 @@ async fn send_login(
 /// * `password` - Password.
 /// * `remember` - Whether to remember password.
 /// * `port_forward` - Target of a port-forward login; ignored by other types.
+/// * `hash` - The challenge this connection was given.
 /// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
@@ -3685,6 +3686,7 @@ pub async fn handle_login_from_ui(
     password: String,
     remember: bool,
     port_forward: PortForward,
+    hash: Hash,
     peer: &mut Stream,
 ) {
     let mut hash_password = if password.is_empty() {
@@ -3700,7 +3702,7 @@ pub async fn handle_login_from_ui(
         lc.write().unwrap().password_source = Default::default();
         let mut hasher = Sha256::new();
         hasher.update(password);
-        hasher.update(&lc.read().unwrap().hash.salt);
+        hasher.update(&hash.salt);
         let res = hasher.finalize();
         lc.write().unwrap().remember = remember;
         res[..].into()
@@ -3708,7 +3710,7 @@ pub async fn handle_login_from_ui(
     lc.write().unwrap().password = hash_password.clone();
     let mut hasher2 = Sha256::new();
     hasher2.update(&hash_password[..]);
-    hasher2.update(&lc.read().unwrap().hash.challenge);
+    hasher2.update(&hash.challenge);
     hash_password = hasher2.finalize()[..].to_vec();
 
     send_login(lc.clone(), os_username, os_password, hash_password, port_forward, peer).await;
@@ -4086,6 +4088,57 @@ mod login_scope_tests {
         assert_eq!((pf(&a).host.as_str(), pf(&a).port), ("a", 1));
         assert_eq!((pf(&b).host.as_str(), pf(&b).port), ("b", 2));
         assert!(pf(&a).multiplex);
+    }
+
+    /// Each connection answers its own challenge: the `Hash` is a parameter
+    /// of the login, not a field two accepts could overwrite in the handler.
+    #[test]
+    fn a_ui_login_answers_the_challenge_it_was_given() {
+        use hbb_common::{protobuf::Message as _, tcp::FramedStream, tokio, Stream};
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = l.local_addr().unwrap();
+            let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+            let (server, _) = l.accept().await.unwrap();
+            let mut ours = Stream::Tcp(FramedStream::from(client, addr));
+            let mut peer = Stream::Tcp(FramedStream::from(server, addr));
+            let lc = Arc::new(RwLock::new(LoginConfigHandler::default()));
+            let hash = |challenge: &str| Hash {
+                salt: "salt".to_owned(),
+                challenge: challenge.to_owned(),
+                ..Default::default()
+            };
+            let expected = |challenge: &str| {
+                let mut h = Sha256::new();
+                h.update("pw");
+                h.update("salt");
+                let salted = h.finalize();
+                let mut h2 = Sha256::new();
+                h2.update(&salted[..]);
+                h2.update(challenge);
+                h2.finalize()[..].to_vec()
+            };
+            for challenge in ["a", "b"] {
+                handle_login_from_ui(
+                    lc.clone(),
+                    String::new(),
+                    String::new(),
+                    "pw".to_owned(),
+                    false,
+                    Default::default(),
+                    hash(challenge),
+                    &mut ours,
+                )
+                .await;
+                let bytes = peer.next().await.unwrap().unwrap();
+                let msg = Message::parse_from_bytes(&bytes).unwrap();
+                assert_eq!(msg.login_request().password, expected(challenge));
+            }
+        });
     }
 }
 
