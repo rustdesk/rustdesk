@@ -811,27 +811,16 @@ fn disable(state: &mut State) -> ResultType<()> {
     let mut released: Vec<String> = Vec::new();
     let mut still_held: Vec<String> = Vec::new();
     for t in &targets {
-        // The override comes off before the unforce, or the re-probe would read our EDID straight
-        // back and a real monitor on that connector would keep being described by it. One entry at
-        // a time: every connector gets its write attempted, and a failure must not strand the
-        // others with their override already gone.
-        drop_our_entries(|e| entry_connector(e) == Some(t.name.as_str()));
+        // The unforce comes FIRST, with our override still installed. A `detect` that fails then
+        // has touched nothing, so there is no marker to put back and no window in which a second
+        // failure could lose the record - the parameter entry simply stays, as it was. Only once
+        // the connector is off the force does the entry come off, and one more `detect` makes it
+        // read the wire instead of the EDID it already holds.
         if let Err(e) = write_status(&t.sysfs, "detect") {
             log::warn!("headless display: cannot release {}: {e}", t.sysfs);
-            // Put the marker back. The parameter entry is what survives this process and, for a
-            // force whose override never loaded, it is the only record there is. A target whose
-            // connector is gone has no identity to record, and an unqualified marker would follow
-            // the name onto whatever appears next, so that one is left to the process record alone.
             match &t.marker {
                 Some(marker) => {
-                    if let Err(e) = install_edid(&t.name, marker) {
-                        log::warn!(
-                            "headless display: cannot re-record the hold on {}: {e}",
-                            t.sysfs
-                        );
-                    } else {
-                        still_held.push(t.name.clone());
-                    }
+                    still_held.push(t.name.clone());
                     state.forced.push(Held {
                         sysfs: t.sysfs.clone(),
                         name: t.name.clone(),
@@ -845,9 +834,15 @@ fn disable(state: &mut State) -> ResultType<()> {
                 ),
             }
             last_err = Some(e);
-        } else {
-            released.push(t.sysfs.clone());
+            continue;
         }
+        drop_our_entries(|e| entry_connector(e) == Some(t.name.as_str()));
+        if let Err(e) = write_status(&t.sysfs, "detect") {
+            // Released, but it may still report the override it probed a moment ago; the next
+            // pass sees a connector carrying our EDID with no marker and re-probes it.
+            log::warn!("headless display: {} released, but the re-probe failed: {e}", t.sysfs);
+        }
+        released.push(t.sysfs.clone());
     }
     // Whatever is left of ours names no connector this pass could act on - an override orphaned by
     // an earlier failure, or one whose card is gone - and it would keep painting our EDID on the
