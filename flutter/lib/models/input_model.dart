@@ -2265,9 +2265,19 @@ class InputModel {
   /// just-completed gesture queued but whose predecessors are still draining,
   /// leaving the peer with a held touch — the exact release
   /// [_queuePanEndUnconditionally] exists to guarantee.
+  ///
+  /// [_panEventChain] is deliberately NOT replaced here. The generation check
+  /// only stops a closure that has not yet reached the bridge; one that already
+  /// called `sessionSendPointer` has submitted an frb Normal task that no Dart
+  /// state can recall, and the pinned frb 1.80.1 executor is a worker pool with
+  /// no completion-order barrier. Keeping the chain is that barrier: each link
+  /// awaits the task's completion Future, so the next session's first send is
+  /// submitted only after every task submitted by the previous one has already
+  /// run, and a delayed stale event can never interleave with a new gesture.
+  /// (A stale event that lands before any new gesture is separately made inert
+  /// by the receiver, which ignores TOUCH_PAN_UPDATE/END with no open pan.)
   void invalidateQueuedPanEvents() {
     _panEventGeneration++;
-    _panEventChain = Future.value();
   }
 
   bool _checkPeerControlProtected(double x, double y) {

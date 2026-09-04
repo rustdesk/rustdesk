@@ -84,6 +84,16 @@ class InputService : AccessibilityService() {
     private var touchPath = Path()
     private var stroke: GestureDescription.StrokeDescription? = null
     private var lastTouchGestureStartTime = 0L
+    // [FIX #15630] Whether a touch pan is open: TOUCH_PAN_START seen and its
+    // TOUCH_PAN_END not yet. Guards the update/end branches, which are only
+    // meaningful inside a stroke opened by TOUCH_PAN_START. Without it a pan
+    // event arriving with no open pan lineTo()s an empty touchPath — which
+    // Android treats as starting at (0,0) — and times it against a stale
+    // lastTouchGestureStartTime, dispatching a stray swipe across the screen.
+    // The controller only emits updates after an accepted pan_start, so this
+    // can only be reached by an event outliving the connection that produced
+    // it. Self-healing: a later TOUCH_PAN_START reopens the pan regardless.
+    private var panGestureOpen = false
     private var mouseX = 0
     private var mouseY = 0
     private var timer = Timer()
@@ -226,6 +236,12 @@ class InputService : AccessibilityService() {
     fun onTouchInput(mask: Int, _x: Int, _y: Int) {
         when (mask) {
             TOUCH_PAN_UPDATE -> {
+                // Drop the whole branch, position included: the coordinates are
+                // a delta against a stroke that does not exist (see
+                // panGestureOpen).
+                if (!panGestureOpen) {
+                    return
+                }
                 mouseX -= _x * SCREEN_INFO.scale
                 mouseY -= _y * SCREEN_INFO.scale
                 mouseX = max(0, mouseX);
@@ -236,8 +252,17 @@ class InputService : AccessibilityService() {
                 mouseX = max(0, _x) * SCREEN_INFO.scale
                 mouseY = max(0, _y) * SCREEN_INFO.scale
                 startGesture(mouseX, mouseY)
+                panGestureOpen = true
             }
             TOUCH_PAN_END -> {
+                // Drop the whole branch, position included: releasing a stroke
+                // that does not exist is a no-op, and applying the payload
+                // position would relocate the pointer for every later
+                // positionless event (see panGestureOpen).
+                if (!panGestureOpen) {
+                    return
+                }
+                panGestureOpen = false
                 endGesture(mouseX, mouseY)
                 mouseX = max(0, _x) * SCREEN_INFO.scale
                 mouseY = max(0, _y) * SCREEN_INFO.scale
