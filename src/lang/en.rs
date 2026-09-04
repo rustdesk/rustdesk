@@ -277,5 +277,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Your ip is blocked by the peer", "Your IP is blocked by the peer"),
         ("sync-clipboard-between-sessions-tip", "Text or images copied in one remote session are also sent to the clipboard of your other connected sessions."),
         ("terminal-clipboard-write-tip", "An app in the terminal wants to copy text to this device's clipboard. If granted, this permission applies to terminal apps in all connections until you turn it off in Settings. Manual copy and paste are unaffected."),
+        ("port-forward-mux-tip", "Carry every connection of a port-forward mapping over a single connection to the peer, instead of connecting and logging in again for each one."),
     ].iter().cloned().collect();
 }

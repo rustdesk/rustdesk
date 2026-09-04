@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Pantaila anitzen pantaila-argazkiak bateratzea ez da onartzen une honetan. Aldatu pantaila bakarrera eta saiatu berriro."),
         ("screenshot-action-tip", "Hautatu pantaila-argazkiarekin nola jarraitu."),
         ("Save as", "Gorde honela"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Esportatu"),
+        ("Export Logs", "Esportatu erregistroak"),
+        ("Import Folder", "Inportatu karpeta"),
         ("Copy to clipboard", "Kopiatu arbelera"),
         ("Enable remote printer", "Gaitu urruneko inprimagailua"),
         ("Downloading {}", "{} deskargatzen"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Gaitu"),
+        ("Reuse one connection for port forwarding", "Berrerabili konexio bakarra portuen birbideratzerako"),
+        ("port-forward-mux-tip", "Portu-birbideratze baten konexio guztiak beste ordenagailurako konexio bakar batetik eramaten ditu, bakoitzerako berriro konektatu eta saioa hasi beharrean."),
     ].iter().cloned().collect();
 }

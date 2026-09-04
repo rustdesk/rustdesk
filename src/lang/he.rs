@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "צילום מסך משולב מכל המסכים אינו נתמך"),
         ("screenshot-action-tip", "בחר פעולה לאחר צילום המסך"),
         ("Save as", "שמור בשם"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "ייצוא"),
+        ("Export Logs", "ייצוא יומנים"),
+        ("Import Folder", "ייבוא תיקייה"),
         ("Copy to clipboard", "העתק ללוח"),
         ("Enable remote printer", "אפשר מדפסת מרוחקת"),
         ("Downloading {}", "מוריד את {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "הפעל"),
+        ("Reuse one connection for port forwarding", "שימוש חוזר בחיבור אחד להעברת פורטים"),
+        ("port-forward-mux-tip", "כל החיבורים של העברת פורטים אחת עוברים דרך חיבור יחיד למחשב המרוחק, במקום ליצור חיבור חדש ולהיכנס מחדש עבור כל אחד מהם."),
     ].iter().cloned().collect();
 }

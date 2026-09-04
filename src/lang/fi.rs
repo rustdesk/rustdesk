@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Yhdistetyn näytön kuvakaappaus ei ole tuettu"),
         ("screenshot-action-tip", "Valitse, mitä haluat tehdä kuvakaappaukselle"),
         ("Save as", "Tallenna nimellä"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Vie"),
+        ("Export Logs", "Vie lokit"),
+        ("Import Folder", "Tuo kansio"),
         ("Copy to clipboard", "Kopioi leikepöydälle"),
         ("Enable remote printer", "Ota etätulostin käyttöön"),
         ("Downloading {}", "Ladataan {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Ota käyttöön"),
+        ("Reuse one connection for port forwarding", "Käytä yhtä yhteyttä portin edelleenohjaukseen"),
+        ("port-forward-mux-tip", "Välittää kaikki yhden portin edelleenohjauksen yhteydet yhden vastapuoleen avatun yhteyden kautta sen sijaan, että jokaista varten muodostettaisiin yhteys ja kirjauduttaisiin uudelleen."),
     ].iter().cloned().collect();
 }

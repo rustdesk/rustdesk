@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Captura de ecran a ecranului combinat nu este suportată în prezent."),
         ("screenshot-action-tip", "Selectează acțiunea pentru captura de ecran: salvează ca fișier sau copiază în clipboard."),
         ("Save as", "Salvează ca"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Exportă"),
+        ("Export Logs", "Exportă jurnalele"),
+        ("Import Folder", "Importă folder"),
         ("Copy to clipboard", "Copiază în clipboard"),
         ("Enable remote printer", "Activează imprimanta la distanță"),
         ("Downloading {}", "Se descarcă {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Activează"),
+        ("Reuse one connection for port forwarding", "Reutilizează o singură conexiune pentru redirecționarea porturilor"),
+        ("port-forward-mux-tip", "Trece toate conexiunile unei redirecționări de porturi printr-o singură conexiune către celălalt calculator, în loc să se conecteze și să se autentifice din nou pentru fiecare."),
     ].iter().cloned().collect();
 }

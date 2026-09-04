@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Không hỗ trợ chụp gộp nhiều màn hình."),
         ("screenshot-action-tip", "Hành động chụp màn hình"),
         ("Save as", "Lưu thành"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Xuất"),
+        ("Export Logs", "Xuất nhật ký"),
+        ("Import Folder", "Nhập thư mục"),
         ("Copy to clipboard", "Sao chép vào Clipboard"),
         ("Enable remote printer", "Bật máy in từ xa"),
         ("Downloading {}", "Đang tải xuống {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Bật"),
+        ("Reuse one connection for port forwarding", "Dùng chung một kết nối cho chuyển tiếp cổng"),
+        ("port-forward-mux-tip", "Chuyển toàn bộ kết nối của một quy tắc chuyển tiếp cổng qua một kết nối duy nhất tới máy đối phương, thay vì kết nối và đăng nhập lại cho từng kết nối."),
     ].iter().cloned().collect();
 }

@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "რამდენიმე ეკრანის სურათის გაერთიანება ამჟამად მხარდაჭერილი არ არის. გადართეთ ერთ ეკრანზე და სცადეთ ხელახლა."),
         ("screenshot-action-tip", "აირჩიეთ, როგორ გავაგრძელოთ ეკრანის სურათთან მუშაობა."),
         ("Save as", "შენახვა როგორც"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "ექსპორტი"),
+        ("Export Logs", "ჟურნალების ექსპორტი"),
+        ("Import Folder", "საქაღალდის იმპორტი"),
         ("Copy to clipboard", "ბუფერში კოპირება"),
         ("Enable remote printer", "დისტანციური პრინტერის ჩართვა"),
         ("Downloading {}", "მიმდინარეობს {}-ის ჩამოტვირთვა"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "ჩართვა"),
+        ("Reuse one connection for port forwarding", "პორტის გადამისამართებისთვის ერთი კავშირის ხელახლა გამოყენება"),
+        ("port-forward-mux-tip", "ერთი პორტის გადამისამართების ყველა კავშირი გადის მეორე კომპიუტერთან დამყარებული ერთი კავშირით, ნაცვლად იმისა, რომ თითოეულისთვის თავიდან დაუკავშირდეს და შევიდეს სისტემაში."),
     ].iter().cloned().collect();
 }

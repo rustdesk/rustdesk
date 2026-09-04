@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "मर्ज की गई स्क्रीन के स्क्रीनशॉट समर्थित नहीं हैं।"),
         ("screenshot-action-tip", "स्क्रीनशॉट लेने के बाद की कार्रवाई"),
         ("Save as", "इस रूप में सहेजें"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "एक्सपोर्ट करें"),
+        ("Export Logs", "लॉग एक्सपोर्ट करें"),
+        ("Import Folder", "फ़ोल्डर इंपोर्ट करें"),
         ("Copy to clipboard", "क्लिपबोर्ड पर कॉपी करें"),
         ("Enable remote printer", "रिमोट प्रिंटर सक्षम करें"),
         ("Downloading {}", "{} डाउनलोड हो रहा है"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "सक्षम करें"),
+        ("Reuse one connection for port forwarding", "पोर्ट फ़ॉरवर्डिंग के लिए एक ही कनेक्शन दोबारा उपयोग करें"),
+        ("port-forward-mux-tip", "एक पोर्ट फ़ॉरवर्डिंग के सभी कनेक्शन दूसरे कंप्यूटर से बने एक ही कनेक्शन से होकर जाते हैं, हर एक के लिए दोबारा कनेक्ट और लॉगिन करने के बजाय।"),
     ].iter().cloned().collect();
 }

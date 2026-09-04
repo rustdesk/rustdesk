@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "La fusión de capturas de pantalla de múltiples monitores no está soportada. Por favor, cambie a un monitor e inténtelo de nuevo."),
         ("screenshot-action-tip", "Por favor, seleccione cómo continuar con la captura de pantalla."),
         ("Save as", "Guardar como"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Exportar"),
+        ("Export Logs", "Exportar registros"),
+        ("Import Folder", "Importar carpeta"),
         ("Copy to clipboard", "Copiar al portapapeles"),
         ("Enable remote printer", "Habilitar impresora remota"),
         ("Downloading {}", "Descargando {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Habilitar"),
+        ("Reuse one connection for port forwarding", "Reutilizar una conexión para la redirección de puertos"),
+        ("port-forward-mux-tip", "Llevar todas las conexiones de una redirección de puertos por una única conexión con el otro equipo, en lugar de conectar e iniciar sesión de nuevo para cada una."),
     ].iter().cloned().collect();
 }

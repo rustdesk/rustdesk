@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Mitme kuva kuvatõmmiste ühendamine pole praegu toetatud. Palun lülitu ühele kuvale ja proovi uuesti."),
         ("screenshot-action-tip", "Palun vali, kuidas kuvatõmmisega jätkata."),
         ("Save as", "Salvesta kui"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Ekspordi"),
+        ("Export Logs", "Ekspordi logid"),
+        ("Import Folder", "Impordi kaust"),
         ("Copy to clipboard", "Kopeeri lõikelauale"),
         ("Enable remote printer", "Luba kaugprinter"),
         ("Downloading {}", "Allalaadimine: {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Luba"),
+        ("Reuse one connection for port forwarding", "Kasuta pordi suunamiseks üht ühendust"),
+        ("port-forward-mux-tip", "Juhib ühe pordisuunamise kõik ühendused ühe teise arvutiga loodud ühenduse kaudu, selle asemel et iga ühenduse jaoks uuesti ühenduda ja sisse logida."),
     ].iter().cloned().collect();
 }

@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Бірнеше дисплейдің скриншоттарын біріктіруге қазір қолдау көрсетілмейді. Жеке дисплейге ауысып, қайталап көруді өтінеміз."),
         ("screenshot-action-tip", "Скриншотпен қалай жалғастыру керектігін таңдауды өтінеміз."),
         ("Save as", "Басқаша сақтау"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Экспорттау"),
+        ("Export Logs", "Журналдарды экспорттау"),
+        ("Import Folder", "Қалтаны импорттау"),
         ("Copy to clipboard", "Көшіру-тақтаға көшіру"),
         ("Enable remote printer", "Қашықтағы принтерді іске қосу"),
         ("Downloading {}", "{} жүктелуде"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Қосу"),
+        ("Reuse one connection for port forwarding", "Порт бағыттау үшін бір қосылымды қайта пайдалану"),
+        ("port-forward-mux-tip", "Бір порт бағыттаудың барлық қосылымдары әрқайсысы үшін қайта қосылып кірудің орнына қарсы құрылғымен орнатылған бір қосылым арқылы өтеді."),
     ].iter().cloned().collect();
 }

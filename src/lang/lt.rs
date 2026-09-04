@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Kelių ekranų nuotraukų sujungimas šiuo metu nepalaikomas. Perjunkite į vieną ekraną ir bandykite dar kartą."),
         ("screenshot-action-tip", "Pasirinkite, ką daryti su ekrano nuotrauka."),
         ("Save as", "Įrašyti kaip"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Eksportuoti"),
+        ("Export Logs", "Eksportuoti žurnalus"),
+        ("Import Folder", "Importuoti aplanką"),
         ("Copy to clipboard", "Kopijuoti į iškarpinę"),
         ("Enable remote printer", "Įgalinti nuotolinį spausdintuvą"),
         ("Downloading {}", "Atsisiunčiama {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Įgalinti"),
+        ("Reuse one connection for port forwarding", "Prievadų peradresavimui naudoti vieną ryšį"),
+        ("port-forward-mux-tip", "Visi vieno prievadų peradresavimo ryšiai eina per vieną ryšį su kitu kompiuteriu, užuot kiekvienam iš jų jungiantis ir prisijungiant iš naujo."),
     ].iter().cloned().collect();
 }
