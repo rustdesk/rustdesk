@@ -92,12 +92,11 @@ pub async fn listen(
         tokio::select! {
             Ok((forward, addr)) = listener.accept() => {
                 log::info!("new connection from {:?}", addr);
-                lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
                 let id = id.clone();
                 let password = password.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
                 let mut close_port_forward = false;
-                match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
+                match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward, &remote_host, remote_port).await {
                     Ok(Some(stream)) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
@@ -143,6 +142,8 @@ async fn connect_and_login(
     token: &str,
     is_rdp: bool,
     close_port_forward: &mut bool,
+    remote_host: &str,
+    remote_port: i32,
 ) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
         ConnType::RDP
@@ -160,6 +161,7 @@ async fn connect_and_login(
     }
     let mut buffer = Vec::new();
     let mut received = false;
+    let mut challenge = None;
 
     let _keep_it = hc_connection(feedback, rendezvous_server, token).await;
 
@@ -177,7 +179,8 @@ async fn connect_and_login(
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
-                            if !interface.handle_hash(password, hash, &mut stream).await {
+                            challenge = Some(hash.clone());
+                            if !login_with_hash(&interface, password, hash, remote_host, remote_port, &mut stream).await {
                                 return Ok(None);
                             }
                         }
@@ -208,8 +211,8 @@ async fn connect_and_login(
             },
             d = ui_receiver.recv() => {
                 match d {
-                    Some(Data::Login((os_username, os_password, password, remember))) => {
-                        interface.handle_login_from_ui(os_username, os_password, password, remember, &mut stream).await;
+                    Some(Data::Login(login)) => {
+                        login_from_ui(&interface, &challenge, login, remote_host, remote_port, &mut stream).await;
                     }
                     Some(Data::Message(msg)) => {
                         allow_err!(stream.send(&msg).await);
@@ -231,6 +234,57 @@ async fn connect_and_login(
         allow_err!(stream.send_bytes(buffer.into()).await);
     }
     Ok(Some(stream))
+}
+
+
+/// A mapping's login is built from the window's shared handler:
+/// `create_login_msg` reads `port_forward` and `handle_login_from_ui` reads
+/// `hash`. Mappings log in concurrently, so each fills them and sends under
+/// the window's turn lock, or one login carried another mapping's target or
+/// answered another's challenge.
+async fn login_with_hash(
+    interface: &impl Interface,
+    password: &str,
+    hash: Hash,
+    remote_host: &str,
+    remote_port: i32,
+    stream: &mut Stream,
+) -> bool {
+    let lc = interface.get_lch();
+    let turn = lc.read().unwrap().port_forward_login_turn.clone();
+    let _turn = turn.lock().await;
+    lc.write().unwrap().port_forward = (remote_host.to_owned(), remote_port);
+    interface.handle_hash(password, hash, stream).await
+}
+
+/// The window's password prompt is broadcast to every mapping. One whose own
+/// `Hash` has not arrived has nothing to answer with and waits: the mapping
+/// that prompted stores the salted password in the shared handler, and
+/// `handle_hash` logs this one in with it.
+async fn login_from_ui(
+    interface: &impl Interface,
+    challenge: &Option<Hash>,
+    login: (String, String, String, bool),
+    remote_host: &str,
+    remote_port: i32,
+    stream: &mut Stream,
+) {
+    let Some(hash) = challenge else {
+        log::info!("password from UI before this connection's hash, waiting for it");
+        return;
+    };
+    let lc = interface.get_lch();
+    let turn = lc.read().unwrap().port_forward_login_turn.clone();
+    let _turn = turn.lock().await;
+    {
+        let mut lc = lc.write().unwrap();
+        lc.port_forward = (remote_host.to_owned(), remote_port);
+        lc.set_hash(hash.clone());
+    }
+    let (os_username, os_password, password, remember) = login;
+    interface
+        .handle_login_from_ui(os_username, os_password, password, remember, stream)
+        .await;
 }
 
 async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> ResultType<()> {
@@ -256,4 +310,160 @@ async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> 
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod login_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use hbb_common::{
+        tcp::FramedStream,
+        tokio::time::{sleep, timeout, Duration},
+    };
+    use sha2::{Digest, Sha256};
+
+    /// A window's interface over its shared handler. `handle_hash` can pause
+    /// before building the login, where the real one looks passwords up.
+    #[derive(Clone)]
+    struct Ui {
+        lc: Arc<RwLock<LoginConfigHandler>>,
+        pause: Duration,
+    }
+
+    #[async_trait]
+    impl Interface for Ui {
+        fn send(&self, _data: Data) {}
+        fn msgbox(&self, _msgtype: &str, _title: &str, _text: &str, _link: &str) {}
+        fn handle_login_error(&self, _err: &str) -> bool {
+            false
+        }
+        fn handle_peer_info(&self, _pi: PeerInfo) {}
+        fn set_multiple_windows_session(&self, _sessions: Vec<WindowsSession>) {}
+        async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
+            sleep(self.pause).await;
+            crate::client::handle_hash(self.lc.clone(), pass, hash, self, peer).await
+        }
+        async fn handle_login_from_ui(
+            &self,
+            os_username: String,
+            os_password: String,
+            password: String,
+            remember: bool,
+            peer: &mut Stream,
+        ) {
+            crate::client::handle_login_from_ui(
+                self.lc.clone(),
+                os_username,
+                os_password,
+                password,
+                remember,
+                peer,
+            )
+            .await
+        }
+        async fn handle_test_delay(&self, _t: TestDelay, _peer: &mut Stream) {}
+        fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>> {
+            self.lc.clone()
+        }
+    }
+
+    fn window() -> Ui {
+        let mut lc = LoginConfigHandler::default();
+        lc.conn_type = ConnType::PORT_FORWARD;
+        Ui {
+            lc: Arc::new(RwLock::new(lc)),
+            pause: Duration::ZERO,
+        }
+    }
+
+    /// (our end, the peer's end) of one connection.
+    async fn loopback() -> (Stream, Stream) {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let (server, _) = l.accept().await.unwrap();
+        (
+            Stream::Tcp(FramedStream::from(client, addr)),
+            Stream::Tcp(FramedStream::from(server, addr)),
+        )
+    }
+
+    async fn login_at(peer: &mut Stream) -> LoginRequest {
+        let bytes = peer.next().await.unwrap().unwrap();
+        Message::parse_from_bytes(&bytes)
+            .unwrap()
+            .login_request()
+            .clone()
+    }
+
+    fn target(lr: &LoginRequest) -> (String, i32) {
+        (lr.port_forward().host.clone(), lr.port_forward().port)
+    }
+
+    fn hash(challenge: &str) -> Hash {
+        Hash {
+            salt: "salt".to_owned(),
+            challenge: challenge.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    /// What the peer expects for password `pw` under `hash(challenge)`.
+    fn digest(challenge: &str) -> Vec<u8> {
+        let mut h = Sha256::new();
+        h.update("pw");
+        h.update("salt");
+        let salted = h.finalize();
+        let mut h2 = Sha256::new();
+        h2.update(&salted[..]);
+        h2.update(challenge);
+        h2.finalize()[..].to_vec()
+    }
+
+    #[test]
+    fn mappings_logging_in_at_once_each_carry_their_own_target() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let mut ui = window();
+            ui.pause = Duration::from_millis(50);
+            let (mut a, mut a_peer) = loopback().await;
+            let (mut b, mut b_peer) = loopback().await;
+            tokio::join!(
+                login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a),
+                login_with_hash(&ui, "pw", hash("b"), "b", 2, &mut b),
+            );
+            assert_eq!(target(&login_at(&mut a_peer).await), ("a".to_owned(), 1));
+            assert_eq!(target(&login_at(&mut b_peer).await), ("b".to_owned(), 2));
+        });
+    }
+
+    #[test]
+    fn a_password_typed_before_this_connections_hash_waits_for_it() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let ui = window();
+            let (mut a, mut a_peer) = loopback().await;
+            let (mut b, mut b_peer) = loopback().await;
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a).await);
+            login_at(&mut a_peer).await;
+            let typed = || (String::new(), String::new(), "pw".to_owned(), false);
+            login_from_ui(&ui, &None, typed(), "b", 2, &mut b).await;
+            assert!(
+                timeout(Duration::from_millis(200), b_peer.next())
+                    .await
+                    .is_err(),
+                "logged in without a challenge"
+            );
+            login_from_ui(&ui, &Some(hash("b")), typed(), "b", 2, &mut b).await;
+            let lr = login_at(&mut b_peer).await;
+            assert_eq!(lr.password, digest("b"));
+            assert_eq!(target(&lr), ("b".to_owned(), 2));
+        });
+    }
 }
