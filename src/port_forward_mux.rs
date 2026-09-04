@@ -551,7 +551,7 @@ mod tunnel {
             Ok(())
         }
 
-        fn on_frame(&self, ch: PortForwardChannel) -> Option<String> {
+        pub(super) fn on_frame(&self, ch: PortForwardChannel) -> Option<String> {
             match ch.union {
                 Some(port_forward_channel::Union::Opened(o)) => {
                     let refused = {
@@ -581,14 +581,18 @@ mod tunnel {
                         log::debug!("port forward data for unknown channel {}", d.channel_id);
                         return None;
                     };
-                    let msg = if e.window.lock().unwrap().accept(d.data.len()) {
-                        Inbound::Data(d.data)
-                    } else {
-                        log::warn!("port forward channel {} overran its window", d.channel_id);
-                        Inbound::Violation
-                    };
-                    if e.inbound.send(msg).is_err() {
-                        channels.remove(&d.channel_id);
+                    let accepted = e.window.lock().unwrap().accept(d.data.len());
+                    let delivered = accepted && e.inbound.send(Inbound::Data(d.data)).is_ok();
+                    if delivered {
+                        return None;
+                    }
+                    // Dropped here and now, so the peer cannot queue anything more
+                    // for this id while the task is still on its way out.
+                    if let Some(e) = channels.remove(&d.channel_id) {
+                        if !accepted {
+                            log::warn!("port forward channel {} overran its window", d.channel_id);
+                            e.inbound.send(Inbound::Violation).ok();
+                        }
                     }
                     None
                 }
@@ -1269,6 +1273,34 @@ mod tests {
                     h.first_report_at("one more".to_owned(), at(40)),
                     Some("one more".to_owned())
                 );
+            });
+        }
+
+        #[test]
+        fn an_over_window_frame_drops_the_channel_at_once() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                t.claim();
+                let h = t.set_muxed(ours, NoUi::default());
+                let (_app, sock) = local_pair().await;
+                h.open("localhost", 1, sock, vec![]).unwrap();
+                let id = match recv_frame(&mut peer).await.union {
+                    Some(port_forward_channel::Union::Open(o)) => o.channel_id,
+                    other => panic!("expected open, got {:?}", other),
+                };
+                let mut ch = PortForwardChannel::new();
+                ch.set_data(PortForwardData {
+                    channel_id: id,
+                    data: Bytes::from(vec![0u8; CHANNEL_WINDOW as usize + 1]),
+                    ..Default::default()
+                });
+                h.on_frame(ch.clone());
+                // Gone on the spot: a peer that keeps sending past the window
+                // can no longer queue anything for this channel.
+                assert_eq!(h.live_channels(), 0);
+                h.on_frame(ch);
+                assert_eq!(h.live_channels(), 0);
             });
         }
 

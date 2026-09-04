@@ -61,14 +61,18 @@ impl PortForwardMux {
                     return;
                 };
                 let accepted = entry.window.lock().unwrap().accept(len);
-                let msg = if accepted {
-                    Inbound::Data(d.data)
-                } else {
-                    log::warn!("port forward channel {} overran its window", d.channel_id);
-                    Inbound::Violation
+                let delivered = accepted && entry.inbound.send(Inbound::Data(d.data)).is_ok();
+                if delivered {
+                    return;
+                }
+                // Dropped here and now, so the peer cannot queue anything more
+                // for this id while the task is still on its way out.
+                let Some(entry) = self.channels.remove(&d.channel_id) else {
+                    return;
                 };
-                if entry.inbound.send(msg).is_err() {
-                    self.channels.remove(&d.channel_id);
+                if !accepted {
+                    log::warn!("port forward channel {} overran its window", d.channel_id);
+                    entry.inbound.send(Inbound::Violation).ok();
                 }
             }
             Some(port_forward_channel::Union::Close(c)) => {
@@ -415,6 +419,29 @@ mod tests {
             }
             mux.handle(data(2, b"still fine"), || true);
             assert_eq!(data_of(&next_frame(&mut rx).await), (2, b"still fine".to_vec()));
+        });
+    }
+
+    #[test]
+    fn an_over_window_frame_drops_the_channel_at_once() {
+        rt().block_on(async {
+            let port = echo_target().await;
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
+            mux.handle(open(1, port), || true);
+            opened(&next_frame(&mut rx).await);
+            let too_much = vec![0u8; CHANNEL_WINDOW as usize + 1];
+            mux.handle(data(1, &too_much), || true);
+            // Gone before the channel task has run: whatever the peer keeps
+            // sending for this id can no longer queue anything.
+            assert_eq!(mux.live_channels(), 0);
+            mux.handle(data(1, &too_much), || true);
+            assert_eq!(mux.live_channels(), 0);
+            let ch = next_frame(&mut rx).await;
+            match &ch.union {
+                Some(port_forward_channel::Union::Close(c)) => assert_eq!(c.channel_id, 1),
+                other => panic!("expected close, got {:?}", other),
+            }
         });
     }
 
