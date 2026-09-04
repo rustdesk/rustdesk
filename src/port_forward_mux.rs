@@ -419,7 +419,6 @@ mod tunnel {
     // Internal state only; `Claim` is the API listeners see.
     enum TunnelState {
         Unset,
-        Establishing,
         Muxed(Arc<TunnelHandle>),
         Legacy,
         Failed,
@@ -427,16 +426,16 @@ mod tunnel {
 
     pub enum Claim {
         Claimed,
-        Wait,
         Muxed(Arc<TunnelHandle>),
         Legacy,
     }
 
-    /// One per port-forward window. `watch::Sender::send_if_modified` is the
-    /// atomic claim; nothing is ever awaited while it runs.
+    /// One per listener. The accept loop owns it and reads it between
+    /// accepts; the tunnel loop resets it when it ends, so the next accept
+    /// establishes again.
     pub struct Tunnel {
         state: watch::Sender<TunnelState>,
-        /// Never sent on. The loop's receiver errors when the window drops
+        /// Never sent on. The loop's receiver errors when the listener drops
         /// this `Tunnel`, and that is what ends a tunnel nothing else ends.
         lifetime: watch::Sender<()>,
     }
@@ -448,42 +447,11 @@ mod tunnel {
             Self { state, lifetime }
         }
 
-        pub fn try_claim(&self) -> Claim {
-            let mut outcome = Claim::Wait;
-            self.state.send_if_modified(|s| match s {
-                TunnelState::Unset | TunnelState::Failed => {
-                    *s = TunnelState::Establishing;
-                    outcome = Claim::Claimed;
-                    true
-                }
-                TunnelState::Establishing => false,
-                TunnelState::Muxed(h) => {
-                    outcome = Claim::Muxed(h.clone());
-                    false
-                }
-                TunnelState::Legacy => {
-                    outcome = Claim::Legacy;
-                    false
-                }
-            });
-            outcome
-        }
-
-        /// What the establishing accept ended up with; `None` when it failed.
-        pub async fn wait_ready(&self) -> Option<Claim> {
-            let mut rx = self.state.subscribe();
-            loop {
-                match &*rx.borrow_and_update() {
-                    TunnelState::Muxed(h) => return Some(Claim::Muxed(h.clone())),
-                    TunnelState::Legacy => return Some(Claim::Legacy),
-                    // `Unset` here means the tunnel died between the claim
-                    // and this wait; the waiter treats it as a failure.
-                    TunnelState::Failed | TunnelState::Unset => return None,
-                    TunnelState::Establishing => {}
-                }
-                if rx.changed().await.is_err() {
-                    return None;
-                }
+        pub fn claim(&self) -> Claim {
+            match &*self.state.borrow() {
+                TunnelState::Unset | TunnelState::Failed => Claim::Claimed,
+                TunnelState::Muxed(h) => Claim::Muxed(h.clone()),
+                TunnelState::Legacy => Claim::Legacy,
             }
         }
 
@@ -499,7 +467,7 @@ mod tunnel {
             let state = self.state.clone();
             // Publish before spawning: if the loop exits first and resets the
             // state, a later publish here would pin it at Muxed with a dead
-            // handle and the window could never re-establish.
+            // handle and the listener could never re-establish.
             self.state.send_replace(TunnelState::Muxed(handle.clone()));
             tokio::spawn(tunnel_loop(
                 stream,
@@ -1119,19 +1087,13 @@ mod tests {
         }
 
         #[test]
-        fn claim_is_exclusive_and_waiters_see_the_outcome() {
-            rt().block_on(async {
-                let t = Arc::new(Tunnel::new());
-                assert!(matches!(t.try_claim(), Claim::Claimed));
-                assert!(matches!(t.try_claim(), Claim::Wait));
-                let w = { let t = t.clone(); tokio::spawn(async move { t.wait_ready().await }) };
-                t.set_failed();
-                assert!(w.await.unwrap().is_none());
-                assert!(matches!(t.try_claim(), Claim::Claimed));
-                t.set_legacy();
-                assert!(matches!(t.try_claim(), Claim::Legacy));
-                assert!(matches!(t.wait_ready().await, Some(Claim::Legacy)));
-            });
+        fn claim_follows_the_tunnel_state() {
+            let t = Tunnel::new();
+            assert!(matches!(t.claim(), Claim::Claimed));
+            t.set_failed();
+            assert!(matches!(t.claim(), Claim::Claimed));
+            t.set_legacy();
+            assert!(matches!(t.claim(), Claim::Legacy));
         }
 
         #[test]
@@ -1139,7 +1101,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
-                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.claim(), Claim::Claimed));
                 let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 80, sock, b"GET / HTTP/1.0\r\n\r\n".to_vec()).unwrap();
@@ -1171,7 +1133,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
-                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.claim(), Claim::Claimed));
                 let h = t.set_muxed(ours, NoUi::default());
                 let (app, sock) = local_pair().await;
                 h.open("localhost", 80, sock, Vec::new()).unwrap();
@@ -1182,7 +1144,7 @@ mod tests {
                 peer.send(&close_msg(id)).await.unwrap();
                 drop(app);
                 // The loop holds a handle of its own, so dropping ours proves
-                // nothing; the window's `Tunnel` is what must end the peer.
+                // nothing; the listener's `Tunnel` is what must end the peer.
                 drop(h);
                 drop(t);
                 let end = hbb_common::timeout(2000, peer.next()).await;
@@ -1199,7 +1161,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
-                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.claim(), Claim::Claimed));
                 let h = t.set_muxed(ours, NoUi::default());
                 // Twenty channels, each with one byte of pipelined data behind
                 // its open. An open on the control queue can lose the loop's
@@ -1239,7 +1201,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
-                t.try_claim();
+                t.claim();
                 let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 1, sock, vec![]).unwrap();
@@ -1258,7 +1220,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, mut peer) = stream_pair().await;
                 let t = Tunnel::new();
-                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.claim(), Claim::Claimed));
                 let ui = NoUi::default();
                 let h = t.set_muxed(ours, ui.clone());
                 for reason in ["unreachable", "unreachable", "no permission"] {
@@ -1286,7 +1248,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, _peer) = stream_pair().await;
                 let t = Tunnel::new();
-                t.try_claim();
+                t.claim();
                 let h = t.set_muxed(ours, NoUi::default());
                 let t0 = Instant::now();
                 let at = |secs: u64| t0 + std::time::Duration::from_secs(secs);
@@ -1315,7 +1277,7 @@ mod tests {
             rt().block_on(async {
                 let (ours, peer) = stream_pair().await;
                 let t = Tunnel::new();
-                t.try_claim();
+                t.claim();
                 let h = t.set_muxed(ours, NoUi::default());
                 let (mut app, sock) = local_pair().await;
                 h.open("localhost", 1, sock, vec![]).unwrap();
@@ -1323,7 +1285,7 @@ mod tests {
                 let mut buf = [0u8; 1];
                 assert_eq!(app.read(&mut buf).await.unwrap(), 0);
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                assert!(matches!(t.try_claim(), Claim::Claimed));
+                assert!(matches!(t.claim(), Claim::Claimed));
                 assert!(h.open("localhost", 1, local_pair().await.1, vec![]).is_err());
             });
         }
@@ -1381,7 +1343,6 @@ mod tests {
             tokio::spawn(async move {
                 let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
                 let mut mux = PortForwardMux::new(tx, login_target);
-                let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
                 loop {
                     tokio::select! {
                         Some((_, m)) = rx.recv() => {
@@ -1392,12 +1353,10 @@ mod tests {
                                 let Ok(m) = Message::parse_from_bytes(&bytes) else { continue };
                                 if let Some(message::Union::PortForwardChannel(ch)) = m.union {
                                     mux.handle(ch, || true);
-                                    mux.sweep();
                                 }
                             }
                             _ => return,
                         },
-                        _ = tick.tick() => { mux.sweep(); }
                     }
                 }
             });
@@ -1428,7 +1387,7 @@ mod tests {
             let port = echo_target().await;
             fake_controlled(theirs, format!("127.0.0.1:{}", port));
             let t = Tunnel::new();
-            t.try_claim();
+            t.claim();
             let h = t.set_muxed(ours, NoUi::default());
             (t, h, port)
         }

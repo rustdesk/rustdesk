@@ -80,9 +80,11 @@ pub async fn listen(
     lc: Arc<RwLock<LoginConfigHandler>>,
     remote_host: String,
     remote_port: i32,
-    tunnel: Arc<Tunnel>,
 ) -> ResultType<()> {
     let listener = tcp::new_listener(format!("127.0.0.1:{}", port), true).await?;
+    // One tunnel per mapping: every accept here goes to the one target the
+    // peer authenticated, and dropping it at the end closes that tunnel.
+    let tunnel = Tunnel::new();
     let addr = listener.local_addr()?;
     log::info!("listening on port {:?}", addr);
     let is_rdp = port == 0;
@@ -97,36 +99,14 @@ pub async fn listen(
             // never shadow it.
             Ok((forward, peer_addr)) = listener.accept() => {
                 log::debug!("new connection from {:?}", peer_addr);
-                let claim = match tunnel.try_claim() {
-                    Claim::Wait => {
-                        // Keep servicing the UI while the establishing accept holds the
-                        // prompt. `None` means establishment failed: this accept is dropped.
-                        let resolved = loop {
-                            tokio::select! {
-                                r = tunnel.wait_ready() => break r,
-                                d = ui_receiver.recv() => if on_ui_command(d, addr.port(), &lc, &id) {
-                                    return Ok(());
-                                },
-                            }
-                        };
-                        match resolved {
-                            Some(c) => c,
-                            None => {
-                                log::debug!("tunnel failed while {:?} waited; dropping it", peer_addr);
-                                continue;
-                            }
-                        }
-                    }
-                    other => other,
-                };
-                match claim {
+                match tunnel.claim() {
                     Claim::Muxed(handle) => {
                         if let Err(e) = handle.open(&remote_host, remote_port, forward, Vec::new()) {
                             log::debug!("cannot open channel for {:?}: {}", peer_addr, e);
                         }
                     }
                     // The claiming accept negotiates: it asks for the tunnel, and
-                    // the peer's answer fixes the window's mode until it closes.
+                    // the peer's answer fixes this listener's mode until it closes.
                     Claim::Claimed => {
                         {
                             let mut lc = lc.write().unwrap();
@@ -164,7 +144,7 @@ pub async fn listen(
                             _ => tunnel.set_failed(),
                         }
                     }
-                    // A `Legacy` window stays legacy until it closes: every accept
+                    // A `Legacy` listener stays legacy until it closes: every accept
                     // logs in on its own, asks for no tunnel, and takes the raw pipe
                     // whatever the peer reports. Reopening the window is how a user
                     // picks up an upgraded peer; nothing switches modes underneath
@@ -187,8 +167,6 @@ pub async fn listen(
                             _ => {}
                         }
                     }
-                    // Resolved above; a stray `Wait` just drops this accept.
-                    Claim::Wait => continue,
                 }
             }
             d = ui_receiver.recv() => if on_ui_command(d, addr.port(), &lc, &id) {

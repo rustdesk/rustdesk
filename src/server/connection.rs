@@ -1046,7 +1046,6 @@ impl Connection {
                         conn.on_close("Timeout", true).await;
                         break;
                     }
-                    conn.push_port_forward_label();
                     // The control end will jump out of the loop after receiving LoginResponse and will not reply to the TestDelay
                     if conn.last_test_delay.is_none() && !(conn.port_forward_socket.is_some() && conn.authorized) {
                         conn.last_test_delay = Some(Instant::now());
@@ -2230,15 +2229,6 @@ impl Connection {
     #[inline]
     fn send_to_cm(&mut self, data: ipc::Data) {
         self.tx_to_cm.send(data).ok();
-    }
-
-    fn push_port_forward_label(&mut self) {
-        let Some(label) = self.port_forward_mux.as_mut().and_then(|m| m.sweep()) else {
-            return;
-        };
-        self.port_forward_address = label.clone();
-        log::info!("port forward targets now {}", label);
-        self.send_to_cm(ipc::Data::UpdatePortForward(label));
     }
 
     fn handle_port_forward_channel(&mut self, ch: PortForwardChannel) {

@@ -1944,7 +1944,6 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let key = crate::get_key(false).await;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
-        let tunnel = std::sync::Arc::new(crate::port_forward_mux::Tunnel::new());
         if handler.is_rdp() {
             let port = handler
                 .get_option("rdp_port".to_owned())
@@ -1959,7 +1958,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                 handler.get_option("rdp_password".to_owned()),
             );
             log::info!("Remote rdp port: {}", port);
-            start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token, tunnel).await;
+            start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
         } else if handler.args.len() == 0 {
             let pfs = handler.lc.read().unwrap().port_forwards.clone();
             let mut queues = HashMap::<i32, mpsc::UnboundedSender<Data>>::new();
@@ -1977,7 +1976,6 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                         let handler = handler.clone();
                         let key = key.clone();
                         let token = token.clone();
-                        let tunnel = tunnel.clone();
                         tokio::spawn(async move {
                             start_one_port_forward(
                                 handler,
@@ -1987,7 +1985,6 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                                 receiver,
                                 &key,
                                 &token,
-                                tunnel,
                             )
                             .await;
                         });
@@ -2026,7 +2023,6 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
                 receiver,
                 &key,
                 &token,
-                tunnel,
             )
             .await;
         }
@@ -2046,7 +2042,6 @@ async fn start_one_port_forward<T: InvokeUiSession>(
     receiver: mpsc::UnboundedReceiver<Data>,
     key: &str,
     token: &str,
-    tunnel: std::sync::Arc<crate::port_forward_mux::Tunnel>,
 ) {
     if let Err(err) = crate::port_forward::listen(
         handler.get_id(),
@@ -2059,7 +2054,6 @@ async fn start_one_port_forward<T: InvokeUiSession>(
         handler.lc.clone(),
         remote_host,
         remote_port,
-        tunnel,
     )
     .await
     {

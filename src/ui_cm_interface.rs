@@ -196,8 +196,6 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn update_voice_call_state(&self, client: &Client);
 
     fn file_transfer_log(&self, action: &str, log: &str);
-
-    fn update_port_forward(&self, id: i32, port_forward: String);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -604,17 +602,6 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         }
                                     }
                                 }
-                                Data::UpdatePortForward(port_forward) => {
-                                    let updated = {
-                                        let mut clients = CLIENTS.write().unwrap();
-                                        clients.get_mut(&self.conn_id).map(|c| {
-                                            c.port_forward = port_forward.clone();
-                                        })
-                                    };
-                                    if updated.is_some() {
-                                        self.cm.ui_handler.update_port_forward(self.conn_id, port_forward);
-                                    }
-                                }
                                 Data::FS(mut fs) => {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
                                         if let Ok(bytes) = self.stream.next_raw().await {
@@ -962,17 +949,6 @@ pub async fn start_listen<T: InvokeUiCM>(
             }
             Some(Data::Close) => {
                 break;
-            }
-            Some(Data::UpdatePortForward(port_forward)) => {
-                let updated = {
-                    let mut clients = CLIENTS.write().unwrap();
-                    clients.get_mut(&current_id).map(|c| {
-                        c.port_forward = port_forward.clone();
-                    })
-                };
-                if updated.is_some() {
-                    cm.ui_handler.update_port_forward(current_id, port_forward);
-                }
             }
             Some(Data::StartVoiceCall) => {
                 cm.voice_call_started(current_id);
