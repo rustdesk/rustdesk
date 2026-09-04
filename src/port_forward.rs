@@ -162,6 +162,7 @@ async fn connect_and_login(
     let mut buffer = Vec::new();
     let mut received = false;
     let mut challenge = None;
+    let mut pending_login = None;
 
     let _keep_it = hc_connection(feedback, rendezvous_server, token).await;
 
@@ -180,7 +181,7 @@ async fn connect_and_login(
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
                             challenge = Some(hash.clone());
-                            if !login_with_hash(&interface, password, hash, remote_host, remote_port, &mut stream).await {
+                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, &mut stream).await {
                                 return Ok(None);
                             }
                         }
@@ -211,9 +212,10 @@ async fn connect_and_login(
             },
             d = ui_receiver.recv() => {
                 match d {
-                    Some(Data::Login(login)) => {
-                        login_from_ui(&interface, &challenge, login, remote_host, remote_port, &mut stream).await;
-                    }
+                    Some(Data::Login(login)) => match &challenge {
+                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, &mut stream).await,
+                        None => pending_login = Some(login),
+                    },
                     Some(Data::Message(msg)) => {
                         allow_err!(stream.send(&msg).await);
                     }
@@ -257,22 +259,41 @@ async fn login_with_hash(
     interface.handle_hash(password, hash, stream).await
 }
 
-/// The window's password prompt is broadcast to every mapping. One whose own
-/// `Hash` has not arrived has nothing to answer with and waits: the mapping
-/// that prompted stores the salted password in the shared handler, and
-/// `handle_hash` logs this one in with it.
+type UiLogin = (String, String, String, bool);
+
+/// This connection's `Hash`. The window's password prompt is broadcast to
+/// every mapping and can reach this one first, so a password typed while
+/// the `Hash` was on its way is kept and answers it now, rather than being
+/// dropped in the hope that the mapping which prompted has already stored
+/// it in the shared handler.
+async fn hash_arrived(
+    interface: &impl Interface,
+    password: &str,
+    hash: Hash,
+    pending_login: Option<UiLogin>,
+    remote_host: &str,
+    remote_port: i32,
+    stream: &mut Stream,
+) -> bool {
+    match pending_login {
+        Some(login) => {
+            login_from_ui(interface, &hash, login, remote_host, remote_port, stream).await;
+            true
+        }
+        None => login_with_hash(interface, password, hash, remote_host, remote_port, stream).await,
+    }
+}
+
+/// The window's password prompt is broadcast to every mapping; this one
+/// answers it with its own challenge.
 async fn login_from_ui(
     interface: &impl Interface,
-    challenge: &Option<Hash>,
-    login: (String, String, String, bool),
+    hash: &Hash,
+    login: UiLogin,
     remote_host: &str,
     remote_port: i32,
     stream: &mut Stream,
 ) {
-    let Some(hash) = challenge else {
-        log::info!("password from UI before this connection's hash, waiting for it");
-        return;
-    };
     let lc = interface.get_lch();
     let turn = lc.read().unwrap().port_forward_login_turn.clone();
     let _turn = turn.lock().await;
@@ -318,7 +339,7 @@ mod login_tests {
     use async_trait::async_trait;
     use hbb_common::{
         tcp::FramedStream,
-        tokio::time::{sleep, timeout, Duration},
+        tokio::time::{sleep, Duration},
     };
     use sha2::{Digest, Sha256};
 
@@ -454,7 +475,7 @@ mod login_tests {
             assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a).await);
             login_at(&mut a_peer).await;
             let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            login_from_ui(&ui, &Some(hash("b")), typed, "b", 2, &mut b).await;
+            login_from_ui(&ui, &hash("b"), typed, "b", 2, &mut b).await;
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
@@ -462,30 +483,18 @@ mod login_tests {
     }
 
     #[test]
-    fn a_password_typed_before_this_connections_hash_waits_for_it() {
+    fn a_password_typed_before_this_connections_hash_answers_it_when_it_comes() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
         rt.block_on(async {
             let ui = window();
-            let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
-            let typed = || (String::new(), String::new(), "pw".to_owned(), false);
-            // A has its hash and answers the prompt, which stores the salted
-            // password in the shared handler.
-            login_from_ui(&ui, &Some(hash("a")), typed(), "a", 1, &mut a).await;
-            assert_eq!(login_at(&mut a_peer).await.password, digest("a"));
-            // The same broadcast reaches B before its hash.
-            login_from_ui(&ui, &None, typed(), "b", 2, &mut b).await;
-            assert!(
-                timeout(Duration::from_millis(200), b_peer.next())
-                    .await
-                    .is_err(),
-                "logged in without a challenge"
-            );
-            // B's hash arrives: it logs in with the stored password, no preset.
-            assert!(login_with_hash(&ui, "", hash("b"), "b", 2, &mut b).await);
+            // The prompt's password reached B before its hash, and no other
+            // mapping has stored it in the handler yet.
+            let typed = (String::new(), String::new(), "pw".to_owned(), false);
+            assert!(hash_arrived(&ui, "", hash("b"), Some(typed), "b", 2, &mut b).await);
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
