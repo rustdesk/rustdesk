@@ -121,7 +121,7 @@ impl PortForwardMux {
         let (addr, is_rdp) = Connection::normalize_port_forward_target(&mut pf);
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
         let credit = Arc::new(SendCredit::new(effective_window(open.window)));
-        let window = Arc::new(Mutex::new(RecvWindow::new(CHANNEL_WINDOW)));
+        let window = Arc::new(Mutex::new(RecvWindow::new(INITIAL_WINDOW)));
         self.channels.insert(
             id,
             Entry {
@@ -176,6 +176,11 @@ impl PortForwardMux {
     #[cfg(test)]
     pub fn live_channels(&self) -> usize {
         self.channels.len()
+    }
+
+    #[cfg(test)]
+    pub fn recv_window_remaining(&self, id: i32) -> Option<u32> {
+        self.channels.get(&id).map(|e| e.window.lock().unwrap().remaining())
     }
 
     /// Dropping every sender ends every task; each drops its target socket.
@@ -234,6 +239,8 @@ async fn run_controlled_channel(
             }
         }
     };
+    // Granted before `opened` leaves, so the peer can never be ahead of it.
+    window.lock().unwrap().grant(CHANNEL_WINDOW - INITIAL_WINDOW);
     if sink
         .send_ordered(opened_msg(id, true, "", CHANNEL_WINDOW))
         .await
@@ -426,6 +433,21 @@ mod tests {
             }
             mux.handle(data(2, b"still fine"), || true);
             assert_eq!(data_of(&next_frame(&mut rx).await), (2, b"still fine".to_vec()));
+        });
+    }
+
+    #[test]
+    fn demux_admits_only_the_initial_window_before_opened() {
+        rt().block_on(async {
+            let port = echo_target().await;
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
+            mux.handle(open(1, port), || true);
+            // The channel task has not run yet: the demultiplexer alone
+            // decides what may sit in the queue before `opened`.
+            assert_eq!(mux.recv_window_remaining(1), Some(INITIAL_WINDOW));
+            assert_eq!(opened(&next_frame(&mut rx).await), (1, true));
+            assert_eq!(mux.recv_window_remaining(1), Some(CHANNEL_WINDOW));
         });
     }
 
