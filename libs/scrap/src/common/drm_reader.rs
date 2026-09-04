@@ -29,7 +29,37 @@ pub struct CursorSnapshot {
     pub height: u32,
     pub hotx: i32,
     pub hoty: i32,
+    /// Whether the hotspot came from the plane's HOTSPOT_X/Y properties. Those exist on
+    /// para-virtualised drivers only; on bare metal it is `infer_hotspot`'s guess, made on the
+    /// bitmap as scanned out - which on a rotated output is the compositor's pre-rotated sprite,
+    /// so the consumer must re-guess on the upright one.
+    pub hot_measured: bool,
     pub colors: Vec<u8>,
+}
+
+/// Where a cursor bitmap's hotspot most likely is, from its opaque pixels alone: the top-left of
+/// the opaque bounding box for an arrow, its centre for a tall shape (an I-beam). Only meaningful
+/// on an UPRIGHT sprite - a rotated arrow's tip is some other corner of its box.
+pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
+    let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
+    for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
+        if px[3] >= 128 {
+            let (x, y) = ((i % w) as i32, (i / w) as i32);
+            minx = minx.min(x);
+            maxx = maxx.max(x);
+            miny = miny.min(y);
+            maxy = maxy.max(y);
+        }
+    }
+    if maxx < minx || maxy < miny {
+        return (0, 0);
+    }
+    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
+    if bh > bw * 2 {
+        ((minx + maxx) / 2, (miny + maxy) / 2)
+    } else {
+        (minx, miny)
+    }
 }
 
 /// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
@@ -363,6 +393,7 @@ impl DrmReader {
                     height: 1,
                     hotx: 0,
                     hoty: 0,
+                    hot_measured: false,
                     colors: vec![0, 0, 0, 0],
                 })
             } else if !c.pixels.is_null()
@@ -376,38 +407,19 @@ impl DrmReader {
                 let src = std::slice::from_raw_parts(c.pixels, n);
                 let mut hash: u64 = 1469598103934665603;
                 let mut colors = Vec::with_capacity(n * 4);
-                let (mut minx, mut miny, mut maxx, mut maxy) = (cw, ch, -1i32, -1i32);
-                for (i, &p) in src.iter().enumerate() {
-                    let a = ((p >> 24) & 0xff) as u8;
-                    let r = ((p >> 16) & 0xff) as u8;
-                    let g = ((p >> 8) & 0xff) as u8;
-                    let b = (p & 0xff) as u8;
-                    colors.push(r);
-                    colors.push(g);
-                    colors.push(b);
-                    colors.push(a);
+                for &p in src.iter() {
+                    colors.push(((p >> 16) & 0xff) as u8);
+                    colors.push(((p >> 8) & 0xff) as u8);
+                    colors.push((p & 0xff) as u8);
+                    colors.push(((p >> 24) & 0xff) as u8);
                     hash ^= p as u64;
                     hash = hash.wrapping_mul(1099511628211);
-                    if a >= 128 {
-                        let x = (i as i32) % cw;
-                        let y = (i as i32) / cw;
-                        if x < minx { minx = x; }
-                        if x > maxx { maxx = x; }
-                        if y < miny { miny = y; }
-                        if y > maxy { maxy = y; }
-                    }
                 }
-                let (hotx, hoty) = if c.hot_x != 0 || c.hot_y != 0 {
+                let hot_measured = c.hot_x != 0 || c.hot_y != 0;
+                let (hotx, hoty) = if hot_measured {
                     (c.hot_x, c.hot_y)
-                } else if maxx >= minx && maxy >= miny {
-                    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
-                    if bh > bw * 2 {
-                        ((minx + maxx) / 2, (miny + maxy) / 2)
-                    } else {
-                        (minx, miny)
-                    }
                 } else {
-                    (0, 0)
+                    infer_hotspot(&colors, cw as usize, ch as usize)
                 };
                 // Fold geometry + hotspot into the id: identical pixels with a changed size or
                 // hotspot must count as a new shape, otherwise drm_capture_worker suppresses the
@@ -423,6 +435,7 @@ impl DrmReader {
                     height: ch as u32,
                     hotx,
                     hoty,
+                    hot_measured,
                     colors,
                 })
             } else {
