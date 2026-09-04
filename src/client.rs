@@ -1752,10 +1752,6 @@ pub struct LoginConfigHandler {
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
     config: PeerConfig,
-    pub port_forward: (String, i32),
-    /// Whether the next port-forward login asks for the multiplexed tunnel.
-    /// `port_forward::listen` sets it per accept.
-    pub port_forward_mux: bool,
     pub version: i64,
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
@@ -2665,6 +2661,7 @@ impl LoginConfigHandler {
         os_username: String,
         os_password: String,
         password: Vec<u8>,
+        port_forward: PortForward,
     ) -> Message {
         let my_id = Config::get_id();
         let (my_id, pure_id) = if let Some((id, _, _)) = self.other_server.as_ref() {
@@ -2761,12 +2758,7 @@ impl LoginConfigHandler {
                 ..Default::default()
             }),
             ConnType::VIEW_CAMERA => lr.set_view_camera(Default::default()),
-            ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
-                host: self.port_forward.0.clone(),
-                port: self.port_forward.1,
-                multiplex: self.port_forward_mux,
-                ..Default::default()
-            }),
+            ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(port_forward),
             ConnType::TERMINAL => {
                 let mut terminal = Terminal::new();
                 terminal.service_id = self.get_option(self.get_key_terminal_service_id());
@@ -3500,6 +3492,7 @@ pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     password_preset: &str,
     hash: Hash,
+    port_forward: PortForward,
     interface: &impl Interface,
     peer: &mut Stream,
 ) -> bool {
@@ -3619,7 +3612,7 @@ pub async fn handle_hash(
         hasher.finalize()[..].into()
     };
 
-    send_login(lc.clone(), String::new(), String::new(), password, peer).await;
+    send_login(lc.clone(), String::new(), String::new(), password, port_forward, peer).await;
     lc.write().unwrap().hash = hash;
     true
 }
@@ -3657,18 +3650,20 @@ fn try_get_password_from_personal_ab(lc: Arc<RwLock<LoginConfigHandler>>, passwo
 /// * `os_username` - OS username.
 /// * `os_password` - OS password.
 /// * `password` - Password.
+/// * `port_forward` - Target of a port-forward login; ignored by other types.
 /// * `peer` - [`Stream`] for communicating with peer.
 async fn send_login(
     lc: Arc<RwLock<LoginConfigHandler>>,
     os_username: String,
     os_password: String,
     password: Vec<u8>,
+    port_forward: PortForward,
     peer: &mut Stream,
 ) {
     let msg_out = lc
         .read()
         .unwrap()
-        .create_login_msg(os_username, os_password, password);
+        .create_login_msg(os_username, os_password, password, port_forward);
     allow_err!(peer.send(&msg_out).await);
 }
 
@@ -3681,6 +3676,7 @@ async fn send_login(
 /// * `os_password` - OS password.
 /// * `password` - Password.
 /// * `remember` - Whether to remember password.
+/// * `port_forward` - Target of a port-forward login; ignored by other types.
 /// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_login_from_ui(
     lc: Arc<RwLock<LoginConfigHandler>>,
@@ -3688,6 +3684,7 @@ pub async fn handle_login_from_ui(
     os_password: String,
     password: String,
     remember: bool,
+    port_forward: PortForward,
     peer: &mut Stream,
 ) {
     let mut hash_password = if password.is_empty() {
@@ -3714,7 +3711,7 @@ pub async fn handle_login_from_ui(
     hasher2.update(&lc.read().unwrap().hash.challenge);
     hash_password = hasher2.finalize()[..].to_vec();
 
-    send_login(lc.clone(), os_username, os_password, hash_password, peer).await;
+    send_login(lc.clone(), os_username, os_password, hash_password, port_forward, peer).await;
 }
 
 async fn send_switch_login_request(
@@ -3728,7 +3725,7 @@ async fn send_switch_login_request(
         lr: hbb_common::protobuf::MessageField::some(
             lc.read()
                 .unwrap()
-                .create_login_msg("".to_owned(), "".to_owned(), vec![])
+                .create_login_msg("".to_owned(), "".to_owned(), vec![], Default::default())
                 .login_request()
                 .to_owned(),
         ),
@@ -3761,6 +3758,11 @@ pub trait Interface: Send + Clone + 'static + Sized {
     async fn handle_test_delay(&self, t: TestDelay, peer: &mut Stream);
 
     fn get_lch(&self) -> Arc<RwLock<LoginConfigHandler>>;
+    /// A clone whose port-forward login asks for this target. The target
+    /// travels with the clone, never through the shared
+    /// `LoginConfigHandler`, so mappings logging in at the same time cannot
+    /// overwrite each other's target between the accept and the peer's `Hash`.
+    fn with_port_forward(&self, port_forward: PortForward) -> Self;
 
     fn get_id(&self) -> String {
         self.get_lch().read().unwrap().id.clone()
@@ -4059,6 +4061,31 @@ mod retry_tests {
             "Incoming only mode",
             false,
         ));
+    }
+}
+
+#[cfg(test)]
+mod login_scope_tests {
+    use super::*;
+
+    /// The target rides in the call, never in the shared handler: two accepts
+    /// building their logins off one handler cannot see each other's target.
+    #[test]
+    fn a_port_forward_login_carries_the_callers_target() {
+        let mut lc = LoginConfigHandler::default();
+        lc.conn_type = ConnType::PORT_FORWARD;
+        let target = |host: &str, port: i32| PortForward {
+            host: host.to_owned(),
+            port,
+            multiplex: true,
+            ..Default::default()
+        };
+        let a = lc.create_login_msg(String::new(), String::new(), vec![], target("a", 1));
+        let b = lc.create_login_msg(String::new(), String::new(), vec![], target("b", 2));
+        let pf = |m: &Message| m.login_request().port_forward().clone();
+        assert_eq!((pf(&a).host.as_str(), pf(&a).port), ("a", 1));
+        assert_eq!((pf(&b).host.as_str(), pf(&b).port), ("b", 2));
+        assert!(pf(&a).multiplex);
     }
 }
 

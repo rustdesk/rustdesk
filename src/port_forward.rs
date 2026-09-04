@@ -108,11 +108,11 @@ pub async fn listen(
                     // The claiming accept negotiates: it asks for the tunnel, and
                     // the peer's answer fixes this listener's mode until it closes.
                     Claim::Claimed => {
-                        {
-                            let mut lc = lc.write().unwrap();
-                            lc.port_forward = (remote_host.clone(), remote_port);
-                            lc.port_forward_mux = crate::common::get_port_forward_mux_enabled();
-                        }
+                        let interface = interface.with_port_forward(login_target(
+                            &remote_host,
+                            remote_port,
+                            crate::common::get_port_forward_mux_enabled(),
+                        ));
                         let mut forward = Framed::new(forward, BytesCodec::new());
                         let mut close_port_forward = false;
                         match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
@@ -150,11 +150,7 @@ pub async fn listen(
                     // the window, is how a user picks up an upgraded peer; nothing
                     // switches modes underneath live connections.
                     Claim::Legacy => {
-                        {
-                            let mut lc = lc.write().unwrap();
-                            lc.port_forward = (remote_host.clone(), remote_port);
-                            lc.port_forward_mux = false;
-                        }
+                        let interface = interface.with_port_forward(login_target(&remote_host, remote_port, false));
                         let mut forward = Framed::new(forward, BytesCodec::new());
                         let mut close_port_forward = false;
                         match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
@@ -216,6 +212,18 @@ pub(crate) struct LoginOutcome {
     mux: bool,
     prebuf: Vec<u8>,
     local_eof: bool,
+}
+
+/// The target this accept's login asks for. It travels with the interface
+/// clone rather than through the shared `LoginConfigHandler`, so mappings
+/// logging in at the same time cannot overwrite each other's target.
+fn login_target(host: &str, port: i32, multiplex: bool) -> PortForward {
+    PortForward {
+        host: host.to_owned(),
+        port,
+        multiplex,
+        ..Default::default()
+    }
 }
 
 fn peer_supports_mux(pi: &PeerInfo) -> bool {

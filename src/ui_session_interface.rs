@@ -57,6 +57,9 @@ const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
 pub struct Session<T: InvokeUiSession> {
     pub password: String,
     pub args: Vec<String>,
+    /// Per clone, set by `Interface::with_port_forward`: the target a
+    /// port-forward login asks for.
+    pub port_forward: PortForward,
     pub lc: Arc<RwLock<LoginConfigHandler>>,
     pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
@@ -1868,8 +1871,14 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
+    fn with_port_forward(&self, port_forward: PortForward) -> Self {
+        let mut scoped = self.clone();
+        scoped.port_forward = port_forward;
+        scoped
+    }
+
     async fn handle_hash(&self, pass: &str, hash: Hash, peer: &mut Stream) -> bool {
-        handle_hash(self.lc.clone(), pass, hash, self, peer).await
+        handle_hash(self.lc.clone(), pass, hash, self.port_forward.clone(), self, peer).await
     }
 
     async fn handle_login_from_ui(
@@ -1886,6 +1895,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
             os_password,
             password,
             remember,
+            self.port_forward.clone(),
             peer,
         )
         .await;
