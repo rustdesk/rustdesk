@@ -1756,7 +1756,7 @@ pub struct LoginConfigHandler {
     /// Held by a port-forward mapping from filling `port_forward` and `hash`
     /// until its login is built from them; a window's mappings log in
     /// concurrently.
-    pub port_forward_login_turn: Arc<hbb_common::tokio::sync::Mutex<()>>,
+    pub(crate) port_forward_login_turn: Arc<hbb_common::tokio::sync::Mutex<()>>,
     pub version: i64,
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
@@ -1796,7 +1796,7 @@ impl Deref for LoginConfigHandler {
 }
 
 impl LoginConfigHandler {
-    pub fn set_hash(&mut self, hash: Hash) {
+    pub(crate) fn set_hash(&mut self, hash: Hash) {
         self.hash = hash;
     }
 

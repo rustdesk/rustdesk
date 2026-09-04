@@ -441,6 +441,27 @@ mod login_tests {
     }
 
     #[test]
+    fn a_mapping_answers_the_prompt_with_its_own_challenge() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let ui = window();
+            let (mut a, mut a_peer) = loopback().await;
+            let (mut b, mut b_peer) = loopback().await;
+            // A's hash arrived last, so it is the one the handler holds.
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a).await);
+            login_at(&mut a_peer).await;
+            let typed = (String::new(), String::new(), "pw".to_owned(), false);
+            login_from_ui(&ui, &Some(hash("b")), typed, "b", 2, &mut b).await;
+            let lr = login_at(&mut b_peer).await;
+            assert_eq!(lr.password, digest("b"));
+            assert_eq!(target(&lr), ("b".to_owned(), 2));
+        });
+    }
+
+    #[test]
     fn a_password_typed_before_this_connections_hash_waits_for_it() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -450,9 +471,12 @@ mod login_tests {
             let ui = window();
             let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
-            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a).await);
-            login_at(&mut a_peer).await;
             let typed = || (String::new(), String::new(), "pw".to_owned(), false);
+            // A has its hash and answers the prompt, which stores the salted
+            // password in the shared handler.
+            login_from_ui(&ui, &Some(hash("a")), typed(), "a", 1, &mut a).await;
+            assert_eq!(login_at(&mut a_peer).await.password, digest("a"));
+            // The same broadcast reaches B before its hash.
             login_from_ui(&ui, &None, typed(), "b", 2, &mut b).await;
             assert!(
                 timeout(Duration::from_millis(200), b_peer.next())
@@ -460,7 +484,8 @@ mod login_tests {
                     .is_err(),
                 "logged in without a challenge"
             );
-            login_from_ui(&ui, &Some(hash("b")), typed(), "b", 2, &mut b).await;
+            // B's hash arrives: it logs in with the stored password, no preset.
+            assert!(login_with_hash(&ui, "", hash("b"), "b", 2, &mut b).await);
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
