@@ -394,6 +394,10 @@ const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 // The same horizon as the 30 s read timeout: a peer that has not drained a
 // single message for that long is the same dead peer that check would catch.
 const SEND_TIMEOUT_OTHER: u64 = 30_000;
+// The raw port-forward loop's write to the local target: that loop idles for
+// an hour before giving up, and a target that stops draining is not a dead
+// peer, so this keeps the value the write always had.
+const PORT_FORWARD_LOCAL_SEND_TIMEOUT: u64 = 120_000;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
@@ -1236,7 +1240,7 @@ impl Connection {
                     res = self.stream.next() => {
                         if let Some(res) = res {
                             last_recv_time = Instant::now();
-                            timeout(SEND_TIMEOUT_OTHER, forward.send(res?)).await??;
+                            timeout(PORT_FORWARD_LOCAL_SEND_TIMEOUT, forward.send(res?)).await??;
                         } else {
                             bail!("Stream reset by the peer");
                         }
