@@ -97,24 +97,15 @@ pub async fn listen(
             // never shadow it.
             Ok((forward, peer_addr)) = listener.accept() => {
                 log::debug!("new connection from {:?}", peer_addr);
-                let claim = tunnel.try_claim();
-                let claim = match claim {
+                let claim = match tunnel.try_claim() {
                     Claim::Wait => {
                         // Keep servicing the UI while the establishing accept holds the
                         // prompt. `None` means establishment failed: this accept is dropped.
-                        let resolved: Option<Claim> = loop {
+                        let resolved = loop {
                             tokio::select! {
-                                // `tokio::select!` brings its own `Poll::{Ready, Pending}` into
-                                // scope, so `Ready` must be qualified here or it resolves to that.
-                                r = tunnel.wait_ready() => break match r {
-                                    crate::port_forward_mux::Ready::Muxed(h) => Some(Claim::Muxed(h)),
-                                    crate::port_forward_mux::Ready::Legacy => Some(Claim::Legacy),
-                                    crate::port_forward_mux::Ready::Failed => None,
-                                },
-                                d = ui_receiver.recv() => match d {
-                                    Some(Data::Close) => return Ok(()),
-                                    Some(Data::NewRDP) => run_rdp(addr.port(), &rdp_display_name(&lc, &id)),
-                                    _ => {}
+                                r = tunnel.wait_ready() => break r,
+                                d = ui_receiver.recv() => if on_ui_command(d, addr.port(), &lc, &id) {
+                                    return Ok(());
                                 },
                             }
                         };
@@ -134,18 +125,10 @@ pub async fn listen(
                             log::debug!("cannot open channel for {:?}: {}", peer_addr, e);
                         }
                     }
-                    Claim::Legacy => {
-                        lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
-                        let mut forward = Framed::new(forward, BytesCodec::new());
-                        let mut close_port_forward = false;
-                        match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
-                            Ok(Some(outcome)) => run_legacy(outcome, forward, peer_addr, interface.clone()),
-                            _ if close_port_forward => break,
-                            Err(err) => interface.on_establish_connection_error(err.to_string()),
-                            _ => {}
-                        }
-                    }
-                    Claim::Claimed => {
+                    // A `Legacy` window logs in for every accept, as it always did,
+                    // and publishes the outcome the same way the claiming accept
+                    // does: a peer upgraded since the window opened becomes a tunnel.
+                    Claim::Claimed | Claim::Legacy => {
                         lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
                         let mut forward = Framed::new(forward, BytesCodec::new());
                         let mut close_port_forward = false;
@@ -182,21 +165,25 @@ pub async fn listen(
                     Claim::Wait => continue,
                 }
             }
-            d = ui_receiver.recv() => {
-                match d {
-                    Some(Data::Close) => {
-                        break;
-                    }
-                    Some(Data::NewRDP) => {
-                        println!("receive run_rdp from ui_receiver");
-                        run_rdp(addr.port(), &rdp_display_name(&lc, &id));
-                    }
-                    _ => {}
-                }
-            }
+            d = ui_receiver.recv() => if on_ui_command(d, addr.port(), &lc, &id) {
+                break;
+            },
         }
     }
     Ok(())
+}
+
+/// Commands the window sends its listener. `true` means stop listening: the
+/// window is closing, or its sender is gone.
+fn on_ui_command(d: Option<Data>, port: u16, lc: &Arc<RwLock<LoginConfigHandler>>, id: &str) -> bool {
+    match d {
+        Some(Data::Close) | None => true,
+        Some(Data::NewRDP) => {
+            run_rdp(port, &rdp_display_name(lc, id));
+            false
+        }
+        _ => false,
+    }
 }
 
 /// Today's raw pipe, for peers without multiplexing.

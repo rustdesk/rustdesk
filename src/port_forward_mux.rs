@@ -1,5 +1,5 @@
 use hbb_common::{
-    bytes::{BufMut, Bytes, BytesMut},
+    bytes::Bytes,
     log,
     message_proto::*,
     tokio::{
@@ -118,7 +118,6 @@ impl SendCredit {
             let mut credit = self.credit.lock().unwrap();
             *credit = credit.saturating_add(n).min(MAX_SEND_CREDIT);
         }
-        self.notify.notify_waiters();
         self.notify.notify_one();
     }
 
@@ -260,18 +259,17 @@ async fn relay_socket_to_tunnel<R: AsyncRead + Unpin>(
     mut cancel: watch::Receiver<bool>,
 ) -> RelayEnd {
     let mut reader = std::io::Cursor::new(prebuf).chain(reader);
+    // One scratch buffer per channel and an exact-size copy per frame: a frame
+    // that owned its read allocation would pin up to MAX_FRAME until sent,
+    // whatever its length, and interactive traffic is mostly tiny frames.
+    let mut scratch = vec![0u8; MAX_FRAME];
     loop {
         let allow = tokio::select! {
             n = credit.take(MAX_FRAME) => n,
             _ = cancel.changed() => return RelayEnd::Cancelled,
         };
-        let mut buf = BytesMut::with_capacity(allow);
-        let mut limited = (&mut buf).limit(allow);
         let got = tokio::select! {
-            r = reader.read_buf(&mut limited) => match r {
-                Ok(n) => n,
-                Err(_) => 0,
-            },
+            r = reader.read(&mut scratch[..allow]) => r.unwrap_or(0),
             _ = cancel.changed() => {
                 credit.add(allow as u32);
                 return RelayEnd::Cancelled;
@@ -284,7 +282,8 @@ async fn relay_socket_to_tunnel<R: AsyncRead + Unpin>(
         if got == 0 {
             return RelayEnd::LocalEof;
         }
-        if sink.send_ordered(data_msg(id, buf.freeze())).await.is_err() {
+        let frame = data_msg(id, Bytes::copy_from_slice(&scratch[..got]));
+        if sink.send_ordered(frame).await.is_err() {
             return RelayEnd::TunnelGone;
         }
     }
@@ -381,7 +380,7 @@ pub async fn run_channel<R, W>(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub use tunnel::{Claim, Ready, Tunnel, TunnelHandle};
+pub use tunnel::{Claim, Tunnel};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tunnel {
@@ -394,15 +393,20 @@ mod tunnel {
         Stream,
     };
     use std::{
-        collections::{HashMap, HashSet},
+        collections::HashMap,
         sync::atomic::{AtomicI32, Ordering},
+        time::Duration,
     };
 
-    /// One dialog per distinct reason, and never an unbounded number: the
-    /// message text comes from the peer.
-    const MAX_REPORTED_OPEN_ERRORS: usize = 8;
+    /// A refused reason is shown once, then not again until it has been quiet
+    /// for this long: a page load's dozen refusals make one dialog, and a
+    /// target that breaks again hours later is reported again.
+    const REPORT_AGAIN_AFTER: Duration = Duration::from_secs(10);
+    /// Distinct reasons remembered at once, so the dialog count stays bounded
+    /// however the peer varies the text it sends.
+    pub(super) const MAX_REPORTED_OPEN_ERRORS: usize = 8;
 
-    // Internal state only; `Claim` and `Ready` are the API listeners see.
+    // Internal state only; `Claim` is the API listeners see.
     enum TunnelState {
         Unset,
         Establishing,
@@ -416,12 +420,6 @@ mod tunnel {
         Wait,
         Muxed(Arc<TunnelHandle>),
         Legacy,
-    }
-
-    pub enum Ready {
-        Muxed(Arc<TunnelHandle>),
-        Legacy,
-        Failed,
     }
 
     /// One per port-forward window. `watch::Sender::send_if_modified` is the
@@ -457,22 +455,20 @@ mod tunnel {
             outcome
         }
 
-        pub async fn wait_ready(&self) -> Ready {
+        /// What the establishing accept ended up with; `None` when it failed.
+        pub async fn wait_ready(&self) -> Option<Claim> {
             let mut rx = self.state.subscribe();
             loop {
-                let ready = match &*rx.borrow_and_update() {
-                    TunnelState::Muxed(h) => Some(Ready::Muxed(h.clone())),
-                    TunnelState::Legacy => Some(Ready::Legacy),
+                match &*rx.borrow_and_update() {
+                    TunnelState::Muxed(h) => return Some(Claim::Muxed(h.clone())),
+                    TunnelState::Legacy => return Some(Claim::Legacy),
                     // `Unset` here means the tunnel died between the claim
                     // and this wait; the waiter treats it as a failure.
-                    TunnelState::Failed | TunnelState::Unset => Some(Ready::Failed),
-                    TunnelState::Establishing => None,
-                };
-                if let Some(r) = ready {
-                    return r;
+                    TunnelState::Failed | TunnelState::Unset => return None,
+                    TunnelState::Establishing => {}
                 }
                 if rx.changed().await.is_err() {
-                    return Ready::Failed;
+                    return None;
                 }
             }
         }
@@ -515,7 +511,7 @@ mod tunnel {
         sink: FrameSink,
         channels: Mutex<HashMap<i32, ChannelEntry>>,
         next_id: AtomicI32,
-        reported: Mutex<HashSet<String>>,
+        reported: Mutex<HashMap<String, Instant>>,
     }
 
     impl TunnelHandle {
@@ -626,17 +622,28 @@ mod tunnel {
             }
         }
 
-        /// The peer's reason for refusing a channel, the first time we see it.
-        /// One page load can have a dozen connections refused for the same
-        /// reason, and the user needs one dialog, not a dozen.
+        /// The peer's reason for refusing a channel, unless it was reported
+        /// within `REPORT_AGAIN_AFTER`. One page load can have a dozen
+        /// connections refused for the same reason, and the user needs one
+        /// dialog, not a dozen; a burst that keeps going keeps it quiet.
         fn first_report(&self, message: String) -> Option<String> {
+            self.first_report_at(message, Instant::now())
+        }
+
+        pub(super) fn first_report_at(&self, message: String, now: Instant) -> Option<String> {
             if message.is_empty() {
                 return None;
             }
             let mut reported = self.reported.lock().unwrap();
-            if reported.len() >= MAX_REPORTED_OPEN_ERRORS || !reported.insert(message.clone()) {
+            reported.retain(|_, last| now.duration_since(*last) < REPORT_AGAIN_AFTER);
+            if let Some(last) = reported.get_mut(&message) {
+                *last = now;
                 return None;
             }
+            if reported.len() >= MAX_REPORTED_OPEN_ERRORS {
+                return None;
+            }
+            reported.insert(message.clone(), now);
             Some(message)
         }
 
@@ -1039,7 +1046,7 @@ mod tests {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     mod tunnel {
         use super::*;
-        use crate::port_forward_mux::{Claim, Ready, Tunnel, TunnelHandle};
+        use crate::port_forward_mux::{tunnel::{TunnelHandle, MAX_REPORTED_OPEN_ERRORS}, Claim, Tunnel};
         use hbb_common::{
             protobuf::Message as _,
             tcp::FramedStream,
@@ -1085,11 +1092,11 @@ mod tests {
                 assert!(matches!(t.try_claim(), Claim::Wait));
                 let w = { let t = t.clone(); tokio::spawn(async move { t.wait_ready().await }) };
                 t.set_failed();
-                assert!(matches!(w.await.unwrap(), Ready::Failed));
+                assert!(w.await.unwrap().is_none());
                 assert!(matches!(t.try_claim(), Claim::Claimed));
                 t.set_legacy();
                 assert!(matches!(t.try_claim(), Claim::Legacy));
-                assert!(matches!(t.wait_ready().await, Ready::Legacy));
+                assert!(matches!(t.wait_ready().await, Some(Claim::Legacy)));
             });
         }
 
@@ -1213,6 +1220,35 @@ mod tests {
         }
 
         #[test]
+        fn a_refused_reason_is_reported_again_after_a_quiet_spell() {
+            rt().block_on(async {
+                let (ours, _peer) = stream_pair().await;
+                let t = Tunnel::new();
+                t.try_claim();
+                let h = t.set_muxed(ours, NoUi::default());
+                let t0 = Instant::now();
+                let at = |secs: u64| t0 + std::time::Duration::from_secs(secs);
+                let down = || "down".to_owned();
+                assert_eq!(h.first_report_at(down(), at(0)), Some(down()));
+                // A burst that keeps going keeps the dialog quiet ...
+                assert_eq!(h.first_report_at(down(), at(8)), None);
+                assert_eq!(h.first_report_at(down(), at(16)), None);
+                // ... and one that stopped is reported afresh.
+                assert_eq!(h.first_report_at(down(), at(27)), Some(down()));
+                // The cap counts reasons still live, so it cannot silence the
+                // window for good.
+                for i in 0..MAX_REPORTED_OPEN_ERRORS {
+                    h.first_report_at(format!("reason {}", i), at(27));
+                }
+                assert_eq!(h.first_report_at("one more".to_owned(), at(27)), None);
+                assert_eq!(
+                    h.first_report_at("one more".to_owned(), at(40)),
+                    Some("one more".to_owned())
+                );
+            });
+        }
+
+        #[test]
         fn tunnel_death_closes_channels_and_resets_state() {
             rt().block_on(async {
                 let (ours, peer) = stream_pair().await;
@@ -1293,7 +1329,7 @@ mod tests {
                             Some(Ok(bytes)) => {
                                 let Ok(m) = Message::parse_from_bytes(&bytes) else { continue };
                                 if let Some(message::Union::PortForwardChannel(ch)) = m.union {
-                                    mux.handle(ch, true);
+                                    mux.handle(ch, || true);
                                     mux.sweep();
                                 }
                             }

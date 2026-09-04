@@ -963,6 +963,17 @@ pub async fn start_listen<T: InvokeUiCM>(
             Some(Data::Close) => {
                 break;
             }
+            Some(Data::UpdatePortForward(port_forward)) => {
+                let updated = {
+                    let mut clients = CLIENTS.write().unwrap();
+                    clients.get_mut(&current_id).map(|c| {
+                        c.port_forward = port_forward.clone();
+                    })
+                };
+                if updated.is_some() {
+                    cm.ui_handler.update_port_forward(current_id, port_forward);
+                }
+            }
             Some(Data::StartVoiceCall) => {
                 cm.voice_call_started(current_id);
             }
