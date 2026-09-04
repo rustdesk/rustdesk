@@ -125,11 +125,14 @@ pub async fn listen(
                             log::debug!("cannot open channel for {:?}: {}", peer_addr, e);
                         }
                     }
-                    // A `Legacy` window logs in for every accept, as it always did,
-                    // and publishes the outcome the same way the claiming accept
-                    // does: a peer upgraded since the window opened becomes a tunnel.
-                    Claim::Claimed | Claim::Legacy => {
-                        lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
+                    // The claiming accept negotiates: it asks for the tunnel, and
+                    // the peer's answer fixes the window's mode until it closes.
+                    Claim::Claimed => {
+                        {
+                            let mut lc = lc.write().unwrap();
+                            lc.port_forward = (remote_host.clone(), remote_port);
+                            lc.port_forward_mux = crate::common::get_port_forward_mux_enabled();
+                        }
                         let mut forward = Framed::new(forward, BytesCodec::new());
                         let mut close_port_forward = false;
                         match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
@@ -159,6 +162,29 @@ pub async fn listen(
                                 interface.on_establish_connection_error(err.to_string());
                             }
                             _ => tunnel.set_failed(),
+                        }
+                    }
+                    // A `Legacy` window stays legacy until it closes: every accept
+                    // logs in on its own, asks for no tunnel, and takes the raw pipe
+                    // whatever the peer reports. Reopening the window is how a user
+                    // picks up an upgraded peer; nothing switches modes underneath
+                    // live connections.
+                    Claim::Legacy => {
+                        {
+                            let mut lc = lc.write().unwrap();
+                            lc.port_forward = (remote_host.clone(), remote_port);
+                            lc.port_forward_mux = false;
+                        }
+                        let mut forward = Framed::new(forward, BytesCodec::new());
+                        let mut close_port_forward = false;
+                        match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp, &mut close_port_forward).await {
+                            Ok(Some(outcome)) if outcome.local_eof => {
+                                log::debug!("legacy peer and local {:?} already gone", peer_addr);
+                            }
+                            Ok(Some(outcome)) => run_legacy(outcome, forward, peer_addr, interface.clone()),
+                            _ if close_port_forward => break,
+                            Err(err) => interface.on_establish_connection_error(err.to_string()),
+                            _ => {}
                         }
                     }
                     // Resolved above; a stray `Wait` just drops this accept.
