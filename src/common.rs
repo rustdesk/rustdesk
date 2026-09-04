@@ -1167,13 +1167,6 @@ pub fn get_ipv6_punch_enabled() -> bool {
     )
 }
 
-pub fn get_port_forward_mux_enabled() -> bool {
-    config::option2bool(
-        keys::OPTION_ENABLE_PORT_FORWARD_MUX,
-        &get_local_option(keys::OPTION_ENABLE_PORT_FORWARD_MUX),
-    )
-}
-
 pub fn get_local_option(key: &str) -> String {
     let v = LocalConfig::get_option(key);
     if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
