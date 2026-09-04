@@ -391,7 +391,9 @@ const SEC30: Duration = Duration::from_secs(30);
 const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
-const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
+// The same horizon as the 30 s read timeout: a peer that has not drained a
+// single message for that long is the same dead peer that check would catch.
+const SEND_TIMEOUT_OTHER: u64 = 30_000;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Whether the DRM backend can serve a Wayland login screen here.
@@ -585,13 +587,9 @@ impl Connection {
             crate::rustdesk_interval(time::interval_at(Instant::now(), TEST_DELAY_TIMEOUT));
         let mut last_recv_time = Instant::now();
 
-        conn.stream.set_send_timeout(
-            if conn.file_transfer.is_some() || conn.port_forward_socket.is_some() || conn.terminal {
-                SEND_TIMEOUT_OTHER
-            } else {
-                SEND_TIMEOUT_VIDEO
-            },
-        );
+        // The connection type is not known until the login request arrives;
+        // `on_message` picks the type-specific timeout then.
+        conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
@@ -2765,6 +2763,17 @@ impl Connection {
                     }
                 }
             }
+
+            self.stream.set_send_timeout(
+                if self.file_transfer.is_some()
+                    || self.terminal
+                    || matches!(self.lr.union, Some(login_request::Union::PortForward(_)))
+                {
+                    SEND_TIMEOUT_OTHER
+                } else {
+                    SEND_TIMEOUT_VIDEO
+                },
+            );
 
             if !crate::common::is_direct_ip_access(&lr.username) && lr.username != Config::get_id()
             {
