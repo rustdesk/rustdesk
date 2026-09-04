@@ -1753,6 +1753,9 @@ pub struct LoginConfigHandler {
     pub remember: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
+    /// Whether the next port-forward login asks for the multiplexed tunnel.
+    /// `port_forward::listen` sets it per accept.
+    pub port_forward_mux: bool,
     pub version: i64,
     features: Option<Features>,
     pub session_id: u64, // used for local <-> server communication
@@ -2761,7 +2764,7 @@ impl LoginConfigHandler {
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
-                multiplex: crate::common::get_port_forward_mux_enabled(),
+                multiplex: self.port_forward_mux,
                 ..Default::default()
             }),
             ConnType::TERMINAL => {
