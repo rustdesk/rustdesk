@@ -11,7 +11,7 @@ use hbb_common::{
     tokio::{self, net::TcpStream, sync::mpsc},
 };
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
@@ -27,7 +27,6 @@ struct Entry {
     inbound: mpsc::UnboundedSender<Inbound>,
     credit: Arc<SendCredit>,
     window: Arc<Mutex<RecvWindow>>,
-    target: String,
 }
 
 /// The controlled side of one multiplexed tunnel. The main loop owns it and
@@ -36,17 +35,14 @@ pub struct PortForwardMux {
     channels: HashMap<i32, Entry>,
     tx: Sender,
     login_target: String,
-    last_label: String,
 }
 
 impl PortForwardMux {
     pub fn new(tx: Sender, login_target: String) -> Self {
-        let last_label = login_target.clone();
         Self {
             channels: HashMap::new(),
             tx,
             login_target,
-            last_label,
         }
     }
 
@@ -119,6 +115,18 @@ impl PortForwardMux {
             ..Default::default()
         };
         let (addr, is_rdp) = Connection::normalize_port_forward_target(&mut pf);
+        // Approval and permission checks saw the login's target; a tunnel
+        // serves that one target and nothing else.
+        if addr != self.login_target {
+            log::warn!(
+                "port forward channel {} asked for {} on a tunnel logged in for {}",
+                id,
+                addr,
+                self.login_target
+            );
+            self.reply(opened_msg(id, false, "Port forward target not authorized", 0));
+            return;
+        }
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
         let credit = Arc::new(SendCredit::new(effective_window(open.window)));
         let window = Arc::new(Mutex::new(RecvWindow::new(INITIAL_WINDOW)));
@@ -128,7 +136,6 @@ impl PortForwardMux {
                 inbound: inbound_tx,
                 credit: credit.clone(),
                 window: window.clone(),
-                target: addr.clone(),
             },
         );
         tokio::spawn(run_controlled_channel(
@@ -146,31 +153,6 @@ impl PortForwardMux {
         self.tx
             .send((tokio::time::Instant::now(), Arc::new(msg)))
             .ok();
-    }
-
-    /// Drops dead entries and recomputes the CM label from the survivors.
-    /// Returns the label only when it differs from the last one returned.
-    pub fn sweep(&mut self) -> Option<String> {
-        self.channels.retain(|_, e| !e.inbound.is_closed());
-        let targets: BTreeSet<&str> = self.channels.values().map(|e| e.target.as_str()).collect();
-        let label = if targets.is_empty() {
-            self.login_target.clone()
-        } else {
-            let first = if targets.contains(self.login_target.as_str()) {
-                self.login_target.as_str()
-            } else {
-                targets.iter().next().copied().unwrap_or(self.login_target.as_str())
-            };
-            match targets.len() - 1 {
-                0 => first.to_owned(),
-                n => format!("{} +{}", first, n),
-            }
-        };
-        if label == self.last_label {
-            return None;
-        }
-        self.last_label = label.clone();
-        Some(label)
     }
 
     #[cfg(test)]
@@ -359,7 +341,7 @@ mod tests {
         rt().block_on(async {
             let port = echo_target().await;
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             mux.handle(open(1, port), || true);
             mux.handle(data(1, b"ping"), || true);
             assert_eq!(opened(&next_frame(&mut rx).await), (1, true));
@@ -375,7 +357,7 @@ mod tests {
             let port = l.local_addr().unwrap().port();
             drop(l);
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             mux.handle(open(1, port), || true);
             mux.handle(data(1, b"lost"), || true);
             assert_eq!(opened(&next_frame(&mut rx).await), (1, false));
@@ -388,7 +370,7 @@ mod tests {
         rt().block_on(async {
             let port = echo_target().await;
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             mux.handle(open(1, port), || false);
             assert_eq!(opened(&next_frame(&mut rx).await), (1, false));
             assert_eq!(mux.live_channels(), 0);
@@ -403,7 +385,7 @@ mod tests {
             // that same poll loses: no `opened` may ever be sent.
             let port = echo_target().await;
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             mux.handle(open(1, port), || true);
             mux.handle(close(1), || true);
             assert!(tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await.is_err());
@@ -416,7 +398,7 @@ mod tests {
         rt().block_on(async {
             let port = echo_target().await;
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             mux.handle(open(1, port), || true);
             mux.handle(open(2, port), || true);
             let mut seen = 0;
@@ -433,6 +415,29 @@ mod tests {
             }
             mux.handle(data(2, b"still fine"), || true);
             assert_eq!(data_of(&next_frame(&mut rx).await), (2, b"still fine".to_vec()));
+        });
+    }
+
+    #[test]
+    fn open_to_a_target_other_than_the_login_target_is_refused() {
+        rt().block_on(async {
+            let a = echo_target().await;
+            let b = echo_target().await;
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", a));
+            mux.handle(open(1, a), || true);
+            assert_eq!(opened(&next_frame(&mut rx).await), (1, true));
+            // Approval was for target a; b needs a login of its own.
+            mux.handle(open(2, b), || true);
+            let ch = next_frame(&mut rx).await;
+            match &ch.union {
+                Some(port_forward_channel::Union::Opened(o)) => {
+                    assert_eq!((o.channel_id, o.success), (2, false));
+                    assert!(!o.message.is_empty());
+                }
+                other => panic!("expected opened, got {:?}", other),
+            }
+            assert_eq!(mux.live_channels(), 1);
         });
     }
 
@@ -469,7 +474,7 @@ mod tests {
     }
 
     /// A target that accepts and hangs up at once, so every channel ends on
-    /// the target's EOF — the case where only the sweep can free the entry.
+    /// the target's EOF — the case where only the next `open` frees the entry.
     async fn drop_target() -> u16 {
         let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = l.local_addr().unwrap().port();
@@ -483,16 +488,16 @@ mod tests {
     }
 
     #[test]
-    fn sweep_frees_dead_entries_so_the_cap_counts_live_channels() {
+    fn open_frees_dead_entries_so_the_cap_counts_live_channels() {
         rt().block_on(async {
             let port = drop_target().await;
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, "localhost:1".to_owned());
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
             for id in 1..=(MAX_CHANNELS as i32 * 2) {
                 mux.handle(open(id, port), || true);
                 assert_eq!(opened(&next_frame(&mut rx).await), (id, true));
                 // The task sends `close` on the target's EOF and exits; the
-                // entry is dead until the next `open` sweeps it.
+                // entry is dead until the next `open` drops it.
                 let ch = next_frame(&mut rx).await;
                 match &ch.union {
                     Some(port_forward_channel::Union::Close(c)) => assert_eq!(c.channel_id, id),
@@ -500,32 +505,6 @@ mod tests {
                 }
                 tokio::task::yield_now().await;
             }
-            // A task has exited by the time its `close` is read, so one sweep
-            // must leave nothing behind.
-            mux.sweep();
-            assert_eq!(mux.live_channels(), 0);
-        });
-    }
-
-    #[test]
-    fn label_counts_distinct_targets_only() {
-        rt().block_on(async {
-            let a = echo_target().await;
-            let b = echo_target().await;
-            let (tx, mut rx) = mpsc::unbounded_channel();
-            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", a));
-            assert_eq!(mux.sweep(), None);
-            mux.handle(open(1, a), || true);
-            mux.handle(open(2, a), || true);
-            opened(&next_frame(&mut rx).await);
-            opened(&next_frame(&mut rx).await);
-            assert_eq!(mux.sweep(), None);
-            mux.handle(open(3, b), || true);
-            opened(&next_frame(&mut rx).await);
-            assert_eq!(mux.sweep(), Some(format!("127.0.0.1:{} +1", a)));
-            mux.handle(close(3), || true);
-            tokio::task::yield_now().await;
-            assert_eq!(mux.sweep(), Some(format!("127.0.0.1:{}", a)));
         });
     }
 }

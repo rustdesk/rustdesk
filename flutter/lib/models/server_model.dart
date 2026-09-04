@@ -768,16 +768,6 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void updatePortForward(Map<String, dynamic> evt) {
-    final id = int.tryParse(evt['id']?.toString() ?? '');
-    final portForward = evt['port_forward']?.toString() ?? '';
-    if (id == null || portForward.isEmpty) return;
-    final index = _clients.indexWhere((c) => c.id == id);
-    if (index < 0) return;
-    _clients[index].portForward = portForward;
-    notifyListeners();
-  }
-
   void androidUpdatekeepScreenOn() async {
     if (!isAndroid) return;
     var floatingWindowDisabled =
