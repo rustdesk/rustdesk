@@ -1669,16 +1669,12 @@ impl Connection {
             return true;
         };
         if pf.multiplex {
-            if let Some(tx) = self.inner.tx.clone() {
-                self.port_forward_mux = Some(super::port_forward_mux::PortForwardMux::new(
-                    tx,
-                    self.port_forward_address.clone(),
-                ));
-                return true;
-            }
-            // Without a sender there is no way to answer channel frames: fall
-            // through to the raw pipe below rather than return with neither
-            // flag set, which would make the connection look like remote desktop.
+            // `inner.tx` is set for the connection's whole life; `None` here is
+            // unreachable, and refusing the login is the only honest answer.
+            self.port_forward_mux = self.inner.tx.clone().map(|tx| {
+                super::port_forward_mux::PortForwardMux::new(tx, self.port_forward_address.clone())
+            });
+            return self.port_forward_mux.is_some();
         }
         let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
@@ -2243,6 +2239,16 @@ impl Connection {
         self.port_forward_address = label.clone();
         log::info!("port forward targets now {}", label);
         self.send_to_cm(ipc::Data::UpdatePortForward(label));
+    }
+
+    fn handle_port_forward_channel(&mut self, ch: PortForwardChannel) {
+        let Some(mux) = self.port_forward_mux.as_mut() else {
+            log::debug!("port forward channel frame on a non-multiplexed connection");
+            return;
+        };
+        mux.handle(ch, || {
+            Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions)
+        });
     }
 
     #[inline]
@@ -3901,27 +3907,7 @@ impl Connection {
                         self.refresh_video_display(Some(request.display as usize));
                     }
                 }
-                Some(message::Union::PortForwardChannel(ch)) => {
-                    // Only open/close can change the target set; sweeping after every
-                    // data frame would walk the whole table per 64 KiB.
-                    let may_change_targets = matches!(
-                        ch.union,
-                        Some(port_forward_channel::Union::Open(_))
-                            | Some(port_forward_channel::Union::Close(_))
-                    );
-                    // Only `open` consults permissions; short-circuit so the lookup
-                    // isn't made per 64 KiB of data.
-                    let permitted = matches!(ch.union, Some(port_forward_channel::Union::Open(_)))
-                        && Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions);
-                    if let Some(mux) = self.port_forward_mux.as_mut() {
-                        mux.handle(ch, permitted);
-                        if may_change_targets {
-                            self.push_port_forward_label();
-                        }
-                    } else {
-                        log::debug!("port forward channel frame on a non-multiplexed connection");
-                    }
-                }
+                Some(message::Union::PortForwardChannel(ch)) => self.handle_port_forward_channel(ch),
                 Some(message::Union::TerminalAction(action)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
