@@ -66,6 +66,16 @@ impl RecvWindow {
         }
     }
 
+    /// Widens the window without advertising: the grant travels in `opened`.
+    pub fn grant(&mut self, n: u32) {
+        self.remaining = self.remaining.saturating_add(n);
+    }
+
+    #[cfg(test)]
+    pub fn remaining(&self) -> u32 {
+        self.remaining
+    }
+
     /// Returns the amount to advertise in a `window_update` once enough has
     /// been drained; the same amount is credited back.
     pub fn drained(&mut self, n: usize) -> Option<u32> {
@@ -779,6 +789,16 @@ mod tests {
             w.drained(MAX_FRAME);
             moved += MAX_FRAME as u64;
         }
+    }
+
+    #[test]
+    fn grant_extends_a_window_that_has_been_used_up() {
+        let mut w = RecvWindow::new(INITIAL_WINDOW);
+        assert!(w.accept(INITIAL_WINDOW as usize));
+        assert!(!w.accept(1));
+        w.grant(CHANNEL_WINDOW - INITIAL_WINDOW);
+        assert!(w.accept((CHANNEL_WINDOW - INITIAL_WINDOW) as usize));
+        assert!(!w.accept(1));
     }
 
     #[test]
