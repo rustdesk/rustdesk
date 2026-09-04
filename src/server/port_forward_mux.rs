@@ -382,6 +382,24 @@ mod tests {
     }
 
     #[test]
+    fn a_revoked_permission_refuses_new_channels_and_keeps_live_ones() {
+        rt().block_on(async {
+            let port = echo_target().await;
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let mut mux = PortForwardMux::new(tx, format!("127.0.0.1:{}", port));
+            mux.handle(open(1, port), || true);
+            assert_eq!(opened(&next_frame(&mut rx).await), (1, true));
+            // `enable-tunnel` is consulted per `open`, so turning it off
+            // mid-session stops new channels; the live one keeps relaying.
+            mux.handle(open(2, port), || false);
+            assert_eq!(opened(&next_frame(&mut rx).await), (2, false));
+            mux.handle(data(1, b"still relayed"), || false);
+            assert_eq!(data_of(&next_frame(&mut rx).await), (1, b"still relayed".to_vec()));
+            assert_eq!(mux.live_channels(), 1);
+        });
+    }
+
+    #[test]
     fn close_while_connecting_sends_no_opened() {
         rt().block_on(async {
             // `close` is queued before the task is first polled. Its `select!` is

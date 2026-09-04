@@ -1311,14 +1311,27 @@ mod tests {
                 let t = Tunnel::new();
                 t.claim();
                 let h = t.set_muxed(ours, NoUi::default());
-                let (mut app, sock) = local_pair().await;
-                h.open("localhost", 1, sock, vec![]).unwrap();
+                let (mut app_a, sock_a) = local_pair().await;
+                let (mut app_b, sock_b) = local_pair().await;
+                h.open("localhost", 1, sock_a, vec![]).unwrap();
+                h.open("localhost", 1, sock_b, vec![]).unwrap();
                 drop(peer);
+                // One tunnel is one failure domain: every channel on it ends.
                 let mut buf = [0u8; 1];
-                assert_eq!(app.read(&mut buf).await.unwrap(), 0);
+                assert_eq!(app_a.read(&mut buf).await.unwrap(), 0);
+                assert_eq!(app_b.read(&mut buf).await.unwrap(), 0);
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                assert!(matches!(t.claim(), Claim::Claimed));
                 assert!(h.open("localhost", 1, local_pair().await.1, vec![]).is_err());
+                // The next accept establishes again on the same `Tunnel`.
+                assert!(matches!(t.claim(), Claim::Claimed));
+                let (ours, mut peer) = stream_pair().await;
+                let h = t.set_muxed(ours, NoUi::default());
+                let (_app_c, sock_c) = local_pair().await;
+                h.open("localhost", 1, sock_c, vec![]).unwrap();
+                assert!(matches!(
+                    recv_frame(&mut peer).await.union,
+                    Some(port_forward_channel::Union::Open(_))
+                ));
             });
         }
 
