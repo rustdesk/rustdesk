@@ -37,7 +37,7 @@ serde = {version="1.0", features=["derive"]}
 [dependencies.winapi]
 version = "0.3"
 default-features = true
-features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
+features = ["dxgi", "dxgi1_2", "dxgi1_5", "dxgi1_6", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block = "0.1"
