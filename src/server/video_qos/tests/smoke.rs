@@ -1,12 +1,12 @@
 use super::*;
 
-fn session(fps: u32, quality: Quality) -> VideoQoS {
+pub(super) fn session(fps: u32, quality: Quality) -> VideoQoS {
     let mut qos = VideoQoS {
         fps: INIT_FPS.min(fps),
         abr_config: false,
-        new_user_instant: Instant::now() - Duration::from_secs(2),
         ..Default::default()
     };
+    qos.advance_ms(2000);
     qos.users.insert(
         1,
         UserData {
@@ -160,6 +160,7 @@ fn smoke_bandwidth_drop_and_recovery() {
     let mut drained = false;
     let mut recovered_at = None;
     for now in (0..120_000).step_by(10) {
+        qos.advance_ms(10);
         let capacity = if (10_000..70_000).contains(&now) {
             15.0
         } else {
@@ -221,7 +222,8 @@ fn smoke_bandwidth_drop_and_recovery() {
 #[test]
 fn smoke_capacity_with_short_stalls() {
     for limit in [30, 60] {
-        for phase in [0, 500, 900] {
+        // Probes run at one second cadence; sweep the stall phase so no alignment hides.
+        for phase in (0..1000).step_by(50) {
             let mut qos = session(limit, Quality::Balanced);
             for _ in 0..90 {
                 qos.user_network_delay(1, 10);
@@ -231,6 +233,7 @@ fn smoke_capacity_with_short_stalls() {
             let mut probe: Option<(u32, f64, Option<u32>)> = None;
             let mut max_delay = 0;
             for now in (0..120_000).step_by(10) {
+                qos.advance_ms(10);
                 // A 700 ms pause affects video and probes on the same FIFO link.
                 let available = if (now + phase) % 6000 < 700 {
                     0.0
@@ -278,7 +281,6 @@ fn smoke_abr_bandwidth_drop_and_recovery() {
         let initial_ratio = qos.ratio();
         let mut queue = 0.0_f64;
         let mut probe: Option<(u32, f64, Option<u32>)> = None;
-        let mut ratio_changed_at = 0;
         let mut first_ratio_drop = None;
         let mut first_fps_drop = None;
         let mut first_fps_drop_delay = None;
@@ -287,6 +289,7 @@ fn smoke_abr_bandwidth_drop_and_recovery() {
         let mut drained = false;
         let mut recovered_at = None;
         for now in (0..120_000).step_by(10) {
+            qos.advance_ms(10);
             let capacity = if (10_000..70_000).contains(&now) {
                 reduced_capacity as f64
             } else {
@@ -296,9 +299,6 @@ fn smoke_abr_bandwidth_drop_and_recovery() {
             let frame_size = (qos.ratio() / initial_ratio) as f64;
             queue = (queue + (qos.fps() as f64 * frame_size - capacity) * 0.01).max(0.0);
             qos.store_bitrate((4000.0 * frame_size) as u32);
-            let simulated_instant =
-                Instant::now() - Duration::from_millis((now - ratio_changed_at) as u64);
-            qos.adjust_ratio_instant = simulated_instant;
             if let Some((_, remaining, reply_at)) = probe.as_mut() {
                 *remaining -= capacity * 0.01;
                 if *remaining <= 0.0 && reply_at.is_none() {
@@ -323,9 +323,6 @@ fn smoke_abr_bandwidth_drop_and_recovery() {
                 if (20_000..40_000).contains(&now) && queue_ms < 100 {
                     drained = true;
                 }
-            }
-            if qos.adjust_ratio_instant != simulated_instant {
-                ratio_changed_at = now;
             }
             if qos.ratio() < initial_ratio && first_ratio_drop.is_none() {
                 first_ratio_drop = Some(now);
