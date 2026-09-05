@@ -8,7 +8,7 @@ use hbb_common::{
     log,
     message_proto::*,
     timeout,
-    tokio::{self, net::TcpStream, sync::mpsc},
+    tokio::{self, net::TcpStream, sync::{mpsc, watch}},
 };
 use std::{
     collections::HashMap,
@@ -35,6 +35,9 @@ pub struct PortForwardMux {
     channels: HashMap<i32, Entry>,
     tx: Sender,
     login_target: String,
+    /// Sent once, by `close_all`, for the channels its `clear` cannot reach:
+    /// one parked on its target socket is not on the inbound queue.
+    teardown: watch::Sender<()>,
 }
 
 impl PortForwardMux {
@@ -43,6 +46,7 @@ impl PortForwardMux {
             channels: HashMap::new(),
             tx,
             login_target,
+            teardown: watch::channel(()).0,
         }
     }
 
@@ -150,6 +154,7 @@ impl PortForwardMux {
             window,
             inbound_rx,
             FrameSink::Direct(self.tx.clone()),
+            self.teardown.subscribe(),
         ));
     }
 
@@ -169,9 +174,11 @@ impl PortForwardMux {
         self.channels.get(&id).map(|e| e.window.lock().unwrap().remaining())
     }
 
-    /// Dropping every sender ends every task; each drops its target socket.
+    /// Every task ends and drops its target socket: the queue's senders go for
+    /// a task on the queue, `teardown` reaches one parked on the socket.
     pub fn close_all(&mut self) {
         self.channels.clear();
+        self.teardown.send(()).ok();
     }
 }
 
@@ -186,6 +193,7 @@ async fn run_controlled_channel(
     window: Arc<Mutex<RecvWindow>>,
     mut inbound: mpsc::UnboundedReceiver<Inbound>,
     sink: FrameSink,
+    teardown: watch::Receiver<()>,
 ) {
     let mut pending: Vec<Bytes> = Vec::new();
     let mut pending_len = 0usize;
@@ -235,7 +243,7 @@ async fn run_controlled_channel(
         return;
     }
     let (reader, writer) = socket.into_split();
-    run_channel(id, reader, writer, Vec::new(), pending, credit, window, inbound, sink).await;
+    run_channel(id, reader, writer, Vec::new(), pending, credit, window, inbound, sink, teardown).await;
 }
 
 /// The same words the raw pipe puts in its login error, so one problem reads
