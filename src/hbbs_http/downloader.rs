@@ -5,7 +5,7 @@ use hbb_common::{
     log,
     tokio::{
         self,
-        fs::File,
+        fs::{File, OpenOptions},
         io::AsyncWriteExt,
         sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     },
@@ -213,7 +213,13 @@ async fn do_download(
 
     let mut dest: Option<File> = None;
     if let Some(p) = request.path {
-        dest = Some(File::create(p).await?);
+        dest = Some(
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(p)
+                .await?,
+        );
     }
 
     loop {
