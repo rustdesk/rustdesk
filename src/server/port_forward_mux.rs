@@ -35,9 +35,9 @@ pub struct PortForwardMux {
     channels: HashMap<i32, Entry>,
     tx: Sender,
     login_target: String,
-    /// Sent once, by `close_all`, for the channels its `clear` cannot reach:
+    /// Raised once, by `close_all`, for the channels its `clear` cannot reach:
     /// one parked on its target socket is not on the inbound queue.
-    teardown: watch::Sender<()>,
+    teardown: watch::Sender<bool>,
 }
 
 impl PortForwardMux {
@@ -46,7 +46,7 @@ impl PortForwardMux {
             channels: HashMap::new(),
             tx,
             login_target,
-            teardown: watch::channel(()).0,
+            teardown: watch::channel(false).0,
         }
     }
 
@@ -178,7 +178,9 @@ impl PortForwardMux {
     /// a task on the queue, `teardown` reaches one parked on the socket.
     pub fn close_all(&mut self) {
         self.channels.clear();
-        self.teardown.send(()).ok();
+        // Not `send`: with no channel live it stores nothing, and one opened
+        // as the tunnel closes would never see it.
+        self.teardown.send_replace(true);
     }
 }
 
@@ -193,7 +195,7 @@ async fn run_controlled_channel(
     window: Arc<Mutex<RecvWindow>>,
     mut inbound: mpsc::UnboundedReceiver<Inbound>,
     sink: FrameSink,
-    teardown: watch::Receiver<()>,
+    teardown: watch::Receiver<bool>,
 ) {
     let mut pending: Vec<Bytes> = Vec::new();
     let mut pending_len = 0usize;

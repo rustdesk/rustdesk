@@ -348,7 +348,8 @@ async fn relay_tunnel_to_socket<W: AsyncWrite + Unpin>(
 /// ended for a local reason — the peer's own `close` is never echoed.
 /// `teardown` is the tunnel closing under the channel: it cancels both halves
 /// even when they are parked on the socket, where dropping the inbound sender
-/// reaches neither.
+/// reaches neither. It is a level, so a channel opened as the tunnel closes,
+/// subscribing after the signal went out, still sees it.
 pub async fn run_channel<R, W>(
     id: i32,
     reader: R,
@@ -359,7 +360,7 @@ pub async fn run_channel<R, W>(
     window: Arc<Mutex<RecvWindow>>,
     inbound: mpsc::UnboundedReceiver<Inbound>,
     sink: FrameSink,
-    mut teardown: watch::Receiver<()>,
+    mut teardown: watch::Receiver<bool>,
 ) where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
@@ -380,7 +381,9 @@ pub async fn run_channel<R, W>(
             let _ = cancel_tx.send(true);
             (r.unwrap_or(RelayEnd::Cancelled), to_tunnel.await.unwrap_or(RelayEnd::Cancelled))
         }
-        _ = teardown.changed() => {
+        // Wrapped so `select!` keeps a `bool`, not the `Ref` (a read guard,
+        // not `Send`) it would otherwise hold across the joins.
+        _ = async { teardown.wait_for(|down| *down).await.is_ok() } => {
             let _ = cancel_tx.send(true);
             (to_tunnel.await.unwrap_or(RelayEnd::Cancelled), to_socket.await.unwrap_or(RelayEnd::Cancelled))
         }
@@ -471,7 +474,7 @@ mod tunnel {
                 channels: Mutex::new(HashMap::new()),
                 next_id: AtomicI32::new(1),
                 reported: Default::default(),
-                teardown: watch::channel(()).0,
+                teardown: watch::channel(false).0,
             });
             let state = self.state.clone();
             // Publish before spawning: if the loop exits first and resets the
@@ -511,9 +514,9 @@ mod tunnel {
         channels: Mutex<HashMap<i32, ChannelEntry>>,
         next_id: AtomicI32,
         reported: Mutex<HashMap<String, Instant>>,
-        /// Sent once, by `close_all`, for the channels its `clear` cannot
+        /// Raised once, by `close_all`, for the channels its `clear` cannot
         /// reach: one parked on its local socket is not on the inbound queue.
-        teardown: watch::Sender<()>,
+        teardown: watch::Sender<bool>,
     }
 
     impl TunnelHandle {
@@ -656,7 +659,9 @@ mod tunnel {
 
         fn close_all(&self) {
             self.channels.lock().unwrap().clear();
-            self.teardown.send(()).ok();
+            // Not `send`: with no channel live it stores nothing, and one
+            // opened as the tunnel closes would never see it.
+            self.teardown.send_replace(true);
         }
 
         #[cfg(test)]
@@ -897,13 +902,19 @@ mod tests {
         credit: Arc<SendCredit>,
         window: Arc<Mutex<RecvWindow>>,
         local: tokio::io::DuplexStream,
-        teardown: watch::Sender<()>,
+        teardown: watch::Sender<bool>,
         task: tokio::task::JoinHandle<()>,
     }
 
     /// A channel whose "local socket" is one end of a duplex pipe and whose
     /// "tunnel" is a pair of queues the test reads directly.
     fn harness(id: i32, prebuf: Vec<u8>, initial_out: Vec<Bytes>) -> Harness {
+        harness_on(id, prebuf, initial_out, watch::channel(false).0)
+    }
+
+    /// The channel subscribes to `teardown` here, so a test can hand in one
+    /// that has already been raised.
+    fn harness_on(id: i32, prebuf: Vec<u8>, initial_out: Vec<Bytes>, teardown: watch::Sender<bool>) -> Harness {
         let (data_tx, data_rx) = mpsc::channel(DATA_QUEUE_FRAMES);
         let (control_tx, control_rx) = mpsc::unbounded_channel();
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
@@ -912,7 +923,7 @@ mod tests {
         let credit = Arc::new(SendCredit::new(INITIAL_WINDOW));
         let window = Arc::new(Mutex::new(RecvWindow::new(CHANNEL_WINDOW)));
         let sink = FrameSink::Queued { data: data_tx, control: control_tx };
-        let (teardown, teardown_rx) = watch::channel(());
+        let teardown_rx = teardown.subscribe();
         let task = tokio::spawn(run_channel(
             id, r, w, prebuf, initial_out, credit.clone(), window.clone(), inbound_rx, sink, teardown_rx,
         ));
@@ -954,9 +965,24 @@ mod tests {
                 h.inbound_tx.send(Inbound::Data(Bytes::from(vec![0u8; MAX_FRAME]))).unwrap();
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            h.teardown.send(()).ok();
+            h.teardown.send_replace(true);
             let ended = tokio::time::timeout(std::time::Duration::from_millis(500), &mut h.task).await;
             assert!(ended.is_ok(), "channel task outlived the tunnel");
+        });
+    }
+
+    #[test]
+    fn a_channel_subscribed_after_teardown_ends_at_once() {
+        rt().block_on(async {
+            // `open` can race `close_all`: this channel subscribes after the
+            // signal went out, and its entry sits in a map that was already
+            // cleared, so nothing will ever drop its inbound sender. No other
+            // channel was live when the tunnel closed, either.
+            let teardown = watch::channel(false).0;
+            teardown.send_replace(true);
+            let mut h = harness_on(1, vec![], vec![], teardown);
+            let ended = tokio::time::timeout(std::time::Duration::from_millis(500), &mut h.task).await;
+            assert!(ended.is_ok(), "late channel outlived the tunnel");
         });
     }
 
