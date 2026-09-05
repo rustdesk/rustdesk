@@ -1188,12 +1188,12 @@ impl FlutterHandler {
         let mut is_sent = false;
         let is_multi_sessions = self.is_multi_ui_session();
         for h in self.session_handlers.read().unwrap().values() {
-            // The soft renderer does not support multi-displays session for now.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if h.displays.len() > 1 {
                 continue;
             }
             // If there're multiple ui sessions, we only notify the ui session that has the display.
-            if is_multi_sessions {
+            if is_multi_sessions || h.displays.len() > 1 {
                 if !h.displays.contains(&display) {
                     continue;
                 }

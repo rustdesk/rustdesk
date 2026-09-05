@@ -122,8 +122,12 @@ class ImagePainter extends CustomPainter {
     if (isWeb) {
       paint.filterQuality = FilterQuality.high;
     }
-    canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+    try {
+      canvas.drawImage(
+          image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+    } catch (e) {
+      // Ignore draw errors if the underlying ui.Image was disposed during frame transition.
+    }
   }
 
   @override
