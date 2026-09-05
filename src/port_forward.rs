@@ -205,7 +205,7 @@ async fn connect_and_login(
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
                             challenge = Some(hash.clone());
-                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, &mut stream).await {
+                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, false, &mut stream).await {
                                 return Ok(None);
                             }
                         }
@@ -237,7 +237,7 @@ async fn connect_and_login(
             d = ui_receiver.recv() => {
                 match d {
                     Some(Data::Login(login)) => match &challenge {
-                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, &mut stream).await,
+                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, false, &mut stream).await,
                         None => pending_login = Some(login),
                     },
                     Some(Data::Message(msg)) => {
@@ -264,22 +264,24 @@ async fn connect_and_login(
 
 
 /// A mapping's login is built from the window's shared handler:
-/// `create_login_msg` reads `port_forward` and `handle_login_from_ui` reads
-/// `hash`. Mappings log in concurrently, so each fills them and sends under
-/// the window's turn lock, or one login carried another mapping's target or
-/// answered another's challenge.
+/// `create_login_msg` reads `port_forward` and `port_forward_multiplex`,
+/// `handle_login_from_ui` reads `hash`. Mappings log in concurrently, so each
+/// fills them and sends under the window's turn lock, or one login carried
+/// another mapping's target or answered another's challenge.
 async fn login_with_hash(
     interface: &impl Interface,
     password: &str,
     hash: Hash,
     remote_host: &str,
     remote_port: i32,
+    mux: bool,
     stream: &mut Stream,
 ) -> bool {
     let lc = interface.get_lch();
     let turn = lc.read().unwrap().port_forward_login_turn.clone();
     let _turn = turn.lock().await;
     lc.write().unwrap().port_forward = (remote_host.to_owned(), remote_port);
+    lc.write().unwrap().port_forward_multiplex = mux;
     interface.handle_hash(password, hash, stream).await
 }
 
@@ -297,14 +299,15 @@ async fn hash_arrived(
     pending_login: Option<UiLogin>,
     remote_host: &str,
     remote_port: i32,
+    mux: bool,
     stream: &mut Stream,
 ) -> bool {
     match pending_login {
         Some(login) => {
-            login_from_ui(interface, &hash, login, remote_host, remote_port, stream).await;
+            login_from_ui(interface, &hash, login, remote_host, remote_port, mux, stream).await;
             true
         }
-        None => login_with_hash(interface, password, hash, remote_host, remote_port, stream).await,
+        None => login_with_hash(interface, password, hash, remote_host, remote_port, mux, stream).await,
     }
 }
 
@@ -316,6 +319,7 @@ async fn login_from_ui(
     login: UiLogin,
     remote_host: &str,
     remote_port: i32,
+    mux: bool,
     stream: &mut Stream,
 ) {
     let lc = interface.get_lch();
@@ -324,6 +328,7 @@ async fn login_from_ui(
     {
         let mut lc = lc.write().unwrap();
         lc.port_forward = (remote_host.to_owned(), remote_port);
+        lc.port_forward_multiplex = mux;
         lc.set_hash(hash.clone());
     }
     let (os_username, os_password, password, remember) = login;
@@ -390,8 +395,8 @@ async fn establish_tunnel(
 /// stops at one window rather than growing without bound, and a local EOF
 /// no longer ends the login, since the tunnel may still be wanted. It
 /// reports what the peer answered rather than a raw stream, because the
-/// caller's next step depends on it. The login itself is the raw pipe's:
-/// the window's `port_forward_mux` is what makes it ask for the tunnel.
+/// caller's next step depends on it. The login itself is the raw pipe's,
+/// told to ask for the tunnel.
 async fn connect_and_login_mux(
     id: &str,
     password: &str,
@@ -443,7 +448,7 @@ async fn connect_and_login_mux(
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
                             challenge = Some(hash.clone());
-                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, &mut stream).await {
+                            if !hash_arrived(&interface, password, hash, pending_login.take(), remote_host, remote_port, true, &mut stream).await {
                                 return Ok(None);
                             }
                         }
@@ -476,7 +481,7 @@ async fn connect_and_login_mux(
             d = ui_receiver.recv() => {
                 match d {
                     Some(Data::Login(login)) => match &challenge {
-                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, &mut stream).await,
+                        Some(hash) => login_from_ui(&interface, hash, login, remote_host, remote_port, true, &mut stream).await,
                         None => pending_login = Some(login),
                     },
                     Some(Data::Message(msg)) => {
@@ -698,8 +703,8 @@ mod login_tests {
             let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
             tokio::join!(
-                login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a),
-                login_with_hash(&ui, "pw", hash("b"), "b", 2, &mut b),
+                login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a),
+                login_with_hash(&ui, "pw", hash("b"), "b", 2, false, &mut b),
             );
             assert_eq!(target(&login_at(&mut a_peer).await), ("a".to_owned(), 1));
             assert_eq!(target(&login_at(&mut b_peer).await), ("b".to_owned(), 2));
@@ -717,10 +722,10 @@ mod login_tests {
             let (mut a, mut a_peer) = loopback().await;
             let (mut b, mut b_peer) = loopback().await;
             // A's hash arrived last, so it is the one the handler holds.
-            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, &mut a).await);
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a).await);
             login_at(&mut a_peer).await;
             let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            login_from_ui(&ui, &hash("b"), typed, "b", 2, &mut b).await;
+            login_from_ui(&ui, &hash("b"), typed, "b", 2, false, &mut b).await;
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
@@ -739,10 +744,58 @@ mod login_tests {
             // The prompt's password reached B before its hash, and no other
             // mapping has stored it in the handler yet.
             let typed = (String::new(), String::new(), "pw".to_owned(), false);
-            assert!(hash_arrived(&ui, "", hash("b"), Some(typed), "b", 2, &mut b).await);
+            assert!(hash_arrived(&ui, "", hash("b"), Some(typed), "b", 2, false, &mut b).await);
             let lr = login_at(&mut b_peer).await;
             assert_eq!(lr.password, digest("b"));
             assert_eq!(target(&lr), ("b".to_owned(), 2));
+        });
+    }
+
+    #[test]
+    fn a_raw_pipe_login_on_a_multiplexed_window_does_not_ask_for_the_tunnel() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let ui = window();
+            // The window probes for the tunnel, but this mapping latched to
+            // the raw pipe: its login must read as the raw pipe's, or an
+            // upgraded peer answers with a tunnel it then never gets.
+            ui.lc.write().unwrap().port_forward_mux = true;
+            let (mut a, mut a_peer) = loopback().await;
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, false, &mut a).await);
+            assert!(!login_at(&mut a_peer).await.port_forward().multiplex);
+        });
+    }
+
+    #[test]
+    fn a_password_typed_at_the_prompt_keeps_a_raw_pipe_login_raw() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let ui = window();
+            ui.lc.write().unwrap().port_forward_mux = true;
+            let (mut b, mut b_peer) = loopback().await;
+            let typed = (String::new(), String::new(), "pw".to_owned(), false);
+            login_from_ui(&ui, &hash("b"), typed, "b", 2, false, &mut b).await;
+            assert!(!login_at(&mut b_peer).await.port_forward().multiplex);
+        });
+    }
+
+    #[test]
+    fn a_probing_login_asks_for_the_tunnel() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let ui = window();
+            let (mut a, mut a_peer) = loopback().await;
+            assert!(login_with_hash(&ui, "pw", hash("a"), "a", 1, true, &mut a).await);
+            assert!(login_at(&mut a_peer).await.port_forward().multiplex);
         });
     }
 }

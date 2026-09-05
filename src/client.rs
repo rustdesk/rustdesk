@@ -1753,8 +1753,13 @@ pub struct LoginConfigHandler {
     pub remember: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
-    /// Set once per window, before its mappings start: the claim and the
-    /// login of every accept must agree on it.
+    /// This login's `multiplex`, filled with `port_forward` under the turn
+    /// lock. `port_forward_mux` says whether a mapping probes for the tunnel;
+    /// one the probe latched to the raw pipe logs in without asking, so an
+    /// upgraded peer keeps giving it the raw pipe.
+    pub(crate) port_forward_multiplex: bool,
+    /// Set once per window, before its mappings start: every accept's claim
+    /// reads it.
     pub(crate) port_forward_mux: bool,
     /// Held by a port-forward mapping from filling `port_forward` and `hash`
     /// until its login is built from them; a window's mappings log in
@@ -2772,7 +2777,7 @@ impl LoginConfigHandler {
             ConnType::PORT_FORWARD | ConnType::RDP => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
-                multiplex: self.port_forward_mux,
+                multiplex: self.port_forward_multiplex,
                 ..Default::default()
             }),
             ConnType::TERMINAL => {
@@ -4075,7 +4080,7 @@ mod port_forward_mux_tests {
     use super::*;
 
     #[test]
-    fn a_multiplexed_window_asks_for_the_tunnel() {
+    fn a_login_asks_for_the_tunnel_when_its_mapping_probes() {
         let mut lc = LoginConfigHandler::default();
         lc.conn_type = ConnType::PORT_FORWARD;
         let asks = |lc: &LoginConfigHandler| {
@@ -4085,7 +4090,7 @@ mod port_forward_mux_tests {
                 .multiplex
         };
         assert!(!asks(&lc));
-        lc.port_forward_mux = true;
+        lc.port_forward_multiplex = true;
         assert!(asks(&lc));
     }
 }
