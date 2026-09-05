@@ -579,10 +579,14 @@ fn replay_recorded_trace() {
         return;
     };
     let text = std::fs::read_to_string(&path).unwrap();
+    // A present but malformed value is a corrupt trace, not a missing field.
     let field = |line: &str, key: &str| -> Option<u32> {
         line.split_whitespace()
             .find_map(|kv| kv.strip_prefix(key).and_then(|v| v.strip_prefix('=')))
-            .and_then(|v| v.parse().ok())
+            .map(|v| {
+                v.parse()
+                    .unwrap_or_else(|e| panic!("bad {key}={v:?} in {line:?}: {e}"))
+            })
     };
     let mut qos = super::smoke::session(30, Quality::Balanced);
     let mut now = 0;

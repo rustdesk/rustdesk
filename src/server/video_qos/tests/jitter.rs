@@ -243,6 +243,30 @@ fn viewers_confirm_congestion_independently() {
 }
 
 #[test]
+fn a_congested_viewer_does_not_lower_another_viewers_target() {
+    let mut qos = stable_qos();
+    qos.users.insert(2, UserData::default());
+    for _ in 0..30 {
+        qos.user_network_delay(2, 10);
+        qos.user_network_delay(1, 10);
+    }
+    assert_eq!(qos.fps(), FPS);
+    // Viewer 1 congests; the stream follows the slowest viewer.
+    for _ in 0..4 {
+        qos.user_network_delay(1, 800);
+    }
+    assert_eq!(qos.fps(), 8);
+    // Viewer 2 is fine and keeps its own target rather than inheriting viewer 1's.
+    qos.user_network_delay(2, 10);
+    assert_eq!(qos.users[&2].delay.fps, Some(FPS));
+    // Once viewer 1 restores, the stream is back at once.
+    for _ in 0..3 {
+        qos.user_network_delay(1, 10);
+    }
+    assert_eq!(qos.fps(), FPS);
+}
+
+#[test]
 fn pending_probe_checks_do_not_count_as_fresh_bad_replies() {
     let mut qos = stable_qos();
     qos.user_network_delay(1, 400);
