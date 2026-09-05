@@ -548,14 +548,20 @@ mod tunnel {
             if self.sink.is_closed() {
                 hbb_common::bail!("port forward tunnel is gone");
             }
-            let id = self.next_id.fetch_add(1, Ordering::Relaxed);
             let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
             let credit = Arc::new(SendCredit::new(INITIAL_WINDOW));
             let window = Arc::new(Mutex::new(RecvWindow::new(CHANNEL_WINDOW)));
-            {
+            let id = {
                 let mut channels = self.channels.lock().unwrap();
                 if channels.len() >= MAX_CHANNELS {
                     hbb_common::bail!("too many port forward channels");
+                }
+                // Once the counter has come all the way round it can land on
+                // a channel still up; fewer than MAX_CHANNELS are, so a free
+                // id is a few steps away.
+                let mut id = self.next_id.fetch_add(1, Ordering::Relaxed);
+                while channels.contains_key(&id) {
+                    id = self.next_id.fetch_add(1, Ordering::Relaxed);
                 }
                 channels.insert(
                     id,
@@ -566,7 +572,8 @@ mod tunnel {
                         opened: false,
                     },
                 );
-            }
+                id
+            };
             let open = open_msg(id, host, port, CHANNEL_WINDOW);
             let (reader, writer) = socket.into_split();
             let sink = self.sink.clone();
@@ -681,6 +688,11 @@ mod tunnel {
         #[cfg(test)]
         pub fn live_channels(&self) -> usize {
             self.channels.lock().unwrap().len()
+        }
+
+        #[cfg(test)]
+        pub fn set_next_id(&self, id: i32) {
+            self.next_id.store(id, Ordering::Relaxed);
         }
     }
 
@@ -1195,6 +1207,32 @@ mod tests {
             assert!(matches!(t.claim(), Claim::Claimed));
             t.set_legacy();
             assert!(matches!(t.claim(), Claim::Legacy));
+        }
+
+        #[test]
+        fn an_id_still_live_when_the_counter_comes_round_is_skipped() {
+            rt().block_on(async {
+                let (ours, mut peer) = stream_pair().await;
+                let t = Tunnel::new();
+                t.claim();
+                let h = t.set_muxed(ours, NoUi::default());
+                let id_of = |ch: &PortForwardChannel| match &ch.union {
+                    Some(port_forward_channel::Union::Open(o)) => o.channel_id,
+                    other => panic!("expected open, got {:?}", other),
+                };
+                let (_a, sock_a) = local_pair().await;
+                h.open("localhost", 80, sock_a, vec![]).unwrap();
+                let a = id_of(&recv_frame(&mut peer).await);
+                // 2^32 opens later the counter is back at A's id, and A is
+                // still up. Handing that id out again would replace A's entry
+                // here while the peer keeps routing it to A's socket.
+                h.set_next_id(a);
+                let (_b, sock_b) = local_pair().await;
+                h.open("localhost", 80, sock_b, vec![]).unwrap();
+                let b = id_of(&recv_frame(&mut peer).await);
+                assert_ne!(b, a, "channel B was handed A's live id");
+                assert_eq!(h.live_channels(), 2);
+            });
         }
 
         #[test]
