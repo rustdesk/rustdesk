@@ -1892,11 +1892,14 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
 #[tokio::main(flavor = "current_thread")]
 pub async fn sync_config_to_service() -> ResultType<()> {
     let mut c = connect_service(1000).await?;
-    // The live values, not a fresh read of the files: on disk the id and the secrets are kept
-    // encrypted with their plaintext fields blank, and only each type's own loader undoes that.
-    // Sent as read from disk, the service would install an empty id and mint a new one. This
-    // process loaded its copy at startup, so a setting another process saved since then goes
-    // back as it was; that is the window every `--option` write has always had.
+    // The live values, not a fresh read of the files. On disk the id is blanked and kept in
+    // `enc_id`, and the secrets are encrypted in place; only each type's own loader turns either
+    // back into what the running code uses. Sent as read from disk, the service would install an
+    // empty id and mint a new one, and would take the secrets as ciphertext.
+    // What `get()` returns is this process's in-memory copy, loaded on first use, so a value
+    // another process saved between that load and this send goes back as it was. That window is
+    // narrow but it is not the one an `--option` write has: that replaces only the options map,
+    // while this replaces the service's whole config. Closing it needs a scoped message here.
     c.send(&Data::SyncConfig(Some(
         (Config::get(), Config2::get()).into(),
     )))
