@@ -226,8 +226,8 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # path that jitters, every DATA chunk asks for its SACK at once so a lost tail is back within an
 # RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "cc6633bc240936b4973a3a30b12dad02d9a57f3f" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "cc6633bc240936b4973a3a30b12dad02d9a57f3f" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "2b8e55bcbf0ebfd465d6c34d698d4ccc5315a956" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "2b8e55bcbf0ebfd465d6c34d698d4ccc5315a956" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
