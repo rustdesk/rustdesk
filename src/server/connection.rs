@@ -1668,6 +1668,7 @@ impl Connection {
             return true;
         };
         if pf.multiplex {
+            crate::port_forward_mux::cap_packet_size(&mut self.stream);
             // `inner.tx` is set for the connection's whole life; `None` here is
             // unreachable, and refusing the login is the only honest answer.
             self.port_forward_mux = self.inner.tx.clone().map(|tx| {

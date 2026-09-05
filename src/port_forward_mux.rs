@@ -22,6 +22,11 @@ pub const INITIAL_WINDOW: u32 = 64 * 1024;
 pub const MIN_FRAME_CHARGE: u32 = 64;
 pub const CHANNEL_WINDOW: u32 = 256 * 1024;
 pub const MAX_FRAME: usize = 64 * 1024;
+/// Cap on one framed packet once the tunnel is up: a `MAX_FRAME` data frame,
+/// its protobuf envelope and the 16-byte MAC fit with room to spare. The codec
+/// otherwise takes a header declaring up to 1 GiB, and the channel window is
+/// only checked once the whole packet has arrived.
+pub const MAX_PACKET: usize = 2 * MAX_FRAME;
 pub const UPDATE_THRESHOLD: u32 = CHANNEL_WINDOW / 2;
 pub const MAX_CHANNELS: usize = 256;
 pub const DATA_QUEUE_FRAMES: usize = 128;
@@ -32,6 +37,14 @@ pub const MAX_SEND_CREDIT: u32 = CHANNEL_WINDOW;
 
 pub fn effective_window(advertised: u32) -> u32 {
     advertised.max(INITIAL_WINDOW)
+}
+
+/// For a tunnel's stream once multiplexing is agreed, on both sides. The
+/// WebSocket and WebRTC codecs carry caps of their own.
+pub fn cap_packet_size(stream: &mut hbb_common::Stream) {
+    if let hbb_common::Stream::Tcp(s) = stream {
+        s.0.codec_mut().set_max_packet_length(MAX_PACKET);
+    }
 }
 
 /// What a `data` frame of this length costs its channel's window.
@@ -466,7 +479,8 @@ mod tunnel {
             }
         }
 
-        pub fn set_muxed(&self, stream: Stream, interface: impl Interface) -> Arc<TunnelHandle> {
+        pub fn set_muxed(&self, mut stream: Stream, interface: impl Interface) -> Arc<TunnelHandle> {
+            cap_packet_size(&mut stream);
             let (data_tx, data_rx) = mpsc::channel(DATA_QUEUE_FRAMES);
             let (control_tx, control_rx) = mpsc::unbounded_channel();
             let handle = Arc::new(TunnelHandle {
@@ -1148,6 +1162,29 @@ mod tests {
             let a = TcpStream::connect(addr).await.unwrap();
             let (b, _) = l.accept().await.unwrap();
             (a, b)
+        }
+
+        #[test]
+        fn a_packet_declared_over_the_cap_ends_the_tunnel_before_it_arrives() {
+            rt().block_on(async {
+                use std::time::{Duration, Instant};
+                let (ours, mut theirs) = local_pair().await;
+                let addr = ours.peer_addr().unwrap();
+                let t = Tunnel::new();
+                t.claim();
+                let _h = t.set_muxed(Stream::Tcp(FramedStream::from(ours, addr)), NoUi::default());
+                assert!(matches!(t.claim(), Claim::Muxed(_)));
+                // The codec's three-byte header form, declaring one byte more
+                // than the cap, and nothing behind it: an uncapped codec waits
+                // for the whole packet and the tunnel stays up.
+                let head = ((MAX_PACKET as u32 + 1) << 2) | 0x2;
+                theirs.write_all(&head.to_le_bytes()[..3]).await.unwrap();
+                let deadline = Instant::now() + Duration::from_secs(2);
+                while !matches!(t.claim(), Claim::Claimed) {
+                    assert!(Instant::now() < deadline, "tunnel still up: the oversized header was accepted");
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            });
         }
 
         #[test]
