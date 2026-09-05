@@ -1087,9 +1087,6 @@ impl Connection {
             }
         }
         video_service::notify_video_frame_fetched_by_conn_id(id, None);
-        if conn.authorized {
-            password::update_temporary_password();
-        }
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false).await;
             raii::AuthedConnID::check_remove_session(conn.inner.id(), conn.session_key());
@@ -1747,6 +1744,10 @@ impl Connection {
             return false;
         }
         self.authorized = true;
+        // One-time means gone once it has let a peer in, not once that peer
+        // leaves. This session's later logins come in on the password the
+        // session remembers, so they are not affected.
+        password::update_temporary_password();
         // Releases the budget `check_id_whitelist` charges against this address: only a peer
         // that got this far proved more than a self-reported id.
         self.clear_id_whitelist_failures();
