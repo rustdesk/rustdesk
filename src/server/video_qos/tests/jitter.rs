@@ -5,7 +5,7 @@ fn abr_session() -> VideoQoS {
     qos.new_display("test".to_owned());
     qos.set_support_changing_quality("test", true);
     qos.store_bitrate(4000);
-    qos.adjust_ratio_instant = Instant::now() - Duration::from_secs(4);
+    qos.advance_ms(4000);
     qos
 }
 
@@ -28,14 +28,14 @@ fn bitrate_reduction_precedes_ordinary_fps_reduction() {
 #[test]
 fn bitrate_cooldown_defers_ordinary_fps_reduction() {
     let mut qos = abr_session();
-    qos.adjust_ratio_instant = Instant::now();
+    qos.adjust_ratio_instant = qos.now();
     let ratio = qos.ratio();
     for _ in 0..3 {
         qos.user_network_delay(1, 400);
         assert_eq!(qos.fps(), FPS);
         assert_eq!(qos.ratio(), ratio);
     }
-    qos.adjust_ratio_instant = Instant::now() - Duration::from_secs(4);
+    qos.advance_ms(4000);
     qos.user_network_delay(1, 400);
     assert_eq!(qos.fps(), FPS);
     assert!(qos.ratio() < ratio);
@@ -65,7 +65,7 @@ fn unavailable_abr_or_minimum_bitrate_does_not_prevent_fps_reduction() {
 #[test]
 fn severe_delay_and_timeout_bypass_bitrate_cooldown() {
     let mut qos = abr_session();
-    qos.adjust_ratio_instant = Instant::now();
+    qos.adjust_ratio_instant = qos.now();
     qos.user_network_delay(1, 1200);
     assert_eq!(qos.fps(), 15);
     qos.user_delay_response_elapsed(1, 2500);

@@ -174,6 +174,8 @@ pub struct VideoQoS {
     adjust_ratio_instant: Instant,
     abr_config: bool,
     new_user_instant: Instant,
+    #[cfg(test)]
+    test_now: Option<Instant>,
 }
 
 impl Default for VideoQoS {
@@ -187,7 +189,29 @@ impl Default for VideoQoS {
             adjust_ratio_instant: Instant::now(),
             abr_config: true,
             new_user_instant: Instant::now(),
+            #[cfg(test)]
+            test_now: None,
         }
+    }
+}
+
+// Clock; tests drive a virtual clock so timing is deterministic.
+impl VideoQoS {
+    fn now(&self) -> Instant {
+        #[cfg(test)]
+        if let Some(now) = self.test_now {
+            return now;
+        }
+        Instant::now()
+    }
+
+    fn since(&self, instant: Instant) -> Duration {
+        self.now().saturating_duration_since(instant)
+    }
+
+    #[cfg(test)]
+    fn advance_ms(&mut self, ms: u64) {
+        self.test_now = Some(self.now() + Duration::from_millis(ms));
     }
 }
 
@@ -249,7 +273,7 @@ impl VideoQoS {
     pub fn on_connection_open(&mut self, id: i32) {
         self.users.insert(id, UserData::default());
         self.abr_config = Config::get_option("enable-abr") != "N";
-        self.new_user_instant = Instant::now();
+        self.new_user_instant = self.now();
     }
 
     // Clean up user session
@@ -403,7 +427,7 @@ impl VideoQoS {
             self.adjust_ratio(false);
         }
         if reduce_bitrate
-            && self.adjust_ratio_instant.elapsed().as_secs() >= ADJUST_RATIO_INTERVAL as u64
+            && self.since(self.adjust_ratio_instant).as_secs() >= ADJUST_RATIO_INTERVAL as u64
         {
             self.adjust_ratio(false);
         }
@@ -438,7 +462,7 @@ impl VideoQoS {
         self.adjust_fps();
         let abr_enabled = self.in_vbr_state();
         if abr_enabled {
-            if self.adjust_ratio_instant.elapsed().as_secs() >= ADJUST_RATIO_INTERVAL as u64 {
+            if self.since(self.adjust_ratio_instant).as_secs() >= ADJUST_RATIO_INTERVAL as u64 {
                 let dynamic_screen = self
                     .displays
                     .iter()
@@ -504,7 +528,7 @@ impl VideoQoS {
                 .values()
                 .any(|u| u.delay.needs_bitrate_reduction())
         {
-            self.adjust_ratio_instant = Instant::now();
+            self.adjust_ratio_instant = self.now();
             return;
         }
 
@@ -604,7 +628,7 @@ impl VideoQoS {
             }
         }
         self.ratio = v.clamp(min, max);
-        self.adjust_ratio_instant = Instant::now();
+        self.adjust_ratio_instant = self.now();
     }
 
     // Adjust fps based on network delay and user response time
@@ -625,7 +649,7 @@ impl VideoQoS {
         }
 
         // For new connections (within 1 second), cap fps to INIT_FPS to ensure stability
-        if self.new_user_instant.elapsed().as_secs() < 1 {
+        if self.since(self.new_user_instant).as_secs() < 1 {
             if fps > INIT_FPS {
                 fps = INIT_FPS;
             }
@@ -699,10 +723,8 @@ mod tests {
     use super::*;
 
     fn stable_qos() -> VideoQoS {
-        let mut qos = VideoQoS {
-            new_user_instant: Instant::now() - Duration::from_secs(2),
-            ..Default::default()
-        };
+        let mut qos = VideoQoS::default();
+        qos.advance_ms(2000);
         qos.users.insert(1, UserData::default());
         for _ in 0..12 {
             qos.user_network_delay(1, 10);
@@ -780,5 +802,6 @@ mod tests {
     }
 
     mod jitter;
+    mod sim;
     mod smoke;
 }
