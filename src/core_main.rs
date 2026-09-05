@@ -538,6 +538,76 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if args[0] == "--headless-display" {
+            #[cfg(all(target_os = "linux", feature = "headless-display"))]
+            {
+                use crate::virtual_display_manager::linux as headless;
+                use headless::OPTION_ALLOW_HEADLESS_DISPLAY as KEY;
+                match args.get(1).map(String::as_str) {
+                    // Read-only, so it needs no privilege: every connector's status is world
+                    // readable. The option comes over IPC like `--option` does, because the value
+                    // that matters is the one the running server has, not this process's copy.
+                    Some("status") | None => {
+                        let enabled = hbb_common::config::option2bool(
+                            KEY,
+                            crate::ipc::get_options()
+                                .get(KEY)
+                                .map_or("", |v| v.as_str()),
+                        );
+                        print!("{}", headless::status_text(enabled));
+                    }
+                    Some(verb @ ("enable" | "disable")) => {
+                        if is_cli_setting_change_disabled() {
+                            println!("Settings are disabled!");
+                        } else if verb == "enable" && !headless::is_supported() {
+                            // Disabling must always be possible: with DRM temporarily gone the
+                            // setting would otherwise stay armed and re-fire when DRM returns.
+                            println!("No DRM connectors on this machine!");
+                        } else if crate::platform::is_installed() && is_root() {
+                            // Only the option is set here. Forcing the connector is the root
+                            // service's job.
+                            let want = if verb == "enable" { "Y" } else { "N" };
+                            crate::ipc::set_option(KEY, want);
+                            // `set_option` swallows a failed send, and `set_options` only writes the
+                            // local config after that send succeeds - so a failure here would leave
+                            // the old value in place and the push below would hand the service a
+                            // value nobody asked for. Read it back instead of assuming.
+                            if config::Config::get_option(KEY) != want {
+                                println!("Could not save the setting!");
+                                return None;
+                            }
+                            // ... but on the machine this feature is FOR, that is not enough.
+                            // `ipc::set_option` talks to the user `--server`, and a box with no
+                            // display has no seat0 session, so there is no `--server` to talk to:
+                            // the call quietly falls back to rewriting this process's config file,
+                            // while the running root service keeps the config it read at startup
+                            // and never notices. So hand it to the service directly, over the one
+                            // channel that exists for exactly this and accepts exactly this
+                            // message.
+                            match crate::ipc::sync_config_to_service() {
+                                Ok(()) => println!("Done!"),
+                                Err(err) => println!(
+                                    "Saved, but the running service did not pick it up ({err}); \
+                                     restart it to apply."
+                                ),
+                            }
+                        } else {
+                            println!("Installation and administrative privileges required!");
+                        }
+                    }
+                    Some(other) => {
+                        println!("Unknown argument {other}; expected enable, disable or status")
+                    }
+                }
+                return None;
+            }
+            // Gating the `else if` itself would drop the flag through to the end of the chain and
+            // launch the UI, so the arm stays and only its answer changes.
+            #[cfg(not(all(target_os = "linux", feature = "headless-display")))]
+            {
+                println!("Headless display support is not compiled in!");
+                std::process::exit(1);
+            }
         } else if args[0] == "--assign" {
             if config::Config::no_register_device() {
                 println!("Cannot assign an unregistrable device!");
@@ -884,6 +954,7 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--option")
             | Some("--assign")
             | Some("--deploy")
+            | Some("--headless-display")
     )
 }
 
@@ -931,6 +1002,7 @@ mod tests {
             "--option",
             "--assign",
             "--deploy",
+            "--headless-display",
         ] {
             assert!(is_user_main_ipc_scope_cli_command(&args(&[command])));
         }

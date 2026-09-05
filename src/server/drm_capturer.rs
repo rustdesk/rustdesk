@@ -983,6 +983,30 @@ static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
+/// First moment a hotplug refresh reported an empty topology; None while displays exist.
+static EMPTY_TOPOLOGY_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+/// A monitor unplug opens a measured 5-7 s zero-display gap before the headless force (or the
+/// compositor) restores scanout; demoting inside it hands a live session to the PipeWire portal,
+/// which a headless box can never answer.
+const EMPTY_TOPOLOGY_DEMOTE_AFTER: Duration = Duration::from_secs(10);
+
+/// True once the empty topology has outlived the settle window; records the first sighting.
+fn empty_topology_ready(since: &mut Option<Instant>, window: Duration) -> bool {
+    match *since {
+        Some(t) => t.elapsed() >= window,
+        None => {
+            *since = Some(Instant::now());
+            false
+        }
+    }
+}
+
+/// A non-empty observation retires the debounce clock. Callers must hold no `DRM_STATE` guard:
+/// `swap_available_displays` takes that lock first, so the two must never nest.
+fn clear_empty_topology_clock() {
+    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+}
+
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -1191,6 +1215,10 @@ fn probe_and_publish() -> Availability {
         }
     };
     drop(st);
+    // A successful probe is a non-empty observation, so it retires any pending debounce clock.
+    if answer == Availability::Available {
+        clear_empty_topology_clock();
+    }
     answer
 }
 
@@ -1234,6 +1262,7 @@ fn refresh_unavailable_async() {
                     DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
                     drop(st);
+                    clear_empty_topology_clock();
                     scrap::wayland::display::clear_wayland_displays_cache();
                 }
                 _ => {
@@ -1284,14 +1313,23 @@ fn refresh_available_async() {
                         _ => true,
                     };
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                    drop(st);
+                    // A restored list must also clear the empty-debounce clock, or the NEXT
+                    // empty push demotes instantly off a stale first-sighting. Racing a hotplug
+                    // empty push in the gap is benign (its recheck re-arms within a TTL) and the
+                    // gap is what keeps the two locks un-nested - do not move this under st.
+                    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
                     if changed {
-                        drop(st);
                         scrap::wayland::display::clear_wayland_displays_cache();
                     }
                 }
                 RefreshOutcome::Unavailable => {
-                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
-                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    // Through the shared debounce, DRM_STATE dropped first (the two locks never
+                    // nest): the refresh path must not demote faster than the hotplug path does.
+                    // A publish landing in the gap is re-read by swap under its own lock and the
+                    // worst case is one spurious first-sighting - benign, so no gen re-check.
+                    drop(st);
+                    swap_available_displays(Vec::new());
                 }
                 // Only the TTL stamp moves, so this does NOT go through publish_probe_state.
                 RefreshOutcome::Restamp => {
@@ -1336,6 +1374,11 @@ pub(super) fn warm_availability() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
                 publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                // Warm-up runs detached, so an empty probe can have armed the clock while it was
+                // querying. Retiring it AFTER the publish is what covers that: an empty observation
+                // from before this Available cannot be allowed to time out against it. The guard
+                // above is a temporary, so no lock is held here.
+                clear_empty_topology_clock();
                 return;
             }
             _ => std::thread::sleep(Duration::from_millis(300)),
@@ -1379,6 +1422,7 @@ pub(super) async fn refresh_displays_for_login() {
                     _ => return,
                 }
             };
+            clear_empty_topology_clock();
             if changed {
                 scrap::wayland::display::clear_wayland_displays_cache();
             }
@@ -1665,16 +1709,106 @@ fn normalize_connector(name: &str) -> String {
     }
 }
 
+/// A debounce clock armed before the verdict it would demote belongs to a topology that has since
+/// been proven non-empty. Every publisher of a non-empty topology retires the clock, but that is
+/// four call sites remembering; this makes a missed one cost a settle window rather than an
+/// immediate demote.
+fn clock_predates_verdict(armed_at: Option<Instant>, available_since: Option<Instant>) -> bool {
+    match (armed_at, available_since) {
+        (Some(armed), Some(available)) => armed < available,
+        _ => false,
+    }
+}
+
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
+    // Read and released before the clock lock is taken: the two must never nest, and the order
+    // everywhere else is clock first.
+    let available_since = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(at, _) => Some(*at),
+        _ => None,
+    };
+    // The empty debounce is resolved before DRM_STATE is taken so the two locks never nest.
+    let empty_outlived_window = if list.is_empty() {
+        let mut since = EMPTY_TOPOLOGY_SINCE.lock().unwrap();
+        if clock_predates_verdict(*since, available_since) {
+            *since = None;
+        }
+        let was_first = since.is_none();
+        let ready = empty_topology_ready(&mut *since, EMPTY_TOPOLOGY_DEMOTE_AFTER);
+        if was_first {
+            // A single empty push may be the last event a dead topology ever sends, so re-ask
+            // after the window instead of waiting for a hotplug that may never come.
+            schedule_empty_topology_recheck();
+        }
+        ready
+    } else {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+        false
+    };
     let mut st = DRM_STATE.lock().unwrap();
-    if matches!(&*st, ProbeState::Available(..)) {
-        if list.is_empty() {
-            log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-        } else {
-            log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+    let mut demoted = false;
+    match &*st {
+        ProbeState::Available(at, _) => {
+            // The verdict sampled above can have been replaced while the clock was being
+            // resolved: a non-empty publisher can install a newer Available in between, and an
+            // empty push that then acted on the OLD verdict's clock would demote the new one and
+            // clearing the clock afterwards would not bring it back. Only the verdict that was
+            // sampled may be demoted.
+            let same_verdict = available_since == Some(*at);
+            if list.is_empty() {
+                if empty_outlived_window && same_verdict {
+                    log::info!("drm: topology empty past the settle window, marking DRM unavailable");
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    demoted = true;
+                } else if !same_verdict {
+                    log::info!("drm: hotplug refresh -> 0 displays; a newer verdict landed meanwhile, keeping it");
+                } else {
+                    log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
+                }
+            } else {
+                log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+                publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+            }
+        }
+        // A hotplug that finds displays lifts a negative verdict, which is the rule
+        // `refresh_unavailable_async` already documents: only a non-empty list flips it. Without this
+        // arm the verdict could only be revised by that TTL re-probe, so a topology that went empty
+        // for an instant and came back cost the session the whole NEGATIVE_TTL on the portal even
+        // though the correct list had already arrived. A modeset takes long enough after a connector
+        // reports itself that the enumeration in between genuinely sees nothing.
+        ProbeState::Unavailable(..) if !list.is_empty() => {
+            log::info!(
+                "drm: hotplug refresh -> {} display(s), DRM is available again",
+                list.len()
+            );
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
+        _ => {}
+    }
+    drop(st);
+    // A landed demote retires its clock (locks never nest, so after DRM_STATE drops): recovery
+    // can arrive through publishers that know nothing of the debounce, and a stale first-sighting
+    // would make the NEXT transient empty demote instantly.
+    if demoted {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+    }
+}
+
+fn schedule_empty_topology_recheck() {
+    let spawned = std::thread::Builder::new()
+        .name("drm-empty-recheck".into())
+        .spawn(|| {
+            std::thread::sleep(EMPTY_TOPOLOGY_DEMOTE_AFTER + Duration::from_millis(200));
+            if EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none() {
+                return;
+            }
+            match query_displays() {
+                Ok(list) => swap_available_displays(list),
+                Err(err) => log::debug!("drm: empty-topology recheck failed: {err}"),
+            }
+        });
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the empty-topology recheck: {err}");
     }
 }
 
@@ -2369,6 +2503,31 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+    }
+
+    #[test]
+    fn a_clock_armed_before_the_current_verdict_cannot_demote_it() {
+        let armed = Instant::now();
+        let available = armed + Duration::from_millis(1);
+        assert!(clock_predates_verdict(Some(armed), Some(available)));
+        // Armed while this verdict already stood: it is about the current topology.
+        assert!(!clock_predates_verdict(Some(available), Some(armed)));
+        assert!(!clock_predates_verdict(None, Some(available)));
+        // Nothing to be stale against.
+        assert!(!clock_predates_verdict(Some(armed), None));
+    }
+
+    #[test]
+    fn an_empty_topology_blip_does_not_demote() {
+        // The unplug-to-force gap, measured at 5-7 s on the RPi5: the first empty sighting only
+        // starts the clock, and inside the window the verdict must hold.
+        let mut since = None;
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        assert!(since.is_some(), "the first sighting must start the clock");
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        // Past the window the same state demotes.
+        since = Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
     }
 
     #[test]

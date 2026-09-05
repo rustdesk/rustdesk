@@ -15,6 +15,8 @@ mod ipc_drm;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub use ipc_drm::{start_drm, DmabufDesc, DrmDisplayInfo};
 #[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) use ipc_drm::{begin_held_connector_probe, drm_capture_active};
+#[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::DrmConn;
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) use ipc_drm::connect_drm;
@@ -1876,6 +1878,36 @@ pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
         c.next_timeout(1000).await.ok();
     }
     Config::set_options(value);
+    Ok(())
+}
+
+/// Push this process's config into the running root service.
+///
+/// `set_options` reaches the user `--server`, which then syncs to root on its own. That leaves out
+/// the case where there is no `--server` at all: the root service keeps its config in memory from
+/// startup, so a change made by a root CLI would sit in the config file unread until a restart.
+/// `SyncConfig` is the only message the protected `_service` channel accepts, and root is an allowed
+/// peer on it, so this is the same operation the user server performs, from the other side.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn sync_config_to_service() -> ResultType<()> {
+    let mut c = connect_service(1000).await?;
+    // The live values, not a fresh read of the files. On disk the id is blanked and kept in
+    // `enc_id`, and the secrets are encrypted in place; only each type's own loader turns either
+    // back into what the running code uses. Sent as read from disk, the service would install an
+    // empty id and mint a new one, and would take the secrets as ciphertext.
+    // What `get()` returns is this process's in-memory copy, loaded on first use, so a value
+    // another process saved between that load and this send goes back as it was. That window is
+    // narrow but it is not the one an `--option` write has: that replaces only the options map,
+    // while this replaces the service's whole config. Closing it needs a scoped message here.
+    c.send(&Data::SyncConfig(Some(
+        (Config::get(), Config2::get()).into(),
+    )))
+    .await?;
+    // The service acks a pushed config with SyncConfig(None); anything else did not apply it.
+    if !matches!(c.next_timeout(1000).await?, Some(Data::SyncConfig(None))) {
+        bail!("unexpected reply from the service");
+    }
     Ok(())
 }
 
