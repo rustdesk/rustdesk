@@ -48,6 +48,7 @@ pub struct Capturer {
     duplication: ComPtr<IDXGIOutputDuplication>,
     fastlane: bool,
     surface: ComPtr<IDXGISurface>,
+    readable: ComPtr<ID3D11Texture2D>,
     texture: ComPtr<ID3D11Texture2D>,
     width: usize,
     height: usize,
@@ -163,6 +164,7 @@ impl Capturer {
             duplication: ComPtr(duplication),
             fastlane: desc.DesktopImageInSystemMemory == TRUE,
             surface: ComPtr(ptr::null_mut()),
+            readable: ComPtr(ptr::null_mut()),
             texture: ComPtr(ptr::null_mut()),
             width: display.width() as usize,
             height: display.height() as usize,
@@ -346,19 +348,19 @@ impl Capturer {
         if self.fastlane {
             wrap_hresult((*self.duplication.0).MapDesktopSurface(&mut rect))?;
         } else {
-            self.surface = ComPtr(self.ohgodwhat(frame.0)?);
+            self.ohgodwhat(frame.0)?;
             wrap_hresult((*self.surface.0).Map(&mut rect, DXGI_MAP_READ))?;
         }
         Ok((rect.pBits, rect.Pitch))
     }
 
     // copy from GPU memory to system memory
-    unsafe fn ohgodwhat(&mut self, frame: *mut IDXGIResource) -> io::Result<*mut IDXGISurface> {
+    unsafe fn ohgodwhat(&mut self, frame: *mut IDXGIResource) -> io::Result<()> {
         let mut texture: *mut ID3D11Texture2D = ptr::null_mut();
-        (*frame).QueryInterface(
+        wrap_hresult((*frame).QueryInterface(
             &IID_ID3D11Texture2D,
             &mut texture as *mut *mut _ as *mut *mut _,
-        );
+        ))?;
         let texture = ComPtr(texture);
 
         #[allow(invalid_value)]
@@ -370,24 +372,37 @@ impl Capturer {
         texture_desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
         texture_desc.MiscFlags = 0;
 
-        let mut readable = ptr::null_mut();
-        wrap_hresult((*self.device.0).CreateTexture2D(
-            &mut texture_desc,
-            ptr::null(),
-            &mut readable,
-        ))?;
-        (*readable).SetEvictionPriority(DXGI_RESOURCE_PRIORITY_MAXIMUM);
-        let readable = ComPtr(readable);
+        // Avoid per-frame staging texture allocation and the kernel allocation churn it causes.
+        let mut current: D3D11_TEXTURE2D_DESC = mem::zeroed();
+        if !self.surface.is_null() {
+            (*self.readable.0).GetDesc(&mut current);
+        }
+        if current.Width != texture_desc.Width
+            || current.Height != texture_desc.Height
+            || current.Format != texture_desc.Format
+        {
+            let mut readable = ptr::null_mut();
+            wrap_hresult((*self.device.0).CreateTexture2D(
+                &mut texture_desc,
+                ptr::null(),
+                &mut readable,
+            ))?;
+            (*readable).SetEvictionPriority(DXGI_RESOURCE_PRIORITY_MAXIMUM);
+            let readable = ComPtr(readable);
 
-        let mut surface = ptr::null_mut();
-        (*readable.0).QueryInterface(
-            &IID_IDXGISurface,
-            &mut surface as *mut *mut _ as *mut *mut _,
-        );
+            let mut surface = ptr::null_mut();
+            wrap_hresult((*readable.0).QueryInterface(
+                &IID_IDXGISurface,
+                &mut surface as *mut *mut _ as *mut *mut _,
+            ))?;
 
-        (*self.context.0).CopyResource(readable.0 as *mut _, texture.0 as *mut _);
+            self.readable = readable;
+            self.surface = ComPtr(surface);
+        }
 
-        Ok(surface)
+        (*self.context.0).CopyResource(self.readable.0 as *mut _, texture.0 as *mut _);
+
+        Ok(())
     }
 
     pub fn frame<'a>(&'a mut self, timeout: UINT) -> io::Result<Frame<'a>> {
@@ -485,10 +500,10 @@ impl Capturer {
             }
 
             let mut texture: *mut ID3D11Texture2D = ptr::null_mut();
-            (*frame.0).QueryInterface(
+            wrap_hresult((*frame.0).QueryInterface(
                 &IID_ID3D11Texture2D,
                 &mut texture as *mut *mut _ as *mut *mut _,
-            );
+            ))?;
             let texture = ComPtr(texture);
             self.texture = texture;
 
