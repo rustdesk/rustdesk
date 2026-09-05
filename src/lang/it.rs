@@ -761,12 +761,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continua"),
         ("Browser didn't open? Use the url below to sign in.", "Il browser non si è aperto? Usa l'URL qui sotto per accedere."),
         ("Lock canvas", "Blocca tela"),
-        ("Sync clipboard between sessions", "Sincronizza gli appunti tra le sessioni"),
+        ("Sync clipboard between sessions", "Sincronizza appunti tra le sessioni"),
         ("sync-clipboard-between-sessions-tip", "Il testo o le immagini copiati in una sessione remota vengono inviati anche agli appunti delle altre sessioni connesse."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Un'app nel terminale vuole copiare il testo negli appunti di questo dispositivo. Se concessa, questa autorizzazione si applica alle app terminali in tutte le connessioni finché non la disattivi in Impostazioni. Le operazioni di copia e incolla manuali non sono interessate."),
+        ("Allow terminal apps to copy to clipboard", "Consenti alle app terminali di copiare negli appunti"),
         ("Enable", "Abilita"),
-        ("Reuse one connection for port forwarding", "Riutilizza una sola connessione per l'inoltro delle porte"),
-        ("port-forward-mux-tip", "Fa passare tutte le connessioni di un inoltro di porte su un'unica connessione verso il dispositivo remoto, invece di connettersi e autenticarsi di nuovo per ognuna."),
+        ("Reuse one connection for port forwarding", "Per l'inoltro delle porte riusa una sola connessione "),
+        ("port-forward-mux-tip", "Fa passare tutte le connessioni di un inoltro porte in un'unica connessione verso il dispositivo remoto, invece di connettersi e autenticarsi di nuovo per ognuna."),
     ].iter().cloned().collect();
 }
