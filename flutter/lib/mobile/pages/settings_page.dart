@@ -97,10 +97,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _hideNetwork = false;
   var _hideWebSocket = false;
   var _enableTrustedDevices = false;
+  var _enableTcpPunch = false;
   var _enableUdpPunch = false;
   var _allowInsecureTlsFallback = false;
   var _disableUdp = false;
   var _enableIpv6Punch = false;
+  var _enableWebrtc = false;
   var _isUsingPublicServer = false;
   var _allowAskForNoteAtEndOfConnection = false;
   var _preventSleepWhileConnected = true;
@@ -141,8 +143,10 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         bind.mainGetBuildinOption(key: kOptionHideWebSocketSetting) == 'Y' ||
             isWeb;
     _enableTrustedDevices = mainGetBoolOptionSync(kOptionEnableTrustedDevices);
+    _enableTcpPunch = mainGetLocalBoolOptionSync(kOptionEnableTcpPunch);
     _enableUdpPunch = mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
     _enableIpv6Punch = mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+    _enableWebrtc = mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
     _allowAskForNoteAtEndOfConnection =
         mainGetLocalBoolOptionSync(kOptionAllowAskForNoteAtEndOfConnection);
     _preventSleepWhileConnected =
@@ -817,29 +821,63 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(
+              title: Text(translate('Enable TCP hole punching')),
+              initialValue: _enableTcpPunch,
+              onToggle: isOptionFixed(kOptionEnableTcpPunch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableTcpPunch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableTcpPunch);
+                      setState(() {
+                        _enableTcpPunch = newValue;
+                      });
+                    },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
               title: Text(translate('Enable UDP hole punching')),
               initialValue: _enableUdpPunch,
-              onToggle: (v) async {
-                await mainSetLocalBoolOption(kOptionEnableUdpPunch, v);
-                final newValue =
-                    mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
-                setState(() {
-                  _enableUdpPunch = newValue;
-                });
-              },
+              onToggle: isOptionFixed(kOptionEnableUdpPunch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableUdpPunch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableUdpPunch);
+                      setState(() {
+                        _enableUdpPunch = newValue;
+                      });
+                    },
             ),
           if (!incomingOnly)
             SettingsTile.switchTile(
               title: Text(translate('Enable IPv6 P2P connection')),
               initialValue: _enableIpv6Punch,
-              onToggle: (v) async {
-                await mainSetLocalBoolOption(kOptionEnableIpv6Punch, v);
-                final newValue =
-                    mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
-                setState(() {
-                  _enableIpv6Punch = newValue;
-                });
-              },
+              onToggle: isOptionFixed(kOptionEnableIpv6Punch)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableIpv6Punch, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableIpv6Punch);
+                      setState(() {
+                        _enableIpv6Punch = newValue;
+                      });
+                    },
+            ),
+          if (!incomingOnly)
+            SettingsTile.switchTile(
+              title: Text(translate('Enable WebRTC P2P connection')),
+              initialValue: _enableWebrtc,
+              onToggle: isOptionFixed(kOptionEnableWebrtc)
+                  ? null
+                  : (v) async {
+                      await mainSetLocalBoolOption(kOptionEnableWebrtc, v);
+                      final newValue =
+                          mainGetLocalBoolOptionSync(kOptionEnableWebrtc);
+                      setState(() {
+                        _enableWebrtc = newValue;
+                      });
+                    },
             ),
           SettingsTile(
               title: Text(translate('Language')),

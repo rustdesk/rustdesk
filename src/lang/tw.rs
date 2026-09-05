@@ -768,5 +768,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "啟用"),
         ("Reuse one connection for port forwarding", "連接埠轉送重複使用同一條連線"),
         ("port-forward-mux-tip", "同一條連接埠轉送規則上的所有連線共用一條到對方的連線，而不是每條連線都重新連線並登入一次。"),
+        ("Enable WebRTC P2P connection", "啟用 WebRTC P2P 連線"),
+        ("Enable TCP hole punching", "啟用 TCP 打洞"),
     ].iter().cloned().collect();
 }

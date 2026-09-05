@@ -52,7 +52,7 @@ screencapturekit = ["cpal/screencapturekit"]
 [dependencies]
 async-trait = "0.1"
 scrap = { path = "libs/scrap", features = ["wayland"] }
-hbb_common = { path = "libs/hbb_common" }
+hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
 serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -83,7 +83,7 @@ fon = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 stunclient = "0.4"
-kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
+kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys", branch = "rustdesk-patches" }
 reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
@@ -215,6 +215,19 @@ exclude = ["vdi/host"]
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+# One branch off upstream v0.13.0, the tag whose crate versions match this stack.
+# webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
+# one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows.
+# webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
+# and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
+# IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
+# a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
+# Sending that way, a reordering window keeps a chunk that is merely late from being resent on a
+# path that jitters, every DATA chunk asks for its SACK at once so a lost tail is back within an
+# RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU.
+# Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "48100bf13e694d7e5bbb49b9a753dbad1c359d0c" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "48100bf13e694d7e5bbb49b9a753dbad1c359d0c" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
@@ -234,6 +247,7 @@ os-version = "0.2"
 [dev-dependencies]
 hound = "3.5"
 docopt = "1.1"
+tokio = { version = "1.44", features = ["test-util"] }
 
 [package.metadata.bundle]
 name = "RustDesk"

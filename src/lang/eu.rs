@@ -768,5 +768,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable", "Gaitu"),
         ("Reuse one connection for port forwarding", "Berrerabili konexio bakarra portuen birbideratzerako"),
         ("port-forward-mux-tip", "Portu-birbideratze baten konexio guztiak beste ordenagailurako konexio bakar batetik eramaten ditu, bakoitzerako berriro konektatu eta saioa hasi beharrean."),
+        ("Enable WebRTC P2P connection", "Gaitu WebRTC P2P konexioa"),
+        ("Enable TCP hole punching", "Gaitu TCP zulo-egitea"),
     ].iter().cloned().collect();
 }

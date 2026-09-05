@@ -768,6 +768,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("sync-clipboard-between-sessions-tip", "ایک ریموٹ سیشن میں کاپی کیا گیا متن یا تصاویر آپ کے دیگر منسلک سیشنز کے کلپ بورڈ پر بھی بھیجی جاتی ہیں۔"),
         ("Reuse one connection for port forwarding", "پورٹ فارورڈنگ کے لیے ایک ہی کنکشن دوبارہ استعمال کریں"),
         ("port-forward-mux-tip", "ایک پورٹ فارورڈنگ کے تمام کنکشن دوسرے کمپیوٹر کے ساتھ بنے ایک ہی کنکشن سے گزرتے ہیں، ہر ایک کے لیے دوبارہ منسلک ہو کر لاگ اِن کرنے کے بجائے۔"),
+        ("Enable WebRTC P2P connection", "WebRTC P2P کنکشن کو فعال کریں"),
+        ("Enable TCP hole punching", "TCP ہول پنچنگ کو فعال کریں"),
     ].iter().cloned().collect();
 }
 
