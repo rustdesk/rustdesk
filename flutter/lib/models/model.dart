@@ -3790,6 +3790,14 @@ class FFI {
     ffiModel.waitForImageDialogShow.value = true;
     ffiModel.waitForImageTimer?.cancel();
     ffiModel.waitForImageTimer = null;
+    // `close()` already resets the gesture state, but it is not guaranteed to
+    // run: the remote page's dispose() can be suspended before reaching it if
+    // the app is backgrounded (see RemotePage.dispose). Repeat it here —
+    // `start()` calls mobileReset() before `sessionAddSync` — so the reused
+    // InputModel cannot carry a latched trackpad gesture, or a pan send queued
+    // against the previous connection, into the new one.
+    inputModel.resetTrackpadGestureState();
+    inputModel.invalidateQueuedPanEvents();
   }
 
   /// Start with the given [id]. Only transfer file if [isFileTransfer], only view camera if [isViewCamera], only port forward if [isPortForward].
@@ -4083,6 +4091,7 @@ class FFI {
     // Dispose relative mouse mode resources to ensure cursor is restored
     inputModel.disposeRelativeMouseMode();
     inputModel.disposeSideButtonTracking();
+    inputModel.resetTrackpadGestureState();
     if (closeSession) {
       await bind.sessionClose(sessionId: sessionId);
     }

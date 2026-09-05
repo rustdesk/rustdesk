@@ -533,25 +533,30 @@ class _RawTouchGestureDetectorRegionState
   makeGestures(BuildContext context) {
     return <Type, GestureRecognizerFactory>{
       // Official
-      TapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-              () => TapGestureRecognizer(), (instance) {
+      IgnoreDeviceTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<IgnoreDeviceTapGestureRecognizer>(
+              () => IgnoreDeviceTapGestureRecognizer(), (instance) {
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onTapDown = onTapDown
           ..onTapUp = onTapUp
           ..onTap = onTap;
       }),
-      DoubleTapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
-              () => DoubleTapGestureRecognizer(), (instance) {
+      IgnoreDeviceDoubleTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<
+                  IgnoreDeviceDoubleTapGestureRecognizer>(
+              () => IgnoreDeviceDoubleTapGestureRecognizer(), (instance) {
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onDoubleTapDown = onDoubleTapDown
           ..onDoubleTap = onDoubleTap;
       }),
-      LongPressGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-              () => LongPressGestureRecognizer(), (instance) {
+      IgnoreDeviceLongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<
+                  IgnoreDeviceLongPressGestureRecognizer>(
+              () => IgnoreDeviceLongPressGestureRecognizer(), (instance) {
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onLongPressDown = onLongPressDown
           ..onLongPressUp = onLongPressUp
           ..onLongPress = onLongPress
@@ -562,6 +567,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
               () => HoldTapMoveGestureRecognizer(),
               (instance) => instance
+                ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
                 ..onHoldDragStart = onHoldDragStart
                 ..onHoldDragUpdate = onHoldDragUpdate
                 ..onHoldDragCancel = onHoldDragCancel
@@ -570,6 +576,7 @@ class _RawTouchGestureDetectorRegionState
           GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
               () => DoubleFinerTapGestureRecognizer(), (instance) {
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onDoubleFinerTap = onDoubleFinerTap
           ..onDoubleFinerTapDown = onDoubleFinerTapDown;
       }),
@@ -579,6 +586,7 @@ class _RawTouchGestureDetectorRegionState
         instance.onOneFingerPanStart =
             (DragStartDetails d) => onOneFingerPanStart(context, d);
         instance
+          ..ignoredDeviceIdOf = (() => inputModel.trackpadHoverDeviceId)
           ..onOneFingerPanUpdate = onOneFingerPanUpdate
           ..onOneFingerPanEnd = onOneFingerPanEnd
           ..onOneFingerPanCancel = onOneFingerPanCancel
@@ -622,6 +630,7 @@ class RawPointerMouseRegion extends StatelessWidget {
         onPointerUp?.call(evt);
         inputModel.onPointUpImage(evt);
       },
+      onPointerCancel: inputModel.onPointCancelImage,
       onPointerMove: inputModel.onPointMoveImage,
       onPointerSignal: inputModel.onPointerSignalImage,
       onPointerPanZoomStart: inputModel.onPointerPanZoomStart,
