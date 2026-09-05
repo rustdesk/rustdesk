@@ -222,9 +222,12 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
 # IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
 # a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
+# Sending that way, a reordering window keeps a chunk that is merely late from being resent on a
+# path that jitters, every DATA chunk asks for its SACK at once so a lost tail is back within an
+# RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "825a0a4862818f74406d8e1cc25be72259228235" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "825a0a4862818f74406d8e1cc25be72259228235" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "cc6633bc240936b4973a3a30b12dad02d9a57f3f" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "cc6633bc240936b4973a3a30b12dad02d9a57f3f" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
