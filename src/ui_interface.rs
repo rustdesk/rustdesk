@@ -747,13 +747,14 @@ pub fn current_is_wayland() -> bool {
 
 #[inline]
 pub fn get_new_version() -> String {
-    (*SOFTWARE_UPDATE_URL
+    SOFTWARE_UPDATE_URL
         .lock()
         .unwrap()
+        .trim_end_matches('/')
         .rsplit('/')
         .next()
-        .unwrap_or(""))
-    .to_string()
+        .unwrap_or("")
+        .to_owned()
 }
 
 #[inline]
