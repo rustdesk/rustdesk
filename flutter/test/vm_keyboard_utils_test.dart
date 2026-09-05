@@ -159,33 +159,62 @@ void main() {
       );
     });
 
-    test('keeps a physical modifier held across a VM soft-key stroke', () {
-      final vmEvents = vmKeyEventsForStroke(
-        const VmKeyStroke(0x06),
-        ctrl: true,
-        shift: false,
-        alt: false,
-        command: false,
-        ctrlAlreadyDown: true,
-      );
+    for (final modifier in [
+      vmLeftControlUsbHid,
+      vmLeftShiftUsbHid,
+      vmLeftAltUsbHid,
+      vmLeftGuiUsbHid,
+    ]) {
+      test('keeps physical modifier $modifier held across VM input', () {
+        final vmEvents = vmKeyEventsForStroke(
+          const VmKeyStroke(0x06),
+          ctrl: modifier == vmLeftControlUsbHid,
+          shift: modifier == vmLeftShiftUsbHid,
+          alt: modifier == vmLeftAltUsbHid,
+          command: modifier == vmLeftGuiUsbHid,
+          ctrlAlreadyDown: modifier == vmLeftControlUsbHid,
+          shiftAlreadyDown: modifier == vmLeftShiftUsbHid,
+          altAlreadyDown: modifier == vmLeftAltUsbHid,
+          commandAlreadyDown: modifier == vmLeftGuiUsbHid,
+        );
 
-      final completeSequence = [
-        const VmKeyEvent(vmLeftControlUsbHid, true),
-        ...vmEvents,
-        const VmKeyEvent(0x1B, true),
-        const VmKeyEvent(0x1B, false),
-        const VmKeyEvent(vmLeftControlUsbHid, false),
-      ];
+        final completeSequence = [
+          VmKeyEvent(modifier, true),
+          ...vmEvents,
+          const VmKeyEvent(0x1B, true),
+          const VmKeyEvent(0x1B, false),
+          VmKeyEvent(modifier, false),
+        ];
 
+        expect(
+          completeSequence,
+          [
+            VmKeyEvent(modifier, true),
+            const VmKeyEvent(0x06, true),
+            const VmKeyEvent(0x06, false),
+            const VmKeyEvent(0x1B, true),
+            const VmKeyEvent(0x1B, false),
+            VmKeyEvent(modifier, false),
+          ],
+        );
+      });
+    }
+
+    test('synthesizes toolbar Shift while physical Ctrl stays held', () {
       expect(
-        completeSequence,
+        vmKeyEventsForStroke(
+          const VmKeyStroke(0x06),
+          ctrl: true,
+          shift: true,
+          alt: false,
+          command: false,
+          ctrlAlreadyDown: true,
+        ),
         const [
-          VmKeyEvent(vmLeftControlUsbHid, true),
+          VmKeyEvent(vmLeftShiftUsbHid, true),
           VmKeyEvent(0x06, true),
           VmKeyEvent(0x06, false),
-          VmKeyEvent(0x1B, true),
-          VmKeyEvent(0x1B, false),
-          VmKeyEvent(vmLeftControlUsbHid, false),
+          VmKeyEvent(vmLeftShiftUsbHid, false),
         ],
       );
     });
