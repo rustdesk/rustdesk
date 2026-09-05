@@ -52,6 +52,7 @@ struct UserDelay {
     rtt_calculator: RttCalculator,
     quick_increase_fps_count: usize,
     increase_fps_count: usize,
+    congestion_score: usize,
 }
 
 impl UserDelay {
@@ -61,6 +62,41 @@ impl UserDelay {
             self.delay_history.pop_front();
         }
         self.delay_history.push_back(delay);
+    }
+
+    fn limit_fps_change(&mut self, current_fps: u32, fps: u32, delay: u32) -> u32 {
+        // A spike stays in the average for several samples; confirm congestion with fresh samples.
+        let delay = delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default());
+        if delay >= DELAY_THRESHOLD_150MS {
+            self.congestion_score = (self.congestion_score + 2).min(6);
+        } else {
+            self.congestion_score = self.congestion_score.saturating_sub(1);
+        }
+        if fps >= current_fps {
+            return if delay >= DELAY_THRESHOLD_150MS {
+                current_fps
+            } else {
+                fps.min(current_fps + current_fps / 10 + 1)
+            };
+        }
+        // An extra second of delay cannot wait for another confirmation.
+        if delay < 1000 && (delay < DELAY_THRESHOLD_150MS || self.congestion_score < 4) {
+            return current_fps;
+        }
+        let divisor = if delay >= 1000 || (delay >= 600 && self.congestion_score == 6) {
+            2
+        } else {
+            5
+        };
+        fps.max(current_fps.saturating_sub((current_fps / divisor).max(1)))
+    }
+
+    fn avg_delay_for_fps(&self) -> u32 {
+        if self.delay_history.is_empty() {
+            return DELAY_THRESHOLD_150MS;
+        }
+        let avg_delay = self.delay_history.iter().sum::<u32>() / self.delay_history.len() as u32;
+        avg_delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default())
     }
 
     // Average delay minus RTT
@@ -262,9 +298,9 @@ impl VideoQoS {
         let mut adjust_ratio = false;
         if let Some(user) = self.users.get_mut(&id) {
             let delay = delay.max(10);
-            let old_avg_delay = user.delay.avg_delay();
+            let old_avg_delay = user.delay.avg_delay_for_fps();
             user.delay.add_delay(delay);
-            let mut avg_delay = user.delay.avg_delay();
+            let mut avg_delay = user.delay.avg_delay_for_fps();
             avg_delay = avg_delay.max(10);
             let mut fps = self.fps;
 
@@ -321,6 +357,7 @@ impl VideoQoS {
                 user.delay.quick_increase_fps_count = 0;
             }
 
+            fps = user.delay.limit_fps_change(self.fps, fps, delay);
             fps = fps.clamp(MIN_FPS, highest_fps);
             // first network delay message
             adjust_ratio = user.delay.fps.is_none();
@@ -592,4 +629,90 @@ impl RttCalculator {
         }
         None
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stable_qos() -> VideoQoS {
+        let mut qos = VideoQoS {
+            new_user_instant: Instant::now() - Duration::from_secs(2),
+            ..Default::default()
+        };
+        qos.users.insert(1, UserData::default());
+        for _ in 0..12 {
+            qos.user_network_delay(1, 10);
+        }
+        assert_eq!(qos.fps(), FPS);
+        qos
+    }
+
+    #[test]
+    fn isolated_delay_spike_does_not_lower_fps() {
+        let mut qos = stable_qos();
+        for delay in [800, 10, 10, 10] {
+            qos.user_network_delay(1, delay);
+            assert_eq!(qos.fps(), FPS);
+        }
+    }
+
+    #[test]
+    fn occasional_spikes_do_not_accumulate_congestion() {
+        let mut qos = stable_qos();
+        for delay in [800, 10, 10].repeat(20) {
+            qos.user_network_delay(1, delay);
+            assert_eq!(qos.fps(), FPS);
+        }
+    }
+
+    #[test]
+    fn sustained_delay_reduces_fps_gradually() {
+        let mut qos = stable_qos();
+        for expected_fps in [30, 24, 12, 6, 3] {
+            qos.user_network_delay(1, 800);
+            assert_eq!(qos.fps(), expected_fps);
+        }
+    }
+
+    #[test]
+    fn response_timeout_still_limits_fps() {
+        let mut qos = stable_qos();
+        qos.user_delay_response_elapsed(1, 2001);
+        assert_eq!(qos.fps(), MIN_FPS + 1);
+    }
+
+    #[test]
+    fn severe_delay_does_not_wait_for_another_reply() {
+        let mut qos = stable_qos();
+        qos.user_network_delay(1, 1200);
+        assert_eq!(qos.fps(), 15);
+    }
+
+    #[test]
+    fn response_timeout_recovers_gradually() {
+        let mut qos = stable_qos();
+        qos.user_delay_response_elapsed(1, 3000);
+        qos.user_network_delay(1, 3200);
+        assert!(qos.fps() <= 2);
+        qos.user_delay_response_elapsed(1, 0);
+        for _ in 0..3 {
+            qos.user_network_delay(1, 10);
+            assert!(qos.fps() <= 4);
+        }
+        for _ in 0..30 {
+            qos.user_network_delay(1, 10);
+        }
+        assert_eq!(qos.fps(), FPS);
+    }
+
+    #[test]
+    fn custom_fps_limit_applies_during_delay_spike() {
+        let mut qos = stable_qos();
+        qos.user_custom_fps(1, 12);
+        qos.user_network_delay(1, 800);
+        assert_eq!(qos.fps(), 12);
+    }
+
+    mod smoke;
 }
