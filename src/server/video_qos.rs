@@ -19,7 +19,8 @@ b. TestDelay reply => update the user's fps from the excess delay, the reply's d
    a floor: bitrate-targeted encoders do not send fewer bytes at fewer frames.
 c. probe outstanding for more than two seconds => halve the fps for every further
    second, down to MIN_FPS + 1; the late reply does not reduce again
-d. second timeout / TestDelay reply => real fps is the minimum over all users
+d. second timeout / TestDelay reply => real fps is the minimum over all users;
+   every user adapts from its own target, never from that minimum
 
 ratio adjust:
 a. user set image quality => update to the maximum ratio of the latest quality
@@ -390,7 +391,10 @@ impl VideoQoS {
             user.delay.add_delay(delay);
             let mut avg_delay = user.delay.avg_delay();
             avg_delay = avg_delay.max(10);
-            let mut fps = self.fps;
+            // Each viewer adapts from its own target.  The stream follows the slowest
+            // viewer in adjust_fps; that minimum must not feed back into the others.
+            let current_fps = user.delay.fps.unwrap_or(self.fps);
+            let mut fps = current_fps;
 
             // Adaptive FPS adjustment based on network delay:
             if avg_delay < 50 {
@@ -451,7 +455,7 @@ impl VideoQoS {
             }
             fps = user
                 .delay
-                .limit_fps_change(self.fps, fps, delay, bitrate_first, braked);
+                .limit_fps_change(current_fps, fps, delay, bitrate_first, braked);
             reduce_bitrate = bitrate_first
                 && user.delay.needs_bitrate_reduction()
                 && user.delay.replies_after_bitrate_reduction.is_none();
