@@ -18,6 +18,7 @@ import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'input_modifier_utils.dart';
 import 'relative_mouse_model.dart';
+import 'vm_keyboard_utils.dart';
 import '../common.dart';
 import '../consts.dart';
 
@@ -299,6 +300,17 @@ class ToReleaseKeys {
   KeyEvent? lastRCommandKeyEvent;
   KeyEvent? lastSuperKeyEvent;
 
+  bool get hasCtrlKeyDown =>
+      lastLCtrlKeyEvent != null || lastRCtrlKeyEvent != null;
+  bool get hasShiftKeyDown =>
+      lastLShiftKeyEvent != null || lastRShiftKeyEvent != null;
+  bool get hasAltKeyDown =>
+      lastLAltKeyEvent != null || lastRAltKeyEvent != null;
+  bool get hasCommandKeyDown =>
+      lastLCommandKeyEvent != null ||
+      lastRCommandKeyEvent != null ||
+      lastSuperKeyEvent != null;
+
   reset() {
     lastLShiftKeyEvent = null;
     lastRShiftKeyEvent = null;
@@ -407,6 +419,9 @@ class InputModel {
 
   final WeakReference<FFI> parent;
   String keyboardMode = '';
+  // Physical US-key input is opt-in because normal host input should keep its
+  // Unicode and IME behavior.
+  bool vmKeyboardMode = false;
 
   // keyboard
   var shift = false;
@@ -633,7 +648,7 @@ class InputModel {
       if (!alt) {
         alt = true;
       }
-      toReleaseKeys.lastLAltKeyEvent = upEvent(e);
+      toReleaseKeys.lastRAltKeyEvent = upEvent(e);
     } else if (e.logicalKey == LogicalKeyboardKey.controlLeft) {
       if (!ctrl) {
         ctrl = true;
@@ -1038,6 +1053,46 @@ class InputModel {
         ctrl: ctrl,
         shift: shift,
         command: command);
+  }
+
+  /// Sends supported iOS soft-keyboard text as physical US-layout keys in VM
+  /// mode. The guest keyboard layout must be US-compatible.
+  /// Returns false when the caller should use the normal text-input path.
+  bool inputVmKeyboardText(String text) {
+    if (!vmKeyboardMode ||
+        !isIOS ||
+        peerPlatform != kPeerPlatformWindows ||
+        !keyboardPerm ||
+        isViewCamera) {
+      return false;
+    }
+
+    final strokes = vmKeyStrokesForText(text);
+    if (strokes == null) return false;
+
+    void sendPhysicalKey(int usbHid, bool down) {
+      // Reuse the normal physical-key dispatch entry point. The sentinel only
+      // overrides the Rust-side keyboard mode for this explicit VM event.
+      newKeyboardMode('flutter_key_map', usbHid, down, false);
+    }
+
+    for (final stroke in strokes) {
+      final events = vmKeyEventsForStroke(
+        stroke,
+        ctrl: ctrl,
+        shift: shift,
+        alt: alt,
+        command: command,
+        ctrlAlreadyDown: toReleaseKeys.hasCtrlKeyDown,
+        shiftAlreadyDown: toReleaseKeys.hasShiftKeyDown,
+        altAlreadyDown: toReleaseKeys.hasAltKeyDown,
+        commandAlreadyDown: toReleaseKeys.hasCommandKeyDown,
+      );
+      for (final event in events) {
+        sendPhysicalKey(event.usbHid, event.down);
+      }
+    }
+    return true;
   }
 
   static Map<String, dynamic> getMouseEventMove() => {
