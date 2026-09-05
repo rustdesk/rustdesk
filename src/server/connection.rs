@@ -1661,7 +1661,7 @@ impl Connection {
     }
 
     async fn connect_port_forward_if_needed(&mut self) -> bool {
-        if self.port_forward_socket.is_some() {
+        if self.is_port_forward() {
             return true;
         }
         let Some(login_request::Union::PortForward(pf)) = self.lr.union.as_ref() else {
