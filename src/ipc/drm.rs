@@ -142,11 +142,11 @@ static DRM_DISPLAY_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic:
 fn drm_displays_from_reader(
     reader: &mut scrap::drm_reader::DrmReader,
     device: &str,
-) -> (Vec<DrmDisplayInfo>, Vec<String>) {
+) -> Option<(Vec<DrmDisplayInfo>, Vec<String>)> {
     let render_node = reader.render_node().unwrap_or_default();
     let mut undriven = Vec::new();
     let displays: Vec<DrmDisplayInfo> = reader
-        .displays()
+        .displays()?
         .into_iter()
         // Only outputs bound to a CRTC: a CONNECTED-but-unbound connector enumerates with
         // `crtc_id == 0`, and `open(crtc=0)` auto-selects the FIRST ACTIVE CRTC and streams ITS frames.
@@ -169,11 +169,76 @@ fn drm_displays_from_reader(
             device: device.to_owned(),
         })
         .collect();
-    (displays, undriven)
+    Some((displays, undriven))
+}
+
+/// What the enumeration can honestly claim. `enumerated` = at least one card COMPLETED a
+/// connector enumeration (an open alone proves nothing: drmtap_list_displays returns -errno on
+/// an open device whose resources cannot be read); `uninspected` = some visible card was skipped
+/// or failed, so an empty list does not prove absence.
+#[derive(Clone, Copy)]
+struct EnumerationTrust {
+    enumerated: bool,
+    uninspected: bool,
+}
+
+/// Card nodes that can DRIVE an output: a card with no `/sys/class/drm/cardN-*` connector
+/// directory (a render-only node like v3d or tegra) is display-incapable by construction, and
+/// counting it would keep absence unprovable forever on every split render/display SoC.
+/// `None` when the inventory could not be read, which is a different fact from zero cards.
+fn dri_display_cards() -> Option<std::collections::HashSet<String>> {
+    let rd = std::fs::read_dir("/sys/class/drm").ok()?;
+    let mut cards = std::collections::HashSet::new();
+    let mut with_connector = std::collections::HashSet::new();
+    for e in rd {
+        // A partial listing cannot bound the inventory, so it must not answer as if it did.
+        let e = e.ok()?;
+        let name = e.file_name().to_string_lossy().into_owned();
+        if let Some((card, _)) = name.split_once('-') {
+            if card.starts_with("card") {
+                with_connector.insert(card.to_owned());
+            }
+        } else if name.starts_with("card") && name[4..].chars().all(|c| c.is_ascii_digit()) {
+            cards.insert(name);
+        }
+    }
+    Some(cards.intersection(&with_connector).cloned().collect())
+}
+
+/// Whether every connector-bearing card sysfs knows of is among the devices libdrmtap handed
+/// back. Identities, not counts: `list_devices` returns every device with KMS resources, which
+/// includes connectorless ones, so a connectorless `card1` can make the counts equal while the
+/// `card0` that carries the display is missing - and a round that then enumerates `card1` cleanly
+/// with no displays would be taken as proof of absence.
+fn inventory_is_covered(sysfs_cards: &std::collections::HashSet<String>, device_paths: &[&str]) -> bool {
+    sysfs_cards.iter().all(|card| {
+        device_paths
+            .iter()
+            .any(|p| std::path::Path::new(p).file_name().and_then(|n| n.to_str()) == Some(card))
+    })
+}
+
+/// Whether `/dev/dri/cardN` has any sysfs connector: a failed open of a connector-less card says
+/// nothing about display presence.
+fn dev_card_has_connectors(path: &str) -> bool {
+    let Some(card) = std::path::Path::new(path).file_name().and_then(|n| n.to_str()) else {
+        return true;
+    };
+    let prefix = format!("{card}-");
+    std::fs::read_dir("/sys/class/drm")
+        .map(|mut rd| {
+            rd.any(|e| match e {
+                // An entry we could not read might BE this card's connector, and the answer this
+                // function owes is the conservative one: could this card drive an output.
+                Err(_) => true,
+                Ok(e) => e.file_name().to_string_lossy().starts_with(&prefix),
+            })
+        })
+        .unwrap_or(true)
 }
 
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
-fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
+fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, EnumerationTrust) {
     if let Some(devices) = scrap::drm_reader::list_devices() {
         if devices.len() > 1 {
             log::info!(
@@ -194,32 +259,57 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
         let mut all = Vec::new();
         let mut undriven_total = Vec::new();
         let mut any_opened = false;
+        // list_devices silently skips card nodes it cannot open, so absence is only proven when
+        // its list covers every card that could drive an output (render-only nodes are skipped
+        // by design and prove nothing). Covered by identity, see `inventory_is_covered`.
+        let device_paths: Vec<&str> = devices.iter().map(|d| d.path.as_str()).collect();
+        let mut uninspected = match dri_display_cards() {
+            Some(cards) => !inventory_is_covered(&cards, &device_paths),
+            None => true,
+        };
+        let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
                 any_opened = true;
-                let (mut got, mut undriven) = drm_displays_from_reader(&mut r, &dev.path);
-                all.append(&mut got);
-                undriven_total.append(&mut undriven);
-            } else if dev.display_count == 0 {
-                log::debug!(
-                    "drm: {} has no active display and did not open; cannot tell whether it has a \
-                     connected output that is merely switched off",
-                    dev.path
-                );
+                match drm_displays_from_reader(&mut r, &dev.path) {
+                    Some((mut got, mut undriven)) => {
+                        enumerated = true;
+                        all.append(&mut got);
+                        undriven_total.append(&mut undriven);
+                    }
+                    None => uninspected = true,
+                }
+            } else {
+                uninspected = true;
+                if dev.display_count == 0 {
+                    log::debug!(
+                        "drm: {} has no active display and did not open; cannot tell whether it has a \
+                         connected output that is merely switched off",
+                        dev.path
+                    );
+                }
             }
         }
         // Take this even when the list is EMPTY: the fallback re-keys identities under `device = ""`.
         if any_opened {
-            return (all, undriven_total);
+            return (all, undriven_total, EnumerationTrust { enumerated, uninspected });
         }
     }
     // Auto-detect alone is not enough: it picks a card that is SCANNING OUT. Measured on the T2 with
     // the panel idle-disabled it binds card0 (the Touch Bar); the panel on card2 is invisible to it.
     let mut all = Vec::new();
     let mut undriven_total = Vec::new();
+    let mut inventory_failed = false;
     let mut paths: Vec<std::path::PathBuf> = match std::fs::read_dir("/dev/dri") {
         Ok(rd) => rd
-            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter_map(|e| match e {
+                Ok(e) => Some(e.path()),
+                Err(err) => {
+                    log::debug!("drm: cannot read a /dev/dri entry: {err}");
+                    inventory_failed = true;
+                    None
+                }
+            })
             .filter(|p| {
                 p.file_name()
                     .and_then(|n| n.to_str())
@@ -228,18 +318,32 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
             .collect(),
         Err(err) => {
             log::debug!("drm: cannot read /dev/dri to enumerate cards: {err}");
+            // An inventory we could not read is not an empty one: the reader below can still
+            // auto-detect a card, and the siblings it never saw stay unaccounted for.
+            inventory_failed = true;
             Vec::new()
         }
     };
     // Deterministic order, so the display list does not depend on directory order.
     paths.sort();
     let n_paths = paths.len();
+    let mut uninspected = inventory_failed;
+    let mut enumerated = false;
     for p in paths {
         let Some(path) = p.to_str() else { continue };
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(path), 0) {
-            let (mut got, mut undriven) = drm_displays_from_reader(&mut r, path);
-            all.append(&mut got);
-            undriven_total.append(&mut undriven);
+            match drm_displays_from_reader(&mut r, path) {
+                Some((mut got, mut undriven)) => {
+                    enumerated = true;
+                    all.append(&mut got);
+                    undriven_total.append(&mut undriven);
+                }
+                // Measured on a split SoC (pi 5): the render-only node OPENS and fails here,
+                // so this arm needs the same connector filter as the failed-open one below.
+                None => uninspected |= dev_card_has_connectors(path),
+            }
+        } else if dev_card_has_connectors(path) {
+            uninspected = true;
         }
     }
     log::info!(
@@ -252,10 +356,19 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>) {
     if all.is_empty() && undriven_total.is_empty() {
         if let Some(mut r) = scrap::drm_reader::DrmReader::open(None, 0) {
             log::info!("drm: no card enumerated by path; falling back to the auto-detected reader");
-            return drm_displays_from_reader(&mut r, "");
+            if let Some((got, undriven)) = drm_displays_from_reader(&mut r, "") {
+                // The loop above already recorded every card it could not account for; the raw
+                // path count would re-add render-only siblings that prove nothing.
+                return (
+                    got,
+                    undriven,
+                    EnumerationTrust { enumerated: true, uninspected },
+                );
+            }
+            uninspected = true;
         }
     }
-    (all, undriven_total)
+    (all, undriven_total, EnumerationTrust { enumerated, uninspected })
 }
 
 /// Connectors a wake did NOT bring back. SELF-REFUTING: an entry later seen DRIVEN is removed.
@@ -386,9 +499,75 @@ fn drm_wake_displays(reason: &str) -> bool {
     true
 }
 
+
+/// Nothing plugged in at all is a different failure from a display that is merely asleep: there
+/// is no scanout now and there will not be one until an output exists, so capture silently falls
+/// back to the portal, which then asks for consent on a screen nobody can look at. Said on the
+/// edge rather than every poll.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+enum PresenceVerdict {
+    /// Nothing completed an enumeration; presence is unknowable this round.
+    Unknown,
+    /// Every inspected card is empty, but some card was skipped or failed: not proven absent.
+    UnprovenAbsence,
+    /// Every card enumerated and none has a display: the honest headless diagnosis.
+    NoOutput,
+    SomeOutput,
+}
+
+fn presence_verdict(any_display: bool, any_undriven: bool, trust: EnumerationTrust) -> PresenceVerdict {
+    if !trust.enumerated {
+        return PresenceVerdict::Unknown;
+    }
+    if any_display || any_undriven {
+        return PresenceVerdict::SomeOutput;
+    }
+    if trust.uninspected {
+        return PresenceVerdict::UnprovenAbsence;
+    }
+    PresenceVerdict::NoOutput
+}
+
+fn note_output_presence(displays: &[DrmDisplayInfo], undriven: &[String], trust: EnumerationTrust) {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    // One latch holding the LAST verdict, not per-state booleans: every transition between the
+    // four states is a different diagnosis and each deserves its line, exactly once.
+    static LAST: AtomicU8 = AtomicU8::new(u8::MAX);
+    let verdict = presence_verdict(!displays.is_empty(), !undriven.is_empty(), trust);
+    let prev = LAST.swap(verdict as u8, Ordering::Relaxed);
+    if prev == verdict as u8 {
+        return;
+    }
+    match verdict {
+        PresenceVerdict::Unknown => log::warn!(
+            "drm: no DRM device completed a connector enumeration, so display presence is \
+             unknown (each failure logged its own error above)"
+        ),
+        // Not the dummy-plug advice: an uninspected sibling card may be driving a display.
+        PresenceVerdict::UnprovenAbsence => log::warn!(
+            "drm: every card that could be enumerated reports no display, but at least one \
+             card could not be inspected; display presence is unknown"
+        ),
+        PresenceVerdict::NoOutput => log::warn!(
+            "drm: no connector reports a display, so this machine has no scanout to capture. \
+             Attach a display or a dummy plug; a headless box can also force a connector on \
+             (echo on > /sys/class/drm/<card>-<connector>/status)"
+        ),
+        PresenceVerdict::SomeOutput => {
+            // The very first verdict of the process being SomeOutput is the ordinary boot; only
+            // a RETURN to it closes an earlier warning.
+            if prev != u8::MAX {
+                log::info!("drm: an output is present again");
+            }
+        }
+    }
+}
+
 #[cfg(not(feature = "drm-wake"))]
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
-    let (displays, undriven) = drm_enumerate_all_displays();
+    let (displays, undriven, trust) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, trust);
     if !undriven.is_empty() {
         log::debug!(
             "drm: {} connected display(s) have no CRTC ({reason}); this build has no display wake",
@@ -404,7 +583,8 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     use std::sync::atomic::Ordering;
 
-    let (displays, undriven) = drm_enumerate_all_displays();
+    let (displays, undriven, trust) = drm_enumerate_all_displays();
+    note_output_presence(&displays, &undriven, trust);
     if !hbb_common::config::Config::get_bool_option(OPTION_ENABLE_DRM_DISPLAY_WAKE) {
         if !undriven.is_empty() {
             log::info!(
@@ -440,7 +620,7 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     let mut cur_wakeable = wakeable;
     while !cur_wakeable.is_empty() && std::time::Instant::now() < deadline {
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let (next, next_undriven) = drm_enumerate_all_displays();
+        let (next, next_undriven, _) = drm_enumerate_all_displays();
         cur_wakeable = drm_wakeable_undriven(&next, &next_undriven);
         cur = next;
     }
@@ -479,6 +659,28 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
     cur
 }
 
+/// Whether a refresh round may replace the cache. A round that could not inspect every card cannot
+/// prove a display is GONE, so one that drops a cached connector is refused; growth, and changes to
+/// a display that is still there, land. A real removal takes the node out of /dev/dri and sysfs
+/// together, so the counts fall in step and that round is not partial in the first place.
+///
+/// Identity is the card AND the connector name. Two LIVE connectors never share a name - the index
+/// comes from a per-type ida that is global to drm.ko, measured on a 3-card machine whose DP
+/// numbering ran 1..3 on one card and 4..7 on the next - but the cache and the fresh list are not
+/// contemporaneous: the kernel returns a name to that allocator when a connector goes, so between
+/// two rounds `DP-1` can come back on another card. Matching by name alone would call that the same
+/// display and swap it in, and the consumer keys on `(device, crtc_id)`, so its stream would end.
+fn round_may_replace_cache(
+    cache: &[DrmDisplayInfo],
+    fresh: &[DrmDisplayInfo],
+    uninspected: bool,
+) -> bool {
+    !uninspected
+        || cache
+            .iter()
+            .all(|c| fresh.iter().any(|f| f.name == c.name && f.device == c.device))
+}
+
 /// The SINGLE writer of DRM_DISPLAY_CACHE (+ DRM_DISPLAY_GENERATION), off the caller's thread and
 /// SINGLE-FLIGHT: a request arriving during a run coalesces into exactly one follow-up.
 fn schedule_drm_cache_refresh() {
@@ -514,18 +716,36 @@ fn schedule_drm_cache_refresh() {
         .name("drm-cache-refresh".into())
         .spawn(move || loop {
             PENDING.store(false, Ordering::Release);
-            let fresh = std::panic::catch_unwind(drm_enumerate_all_displays)
+            let (fresh, undriven, trust) = std::panic::catch_unwind(drm_enumerate_all_displays)
                 .unwrap_or_else(|_| {
                     log::error!("drm: display enumeration panicked; treating as no displays");
-                    (Vec::new(), Vec::new())
-                })
-                .0;
-            let changed = {
+                    (
+                        Vec::new(),
+                        Vec::new(),
+                        EnumerationTrust { enumerated: false, uninspected: true },
+                    )
+                });
+            // The hotplug edge reports presence too; the verdict latch keeps it idempotent
+            // across this worker and the handshake path.
+            note_output_presence(&fresh, &undriven, trust);
+            let changed = if !trust.enumerated {
+                // A round that measured nothing must not wipe a good cache: the stale topology
+                // beats an empty one that only means the measurement failed.
+                log::debug!("drm: keeping the cached topology through a failed enumeration");
+                false
+            } else {
                 let mut cache = match DRM_DISPLAY_CACHE.lock() {
                     Ok(g) => g,
                     Err(poisoned) => poisoned.into_inner(),
                 };
-                if *cache != fresh {
+                if !round_may_replace_cache(&cache, &fresh, trust.uninspected) {
+                    log::debug!(
+                        "drm: keeping {} cached display(s) through a partial enumeration ({} seen)",
+                        cache.len(),
+                        fresh.len()
+                    );
+                    false
+                } else if *cache != fresh {
                     *cache = fresh;
                     true
                 } else {
@@ -1473,6 +1693,99 @@ mod drm_conn_tests {
     use hbb_common::libc;
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+
+    #[test]
+    fn presence_is_only_proven_by_a_complete_enumeration() {
+        let complete = EnumerationTrust { enumerated: true, uninspected: false };
+        let partial = EnumerationTrust { enumerated: true, uninspected: true };
+        let nothing = EnumerationTrust { enumerated: false, uninspected: true };
+        assert_eq!(
+            presence_verdict(false, false, complete),
+            PresenceVerdict::NoOutput
+        );
+        assert_eq!(
+            presence_verdict(false, false, partial),
+            PresenceVerdict::UnprovenAbsence,
+            "a skipped card may be driving a display"
+        );
+        assert_eq!(presence_verdict(false, false, nothing), PresenceVerdict::Unknown);
+        assert_eq!(presence_verdict(true, false, partial), PresenceVerdict::SomeOutput);
+        assert_eq!(
+            presence_verdict(false, true, complete),
+            PresenceVerdict::SomeOutput,
+            "an undriven connector is still evidence of a display"
+        );
+    }
+
+    fn display(name: &str, width: u32) -> DrmDisplayInfo {
+        DrmDisplayInfo {
+            name: name.to_owned(),
+            crtc_id: 0,
+            x: 0,
+            y: 0,
+            width,
+            height: 1080,
+            active: true,
+            render_node: String::new(),
+            device: "/dev/dri/card1".to_owned(),
+        }
+    }
+
+    // rustdesk#15906: equal cardinality is not coverage. sysfs knows one connector-bearing card and
+    // libdrmtap returns one KMS device: only the same card counts.
+    #[test]
+    fn coverage_is_by_card_identity_not_by_count() {
+        let sysfs: std::collections::HashSet<String> = ["card0".to_owned()].into_iter().collect();
+        assert!(!inventory_is_covered(&sysfs, &["/dev/dri/card1"]));
+        assert!(inventory_is_covered(&sysfs, &["/dev/dri/card0"]));
+        assert!(inventory_is_covered(&sysfs, &["/dev/dri/card1", "/dev/dri/card0"]));
+        // Nothing to cover is covered, whatever came back.
+        let none: std::collections::HashSet<String> = Default::default();
+        assert!(inventory_is_covered(&none, &[]));
+        assert!(inventory_is_covered(&none, &["/dev/dri/card3"]));
+    }
+
+    // A round where one card answers and a sibling does not cannot prove the sibling's displays
+    // are gone. Refusing only a SHORTER list was not enough: the failing card can lose one while
+    // another gains one, and the count is unchanged.
+    #[test]
+    fn a_partial_round_may_not_drop_a_cached_display() {
+        let cache = [display("DP-1", 3840), display("HDMI-A-1", 1920)];
+
+        let shrunk = [display("DP-1", 3840)];
+        assert!(!round_may_replace_cache(&cache, &shrunk, true));
+        assert!(
+            round_may_replace_cache(&cache, &shrunk, false),
+            "a complete round measured the removal and must land"
+        );
+
+        let swapped = [display("DP-1", 3840), display("DP-4", 1280)];
+        assert!(!round_may_replace_cache(&cache, &swapped, true));
+
+        // Same connector NAME, another card. Between two rounds the kernel can hand `DP-1` back
+        // out, so a name-only match would accept this and the consumer, which keys on the card and
+        // the crtc, would see its display disappear.
+        let moved = [
+            DrmDisplayInfo {
+                device: "/dev/dri/card2".to_owned(),
+                ..display("DP-1", 3840)
+            },
+            display("HDMI-A-1", 1920),
+        ];
+        assert!(!round_may_replace_cache(&cache, &moved, true));
+
+        let grown = [
+            display("DP-1", 3840),
+            display("HDMI-A-1", 1920),
+            display("DP-4", 1280),
+        ];
+        assert!(round_may_replace_cache(&cache, &grown, true));
+
+        // A mode change on a display that is still there is not a loss, so a partial round must
+        // not freeze it out: uninspected can stay pinned true (an unreadable /sys/class/drm).
+        let resized = [display("DP-1", 2560), display("HDMI-A-1", 1920)];
+        assert!(round_may_replace_cache(&cache, &resized, true));
+    }
 
     // Added to the wire later: an older peer's message must still decode.
     #[test]

@@ -433,17 +433,24 @@ impl DrmReader {
         }
     }
 
-    pub fn displays(&mut self) -> Vec<DisplaySnapshot> {
+    /// `None` is an enumeration FAILURE (drmtap_list_displays returns -errno when
+    /// drmModeGetResources fails on an otherwise-open device); only `Some(empty)` means the
+    /// device truly reports no connector with a display.
+    pub fn displays(&mut self) -> Option<Vec<DisplaySnapshot>> {
         // SAFETY: ctx valid; raw is a zeroed, correctly-sized array; count is clamped to the buffer before indexing.
         unsafe {
             let mut raw = vec![std::mem::zeroed::<drmtap_display>(); 16];
             let cap = raw.len() as i32;
             let n = (self.lib.list_displays)(self.ctx, raw.as_mut_ptr(), cap);
-            if n <= 0 {
-                return Vec::new();
+            if n < 0 {
+                log::warn!("drmtap_list_displays failed ({n})");
+                return None;
+            }
+            if n == 0 {
+                return Some(Vec::new());
             }
             let count = (n as usize).min(raw.len());
-            (0..count)
+            let snaps = (0..count)
                 .map(|i| {
                     let name_bytes: Vec<u8> = raw[i]
                         .name
@@ -461,7 +468,8 @@ impl DrmReader {
                         active: raw[i].active != 0,
                     }
                 })
-                .collect()
+                .collect();
+            Some(snaps)
         }
     }
 }
