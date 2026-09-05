@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common/widgets/touch_mode_gesture_tracker.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,6 +74,66 @@ void main() {
       tracker.pointerDown(2);
 
       expect(tracker.sequence, sequence);
+    });
+
+    testWidgets('single taps work after a double tap wins the gesture arena',
+        (tester) async {
+      final tracker = TouchModeGestureTracker();
+      final callbacks = <String>[];
+      var clicks = 0;
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: Listener(
+          onPointerDown: (event) => tracker.pointerDown(event.pointer),
+          onPointerUp: (event) => tracker.pointerEnd(event.pointer),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) {
+              callbacks.add('down');
+              tracker.recordTapDown();
+            },
+            onTapCancel: () {
+              callbacks.add('cancel');
+              tracker.takeNextTapDown();
+            },
+            onTapUp: (_) async {
+              final sequence = tracker.takeNextTapDown();
+              if (sequence == null) return;
+              await handleTrackedTap(
+                tracker: tracker,
+                sequence: sequence,
+                move: () async => true,
+                sendTap: () async => clicks++,
+              );
+            },
+            onDoubleTap: () {
+              callbacks.add('double');
+              tracker.clearTapDowns();
+            },
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ));
+
+      final position = tester.getCenter(find.byType(GestureDetector));
+      // Hold each contact past the tap-down deadline. Flutter can then emit
+      // both tap-downs before the double-tap recognizer cancels only one tap.
+      for (var i = 0; i < 2; i++) {
+        final gesture = await tester.startGesture(position);
+        await tester.pump(kPressTimeout + const Duration(milliseconds: 1));
+        await gesture.up();
+        await tester.pump(kDoubleTapMinTime);
+      }
+      expect(callbacks, ['down', 'down', 'cancel', 'double']);
+      expect(clicks, 0);
+
+      // Both subsequent singles must be delivered; one successful tap is not
+      // enough to detect a queue that remains permanently one sequence behind.
+      for (var i = 1; i <= 2; i++) {
+        await tester.tapAt(position);
+        await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 1));
+        expect(clicks, i);
+      }
     });
   });
 }

@@ -277,6 +277,12 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    if (isIOS) {
+      // A double tap can emit two tap-downs but only one tap-cancel.
+      _touchModeGestureTracker.clearTapDowns();
+      _lastTapDownDetails = null;
+      _lastTapDownSequence = null;
+    }
     if (ffiModel.touchMode && ffi.cursorModel.lastIsBlocked) {
       return;
     }
