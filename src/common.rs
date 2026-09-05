@@ -2667,21 +2667,24 @@ pub async fn punch_udp(
     let mut recv_errors = 0u32;
     socket.send(&probe).await.ok();
     probes_sent += 1;
-    let mut last_send_time = Instant::now();
     let tm = Instant::now();
+    // Absolute instants, not relative sleeps: `select!` rebuilds every arm each iteration, so a
+    // peer that keeps the receive side ready restarts a relative timer before it can fire. That
+    // both defeats MAX_TIME and starves the retransmit, and the peer decides the rate - an
+    // old-build peer's empty datagrams match no arm below and loop without even a pause.
+    let deadline = tm + MAX_TIME;
+    let mut next_probe = tm + retry_interval;
 
     loop {
         tokio::select! {
-            _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
-                if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, {probes_sent} probes sent, {probes_seen} probes received, acked: {acked}, {recv_errors} recv errors absorbed");
-                }
-                if last_send_time.elapsed() >= retry_interval {
-                    socket.send(&probe).await.ok();
-                    probes_sent += 1;
-                    retry_interval = std::cmp::min(retry_interval.mul_f64(1.5), MAX_INTERVAL);
-                    last_send_time = Instant::now();
-                }
+            _ = tokio::time::sleep_until(deadline) => {
+                bail!("UDP punch is timed out, {probes_sent} probes sent, {probes_seen} probes received, acked: {acked}, {recv_errors} recv errors absorbed");
+            }
+            _ = tokio::time::sleep_until(next_probe) => {
+                socket.send(&probe).await.ok();
+                probes_sent += 1;
+                retry_interval = std::cmp::min(retry_interval.mul_f64(1.5), MAX_INTERVAL);
+                next_probe = Instant::now() + retry_interval;
             }
             res = socket.recv(&mut data) => match res {
                 Err(e) => {
@@ -2836,6 +2839,38 @@ mod tests {
             Instant::now() + Duration::from_secs(1),
             Duration::from_secs(1),
         )
+    }
+
+    // The deadline must hold against a peer that keeps the receive side ready. `select!` rebuilds
+    // its arms every iteration, so a relative sleep would be restarted by every datagram and the
+    // punch would run for as long as the peer keeps talking, with no outer timeout to stop it.
+    #[tokio::test]
+    async fn test_udp_punch_deadline_survives_a_talkative_peer() {
+        let a = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let b = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let (a_addr, b_addr) = (a.local_addr().unwrap(), b.local_addr().unwrap());
+        a.connect(b_addr).await.unwrap();
+        b.connect(a_addr).await.unwrap();
+        // Empty datagrams answer no probe and match no return branch, so they only feed the loop.
+        // Sent well past the punch deadline so a restarted timer would show up as a long run.
+        let flooder = tokio::spawn(async move {
+            let end = Instant::now() + Duration::from_secs(12);
+            while Instant::now() < end {
+                if b.send(&[]).await.is_err() {
+                    break;
+                }
+                sleep(Duration::from_millis(5)).await;
+            }
+        });
+        let start = Instant::now();
+        let res = punch_udp(Arc::new(a), false).await;
+        let elapsed = start.elapsed();
+        flooder.abort();
+        assert!(res.is_err(), "the punch should have timed out");
+        assert!(
+            elapsed < Duration::from_secs(6),
+            "the punch ran for {elapsed:?}; its deadline did not hold"
+        );
     }
 
     #[test]

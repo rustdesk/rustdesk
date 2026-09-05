@@ -943,6 +943,11 @@ impl RendezvousMediator {
         }
         let relay_server = self.get_relay_server(ph.relay_server);
         // for ensure, websocket go relay directly
+        // A symmetric NAT relays the legacy transports but deliberately not WebRTC: the answer
+        // built above rides along on the relay request, and ICE probes the candidate pairs rather
+        // than trusting this classification, so a direct WebRTC pair can still form on a
+        // connection this branch has already called relay-only. Do not gate the answerer on
+        // nat_type to make the two agree.
         if ph.nat_type.enum_value() == Ok(NatType::SYMMETRIC)
             || Config::get_nat_type() == NatType::SYMMETRIC as i32
             || relay
