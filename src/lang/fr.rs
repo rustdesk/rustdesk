@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Actuellement, la prise de capture d’écran ne prend pas en charge les affichages multiples. Veuillez réessayer après avoir sélectionné un seul affichage."),
         ("screenshot-action-tip", "Veuillez choisir l’action à effectuer avec la capture d’écran."),
         ("Save as", "Enregistrer sous"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Exporter"),
+        ("Export Logs", "Exporter les journaux"),
+        ("Import Folder", "Importer un dossier"),
         ("Copy to clipboard", "Copier dans le presse-papier"),
         ("Enable remote printer", "Activer l’impression à distance"),
         ("Downloading {}", "Téléchargement de {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Activer"),
+        ("Reuse one connection for port forwarding", "Réutiliser une seule connexion pour la redirection de ports"),
+        ("port-forward-mux-tip", "Faire passer toutes les connexions d'une redirection de ports par une seule connexion vers le pair, au lieu de se connecter et de s'authentifier à nouveau pour chacune."),
     ].iter().cloned().collect();
 }

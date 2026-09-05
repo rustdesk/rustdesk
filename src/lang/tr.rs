@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Birden fazla ekranın ekran görüntülerinin birleştirilmesi şu anda desteklenmiyor. Lütfen tek bir ekrana geçin ve tekrar deneyin."),
         ("screenshot-action-tip", "Lütfen ekran görüntüsüyle nasıl devam edeceğinizi seçin."),
         ("Save as", "Farklı kaydet"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Dışa aktar"),
+        ("Export Logs", "Günlükleri dışa aktar"),
+        ("Import Folder", "Klasör içe aktar"),
         ("Copy to clipboard", "Panoya kopyala"),
         ("Enable remote printer", "Uzak yazıcıyı etkinleştir"),
         ("Downloading {}", "{} indiriliyor"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Etkinleştir"),
+        ("Reuse one connection for port forwarding", "Port yönlendirme için tek bağlantıyı yeniden kullan"),
+        ("port-forward-mux-tip", "Bir port yönlendirmesindeki tüm bağlantıları, her biri için yeniden bağlanıp oturum açmak yerine karşı tarafa açılan tek bir bağlantı üzerinden taşır."),
     ].iter().cloned().collect();
 }

@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "啟用"),
+        ("Reuse one connection for port forwarding", "連接埠轉送重複使用同一條連線"),
+        ("port-forward-mux-tip", "同一條連接埠轉送規則上的所有連線共用一條到對方的連線，而不是每條連線都重新連線並登入一次。"),
     ].iter().cloned().collect();
 }

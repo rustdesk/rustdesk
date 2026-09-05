@@ -1944,6 +1944,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let key = crate::get_key(false).await;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
+        handler.lc.write().unwrap().port_forward_mux = crate::port_forward::mux_enabled();
         if handler.is_rdp() {
             let port = handler
                 .get_option("rdp_port".to_owned())

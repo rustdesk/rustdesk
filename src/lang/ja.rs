@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "複数のディスプレイのスクリーンショットの結合は、現在非対応です。単一のディスプレイに切り替えてもう一度お試しください。"),
         ("screenshot-action-tip", "スクリーンショットを続行する方法を選択してください。"),
         ("Save as", "保存先"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "エクスポート"),
+        ("Export Logs", "ログをエクスポート"),
+        ("Import Folder", "フォルダをインポート"),
         ("Copy to clipboard", "クリップボードにコピー"),
         ("Enable remote printer", "リモートプリンターを有効化する"),
         ("Downloading {}", "{} をダウンロード中"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "有効にする"),
+        ("Reuse one connection for port forwarding", "ポート転送で 1 つの接続を再利用する"),
+        ("port-forward-mux-tip", "1 つのポート転送のすべての接続を、相手への 1 本の接続にまとめます。接続ごとに接続とログインをやり直しません。"),
     ].iter().cloned().collect();
 }

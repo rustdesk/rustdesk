@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Menggabungkan tangkapan layar dari beberapa tampilan saat ini tidak didukung. Silakan beralih ke satu tampilan dan coba lagi."),
         ("screenshot-action-tip", "Silakan pilih cara melanjutkan dengan tangkapan layar."),
         ("Save as", "Simpan sebagai"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Ekspor"),
+        ("Export Logs", "Ekspor Log"),
+        ("Import Folder", "Impor Folder"),
         ("Copy to clipboard", "Salin ke papan klip"),
         ("Enable remote printer", "Aktifkan printer jarak jauh"),
         ("Downloading {}", "Mendownload {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Aktifkan"),
+        ("Reuse one connection for port forwarding", "Gunakan ulang satu koneksi untuk penerusan port"),
+        ("port-forward-mux-tip", "Menyalurkan semua koneksi dari satu penerusan port melalui satu koneksi ke perangkat lain, alih-alih menyambung dan masuk lagi untuk setiap koneksi."),
     ].iter().cloned().collect();
 }

@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Sammenfletning af skærmbilleder fra flere skærme understøttes ikke i øjeblikket. Skift venligst til en enkelt skærm og prøv igen."),
         ("screenshot-action-tip", "Vælg venligst, hvordan du vil fortsætte med skærmbilledet."),
         ("Save as", "Gem som"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Eksportér"),
+        ("Export Logs", "Eksportér logfiler"),
+        ("Import Folder", "Importér mappe"),
         ("Copy to clipboard", "Kopiér til udklipsholder"),
         ("Enable remote printer", "Aktivér fjernprinter"),
         ("Downloading {}", "Downloader {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Aktivér"),
+        ("Reuse one connection for port forwarding", "Genbrug én forbindelse til portvideresendelse"),
+        ("port-forward-mux-tip", "Fører alle forbindelser i en portvideresendelse gennem én enkelt forbindelse til modparten i stedet for at forbinde og logge ind igen for hver enkelt."),
     ].iter().cloned().collect();
 }

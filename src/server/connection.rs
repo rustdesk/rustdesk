@@ -257,6 +257,7 @@ pub struct Connection {
     view_camera: bool,
     terminal: bool,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
+    port_forward_mux: Option<super::port_forward_mux::PortForwardMux>,
     port_forward_address: String,
     tx_to_cm: mpsc::UnboundedSender<ipc::Data>,
     authorized: bool,
@@ -469,6 +470,7 @@ impl Connection {
             view_camera: false,
             terminal: false,
             port_forward_socket: None,
+            port_forward_mux: None,
             port_forward_address: "".to_owned(),
             tx_to_cm,
             authorized: false,
@@ -1645,7 +1647,7 @@ impl Connection {
         }
     }
 
-    fn normalize_port_forward_target(pf: &mut PortForward) -> (String, bool) {
+    pub(super) fn normalize_port_forward_target(pf: &mut PortForward) -> (String, bool) {
         let mut is_rdp = false;
         if pf.host == "RDP" && pf.port == 0 {
             pf.host = "localhost".to_owned();
@@ -1659,12 +1661,21 @@ impl Connection {
     }
 
     async fn connect_port_forward_if_needed(&mut self) -> bool {
-        if self.port_forward_socket.is_some() {
+        if self.is_port_forward() {
             return true;
         }
         let Some(login_request::Union::PortForward(pf)) = self.lr.union.as_ref() else {
             return true;
         };
+        if pf.multiplex {
+            crate::port_forward_mux::cap_packet_size(&mut self.stream);
+            // `inner.tx` is set for the connection's whole life; `None` here is
+            // unreachable, and refusing the login is the only honest answer.
+            self.port_forward_mux = self.inner.tx.clone().map(|tx| {
+                super::port_forward_mux::PortForwardMux::new(tx, self.port_forward_address.clone())
+            });
+            return self.port_forward_mux.is_some();
+        }
         let mut pf = pf.clone();
         let (mut addr, is_rdp) = Self::normalize_port_forward_target(&mut pf);
         self.port_forward_address = addr.clone();
@@ -1752,7 +1763,7 @@ impl Connection {
         self.clear_id_whitelist_failures();
         let (conn_type, auth_conn_type) = if self.file_transfer.is_some() {
             (1, AuthConnType::FileTransfer)
-        } else if self.port_forward_socket.is_some() {
+        } else if self.is_port_forward() {
             (2, AuthConnType::PortForward)
         } else if self.view_camera {
             (3, AuthConnType::ViewCamera)
@@ -1865,7 +1876,12 @@ impl Connection {
             pi.platform_additions = serde_json::to_string(&platform_additions).unwrap_or("".into());
         }
 
-        if self.port_forward_socket.is_some() {
+        if self.is_port_forward() {
+            pi.features = Some(Features {
+                port_forward_mux: self.port_forward_mux.is_some(),
+                ..Default::default()
+            })
+            .into();
             let mut msg_out = Message::new();
             res.set_peer_info(pi);
             msg_out.set_login_response(res);
@@ -2063,9 +2079,14 @@ impl Connection {
     #[inline]
     fn is_remote(&self) -> bool {
         self.file_transfer.is_none()
-            && self.port_forward_socket.is_none()
+            && !self.is_port_forward()
             && !self.view_camera
             && !self.terminal
+    }
+
+    #[inline]
+    fn is_port_forward(&self) -> bool {
+        self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
     }
 
     fn try_sub_monitor_services(&mut self) {
@@ -2209,6 +2230,16 @@ impl Connection {
     #[inline]
     fn send_to_cm(&mut self, data: ipc::Data) {
         self.tx_to_cm.send(data).ok();
+    }
+
+    fn handle_port_forward_channel(&mut self, ch: PortForwardChannel) {
+        let Some(mux) = self.port_forward_mux.as_mut() else {
+            log::debug!("port forward channel frame on a non-multiplexed connection");
+            return;
+        };
+        mux.handle(ch, || {
+            Self::permission(keys::OPTION_ENABLE_TUNNEL, &self.control_permissions)
+        });
     }
 
     #[inline]
@@ -2576,11 +2607,13 @@ impl Connection {
                 let PortForward {
                     host,
                     port,
+                    multiplex,
                     special_fields: _,
                 } = pf;
                 push(b"port_forward");
                 push(host.as_bytes());
                 push(&port.to_le_bytes());
+                push(&[*multiplex as u8]);
             }
             // Variants this build does not know execute as remote, so they latch as remote.
             None | Some(_) => push(b"remote"),
@@ -3865,6 +3898,7 @@ impl Connection {
                         self.refresh_video_display(Some(request.display as usize));
                     }
                 }
+                Some(message::Union::PortForwardChannel(ch)) => self.handle_port_forward_channel(ch),
                 Some(message::Union::TerminalAction(action)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     allow_err!(self.handle_terminal_action(action).await);
@@ -5074,6 +5108,9 @@ impl Connection {
         let data = ipc::Data::Close;
         self.tx_to_cm.send(data).ok();
         self.port_forward_socket.take();
+        if let Some(mut mux) = self.port_forward_mux.take() {
+            mux.close_all();
+        }
     }
 
     // The `reason` should be consistent with `check_if_retry` if not empty
@@ -5675,7 +5712,7 @@ impl Connection {
         let allowed = match conn_type {
             AuthConnType::Remote => true,
             AuthConnType::FileTransfer => Self::is_file_transfer_scoped_message(msg),
-            AuthConnType::PortForward => false,
+            AuthConnType::PortForward => Self::is_port_forward_scoped_message(msg),
             AuthConnType::ViewCamera => Self::is_view_camera_scoped_message(msg),
             AuthConnType::Terminal => Self::is_terminal_scoped_message(msg),
         };
@@ -5747,6 +5784,13 @@ impl Connection {
         #[cfg(not(windows))]
         let _ = misc;
         false
+    }
+
+    fn is_port_forward_scoped_message(msg: &Message) -> bool {
+        matches!(
+            msg.union.as_ref(),
+            Some(message::Union::PortForwardChannel(_))
+        )
     }
 
     fn is_terminal_scoped_message(msg: &Message) -> bool {
@@ -5899,6 +5943,7 @@ impl Connection {
             Some(message::Union::ScreenshotResponse(_)) => "screenshot_response",
             Some(message::Union::TerminalAction(_)) => "terminal_action",
             Some(message::Union::TerminalResponse(_)) => "terminal_response",
+            Some(message::Union::PortForwardChannel(_)) => "port_forward_channel",
             Some(message::Union::Misc(misc)) => Self::misc_message_family(misc),
             Some(_) => "message.other",
             None => "empty",
@@ -7228,6 +7273,10 @@ mod test {
                         }),
                         Some("misc.option"),
                     ),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
+                        Some("port_forward_channel"),
+                    ),
                 ],
             ),
             (
@@ -7288,6 +7337,10 @@ mod test {
                             o.disable_audio = BoolOption::Yes.into();
                         }),
                         Some("misc.option"),
+                    ),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
+                        Some("port_forward_channel"),
                     ),
                 ],
             ),
@@ -7387,6 +7440,10 @@ mod test {
                             o.supported_decoding =
                                 hbb_common::protobuf::MessageField::some(Default::default())
                         }),
+                        None,
+                    ),
+                    (
+                        msg(|m| m.set_port_forward_channel(PortForwardChannel::new())),
                         None,
                     ),
                 ],

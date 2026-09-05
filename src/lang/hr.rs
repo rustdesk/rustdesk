@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Spajanje snimaka zaslona s više zaslona trenutačno nije podržano. Prebacite se na jedan zaslon i pokušajte ponovno."),
         ("screenshot-action-tip", "Odaberite kako nastaviti sa snimkom zaslona."),
         ("Save as", "Spremi kao"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Izvoz"),
+        ("Export Logs", "Izvoz zapisnika"),
+        ("Import Folder", "Uvoz mape"),
         ("Copy to clipboard", "Kopiraj u međuspremnik"),
         ("Enable remote printer", "Omogući udaljeni pisač"),
         ("Downloading {}", "Preuzimanje {}"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Omogući"),
+        ("Reuse one connection for port forwarding", "Ponovno koristi jednu vezu za prosljeđivanje portova"),
+        ("port-forward-mux-tip", "Sve veze jednog prosljeđivanja portova idu kroz jednu vezu prema drugoj strani, umjesto ponovnog povezivanja i prijave za svaku od njih."),
     ].iter().cloned().collect();
 }

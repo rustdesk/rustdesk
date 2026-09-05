@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "ஸ்கிரீன்ஷாட்_இணைக்கப்பட்ட_திரை_ஆதரவற்ற_குறிப்பு"),
         ("screenshot-action-tip", "ஸ்கிரீன்ஷாட்_செயல்_குறிப்பு"),
         ("Save as", "இப்படி சேமி"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "ஏற்றுமதி"),
+        ("Export Logs", "பதிவுகளை ஏற்றுமதி செய்"),
+        ("Import Folder", "கோப்புறையை இறக்குமதி செய்"),
         ("Copy to clipboard", "கிளிப்போர்டில் நகல்"),
         ("Enable remote printer", "தொலை அச்சுப்பொறி இயக்கு"),
         ("Downloading {}", "{} பதிவிறக்குகிறது"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "இயக்கு"),
+        ("Reuse one connection for port forwarding", "போர்ட் ஃபார்வேர்டிங்கிற்கு ஒரே இணைப்பை மீண்டும் பயன்படுத்து"),
+        ("port-forward-mux-tip", "ஒரு போர்ட் ஃபார்வேர்டிங்கின் அனைத்து இணைப்புகளும் மறுமுனைக்கான ஒரே இணைப்பின் வழியாகச் செல்லும், ஒவ்வொன்றுக்கும் மீண்டும் இணைந்து உள்நுழைவதற்குப் பதிலாக."),
     ].iter().cloned().collect();
 }

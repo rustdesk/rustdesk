@@ -659,9 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "Egyesített képernyőről nem támogatott a képernyőkép készítése"),
         ("screenshot-action-tip", "Képernyőkép-művelet"),
         ("Save as", "Mentés másként"),
-        ("Export", ""),
-        ("Export Logs", ""),
-        ("Import Folder", ""),
+        ("Export", "Exportálás"),
+        ("Export Logs", "Naplók exportálása"),
+        ("Import Folder", "Mappa importálása"),
         ("Copy to clipboard", "Másolás a vágólapra"),
         ("Enable remote printer", "Távoli nyomtatók engedélyezése"),
         ("Downloading {}", "{} letöltése"),
@@ -766,5 +766,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("terminal-clipboard-write-tip", ""),
         ("Allow terminal apps to copy to clipboard", ""),
         ("Enable", "Engedélyezés"),
+        ("Reuse one connection for port forwarding", "Egyetlen kapcsolat újrafelhasználása a portátirányításhoz"),
+        ("port-forward-mux-tip", "Egy portátirányítás összes kapcsolatát egyetlen, a másik géppel létesített kapcsolaton vezeti át, ahelyett hogy mindegyikhez újra csatlakozna és bejelentkezne."),
     ].iter().cloned().collect();
 }
