@@ -115,6 +115,11 @@ const String kOptionEnableAudio = "enable-audio";
 const String kOptionEnableCamera = "enable-camera";
 const String kOptionEnableTerminal = "enable-terminal";
 const String kOptionTerminalPersistent = "terminal-persistent";
+const String kOptionAllowTerminalClipboardWrite =
+    "allow-terminal-clipboard-write";
+const String kTerminalClipboardWriteUnconfigured = "";
+const String kTerminalClipboardWriteAllowed = "Y";
+const String kTerminalClipboardWriteDenied = "N";
 const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";

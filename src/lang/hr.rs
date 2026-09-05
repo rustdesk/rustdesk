@@ -763,5 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Zaključaj pozadinu"),
         ("Sync clipboard between sessions", "Sinkroniziraj međuspremnik između sesija"),
         ("sync-clipboard-between-sessions-tip", "Tekst ili slike kopirani u jednoj udaljenoj sesiji šalju se i u međuspremnik vaših ostalih povezanih sesija."),
+        ("terminal-clipboard-write-tip", ""),
+        ("Allow terminal apps to copy to clipboard", ""),
+        ("Enable", "Omogući"),
     ].iter().cloned().collect();
 }
