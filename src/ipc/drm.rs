@@ -1031,6 +1031,12 @@ fn drm_capture_worker(
 
     let t_conn = std::time::Instant::now();
 
+    // Counted in from the first enumeration, not from the reader: a probe of a held connector
+    // empties the topology for a moment, and a worker that enumerated before taking the guard
+    // would see that emptiness and send its session to the portal. Declared ahead of `reader`
+    // too, so it outlives it: no probe starts while the reader is still being torn down.
+    let _capture = CaptureGuard::new();
+
     // Enumerate FRESH rather than serve the cache: a cached display may no longer be driven.
     let displays = drm_enumerate_settled("a consumer connected");
     if frame_tx
@@ -1062,7 +1068,6 @@ fn drm_capture_worker(
         }
     };
     schedule_drm_cache_refresh();
-    let _capturing = CaptureGuard::new();
     log::debug!(
         "drm: capture reader for crtc {target_crtc} opened in {:?}",
         t_open.elapsed()
@@ -1524,10 +1529,14 @@ mod drm_conn_tests {
     use hbb_common::tokio::{self, io::AsyncWriteExt};
     use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 
+    // The tests that move DRM_CAPTURES_OPEN, a process-wide counter, take turns.
+    static COUNTER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // rustdesk#15908: a probe of the held connector and a capture admission exclude each other, so
     // the activity check the probe makes cannot be overtaken between the check and the writes.
     #[test]
     fn a_held_connector_probe_stands_down_for_an_open_capture() {
+        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
         assert!(begin_held_connector_probe().is_some(), "idle machine: probe allowed");
         {
             let _open = CaptureGuard::new();
@@ -1541,6 +1550,32 @@ mod drm_conn_tests {
         assert!(gate.is_some());
         drop(gate);
         assert!(begin_held_connector_probe().is_some());
+    }
+
+    // rustdesk#15908, round 6: the guard has to be in place BEFORE the fresh enumeration, not
+    // after the reader opens, or a probe holding the gate through the whole handshake still lets
+    // the worker enumerate the topology the probe has just emptied. Driven through the real
+    // worker: it enumerates, reports its display list and blocks waiting for a target, and at
+    // that point it must already count as a capture. No target ever comes, so it returns and
+    // counts itself out.
+    #[test]
+    fn a_capture_counts_from_its_first_enumeration() {
+        let _turn = COUNTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let (frame_tx, mut frame_rx) = hbb_common::tokio::sync::mpsc::channel(4);
+        let (crtc_tx, crtc_rx) = std::sync::mpsc::channel::<(String, u32, bool)>();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let gated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker =
+            std::thread::spawn(move || drm_capture_worker(frame_tx, crtc_rx, stop, gated));
+        assert!(
+            matches!(frame_rx.blocking_recv(), Some(DrmProducerMsg::Displays(_))),
+            "the worker's first message is its display list"
+        );
+        assert!(drm_capture_active(), "waiting for a target, the worker already counts as a capture");
+        assert!(begin_held_connector_probe().is_none(), "so no probe may start meanwhile");
+        drop(crtc_tx);
+        worker.join().expect("with no target the worker returns");
+        assert!(!drm_capture_active(), "and counts itself out on the way out");
     }
 
     // Added to the wire later: an older peer's message must still decode.
