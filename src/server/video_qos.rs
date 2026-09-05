@@ -52,7 +52,9 @@ struct UserDelay {
     rtt_calculator: RttCalculator,
     quick_increase_fps_count: usize,
     increase_fps_count: usize,
-    congestion_score: usize,
+    consecutive_bad_samples: usize,
+    consecutive_good_samples: usize,
+    replies_after_bitrate_reduction: Option<u8>,
 }
 
 impl UserDelay {
@@ -64,31 +66,56 @@ impl UserDelay {
         self.delay_history.push_back(delay);
     }
 
-    fn limit_fps_change(&mut self, current_fps: u32, fps: u32, delay: u32) -> u32 {
+    fn limit_fps_change(
+        &mut self,
+        current_fps: u32,
+        fps: u32,
+        delay: u32,
+        bitrate_first: bool,
+    ) -> u32 {
         // A spike stays in the average for several samples; confirm congestion with fresh samples.
         let delay = delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default());
         if delay >= DELAY_THRESHOLD_150MS {
-            self.congestion_score = (self.congestion_score + 2).min(6);
+            self.consecutive_bad_samples = (self.consecutive_bad_samples + 1).min(3);
+            self.consecutive_good_samples = 0;
+            if let Some(replies) = self.replies_after_bitrate_reduction.as_mut() {
+                *replies = (*replies + 1).min(2);
+            }
         } else {
-            self.congestion_score = self.congestion_score.saturating_sub(1);
-        }
-        if fps >= current_fps {
-            return if delay >= DELAY_THRESHOLD_150MS {
-                current_fps
+            self.consecutive_bad_samples = 0;
+            self.replies_after_bitrate_reduction = None;
+            self.consecutive_good_samples = (self.consecutive_good_samples + 1).min(3);
+            // Fresh low-delay replies permit recovery even while the average contains a spike.
+            return if self.consecutive_good_samples >= 3 {
+                fps.max(current_fps + (current_fps / 5).max(2))
             } else {
-                fps.min(current_fps + current_fps / 10 + 1)
+                current_fps + (current_fps / 10).max(1)
             };
         }
-        // An extra second of delay cannot wait for another confirmation.
-        if delay < 1000 && (delay < DELAY_THRESHOLD_150MS || self.congestion_score < 4) {
+        if fps >= current_fps {
             return current_fps;
         }
-        let divisor = if delay >= 1000 || (delay >= 600 && self.congestion_score == 6) {
+        // An extra second of delay cannot wait for another confirmation.
+        if delay < 1000
+            && (self.consecutive_bad_samples < 3
+                || (bitrate_first && self.replies_after_bitrate_reduction.unwrap_or_default() < 2))
+        {
+            return current_fps;
+        }
+        let divisor = if delay >= 1000 || (delay >= 600 && self.consecutive_bad_samples == 3) {
             2
         } else {
             5
         };
         fps.max(current_fps.saturating_sub((current_fps / divisor).max(1)))
+    }
+
+    fn needs_bitrate_reduction(&self) -> bool {
+        self.response_delayed
+            || self.consecutive_bad_samples >= 2
+            || self.delay_history.back().is_some_and(|delay| {
+                delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default()) >= 1000
+            })
     }
 
     fn avg_delay_for_fps(&self) -> u32 {
@@ -282,6 +309,7 @@ impl VideoQoS {
     pub fn user_network_delay(&mut self, id: i32, delay: u32) {
         let highest_fps = self.highest_fps();
         let target_ratio = self.latest_quality().ratio();
+        let bitrate_first = self.in_vbr_state() && !self.displays.is_empty();
 
         // For bad network, small fps means quick reaction and high quality
         let (min_fps, normal_fps) = if target_ratio >= BR_BEST {
@@ -296,6 +324,7 @@ impl VideoQoS {
         let dividend_ms = DELAY_THRESHOLD_150MS * min_fps;
 
         let mut adjust_ratio = false;
+        let mut reduce_bitrate = false;
         if let Some(user) = self.users.get_mut(&id) {
             let delay = delay.max(10);
             let old_avg_delay = user.delay.avg_delay_for_fps();
@@ -357,7 +386,12 @@ impl VideoQoS {
                 user.delay.quick_increase_fps_count = 0;
             }
 
-            fps = user.delay.limit_fps_change(self.fps, fps, delay);
+            fps = user
+                .delay
+                .limit_fps_change(self.fps, fps, delay, bitrate_first);
+            reduce_bitrate = bitrate_first
+                && user.delay.needs_bitrate_reduction()
+                && user.delay.replies_after_bitrate_reduction.is_none();
             fps = fps.clamp(MIN_FPS, highest_fps);
             // first network delay message
             adjust_ratio = user.delay.fps.is_none();
@@ -366,6 +400,11 @@ impl VideoQoS {
         self.adjust_fps();
         if adjust_ratio && !cfg!(target_os = "linux") {
             //Reduce the possibility of vaapi being created twice
+            self.adjust_ratio(false);
+        }
+        if reduce_bitrate
+            && self.adjust_ratio_instant.elapsed().as_secs() >= ADJUST_RATIO_INTERVAL as u64
+        {
             self.adjust_ratio(false);
         }
     }
@@ -459,6 +498,15 @@ impl VideoQoS {
         let Some(max_delay) = max_delay else {
             return;
         };
+        if max_delay >= DELAY_THRESHOLD_150MS
+            && !self
+                .users
+                .values()
+                .any(|u| u.delay.needs_bitrate_reduction())
+        {
+            self.adjust_ratio_instant = Instant::now();
+            return;
+        }
 
         let target_quality = self.latest_quality();
         let target_ratio = self.latest_quality().ratio();
@@ -540,6 +588,21 @@ impl VideoQoS {
             }
         }
 
+        if max_delay >= DELAY_THRESHOLD_150MS {
+            for user in self.users.values_mut() {
+                if user.delay.needs_bitrate_reduction()
+                    && user.delay.replies_after_bitrate_reduction.is_none()
+                {
+                    // One outstanding probe may have started before the bitrate change.
+                    user.delay.replies_after_bitrate_reduction =
+                        Some(if v.clamp(min, max) < current_ratio {
+                            0
+                        } else {
+                            2
+                        });
+                }
+            }
+        }
         self.ratio = v.clamp(min, max);
         self.adjust_ratio_instant = Instant::now();
     }
@@ -669,7 +732,7 @@ mod tests {
     #[test]
     fn sustained_delay_reduces_fps_gradually() {
         let mut qos = stable_qos();
-        for expected_fps in [30, 24, 12, 6, 3] {
+        for expected_fps in [30, 30, 15, 8, 4] {
             qos.user_network_delay(1, 800);
             assert_eq!(qos.fps(), expected_fps);
         }
@@ -696,11 +759,13 @@ mod tests {
         qos.user_network_delay(1, 3200);
         assert!(qos.fps() <= 2);
         qos.user_delay_response_elapsed(1, 0);
-        for _ in 0..3 {
+        for _ in 0..2 {
             qos.user_network_delay(1, 10);
             assert!(qos.fps() <= 4);
         }
-        for _ in 0..30 {
+        qos.user_network_delay(1, 10);
+        assert!(qos.fps() >= 10);
+        for _ in 0..10 {
             qos.user_network_delay(1, 10);
         }
         assert_eq!(qos.fps(), FPS);
@@ -714,5 +779,6 @@ mod tests {
         assert_eq!(qos.fps(), 12);
     }
 
+    mod jitter;
     mod smoke;
 }
