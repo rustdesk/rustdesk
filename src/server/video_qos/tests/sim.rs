@@ -516,6 +516,57 @@ fn sim_scenarios() {
         println!("{}", report.row());
     }
     write_traces(&reports);
+    let get = |name: &str| reports.iter().find(|r| r.name == name).unwrap();
+
+    // A jittery but healthy link must stay fast: the whole point of the change.
+    for name in [
+        "home_wifi_30",
+        "home_wifi_60",
+        "home_wifi_fixed_rate_30",
+        "home_wifi_no_abr_30",
+        "office_home_wifi_30",
+    ] {
+        let r = get(name);
+        assert!(r.mean_fps >= 0.85 * r.limit as f64, "{name}: {r:?}");
+        assert!(r.below_half_pct <= 5.0, "{name}: {r:?}");
+        assert!(r.queue_p95_ms < 500, "{name}: {r:?}");
+    }
+    // A clean link is where the developers test; it must sit at the limit.
+    for name in ["city_relay_30", "city_relay_60"] {
+        let r = get(name);
+        assert_eq!(r.min_fps, r.limit, "{name}: {r:?}");
+    }
+    // High but stable RTT is not congestion.
+    let r = get("intercontinental_30");
+    assert!(
+        r.mean_fps >= 0.9 * r.limit as f64,
+        "intercontinental: {r:?}"
+    );
+    assert!(
+        r.final_ratio >= Quality::Balanced.ratio() * 0.9,
+        "intercontinental: {r:?}"
+    );
+    // Real congestion must be detected, drained, and recovered from.  With a CBR
+    // encoder only the bitrate drains the queue, and three probe replies at one
+    // second cadence are needed before a confirmed cut, so about two seconds of
+    // queue are inherent there.  Without ABR nothing drains a CBR queue at all, so
+    // that combination is reported but not asserted.
+    for (name, queue_p95_bound_ms, below_half_bound_pct) in [
+        ("bandwidth_halved_30", 2500, 10.0),
+        ("bandwidth_halved_fixed_rate_30", 1500, 5.0),
+        ("bandwidth_halved_fixed_rate_no_abr_30", 2000, 20.0),
+    ] {
+        let r = get(name);
+        assert!(r.queue_p95_ms < queue_p95_bound_ms, "{name}: {r:?}");
+        assert!(r.below_half_pct <= below_half_bound_pct, "{name}: {r:?}");
+        assert!(
+            r.recovery_ms.is_some_and(|ms| ms <= 15_000),
+            "{name}: {r:?}"
+        );
+        assert_eq!(r.final_fps, r.limit, "{name}: {r:?}");
+    }
+    let r = get("mobile_bufferbloat_30");
+    assert!(r.queue_p95_ms < 2000, "mobile: {r:?}");
 }
 
 /// Replays a `qos_trace` log captured on a real host (see `user_network_delay`),
