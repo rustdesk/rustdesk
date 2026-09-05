@@ -660,7 +660,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-action-tip", "Seleziona come continuare con la schermata."),
         ("Save as", "Salva come"),
         ("Export", "Esporta"),
-        ("Export Logs", "Esporta i log"),
+        ("Export Logs", "Esporta registri"),
         ("Import Folder", "Importa cartella"),
         ("Copy to clipboard", "Copia negli appunti"),
         ("Enable remote printer", "Abilita stampante remota"),
