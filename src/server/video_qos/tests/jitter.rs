@@ -335,3 +335,77 @@ fn recovery_continues_with_intermittent_jitter() {
     }
     assert_eq!(qos.fps(), FPS);
 }
+
+#[test]
+fn custom_limit_of_one_viewer_does_not_lower_another_viewers_target() {
+    let mut qos = stable_qos();
+    qos.users.insert(2, UserData::default());
+    for _ in 0..30 {
+        qos.user_network_delay(2, 10);
+        qos.user_network_delay(1, 10);
+    }
+    qos.user_custom_fps(2, 12);
+    qos.user_network_delay(1, 10);
+    assert_eq!(qos.fps(), 12, "the stream follows the lowest limit");
+    assert_eq!(
+        qos.users[&1].delay.fps,
+        Some(FPS),
+        "viewer 1's own target is not a function of viewer 2's limit"
+    );
+    qos.users.remove(&2);
+    qos.user_network_delay(1, 10);
+    assert_eq!(
+        qos.fps(),
+        FPS,
+        "the stream is back the moment the limit is gone"
+    );
+}
+
+#[test]
+fn new_viewer_does_not_inherit_another_viewers_congested_fps() {
+    let mut qos = stable_qos();
+    for _ in 0..4 {
+        qos.user_network_delay(1, 800);
+    }
+    assert_eq!(qos.fps(), 8);
+    qos.users.insert(2, UserData::default());
+    qos.user_network_delay(2, 10);
+    assert!(
+        qos.users[&2].delay.fps >= Some(INIT_FPS),
+        "a new viewer starts from INIT_FPS, not from the congested stream: {:?}",
+        qos.users[&2].delay.fps
+    );
+}
+
+#[test]
+fn unconfirmed_severe_viewer_does_not_amplify_another_viewers_confirmed_mild_congestion() {
+    let mut qos = abr_session();
+    qos.users.insert(2, UserData::default());
+    for _ in 0..30 {
+        qos.user_network_delay(2, 10);
+        qos.user_network_delay(1, 10);
+    }
+    // The first reply of a new viewer adjusts the ratio and restarts the cooldown.
+    qos.advance_ms(4000);
+    let ratio = qos.ratio();
+    // Viewer 2: mild congestion, confirmed over three replies.  Viewer 1: one
+    // severe spike, never confirmed.  Each viewer on its own calls for at most a
+    // five percent step; together they must not turn into a halving.
+    qos.user_network_delay(2, 200);
+    qos.user_network_delay(1, 1200);
+    qos.user_network_delay(2, 200);
+    let after_two = qos.ratio();
+    assert!(after_two < ratio, "viewer 2's second bad reply cuts");
+    assert!(
+        after_two >= ratio * 0.94,
+        "viewer 2's own mild excess is a five percent step, not {after_two}"
+    );
+    qos.user_network_delay(2, 200);
+    qos.advance_ms(4000);
+    qos.update_display_data("test", 30);
+    assert!(
+        qos.ratio() >= after_two * 0.94,
+        "viewer 1's severity must not be paired with viewer 2's confirmation: {}",
+        qos.ratio()
+    );
+}

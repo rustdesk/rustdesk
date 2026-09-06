@@ -20,15 +20,18 @@ b. TestDelay reply => update the user's fps from the excess delay, the reply's d
 c. probe outstanding for more than two seconds => halve the fps for every further
    second, down to MIN_FPS + 1; the late reply does not reduce again
 d. second timeout / TestDelay reply => real fps is the minimum over all users;
-   every user adapts from its own target, never from that minimum
+   every user starts at INIT_FPS, adapts from its own target and is capped by its
+   own limit, never by that minimum or by another user's limit
 
 ratio adjust:
 a. user set image quality => update to the maximum ratio of the latest quality
 b. 3 seconds timeout => update ratio according to network delay
     When network delay < DELAY_THRESHOLD_150MS, increase ratio, max 150kbps;
-    When network delay >= DELAY_THRESHOLD_150MS and a user confirmed congestion
-    (two bad replies in a row, or a probe still out at the second tick past two
-    seconds), decrease ratio; one slow reply or one short stall does not.
+    When a user calls for a reduction (two bad replies in a row, or a probe still
+    out at the second tick past two seconds), decrease ratio by the step that user's
+    own delay and confirmation call for, the most conservative step over all users;
+    one slow reply or one short stall does not, and one user's spike is never paired
+    with another user's confirmation.
 c. confirmed congestion => decrease ratio at once, when the 3 seconds cooldown allows
 
 delay:
@@ -172,6 +175,32 @@ impl UserDelay {
         self.consecutive_bad_samples >= 2 || self.stall_ticks >= 2
     }
 
+    // The bitrate step this viewer's own evidence calls for, None when it calls for
+    // none.  Severity and confirmation come from the same viewer; the controller
+    // never pairs one viewer's spike with another viewer's confirmation.
+    fn ratio_reduction(&self) -> Option<f32> {
+        if !self.needs_bitrate_reduction() {
+            return None;
+        }
+        let excess = self.avg_delay();
+        let confirmed = self.consecutive_bad_samples >= 3;
+        Some(if excess < 200 {
+            0.95
+        } else if excess < 300 {
+            0.9
+        } else if excess < 500 {
+            if confirmed {
+                0.7
+            } else {
+                0.85
+            }
+        } else if confirmed {
+            0.5
+        } else {
+            0.8
+        })
+    }
+
     // Average delay above the baseline: what the queue adds on top of the path itself.
     fn avg_delay(&self) -> u32 {
         if self.delay_history.is_empty() {
@@ -190,6 +219,19 @@ struct UserData {
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: UserDelay,
     record: bool,
+}
+
+impl UserData {
+    // The frame rate this viewer asked for, from its custom or auto-adjust limit.
+    fn fps_cap(&self) -> u32 {
+        let mut fps = self.custom_fps.unwrap_or(FPS);
+        if let Some(auto_adjust_fps) = self.auto_adjust_fps {
+            if fps == 0 || auto_adjust_fps < fps {
+                fps = auto_adjust_fps;
+            }
+        }
+        fps.clamp(MIN_FPS, MAX_FPS)
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -365,7 +407,6 @@ impl VideoQoS {
     }
 
     pub fn user_network_delay(&mut self, id: i32, delay: u32) {
-        let highest_fps = self.highest_fps();
         let target_ratio = self.latest_quality().ratio();
         // Fewer frames only save bytes with encoders that size frames for a fixed rate;
         // bitrate-targeted encoders keep the bitrate, so the bitrate has to come down first.
@@ -394,9 +435,11 @@ impl VideoQoS {
             user.delay.add_delay(delay);
             let mut avg_delay = user.delay.avg_delay();
             avg_delay = avg_delay.max(10);
-            // Each viewer adapts from its own target.  The stream follows the slowest
-            // viewer in adjust_fps; that minimum must not feed back into the others.
-            let current_fps = user.delay.fps.unwrap_or(self.fps);
+            // Each viewer adapts from its own target, starts at INIT_FPS and is capped
+            // by its own limit.  The stream follows the slowest viewer in adjust_fps;
+            // neither that minimum nor another viewer's limit feeds back into it.
+            let user_cap = user.fps_cap();
+            let current_fps = user.delay.fps.unwrap_or(INIT_FPS.min(user_cap));
             let mut fps = current_fps;
 
             // Adaptive FPS adjustment based on network delay:
@@ -462,7 +505,7 @@ impl VideoQoS {
             reduce_bitrate = bitrate_first
                 && user.delay.needs_bitrate_reduction()
                 && user.delay.replies_after_bitrate_reduction.is_none();
-            fps = fps.clamp(MIN_FPS, highest_fps);
+            fps = fps.clamp(MIN_FPS, user_cap);
             // first network delay message
             adjust_ratio = user.delay.fps.is_none();
             user.delay.fps = Some(fps);
@@ -489,7 +532,6 @@ impl VideoQoS {
     }
 
     pub fn user_delay_response_elapsed(&mut self, id: i32, elapsed: u128) {
-        let current_fps = self.fps;
         let Some(user) = self.users.get_mut(&id) else {
             return;
         };
@@ -503,7 +545,7 @@ impl VideoQoS {
         let reference = match user.delay.stall_reference_fps {
             Some(reference) => reference,
             None => {
-                let reference = user.delay.fps.unwrap_or(current_fps);
+                let reference = user.delay.fps.unwrap_or(INIT_FPS.min(user.fps_cap()));
                 user.delay.stall_reference_fps = Some(reference);
                 user.delay.on_reduction(reference);
                 reference
@@ -552,25 +594,12 @@ impl VideoQoS {
 
     #[inline]
     fn highest_fps(&self) -> u32 {
-        let user_fps = |u: &UserData| {
-            let mut fps = u.custom_fps.unwrap_or(FPS);
-            if let Some(auto_adjust_fps) = u.auto_adjust_fps {
-                if fps == 0 || auto_adjust_fps < fps {
-                    fps = auto_adjust_fps;
-                }
-            }
-            fps
-        };
-
-        let fps = self
-            .users
-            .iter()
-            .map(|(_, u)| user_fps(u))
-            .filter(|u| *u >= MIN_FPS)
+        self.users
+            .values()
+            .map(|u| u.fps_cap())
             .min()
-            .unwrap_or(FPS);
-
-        fps.clamp(MIN_FPS, MAX_FPS)
+            .unwrap_or(FPS)
+            .clamp(MIN_FPS, MAX_FPS)
     }
 
     // Get latest quality settings from all users
@@ -637,12 +666,14 @@ impl VideoQoS {
         let Some(max_delay) = max_delay else {
             return;
         };
-        if max_delay >= DELAY_THRESHOLD_150MS
-            && !self
-                .users
-                .values()
-                .any(|u| u.delay.needs_bitrate_reduction())
-        {
+        // Each viewer judges its own delay; the stream takes the most conservative
+        // step any viewer asks for.
+        let reduction = self
+            .users
+            .values()
+            .filter_map(|u| u.delay.ratio_reduction())
+            .reduce(f32::min);
+        if reduction.is_none() && max_delay >= DELAY_THRESHOLD_150MS {
             // Elevated but unconfirmed: no change, and no cooldown either, so a
             // confirmation on the next reply is acted on at once.
             self.reset_send_counters();
@@ -665,14 +696,12 @@ impl VideoQoS {
 
         let mut v = current_ratio;
 
-        // Adjust ratio based on network delay thresholds.  Three bad replies in a row
-        // confirm congestion; with a bitrate-targeted encoder the bitrate is then the
-        // only thing that drains the queue, so it comes down hard.
-        let confirmed = self
-            .users
-            .values()
-            .any(|u| u.delay.consecutive_bad_samples >= 3);
-        if max_delay < 50 {
+        // Three bad replies in a row confirm congestion; with a bitrate-targeted
+        // encoder the bitrate is then the only thing that drains the queue, so it
+        // comes down hard.  Increases need every viewer below the threshold.
+        if let Some(factor) = reduction {
+            v = current_ratio * factor;
+        } else if max_delay < 50 {
             if dynamic_screen {
                 v = current_ratio * 1.15;
             }
@@ -680,18 +709,8 @@ impl VideoQoS {
             if dynamic_screen {
                 v = current_ratio * 1.1;
             }
-        } else if max_delay < DELAY_THRESHOLD_150MS {
-            if dynamic_screen {
-                v = current_ratio * 1.05;
-            }
-        } else if max_delay < 200 {
-            v = current_ratio * 0.95;
-        } else if max_delay < 300 {
-            v = current_ratio * 0.9;
-        } else if max_delay < 500 {
-            v = current_ratio * if confirmed { 0.7 } else { 0.85 };
-        } else {
-            v = current_ratio * if confirmed { 0.5 } else { 0.8 };
+        } else if dynamic_screen {
+            v = current_ratio * 1.05;
         }
 
         // Limit quality increase rate for better stability
@@ -704,7 +723,7 @@ impl VideoQoS {
             }
         }
 
-        if max_delay >= DELAY_THRESHOLD_150MS {
+        if reduction.is_some() {
             for user in self.users.values_mut() {
                 if user.delay.needs_bitrate_reduction()
                     && user.delay.replies_after_bitrate_reduction.is_none()
