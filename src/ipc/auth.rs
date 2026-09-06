@@ -306,11 +306,14 @@ fn current_exe_canonical_path() -> ResultType<PathBuf> {
 fn peer_exe_canonical_path_by_pid(peer_pid: u32) -> ResultType<PathBuf> {
     let proc_exe = PathBuf::from(format!("/proc/{peer_pid}/exe"));
     let peer_exe = fs::read_link(&proc_exe).map_err(|err| {
-        anyhow::anyhow!(
+        // Keep the io::Error as the source (not just its text) so the read's error kind survives for
+        // `peer_exe_read_permission_denied`, while the context preserves the same logged message.
+        let msg = format!(
             "Failed to read peer executable link '{}': {}",
             proc_exe.display(),
             err
-        )
+        );
+        anyhow::Error::new(err).context(msg)
     })?;
     fs::canonicalize(&peer_exe).map_err(|err| {
         anyhow::anyhow!(
@@ -467,10 +470,46 @@ fn portable_service_helper_is_trusted(
     peer_hash == current_hash
 }
 
+// EACCES/EPERM from reading /proc/<pid>/exe (both map to `PermissionDenied`) means the peer could
+// not be introspected, which is distinct from a successfully read but mismatched executable path.
+#[cfg(target_os = "linux")]
+#[inline]
+fn peer_exe_read_permission_denied(err: &anyhow::Error) -> bool {
+    err.downcast_ref::<std::io::Error>()
+        .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied)
+}
+
+// A root IPC server can always read a same-user-namespace peer's /proc/<pid>/exe, so a permission
+// error there is genuinely anomalous (e.g. a cross-namespace peer) and must stay fail-closed. Only a
+// NON-root server (the non-systemd case where the service could not register as root and runs as the
+// active user) cannot introspect a peer; there the executable check has no information to act on, so
+// deferring to the uid gate is both the best achievable and the pre-1.4.7 behavior — and it keeps the
+// hardened root-service path untouched.
+#[cfg(target_os = "linux")]
+#[inline]
+fn ipc_server_is_unprivileged() -> bool {
+    unsafe { libc::geteuid() != 0 }
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[inline]
 fn ensure_peer_executable_matches_current_by_pid(peer_pid: u32, postfix: &str) -> ResultType<()> {
-    let peer_exe = peer_exe_canonical_path_by_pid(peer_pid)?;
+    let peer_exe = match peer_exe_canonical_path_by_pid(peer_pid) {
+        Ok(peer_exe) => peer_exe,
+        Err(err) => {
+            #[cfg(target_os = "linux")]
+            if peer_exe_read_permission_denied(&err) && ipc_server_is_unprivileged() {
+                log::warn!(
+                    "Peer executable link not introspectable on ipc channel '{}' by an unprivileged server (peer_pid={}): {}; identity unavailable, deferring to the uid gate",
+                    postfix,
+                    peer_pid,
+                    err
+                );
+                return Ok(());
+            }
+            return Err(err);
+        }
+    };
     let current_exe = current_exe_canonical_path()?;
     if executable_paths_match(&peer_exe, &current_exe) {
         return Ok(());
@@ -1033,5 +1072,29 @@ mod tests {
             .parse()
             .unwrap_or_else(|_| panic!("failed to parse get_active_userid() output: '{raw_uid}'"));
         assert_eq!(parsed_uid, console_uid);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_peer_exe_read_permission_denied_classification() {
+        // EACCES/EPERM reading /proc/<pid>/exe (both map to `PermissionDenied`) means the peer is
+        // not introspectable and must be classified as such even after `context()` is attached, so
+        // the caller degrades to the uid gate instead of rejecting a legitimate peer.
+        for errno in [hbb_common::libc::EACCES, hbb_common::libc::EPERM] {
+            let err = hbb_common::anyhow::Error::new(std::io::Error::from_raw_os_error(errno))
+                .context("Failed to read peer executable link '/proc/1/exe'");
+            assert!(
+                super::peer_exe_read_permission_denied(&err),
+                "errno {errno} must classify as permission denied"
+            );
+        }
+        // A vanished peer (NotFound) or a non-io error must NOT degrade to allow.
+        let not_found =
+            hbb_common::anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .context("Failed to read peer executable link '/proc/1/exe'");
+        assert!(!super::peer_exe_read_permission_denied(&not_found));
+        assert!(!super::peer_exe_read_permission_denied(
+            &hbb_common::anyhow::anyhow!("canonicalize failure text")
+        ));
     }
 }
