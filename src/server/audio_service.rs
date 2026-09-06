@@ -258,6 +258,12 @@ mod cpal_impl {
         sp: GenericService,
     }
 
+    struct CaptureStreamOutput {
+        service: GenericService,
+        sample_rate: u32,
+        encode_channel: magnum_opus::Channels,
+    }
+
     impl CaptureFrameProcessor {
         fn new(
             config: CaptureFrameProcessorConfig,
@@ -444,17 +450,22 @@ mod cpal_impl {
             48000
         };
         let ch = if config.channels() > 1 { Stereo } else { Mono };
+        let output = CaptureStreamOutput {
+            service: sp,
+            sample_rate,
+            encode_channel: ch,
+        };
         let stream = match config.sample_format() {
-            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
-            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
-            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
-            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate, ch)?,
-            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate, ch)?,
-            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate, ch)?,
-            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate, ch)?,
-            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate, ch)?,
-            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate, ch)?,
-            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate, ch)?,
+            I8 => build_input_stream::<i8>(device, &config, output)?,
+            I16 => build_input_stream::<i16>(device, &config, output)?,
+            I32 => build_input_stream::<i32>(device, &config, output)?,
+            I64 => build_input_stream::<i64>(device, &config, output)?,
+            U8 => build_input_stream::<u8>(device, &config, output)?,
+            U16 => build_input_stream::<u16>(device, &config, output)?,
+            U32 => build_input_stream::<u32>(device, &config, output)?,
+            U64 => build_input_stream::<u64>(device, &config, output)?,
+            F32 => build_input_stream::<f32>(device, &config, output)?,
+            F64 => build_input_stream::<f64>(device, &config, output)?,
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
@@ -488,9 +499,7 @@ mod cpal_impl {
     fn build_input_stream<T>(
         device: cpal::Device,
         config: &cpal::SupportedStreamConfig,
-        sp: GenericService,
-        sample_rate: u32,
-        encode_channel: magnum_opus::Channels,
+        output: CaptureStreamOutput,
     ) -> ResultType<cpal::Stream>
     where
         T: cpal::SizedSample,
@@ -501,20 +510,21 @@ mod cpal_impl {
             log::trace!("an error occurred on stream: {}", err);
         };
         let sample_rate_0 = config.sample_rate().0;
-        log::debug!("Audio sample rate : {}", sample_rate);
+        log::debug!("Audio sample rate : {}", output.sample_rate);
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
         let device_channel = config.channels();
         let (_, capture_frame_samples) = capture_packet_layout(sample_rate_0, device_channel)?;
-        let encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
+        let encoder = Encoder::new(output.sample_rate, output.encode_channel, LowDelay)?;
         let processor_config = CaptureFrameProcessorConfig {
             input_rate: sample_rate_0,
-            output_rate: sample_rate,
+            output_rate: output.sample_rate,
             device_channel,
-            encode_channel: encode_channel as _,
+            encode_channel: output.encode_channel as _,
         };
-        let mut processor = CaptureFrameProcessor::new(processor_config, encoder, sp)?;
+        let mut processor =
+            CaptureFrameProcessor::new(processor_config, encoder, output.service)?;
         INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
         let stream_config = capture_stream_config(config, device_channel);
