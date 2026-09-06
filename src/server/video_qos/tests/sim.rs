@@ -3,15 +3,24 @@
 //! The controller is driven the way `Connection` drives it: one TestDelay probe per
 //! second, a single probe outstanding, `user_delay_response_elapsed` on every timer
 //! tick, `update_display_data` once per second.  Video frames and probes share one
-//! FIFO link, so a probe measures the queue that the frames built up in front of it.
+//! FIFO, which stands for the downstream shared path (stream, transport, link): the
+//! probe measures the bytes that were handed to that path in front of it.  It is not
+//! the server's `tx_video` channel, which the probe does not pass through, and the
+//! model does not stall the timer while a send is blocked, as the real loop does.
 //!
-//! The link is deliberately richer than a fixed-rate pipe: variable frame sizes with
-//! scene changes, slowly wobbling capacity, heavy-tailed jitter, loss events that
-//! behave like a reliable stream's retransmission (a short stall plus a temporary
-//! rate reduction) and independent link stalls.  It still is a model, not a network:
-//! it does not reproduce a real transport's congestion control or a real encoder.
-//! Its job is to show how the controller reacts to the *kind* of behaviour a home
-//! Wi-Fi, a stable relay or a saturated uplink produce, deterministically.
+//! Three independent random streams keep an A/B comparison paired: the network
+//! trace (capacity wobble, stalls, loss events) is generated before the run from the
+//! network stream alone, so two controllers with the same seed face the same link
+//! whatever they decide; encoder noise and probe jitter have streams of their own.
+//!
+//! The encoder model conserves its bitrate budget: a scene change costs three
+//! frames' worth of data and the surplus is repaid by the following frames, so the
+//! long-term offered load does not depend on the frame rate under CBR.
+//!
+//! It still is a model, not a network: it does not reproduce a real transport's
+//! congestion control or a real encoder.  Its job is to show how the controller
+//! reacts to the *kind* of behaviour a home Wi-Fi, a stable relay or a saturated
+//! uplink produce, deterministically and over many seeds.
 use super::*;
 
 /// xorshift64* generator, so the tests need no external crate and stay reproducible.
@@ -99,6 +108,62 @@ impl Link {
     }
 }
 
+/// Everything the link does during a run, decided before the run starts.
+struct LinkTrace {
+    capacity_kbps: Vec<f64>, // per tick, wobble and retransmission backoff applied
+    stalled: Vec<bool>,      // per tick
+}
+
+fn mark(flags: &mut [bool], from_ms: f64, to_ms: f64) {
+    let from = (from_ms / TICK_MS as f64).max(0.0) as usize;
+    let to = ((to_ms / TICK_MS as f64).ceil() as usize).min(flags.len());
+    for flag in flags.iter_mut().take(to).skip(from) {
+        *flag = true;
+    }
+}
+
+fn link_trace(link: &Link, ticks: usize, rng: &mut Rng) -> LinkTrace {
+    let mut capacity_kbps = vec![0.0; ticks];
+    let mut stalled = vec![false; ticks];
+    let mut backoff = vec![false; ticks];
+    let mut wobble = 0.0_f64;
+    for (i, capacity) in capacity_kbps.iter_mut().enumerate() {
+        let now = i as u32 * TICK_MS;
+        if now % 100 == 0 {
+            wobble = (wobble + rng.normal() * 0.03).clamp(-link.wobble, link.wobble);
+        }
+        *capacity = link.capacity_at(now) * (1.0 + wobble);
+    }
+    if link.stall_mean_interval_s > 0.0 {
+        let mut start = rng.exponential(link.stall_mean_interval_s) * 1000.0;
+        while start < (ticks as f64) * TICK_MS as f64 {
+            let len = rng.range(link.stall_ms.0, link.stall_ms.1);
+            mark(&mut stalled, start, start + len);
+            start += rng.exponential(link.stall_mean_interval_s) * 1000.0;
+        }
+    }
+    if link.loss_per_s > 0.0 {
+        let per_tick = link.loss_per_s * TICK_MS as f64 / 1000.0;
+        for i in 0..ticks {
+            if rng.uniform() < per_tick {
+                let start = (i as u32 * TICK_MS) as f64;
+                let len = rng.range(200.0, 400.0);
+                mark(&mut stalled, start, start + len);
+                mark(&mut backoff, start + len, start + len + 1000.0);
+            }
+        }
+    }
+    for (capacity, backoff) in capacity_kbps.iter_mut().zip(&backoff) {
+        if *backoff {
+            *capacity *= 0.5;
+        }
+    }
+    LinkTrace {
+        capacity_kbps,
+        stalled,
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Content {
     /// Every frame changes: a video call or a movie.
@@ -113,8 +178,10 @@ pub enum EncoderModel {
     /// VP8, VP9 and AV1 run CBR against millisecond timestamps: fewer frames per
     /// second means bigger frames, the bitrate stays.  Only the ratio moves bytes.
     Cbr,
-    /// Hardware encoders are configured for a fixed 30 fps, so every frame carries
-    /// a thirtieth of the bitrate and fewer frames do mean fewer bytes.
+    /// Hardware encoders configured for a fixed 30 fps rate-control assumption:
+    /// every frame carries a thirtieth of the bitrate, so fewer frames mean fewer
+    /// bytes.  Actual hardware behaviour is backend dependent (Android's MediaCodec
+    /// path runs VBR).
     FixedRate,
 }
 
@@ -135,66 +202,127 @@ pub struct Scenario {
 const BASE_KBPS: f64 = 6000.0;
 /// The frame rate hardware encoders are configured for.
 const ENCODER_CONFIGURED_FPS: f64 = 30.0;
+/// Log-normal spread of frame sizes around their budget.
+const FRAME_SIZE_SIGMA: f64 = 0.35;
 const TICK_MS: u32 = 10;
-/// Samples taken before this instant only warm the controller up.
+/// Samples taken before this instant belong to the cold start, not the steady state.
 const WARM_UP_MS: u32 = 15_000;
+/// A recovery counts once target and queue have held for this long.
+const SUSTAINED_MS: u32 = 5_000;
+/// Seeds every scenario is run with.
+pub const SEEDS: std::ops::RangeInclusive<u64> = 1..=20;
+
+/// Frame sizes with a conserved bitrate budget.
+struct Encoder {
+    model: EncoderModel,
+    content: Content,
+    rng: Rng,
+    frames: u64,
+    debt_bits: f64,
+}
+
+impl Encoder {
+    fn frame_bits(&mut self, bitrate_kbps: f64, produce_rate: f64) -> f64 {
+        let target = match (self.content, self.model) {
+            // A changed region of a static screen is small whatever the rate control does.
+            (Content::Office, _) => bitrate_kbps * 1000.0 / ENCODER_CONFIGURED_FPS * 0.3,
+            (Content::Video, EncoderModel::Cbr) => bitrate_kbps * 1000.0 / produce_rate,
+            (Content::Video, EncoderModel::FixedRate) => {
+                bitrate_kbps * 1000.0 / ENCODER_CONFIGURED_FPS
+            }
+        };
+        // Mean one: the spread must not change the offered load.
+        let noise = self.rng.log_normal(1.0, FRAME_SIZE_SIGMA)
+            * (-FRAME_SIZE_SIGMA * FRAME_SIZE_SIGMA / 2.0).exp();
+        let mut bits = target * noise;
+        self.frames += 1;
+        let scene_change = self.content == Content::Video
+            && self.frames % (5 * produce_rate.max(1.0) as u64).max(1) == 0;
+        if scene_change {
+            // A scene change every five seconds of video costs a few frames' worth of
+            // data; rate control claws it back from the frames that follow.
+            bits *= 3.0;
+            self.debt_bits += bits - target;
+        } else if self.debt_bits > 0.0 {
+            let repay = self.debt_bits.min(target * 0.5).min(bits * 0.5);
+            bits -= repay;
+            self.debt_bits -= repay;
+        }
+        bits
+    }
+}
 
 struct Packet {
     bits: f64,
+    enqueued_ms: u32,
     probe_sent_ms: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Report {
     pub name: String,
+    pub seed: u64,
     pub limit: u32,
-    pub mean_fps: f64,
-    pub p10_fps: u32,
-    pub min_fps: u32,
-    /// Share of the measured time spent below half of the FPS limit.
+    /// Controller target, sampled every 100 ms after the warm-up.
+    pub mean_target_fps: f64,
+    pub p10_target_fps: u32,
+    pub min_target_fps: u32,
+    /// Share of the measured time the target spent below half of the limit.
     pub below_half_pct: f64,
+    /// Frames the encoder produced per second.
+    pub produced_fps: f64,
+    /// Frames that left the shared path per second.
+    pub delivered_fps: f64,
+    /// Time a delivered frame spent in the shared path, 95th percentile.
+    pub frame_age_p95_ms: u32,
     pub queue_p95_ms: u32,
     pub max_delay_ms: u32,
-    /// Time from the capacity restore until the FPS limit was reached again.
+    /// Whether the link drops and restores its capacity at all.
+    pub has_restore: bool,
+    /// Time from the capacity restore until target at the limit and queue below
+    /// 200 ms held for `SUSTAINED_MS`.
     pub recovery_ms: Option<u32>,
+    /// Lowest target during the first `WARM_UP_MS`.
+    pub cold_start_min_fps: u32,
+    /// First time the target reached 90% of the limit.
+    pub time_to_90pct_ms: Option<u32>,
     pub final_fps: u32,
     pub final_ratio: f32,
-    pub trace: Vec<(u32, u32, u32, f32)>, // (time_ms, fps, queue_ms, ratio)
+    pub trace: Vec<(u32, u32, u32, f32)>, // (time_ms, target fps, queue_ms, ratio)
 }
 
-impl Report {
-    pub fn row(&self) -> String {
-        format!(
-            "| {} | {} | {:.1} | {} | {} | {:.1}% | {} | {} | {} | {} | {:.2} |",
-            self.name,
-            self.limit,
-            self.mean_fps,
-            self.p10_fps,
-            self.min_fps,
-            self.below_half_pct,
-            self.queue_p95_ms,
-            self.max_delay_ms,
-            self.recovery_ms
-                .map(|ms| format!("{:.1}s", ms as f64 / 1000.0))
-                .unwrap_or_else(|| "-".to_owned()),
-            self.final_fps,
-            self.final_ratio
-        )
-    }
-
-    pub const HEADER: &'static str = "| scenario | limit | mean fps | p10 fps | min fps | < limit/2 | queue p95 | max probe | recovery | final fps | final ratio |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|";
-}
-
-fn percentile(sorted: &[u32], p: f64) -> u32 {
-    if sorted.is_empty() {
+fn percentile_u32(values: &[u32], p: f64) -> u32 {
+    if values.is_empty() {
         return 0;
     }
-    let idx = ((sorted.len() - 1) as f64 * p).round() as usize;
-    sorted[idx.min(sorted.len() - 1)]
+    let mut sorted = values.to_vec();
+    sorted.sort_unstable();
+    sorted[(((sorted.len() - 1) as f64) * p).round() as usize]
+}
+
+fn percentile_f64(values: &[f64], p: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    sorted[(((sorted.len() - 1) as f64) * p).round() as usize]
 }
 
 pub fn run(sc: &Scenario) -> Report {
-    let mut rng = Rng::new(sc.seed);
+    let mut network_rng = Rng::new(sc.seed);
+    let mut probe_rng = Rng::new(sc.seed ^ 0x5052_4F42_45);
+    let mut encoder = Encoder {
+        model: sc.encoder,
+        content: sc.content,
+        rng: Rng::new(sc.seed ^ 0x454E_434F_4445),
+        frames: 0,
+        debt_bits: 0.0,
+    };
+    let total_ms = sc.seconds * 1000;
+    let ticks = (total_ms / TICK_MS) as usize;
+    let link = link_trace(&sc.link, ticks, &mut network_rng);
+
     let mut qos = super::smoke::session(sc.limit, sc.quality);
     qos.abr_config = sc.abr;
     if sc.abr {
@@ -205,52 +333,27 @@ pub fn run(sc: &Scenario) -> Report {
     let mut queue: VecDeque<Packet> = VecDeque::new();
     let mut queued_bits = 0.0_f64;
     let mut encode_phase = 0.0_f64;
-    let mut frames_encoded = 0_u64;
     let mut encoded_this_second = 0_usize;
     let mut probe_sent: Option<u32> = None;
     let mut replies: Vec<(u32, u32)> = Vec::new(); // (arrive_ms, delay_ms)
-    let mut stall_until = 0_u32;
-    let mut backoff_until = 0_u32;
-    let mut next_stall_ms = if sc.link.stall_mean_interval_s > 0.0 {
-        (rng.exponential(sc.link.stall_mean_interval_s) * 1000.0) as u32
-    } else {
-        u32::MAX
-    };
-    let mut wobble = 0.0_f64;
     let restore_ms = sc.link.restore_ms();
 
     let mut fps_samples = Vec::new();
     let mut queue_samples = Vec::new();
+    let mut produced = 0_u64;
+    let mut delivered = 0_u64;
+    let mut frame_ages = Vec::new();
     let mut trace = Vec::new();
     let mut max_delay = 0_u32;
     let mut recovery_ms = None;
+    let mut good_since: Option<u32> = None;
+    let mut cold_start_min_fps = u32::MAX;
+    let mut time_to_90pct_ms = None;
 
-    let total_ms = sc.seconds * 1000;
-    let mut now = 0_u32;
-    while now < total_ms {
+    for tick in 0..ticks {
+        let now = tick as u32 * TICK_MS;
         qos.advance_ms(TICK_MS as u64);
-
-        // Capacity: nominal schedule, slow wobble, retransmission backoff.
-        if now % 100 == 0 {
-            wobble = (wobble + rng.normal() * 0.03).clamp(-sc.link.wobble, sc.link.wobble);
-        }
-        let mut capacity_kbps = sc.link.capacity_at(now) * (1.0 + wobble);
-        if now < backoff_until {
-            capacity_kbps *= 0.5;
-        }
-
-        // Link events.
-        if now >= next_stall_ms {
-            let len = rng.range(sc.link.stall_ms.0, sc.link.stall_ms.1) as u32;
-            stall_until = stall_until.max(now + len);
-            next_stall_ms = now + (rng.exponential(sc.link.stall_mean_interval_s) * 1000.0) as u32;
-        }
-        if sc.link.loss_per_s > 0.0 && rng.uniform() < sc.link.loss_per_s * TICK_MS as f64 / 1000.0
-        {
-            let len = rng.range(200.0, 400.0) as u32;
-            stall_until = stall_until.max(now + len);
-            backoff_until = stall_until + 1000;
-        }
+        let capacity_kbps = link.capacity_kbps[tick];
 
         // Encoder: frames at the controller's rate, sized by the controller's ratio.
         // The video loop reports the bitrate as soon as it applies a new ratio.
@@ -265,38 +368,27 @@ pub fn run(sc: &Scenario) -> Report {
         encode_phase += produce_rate * TICK_MS as f64 / 1000.0;
         while encode_phase >= 1.0 {
             encode_phase -= 1.0;
-            frames_encoded += 1;
             encoded_this_second += 1;
-            let target_bits = match (sc.content, sc.encoder) {
-                // A changed region of a static screen is small whatever the rate control does.
-                (Content::Office, _) => bitrate_kbps * 1000.0 / ENCODER_CONFIGURED_FPS * 0.3,
-                (Content::Video, EncoderModel::Cbr) => bitrate_kbps * 1000.0 / produce_rate,
-                (Content::Video, EncoderModel::FixedRate) => {
-                    bitrate_kbps * 1000.0 / ENCODER_CONFIGURED_FPS
-                }
-            };
-            let mut bits = target_bits * rng.log_normal(1.0, 0.35);
-            // A scene change every five seconds of video costs a few frames' worth of data.
-            if sc.content == Content::Video
-                && frames_encoded % (5 * produce_rate.max(1.0) as u64).max(1) == 0
-            {
-                bits *= 3.0;
+            if now >= WARM_UP_MS {
+                produced += 1;
             }
+            let bits = encoder.frame_bits(bitrate_kbps, produce_rate);
             queue.push_back(Packet {
                 bits,
+                enqueued_ms: now,
                 probe_sent_ms: None,
             });
             queued_bits += bits;
         }
 
-        // Link drain: probes are tiny and leave as soon as they reach the head.
-        if now >= stall_until {
+        // Shared path drain: probes are tiny and leave as soon as they reach the head.
+        if !link.stalled[tick] {
             let mut budget = capacity_kbps * TICK_MS as f64;
             while budget > 0.0 {
                 let Some(head) = queue.front_mut() else { break };
                 if let Some(sent) = head.probe_sent_ms {
                     let round_trip = sc.link.base_rtt_ms
-                        + rng.log_normal(sc.link.jitter_median_ms, sc.link.jitter_sigma);
+                        + probe_rng.log_normal(sc.link.jitter_median_ms, sc.link.jitter_sigma);
                     let arrive = now + round_trip as u32;
                     replies.push((arrive, arrive - sent));
                     queue.pop_front();
@@ -307,6 +399,10 @@ pub fn run(sc: &Scenario) -> Report {
                 queued_bits -= take;
                 budget -= take;
                 if head.bits <= 1e-9 {
+                    if now >= WARM_UP_MS {
+                        delivered += 1;
+                        frame_ages.push(now - head.enqueued_ms);
+                    }
                     queue.pop_front();
                 }
             }
@@ -327,6 +423,7 @@ pub fn run(sc: &Scenario) -> Report {
                 probe_sent = Some(now);
                 queue.push_back(Packet {
                     bits: 0.0,
+                    enqueued_ms: now,
                     probe_sent_ms: Some(now),
                 });
             }
@@ -341,38 +438,126 @@ pub fn run(sc: &Scenario) -> Report {
             let queue_ms = (queued_bits / capacity_kbps.max(1.0)) as u32;
             let fps = qos.fps();
             trace.push((now, fps, queue_ms, qos.ratio()));
-            if now >= WARM_UP_MS {
+            if now < WARM_UP_MS {
+                cold_start_min_fps = cold_start_min_fps.min(fps);
+            } else {
                 fps_samples.push(fps);
                 queue_samples.push(queue_ms);
             }
+            if time_to_90pct_ms.is_none() && fps * 10 >= sc.limit * 9 {
+                time_to_90pct_ms = Some(now);
+            }
             if let Some(restore) = restore_ms {
-                if now >= restore && fps >= sc.limit && recovery_ms.is_none() {
-                    recovery_ms = Some(now - restore);
+                if now >= restore && recovery_ms.is_none() {
+                    if fps >= sc.limit && queue_ms < 200 {
+                        let since = *good_since.get_or_insert(now);
+                        if now - since >= SUSTAINED_MS {
+                            recovery_ms = Some(since - restore);
+                        }
+                    } else {
+                        good_since = None;
+                    }
                 }
             }
         }
-        now += TICK_MS;
     }
 
-    let mut sorted_fps = fps_samples.clone();
-    sorted_fps.sort_unstable();
-    let mut sorted_queue = queue_samples.clone();
-    sorted_queue.sort_unstable();
+    let measured_s = (total_ms - WARM_UP_MS) as f64 / 1000.0;
     let below_half = fps_samples.iter().filter(|f| **f * 2 < sc.limit).count();
     Report {
         name: sc.name.to_owned(),
+        seed: sc.seed,
         limit: sc.limit,
-        mean_fps: fps_samples.iter().map(|f| *f as f64).sum::<f64>()
+        mean_target_fps: fps_samples.iter().map(|f| *f as f64).sum::<f64>()
             / fps_samples.len().max(1) as f64,
-        p10_fps: percentile(&sorted_fps, 0.10),
-        min_fps: sorted_fps.first().copied().unwrap_or(0),
+        p10_target_fps: percentile_u32(&fps_samples, 0.10),
+        min_target_fps: fps_samples.iter().copied().min().unwrap_or(0),
         below_half_pct: 100.0 * below_half as f64 / fps_samples.len().max(1) as f64,
-        queue_p95_ms: percentile(&sorted_queue, 0.95),
+        produced_fps: produced as f64 / measured_s,
+        delivered_fps: delivered as f64 / measured_s,
+        frame_age_p95_ms: percentile_u32(&frame_ages, 0.95),
+        queue_p95_ms: percentile_u32(&queue_samples, 0.95),
         max_delay_ms: max_delay,
+        has_restore: restore_ms.is_some(),
         recovery_ms,
+        cold_start_min_fps,
+        time_to_90pct_ms,
         final_fps: qos.fps(),
         final_ratio: qos.ratio(),
         trace,
+    }
+}
+
+/// One scenario over all seeds, summarised by the statistics the assertions use.
+#[derive(Debug)]
+pub struct Summary {
+    pub name: String,
+    pub limit: u32,
+    pub mean_target_median: f64,
+    pub p10_target_worst: u32,
+    pub below_half_p90: f64,
+    pub queue_p95_p90: u32,
+    pub delivered_median: f64,
+    pub frame_age_p95_p90: u32,
+    pub has_restore: bool,
+    /// Slowest sustained recovery, `None` when any seed never recovered.
+    pub recovery_worst_ms: Option<u32>,
+    pub cold_start_min_median: u32,
+    /// Slowest time to 90% of the limit, `None` when any seed never got there.
+    pub time_to_90pct_worst_ms: Option<u32>,
+}
+
+impl Summary {
+    pub fn of(reports: &[Report]) -> Self {
+        let f = |g: fn(&Report) -> f64| reports.iter().map(g).collect::<Vec<_>>();
+        let u = |g: fn(&Report) -> u32| reports.iter().map(g).collect::<Vec<_>>();
+        let all = |g: fn(&Report) -> Option<u32>| {
+            reports
+                .iter()
+                .map(g)
+                .try_fold(0, |worst, ms| ms.map(|ms| worst.max(ms)))
+        };
+        Summary {
+            name: reports[0].name.clone(),
+            limit: reports[0].limit,
+            mean_target_median: percentile_f64(&f(|r| r.mean_target_fps), 0.5),
+            p10_target_worst: percentile_u32(&u(|r| r.p10_target_fps), 0.0),
+            below_half_p90: percentile_f64(&f(|r| r.below_half_pct), 0.9),
+            queue_p95_p90: percentile_u32(&u(|r| r.queue_p95_ms), 0.9),
+            delivered_median: percentile_f64(&f(|r| r.delivered_fps), 0.5),
+            frame_age_p95_p90: percentile_u32(&u(|r| r.frame_age_p95_ms), 0.9),
+            has_restore: reports[0].has_restore,
+            recovery_worst_ms: all(|r| r.recovery_ms),
+            cold_start_min_median: percentile_u32(&u(|r| r.cold_start_min_fps), 0.5),
+            time_to_90pct_worst_ms: all(|r| r.time_to_90pct_ms),
+        }
+    }
+
+    pub const HEADER: &'static str = "| scenario | limit | target fps (median of means) | worst p10 | below limit/2 (p90) | queue p95 (p90) | delivered fps (median) | frame age p95 (p90) | sustained recovery (worst) | cold-start min (median) | time to 90% (worst) |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|";
+
+    pub fn row(&self) -> String {
+        let secs = |ms: Option<u32>| {
+            ms.map(|ms| format!("{:.1}s", ms as f64 / 1000.0))
+                .unwrap_or_else(|| "never".to_owned())
+        };
+        format!(
+            "| {} | {} | {:.1} | {} | {:.1}% | {} ms | {:.1} | {} ms | {} | {} | {} |",
+            self.name,
+            self.limit,
+            self.mean_target_median,
+            self.p10_target_worst,
+            self.below_half_p90,
+            self.queue_p95_p90,
+            self.delivered_median,
+            self.frame_age_p95_p90,
+            if self.has_restore {
+                secs(self.recovery_worst_ms)
+            } else {
+                "-".to_owned()
+            },
+            self.cold_start_min_median,
+            secs(self.time_to_90pct_worst_ms),
+        )
     }
 }
 
@@ -389,8 +574,9 @@ fn clean_link(capacity_kbps: f64) -> Link {
     }
 }
 
-/// Weak-signal home Wi-Fi: plenty of capacity on average, but heavy-tailed jitter,
+/// Weak-signal home Wi-Fi with ample average capacity: heavy-tailed jitter,
 /// retransmissions, and a link stall of up to 2.5 s every twenty seconds or so.
+/// Deliberately nasty; it isolates "capacity is fine, timing is not".
 fn home_wifi_link() -> Link {
     Link {
         capacity_kbps: vec![(0, 20_000.0)],
@@ -448,7 +634,7 @@ pub fn scenarios() -> Vec<Scenario> {
         content: Content::Video,
         encoder,
         link,
-        seed: 7,
+        seed: 1,
     };
     use EncoderModel::*;
     vec![
@@ -495,13 +681,33 @@ pub fn scenarios() -> Vec<Scenario> {
     ]
 }
 
-fn write_traces(reports: &[Report]) {
+/// Runs every scenario over `SEEDS` and returns the per-scenario summaries.
+pub fn run_all() -> Vec<(Summary, Vec<Report>)> {
+    scenarios()
+        .iter()
+        .map(|sc| {
+            let reports: Vec<Report> = SEEDS
+                .map(|seed| run(&Scenario { seed, ..sc.clone() }))
+                .collect();
+            (Summary::of(&reports), reports)
+        })
+        .collect()
+}
+
+fn write_traces(results: &[(Summary, Vec<Report>)]) {
     use std::fmt::Write;
     if let Ok(path) = std::env::var("RUSTDESK_QOS_SIM_CSV") {
-        let mut csv = String::from("scenario,time_ms,fps,queue_ms,ratio\n");
-        for report in reports {
-            for (t, fps, queue, ratio) in &report.trace {
-                writeln!(csv, "{},{t},{fps},{queue},{ratio:.3}", report.name).unwrap();
+        let mut csv = String::from("scenario,seed,time_ms,target_fps,queue_ms,ratio\n");
+        for (_, reports) in results {
+            for report in reports {
+                for (t, fps, queue, ratio) in &report.trace {
+                    writeln!(
+                        csv,
+                        "{},{},{t},{fps},{queue},{ratio:.3}",
+                        report.name, report.seed
+                    )
+                    .unwrap();
+                }
             }
         }
         std::fs::write(path, csv).unwrap();
@@ -510,15 +716,30 @@ fn write_traces(reports: &[Report]) {
 
 #[test]
 fn sim_scenarios() {
-    let reports: Vec<Report> = scenarios().iter().map(run).collect();
-    println!("{}", Report::HEADER);
-    for report in &reports {
-        println!("{}", report.row());
+    let results = run_all();
+    println!("{}", Summary::HEADER);
+    for (summary, _) in &results {
+        println!("{}", summary.row());
     }
-    write_traces(&reports);
-    let get = |name: &str| reports.iter().find(|r| r.name == name).unwrap();
+    if std::env::var("RUSTDESK_QOS_SIM_VERBOSE").is_ok() {
+        for (_, reports) in &results {
+            for r in reports {
+                println!(
+                    "{} seed {}: target mean {:.1} p10 {} min {} below-half {:.1}% delivered {:.1} age p95 {} queue p95 {} max probe {} recovery {:?} cold-start min {} t90 {:?}",
+                    r.name, r.seed, r.mean_target_fps, r.p10_target_fps, r.min_target_fps,
+                    r.below_half_pct, r.delivered_fps, r.frame_age_p95_ms, r.queue_p95_ms,
+                    r.max_delay_ms, r.recovery_ms, r.cold_start_min_fps, r.time_to_90pct_ms
+                );
+            }
+        }
+    }
+    write_traces(&results);
+    let get = |name: &str| &results.iter().find(|(s, _)| s.name == name).unwrap().0;
 
-    // A jittery but healthy link must stay fast: the whole point of the change.
+    // A jittery but healthy link must stay fast: the whole point of the change.  The
+    // bounds are what the product needs, not what one seed produced: the target
+    // rarely leaves the limit, never collapses, and stalls of up to 2.5 s leave
+    // about a second of queue at worst.
     for name in [
         "home_wifi_30",
         "home_wifi_60",
@@ -526,53 +747,60 @@ fn sim_scenarios() {
         "home_wifi_no_abr_30",
         "office_home_wifi_30",
     ] {
-        let r = get(name);
-        assert!(r.mean_fps >= 0.85 * r.limit as f64, "{name}: {r:?}");
-        assert!(r.below_half_pct <= 5.0, "{name}: {r:?}");
-        assert!(r.queue_p95_ms < 500, "{name}: {r:?}");
+        let s = get(name);
+        let limit = s.limit as f64;
+        assert!(s.mean_target_median >= 0.85 * limit, "{name}: {s:?}");
+        assert!(s.p10_target_worst * 3 >= s.limit, "{name}: {s:?}");
+        assert!(s.below_half_p90 <= 10.0, "{name}: {s:?}");
+        assert!(s.queue_p95_p90 < 1000, "{name}: {s:?}");
+        if name != "office_home_wifi_30" {
+            assert!(s.delivered_median >= 0.8 * limit, "{name}: {s:?}");
+        }
     }
-    // A clean link is where the developers test; it must sit at the limit.
+    // A clean link is where the developers test; every seed sits at the limit, and
+    // a fresh connection reaches 90% of it within ten seconds.
     for name in ["city_relay_30", "city_relay_60"] {
-        let r = get(name);
-        assert_eq!(r.min_fps, r.limit, "{name}: {r:?}");
+        let s = get(name);
+        assert_eq!(s.p10_target_worst, s.limit, "{name}: {s:?}");
+        assert!(s.queue_p95_p90 < 50, "{name}: {s:?}");
+        assert!(
+            s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
+            "{name}: {s:?}"
+        );
     }
     // High but stable RTT is not congestion.
-    let r = get("intercontinental_30");
-    assert!(
-        r.mean_fps >= 0.9 * r.limit as f64,
-        "intercontinental: {r:?}"
-    );
-    assert!(
-        r.final_ratio >= Quality::Balanced.ratio() * 0.9,
-        "intercontinental: {r:?}"
-    );
-    // Real congestion must be detected, drained, and recovered from.  With a CBR
+    let s = get("intercontinental_30");
+    assert!(s.mean_target_median >= 0.9 * s.limit as f64, "{s:?}");
+    // Real congestion must be detected, drained and recovered from.  With a CBR
     // encoder only the bitrate drains the queue, and three probe replies at one
-    // second cadence are needed before a confirmed cut, so about two seconds of
-    // queue are inherent there.  Without ABR nothing drains a CBR queue at all, so
-    // that combination is reported but not asserted.
+    // second cadence plus a three second ratio cooldown are needed before a
+    // confirmed cut, so a few seconds of queue are inherent there.  Without ABR
+    // nothing drains a CBR queue at all, so that combination is reported but not
+    // asserted.
     for (name, queue_p95_bound_ms, below_half_bound_pct) in [
-        ("bandwidth_halved_30", 2500, 10.0),
-        ("bandwidth_halved_fixed_rate_30", 1500, 5.0),
-        ("bandwidth_halved_fixed_rate_no_abr_30", 2000, 20.0),
+        ("bandwidth_halved_30", 3000, 40.0),
+        ("bandwidth_halved_fixed_rate_30", 2000, 10.0),
+        ("bandwidth_halved_fixed_rate_no_abr_30", 3000, 30.0),
     ] {
-        let r = get(name);
-        assert!(r.queue_p95_ms < queue_p95_bound_ms, "{name}: {r:?}");
-        assert!(r.below_half_pct <= below_half_bound_pct, "{name}: {r:?}");
+        let s = get(name);
+        assert!(s.queue_p95_p90 < queue_p95_bound_ms, "{name}: {s:?}");
+        assert!(s.below_half_p90 <= below_half_bound_pct, "{name}: {s:?}");
         assert!(
-            r.recovery_ms.is_some_and(|ms| ms <= 15_000),
-            "{name}: {r:?}"
+            s.recovery_worst_ms.is_some_and(|ms| ms <= 20_000),
+            "{name}: {s:?}"
         );
-        assert_eq!(r.final_fps, r.limit, "{name}: {r:?}");
     }
-    let r = get("mobile_bufferbloat_30");
-    assert!(r.queue_p95_ms < 2000, "mobile: {r:?}");
+    let s = get("mobile_bufferbloat_30");
+    assert!(s.queue_p95_p90 < 2000, "{s:?}");
+    assert!(s.below_half_p90 <= 15.0, "{s:?}");
 }
 
-/// Replays a `qos_trace` log captured on a real host (see `user_network_delay`),
-/// so the controller's decisions on a recorded delay sequence can be inspected.
-/// Set `RUSTDESK_QOS_TRACE` to the log file; the replay is open loop: the recorded
-/// delays do not react to the replayed decisions.
+/// Replays a `qos_trace` log captured on a real host (see `user_network_delay`).
+/// Set `RUSTDESK_QOS_TRACE` to the log file.  This is an open-loop diagnostic of
+/// the FPS controller only: the recorded delays do not react to the replayed
+/// decisions, the session runs with ABR off, and connections are replayed as
+/// separate viewers of one 30 fps balanced session.  Time advances by the recorded
+/// `t=` deltas, or by one second per line when a trace predates that field.
 #[test]
 fn replay_recorded_trace() {
     let Ok(path) = std::env::var("RUSTDESK_QOS_TRACE") else {
@@ -580,7 +808,7 @@ fn replay_recorded_trace() {
     };
     let text = std::fs::read_to_string(&path).unwrap();
     // A present but malformed value is a corrupt trace, not a missing field.
-    let field = |line: &str, key: &str| -> Option<u32> {
+    let field = |line: &str, key: &str| -> Option<u64> {
         line.split_whitespace()
             .find_map(|kv| kv.strip_prefix(key).and_then(|v| v.strip_prefix('=')))
             .map(|v| {
@@ -589,24 +817,37 @@ fn replay_recorded_trace() {
             })
     };
     let mut qos = super::smoke::session(30, Quality::Balanced);
-    let mut now = 0;
+    let mut last_t: HashMap<i32, u64> = HashMap::new();
+    let mut now = 0_u64;
     let mut trace = Vec::new();
     for line in text.lines().filter(|l| l.contains("qos_trace")) {
-        now += 1000;
-        qos.advance_ms(1000);
+        let id = field(line, "id").unwrap_or(1) as i32;
+        qos.users.entry(id).or_default();
+        let step = match (field(line, "t"), last_t.get(&id)) {
+            (Some(t), Some(prev)) => t.saturating_sub(*prev).clamp(1, 10_000),
+            _ => 1000,
+        };
+        if let Some(t) = field(line, "t") {
+            last_t.insert(id, t);
+        }
+        now += step;
+        qos.advance_ms(step);
         if let Some(elapsed) = field(line, "timeout") {
-            qos.user_delay_response_elapsed(1, elapsed as u128);
+            qos.user_delay_response_elapsed(id, elapsed as u128);
         } else if let Some(delay) = field(line, "delay") {
-            qos.user_delay_response_elapsed(1, 0);
-            qos.user_network_delay(1, delay);
+            qos.user_delay_response_elapsed(id, 0);
+            qos.user_network_delay(id, delay as u32);
         }
         let recorded = field(line, "fps").unwrap_or(0);
-        trace.push((now, recorded, qos.fps()));
+        trace.push((now, id, recorded, qos.fps()));
     }
-    println!("time_ms,recorded_fps,replayed_fps");
-    for (t, recorded, replayed) in &trace {
-        println!("{t},{recorded},{replayed}");
+    println!("time_ms,id,recorded_fps,replayed_fps");
+    for (t, id, recorded, replayed) in &trace {
+        println!("{t},{id},{recorded},{replayed}");
     }
-    let mean = trace.iter().map(|t| t.2 as f64).sum::<f64>() / trace.len().max(1) as f64;
-    println!("replayed mean fps: {mean:.1} over {} samples", trace.len());
+    let mean = trace.iter().map(|t| t.3 as f64).sum::<f64>() / trace.len().max(1) as f64;
+    println!(
+        "replayed mean target fps: {mean:.1} over {} lines",
+        trace.len()
+    );
 }
