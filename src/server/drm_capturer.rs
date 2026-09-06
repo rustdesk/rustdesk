@@ -1988,8 +1988,13 @@ mod drm_capturer_tests {
     // scanned out and only afterwards mapped as if it were a point on it: the guess picks the
     // top-left of the opaque box, and a turned arrow's tip is not in that corner - at 90 the
     // error is the arrow's WIDTH along x, small enough to pass as fine; at 270 it is its HEIGHT
-    // along y, which is the one that got reported. This test covers the second cause; the sprite
-    // itself is covered by the two below.
+    // along y, which is the one that got reported.
+    //
+    // The 180 entry below is about that mapping, not about what was seen: on master the clamp sent
+    // 180 down the untouched branch, so the guess and the sprite were turned together and the
+    // hotspot landed on the tip anyway - measured as (0,0) there, with only the sprite wrong. What
+    // the loop shows is that the guess is not a point that survives being mapped, at any angle.
+    // This test covers the mapping; the sprite is covered by the two below.
     #[test]
     fn a_guessed_hotspot_is_guessed_on_the_upright_sprite() {
         use scrap::drm_reader::infer_hotspot;
