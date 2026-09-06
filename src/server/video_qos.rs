@@ -26,12 +26,16 @@ ratio adjust:
 a. user set image quality => update to the maximum ratio of the latest quality
 b. 3 seconds timeout => update ratio according to network delay
     When network delay < DELAY_THRESHOLD_150MS, increase ratio, max 150kbps;
-    When network delay >= DELAY_THRESHOLD_150MS and a user confirmed congestion, decrease ratio;
+    When network delay >= DELAY_THRESHOLD_150MS and a user confirmed congestion
+    (two bad replies in a row, or a probe still out at the second tick past two
+    seconds), decrease ratio; one slow reply or one short stall does not.
 c. confirmed congestion => decrease ratio at once, when the 3 seconds cooldown allows
 
 delay:
     TestDelay shares the video stream, so it measures the queue in front of it rather
-    than the path RTT; the historical minimum serves as the baseline that is subtracted.
+    than the path RTT; the minimum seen so far serves as the baseline that is
+    subtracted, from the first reply on, so a stable high-RTT link never reads as
+    congested while the estimate settles.
 */
 
 // Constants
@@ -54,7 +58,7 @@ const RESTORE_GUARD_SAMPLES: u8 = 5; // A restored level that congests this soon
 
 #[derive(Default, Debug, Clone)]
 struct UserDelay {
-    response_delayed: bool,
+    stall_ticks: u8, // timer ticks the outstanding probe has been out beyond two seconds
     delay_history: VecDeque<u32>,
     fps: Option<u32>,
     rtt_calculator: RttCalculator,
@@ -161,12 +165,11 @@ impl UserDelay {
         }
     }
 
+    // Bitrate is cut on confirmation only: two bad replies in a row, or a probe still
+    // outstanding at the second tick past two seconds.  One slow reply or one short
+    // stall is jitter, and a static screen would never earn the cut back.
     fn needs_bitrate_reduction(&self) -> bool {
-        self.response_delayed
-            || self.consecutive_bad_samples >= 2
-            || self.delay_history.back().is_some_and(|delay| {
-                delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default()) >= 1000
-            })
+        self.consecutive_bad_samples >= 2 || self.stall_ticks >= 2
     }
 
     // Average delay above the baseline: what the queue adds on top of the path itself.
@@ -385,7 +388,7 @@ impl VideoQoS {
         if let Some(user) = self.users.get_mut(&id) {
             let delay = delay.max(10);
             // The reply closes the outstanding probe, braked or not.
-            user.delay.response_delayed = false;
+            user.delay.stall_ticks = 0;
             let braked = user.delay.stall_reference_fps.take().is_some();
             let old_avg_delay = user.delay.avg_delay();
             user.delay.add_delay(delay);
@@ -465,7 +468,8 @@ impl VideoQoS {
             user.delay.fps = Some(fps);
             let base = user.delay.rtt_calculator.get_rtt().unwrap_or_default();
             log::debug!(
-                "qos_trace id={id} delay={delay} base={base} excess={} avg={avg_delay} bad={} good={} braked={braked} fps={fps} ratio={:.3} reduce_bitrate={reduce_bitrate}",
+                "qos_trace t={} id={id} delay={delay} base={base} excess={} avg={avg_delay} bad={} good={} braked={braked} fps={fps} ratio={:.3} reduce_bitrate={reduce_bitrate}",
+                hbb_common::get_time(),
                 delay.saturating_sub(base),
                 user.delay.consecutive_bad_samples,
                 user.delay.good_samples,
@@ -489,10 +493,10 @@ impl VideoQoS {
         let Some(user) = self.users.get_mut(&id) else {
             return;
         };
-        user.delay.response_delayed = elapsed > 2000;
-        if !user.delay.response_delayed {
+        if elapsed <= 2000 {
             return;
         }
+        user.delay.stall_ticks = user.delay.stall_ticks.saturating_add(1);
         user.delay.add_delay(elapsed as u32);
         // Halve for every second the probe stays out beyond the first: two seconds
         // halve, three quarter, and so on down to the floor.
@@ -508,7 +512,10 @@ impl VideoQoS {
         let divisor = 1u32 << ((elapsed / 1000) as u32).saturating_sub(1).min(5);
         let fps = (reference / divisor).max(MIN_FPS + 1);
         user.delay.fps = Some(fps);
-        log::debug!("qos_trace id={id} timeout={elapsed} fps={fps}");
+        log::debug!(
+            "qos_trace t={} id={id} timeout={elapsed} fps={fps}",
+            hbb_common::get_time()
+        );
         self.adjust_fps();
     }
 }
@@ -636,8 +643,9 @@ impl VideoQoS {
                 .values()
                 .any(|u| u.delay.needs_bitrate_reduction())
         {
+            // Elevated but unconfirmed: no change, and no cooldown either, so a
+            // confirmation on the next reply is acted on at once.
             self.reset_send_counters();
-            self.adjust_ratio_instant = self.now();
             return;
         }
 
@@ -749,7 +757,6 @@ struct RttCalculator {
 
 impl RttCalculator {
     const WINDOW_SAMPLES: usize = 60; // Keep last 60 samples
-    const MIN_SAMPLES: usize = 10; // Require at least 10 samples
     const ALPHA: f32 = 0.5; // Smoothing factor for weighted average
 
     /// Update RTT estimates with a new sample
@@ -782,16 +789,16 @@ impl RttCalculator {
         }
     }
 
-    /// Get current RTT estimate
-    /// Returns None if no valid estimation is available
+    /// Baseline delay of this connection: the smoothed estimate once the window is
+    /// full, the running minimum before that (from the very first sample, so a
+    /// stable high-RTT link is not read as congested while the estimate settles).
+    /// Returns None before the first sample.
     pub fn get_rtt(&self) -> Option<u32> {
         if let Some(rtt) = self.smoothed_rtt {
             return Some(rtt);
         }
-        if self.samples.len() >= Self::MIN_SAMPLES {
-            if let Some(rtt) = self.min_rtt {
-                return Some(rtt);
-            }
+        if let Some(rtt) = self.min_rtt {
+            return Some(rtt);
         }
         None
     }

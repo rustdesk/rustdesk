@@ -768,9 +768,14 @@ fn sim_scenarios() {
             "{name}: {s:?}"
         );
     }
-    // High but stable RTT is not congestion.
+    // High but stable RTT is not congestion, not even during the cold start.
     let s = get("intercontinental_30");
     assert!(s.mean_target_median >= 0.9 * s.limit as f64, "{s:?}");
+    assert!(s.cold_start_min_median >= INIT_FPS, "{s:?}");
+    assert!(
+        s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
+        "{s:?}"
+    );
     // Real congestion must be detected, drained and recovered from.  With a CBR
     // encoder only the bitrate drains the queue, and three probe replies at one
     // second cadence plus a three second ratio cooldown are needed before a

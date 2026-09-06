@@ -158,6 +158,47 @@ fn congestion_bitrate_reduction_resets_dynamic_screen_window() {
 }
 
 #[test]
+fn a_single_stall_does_not_cut_bitrate() {
+    // One probe out for 2.5 s, then its late reply: jitter, not congestion.
+    let mut qos = abr_session();
+    let ratio = qos.ratio();
+    qos.user_delay_response_elapsed(1, 2500);
+    qos.advance_ms(1000);
+    qos.update_display_data("test", 30);
+    assert_eq!(qos.ratio(), ratio, "the timeout tick alone");
+    qos.user_network_delay(1, 2600);
+    assert_eq!(qos.ratio(), ratio, "the late reply alone");
+    qos.user_network_delay(1, 400);
+    assert!(qos.ratio() < ratio, "a second bad reply confirms");
+}
+
+#[test]
+fn a_stall_beyond_three_seconds_cuts_bitrate() {
+    let mut qos = abr_session();
+    let ratio = qos.ratio();
+    qos.user_delay_response_elapsed(1, 2001);
+    qos.update_display_data("test", 30);
+    assert_eq!(qos.ratio(), ratio);
+    qos.advance_ms(1000);
+    qos.user_delay_response_elapsed(1, 3001);
+    qos.update_display_data("test", 30);
+    assert!(qos.ratio() < ratio, "still out at the next tick");
+}
+
+#[test]
+fn stable_high_rtt_does_not_dip_at_start() {
+    for rtt in [180, 300] {
+        let mut qos = super::smoke::session(30, Quality::Balanced);
+        for _ in 0..20 {
+            qos.advance_ms(1000);
+            qos.user_network_delay(1, rtt);
+            assert!(qos.fps() >= INIT_FPS, "rtt {rtt}: {}", qos.fps());
+        }
+        assert_eq!(qos.fps(), FPS, "rtt {rtt}");
+    }
+}
+
+#[test]
 fn confirmed_severe_congestion_halves_bitrate() {
     let mut qos = abr_session();
     let ratio = qos.ratio();
