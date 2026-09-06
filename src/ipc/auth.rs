@@ -1135,4 +1135,46 @@ mod tests {
             false
         ));
     }
+
+    // The matrix test above pins the pure decision; this one pins the WIRING, so rerouting the
+    // authorization path (e.g. degrading without consulting the server's privilege) cannot pass CI.
+    // PID 1 is a real peer whose executable differs from the test binary: an unprivileged server
+    // cannot read its /proc/<pid>/exe and must defer to the uid gate, while a server that can read
+    // it must still reject the mismatch.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_ensure_peer_executable_honors_server_privilege() {
+        let peer_exe_link = std::fs::read_link("/proc/1/exe");
+        let result = super::ensure_peer_executable_matches_current_by_pid(1, "_uinput_mouse");
+        match peer_exe_link {
+            Ok(peer_exe) => {
+                let peer = std::fs::canonicalize(&peer_exe).ok();
+                let current = std::env::current_exe()
+                    .ok()
+                    .and_then(|exe| std::fs::canonicalize(exe).ok());
+                // Only assert when the peer really is a different binary than this test.
+                if peer.is_some() && peer != current {
+                    assert!(
+                        result.is_err(),
+                        "a readable but mismatched peer executable must be rejected"
+                    );
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                if super::ipc_server_is_unprivileged() {
+                    assert!(
+                        result.is_ok(),
+                        "an unprivileged server must defer to the uid gate when the peer executable is unreadable"
+                    );
+                } else {
+                    assert!(
+                        result.is_err(),
+                        "a root server must stay fail-closed when the peer executable is unreadable"
+                    );
+                }
+            }
+            // No /proc, or PID 1 not inspectable for another reason: nothing to pin here.
+            Err(_) => {}
+        }
+    }
 }
