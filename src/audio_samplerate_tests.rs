@@ -15,6 +15,7 @@ const INCOMPLETE_SAMPLE_COUNT: usize = 1;
 const DOWNSAMPLE_RATE: u32 = 24_000;
 const REJECTED_TONE_HZ: f64 = 18_000.0;
 const MAX_ALIAS_RMS: f64 = 0.01;
+const MIN_PASSBAND_RMS: f64 = 0.3;
 
 fn stereo_tone(frames: usize) -> Vec<f32> {
     (0..frames)
@@ -89,6 +90,7 @@ fn moving_capture_resampler_preserves_pending_audio() {
     .unwrap();
     output.extend(remaining);
 
+    assert!(output.len() >= MIN_CONTINUITY_PACKETS);
     assert_eq!(output, expected);
 }
 
@@ -123,6 +125,24 @@ fn capture_downsampling_filters_out_of_band_audio() {
     assert!(
         rms < MAX_ALIAS_RMS,
         "out-of-band output RMS {rms} exceeded {MAX_ALIAS_RMS}"
+    );
+
+    let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
+    let mut resampler = FixedFrameAudioResampler::new(config, output_frames).unwrap();
+    let output: Vec<f32> = input
+        .chunks(INPUT_PACKET_FRAMES * CHANNELS as usize)
+        .flat_map(|packet| resampler.process(packet).unwrap().into_iter().flatten())
+        .collect();
+    assert!(output.len() >= output_frames * CHANNELS as usize * MIN_CONTINUITY_PACKETS);
+    let mean_square = output
+        .iter()
+        .map(|sample| f64::from(*sample).powi(2))
+        .sum::<f64>()
+        / output.len() as f64;
+    let rms = mean_square.sqrt();
+    assert!(
+        rms > MIN_PASSBAND_RMS,
+        "in-band output RMS {rms} fell below {MIN_PASSBAND_RMS}"
     );
 }
 
