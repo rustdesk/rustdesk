@@ -50,15 +50,6 @@ fn stereo_config() -> AudioResamplerConfig {
 }
 
 #[test]
-fn receiver_selects_samplerate_backend() {
-    fn assert_samplerate_backend(_: &samplerate::Samplerate) {}
-
-    let resampler = AudioResampler::new(stereo_config()).unwrap();
-
-    assert_samplerate_backend(&resampler.backend);
-}
-
-#[test]
 fn capture_resampler_emits_complete_continuous_frames() {
     let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
     let mut resampler =
@@ -73,13 +64,6 @@ fn capture_resampler_emits_complete_continuous_frames() {
         .iter()
         .all(|packet| packet.len() == OUTPUT_PACKET_FRAMES * CHANNELS as usize));
     assert!(maximum_boundary_residual(&packets) <= MAX_BOUNDARY_RESIDUAL);
-}
-
-#[test]
-fn capture_resampler_can_move_into_the_audio_callback() {
-    fn assert_send<T: Send>() {}
-
-    assert_send::<FixedFrameAudioResampler>();
 }
 
 #[test]

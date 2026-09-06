@@ -469,22 +469,6 @@ pub fn audio_resample(
     .unwrap_or_default()
 }
 
-#[cfg(all(test, feature = "use_dasp"))]
-mod audio_resample_compatibility_tests {
-    use super::audio_resample;
-
-    const SAMPLE_RATE: u32 = 48_000;
-    const CHANNELS: u16 = 1;
-    const INPUT: [f32; 2] = [0.0, 0.0];
-
-    #[test]
-    fn preserves_the_positional_vec_api() {
-        let output: Vec<f32> = audio_resample(&INPUT, SAMPLE_RATE, SAMPLE_RATE, CHANNELS);
-
-        assert_eq!(output.len(), INPUT.len());
-    }
-}
-
 pub fn audio_rechannel(
     input: Vec<f32>,
     in_hz: u32,

@@ -1,6 +1,4 @@
-use std::{error::Error, fmt};
-
-use hbb_common::log;
+use hbb_common::{log, thiserror};
 use ringbuf::Rb;
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
@@ -12,33 +10,18 @@ pub(super) struct AudioPlaybackConfig {
     pub channels: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(super) enum AudioPlaybackError {
+    #[error(
+        "invalid audio playback configuration: sample_rate={}, channels={}",
+        .0.sample_rate, .0.channels
+    )]
     InvalidConfig(AudioPlaybackConfig),
+    #[error("audio playback frame has {samples} samples for {channels} channels")]
     IncompleteFrame { samples: usize, channels: usize },
+    #[error("audio playback transition frame count overflow")]
     FrameCountOverflow,
 }
-
-impl fmt::Display for AudioPlaybackError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidConfig(config) => write!(
-                formatter,
-                "invalid audio playback configuration: sample_rate={}, channels={}",
-                config.sample_rate, config.channels
-            ),
-            Self::IncompleteFrame { samples, channels } => write!(
-                formatter,
-                "audio playback frame has {samples} samples for {channels} channels"
-            ),
-            Self::FrameCountOverflow => {
-                formatter.write_str("audio playback transition frame count overflow")
-            }
-        }
-    }
-}
-
-impl Error for AudioPlaybackError {}
 
 pub(super) struct AudioPlaybackRecovery {
     channels: usize,
@@ -175,6 +158,8 @@ mod tests {
     const ACTIVE_FRAME: [f32; CHANNELS] = [0.8, -0.8];
     const ACTIVE_FRAMES: usize = 300;
     const SILENT_FRAMES: usize = 300;
+    const TRANSITION_FRAMES: usize =
+        SAMPLE_RATE as usize * super::UNDERRUN_DECLICK_MS / super::MILLISECONDS_PER_SECOND;
     const MAX_SAMPLE_STEP: f32 = 0.01;
 
     fn maximum_sample_step(samples: &[f32]) -> f32 {
@@ -200,6 +185,11 @@ mod tests {
         for _ in 0..ACTIVE_FRAMES {
             output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
         }
+        let transition_end = TRANSITION_FRAMES * CHANNELS;
+        assert_eq!(
+            &output[transition_end - CHANNELS..transition_end],
+            ACTIVE_FRAME.as_slice()
+        );
         for _ in 0..SILENT_FRAMES {
             output.extend_from_slice(recovery.process_frame(None).unwrap());
         }
@@ -212,23 +202,6 @@ mod tests {
             maximum <= MAX_SAMPLE_STEP,
             "underflow transition step {maximum} exceeded {MAX_SAMPLE_STEP}"
         );
-    }
-
-    #[test]
-    fn preserves_input_after_fade_in() {
-        let config = AudioPlaybackConfig {
-            sample_rate: SAMPLE_RATE,
-            channels: CHANNELS,
-        };
-        let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-        let transition_frames = SAMPLE_RATE as usize * super::UNDERRUN_DECLICK_MS / 1_000;
-        let mut last_frame = [0.0; CHANNELS];
-
-        for _ in 0..transition_frames {
-            last_frame.copy_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
-        }
-
-        assert_eq!(last_frame, ACTIVE_FRAME);
     }
 
     #[test]

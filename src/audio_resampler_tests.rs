@@ -68,7 +68,7 @@ fn stereo_config() -> AudioResamplerConfig {
 }
 
 #[test]
-fn preserves_continuity_across_decoded_packet_boundaries() {
+fn preserves_decoded_packet_continuity_and_output_ratio() {
     let input = stereo_tone(CHUNK_FRAMES * CHUNK_COUNT);
     let mut resampler = AudioResampler::new(stereo_config()).unwrap();
     let output: Vec<_> = input
@@ -81,17 +81,7 @@ fn preserves_continuity_across_decoded_packet_boundaries() {
         residual <= MAX_BOUNDARY_RESIDUAL,
         "packet boundary residual {residual} exceeded {MAX_BOUNDARY_RESIDUAL}"
     );
-}
-
-#[test]
-fn preserves_the_long_run_output_ratio() {
-    let input = stereo_tone(CHUNK_FRAMES * CHUNK_COUNT);
-    let mut resampler = AudioResampler::new(stereo_config()).unwrap();
-    let output_samples: usize = input
-        .chunks(CHUNK_FRAMES * CHANNELS as usize)
-        .map(|chunk| resampler.process(chunk).unwrap().len())
-        .sum();
-    let output_frames = output_samples / CHANNELS as usize;
+    let output_frames = output.iter().map(Vec::len).sum::<usize>() / CHANNELS as usize;
     let expected_frames = CHUNK_FRAMES * CHUNK_COUNT * OUTPUT_RATE as usize / INPUT_RATE as usize
         - LOOK_AHEAD_OUTPUT_FRAMES;
 

@@ -1,4 +1,5 @@
-use std::{collections::VecDeque, error::Error, fmt};
+use hbb_common::thiserror;
+use std::collections::VecDeque;
 
 #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
 const INTERPOLATION_MARGIN_FRAMES: usize = 2;
@@ -10,44 +11,23 @@ pub(crate) struct AudioResamplerConfig {
     pub channels: u16,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum AudioResamplerError {
+    #[error(
+        "invalid audio resampler configuration: input_rate={}, output_rate={}, channels={}",
+        .0.input_rate, .0.output_rate, .0.channels
+    )]
     InvalidConfig(AudioResamplerConfig),
-    InvalidOutputFrameSize {
-        output_frames: usize,
-    },
-    IncompleteFrame {
-        samples: usize,
-        channels: usize,
-    },
+    #[error("invalid resampler output frame size: {output_frames}")]
+    InvalidOutputFrameSize { output_frames: usize },
+    #[error("audio resampler input length {samples} is not divisible by channel count {channels}")]
+    IncompleteFrame { samples: usize, channels: usize },
+    #[error("audio resampler output capacity overflow")]
     CapacityOverflow,
     #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+    #[error("audio resampler backend failed: {0}")]
     Backend(String),
 }
-
-impl fmt::Display for AudioResamplerError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidConfig(config) => write!(
-                formatter,
-                "invalid audio resampler configuration: input_rate={}, output_rate={}, channels={}",
-                config.input_rate, config.output_rate, config.channels
-            ),
-            Self::InvalidOutputFrameSize { output_frames } => {
-                write!(formatter, "invalid resampler output frame size: {output_frames}")
-            }
-            Self::IncompleteFrame { samples, channels } => write!(
-                formatter,
-                "audio resampler input length {samples} is not divisible by channel count {channels}"
-            ),
-            Self::CapacityOverflow => formatter.write_str("audio resampler output capacity overflow"),
-            #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-            Self::Backend(message) => write!(formatter, "audio resampler backend failed: {message}"),
-        }
-    }
-}
-
-impl Error for AudioResamplerError {}
 
 pub(crate) struct FixedFrameAudioResampler {
     resampler: AudioResampler,

@@ -177,7 +177,7 @@ mod cpal_impl {
     use super::*;
     use cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
-        BufferSize, Device, Host, InputCallbackInfo, StreamConfig, SupportedStreamConfig,
+        Device, Host, InputCallbackInfo, SupportedStreamConfig,
     };
     use std::borrow::Cow;
 
@@ -492,17 +492,6 @@ mod cpal_impl {
             .map(|sample| <f32 as cpal::FromSample<T>>::from_sample_(*sample))
     }
 
-    fn capture_stream_config(
-        config: &cpal::SupportedStreamConfig,
-        channels: u16,
-    ) -> StreamConfig {
-        StreamConfig {
-            channels,
-            sample_rate: config.sample_rate(),
-            buffer_size: BufferSize::Default,
-        }
-    }
-
     fn build_input_stream<T>(
         device: cpal::Device,
         config: &cpal::SupportedStreamConfig,
@@ -535,9 +524,8 @@ mod cpal_impl {
             CaptureFrameProcessor::new(processor_config, encoder, output.service)?;
         INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
-        let stream_config = capture_stream_config(config, device_channel);
         let stream = device.build_input_stream(
-            &stream_config,
+            &config.config(),
             move |data: &[T], _: &InputCallbackInfo| {
                 INPUT_BUFFER
                     .lock()
