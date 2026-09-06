@@ -464,6 +464,16 @@ mod cpal_impl {
         ))
     }
 
+    fn convert_input_samples<T>(data: &[T]) -> Vec<f32>
+    where
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
+    {
+        data.iter()
+            .map(|sample| <f32 as cpal::FromSample<T>>::from_sample_(*sample))
+            .collect()
+    }
+
     fn build_input_stream<T>(
         device: cpal::Device,
         config: &cpal::SupportedStreamConfig,
@@ -472,7 +482,8 @@ mod cpal_impl {
         encode_channel: magnum_opus::Channels,
     ) -> ResultType<cpal::Stream>
     where
-        T: cpal::SizedSample + dasp::sample::ToSample<f32>,
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
     {
         let err_fn = move |err| {
             // too many UnknownErrno, will improve later
@@ -503,7 +514,7 @@ mod cpal_impl {
         let stream = device.build_input_stream(
             &stream_config,
             move |data: &[T], _: &InputCallbackInfo| {
-                let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                let buffer = convert_input_samples(data);
                 INPUT_BUFFER.lock().unwrap().extend(buffer);
                 while let Some(frame) = take_input_frame(capture_frame_samples) {
                     if let Err(error) = processor.process(frame) {
@@ -519,13 +530,26 @@ mod cpal_impl {
 
     #[cfg(test)]
     mod tests {
-        use super::capture_packet_layout;
+        use super::{capture_packet_layout, convert_input_samples};
 
         const INVALID_CAPTURE_RATE: u32 = 99;
         const RATE_48_KHZ: u32 = 48_000;
         const MONO_CHANNELS: u16 = 1;
+        const NEGATIVE_FULL_SCALE_LIMIT: f32 = -0.99;
+        const POSITIVE_FULL_SCALE_LIMIT: f32 = 0.99;
         const STEREO_CHANNELS: u16 = 2;
         const ZERO_CHANNELS: u16 = 0;
+
+        #[test]
+        fn capture_sample_conversion_uses_cpal_traits() {
+            let input = [i16::MIN, 0, i16::MAX];
+            let output = convert_input_samples(&input);
+
+            assert_eq!(output.len(), input.len());
+            assert!(output[0] <= NEGATIVE_FULL_SCALE_LIMIT);
+            assert_eq!(output[1], 0.0);
+            assert!(output[2] >= POSITIVE_FULL_SCALE_LIMIT);
+        }
 
         #[test]
         fn capture_packet_layout_validates_rate_and_channels() {
