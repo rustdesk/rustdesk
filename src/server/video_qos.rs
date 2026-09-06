@@ -357,6 +357,9 @@ impl VideoQoS {
         self.users.remove(&id);
         if self.users.is_empty() {
             *self = Default::default();
+        } else {
+            // The stream follows the remaining viewers at once.
+            self.adjust_fps();
         }
     }
 
@@ -520,7 +523,13 @@ impl VideoQoS {
             );
         }
         self.adjust_fps();
-        if adjust_ratio && !cfg!(target_os = "linux") {
+        // A viewer's first reply is one more trigger of the periodic adjustment and
+        // keeps its cooldown: a viewer joining right after a cut must not spend the
+        // other viewers' evidence a second time.
+        if adjust_ratio
+            && !cfg!(target_os = "linux")
+            && self.since(self.adjust_ratio_instant).as_secs() >= ADJUST_RATIO_INTERVAL as u64
+        {
             //Reduce the possibility of vaapi being created twice
             self.adjust_ratio(false);
         }

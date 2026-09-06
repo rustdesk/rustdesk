@@ -352,12 +352,29 @@ fn custom_limit_of_one_viewer_does_not_lower_another_viewers_target() {
         Some(FPS),
         "viewer 1's own target is not a function of viewer 2's limit"
     );
-    qos.users.remove(&2);
-    qos.user_network_delay(1, 10);
+    qos.on_connection_close(2);
     assert_eq!(
         qos.fps(),
         FPS,
         "the stream is back the moment the limit is gone"
+    );
+}
+
+#[test]
+fn new_viewers_first_reply_does_not_bypass_bitrate_cooldown() {
+    let mut qos = abr_session();
+    for _ in 0..3 {
+        qos.user_network_delay(1, 800);
+    }
+    // Viewer 1 is confirmed and its evidence was spent on a cut a moment ago.
+    let ratio = qos.ratio();
+    assert!(ratio < Quality::Balanced.ratio());
+    qos.users.insert(2, UserData::default());
+    qos.user_network_delay(2, 10);
+    assert_eq!(
+        qos.ratio(),
+        ratio,
+        "viewer 2's first reply must not spend viewer 1's evidence again inside the cooldown"
     );
 }
 
