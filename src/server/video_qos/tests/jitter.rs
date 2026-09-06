@@ -5,6 +5,8 @@ fn abr_session() -> VideoQoS {
     qos.new_display("test".to_owned());
     qos.set_support_changing_quality("test", true);
     qos.store_bitrate(4000);
+    // Linux skips the first-reply adjustment; exercise it on every platform.
+    qos.first_reply_adjusts_ratio = true;
     qos.advance_ms(4000);
     qos
 }
@@ -424,5 +426,41 @@ fn unconfirmed_severe_viewer_does_not_amplify_another_viewers_confirmed_mild_con
         qos.ratio() >= after_two * 0.94,
         "viewer 1's severity must not be paired with viewer 2's confirmation: {}",
         qos.ratio()
+    );
+}
+
+#[test]
+fn closing_a_just_opened_viewer_does_not_throttle_existing_viewers() {
+    let mut qos = stable_qos();
+    assert_eq!(qos.fps(), FPS);
+    qos.users.insert(2, UserData::default());
+    qos.new_user = Some((2, qos.now()));
+    assert_eq!(
+        qos.fps(),
+        FPS,
+        "nothing changes until the stream is re-aggregated"
+    );
+    qos.on_connection_close(2);
+    assert_eq!(
+        qos.fps(),
+        FPS,
+        "the guard leaves with the viewer that brought it"
+    );
+}
+
+#[test]
+fn a_new_viewer_caps_the_stream_at_init_fps_for_a_second() {
+    let mut qos = stable_qos();
+    qos.users.insert(2, UserData::default());
+    qos.new_user = Some((2, qos.now()));
+    qos.user_network_delay(1, 10);
+    assert_eq!(qos.fps(), INIT_FPS);
+    qos.advance_ms(1000);
+    qos.user_network_delay(2, 10);
+    qos.user_network_delay(1, 10);
+    assert!(
+        qos.fps() > INIT_FPS,
+        "after a second the stream follows the viewers' own targets: {}",
+        qos.fps()
     );
 }

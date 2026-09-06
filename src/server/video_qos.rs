@@ -249,7 +249,8 @@ pub struct VideoQoS {
     bitrate_store: u32,
     adjust_ratio_instant: Instant,
     abr_config: bool,
-    new_user_instant: Instant,
+    new_user: Option<(i32, Instant)>, // the viewer that joined last, and when
+    first_reply_adjusts_ratio: bool,  // false on Linux, where it can create vaapi twice
     #[cfg(test)]
     test_now: Option<Instant>,
 }
@@ -264,7 +265,8 @@ impl Default for VideoQoS {
             bitrate_store: 0,
             adjust_ratio_instant: Instant::now(),
             abr_config: true,
-            new_user_instant: Instant::now(),
+            new_user: None,
+            first_reply_adjusts_ratio: !cfg!(target_os = "linux"),
             #[cfg(test)]
             test_now: None,
         }
@@ -349,7 +351,7 @@ impl VideoQoS {
     pub fn on_connection_open(&mut self, id: i32) {
         self.users.insert(id, UserData::default());
         self.abr_config = Config::get_option("enable-abr") != "N";
-        self.new_user_instant = self.now();
+        self.new_user = Some((id, self.now()));
     }
 
     // Clean up user session
@@ -357,10 +359,14 @@ impl VideoQoS {
         self.users.remove(&id);
         if self.users.is_empty() {
             *self = Default::default();
-        } else {
-            // The stream follows the remaining viewers at once.
-            self.adjust_fps();
+            return;
         }
+        // The newcomer guard belongs to the viewer that joined; it leaves with it.
+        if self.new_user.is_some_and(|(newest, _)| newest == id) {
+            self.new_user = None;
+        }
+        // The stream follows the remaining viewers at once.
+        self.adjust_fps();
     }
 
     pub fn user_custom_fps(&mut self, id: i32, fps: u32) {
@@ -527,10 +533,9 @@ impl VideoQoS {
         // keeps its cooldown: a viewer joining right after a cut must not spend the
         // other viewers' evidence a second time.
         if adjust_ratio
-            && !cfg!(target_os = "linux")
+            && self.first_reply_adjusts_ratio
             && self.since(self.adjust_ratio_instant).as_secs() >= ADJUST_RATIO_INTERVAL as u64
         {
-            //Reduce the possibility of vaapi being created twice
             self.adjust_ratio(false);
         }
         if reduce_bitrate
@@ -764,10 +769,11 @@ impl VideoQoS {
             .unwrap_or(INIT_FPS);
 
         // For new connections (within 1 second), cap fps to INIT_FPS to ensure stability
-        if self.since(self.new_user_instant).as_secs() < 1 {
-            if fps > INIT_FPS {
-                fps = INIT_FPS;
-            }
+        if self
+            .new_user
+            .is_some_and(|(_, joined)| self.since(joined).as_secs() < 1)
+        {
+            fps = fps.min(INIT_FPS);
         }
 
         // Ensure fps stays within valid range
