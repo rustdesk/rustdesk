@@ -60,6 +60,11 @@ fn profiles() -> Vec<(&'static str, Vec<u32>, bool)> {
             true,
         ),
         (
+            "congestion_1500_recovery",
+            [vec![1500; 20], vec![10; 60]].concat(),
+            true,
+        ),
+        (
             "rising_then_falling",
             (0..80).map(|i| 10 + i.min(79 - i) * 20).collect(),
             true,
@@ -117,19 +122,28 @@ fn smoke_latency_profiles() {
                         "{name}, {quality_name}"
                     );
                 }
-                if name == "congestion_800_recovery" {
+                if matches!(name, "congestion_800_recovery" | "congestion_1500_recovery") {
                     assert!(
-                        trace[5] <= (limit / 8).max(3),
-                        "severe congestion: {trace:?}"
+                        trace.iter().all(|fps| *fps >= limit.min(5)),
+                        "automatic reductions must preserve the floor: {trace:?}"
                     );
-                    assert!(
-                        trace[20] <= 3,
-                        "a single good reply must not restore the full frame rate"
+                    if limit >= 15 {
+                        assert!(
+                            trace[20] < limit,
+                            "a single good reply must not restore the full frame rate"
+                        );
+                    }
+                    assert_eq!(
+                        trace[21], limit,
+                        "two fresh good replies must restore the frame rate"
                     );
-                    assert!(
-                        trace[22] >= limit.min(8),
-                        "fresh replies must permit recovery"
-                    );
+                    if name == "congestion_1500_recovery" {
+                        assert_eq!(
+                            trace[5],
+                            limit.min(5),
+                            "severe congestion must brake promptly"
+                        );
+                    }
                 }
                 if name == "congestion_200_recovery" && limit >= 15 {
                     assert!(

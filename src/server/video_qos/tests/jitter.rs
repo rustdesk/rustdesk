@@ -223,9 +223,12 @@ fn fps_holds_its_floor_while_bitrate_can_still_drop() {
     // bitrate comes down first and the frame rate keeps its floor meanwhile.
     let mut qos = abr_session();
     let mut reached_floor = false;
+    // Keep the queue growing, rather than presenting a stable new path delay.
+    let mut delay = 400;
     for _ in 0..60 {
         qos.advance_ms(3000);
-        second(&mut qos, 400, 30);
+        second(&mut qos, delay, 30);
+        delay += 10;
         if qos.ratio() > 0.17 {
             assert!(
                 qos.fps() >= 10,
@@ -243,8 +246,9 @@ fn fps_holds_its_floor_while_bitrate_can_still_drop() {
         "bitrate must reach its floor: {}",
         qos.ratio()
     );
-    for _ in 0..8 {
-        qos.user_network_delay(1, 400);
+    for _ in 0..24 {
+        qos.user_network_delay(1, delay);
+        delay += 10;
     }
     assert!(
         qos.fps() < 10,
@@ -295,8 +299,8 @@ fn a_congested_viewer_does_not_lower_another_viewers_target() {
     }
     assert_eq!(qos.fps(), FPS);
     // Viewer 1 congests; the stream follows the slowest viewer.
-    for _ in 0..4 {
-        qos.user_network_delay(1, 800);
+    for _ in 0..2 {
+        qos.user_network_delay(1, 1200);
     }
     assert_eq!(qos.fps(), 8);
     // Viewer 2 is fine and keeps its own target rather than inheriting viewer 1's.
@@ -328,10 +332,10 @@ fn pending_probe_checks_do_not_count_as_fresh_bad_replies() {
 #[test]
 fn recovery_continues_with_intermittent_jitter() {
     let mut qos = stable_qos();
-    for _ in 0..10 {
-        qos.user_network_delay(1, 800);
+    for _ in 0..3 {
+        qos.user_network_delay(1, 1200);
     }
-    assert!(qos.fps() <= 3);
+    assert_eq!(qos.fps(), 5);
     for delay in [10, 350].repeat(30) {
         qos.user_network_delay(1, delay);
     }
@@ -383,8 +387,8 @@ fn new_viewers_first_reply_does_not_bypass_bitrate_cooldown() {
 #[test]
 fn new_viewer_does_not_inherit_another_viewers_congested_fps() {
     let mut qos = stable_qos();
-    for _ in 0..4 {
-        qos.user_network_delay(1, 800);
+    for _ in 0..2 {
+        qos.user_network_delay(1, 1200);
     }
     assert_eq!(qos.fps(), 8);
     qos.users.insert(2, UserData::default());

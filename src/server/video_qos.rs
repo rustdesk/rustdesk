@@ -11,14 +11,16 @@ a. new user connected => set to INIT_FPS
 b. TestDelay reply => update the user's fps from the excess delay, the reply's delay
    above the baseline this connection has shown so far:
      excess < DELAY_THRESHOLD_150MS: a good reply; grows the fps, and after a
-       reduction returns halfway, then fully, to the level held before it;
+       reduction returns to the level held before it after two good replies;
      excess >= DELAY_THRESHOLD_150MS: a bad reply; nothing happens until three in a
-       row confirm congestion (a second of excess cannot wait), then the fps drops
-       by a fifth per confirmed reply, by half when severe.
+       row confirm congestion, including after each reduction. FPS drops by a
+       fifth at most; a second of excess cannot wait and halves it immediately.
+       A recent fast restore also permits halving at 600 ms of excess.
    While the bitrate can still be reduced (ABR) it is reduced first and the fps keeps
    a floor: bitrate-targeted encoders do not send fewer bytes at fewer frames.
 c. probe outstanding for more than two seconds => halve the fps for every further
-   second, down to MIN_FPS + 1; the late reply does not reduce again
+   second, down to MIN_AUTO_FPS; the late reply does not reduce again. Automatic
+   reductions respect this floor unless the viewer requested a lower FPS cap.
 d. second timeout / TestDelay reply => real fps is the minimum over all users;
    every user starts at INIT_FPS, adapts from its own target and is capped by its
    own limit, never by that minimum or by another user's limit
@@ -36,9 +38,10 @@ c. confirmed congestion => decrease ratio at once, when the 3 seconds cooldown a
 
 delay:
     TestDelay shares the video stream, so it measures the queue in front of it rather
-    than the path RTT; the minimum seen so far serves as the baseline that is
-    subtracted, from the first reply on, so a stable high-RTT link never reads as
-    congested while the estimate settles.
+    than the path RTT. The baseline starts at the first reply and follows lower
+    delays immediately. Old minima expire after 20 fresh replies; a higher window
+    minimum is learned gradually only when the recent floor is no longer rising.
+    Outstanding-probe checks and their late replies do not age this window.
 */
 
 // Constants
@@ -46,6 +49,7 @@ pub const FPS: u32 = 30;
 pub const MIN_FPS: u32 = 1;
 pub const MAX_FPS: u32 = 120;
 pub const INIT_FPS: u32 = 15;
+const MIN_AUTO_FPS: u32 = 5;
 
 // Bitrate ratio constants for different quality levels
 const BR_MAX: f32 = 40.0; // 2000 * 2 / 100
@@ -68,6 +72,7 @@ struct UserDelay {
     quick_increase_fps_count: usize,
     increase_fps_count: usize,
     consecutive_bad_samples: usize,
+    fps_bad_samples: u8, // fresh bad replies since the last FPS reduction
     good_samples: usize, // since the last reduction, capped at 3
     replies_after_bitrate_reduction: Option<u8>,
     fps_before_congestion: Option<u32>, // level to return to once replies are good again
@@ -77,7 +82,6 @@ struct UserDelay {
 
 impl UserDelay {
     fn add_delay(&mut self, delay: u32) {
-        self.rtt_calculator.update(delay);
         if self.delay_history.len() >= HISTORY_DELAY_LEN {
             self.delay_history.pop_front();
         }
@@ -99,18 +103,25 @@ impl UserDelay {
         }
         if delay < DELAY_THRESHOLD_150MS {
             self.consecutive_bad_samples = 0;
+            self.fps_bad_samples = 0;
             self.replies_after_bitrate_reduction = None;
             self.good_samples = (self.good_samples + 1).min(3);
             return self.recover(current_fps, fps);
         }
         self.consecutive_bad_samples = (self.consecutive_bad_samples + 1).min(3);
+        self.fps_bad_samples = (self.fps_bad_samples + 1).min(3);
         if let Some(replies) = self.replies_after_bitrate_reduction.as_mut() {
             *replies = (*replies + 1).min(2);
         }
+        let failed_restore = delay >= 600
+            && self
+                .samples_since_restore
+                .is_some_and(|samples| samples <= RESTORE_GUARD_SAMPLES);
         // A level that congests right after being restored is not the level to return to.
         if self
             .samples_since_restore
             .is_some_and(|samples| samples <= RESTORE_GUARD_SAMPLES)
+            && (failed_restore || self.consecutive_bad_samples >= 3)
         {
             self.fps_before_congestion = Some(current_fps - current_fps / 4);
             self.samples_since_restore = None;
@@ -120,13 +131,16 @@ impl UserDelay {
             return current_fps;
         }
         // An extra second of delay cannot wait for another confirmation.
-        if delay < 1000
-            && (self.consecutive_bad_samples < 3
+        if !failed_restore
+            && delay < 1000
+            && (self.fps_bad_samples < 3
                 || (bitrate_first && self.replies_after_bitrate_reduction.unwrap_or_default() < 2))
         {
             return current_fps;
         }
-        let divisor = if delay >= 1000 || (delay >= 600 && self.consecutive_bad_samples == 3) {
+        // A fast restore probes capacity. Roll it back promptly if the queue grows
+        // again, rather than waiting through another ordinary confirmation window.
+        let divisor = if delay >= 1000 || failed_restore {
             2
         } else {
             5
@@ -136,18 +150,14 @@ impl UserDelay {
     }
 
     // Fresh low-delay replies permit recovery even while the average contains a spike:
-    // a little at first, then halfway and fully back to the level held before congestion.
+    // a little at first, then back to the level held before congestion.
     fn recover(&mut self, current_fps: u32, fps: u32) -> u32 {
         let gradual = current_fps + (current_fps / 10).max(1);
         let level = self
             .fps_before_congestion
             .filter(|level| *level > current_fps);
         match (self.good_samples, level) {
-            (2, Some(level)) => {
-                self.samples_since_restore = Some(0);
-                gradual.max((current_fps + level) / 2)
-            }
-            (3, Some(level)) => {
+            (2 | 3, Some(level)) => {
                 self.fps_before_congestion = None;
                 self.samples_since_restore = Some(0);
                 fps.max(level)
@@ -163,6 +173,7 @@ impl UserDelay {
     // The first reduction of an episode remembers the level to return to.
     fn on_reduction(&mut self, current_fps: u32) {
         self.good_samples = 0;
+        self.fps_bad_samples = 0;
         if self.fps_before_congestion.is_none() {
             self.fps_before_congestion = Some(current_fps);
         }
@@ -440,6 +451,9 @@ impl VideoQoS {
             user.delay.stall_ticks = 0;
             let braked = user.delay.stall_reference_fps.take().is_some();
             let old_avg_delay = user.delay.avg_delay();
+            if !braked {
+                user.delay.rtt_calculator.update(delay);
+            }
             user.delay.add_delay(delay);
             let mut avg_delay = user.delay.avg_delay();
             avg_delay = avg_delay.max(10);
@@ -507,6 +521,7 @@ impl VideoQoS {
                 // While the bitrate can still come down, the frame rate keeps its floor.
                 fps = fps.max(min_fps);
             }
+            fps = fps.max(MIN_AUTO_FPS.min(user_cap));
             fps = user
                 .delay
                 .limit_fps_change(current_fps, fps, delay, bitrate_first, braked);
@@ -565,7 +580,8 @@ impl VideoQoS {
             }
         };
         let divisor = 1u32 << ((elapsed / 1000) as u32).saturating_sub(1).min(5);
-        let fps = (reference / divisor).max(MIN_FPS + 1);
+        let user_cap = user.fps_cap();
+        let fps = (reference / divisor).clamp(MIN_AUTO_FPS.min(user_cap), user_cap);
         user.delay.fps = Some(fps);
         log::debug!(
             "qos_trace t={} id={id} timeout={elapsed} fps={fps}",
@@ -783,58 +799,44 @@ impl VideoQoS {
 
 #[derive(Default, Debug, Clone)]
 struct RttCalculator {
-    min_rtt: Option<u32>,        // Historical minimum RTT ever observed
-    window_min_rtt: Option<u32>, // Minimum RTT within last 60 samples
-    smoothed_rtt: Option<u32>,   // Smoothed RTT estimation
-    samples: VecDeque<u32>,      // Last 60 RTT samples
+    baseline: Option<u32>,
+    samples: VecDeque<u32>,
 }
 
 impl RttCalculator {
-    const WINDOW_SAMPLES: usize = 60; // Keep last 60 samples
-    const ALPHA: f32 = 0.5; // Smoothing factor for weighted average
+    const WINDOW_SAMPLES: usize = 20;
+    const MAX_INCREASE_MS: u32 = 50;
 
-    /// Update RTT estimates with a new sample
     pub fn update(&mut self, delay: u32) {
-        // 1. Update historical minimum RTT
-        match self.min_rtt {
-            Some(min_rtt) if delay < min_rtt => self.min_rtt = Some(delay),
-            None => self.min_rtt = Some(delay),
-            _ => {}
-        }
-
-        // 2. Update sample window
         if self.samples.len() >= Self::WINDOW_SAMPLES {
             self.samples.pop_front();
         }
         self.samples.push_back(delay);
+        let baseline = self.baseline.unwrap_or(delay).min(delay);
+        self.baseline = Some(baseline);
 
-        // 3. Calculate minimum RTT within the window
-        self.window_min_rtt = self.samples.iter().min().copied();
-
-        // 4. Calculate smoothed RTT
-        // Use weighted average if we have enough samples
-        if self.samples.len() >= Self::WINDOW_SAMPLES {
-            if let (Some(min), Some(window_min)) = (self.min_rtt, self.window_min_rtt) {
-                // Weighted average of historical minimum and window minimum
-                let new_srtt =
-                    ((1.0 - Self::ALPHA) * min as f32 + Self::ALPHA * window_min as f32) as u32;
-                self.smoothed_rtt = Some(new_srtt);
-            }
+        if self.samples.len() < Self::WINDOW_SAMPLES {
+            return;
+        }
+        let half = Self::WINDOW_SAMPLES / 2;
+        let older_min = self.samples.iter().take(half).min().copied();
+        let recent_min = self.samples.iter().skip(half).min().copied();
+        let (Some(older_min), Some(recent_min)) = (older_min, recent_min) else {
+            return;
+        };
+        // A rising floor can be a growing queue. Allow 10 ms of probe granularity,
+        // but wait for it to settle before forgetting the old baseline.
+        if recent_min > older_min.saturating_add(10) {
+            return;
+        }
+        let rise = older_min.min(recent_min).saturating_sub(baseline);
+        if rise > 0 {
+            self.baseline = Some(baseline + (rise / 2).clamp(1, Self::MAX_INCREASE_MS));
         }
     }
 
-    /// Baseline delay of this connection: the smoothed estimate once the window is
-    /// full, the running minimum before that (from the very first sample, so a
-    /// stable high-RTT link is not read as congested while the estimate settles).
-    /// Returns None before the first sample.
     pub fn get_rtt(&self) -> Option<u32> {
-        if let Some(rtt) = self.smoothed_rtt {
-            return Some(rtt);
-        }
-        if let Some(rtt) = self.min_rtt {
-            return Some(rtt);
-        }
-        None
+        self.baseline
     }
 }
 
@@ -874,7 +876,7 @@ mod tests {
     #[test]
     fn sustained_delay_reduces_fps_gradually() {
         let mut qos = stable_qos();
-        for expected_fps in [30, 30, 15, 8, 4] {
+        for expected_fps in [30, 30, 24, 24, 24, 20] {
             qos.user_network_delay(1, 800);
             assert_eq!(qos.fps(), expected_fps);
         }
@@ -892,7 +894,7 @@ mod tests {
     #[test]
     fn response_timeout_halves_fps_for_each_second_outstanding() {
         let mut qos = stable_qos();
-        for (elapsed, expected) in [(2001, 15), (3001, 7), (4001, 3), (5001, 2), (6001, 2)] {
+        for (elapsed, expected) in [(2001, 15), (3001, 7), (4001, 5), (5001, 5), (6001, 5)] {
             qos.user_delay_response_elapsed(1, elapsed);
             assert_eq!(qos.fps(), expected, "{elapsed} ms outstanding");
         }
@@ -906,7 +908,7 @@ mod tests {
     }
 
     #[test]
-    fn response_timeout_recovers_in_three_good_replies() {
+    fn response_timeout_recovers_in_two_good_replies() {
         let mut qos = stable_qos();
         qos.user_delay_response_elapsed(1, 3000);
         assert_eq!(qos.fps(), 7);
@@ -924,43 +926,39 @@ mod tests {
             "one good reply must not restore the full frame rate"
         );
         qos.user_network_delay(1, 10);
-        assert_eq!(qos.fps(), 19, "the second good reply goes halfway back");
-        qos.user_network_delay(1, 10);
         assert_eq!(
             qos.fps(),
             FPS,
-            "the third restores the level held before the stall"
+            "the second good reply restores the frame rate"
         );
+        qos.user_network_delay(1, 10);
+        assert_eq!(qos.fps(), FPS, "the third keeps the restored frame rate");
     }
 
     #[test]
     fn restore_aims_lower_after_a_restore_that_congested() {
         let mut qos = stable_qos();
-        for _ in 0..4 {
-            qos.user_network_delay(1, 800);
+        for _ in 0..2 {
+            qos.user_network_delay(1, 1200);
         }
         assert_eq!(qos.fps(), 8);
         qos.user_network_delay(1, 10);
         qos.user_network_delay(1, 10);
-        assert_eq!(qos.fps(), 19, "halfway back to 30");
-        // The halfway level congests at once, so it becomes the new ceiling.
+        assert_eq!(qos.fps(), FPS);
+        // The restored level congests at once, so the next restore aims lower.
         for _ in 0..3 {
             qos.user_network_delay(1, 400);
         }
-        assert!(qos.fps() < 19);
+        assert!(qos.fps() < FPS);
         qos.user_network_delay(1, 10);
         qos.user_network_delay(1, 10);
         assert!(
-            qos.fps() < 19,
+            qos.fps() < FPS,
             "no return to the level that failed: {}",
             qos.fps()
         );
         qos.user_network_delay(1, 10);
-        assert!(
-            qos.fps() < FPS,
-            "and no jump to the level before that: {}",
-            qos.fps()
-        );
+        assert_eq!(qos.fps(), FPS, "ordinary recovery can still reach the cap");
     }
 
     #[test]
@@ -971,7 +969,10 @@ mod tests {
         assert_eq!(qos.fps(), 12);
     }
 
+    mod adaptation;
+    mod baseline;
     mod jitter;
+    mod recovery;
     mod robustness;
     mod sim;
     mod smoke;
