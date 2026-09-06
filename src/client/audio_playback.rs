@@ -1,5 +1,8 @@
 use std::{error::Error, fmt};
 
+use hbb_common::log;
+use ringbuf::Rb;
+
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
 const MILLISECONDS_PER_SECOND: usize = 1_000;
 
@@ -44,6 +47,63 @@ pub(super) struct AudioPlaybackRecovery {
     had_input: bool,
     transition_start: Vec<f32>,
     output_frame: Vec<f32>,
+}
+
+pub(super) struct AudioPlaybackWriter {
+    audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+    channels: std::num::NonZeroUsize,
+    buffered_input: Vec<f32>,
+    recovery: AudioPlaybackRecovery,
+}
+
+impl AudioPlaybackWriter {
+    pub(super) fn new(
+        config: AudioPlaybackConfig,
+        audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+    ) -> Result<Self, AudioPlaybackError> {
+        let channels = std::num::NonZeroUsize::new(config.channels)
+            .ok_or(AudioPlaybackError::InvalidConfig(config))?;
+        let buffer_capacity = audio_buffer.lock().unwrap().capacity();
+        Ok(Self {
+            audio_buffer,
+            channels,
+            buffered_input: vec![0.0; buffer_capacity],
+            recovery: AudioPlaybackRecovery::new(config)?,
+        })
+    }
+
+    pub(super) fn write_output<T>(&mut self, output: &mut [T])
+    where
+        T: cpal::Sample + cpal::FromSample<f32>,
+    {
+        let requested_samples = output.len().min(self.buffered_input.len());
+        let available_samples = super::audio_buffer::drain_audio_samples(
+            &self.audio_buffer,
+            &mut self.buffered_input[..requested_samples],
+            self.channels,
+        );
+        let channel_count = self.channels.get();
+        let available_frames = available_samples / channel_count;
+        for (frame_index, output_frame) in output.chunks_mut(channel_count).enumerate() {
+            let input = if frame_index < available_frames {
+                let start = frame_index * channel_count;
+                Some(&self.buffered_input[start..start + channel_count])
+            } else {
+                None
+            };
+            match self.recovery.process_frame(input) {
+                Ok(recovered) => {
+                    for (output, sample) in output_frame.iter_mut().zip(recovered) {
+                        *output = T::from_sample(*sample);
+                    }
+                }
+                Err(error) => {
+                    log::error!("Failed to recover audio underflow: {error}");
+                    output_frame.fill(T::from_sample(0.0));
+                }
+            }
+        }
+    }
 }
 
 impl AudioPlaybackRecovery {

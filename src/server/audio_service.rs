@@ -474,6 +474,17 @@ mod cpal_impl {
             .collect()
     }
 
+    fn capture_stream_config(
+        config: &cpal::SupportedStreamConfig,
+        channels: u16,
+    ) -> StreamConfig {
+        StreamConfig {
+            channels,
+            sample_rate: config.sample_rate(),
+            buffer_size: BufferSize::Default,
+        }
+    }
+
     fn build_input_stream<T>(
         device: cpal::Device,
         config: &cpal::SupportedStreamConfig,
@@ -506,11 +517,7 @@ mod cpal_impl {
         let mut processor = CaptureFrameProcessor::new(processor_config, encoder, sp)?;
         INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
-        let stream_config = StreamConfig {
-            channels: device_channel,
-            sample_rate: config.sample_rate(),
-            buffer_size: BufferSize::Default,
-        };
+        let stream_config = capture_stream_config(config, device_channel);
         let stream = device.build_input_stream(
             &stream_config,
             move |data: &[T], _: &InputCallbackInfo| {

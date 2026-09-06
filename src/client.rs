@@ -1535,16 +1535,13 @@ impl AudioHandler {
             .resize(config.sample_rate.0 as _, config.channels as _);
         let audio_buffer = self.audio_buffer.0.clone();
         let ready = self.ready.clone();
-        let channels = std::num::NonZeroUsize::new(config.channels as usize)
-            .with_context(|| "Audio output channel count must be non-zero")?;
-        let channel_count = channels.get();
-        let buffer_capacity = audio_buffer.lock().unwrap().capacity();
-        let mut buffered_input = vec![0.0; buffer_capacity];
-        let mut playback_recovery =
-            audio_playback::AudioPlaybackRecovery::new(audio_playback::AudioPlaybackConfig {
+        let mut playback_writer = audio_playback::AudioPlaybackWriter::new(
+            audio_playback::AudioPlaybackConfig {
                 sample_rate: config.sample_rate.0,
-                channels: channel_count,
-            })?;
+                channels: config.channels as usize,
+            },
+            audio_buffer,
+        )?;
         let timeout = None;
         let stream = device.build_output_stream(
             config,
@@ -1553,32 +1550,7 @@ impl AudioHandler {
                     *ready.lock().unwrap() = true;
                 }
 
-                let requested_samples = data.len().min(buffered_input.len());
-                let available_samples = audio_buffer::drain_audio_samples(
-                    &audio_buffer,
-                    &mut buffered_input[..requested_samples],
-                    channels,
-                );
-                let available_frames = available_samples / channel_count;
-                for (frame_index, output_frame) in data.chunks_mut(channel_count).enumerate() {
-                    let input = if frame_index < available_frames {
-                        let start = frame_index * channel_count;
-                        Some(&buffered_input[start..start + channel_count])
-                    } else {
-                        None
-                    };
-                    match playback_recovery.process_frame(input) {
-                        Ok(recovered) => {
-                            for (output, sample) in output_frame.iter_mut().zip(recovered) {
-                                *output = T::from_sample(*sample);
-                            }
-                        }
-                        Err(error) => {
-                            log::error!("Failed to recover audio underflow: {error}");
-                            output_frame.fill(T::from_sample(0.0));
-                        }
-                    }
-                }
+                playback_writer.write_output(data);
             },
             err_fn,
             timeout,
