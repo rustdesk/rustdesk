@@ -51,6 +51,7 @@ mod ta;
 mod ge;
 mod fi;
 mod ml;
+mod gl;
 
 pub const LANGS: &[(&str, &str)] = &[
     ("en", "English"),
@@ -84,6 +85,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ur", "اردو"),
     ("fa", "فارسی"),
     ("ca", "Català"),
+    ("gl", "Galego"),
     ("el", "Ελληνικά"),
     ("sv", "Svenska"),
     ("sq", "Shqip"),
@@ -217,6 +219,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ml" => ml::T.deref(),
         "hi" => hi::T.deref(),
         "gu" => gu::T.deref(),
+        "gl" => gl::T.deref(),
         _ => en::T.deref(),
     };
     let (name, placeholder_value) = extract_placeholder(&name);
