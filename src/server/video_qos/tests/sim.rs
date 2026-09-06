@@ -10,8 +10,10 @@
 //!
 //! Three independent random streams keep an A/B comparison paired: the network
 //! trace (capacity wobble, stalls, loss events) is generated before the run from the
-//! network stream alone, so two controllers with the same seed face the same link
-//! whatever they decide; encoder noise and probe jitter have streams of their own.
+//! network stream alone, probe jitter is a per-second table from its own stream,
+//! and scene changes follow the wall clock, so two controllers with the same seed
+//! face the same link, the same jitter and the same content timeline whatever they
+//! decide.  Only the frame size noise depends on how many frames were produced.
 //!
 //! The encoder model conserves its bitrate budget: a scene change costs three
 //! frames' worth of data and the surplus is repaid by the following frames, so the
@@ -221,12 +223,15 @@ struct Encoder {
     model: EncoderModel,
     content: Content,
     rng: Rng,
-    frames: u64,
+    next_scene_ms: u32,
     debt_bits: f64,
 }
 
+/// A scene change every five seconds of video.
+const SCENE_INTERVAL_MS: u32 = 5_000;
+
 impl Encoder {
-    fn frame_bits(&mut self, bitrate_kbps: f64, produce_rate: f64) -> f64 {
+    fn frame_bits(&mut self, now_ms: u32, bitrate_kbps: f64, produce_rate: f64) -> f64 {
         let target = match (self.content, self.model) {
             // A changed region of a static screen is small whatever the rate control does.
             (Content::Office, _) => bitrate_kbps * 1000.0 / ENCODER_CONFIGURED_FPS * 0.3,
@@ -239,12 +244,13 @@ impl Encoder {
         let noise = self.rng.log_normal(1.0, FRAME_SIZE_SIGMA)
             * (-FRAME_SIZE_SIGMA * FRAME_SIZE_SIGMA / 2.0).exp();
         let mut bits = target * noise;
-        self.frames += 1;
-        let scene_change = self.content == Content::Video
-            && self.frames % (5 * produce_rate.max(1.0) as u64).max(1) == 0;
+        // Scene changes follow the wall clock, not the frame count, so every
+        // controller meets the same content timeline.
+        let scene_change = self.content == Content::Video && now_ms >= self.next_scene_ms;
         if scene_change {
-            // A scene change every five seconds of video costs a few frames' worth of
-            // data; rate control claws it back from the frames that follow.
+            self.next_scene_ms += SCENE_INTERVAL_MS;
+            // A scene change costs a few frames' worth of data; rate control claws
+            // it back from the frames that follow.
             bits *= 3.0;
             self.debt_bits += bits - target;
         } else if self.debt_bits > 0.0 {
@@ -320,12 +326,17 @@ pub fn run(sc: &Scenario) -> Report {
         model: sc.encoder,
         content: sc.content,
         rng: Rng::new(sc.seed ^ 0x454E_434F_4445),
-        frames: 0,
+        next_scene_ms: SCENE_INTERVAL_MS,
         debt_bits: 0.0,
     };
     let total_ms = sc.seconds * 1000;
     let ticks = (total_ms / TICK_MS) as usize;
     let link = link_trace(&sc.link, ticks, &mut network_rng);
+    // Probe jitter indexed by the probe's send second, so the number of probes a
+    // controller manages to send does not change the jitter the next one meets.
+    let probe_jitter_ms: Vec<f64> = (0..=sc.seconds)
+        .map(|_| probe_rng.log_normal(sc.link.jitter_median_ms, sc.link.jitter_sigma))
+        .collect();
 
     let mut qos = super::smoke::session(sc.limit, sc.quality);
     qos.abr_config = sc.abr;
@@ -376,7 +387,7 @@ pub fn run(sc: &Scenario) -> Report {
             if now >= WARM_UP_MS {
                 produced += 1;
             }
-            let bits = encoder.frame_bits(bitrate_kbps, produce_rate);
+            let bits = encoder.frame_bits(now, bitrate_kbps, produce_rate);
             queue.push_back(Packet {
                 bits,
                 enqueued_ms: now,
@@ -391,8 +402,7 @@ pub fn run(sc: &Scenario) -> Report {
             while budget > 0.0 {
                 let Some(head) = queue.front_mut() else { break };
                 if let Some(sent) = head.probe_sent_ms {
-                    let round_trip = sc.link.base_rtt_ms
-                        + probe_rng.log_normal(sc.link.jitter_median_ms, sc.link.jitter_sigma);
+                    let round_trip = sc.link.base_rtt_ms + probe_jitter_ms[(sent / 1000) as usize];
                     let arrive = now + round_trip as u32;
                     replies.push((arrive, arrive - sent));
                     queue.pop_front();
@@ -776,11 +786,19 @@ pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
         if name != "office_home_wifi_30" {
             check(s.delivered_median >= 0.8 * limit, "delivered below 80%");
         }
+        // Frame age is the time a delivered frame spent in the shared path: what a
+        // viewer waits for on top of the round trip.  A jittery high-capacity link
+        // contains isolated stalls of up to 2.5 s, and the bound is on the p90 of
+        // per-seed p95 frame age: isolated stalls are tolerated, but they must not
+        // turn into a sustained multi-second backlog.  A regression bound, not a
+        // latency target; set from the scenario, not from a run.
+        check(s.frame_age_p95_p90 < 1500, "frame age p95 p90 over 1.5 s");
     } else if name.starts_with("city_relay") {
         // A clean link is where the developers test; every seed sits at the limit,
         // and a fresh connection reaches 90% of it within ten seconds.
         check(s.p10_target_worst == s.limit, "left the limit");
         check(s.queue_p95_p90 < 50, "queue on a clean link");
+        check(s.frame_age_p95_p90 < 100, "frame age on a clean link");
         check(
             s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
             "cold start over 10 s",
@@ -795,6 +813,8 @@ pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
             s.cold_start_min_median >= INIT_FPS,
             "cold start below INIT_FPS",
         );
+        // Frame age excludes the round trip, so a high RTT earns no allowance.
+        check(s.frame_age_p95_p90 < 150, "frame age over 150 ms");
         check(
             s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
             "cold start over 10 s",
@@ -812,6 +832,10 @@ pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
         _ => None,
     } {
         check(s.queue_p95_p90 < queue_p95_bound_ms, "queue p95 p90 bound");
+        check(
+            s.frame_age_p95_p90 < queue_p95_bound_ms,
+            "frame age p95 p90 bound",
+        );
         check(s.below_half_p90 <= below_half_bound_pct, "below half bound");
         check(
             s.recovery_worst_ms.is_some_and(|ms| ms <= 20_000),
@@ -819,6 +843,7 @@ pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
         );
     } else if name == "mobile_bufferbloat_30" {
         check(s.queue_p95_p90 < 2000, "queue p95 p90 over 2 s");
+        check(s.frame_age_p95_p90 < 2000, "frame age p95 p90 over 2 s");
         check(s.below_half_p90 <= 15.0, "below half the limit over 15%");
     }
     v

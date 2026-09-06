@@ -131,6 +131,12 @@ fn smoke_latency_profiles() {
                         "fresh replies must permit recovery"
                     );
                 }
+                if name == "congestion_200_recovery" && limit >= 15 {
+                    assert!(
+                        trace[..20].iter().min() < Some(&limit),
+                        "moderate sustained congestion must reduce the frame rate: {trace:?}"
+                    );
+                }
                 if name.ends_with("_recovery") {
                     assert_eq!(trace.last(), Some(&limit), "{name}, {quality_name}");
                 }

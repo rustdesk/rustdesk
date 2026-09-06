@@ -26,9 +26,14 @@ fn held_out_seeds() {
     for sc in scenarios() {
         let mut failing_blocks = 0;
         let mut which: Vec<&str> = Vec::new();
+        let mut reports: Vec<Report> = Vec::new();
         for block in 0..5u64 {
             let first = 21 + block * 20;
-            let s = summarise(&sc, first..first + 20);
+            let block_reports: Vec<Report> = (first..first + 20)
+                .map(|seed| run(&Scenario { seed, ..sc.clone() }))
+                .collect();
+            let s = Summary::of(&block_reports);
+            reports.extend(block_reports);
             let violations = bound_violations(&s);
             if !violations.is_empty() {
                 failing_blocks += 1;
@@ -39,7 +44,7 @@ fn held_out_seeds() {
                 }
             }
         }
-        let all = summarise(&sc, 21..=120);
+        let all = Summary::of(&reports);
         println!(
             "| {} | {}/5 | {} | {:.1} | {} | {:.1}% | {} ms |",
             sc.name,
