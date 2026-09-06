@@ -237,6 +237,18 @@ fn dev_card_has_connectors(path: &str) -> bool {
         .unwrap_or(true)
 }
 
+/// Whether a round's card inventory accounts for every connector-bearing card sysfs knows of.
+///
+/// Both rounds ask this, and they must ask it the same way: a card that sysfs says can drive an
+/// output and that the round never looked at is the difference between "no display" and "did not
+/// look". Sysfs being unreadable is not coverage either - it is the case where we cannot tell.
+fn round_covers_every_card(card_paths: &[&str]) -> bool {
+    match dri_display_cards() {
+        Some(cards) => inventory_is_covered(&cards, card_paths),
+        None => false,
+    }
+}
+
 /// Active displays of every DRM device + the connected-but-undriven identities, from ONE look.
 fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, EnumerationTrust) {
     if let Some(devices) = scrap::drm_reader::list_devices() {
@@ -263,10 +275,7 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
         // its list covers every card that could drive an output (render-only nodes are skipped
         // by design and prove nothing). Covered by identity, see `inventory_is_covered`.
         let device_paths: Vec<&str> = devices.iter().map(|d| d.path.as_str()).collect();
-        let mut uninspected = match dri_display_cards() {
-            Some(cards) => !inventory_is_covered(&cards, &device_paths),
-            None => true,
-        };
+        let mut uninspected = !round_covers_every_card(&device_paths);
         let mut enumerated = false;
         for dev in devices {
             if let Some(mut r) = scrap::drm_reader::DrmReader::open(Some(&dev.path), 0) {
@@ -327,7 +336,12 @@ fn drm_enumerate_all_displays() -> (Vec<DrmDisplayInfo>, Vec<String>, Enumeratio
     // Deterministic order, so the display list does not depend on directory order.
     paths.sort();
     let n_paths = paths.len();
-    let mut uninspected = inventory_failed;
+    // The per-card checks below only account for the cards this directory listed. A connector-
+    // bearing card that sysfs knows about and `/dev/dri` does not is never looked at at all, and
+    // without this it would leave the round looking complete - the same false absence the card
+    // inventory is checked for on the other path, asked here with the same question.
+    let card_paths: Vec<&str> = paths.iter().filter_map(|p| p.to_str()).collect();
+    let mut uninspected = inventory_failed || !round_covers_every_card(&card_paths);
     let mut enumerated = false;
     for p in paths {
         let Some(path) = p.to_str() else { continue };
@@ -662,7 +676,8 @@ fn drm_enumerate_settled(reason: &str) -> Vec<DrmDisplayInfo> {
 /// Whether a refresh round may replace the cache. A round that could not inspect every card cannot
 /// prove a display is GONE, so one that drops a cached connector is refused; growth, and changes to
 /// a display that is still there, land. A real removal takes the node out of /dev/dri and sysfs
-/// together, so the counts fall in step and that round is not partial in the first place.
+/// together, so the two inventories lose it together, coverage still holds, and that round is not
+/// partial in the first place.
 ///
 /// Identity is the card AND the connector name. Two LIVE connectors never share a name - the index
 /// comes from a per-type ida that is global to drm.ko, measured on a 3-card machine whose DP
