@@ -12,9 +12,16 @@ pub(crate) struct AudioResamplerConfig {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum AudioResamplerError {
     InvalidConfig(AudioResamplerConfig),
-    InvalidOutputFrameSize { output_frames: usize },
-    IncompleteFrame { samples: usize, channels: usize },
+    InvalidOutputFrameSize {
+        output_frames: usize,
+    },
+    IncompleteFrame {
+        samples: usize,
+        channels: usize,
+    },
     CapacityOverflow,
+    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+    Backend(String),
 }
 
 impl fmt::Display for AudioResamplerError {
@@ -33,6 +40,8 @@ impl fmt::Display for AudioResamplerError {
                 "audio resampler input length {samples} is not divisible by channel count {channels}"
             ),
             Self::CapacityOverflow => formatter.write_str("audio resampler output capacity overflow"),
+            #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+            Self::Backend(message) => write!(formatter, "audio resampler backend failed: {message}"),
         }
     }
 }
@@ -75,18 +84,65 @@ impl FixedFrameAudioResampler {
 }
 
 pub(crate) struct AudioResampler {
+    #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
     backend: StreamingLinearAudioResampler,
+    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+    config: AudioResamplerConfig,
+    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+    channels: usize,
+    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+    backend: samplerate::Samplerate,
 }
 
 impl AudioResampler {
     pub(crate) fn new(config: AudioResamplerConfig) -> Result<Self, AudioResamplerError> {
-        Ok(Self {
-            backend: StreamingLinearAudioResampler::new(config)?,
-        })
+        #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+        {
+            let channels = validate_config(config)?;
+            let backend = samplerate::Samplerate::new(
+                samplerate::ConverterType::SincBestQuality,
+                config.input_rate as _,
+                config.output_rate as _,
+                channels,
+            )
+            .map_err(|error| {
+                AudioResamplerError::Backend(format!(
+                    "input_rate={}, output_rate={}, channels={}: {error:?}",
+                    config.input_rate, config.output_rate, config.channels
+                ))
+            })?;
+            Ok(Self {
+                config,
+                channels,
+                backend,
+            })
+        }
+        #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
+        {
+            Ok(Self {
+                backend: StreamingLinearAudioResampler::new(config)?,
+            })
+        }
     }
 
     pub(crate) fn process(&mut self, input: &[f32]) -> Result<Vec<f32>, AudioResamplerError> {
-        self.backend.process(input)
+        #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+        {
+            validate_input(input, self.channels)?;
+            self.backend.process(input).map_err(|error| {
+                AudioResamplerError::Backend(format!(
+                    "input_rate={}, output_rate={}, channels={}, samples={}: {error:?}",
+                    self.config.input_rate,
+                    self.config.output_rate,
+                    self.config.channels,
+                    input.len()
+                ))
+            })
+        }
+        #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
+        {
+            self.backend.process(input)
+        }
     }
 }
 
@@ -176,6 +232,10 @@ fn validate_input(input: &[f32], channels: usize) -> Result<(), AudioResamplerEr
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(all(feature = "use_samplerate", not(feature = "use_dasp")))))]
 #[path = "audio_resampler_tests.rs"]
 mod tests;
+
+#[cfg(all(test, feature = "use_samplerate", not(feature = "use_dasp")))]
+#[path = "audio_samplerate_tests.rs"]
+mod samplerate_tests;

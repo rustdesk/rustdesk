@@ -410,6 +410,11 @@ pub fn resample_channels(
     }
 }
 
+#[cfg(all(feature = "use_dasp", feature = "use_samplerate"))]
+compile_error!(
+    "features `use_dasp` and `use_samplerate` are mutually exclusive; disable default features before selecting `use_samplerate`"
+);
+
 #[cfg(feature = "use_dasp")]
 pub fn audio_resample(
     data: &[f32],
@@ -446,7 +451,7 @@ pub fn audio_resample(
     }
 }
 
-#[cfg(feature = "use_samplerate")]
+#[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
 pub fn audio_resample(
     data: &[f32],
     sample_rate0: u32,
@@ -462,6 +467,22 @@ pub fn audio_resample(
         data,
     )
     .unwrap_or_default()
+}
+
+#[cfg(all(test, feature = "use_dasp"))]
+mod audio_resample_compatibility_tests {
+    use super::audio_resample;
+
+    const SAMPLE_RATE: u32 = 48_000;
+    const CHANNELS: u16 = 1;
+    const INPUT: [f32; 2] = [0.0, 0.0];
+
+    #[test]
+    fn preserves_the_positional_vec_api() {
+        let output: Vec<f32> = audio_resample(&INPUT, SAMPLE_RATE, SAMPLE_RATE, CHANNELS);
+
+        assert_eq!(output.len(), INPUT.len());
+    }
 }
 
 pub fn audio_rechannel(
