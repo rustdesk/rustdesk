@@ -871,6 +871,7 @@ fn replay_recorded_trace() {
             })
     };
     let mut qos = super::smoke::session(30, Quality::Balanced);
+    qos.users.clear();
     let mut last_t: HashMap<i32, u64> = HashMap::new();
     let mut now = 0_u64;
     let mut trace = Vec::new();
@@ -904,4 +905,57 @@ fn replay_recorded_trace() {
         "replayed mean target fps: {mean:.1} over {} lines",
         trace.len()
     );
+}
+
+#[test]
+fn replay_recorded_trace_is_independent_of_connection_id() {
+    let replay = |id: i32| {
+        let text: String = (0..20)
+            .map(|i| {
+                format!(
+                    "qos_trace t={} id={id} delay=10 fps=30\n",
+                    100_000 + i * 1000
+                )
+            })
+            .collect();
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "rustdesk-qos-replay-{}-{nonce}-{id}.log",
+            std::process::id()
+        ));
+        std::fs::write(&path, text).unwrap();
+        // Exercise the real replay entry point without changing other tests' environment.
+        let test = format!(
+            "{}::replay_recorded_trace",
+            module_path!().split_once("::").unwrap().1
+        );
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &test, "--nocapture", "--test-threads=1"])
+            .env("RUSTDESK_QOS_TRACE", &path)
+            .output();
+        std::fs::remove_file(&path).unwrap();
+        let output = output.unwrap();
+        assert!(output.status.success(), "replay failed: {output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let id = id.to_string();
+        let fps: Vec<u32> = stdout
+            .lines()
+            .filter_map(|line| {
+                let fields: Vec<_> = line.split(',').collect();
+                if fields.len() == 4 && fields[1] == id {
+                    Some(fields[3].parse().unwrap())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(fps.len(), 20, "missing replay samples: {stdout}");
+        fps
+    };
+    let expected = replay(1);
+    assert_eq!(expected.last(), Some(&30));
+    assert_eq!(replay(1652), expected);
 }
