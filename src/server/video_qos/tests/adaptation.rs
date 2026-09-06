@@ -163,6 +163,46 @@ fn permanent_capacity_drop_held_out_seeds() {
     permanent_drop(21..=120);
 }
 
+#[test]
+fn low_capacity_preserves_auto_floor_and_recovers() {
+    let mut sc = super::sim::scenarios()
+        .into_iter()
+        .find(|s| s.name == "bandwidth_halved_fixed_rate_no_abr_30")
+        .unwrap();
+    sc.link.capacity_kbps = vec![(0, 8000.0), (60_000, 700.0), (120_000, 8000.0)];
+    for seed in super::sim::SEEDS {
+        sc.seed = seed;
+        let report = super::sim::run(&sc);
+        assert!(
+            report.trace.iter().all(|(_, fps, ..)| *fps >= 5),
+            "seed {seed}: automatic reductions went below 5 FPS"
+        );
+        let congested: Vec<_> = report
+            .trace
+            .iter()
+            .filter(|(t, ..)| (80_000..120_000).contains(t))
+            .collect();
+        let min_fps = congested.iter().map(|(_, fps, ..)| *fps).min().unwrap();
+        let min_queue = congested
+            .iter()
+            .map(|(_, _, queue, _)| *queue)
+            .min()
+            .unwrap();
+        assert_eq!(
+            min_fps, 5,
+            "seed {seed}: severe congestion must reach the floor"
+        );
+        // At 5 FPS this model sends about 670 kbps, leaving little room to drain
+        // existing backlog at 700 kbps. Require drainage after capacity returns.
+        assert!(
+            report.recovery_ms.is_some_and(|ms| ms <= 20_000),
+            "seed {seed}: recovery took {:?}",
+            report.recovery_ms
+        );
+        println!("700 kbps fixed-rate, seed {seed}: min FPS={min_fps}, min queue={min_queue} ms, queue p95={} ms, frame age p95={} ms, recovery={:?}", report.queue_p95_ms, report.frame_age_p95_ms, report.recovery_ms);
+    }
+}
+
 const DISPLAY: &str = "adaptation";
 
 fn session(abr: bool) -> VideoQoS {

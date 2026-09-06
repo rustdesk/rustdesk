@@ -25,30 +25,49 @@ fn ordinary_congestion_waits_between_bounded_cuts() {
 fn automatic_floor_preserves_lower_custom_limits() {
     for limit in [1, 3, 5, 30, 60, 120] {
         for abr in [false, true] {
-            let mut qos = super::smoke::session(limit, Quality::Balanced);
-            qos.abr_config = abr;
-            qos.new_display("test".to_owned());
-            qos.set_support_changing_quality("test", true);
-            for _ in 0..90 {
-                qos.user_network_delay(1, 10);
-            }
-            qos.ratio = BR_MIN_HIGH_RESOLUTION;
-            qos.store_bitrate(600);
-            for _ in 0..30 {
-                qos.user_network_delay(1, 1500);
-                assert!(
-                    (5.min(limit)..=limit).contains(&qos.fps()),
-                    "limit={limit}, ABR={abr}"
+            for timeout in [false, true] {
+                let mut qos = super::smoke::session(limit, Quality::Balanced);
+                qos.abr_config = abr;
+                qos.new_display("test".to_owned());
+                qos.set_support_changing_quality("test", true);
+                for _ in 0..90 {
+                    qos.user_network_delay(1, 10);
+                }
+                assert_eq!(qos.fps(), limit);
+                qos.ratio = BR_MIN_HIGH_RESOLUTION;
+                qos.store_bitrate(600);
+                let floor = 5.min(limit);
+                if timeout {
+                    for elapsed in [2001, 3001, 4001, 5001, 10_000, 30_000] {
+                        qos.user_delay_response_elapsed(1, elapsed);
+                        assert!(
+                            (floor..=limit).contains(&qos.fps()),
+                            "timeout={elapsed}, limit={limit}, ABR={abr}"
+                        );
+                    }
+                } else {
+                    for _ in 0..8 {
+                        qos.user_network_delay(1, 1500);
+                        assert!(
+                            (floor..=limit).contains(&qos.fps()),
+                            "limit={limit}, ABR={abr}"
+                        );
+                    }
+                }
+                assert_eq!(
+                    qos.fps(),
+                    floor,
+                    "timeout={timeout}, limit={limit}, ABR={abr}"
                 );
+                if timeout {
+                    qos.user_network_delay(1, 30_100);
+                    assert_eq!(qos.fps(), floor, "a late reply must preserve the floor");
+                }
+                for _ in 0..2 {
+                    qos.user_network_delay(1, 10);
+                }
+                assert_eq!(qos.fps(), limit, "recover: timeout={timeout}, ABR={abr}");
             }
-            for elapsed in [2001, 3001, 4001, 5001, 10_000, 30_000] {
-                qos.user_delay_response_elapsed(1, elapsed);
-                assert!(
-                    (5.min(limit)..=limit).contains(&qos.fps()),
-                    "timeout={elapsed}, limit={limit}, ABR={abr}"
-                );
-            }
-            assert_eq!(qos.fps(), 5.min(limit));
         }
     }
 }
