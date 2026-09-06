@@ -21,6 +21,10 @@
 //! congestion control or a real encoder.  Its job is to show how the controller
 //! reacts to the *kind* of behaviour a home Wi-Fi, a stable relay or a saturated
 //! uplink produce, deterministically and over many seeds.
+//!
+//! Against overfitting: the CI run uses seeds 1 to 20; `robustness.rs` applies the
+//! same bounds to seeds 21 to 120 and sweeps the scenario parameters.  Scenario
+//! parameters are educated guesses until a recorded `qos_trace` calibrates them.
 use super::*;
 
 /// xorshift64* generator, so the tests need no external crate and stay reproducible.
@@ -734,70 +738,90 @@ fn sim_scenarios() {
         }
     }
     write_traces(&results);
-    let get = |name: &str| &results.iter().find(|(s, _)| s.name == name).unwrap().0;
+    for (summary, _) in &results {
+        let violations = bound_violations(summary);
+        assert!(
+            violations.is_empty(),
+            "{}: {violations:?}\n{summary:?}",
+            summary.name
+        );
+    }
+}
 
-    // A jittery but healthy link must stay fast: the whole point of the change.  The
-    // bounds are what the product needs, not what one seed produced: the target
-    // rarely leaves the limit, never collapses, and stalls of up to 2.5 s leave
-    // about a second of queue at worst.
-    for name in [
-        "home_wifi_30",
-        "home_wifi_60",
-        "home_wifi_fixed_rate_30",
-        "home_wifi_no_abr_30",
-        "office_home_wifi_30",
-    ] {
-        let s = get(name);
-        let limit = s.limit as f64;
-        assert!(s.mean_target_median >= 0.85 * limit, "{name}: {s:?}");
-        assert!(s.p10_target_worst * 3 >= s.limit, "{name}: {s:?}");
-        assert!(s.below_half_p90 <= 10.0, "{name}: {s:?}");
-        assert!(s.queue_p95_p90 < 1000, "{name}: {s:?}");
-        if name != "office_home_wifi_30" {
-            assert!(s.delivered_median >= 0.8 * limit, "{name}: {s:?}");
+/// The bounds every scenario summary has to meet, shared by the CI run over `SEEDS`
+/// and by the held-out run in `robustness.rs`.  They state what the product needs,
+/// not what one seed produced.  If a new seed or a new scenario violates a bound,
+/// change the design or loosen the bound with a written reason; never tune a
+/// controller constant until the bound passes.
+pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
+    let name = s.name.as_str();
+    let limit = s.limit as f64;
+    let mut v = Vec::new();
+    let mut check = |ok: bool, what: &'static str| {
+        if !ok {
+            v.push(what);
         }
-    }
-    // A clean link is where the developers test; every seed sits at the limit, and
-    // a fresh connection reaches 90% of it within ten seconds.
-    for name in ["city_relay_30", "city_relay_60"] {
-        let s = get(name);
-        assert_eq!(s.p10_target_worst, s.limit, "{name}: {s:?}");
-        assert!(s.queue_p95_p90 < 50, "{name}: {s:?}");
-        assert!(
+    };
+    if name.starts_with("home_wifi") || name.starts_with("office_home_wifi") {
+        // A jittery but healthy link must stay fast: the whole point of the change.
+        // The target rarely leaves the limit, never collapses, and stalls of up to
+        // 2.5 s leave about a second of queue at worst.
+        check(
+            s.mean_target_median >= 0.85 * limit,
+            "median target below 85%",
+        );
+        check(s.p10_target_worst * 3 >= s.limit, "worst p10 below a third");
+        check(s.below_half_p90 <= 10.0, "below half the limit over 10%");
+        check(s.queue_p95_p90 < 1000, "queue p95 p90 over 1 s");
+        if name != "office_home_wifi_30" {
+            check(s.delivered_median >= 0.8 * limit, "delivered below 80%");
+        }
+    } else if name.starts_with("city_relay") {
+        // A clean link is where the developers test; every seed sits at the limit,
+        // and a fresh connection reaches 90% of it within ten seconds.
+        check(s.p10_target_worst == s.limit, "left the limit");
+        check(s.queue_p95_p90 < 50, "queue on a clean link");
+        check(
             s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
-            "{name}: {s:?}"
+            "cold start over 10 s",
         );
-    }
-    // High but stable RTT is not congestion, not even during the cold start.
-    let s = get("intercontinental_30");
-    assert!(s.mean_target_median >= 0.9 * s.limit as f64, "{s:?}");
-    assert!(s.cold_start_min_median >= INIT_FPS, "{s:?}");
-    assert!(
-        s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
-        "{s:?}"
-    );
-    // Real congestion must be detected, drained and recovered from.  With a CBR
-    // encoder only the bitrate drains the queue, and three probe replies at one
-    // second cadence plus a three second ratio cooldown are needed before a
-    // confirmed cut, so a few seconds of queue are inherent there.  Without ABR
-    // nothing drains a CBR queue at all, so that combination is reported but not
-    // asserted.
-    for (name, queue_p95_bound_ms, below_half_bound_pct) in [
-        ("bandwidth_halved_30", 3000, 40.0),
-        ("bandwidth_halved_fixed_rate_30", 2000, 10.0),
-        ("bandwidth_halved_fixed_rate_no_abr_30", 3000, 30.0),
-    ] {
-        let s = get(name);
-        assert!(s.queue_p95_p90 < queue_p95_bound_ms, "{name}: {s:?}");
-        assert!(s.below_half_p90 <= below_half_bound_pct, "{name}: {s:?}");
-        assert!(
+    } else if name == "intercontinental_30" {
+        // High but stable RTT is not congestion, not even during the cold start.
+        check(
+            s.mean_target_median >= 0.9 * limit,
+            "median target below 90%",
+        );
+        check(
+            s.cold_start_min_median >= INIT_FPS,
+            "cold start below INIT_FPS",
+        );
+        check(
+            s.time_to_90pct_worst_ms.is_some_and(|ms| ms <= 10_000),
+            "cold start over 10 s",
+        );
+    } else if let Some((queue_p95_bound_ms, below_half_bound_pct)) = match name {
+        // Real congestion must be detected, drained and recovered from.  With a CBR
+        // encoder only the bitrate drains the queue, and three probe replies at one
+        // second cadence plus a three second ratio cooldown are needed before a
+        // confirmed cut, so a few seconds of queue are inherent there.  Without
+        // ABR nothing drains a CBR queue at all, so that combination is reported
+        // but not asserted.
+        "bandwidth_halved_30" => Some((3000, 40.0)),
+        "bandwidth_halved_fixed_rate_30" => Some((2000, 10.0)),
+        "bandwidth_halved_fixed_rate_no_abr_30" => Some((3000, 30.0)),
+        _ => None,
+    } {
+        check(s.queue_p95_p90 < queue_p95_bound_ms, "queue p95 p90 bound");
+        check(s.below_half_p90 <= below_half_bound_pct, "below half bound");
+        check(
             s.recovery_worst_ms.is_some_and(|ms| ms <= 20_000),
-            "{name}: {s:?}"
+            "sustained recovery over 20 s",
         );
+    } else if name == "mobile_bufferbloat_30" {
+        check(s.queue_p95_p90 < 2000, "queue p95 p90 over 2 s");
+        check(s.below_half_p90 <= 15.0, "below half the limit over 15%");
     }
-    let s = get("mobile_bufferbloat_30");
-    assert!(s.queue_p95_p90 < 2000, "{s:?}");
-    assert!(s.below_half_p90 <= 15.0, "{s:?}");
+    v
 }
 
 /// Replays a `qos_trace` log captured on a real host (see `user_network_delay`).

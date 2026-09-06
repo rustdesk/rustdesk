@@ -938,6 +938,7 @@ mod tests {
     }
 
     mod jitter;
+    mod robustness;
     mod sim;
     mod smoke;
 }
