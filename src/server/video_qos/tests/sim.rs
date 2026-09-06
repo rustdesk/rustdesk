@@ -849,18 +849,14 @@ pub fn bound_violations(s: &Summary) -> Vec<&'static str> {
     v
 }
 
-/// Replays a `qos_trace` log captured on a real host (see `user_network_delay`).
-/// Set `RUSTDESK_QOS_TRACE` to the log file.  This is an open-loop diagnostic of
-/// the FPS controller only: the recorded delays do not react to the replayed
-/// decisions, the session runs with ABR off, and connections are replayed as
-/// separate viewers of one 30 fps balanced session.  Time advances by the recorded
-/// `t=` deltas, or by one second per line when a trace predates that field.
-#[test]
-fn replay_recorded_trace() {
-    let Ok(path) = std::env::var("RUSTDESK_QOS_TRACE") else {
-        return;
-    };
-    let text = std::fs::read_to_string(&path).unwrap();
+/// Replays `qos_trace` lines through a fresh controller and returns
+/// `(time_ms, id, recorded_fps, replayed_fps)` per line.  Open loop, FPS only:
+/// the recorded delays do not react to the replayed decisions, the session runs
+/// with ABR off, and connections are replayed as separate viewers of one 30 fps
+/// balanced session.  Time advances by the wall-clock delta between consecutive
+/// lines whatever their connection, or by one second per line when a trace
+/// predates the `t=` field.
+pub fn replay(text: &str) -> Vec<(u64, i32, u64, u32)> {
     // A present but malformed value is a corrupt trace, not a missing field.
     let field = |line: &str, key: &str| -> Option<u64> {
         line.split_whitespace()
@@ -872,18 +868,19 @@ fn replay_recorded_trace() {
     };
     let mut qos = super::smoke::session(30, Quality::Balanced);
     qos.users.clear();
-    let mut last_t: HashMap<i32, u64> = HashMap::new();
+    let mut last_t: Option<u64> = None;
     let mut now = 0_u64;
     let mut trace = Vec::new();
     for line in text.lines().filter(|l| l.contains("qos_trace")) {
         let id = field(line, "id").unwrap_or(1) as i32;
         qos.users.entry(id).or_default();
-        let step = match (field(line, "t"), last_t.get(&id)) {
-            (Some(t), Some(prev)) => t.saturating_sub(*prev).clamp(1, 10_000),
+        let t = field(line, "t");
+        let step = match (t, last_t) {
+            (Some(t), Some(prev)) => t.saturating_sub(prev).clamp(1, 10_000),
             _ => 1000,
         };
-        if let Some(t) = field(line, "t") {
-            last_t.insert(id, t);
+        if t.is_some() {
+            last_t = t;
         }
         now += step;
         qos.advance_ms(step);
@@ -896,6 +893,16 @@ fn replay_recorded_trace() {
         let recorded = field(line, "fps").unwrap_or(0);
         trace.push((now, id, recorded, qos.fps()));
     }
+    trace
+}
+
+/// Replays the log named by `RUSTDESK_QOS_TRACE` and prints the result.
+#[test]
+fn replay_recorded_trace() {
+    let Ok(path) = std::env::var("RUSTDESK_QOS_TRACE") else {
+        return;
+    };
+    let trace = replay(&std::fs::read_to_string(&path).unwrap());
     println!("time_ms,id,recorded_fps,replayed_fps");
     for (t, id, recorded, replayed) in &trace {
         println!("{t},{id},{recorded},{replayed}");
@@ -904,6 +911,26 @@ fn replay_recorded_trace() {
     println!(
         "replayed mean target fps: {mean:.1} over {} lines",
         trace.len()
+    );
+}
+
+#[test]
+fn replay_time_axis_is_shared_across_connections() {
+    // Two viewers each log once a second for twenty seconds: twenty seconds of
+    // wall clock, not forty.
+    let text: String = (0..20)
+        .flat_map(|i| {
+            [
+                format!("qos_trace t={} id=1 delay=10 fps=30\n", 100_000 + i * 1000),
+                format!("qos_trace t={} id=2 delay=10 fps=30\n", 100_001 + i * 1000),
+            ]
+        })
+        .collect();
+    let trace = replay(&text);
+    let elapsed = trace.last().unwrap().0 - trace.first().unwrap().0;
+    assert!(
+        (19_000..=19_100).contains(&elapsed),
+        "replayed {elapsed} ms for 19 s of wall clock"
     );
 }
 
