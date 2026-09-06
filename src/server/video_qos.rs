@@ -19,8 +19,9 @@ b. TestDelay reply => update the user's fps from the excess delay, the reply's d
    While the bitrate can still be reduced (ABR) it is reduced first and the fps keeps
    a floor: bitrate-targeted encoders do not send fewer bytes at fewer frames.
 c. probe outstanding for more than two seconds => halve the fps for every further
-   second, down to MIN_AUTO_FPS; the late reply does not reduce again. Automatic
-   reductions respect this floor unless the viewer requested a lower FPS cap.
+   second, down to MIN_AUTO_FPS and never above the target it found; the late
+   reply does not reduce again. Automatic reductions respect this floor unless
+   the viewer requested a lower FPS cap.
 d. second timeout / TestDelay reply => real fps is the minimum over all users;
    every user starts at INIT_FPS, adapts from its own target and is capped by its
    own limit, never by that minimum or by another user's limit
@@ -581,7 +582,11 @@ impl VideoQoS {
         };
         let divisor = 1u32 << ((elapsed / 1000) as u32).saturating_sub(1).min(5);
         let user_cap = user.fps_cap();
-        let fps = (reference / divisor).clamp(MIN_AUTO_FPS.min(user_cap), user_cap);
+        // The floor is a floor, not a lift: a target already below it stays.
+        let current = user.delay.fps.unwrap_or(reference);
+        let fps = (reference / divisor)
+            .clamp(MIN_AUTO_FPS.min(user_cap), user_cap)
+            .min(current);
         user.delay.fps = Some(fps);
         log::debug!(
             "qos_trace t={} id={id} timeout={elapsed} fps={fps}",
@@ -971,6 +976,7 @@ mod tests {
 
     mod adaptation;
     mod baseline;
+    mod invariants;
     mod jitter;
     mod recovery;
     mod robustness;
