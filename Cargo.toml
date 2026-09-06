@@ -31,6 +31,9 @@ hwcodec = ["scrap/hwcodec"]
 vram = ["scrap/vram"]
 mediacodec = ["scrap/mediacodec"]
 drm = ["scrap/drm"]
+# Read the Wayland host cursor shape from the portal `SPA_META_Cursor` metadata (see the scrap
+# feature of the same name). Opt-in; when off the cursor path is unchanged (XFixes).
+portal-cursor = ["scrap/portal-cursor"]
 # The display wake, as its OWN compile gate on top of `drm`. Everything else in the drm backend
 # READS (it captures a scanout); the wake WRITES, injecting one synthetic pointer event from the
 # root service so a compositor that idle-disabled its outputs re-enables them. That is a different

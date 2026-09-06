@@ -17,6 +17,9 @@ pub mod x11;
 #[cfg(all(x11, feature = "wayland"))]
 pub mod wayland;
 
+#[cfg(all(x11, feature = "portal-cursor"))]
+pub use wayland::pipewire_cursor::{portal_cursor, portal_cursor_id, PortalCursorData};
+
 #[cfg(dxgi)]
 pub mod dxgi;
 
