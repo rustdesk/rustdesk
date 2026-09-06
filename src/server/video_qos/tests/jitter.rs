@@ -429,12 +429,19 @@ fn unconfirmed_severe_viewer_does_not_amplify_another_viewers_confirmed_mild_con
     );
 }
 
+/// What `on_connection_open` inserts, without touching the config store.
+fn newcomer(qos: &VideoQoS) -> UserData {
+    UserData {
+        joined_at: Some(qos.now()),
+        ..Default::default()
+    }
+}
+
 #[test]
 fn closing_a_just_opened_viewer_does_not_throttle_existing_viewers() {
     let mut qos = stable_qos();
     assert_eq!(qos.fps(), FPS);
-    qos.users.insert(2, UserData::default());
-    qos.new_user = Some((2, qos.now()));
+    qos.users.insert(2, newcomer(&qos));
     assert_eq!(
         qos.fps(),
         FPS,
@@ -451,8 +458,7 @@ fn closing_a_just_opened_viewer_does_not_throttle_existing_viewers() {
 #[test]
 fn a_new_viewer_caps_the_stream_at_init_fps_for_a_second() {
     let mut qos = stable_qos();
-    qos.users.insert(2, UserData::default());
-    qos.new_user = Some((2, qos.now()));
+    qos.users.insert(2, newcomer(&qos));
     qos.user_network_delay(1, 10);
     assert_eq!(qos.fps(), INIT_FPS);
     qos.advance_ms(1000);
@@ -462,5 +468,22 @@ fn a_new_viewer_caps_the_stream_at_init_fps_for_a_second() {
         qos.fps() > INIT_FPS,
         "after a second the stream follows the viewers' own targets: {}",
         qos.fps()
+    );
+}
+
+#[test]
+fn closing_the_latest_newcomer_keeps_an_earlier_newcomers_guard() {
+    let mut qos = stable_qos();
+    qos.users.insert(2, newcomer(&qos));
+    qos.user_network_delay(2, 10);
+    assert_eq!(qos.fps(), INIT_FPS);
+    qos.advance_ms(100);
+    qos.users.insert(3, newcomer(&qos));
+    qos.advance_ms(100);
+    qos.on_connection_close(3);
+    assert_eq!(
+        qos.fps(),
+        INIT_FPS,
+        "viewer 2 is still inside its own start-up window"
     );
 }

@@ -219,6 +219,7 @@ struct UserData {
     quality: Option<(i64, Quality)>, // (time, quality)
     delay: UserDelay,
     record: bool,
+    joined_at: Option<Instant>, // set by on_connection_open; the start-up guard's clock
 }
 
 impl UserData {
@@ -249,8 +250,7 @@ pub struct VideoQoS {
     bitrate_store: u32,
     adjust_ratio_instant: Instant,
     abr_config: bool,
-    new_user: Option<(i32, Instant)>, // the viewer that joined last, and when
-    first_reply_adjusts_ratio: bool,  // false on Linux, where it can create vaapi twice
+    first_reply_adjusts_ratio: bool, // false on Linux, where it can create vaapi twice
     #[cfg(test)]
     test_now: Option<Instant>,
 }
@@ -265,7 +265,6 @@ impl Default for VideoQoS {
             bitrate_store: 0,
             adjust_ratio_instant: Instant::now(),
             abr_config: true,
-            new_user: None,
             first_reply_adjusts_ratio: !cfg!(target_os = "linux"),
             #[cfg(test)]
             test_now: None,
@@ -349,9 +348,12 @@ impl VideoQoS {
 impl VideoQoS {
     // Initialize new user session
     pub fn on_connection_open(&mut self, id: i32) {
-        self.users.insert(id, UserData::default());
+        let user = UserData {
+            joined_at: Some(self.now()),
+            ..Default::default()
+        };
+        self.users.insert(id, user);
         self.abr_config = Config::get_option("enable-abr") != "N";
-        self.new_user = Some((id, self.now()));
     }
 
     // Clean up user session
@@ -361,11 +363,8 @@ impl VideoQoS {
             *self = Default::default();
             return;
         }
-        // The newcomer guard belongs to the viewer that joined; it leaves with it.
-        if self.new_user.is_some_and(|(newest, _)| newest == id) {
-            self.new_user = None;
-        }
-        // The stream follows the remaining viewers at once.
+        // The stream follows the remaining viewers at once; a departed viewer's
+        // start-up guard left with its entry.
         self.adjust_fps();
     }
 
@@ -768,11 +767,12 @@ impl VideoQoS {
             .min()
             .unwrap_or(INIT_FPS);
 
-        // For new connections (within 1 second), cap fps to INIT_FPS to ensure stability
-        if self
-            .new_user
-            .is_some_and(|(_, joined)| self.since(joined).as_secs() < 1)
-        {
+        // Every viewer inside its first second keeps the stream at INIT_FPS to
+        // ensure stability; each viewer carries its own start-up clock.
+        if self.users.values().any(|u| {
+            u.joined_at
+                .is_some_and(|joined| self.since(joined).as_secs() < 1)
+        }) {
             fps = fps.min(INIT_FPS);
         }
 
