@@ -1957,6 +1957,9 @@ pub fn current_resolution(name: &str) -> ResultType<Resolution> {
 }
 
 pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> ResultType<()> {
+    if try_kscreen_change_mode(name, width, height) {
+        return Ok(());
+    }
     Command::new("xrandr")
         .args(vec![
             "--output",
@@ -1966,6 +1969,154 @@ pub fn change_resolution_directly(name: &str, width: usize, height: usize) -> Re
         ])
         .spawn()?;
     Ok(())
+}
+
+fn kscreen_doctor_output() -> ResultType<String> {
+    let output = Command::new("kscreen-doctor").arg("-o").output()?;
+    if !output.status.success() {
+        bail!(
+            "kscreen-doctor -o failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Highest-refresh `WxH@rate` token advertised for [name], if any.
+pub fn parse_kscreen_best_mode(output: &str, name: &str, width: usize, height: usize) -> Option<String> {
+    let mut current = None;
+    let mut best: Option<(f64, String)> = None;
+    let wanted = format!("{}x{}", width, height);
+    for line in output.lines() {
+        if let Some(rest) = line.strip_prefix("Output:") {
+            current = rest.split_whitespace().nth(1).map(|s| s.to_string());
+            continue;
+        }
+        if current.as_deref() != Some(name) {
+            continue;
+        }
+        let Some(modes_part) = line.split("Modes:").nth(1) else {
+            continue;
+        };
+        for token in modes_part.split_whitespace() {
+            // 15:1280x800@119.85*!  or  14:1280x800@59.81
+            let token = token.trim_end_matches(['*', '!']);
+            let Some((_, mode)) = token.split_once(':') else {
+                continue;
+            };
+            let Some((wh, rate_s)) = mode.split_once('@') else {
+                continue;
+            };
+            if wh != wanted {
+                continue;
+            }
+            let rate = rate_s.parse::<f64>().unwrap_or(0.0);
+            if best.as_ref().map(|(r, _)| rate > *r).unwrap_or(true) {
+                best = Some((rate, mode.to_string()));
+            }
+        }
+    }
+    best.map(|(_, mode)| mode)
+}
+
+pub fn parse_kscreen_scale(output: &str, name: &str) -> Option<f64> {
+    let mut current = None;
+    for line in output.lines() {
+        if let Some(rest) = line.strip_prefix("Output:") {
+            current = rest.split_whitespace().nth(1).map(|s| s.to_string());
+            continue;
+        }
+        if current.as_deref() != Some(name) {
+            continue;
+        }
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("Scale:") {
+            return rest.trim().parse().ok();
+        }
+    }
+    None
+}
+
+fn try_kscreen_change_mode(name: &str, width: usize, height: usize) -> bool {
+    let Ok(info) = kscreen_doctor_output() else {
+        return false;
+    };
+    let Some(mode) = parse_kscreen_best_mode(&info, name, width, height) else {
+        return false;
+    };
+    Command::new("kscreen-doctor")
+        .arg(format!("output.{}.mode.{}", name, mode))
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+pub fn get_display_scale(name: &str) -> Option<f64> {
+    let info = kscreen_doctor_output().ok()?;
+    parse_kscreen_scale(&info, name)
+}
+
+pub fn set_display_scale(name: &str, scale: f64) -> ResultType<()> {
+    let status = Command::new("kscreen-doctor")
+        .arg(format!("output.{}.scale.{}", name, scale))
+        .status()?;
+    if !status.success() {
+        bail!("kscreen-doctor scale {} on {} failed", scale, name);
+    }
+    Ok(())
+}
+
+/// When the host shrinks for a phone-sized client, raise OS scale so
+/// icons and text actually render larger instead of just being fewer pixels.
+pub fn suggested_fit_client_scale(new_width: i32, current_scale: f64) -> f64 {
+    if new_width <= 0 {
+        return current_scale;
+    }
+    let target = if new_width <= 1280 {
+        2.0
+    } else if new_width <= 1600 {
+        1.5
+    } else {
+        current_scale
+    };
+    current_scale.max(target).min(3.0)
+}
+
+#[cfg(test)]
+mod fit_client_kscreen_tests {
+    use super::*;
+
+    const SAMPLE: &str = r#"Output: 1 eDP-1 59758141-7cd8-4e1f-86ad-ce2184261ba8
+enabled
+connected
+Modes:  1:2880x1800@120.00*!  14:1280x800@59.81  15:1280x800@119.85  21:1920x1080@119.93
+Geometry: 0,0 1920x1200
+Scale: 1.5
+Output: 2 HDMI-1 abc
+Scale: 1
+"#;
+
+    #[test]
+    fn picks_highest_refresh_for_mode() {
+        assert_eq!(
+            parse_kscreen_best_mode(SAMPLE, "eDP-1", 1280, 800).as_deref(),
+            Some("1280x800@119.85")
+        );
+    }
+
+    #[test]
+    fn reads_scale_for_named_output() {
+        assert_eq!(parse_kscreen_scale(SAMPLE, "eDP-1"), Some(1.5));
+        assert_eq!(parse_kscreen_scale(SAMPLE, "HDMI-1"), Some(1.0));
+        assert_eq!(parse_kscreen_scale(SAMPLE, "DP-1"), None);
+    }
+
+    #[test]
+    fn raises_scale_on_phone_sized_modes() {
+        assert_eq!(suggested_fit_client_scale(1280, 1.5), 2.0);
+        assert_eq!(suggested_fit_client_scale(1920, 1.5), 1.5);
+        assert_eq!(suggested_fit_client_scale(2880, 1.5), 1.5);
+    }
 }
 
 /// Scoped to `uid`, the user of the session being refreshed: the compositor starts Xwayland as

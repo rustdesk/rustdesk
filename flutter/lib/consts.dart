@@ -81,6 +81,9 @@ const String kWindowEventGetCachedSessionData = "get_cached_session_data";
 const String kWindowEventOpenMonitorSession = "open_monitor_session";
 
 const String kOptionViewStyle = "view_style";
+/// Persist whether this session should shrink the host desktop so it stays
+/// readable on a small client (phone). Stored as 'Y' / 'N'.
+const String kOptionFitToClient = "fit-to-client";
 const String kOptionScrollStyle = "scroll_style";
 const String kOptionEdgeScrollEdgeThickness = "edge-scroll-edge-thickness";
 const String kOptionImageQuality = "image_quality";

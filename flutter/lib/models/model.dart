@@ -43,6 +43,7 @@ import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
 import 'package:flutter_hbb/utils/scale.dart';
+import 'package:flutter_hbb/models/fit_client.dart';
 
 import 'package:flutter_hbb/generated_bridge.dart'
     if (dart.library.html) 'package:flutter_hbb/web/bridge.dart';
@@ -137,6 +138,8 @@ class FfiModel with ChangeNotifier {
   bool isRefreshing = false;
 
   Timer? timerScreenshot;
+  Timer? _fitClientDebounce;
+  (int, int)? _lastFitClientApplied;
 
   Rect? get rect => _rect;
   bool get isOriginalResolutionSet =>
@@ -263,6 +266,9 @@ class FfiModel with ChangeNotifier {
     clearPermissions();
     waitForImageTimer?.cancel();
     timerScreenshot?.cancel();
+    _fitClientDebounce?.cancel();
+    _fitClientDebounce = null;
+    _lastFitClientApplied = null;
   }
 
   setConnectionType(
@@ -1497,7 +1503,110 @@ class FfiModel with ChangeNotifier {
 
     if (!isCache) {
       tryUseAllMyDisplaysForTheRemoteSession(peerId);
+      scheduleFitToClient();
     }
+  }
+
+  void scheduleFitToClient() {
+    if (parent.target?.connType != ConnType.defaultConn) {
+      return;
+    }
+    _fitClientDebounce?.cancel();
+    _fitClientDebounce = Timer(const Duration(milliseconds: 400), () {
+      applyFitToClient();
+    });
+  }
+
+  Future<bool> isFitToClientEnabled() async {
+    final opt = await bind.sessionGetFlutterOption(
+        sessionId: sessionId, k: kOptionFitToClient);
+    if (opt == null || opt.isEmpty) {
+      return isMobile;
+    }
+    return opt == 'Y';
+  }
+
+  Future<void> applyFitToClient() async {
+    final ffi = parent.target;
+    if (ffi == null || ffi.connType != ConnType.defaultConn) {
+      return;
+    }
+    if (!keyboard) {
+      return;
+    }
+    if (!await isFitToClientEnabled()) {
+      return;
+    }
+    if (_pi.resolutions.isEmpty) {
+      return;
+    }
+    final displayIndex = _pi.currentDisplay;
+    if (displayIndex == kAllDisplayValue) {
+      return;
+    }
+    final display = _pi.tryGetDisplayIfNotAllDisplay(display: displayIndex);
+    if (display == null) {
+      return;
+    }
+
+    await bind.sessionSetViewStyle(
+        sessionId: sessionId, value: kRemoteViewStyleAdaptive);
+    await ffi.canvasModel.updateViewStyle();
+
+    final views = ui.PlatformDispatcher.instance.views;
+    if (views.isEmpty) {
+      return;
+    }
+    final view = ui.PlatformDispatcher.instance.implicitView ?? views.first;
+    final dpr = view.devicePixelRatio;
+    final logical = view.physicalSize / dpr;
+    final picked = pickFitClientMode(
+      viewport: FitClientViewport(
+        logicalWidth: logical.width,
+        logicalHeight: logical.height,
+        devicePixelRatio: dpr,
+      ),
+      hostModes:
+          _pi.resolutions.map((r) => HostMode(r.width, r.height)).toList(),
+    );
+    if (picked == null) {
+      return;
+    }
+    if (display.width == picked.width && display.height == picked.height) {
+      _lastFitClientApplied = (picked.width, picked.height);
+      return;
+    }
+    if (_lastFitClientApplied != null &&
+        _lastFitClientApplied!.$1 == picked.width &&
+        _lastFitClientApplied!.$2 == picked.height) {
+      return;
+    }
+    _lastFitClientApplied = (picked.width, picked.height);
+    await bind.sessionChangeResolution(
+      sessionId: sessionId,
+      display: displayIndex,
+      width: picked.width,
+      height: picked.height,
+    );
+  }
+
+  Future<void> restoreFitToClient() async {
+    _fitClientDebounce?.cancel();
+    _lastFitClientApplied = null;
+    final displayIndex = _pi.currentDisplay;
+    final display = _pi.tryGetDisplayIfNotAllDisplay(display: displayIndex);
+    if (display == null || !display.isOriginalResolutionSet) {
+      return;
+    }
+    if (display.isOriginalResolution) {
+      return;
+    }
+    await bind.sessionChangeResolution(
+      sessionId: sessionId,
+      display: displayIndex,
+      width: display.originalWidth,
+      height: display.originalHeight,
+    );
   }
 
   checkDesktopKeyboardMode() async {

@@ -887,16 +887,41 @@ Future<List<TToggleMenu>> toolbarDisplayToggle(
   final sessionId = ffi.sessionId;
   final isDefaultConn = ffi.connType == ConnType.defaultConn;
 
+  if (isDefaultConn && ffiModel.keyboard) {
+    final fitOpt = await bind.sessionGetFlutterOption(
+        sessionId: sessionId, k: kOptionFitToClient);
+    final fitEnabled =
+        fitOpt == 'Y' || ((fitOpt == null || fitOpt.isEmpty) && isMobile);
+    v.add(TToggleMenu(
+        value: fitEnabled,
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionSetFlutterOption(
+              sessionId: sessionId,
+              k: kOptionFitToClient,
+              v: value ? 'Y' : 'N');
+          if (value) {
+            await ffiModel.applyFitToClient();
+          } else {
+            await ffiModel.restoreFitToClient();
+          }
+        },
+        child: Text(translate('Fit to client'))));
+  }
+
   // show quality monitor
-  final option = 'show-quality-monitor';
-  v.add(TToggleMenu(
-      value: bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option),
-      onChanged: (value) async {
-        if (value == null) return;
-        await bind.sessionToggleOption(sessionId: sessionId, value: option);
-        ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
-      },
-      child: Text(translate('Show quality monitor'))));
+  if (!kPhoneRemoteOnly) {
+    final option = 'show-quality-monitor';
+    v.add(TToggleMenu(
+        value:
+            bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option),
+        onChanged: (value) async {
+          if (value == null) return;
+          await bind.sessionToggleOption(sessionId: sessionId, value: option);
+          ffi.qualityMonitorModel.checkShowQualityMonitor(sessionId);
+        },
+        child: Text(translate('Show quality monitor'))));
+  }
   // mute
   if (isDefaultConn && perms['audio'] != false) {
     final option = 'disable-audio';

@@ -62,6 +62,10 @@ final isWebOnWindows = isWebOnWindows_;
 final isWebOnLinux = isWebOnLinux_;
 final isWebOnMacOs = isWebOnMacOS_;
 var isMobile = isAndroid || isIOS;
+/// Phone clients only offer a remote-desktop session. Extra RustDesk
+/// session types stay in the protocol (the public server still works)
+/// but are hidden from the UI.
+bool get kPhoneRemoteOnly => isMobile;
 var version = '';
 int androidVersion = 0;
 

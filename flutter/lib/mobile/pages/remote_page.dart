@@ -513,6 +513,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                       .resetMobileActionsOverlay(ffi: gFFI);
                                   _currentOrientation = orientation;
                                   gFFI.canvasModel.updateViewStyle();
+                                  gFFI.ffiModel.scheduleFitToClient();
                                 });
                               }
                               return Container(

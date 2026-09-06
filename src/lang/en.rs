@@ -161,6 +161,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("no fingerprints", "No fingerprints"),
         ("resolution_original_tip", "Original resolution"),
         ("resolution_fit_local_tip", "Fit local resolution"),
+        ("Fit to client", "Fit to client"),
+        ("fit_to_client_tip", "Shrink the remote desktop so the whole screen stays readable on this device."),
         ("resolution_custom_tip", "Custom resolution"),
         ("Accept and Elevate", "Accept and elevate"),
         ("accept_and_elevate_btn_tooltip", "Accept the connection and elevate UAC permissions."),

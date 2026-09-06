@@ -4653,6 +4653,29 @@ impl Connection {
                             e
                         );
                     }
+                    #[cfg(target_os = "linux")]
+                    {
+                        if let Some(cur_scale) = crate::platform::linux::get_display_scale(&name) {
+                            let new_scale = crate::platform::linux::suggested_fit_client_scale(
+                                r.width, cur_scale,
+                            );
+                            if (new_scale - cur_scale).abs() > 0.05 {
+                                display_service::set_last_changed_scale(
+                                    &name, cur_scale, new_scale,
+                                );
+                                if let Err(e) =
+                                    crate::platform::linux::set_display_scale(&name, new_scale)
+                                {
+                                    log::error!(
+                                        "Failed to set scale of '{}' to {}: {:?}",
+                                        &name,
+                                        new_scale,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -18,6 +18,7 @@ import 'package:window_size/window_size.dart' as window_size;
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/fit_client.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
@@ -2500,7 +2501,18 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
       }
     }
 
-    return null;
+    final picked = pickFitClientMode(
+      viewport: FitClientViewport(
+        logicalWidth: _localResolution!.width.toDouble(),
+        logicalHeight: _localResolution!.height.toDouble(),
+        devicePixelRatio: 1.0,
+      ),
+      hostModes: resolutions.map((r) => HostMode(r.width, r.height)).toList(),
+    );
+    if (picked == null) {
+      return null;
+    }
+    return Resolution(picked.width, picked.height);
   }
 
   bool _isRemoteResolutionFitLocal() {

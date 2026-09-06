@@ -6,8 +6,11 @@ use crate::platform::linux::is_x11;
 use crate::virtual_display_manager;
 #[cfg(windows)]
 use hbb_common::get_version_number;
+use hbb_common::config::Config;
 use hbb_common::protobuf::MessageField;
 use scrap::Display;
+use serde_json::json;
+use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // https://github.com/rustdesk/rustdesk/discussions/6042, avoiding dbus call
@@ -20,6 +23,8 @@ const DUMMY_DISPLAY_SIDE_MAX_SIZE: usize = 1024;
 struct ChangedResolution {
     original: (i32, i32),
     changed: (i32, i32),
+    original_scale: Option<f64>,
+    changed_scale: Option<f64>,
 }
 
 lazy_static::lazy_static! {
@@ -385,21 +390,117 @@ pub(super) fn check_display_changed(
 
 #[inline]
 pub fn set_last_changed_resolution(display_name: &str, original: (i32, i32), changed: (i32, i32)) {
-    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
-    match lock.get_mut(display_name) {
-        Some(res) => res.changed = changed,
-        None => {
-            lock.insert(
-                display_name.to_owned(),
-                ChangedResolution { original, changed },
-            );
+    {
+        let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+        match lock.get_mut(display_name) {
+            Some(res) => res.changed = changed,
+            None => {
+                lock.insert(
+                    display_name.to_owned(),
+                    ChangedResolution {
+                        original,
+                        changed,
+                        original_scale: None,
+                        changed_scale: None,
+                    },
+                );
+            }
         }
+    }
+    persist_changed_resolutions();
+}
+
+#[inline]
+pub fn set_last_changed_scale(display_name: &str, original: f64, changed: f64) {
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    if let Some(res) = lock.get_mut(display_name) {
+        if res.original_scale.is_none() {
+            res.original_scale = Some(original);
+        }
+        res.changed_scale = Some(changed);
+    }
+    drop(lock);
+    persist_changed_resolutions();
+}
+
+fn changed_resolutions_path() -> std::path::PathBuf {
+    Config::path("fit-to-client-restore.json")
+}
+
+fn persist_changed_resolutions() {
+    let lock = CHANGED_RESOLUTIONS.read().unwrap();
+    let path = changed_resolutions_path();
+    if lock.is_empty() {
+        let _ = fs::remove_file(&path);
+        return;
+    }
+    let items: Vec<serde_json::Value> = lock
+        .iter()
+        .map(|(name, res)| {
+            json!({
+                "name": name,
+                "original_width": res.original.0,
+                "original_height": res.original.1,
+                "changed_width": res.changed.0,
+                "changed_height": res.changed.1,
+                "original_scale": res.original_scale,
+                "changed_scale": res.changed_scale,
+            })
+        })
+        .collect();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, serde_json::to_vec(&items).unwrap_or_default());
+}
+
+fn load_changed_resolutions_from_disk() {
+    let path = changed_resolutions_path();
+    let Ok(bytes) = fs::read(&path) else {
+        return;
+    };
+    let Ok(items) = serde_json::from_slice::<Vec<serde_json::Value>>(&bytes) else {
+        let _ = fs::remove_file(&path);
+        return;
+    };
+    let mut lock = CHANGED_RESOLUTIONS.write().unwrap();
+    if !lock.is_empty() {
+        return;
+    }
+    for item in items {
+        let Some(name) = item.get("name").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(ow) = item.get("original_width").and_then(|v| v.as_i64()) else {
+            continue;
+        };
+        let Some(oh) = item.get("original_height").and_then(|v| v.as_i64()) else {
+            continue;
+        };
+        let cw = item
+            .get("changed_width")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(ow);
+        let ch = item
+            .get("changed_height")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(oh);
+        lock.insert(
+            name.to_owned(),
+            ChangedResolution {
+                original: (ow as i32, oh as i32),
+                changed: (cw as i32, ch as i32),
+                original_scale: item.get("original_scale").and_then(|v| v.as_f64()),
+                changed_scale: item.get("changed_scale").and_then(|v| v.as_f64()),
+            },
+        );
     }
 }
 
 #[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn restore_resolutions() {
+    load_changed_resolutions_from_disk();
     for (name, res) in CHANGED_RESOLUTIONS.read().unwrap().iter() {
         let (w, h) = res.original;
         log::info!("Restore resolution of display '{}' to ({}, {})", name, w, h);
@@ -412,9 +513,21 @@ pub fn restore_resolutions() {
                 e
             );
         }
+        #[cfg(target_os = "linux")]
+        if let Some(scale) = res.original_scale {
+            if let Err(e) = crate::platform::linux::set_display_scale(name, scale) {
+                log::error!(
+                    "Failed to restore scale of display '{}' to {}: {}",
+                    name,
+                    scale,
+                    e
+                );
+            }
+        }
     }
     // Can be cleared because restore resolutions is called when there is no client connected.
     CHANGED_RESOLUTIONS.write().unwrap().clear();
+    persist_changed_resolutions();
 }
 
 #[inline]
@@ -438,6 +551,8 @@ pub fn is_privacy_mode_mag_supported() -> bool {
 }
 
 pub fn new() -> GenericService {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    restore_resolutions();
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
     GenericService::run(&svc.clone(), run);
     svc.sp
