@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, error::Error, fmt};
 
+#[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
 const INTERPOLATION_MARGIN_FRAMES: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,10 +50,15 @@ impl fmt::Display for AudioResamplerError {
 impl Error for AudioResamplerError {}
 
 pub(crate) struct FixedFrameAudioResampler {
-    resampler: StreamingLinearAudioResampler,
+    resampler: AudioResampler,
     output_samples: usize,
     pending_samples: VecDeque<f32>,
 }
+
+#[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+// SAFETY: libsamplerate's src_new state owns heap data and has no thread affinity.
+// This wrapper never exposes or shares that state; processing requires &mut self.
+unsafe impl Send for FixedFrameAudioResampler {}
 
 impl FixedFrameAudioResampler {
     pub(crate) fn new(
@@ -66,7 +72,7 @@ impl FixedFrameAudioResampler {
             .checked_mul(config.channels as usize)
             .ok_or(AudioResamplerError::CapacityOverflow)?;
         Ok(Self {
-            resampler: StreamingLinearAudioResampler::new(config)?,
+            resampler: AudioResampler::new(config)?,
             output_samples,
             pending_samples: VecDeque::new(),
         })
@@ -146,6 +152,7 @@ impl AudioResampler {
     }
 }
 
+#[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
 struct StreamingLinearAudioResampler {
     config: AudioResamplerConfig,
     channels: usize,
@@ -153,6 +160,7 @@ struct StreamingLinearAudioResampler {
     next_position: u64,
 }
 
+#[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
 impl StreamingLinearAudioResampler {
     fn new(config: AudioResamplerConfig) -> Result<Self, AudioResamplerError> {
         Ok(Self {

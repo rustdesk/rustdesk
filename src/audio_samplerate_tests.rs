@@ -12,6 +12,9 @@ const TONE_FREQUENCY_HZ: f32 = 997.0;
 const TONE_AMPLITUDE: f32 = 0.5;
 const MAX_BOUNDARY_RESIDUAL: f32 = 0.02;
 const INCOMPLETE_SAMPLE_COUNT: usize = 1;
+const DOWNSAMPLE_RATE: u32 = 24_000;
+const REJECTED_TONE_HZ: f64 = 18_000.0;
+const MAX_ALIAS_RMS: f64 = 0.01;
 
 fn stereo_tone(frames: usize) -> Vec<f32> {
     (0..frames)
@@ -77,6 +80,66 @@ fn capture_resampler_can_move_into_the_audio_callback() {
     fn assert_send<T: Send>() {}
 
     assert_send::<FixedFrameAudioResampler>();
+}
+
+#[test]
+fn moving_capture_resampler_preserves_pending_audio() {
+    let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
+    let packet_samples = INPUT_PACKET_FRAMES * CHANNELS as usize;
+    let mut expected_resampler =
+        FixedFrameAudioResampler::new(stereo_config(), OUTPUT_PACKET_FRAMES).unwrap();
+    let expected: Vec<_> = input
+        .chunks(packet_samples)
+        .flat_map(|packet| expected_resampler.process(packet).unwrap())
+        .collect();
+    let mut moved_resampler =
+        FixedFrameAudioResampler::new(stereo_config(), OUTPUT_PACKET_FRAMES).unwrap();
+    let mut output = moved_resampler.process(&input[..packet_samples]).unwrap();
+    let remaining = std::thread::spawn(move || {
+        input[packet_samples..]
+            .chunks(packet_samples)
+            .flat_map(|packet| moved_resampler.process(packet).unwrap())
+            .collect::<Vec<_>>()
+    })
+    .join()
+    .unwrap();
+    output.extend(remaining);
+
+    assert_eq!(output, expected);
+}
+
+#[test]
+fn capture_downsampling_filters_out_of_band_audio() {
+    let input: Vec<_> = (0..INPUT_PACKET_FRAMES * PACKET_COUNT)
+        .flat_map(|frame| {
+            let phase =
+                std::f64::consts::TAU * REJECTED_TONE_HZ * frame as f64 / f64::from(INPUT_RATE);
+            let sample = (f64::from(TONE_AMPLITUDE) * phase.sin()) as f32;
+            [sample, sample]
+        })
+        .collect();
+    let config = AudioResamplerConfig {
+        output_rate: DOWNSAMPLE_RATE,
+        ..stereo_config()
+    };
+    let output_frames = DOWNSAMPLE_RATE as usize / PACKETS_PER_SECOND;
+    let mut resampler = FixedFrameAudioResampler::new(config, output_frames).unwrap();
+    let output: Vec<f32> = input
+        .chunks(INPUT_PACKET_FRAMES * CHANNELS as usize)
+        .flat_map(|packet| resampler.process(packet).unwrap().into_iter().flatten())
+        .collect();
+
+    assert!(output.len() >= output_frames * CHANNELS as usize * MIN_CONTINUITY_PACKETS);
+    let mean_square = output
+        .iter()
+        .map(|sample| f64::from(*sample).powi(2))
+        .sum::<f64>()
+        / output.len() as f64;
+    let rms = mean_square.sqrt();
+    assert!(
+        rms < MAX_ALIAS_RMS,
+        "out-of-band output RMS {rms} exceeded {MAX_ALIAS_RMS}"
+    );
 }
 
 #[test]
