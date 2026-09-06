@@ -89,6 +89,10 @@ use crate::ui_session_interface::SessionPermissionConfig;
 
 pub use super::lang::*;
 
+#[cfg(not(target_os = "linux"))]
+mod audio_buffer;
+#[cfg(not(target_os = "linux"))]
+mod audio_playback;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
@@ -1531,55 +1535,49 @@ impl AudioHandler {
             .resize(config.sample_rate.0 as _, config.channels as _);
         let audio_buffer = self.audio_buffer.0.clone();
         let ready = self.ready.clone();
+        let channels = std::num::NonZeroUsize::new(config.channels as usize)
+            .with_context(|| "Audio output channel count must be non-zero")?;
+        let channel_count = channels.get();
+        let buffer_capacity = audio_buffer.lock().unwrap().capacity();
+        let mut buffered_input = vec![0.0; buffer_capacity];
+        let mut playback_recovery =
+            audio_playback::AudioPlaybackRecovery::new(audio_playback::AudioPlaybackConfig {
+                sample_rate: config.sample_rate.0,
+                channels: channel_count,
+            })?;
         let timeout = None;
         let stream = device.build_output_stream(
             config,
-            move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
+            move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
                 if !*ready.lock().unwrap() {
                     *ready.lock().unwrap() = true;
                 }
 
-                let mut n = data.len();
-                let mut lock = audio_buffer.lock().unwrap();
-                let mut having = lock.occupied_len();
-                // android two timestamps, one from zero, another not
-                #[cfg(not(target_os = "android"))]
-                if having < n {
-                    let tms = info.timestamp();
-                    let how_long = tms
-                        .playback
-                        .duration_since(&tms.callback)
-                        .unwrap_or(Duration::from_millis(0));
-
-                    // must long enough to fight back scheuler delay
-                    if how_long > Duration::from_millis(6) && how_long < Duration::from_millis(3000)
-                    {
-                        drop(lock);
-                        std::thread::sleep(how_long.div_f32(1.2));
-                        lock = audio_buffer.lock().unwrap();
-                        having = lock.occupied_len();
-                    }
-
-                    if having < n {
-                        n = having;
-                    }
-                }
-                #[cfg(target_os = "android")]
-                if having < n {
-                    n = having;
-                }
-                let mut elems = vec![0.0f32; n];
-                if n > 0 {
-                    lock.pop_slice(&mut elems);
-                }
-                drop(lock);
-
-                let mut input = elems.into_iter();
-                for sample in data.iter_mut() {
-                    *sample = match input.next() {
-                        Some(x) => T::from_sample(x),
-                        _ => T::from_sample(0.),
+                let requested_samples = data.len().min(buffered_input.len());
+                let available_samples = audio_buffer::drain_audio_samples(
+                    &audio_buffer,
+                    &mut buffered_input[..requested_samples],
+                    channels,
+                );
+                let available_frames = available_samples / channel_count;
+                for (frame_index, output_frame) in data.chunks_mut(channel_count).enumerate() {
+                    let input = if frame_index < available_frames {
+                        let start = frame_index * channel_count;
+                        Some(&buffered_input[start..start + channel_count])
+                    } else {
+                        None
                     };
+                    match playback_recovery.process_frame(input) {
+                        Ok(recovered) => {
+                            for (output, sample) in output_frame.iter_mut().zip(recovered) {
+                                *output = T::from_sample(*sample);
+                            }
+                        }
+                        Err(error) => {
+                            log::error!("Failed to recover audio underflow: {error}");
+                            output_frame.fill(T::from_sample(0.0));
+                        }
+                    }
                 }
             },
             err_fn,
