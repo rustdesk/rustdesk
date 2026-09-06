@@ -1178,6 +1178,8 @@ pub struct AudioHandler {
     simple: Option<psimple::Simple>,
     #[cfg(not(target_os = "linux"))]
     audio_buffer: AudioBuffer,
+    #[cfg(not(target_os = "linux"))]
+    audio_resampler: Option<crate::audio_resampler::AudioResampler>,
     sample_rate: (u32, u32),
     #[cfg(not(target_os = "linux"))]
     audio_stream: Option<Box<dyn StreamTrait>>,
@@ -1186,6 +1188,54 @@ pub struct AudioHandler {
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
     ready: Arc<std::sync::Mutex<bool>>,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Clone, Copy)]
+struct DecodedAudioConfig {
+    sample_rate: u32,
+    input_channels: u16,
+    output_channels: u16,
+}
+
+#[cfg(not(target_os = "linux"))]
+fn create_audio_resampler(
+    input_rate: u32,
+    output_rate: u32,
+    channels: u16,
+) -> ResultType<Option<crate::audio_resampler::AudioResampler>> {
+    if input_rate == output_rate {
+        return Ok(None);
+    }
+    Ok(Some(crate::audio_resampler::AudioResampler::new(
+        crate::audio_resampler::AudioResamplerConfig {
+            input_rate,
+            output_rate,
+            channels,
+        },
+    )?))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prepare_decoded_audio(
+    input: &[f32],
+    resampler: Option<&mut crate::audio_resampler::AudioResampler>,
+    config: DecodedAudioConfig,
+) -> Result<Vec<f32>, crate::audio_resampler::AudioResamplerError> {
+    let mut output = match resampler {
+        Some(resampler) => resampler.process(input)?,
+        None => input.to_owned(),
+    };
+    if config.input_channels != config.output_channels {
+        output = crate::audio_rechannel(
+            output,
+            config.sample_rate,
+            config.sample_rate,
+            config.input_channels,
+            config.output_channels,
+        );
+    }
+    Ok(output)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1363,6 +1413,9 @@ impl AudioHandler {
         }
 
         self.sample_rate = (format0.sample_rate, config.sample_rate.0);
+        let audio_resampler = create_audio_resampler(
+            format0.sample_rate, config.sample_rate.0, format0.channels as _,
+        )?;
         let mut build_output_stream = |config: StreamConfig| match sample_format {
             cpal::SampleFormat::I8 => self.build_output_stream::<i8>(&config, &device),
             cpal::SampleFormat::I16 => self.build_output_stream::<i16>(&config, &device),
@@ -1387,6 +1440,7 @@ impl AudioHandler {
         } else {
             build_output_stream(config)?;
         }
+        self.audio_resampler = audio_resampler;
 
         Ok(())
     }
@@ -1423,39 +1477,40 @@ impl AudioHandler {
             return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
-            if let Ok(n) = d.decode_float(&frame.data, buffer, false) {
-                let channels = self.channels;
-                let n = n * (channels as usize);
-                #[cfg(not(target_os = "linux"))]
-                {
-                    let sample_rate0 = self.sample_rate.0;
-                    let sample_rate = self.sample_rate.1;
-                    let mut buffer = buffer[0..n].to_owned();
-                    if sample_rate != sample_rate0 {
-                        buffer = crate::audio_resample(
-                            &buffer[0..n],
-                            sample_rate0,
-                            sample_rate,
-                            channels,
-                        );
-                    }
-                    if self.channels != self.device_channel {
-                        buffer = crate::audio_rechannel(
-                            buffer,
-                            sample_rate,
-                            sample_rate,
-                            self.channels,
-                            self.device_channel,
-                        );
-                    }
-                    self.audio_buffer.append_pcm(&buffer);
+            let decoded_frames = match d.decode_float(&frame.data, buffer, false) {
+                Ok(decoded_frames) => decoded_frames,
+                Err(error) => {
+                    log::warn!("Failed to decode audio frame: {error:?}");
+                    return;
                 }
-                #[cfg(target_os = "linux")]
-                {
-                    let data_u8 =
-                        unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
-                    self.simple.as_mut().map(|x| x.write(data_u8));
-                }
+            };
+            let channels = self.channels;
+            let n = decoded_frames * channels as usize;
+            #[cfg(not(target_os = "linux"))]
+            {
+                let config = DecodedAudioConfig {
+                    sample_rate: self.sample_rate.1,
+                    input_channels: self.channels,
+                    output_channels: self.device_channel,
+                };
+                let buffer = match prepare_decoded_audio(
+                    &buffer[0..n],
+                    self.audio_resampler.as_mut(),
+                    config,
+                ) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        log::error!("Failed to resample decoded audio: {error:#}");
+                        return;
+                    }
+                };
+                self.audio_buffer.append_pcm(&buffer);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let data_u8 =
+                    unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
+                self.simple.as_mut().map(|x| x.write(data_u8));
             }
         });
     }
