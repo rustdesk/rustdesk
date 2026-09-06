@@ -479,16 +479,27 @@ fn peer_exe_read_permission_denied(err: &anyhow::Error) -> bool {
         .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::PermissionDenied)
 }
 
-// A root IPC server can always read a same-user-namespace peer's /proc/<pid>/exe, so a permission
-// error there is genuinely anomalous (e.g. a cross-namespace peer) and must stay fail-closed. Only a
-// NON-root server (the non-systemd case where the service could not register as root and runs as the
-// active user) cannot introspect a peer; there the executable check has no information to act on, so
-// deferring to the uid gate is both the best achievable and the pre-1.4.7 behavior — and it keeps the
-// hardened root-service path untouched.
+// The degrade is confined to a NON-root server. In a standard install the IPC server is the root
+// service, which normally can read a same-user-namespace peer's /proc/<pid>/exe; a root server that
+// nonetheless fails the read (e.g. dropped CAP_SYS_PTRACE, or a cross-namespace peer) is anomalous
+// and stays fail-closed. Only when the server itself is unprivileged (the non-systemd case where the
+// service could not register as root and runs as the active user) can it not introspect ANY peer;
+// there the executable check has no information to act on, so deferring to the uid gate is both the
+// best achievable and the pre-1.4.7 behavior, while the hardened root-service path is untouched.
 #[cfg(target_os = "linux")]
 #[inline]
 fn ipc_server_is_unprivileged() -> bool {
     unsafe { libc::geteuid() != 0 }
+}
+
+// The privilege-dependent authorization decision, pure so both branches are unit-testable: defer to
+// the uid gate only when an unprivileged server hit a permission error introspecting the peer. A root
+// server (`server_is_unprivileged == false`) always stays fail-closed, and a non-permission error
+// (e.g. the peer vanished) never degrades.
+#[cfg(target_os = "linux")]
+#[inline]
+fn should_defer_exe_check_to_uid_gate(err: &anyhow::Error, server_is_unprivileged: bool) -> bool {
+    server_is_unprivileged && peer_exe_read_permission_denied(err)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -498,7 +509,7 @@ fn ensure_peer_executable_matches_current_by_pid(peer_pid: u32, postfix: &str) -
         Ok(peer_exe) => peer_exe,
         Err(err) => {
             #[cfg(target_os = "linux")]
-            if peer_exe_read_permission_denied(&err) && ipc_server_is_unprivileged() {
+            if should_defer_exe_check_to_uid_gate(&err, ipc_server_is_unprivileged()) {
                 log::warn!(
                     "Peer executable link not introspectable on ipc channel '{}' by an unprivileged server (peer_pid={}): {}; identity unavailable, deferring to the uid gate",
                     postfix,
@@ -1078,8 +1089,7 @@ mod tests {
     #[test]
     fn test_peer_exe_read_permission_denied_classification() {
         // EACCES/EPERM reading /proc/<pid>/exe (both map to `PermissionDenied`) means the peer is
-        // not introspectable and must be classified as such even after `context()` is attached, so
-        // the caller degrades to the uid gate instead of rejecting a legitimate peer.
+        // not introspectable and must be classified as such even after `context()` is attached.
         for errno in [hbb_common::libc::EACCES, hbb_common::libc::EPERM] {
             let err = hbb_common::anyhow::Error::new(std::io::Error::from_raw_os_error(errno))
                 .context("Failed to read peer executable link '/proc/1/exe'");
@@ -1088,13 +1098,41 @@ mod tests {
                 "errno {errno} must classify as permission denied"
             );
         }
-        // A vanished peer (NotFound) or a non-io error must NOT degrade to allow.
+        // A vanished peer (NotFound) or a non-io error must NOT classify as permission denied.
         let not_found =
             hbb_common::anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::NotFound))
                 .context("Failed to read peer executable link '/proc/1/exe'");
         assert!(!super::peer_exe_read_permission_denied(&not_found));
         assert!(!super::peer_exe_read_permission_denied(
             &hbb_common::anyhow::anyhow!("canonicalize failure text")
+        ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_should_defer_exe_check_to_uid_gate_matrix() {
+        let eacces = || {
+            hbb_common::anyhow::Error::new(std::io::Error::from_raw_os_error(
+                hbb_common::libc::EACCES,
+            ))
+            .context("Failed to read peer executable link '/proc/1/exe'")
+        };
+        let not_found = || {
+            hbb_common::anyhow::Error::new(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .context("Failed to read peer executable link '/proc/1/exe'")
+        };
+        // Only an unprivileged server that hit a permission error defers to the uid gate.
+        assert!(super::should_defer_exe_check_to_uid_gate(&eacces(), true));
+        // A root server stays fail-closed even on a permission error.
+        assert!(!super::should_defer_exe_check_to_uid_gate(&eacces(), false));
+        // A non-permission error never degrades, regardless of privilege.
+        assert!(!super::should_defer_exe_check_to_uid_gate(
+            &not_found(),
+            true
+        ));
+        assert!(!super::should_defer_exe_check_to_uid_gate(
+            &not_found(),
+            false
         ));
     }
 }
