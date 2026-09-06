@@ -93,6 +93,8 @@ pub use super::lang::*;
 mod audio_buffer;
 #[cfg(not(target_os = "linux"))]
 mod audio_playback;
+#[cfg(all(test, not(target_os = "linux")))]
+mod audio_state_tests;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
@@ -1460,11 +1462,22 @@ impl AudioHandler {
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
-                allow_err!(self.start_audio(f));
+                let result = self.start_audio(f);
+                self.handle_audio_start_result(result);
             }
             Err(err) => {
                 log::error!("Failed to create audio decoder: {}", err);
             }
+        }
+    }
+
+    fn handle_audio_start_result(&mut self, result: ResultType<()>) {
+        if let Err(error) = result {
+            #[cfg(not(target_os = "linux"))]
+            {
+                *self = Self::default();
+            }
+            log::error!("Failed to start audio playback: {error:#}");
         }
     }
 
