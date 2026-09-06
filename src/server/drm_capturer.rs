@@ -53,22 +53,21 @@ impl FrameSlot {
     }
 }
 
-/// `Shared.transform` before new() stores the real value: a cursor arriving this early is held
-/// back and replayed once the session transform is in, because the producer will not resend it
-/// until the shape changes.
+/// `Shared.cursor_transform` before new() stores the real value: a cursor arriving this early is
+/// held back and replayed once the session transform is in, because the producer will not resend
+/// it until the shape changes.
 const TRANSFORM_PENDING: i32 = i32::MIN;
 
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
-    // Frame transform, TRANSFORM_PENDING until new() stores it post-handshake.
-    transform: std::sync::atomic::AtomicI32,
-    // The output's real transform, for the cursor. It differs from `transform` on a
-    // hardware-rotated 180 output: the primary plane scans out upright there, but the compositor
-    // still pre-rotates the cursor sprite in software (measured on i915 + mutter: the frame
-    // arrived upright and the sprite upside down), so the cursor is turned back by the real
-    // angle even when the frame must not be. The receive thread defers any cursor that races
-    // the store.
+    // The output's real transform, TRANSFORM_PENDING until new() stores it post-handshake. Only
+    // the cursor needs it across threads: it differs from the angle the FRAME is turned by on a
+    // hardware-rotated 180 output, where the primary plane scans out upright but the compositor
+    // still pre-rotates the sprite (measured on i915 + mutter: the frame arrived upright and the
+    // sprite upside down). The frame's own angle is not shared - it is fixed for the session and
+    // lives on the capturer that uses it. The receive thread defers any cursor that races the
+    // store.
     cursor_transform: std::sync::atomic::AtomicI32,
 }
 
@@ -339,7 +338,6 @@ impl IpcDrmCapturer {
                 ended: None,
             }),
             cv: Condvar::new(),
-            transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
             cursor_transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
         });
         let stop = Arc::new(AtomicBool::new(false));
@@ -373,9 +371,6 @@ impl IpcDrmCapturer {
         shared
             .cursor_transform
             .store(wl_transform, std::sync::atomic::Ordering::Release);
-        shared
-            .transform
-            .store(transform, std::sync::atomic::Ordering::Release);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -948,8 +943,11 @@ fn deliver_drm_cursor(
     raw: Vec<u8>,
     t: i32,
 ) {
-    // Every non-zero angle, 180 included: the compositor pre-rotates the sprite by the output's
-    // full transform whether or not the primary plane is hardware-rotated.
+    // Every non-zero angle, 180 included. Measured on i915 + mutter with the output at 180: the
+    // frame arrived upright and the sprite upside down, so the compositor had pre-rotated the
+    // sprite by the full transform while the plane scanned out already turned. wl_output cannot
+    // say which of the two happened - the same blindness `frame_transform` defers to - so the
+    // sprite is treated as pre-rotated at every angle.
     let (width, height, hotx, hoty, colors) = if t != 0 {
         let mut turned = Vec::new();
         unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
@@ -957,8 +955,8 @@ fn deliver_drm_cursor(
         // A hotspot the driver measured is a point on the scanout sprite and maps like a pixel.
         // A guessed one was guessed on the ROTATED sprite - top-left of an arrow's box - and
         // the tip of a turned arrow is some other corner, so it is guessed again on the upright
-        // one. That is the difference between 90 and 270: on one the tip happens to stay in
-        // the guessed corner, on the other it does not.
+        // one. The old flow was off at every angle; what differs is the size of the error, which
+        // is why only one of them got reported (see the test below).
         let (hx, hy) = if hot_measured {
             unrotate_hotspot(t, width as i32, height as i32, hotx, hoty)
         } else {
@@ -1819,7 +1817,6 @@ mod drm_capturer_tests {
                     ended: None,
                 }),
                 cv: Condvar::new(),
-                transform: std::sync::atomic::AtomicI32::new(0),
                 cursor_transform: std::sync::atomic::AtomicI32::new(0),
             }),
             stop: Arc::new(AtomicBool::new(false)),
@@ -1959,8 +1956,8 @@ mod drm_capturer_tests {
         assert_eq!(back, src);
     }
 
-    /// An upright arrow, tip at (0,0): 4 wide, 6 tall, every pixel with x <= y/2 opaque. Its
-    /// opaque box is the whole bitmap, and its top-left corner IS the tip - which is exactly why
+    /// An upright arrow, tip at (0,0): a 4x6 bitmap, every pixel with x <= y/2 opaque, so the
+    /// opaque box is the left 3 columns. Its top-left corner IS the tip - which is exactly why
     /// the bare-metal guess works when the sprite is upright, and only then.
     fn arrow() -> (Vec<u8>, usize, usize) {
         let (w, h) = (4usize, 6usize);
@@ -1985,11 +1982,14 @@ mod drm_capturer_tests {
     }
 
     // rustdesk#15886, the maintainer's physical test: the cursor looked right at 0 and 90, drawn
-    // above the click point at 270, and upside down at 180. All of it comes out of one line: the
-    // hotspot was GUESSED on the sprite as scanned out, and only afterwards mapped as if it were a
-    // point on it. The guess picks the top-left of the opaque box, and a turned arrow's tip is
-    // never in that corner - at 90 the error is the arrow's WIDTH along x, small enough to pass
-    // as fine; at 270 it is the arrow's HEIGHT along y, which is what was noticed.
+    // above the click point at 270, and upside down at 180. Two causes, not one. The sprite came
+    // out upside down at 180 because master turned it only at 90 and 270, so a 180 sprite was
+    // never turned back at all. And at every angle the hotspot was GUESSED on the sprite as
+    // scanned out and only afterwards mapped as if it were a point on it: the guess picks the
+    // top-left of the opaque box, and a turned arrow's tip is not in that corner - at 90 the
+    // error is the arrow's WIDTH along x, small enough to pass as fine; at 270 it is its HEIGHT
+    // along y, which is the one that got reported. This test covers the second cause; the sprite
+    // itself is covered by the two below.
     #[test]
     fn a_guessed_hotspot_is_guessed_on_the_upright_sprite() {
         use scrap::drm_reader::infer_hotspot;
@@ -2028,6 +2028,30 @@ mod drm_capturer_tests {
         let mut turned = Vec::new();
         unrotate_bgra(&scan, sw, sh, 180, &mut turned);
         assert_eq!(turned, up);
+    }
+
+    // The two above exercise the helpers, which cannot see WHICH angle the cursor path is handed
+    // or whether it turns 180 at all - the line that decides both is `if t != 0` in
+    // `deliver_drm_cursor`, and reverting it to master's `t == 90 || t == 270` leaves every helper
+    // assertion above still passing. So this drives the real path and reads back what it published.
+    #[test]
+    fn the_cursor_path_publishes_an_upright_sprite_at_every_angle() {
+        let (up, w, h) = arrow();
+        for (i, t) in [0, 90, 180, 270].into_iter().enumerate() {
+            // A display id of its own per angle: DRM_CURSOR is process-wide and keyed by display.
+            let display = 9_100 + i as i32;
+            let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+            deliver_drm_cursor(display, 1, 7, sw as u32, sh as u32, 0, 0, false, scan, t);
+            let map = DRM_CURSOR.lock().unwrap();
+            let (_, c) = map.get(&display).expect("the cursor path published nothing");
+            assert_eq!(
+                (c.width as usize, c.height as usize),
+                (w, h),
+                "the published sprite is upright-sized at {t}"
+            );
+            assert_eq!(c.colors, up, "the published sprite is upright at {t}");
+            assert_eq!((c.hotx, c.hoty), (0, 0), "the tip is the hotspot at {t}");
+        }
     }
 
     #[test]
