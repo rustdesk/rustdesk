@@ -1,0 +1,224 @@
+# Build the two binaries this fork actually needs:
+#   * Linux x86_64 Flutter RPM (laptop host)
+#   * unsigned iOS IPA (iPhone client)
+#
+# Trigger: Actions → "Fit-client Linux host + iOS IPA" → Run workflow
+name: Fit-client Linux host + iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fit-to-client]
+    paths:
+      - ".github/workflows/fit-client-build.yml"
+      - "src/**"
+      - "flutter/**"
+      - "libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.py"
+      - "vcpkg.json"
+
+concurrency:
+  group: fit-client-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  VERSION: "1.5.0"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  linux-host-rpm:
+    name: Linux x86_64 Flutter RPM
+    needs: [generate-bridge]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet
+          sudo apt-get update -y
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            clang cmake curl gcc git g++ nasm ninja-build pkg-config \
+            libayatana-appindicator3-dev libasound2-dev libclang-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgtk-3-dev libpulse-dev libva-dev libxcb-randr0-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libxdo-dev libxfixes-dev \
+            llvm-dev python3 rpm unzip wget xz-utils libssl-dev
+          sudo apt-get remove -y libopus-dev || true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-unknown-linux-gnu
+          components: rustfmt
+
+      - name: Disable extra rust crate types
+        run: sed -i 's/\["cdylib", "staticlib", "rlib"\]/["cdylib"]/g' Cargo.toml
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet x64-linux --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT" -name "*.log" | while read -r log; do
+              echo "===== $log ====="
+              tail -n 80 "$log" || true
+            done
+            exit 1
+          fi
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch Flutter 3.24.5
+        run: |
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+          git apply "${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+
+      - name: Build rustdesk library
+        run: cargo build --locked --lib --features hwcodec,flutter,unix-file-copy-paste --release
+
+      - name: Build Flutter linux bundle and RPM
+        run: |
+          export CARGO_INCREMENTAL=0
+          python3 ./build.py --flutter --skip-cargo
+          HBB="$(pwd)" rpmbuild ./res/rpm-flutter.spec -bb
+          mkdir -p dist
+          cp -v "$HOME/rpmbuild/RPMS/x86_64"/rustdesk*.rpm dist/
+          ls -lh dist
+
+      - name: Upload Linux RPM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-${{ env.VERSION }}-x86_64.rpm
+          path: dist/rustdesk*.rpm
+          if-no-files-found: error
+
+  ios-ipa:
+    name: iOS unsigned IPA
+    needs: [generate-bridge]
+    runs-on: macos-latest
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install dependencies
+        run: brew install nasm yasm
+
+      - name: Checkout source code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch Flutter 3.24.5
+        run: |
+          cd "$(dirname "$(dirname "$(which flutter)")")"
+          git apply "${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT" -name "*.log" | while read -r log; do
+              echo "===== $log ====="
+              tail -n 80 "$log" || true
+            done
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-ios
+          components: rustfmt
+
+      - name: Restore bridge files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Build rustdesk iOS library
+        run: |
+          rustup target add aarch64-apple-ios
+          cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib
+
+      - name: Build unsigned IPA
+        working-directory: flutter
+        run: |
+          flutter build ipa --release --no-codesign
+          mkdir -p build/ios/ipa
+          ARCHIVE="build/ios/archive/Runner.xcarchive"
+          if [[ -d "$ARCHIVE/Products/Applications" ]]; then
+            pushd "$ARCHIVE/Products/Applications"
+            rm -rf Payload
+            mkdir Payload
+            cp -R *.app Payload/
+            zip -r ../../../../ipa/RustDesk-unsigned.ipa Payload
+            popd
+          fi
+          ls -lh build/ios/ipa || true
+          test -n "$(ls -A build/ios/ipa/*.ipa 2>/dev/null)"
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rustdesk-${{ env.VERSION }}-ios-unsigned.ipa
+          path: flutter/build/ios/ipa/*.ipa
+          if-no-files-found: error
