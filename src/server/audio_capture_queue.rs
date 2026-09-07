@@ -11,12 +11,13 @@ use std::{
         Arc, OnceLock,
     },
     thread::{JoinHandle, Thread},
-    time::{Duration, Instant},
 };
+
+#[path = "audio_capture_encoder.rs"]
+mod encoder;
 
 const CAPTURE_PCM_QUEUE_PACKETS: usize = 10;
 const CAPTURE_ENCODER_THREAD_NAME: &str = "audio-encoder";
-const CAPTURE_LOSS_LOG_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct CapturePcmLoss {
@@ -39,7 +40,7 @@ impl CapturePcmLoss {
 
 struct CapturePcmHandoff {
     available: ArrayQueue<Vec<f32>>,
-    ready: ArrayQueue<Vec<f32>>,
+    ready: ArrayQueue<(usize, Vec<f32>)>,
     wake_thread: OnceLock<Thread>,
     dropped: AtomicUsize,
     oversized: AtomicUsize,
@@ -50,6 +51,7 @@ struct CapturePcmHandoff {
 pub(super) struct CapturePcmSender {
     handoff: Arc<CapturePcmHandoff>,
     spare: Option<Vec<f32>>,
+    sequence: usize,
 }
 
 pub(super) struct CapturePcmReceiver {
@@ -100,11 +102,6 @@ struct CaptureEncoderContext {
     stop: Arc<AtomicBool>,
 }
 
-struct CaptureLossReporter {
-    pending: CapturePcmLoss,
-    last_report: Instant,
-}
-
 pub(super) fn new_pcm_handoff(
     capacity: usize,
     max_samples: usize,
@@ -126,6 +123,7 @@ pub(super) fn new_pcm_handoff(
         CapturePcmSender {
             handoff: handoff.clone(),
             spare: None,
+            sequence: 0,
         },
         CapturePcmReceiver { handoff },
     ))
@@ -157,6 +155,8 @@ impl CapturePcmSender {
     }
 
     pub(super) fn submit(&mut self, input: &[f32]) {
+        let sequence = self.sequence;
+        self.sequence = self.sequence.wrapping_add(1);
         if input.len() > self.handoff.max_samples {
             self.handoff.oversized.fetch_add(1, Ordering::Relaxed);
             self.wake();
@@ -169,7 +169,7 @@ impl CapturePcmSender {
         };
         buffer.clear();
         buffer.extend_from_slice(input);
-        if let Err(buffer) = self.handoff.ready.push(buffer) {
+        if let Err((_, buffer)) = self.handoff.ready.push((sequence, buffer)) {
             self.handoff
                 .recycle_failures
                 .fetch_add(1, Ordering::Relaxed);
@@ -183,7 +183,7 @@ impl CapturePcmSender {
             .take()
             .or_else(|| self.handoff.available.pop())
             .or_else(|| {
-                let buffer = self.handoff.ready.pop();
+                let buffer = self.handoff.ready.pop().map(|(_, buffer)| buffer);
                 if buffer.is_some() {
                     self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
                 }
@@ -199,7 +199,12 @@ impl CapturePcmSender {
 }
 
 impl CapturePcmReceiver {
+    #[cfg(test)]
     pub(super) fn pop(&self) -> Option<Vec<f32>> {
+        self.pop_packet().map(|(_, buffer)| buffer)
+    }
+
+    fn pop_packet(&self) -> Option<(usize, Vec<f32>)> {
         self.handoff.ready.pop()
     }
 
@@ -225,36 +230,6 @@ impl CapturePcmReceiver {
     }
 }
 
-impl CaptureLossReporter {
-    fn new() -> Self {
-        Self {
-            pending: Default::default(),
-            last_report: Instant::now(),
-        }
-    }
-
-    fn record(&mut self, loss: CapturePcmLoss) {
-        self.pending.add(loss);
-    }
-
-    fn report(&mut self, force: bool) {
-        if self.pending.is_empty() {
-            return;
-        }
-        if !force && self.last_report.elapsed() < CAPTURE_LOSS_LOG_INTERVAL {
-            return;
-        }
-        let loss = std::mem::take(&mut self.pending);
-        log::warn!(
-            "Audio capture PCM handoff loss: dropped={}, oversized={}, recycle_failures={}",
-            loss.dropped,
-            loss.oversized,
-            loss.recycle_failures
-        );
-        self.last_report = Instant::now();
-    }
-}
-
 pub(super) fn start_capture_encoder(
     config: CaptureEncoderConfig,
     service: GenericService,
@@ -270,7 +245,7 @@ pub(super) fn start_capture_encoder(
     };
     let handle = std::thread::Builder::new()
         .name(CAPTURE_ENCODER_THREAD_NAME.to_owned())
-        .spawn(move || run_capture_encoder(context))
+        .spawn(move || encoder::run_capture_encoder(context, config))
         .with_context(|| "Failed to start audio encoder thread")?;
     let wake_thread = handle.thread().clone();
     let worker = CaptureEncoderWorker {
@@ -279,21 +254,4 @@ pub(super) fn start_capture_encoder(
     };
     sender.set_wake_thread(wake_thread)?;
     Ok((sender, worker))
-}
-
-fn run_capture_encoder(mut context: CaptureEncoderContext) {
-    let mut reporter = CaptureLossReporter::new();
-    loop {
-        while let Some(packet) = context.receiver.pop() {
-            send_f32(&packet, &mut context.encoder, &context.service);
-            context.receiver.recycle(packet);
-        }
-        reporter.record(context.receiver.take_loss());
-        if context.stop.load(Ordering::Acquire) && context.receiver.is_empty() {
-            reporter.report(true);
-            return;
-        }
-        reporter.report(false);
-        std::thread::park_timeout(CAPTURE_LOSS_LOG_INTERVAL);
-    }
 }
