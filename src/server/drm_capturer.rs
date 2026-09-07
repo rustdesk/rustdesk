@@ -394,6 +394,38 @@ mod cursor_calibration_tests {
         assert_ne!(a, remix_cursor_id(wire, 13, 12));
     }
 
+    // The first version of this published and cached in one chain, and the jitter guard on the
+    // published value returned before the agreement guard could ever match: the cache was dead
+    // code. These pin the two questions apart.
+    #[test]
+    fn a_second_window_that_agrees_confirms_the_candidate() {
+        // Nothing published, nothing pending: the first measurement is a candidate, and it is
+        // worth publishing because the client is still drawing the guess.
+        assert_eq!(cal_outcome(None, None, (12, 12)), (false, true, Some((12, 12))));
+        // A second window agreeing within tolerance confirms it. There is nothing new to
+        // publish, and that must NOT stop the cache from being written.
+        assert_eq!(
+            cal_outcome(Some((12, 12)), Some((12, 12)), (13, 12)),
+            (true, false, Some((12, 12)))
+        );
+    }
+
+    #[test]
+    fn a_disagreeing_window_replaces_the_candidate_and_publishes() {
+        assert_eq!(
+            cal_outcome(Some((12, 12)), Some((12, 12)), (30, 4)),
+            (false, true, Some((30, 4)))
+        );
+    }
+
+    #[test]
+    fn a_cache_seeded_shape_still_reaches_the_cache() {
+        // Seeded from the cache: applied is set, pending is not. The first measurement agrees
+        // with what is drawn, so nothing is published - and there is no candidate yet, so
+        // nothing is confirmed either; it becomes the candidate.
+        assert_eq!(cal_outcome(Some((12, 12)), None, (12, 13)), (false, false, Some((12, 13))));
+    }
+
     #[test]
     fn the_calibration_cache_is_bounded() {
         for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
@@ -425,22 +457,56 @@ struct CursorCal {
 }
 
 /// The logical rect the peer's coordinates live in, and this display's physical scanout size.
-/// Read ONCE per attempt window, never per frame: the enumeration behind it is backed off and
-/// fork-heavy when it fails.
+/// Reached only after the cheap gates, because the enumeration behind it backs off and forks on
+/// failure and must not run on every frame.
+///
+/// The connector is matched to a wayland output through `identity_matches`, the same
+/// progressive-taken pass the transform and the advertised swap key off. Raw name equality is
+/// not the same thing: two cards can present the same bare connector name, and the normalized
+/// comparison is what the rest of this file trusts.
 fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))> {
-    let info = display_info_of(display)?;
+    let idx = display.max(0) as usize;
+    let drm = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(_, list) => list.clone(),
+        _ => return None,
+    };
+    let info = drm.get(idx)?.clone();
     let wl = scrap::wayland::display::get_displays();
+    let j = identity_matches(&drm, &wl.displays).get(idx).copied().flatten()?;
     let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
-    let r = rects.iter().find(|r| r.name == info.name)?;
+    let r = rects.get(j)?;
     Some((
         (r.x, r.y, r.w, r.h),
         (info.width as i32, info.height as i32),
     ))
 }
 
+/// What one measurement does to the calibration state.
+///
+/// Caching and publishing are SEPARATE questions, and conflating them is what made the first
+/// version of this dead code: a second window that AGREES with the candidate is exactly the
+/// case that should reach the cache, and it is also the case with nothing new to publish. Ask
+/// about the cache first, then about publishing.
+///
+/// Returns (confirm the candidate into the cache, publish this to the client, the new candidate).
+fn cal_outcome(
+    applied: Option<(i32, i32)>,
+    pending: Option<(i32, i32)>,
+    h: (i32, i32),
+) -> (bool, bool, Option<(i32, i32)>) {
+    let near = |a: (i32, i32)| {
+        (h.0 - a.0).abs() <= CURSOR_CAL_TOLERANCE && (h.1 - a.1).abs() <= CURSOR_CAL_TOLERANCE
+    };
+    let confirms = pending.is_some_and(near);
+    // Within the tolerance of what the client already draws this is jitter from the peer's
+    // logical quantization; re-publishing would only mint ids and churn its shape cache.
+    let publish = !applied.is_some_and(near);
+    let candidate = if confirms { pending } else { Some(h) };
+    (confirms, publish, candidate)
+}
+
 /// One frame reported where the cursor plane is. Advance the settle count and, inside an open
-/// window, try to measure. A measurement that differs from what the client already draws is
-/// published immediately under a derived id; the cache waits for a second window to agree.
+/// window, try to measure.
 fn note_cursor_plane(
     cal: &mut Option<CursorCal>,
     pos: Option<(i32, i32)>,
@@ -463,40 +529,43 @@ fn note_cursor_plane(
         return;
     }
     c.window -= 1;
+    // The cheap gates first, so an open window over a still pointer costs a comparison and not
+    // a display enumeration. `calibrated_hotspot` re-checks both; these only decide whether it
+    // is worth looking the geometry up at all.
+    if c.stable < CURSOR_CAL_STABLE_TICKS {
+        return;
+    }
+    let injected = crate::server::input_service::last_peer_input_pos_and_age_ms();
+    if !injected
+        .is_some_and(|(_, age)| (CURSOR_CAL_MIN_INPUT_AGE_MS..=CURSOR_CAL_MAX_INPUT_AGE_MS).contains(&age))
+    {
+        return;
+    }
+    // A rotated output is NOT measured. The plane position is unrotated scanout space while the
+    // injected point is in the oriented logical layout, so subtracting one from the other needs
+    // a rotation this fix deliberately does not carry. Declining costs the rotated case its
+    // measurement, which leaves it exactly where master already is: on the guess.
+    if transform != 0 {
+        return;
+    }
     let Some((rect, phys)) = cal_rect_and_size(display) else {
         return;
     };
-    let injected = crate::server::input_service::last_peer_input_pos_and_age_ms();
-    let Some(h) = calibrated_hotspot(
-        false,
-        (c.width, c.height),
-        injected,
-        rect,
-        phys,
-        p,
-        c.stable,
-    ) else {
+    let Some(h) = calibrated_hotspot(false, (c.width, c.height), injected, rect, phys, p, c.stable)
+    else {
         return;
     };
-    // Within tolerance of what is already drawn this is jitter from the peer's logical
-    // quantization, and re-publishing would only mint ids and churn the client's shape cache.
-    if let Some((ax, ay)) = c.applied {
-        if (h.0 - ax).abs() <= CURSOR_CAL_TOLERANCE && (h.1 - ay).abs() <= CURSOR_CAL_TOLERANCE {
-            return;
-        }
+    let (confirms, publish, candidate) = cal_outcome(c.applied, c.pending, h);
+    if confirms {
+        store_cursor_cal(c.id, h);
     }
-    match c.pending {
-        Some((px, py))
-            if (h.0 - px).abs() <= CURSOR_CAL_TOLERANCE
-                && (h.1 - py).abs() <= CURSOR_CAL_TOLERANCE =>
-        {
-            store_cursor_cal(c.id, h)
-        }
-        _ => c.pending = Some(h),
+    c.pending = candidate;
+    // Measured either way: stay quiet until the plane moves and re-opens a window.
+    c.window = 0;
+    if !publish {
+        return;
     }
     c.applied = Some(h);
-    // Measured: stay quiet until the plane moves and re-opens a window.
-    c.window = 0;
     deliver_drm_cursor(
         display,
         cursor_epoch,
