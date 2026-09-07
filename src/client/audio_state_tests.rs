@@ -79,7 +79,10 @@ fn failed_format_change_discards_old_playback_state() {
     handler.audio_decoder = Some(decoder(OUTPUT_RATE));
     handler.sample_rate = (OUTPUT_RATE, OUTPUT_RATE);
 
-    handler.handle_audio_start_result(Err(anyhow!("Injected output stream startup failure")));
+    handler.handle_audio_start_result(
+        Err(anyhow!("Injected output stream startup failure")),
+        false,
+    );
 
     assert!(dropped.load(Ordering::SeqCst));
     assert!(handler.audio_stream.is_none());
@@ -91,15 +94,20 @@ fn failed_format_change_discards_old_playback_state() {
 }
 
 #[test]
-fn successful_start_preserves_audio_packet_duration() {
-    let (mut handler, dropped) = active_handler(OUTPUT_RATE);
+fn successful_start_or_compatible_failure_preserves_audio_packet_duration() {
+    for result in [
+        Ok(()),
+        Err(anyhow!("Injected compatible stream replacement failure")),
+    ] {
+        let (mut handler, dropped) = active_handler(OUTPUT_RATE);
 
-    handler.handle_audio_start_result(Ok(()));
-    handler.handle_frame(audio_frame());
+        handler.handle_audio_start_result(result, true);
+        handler.handle_frame(audio_frame());
 
-    assert!(!dropped.load(Ordering::SeqCst));
-    assert_eq!(
-        handler.audio_buffer.0.lock().unwrap().occupied_len(),
-        OUTPUT_RATE as usize / PACKETS_PER_SECOND * CHANNELS as usize
-    );
+        assert!(!dropped.load(Ordering::SeqCst));
+        assert_eq!(
+            handler.audio_buffer.0.lock().unwrap().occupied_len(),
+            OUTPUT_RATE as usize / PACKETS_PER_SECOND * CHANNELS as usize
+        );
+    }
 }

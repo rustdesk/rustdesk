@@ -1459,11 +1459,17 @@ impl AudioHandler {
         }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
+                #[cfg(target_os = "linux")]
+                let keep_existing_stream = self.simple.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
+                #[cfg(not(target_os = "linux"))]
+                let keep_existing_stream = false;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
                 let result = self.start_audio(f);
-                self.handle_audio_start_result(result);
+                self.handle_audio_start_result(result, keep_existing_stream);
             }
             Err(err) => {
                 log::error!("Failed to create audio decoder: {}", err);
@@ -1471,13 +1477,16 @@ impl AudioHandler {
         }
     }
 
-    fn handle_audio_start_result(&mut self, result: ResultType<()>) {
+    fn handle_audio_start_result(&mut self, result: ResultType<()>, keep_existing_stream: bool) {
         if let Err(error) = result {
-            #[cfg(not(target_os = "linux"))]
-            {
+            if keep_existing_stream {
+                log::error!(
+                    "Failed to replace audio playback stream; keeping the existing compatible stream: {error:#}"
+                );
+            } else {
                 *self = Self::default();
+                log::error!("Failed to start audio playback: {error:#}");
             }
-            log::error!("Failed to start audio playback: {error:#}");
         }
     }
 
@@ -1588,6 +1597,27 @@ mod audio_format_tests {
         assert!(is_supported_audio_channel_count(2));
         assert!(!is_supported_audio_channel_count(0));
         assert!(!is_supported_audio_channel_count(u32::MAX));
+    }
+
+    #[test]
+    fn failed_audio_start_discards_format_state() {
+        use super::{anyhow, AudioDecoder, AudioHandler, Stereo};
+
+        const SAMPLE_RATE: u32 = 48_000;
+        const CHANNELS: u16 = 2;
+        let decoder = AudioDecoder::new(SAMPLE_RATE, Stereo).unwrap();
+        let mut handler = AudioHandler {
+            audio_decoder: Some((decoder, Vec::new())),
+            sample_rate: (SAMPLE_RATE, SAMPLE_RATE),
+            channels: CHANNELS,
+            ..Default::default()
+        };
+
+        handler.handle_audio_start_result(Err(anyhow!("Injected playback startup failure")), false);
+
+        assert!(handler.audio_decoder.is_none());
+        assert_eq!(handler.channels, 0);
+        assert_eq!(handler.sample_rate, (0, 0));
     }
 }
 
