@@ -164,9 +164,25 @@ fn scrub_preexisting_ipc_parent_entries(
     Ok(())
 }
 
-fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
-    let path = config::Config::ipc_path(postfix);
-    let parent_dir = Path::new(&path)
+/// Remove one entry from the IPC parent directory through a no-follow fd on that directory.
+///
+/// Prefer this over `std::fs::remove_file` for anything about to be bound: `remove_file` is
+/// `unlink(2)`, which returns EISDIR against a directory-typed squatter and leaves it in place,
+/// and the bind that follows then fails EADDRINUSE. `remove_parent_entry_via_fd` fstats the
+/// entry first and picks `AT_REMOVEDIR` when it needs to.
+///
+/// `AT_REMOVEDIR` is `rmdir(2)`, so the directory case this closes is the EMPTY one; a non-empty
+/// squatter still yields ENOTEMPTY and still blocks the bind that follows. That is deliberate, and
+/// the "obvious" fix is worse than the bug: removing it recursively would be root deleting a tree
+/// an unprivileged process planted. What the caller gains there is a named error to log ahead of
+/// the bind's own failure, not a successful bind.
+pub(crate) fn remove_ipc_entry_via_secure_parent_fd(path: &str) -> ResultType<()> {
+    let entry_name = Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, format!("invalid ipc path: {path}")))?
+        .to_owned();
+    let parent_dir = Path::new(path)
         .parent()
         .ok_or_else(|| Error::new(ErrorKind::InvalidInput, format!("invalid ipc path: {path}")))?;
     let parent_c = CString::new(parent_dir.as_os_str().as_bytes().to_vec())?;
@@ -179,8 +195,8 @@ fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
             return Err(Error::new(
                 open_err.kind(),
                 format!(
-                    "failed to open ipc parent dir for stale socket cleanup (no-follow): postfix={}, parent={}, err={}",
-                    postfix,
+                    "failed to open ipc parent dir for stale socket cleanup (no-follow): path={}, parent={}, err={}",
+                    path,
                     parent_dir.display(),
                     open_err
                 ),
@@ -189,7 +205,11 @@ fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
         }
     };
     let _fd_guard = FdGuard(fd);
-    remove_parent_entry_via_fd(fd, parent_dir, &format!("ipc{}", postfix))
+    remove_parent_entry_via_fd(fd, parent_dir, &entry_name)
+}
+
+fn remove_ipc_socket_via_secure_parent_fd(postfix: &str) -> ResultType<()> {
+    remove_ipc_entry_via_secure_parent_fd(&config::Config::ipc_path(postfix))
 }
 
 // Purpose:
@@ -686,6 +706,64 @@ pub(crate) fn should_scrub_parent_entries_after_check_pid(
 
 #[cfg(test)]
 mod tests {
+    // Pins the HELPER's contract, which is all `new_drm_listener` consists of at that line -- not
+    // the call site itself. Binding the real `/tmp/<app>-service/ipc_drm` from a test would collide
+    // with a live root service, so "the listener still calls this" is not covered here.
+    #[test]
+    fn test_remove_ipc_entry_via_secure_parent_fd_clears_an_empty_directory_squatter() {
+        let unique = format!(
+            "rustdesk-ipc-entry-remove-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let base = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&base).unwrap();
+        let squatter = base.join("ipc_drm");
+        std::fs::create_dir(&squatter).unwrap();
+
+        // Positive control for the defect this closes: `remove_file` is `unlink(2)` and cannot
+        // remove a directory. That is why the listener could not clear one, and then failed to
+        // bind over it. Without this line a passing test would prove nothing.
+        assert!(
+            std::fs::remove_file(&squatter).is_err(),
+            "remove_file must fail on a directory, or this test is vacuous"
+        );
+        assert!(squatter.is_dir());
+
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+        assert!(
+            !squatter.exists(),
+            "the fd-based removal picks AT_REMOVEDIR and clears it"
+        );
+
+        // Idempotent: this runs before every bind, so a path that is already gone is not an error.
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+
+        // The ORDINARY case, and the one the listener hits on every restart: a stale socket left by
+        // the previous run, i.e. a regular file. Covered here because the other file-removal test
+        // goes through `remove_parent_entry_via_fd` and the postfix path, not this entry point.
+        std::fs::write(&squatter, b"stale").unwrap();
+        super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref()).unwrap();
+        assert!(!squatter.exists(), "a stale regular file is cleared too");
+
+        // And the documented limit, pinned so the doc cannot drift: AT_REMOVEDIR is rmdir(2), so a
+        // NON-empty squatter is reported, not cleared. The caller logs that and carries on; nothing
+        // here should ever start deleting a tree it did not create.
+        std::fs::create_dir(&squatter).unwrap();
+        std::fs::write(squatter.join("planted"), b"x").unwrap();
+        assert!(
+            super::remove_ipc_entry_via_secure_parent_fd(squatter.to_string_lossy().as_ref())
+                .is_err(),
+            "a non-empty directory must be reported, not silently left as success"
+        );
+        assert!(squatter.join("planted").exists(), "and not deleted");
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
     #[test]
     fn test_write_pid_file_rejects_symlink() {
         use std::os::unix::fs::symlink;

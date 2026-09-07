@@ -48,7 +48,7 @@ A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről 
 
 - Futtasd a `cargo run` parancsot
 
-## [Építés](https://rustdesk.com/docs/hu/dev/build/)
+## [Építés](https://rustdesk.com/docs/en/dev/build/)
 
 ## Hogyan építs Linuxon
 
@@ -150,7 +150,6 @@ Kérlek mindenképpen nézd meg hogy ezeket a parancsokat a root RustDesk mappá
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript for Flutter web client
 
 ## Képernyőképek
 

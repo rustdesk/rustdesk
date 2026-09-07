@@ -22,6 +22,14 @@ import '../../models/file_model.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
+/// Set only by this window's own close control, and only once the user has confirmed. Any other
+/// way the window can go - a session logout closing every window, the window manager, a native
+/// title-bar button this app does not draw - leaves it false, which is the honest answer:
+/// nothing in that close says who asked for it. It lives at file scope because the control that
+/// sets it (`ConnectionManagerState`) and the handler that reads it (`_DesktopServerPageState`)
+/// are different widgets.
+bool _cmClosedByOperator = false;
+
 class DesktopServerPage extends StatefulWidget {
   const DesktopServerPage({Key? key}) : super(key: key);
 
@@ -55,7 +63,10 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   @override
   void onWindowClose() {
-    Future.wait([gFFI.serverModel.closeAll(), gFFI.close()]).then((_) {
+    // Other platforms keep the old behaviour exactly: the ambiguity this guards against is a
+    // Linux session logout, which closes every window in the session.
+    final byOperator = _cmClosedByOperator || !isLinux;
+    Future.wait([gFFI.serverModel.closeAll(byOperator: byOperator), gFFI.close()]).then((_) {
       if (isMacOS) {
         RdPlatformChannel.instance.terminate();
       } else {
@@ -327,6 +338,7 @@ class ConnectionManagerState extends State<ConnectionManager>
     var tabController = gFFI.serverModel.tabController;
     final connLength = tabController.length;
     if (connLength <= 1) {
+      _cmClosedByOperator = true;
       windowManager.close();
       return true;
     } else {
@@ -338,6 +350,9 @@ class ConnectionManagerState extends State<ConnectionManager>
         res = await closeConfirmDialog();
       }
       if (res) {
+        // After the dialog, never before it: an external close while it is open must not
+        // inherit an intent the user had not expressed yet.
+        _cmClosedByOperator = true;
         windowManager.close();
       }
       return res;

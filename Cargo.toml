@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.9"
+version = "1.5.0"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -30,7 +30,13 @@ default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 vram = ["scrap/vram"]
 mediacodec = ["scrap/mediacodec"]
-plugin_framework = []
+drm = ["scrap/drm"]
+# The display wake, as its OWN compile gate on top of `drm`. Everything else in the drm backend
+# READS (it captures a scanout); the wake WRITES, injecting one synthetic pointer event from the
+# root service so a compositor that idle-disabled its outputs re-enables them. That is a different
+# kind of operation and deserves a switch that can remove it from the binary entirely, without
+# giving up DRM capture: `--features drm` builds the capture path with no wake code compiled in.
+drm-wake = ["drm"]
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [
     "dep:x11-clipboard",
@@ -46,7 +52,7 @@ screencapturekit = ["cpal/screencapturekit"]
 [dependencies]
 async-trait = "0.1"
 scrap = { path = "libs/scrap", features = ["wayland"] }
-hbb_common = { path = "libs/hbb_common" }
+hbb_common = { path = "libs/hbb_common", features = ["webrtc"] }
 serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -74,12 +80,11 @@ hex = "0.4"
 chrono = "0.4"
 cidr-utils = "0.5"
 fon = "0.6"
-zip = "0.6"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.4", default-features = false, features = ["gen_secret", "otpauth"] }
 stunclient = "0.4"
-kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys"}
-reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip"], default-features=false }
+kcp-sys= { git = "https://github.com/rustdesk-org/kcp-sys", branch = "rustdesk-patches" }
+reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-tls", "rustls-tls", "rustls-tls-native-roots", "gzip", "zstd"], default-features=false }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
@@ -124,14 +129,18 @@ windows = { version = "0.61", features = [
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
     "Win32_System",
+    "Win32_System_Com",
     "Win32_System_Diagnostics",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Environment",
     "Win32_System_IO",
     "Win32_System_Memory",
     "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 winreg = "0.11"
 windows-service = "0.6"
@@ -140,7 +149,6 @@ remote_printer = { path = "libs/remote_printer" }
 impersonate_system = { git = "https://github.com/rustdesk-org/impersonate-system" }
 shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
-runas = "1.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -181,7 +189,6 @@ async-process = "1.7"
 evdev = { git="https://github.com/rustdesk-org/evdev" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
-pam = { git="https://github.com/rustdesk-org/pam" }
 x11-clipboard = {git="https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true}
 x11rb =  {version = "0.12", features = ["all-extensions"], optional = true}
 percent-encoding = {version = "2.3", optional = true}
@@ -202,12 +209,28 @@ android-wakelock = { git = "https://github.com/rustdesk-org/android-wakelock" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/virtual_display/dylib", "libs/portable", "libs/remote_printer"]
-exclude = ["vdi/host", "examples/custom_plugin"]
+exclude = ["vdi/host"]
 
 # Patch libxdo-sys to use a stub implementation that doesn't require libxdo
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+# One branch off upstream v0.13.0, the tag whose crate versions match this stack.
+# webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
+# one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows.
+# webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
+# and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
+# IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
+# a congestion window, as KCP does - on by default, `allow-webrtc-congestion-control` opts back in.
+# Sending that way, a reordering window keeps a chunk that is merely late from being resent on a
+# path that jitters, every DATA chunk asks for its SACK at once so a lost tail is back within an
+# RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU. A T3-rtx resends
+# everything outstanding when it packs into four packets and otherwise probes with one and lets
+# the SACK settle the rest (F-RTO), timed from the latest send, so a stall no longer resends the
+# whole backlog behind itself while a short lost tail still comes back at once.
+# Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "b221f13b1d6f21fbce09f9f63096be27dd392265" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "b221f13b1d6f21fbce09f9f63096be27dd392265" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
@@ -227,6 +250,7 @@ os-version = "0.2"
 [dev-dependencies]
 hound = "3.5"
 docopt = "1.1"
+tokio = { version = "1.44", features = ["test-util"] }
 
 [package.metadata.bundle]
 name = "RustDesk"

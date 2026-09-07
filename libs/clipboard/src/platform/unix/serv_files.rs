@@ -93,13 +93,14 @@ impl ClipFiles {
         Ok(())
     }
 
-    fn build_file_list_pdu(&mut self) {
+    fn build_file_list_pdu(&mut self) -> Result<(), CliprdrError> {
         let mut data = BytesMut::with_capacity(4 + 592 * self.file_list.len());
         data.put_u32_le(self.file_list.len() as u32);
         for file in self.file_list.iter() {
-            data.put(file.as_bin().as_slice());
+            data.put(file.as_bin()?.as_slice());
         }
-        self.files_pdu = data.to_vec()
+        self.files_pdu = data.to_vec();
+        Ok(())
     }
 
     fn get_files_for_audit(&self, request: &FileContentsRequest) -> Option<ClipboardFile> {
@@ -301,7 +302,7 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
         return Ok(());
     }
     files_lock.sync_files(files, current)?;
-    Ok(files_lock.build_file_list_pdu())
+    files_lock.build_file_list_pdu()
 }
 
 pub fn get_file_list_pdu() -> Vec<u8> {

@@ -166,7 +166,6 @@ Lütfen bu komutları RustDesk reposunun root klasöründe çalıştırdığın�
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: [rustdesk-server](https://github.com/rustdesk/rustdesk-server) ile iletişime gir, remote direct(TCP delik açma) yada relay bağlantısı için bekle
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platforma özgü kod
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Masaüstü ve mobil için Flutter kodu
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: Flutter web istemcisi için JavaScript
 
 
 ## Ekran Görüntüleri

@@ -300,7 +300,7 @@ bool TerminateProcessesByNameW(LPCWSTR processName, LPCWSTR excludeParam)
         {
             do
             {
-                if (lstrcmpW(processName, processEntry.szExeFile) == 0)
+                if (lstrcmpiW(processName, processEntry.szExeFile) == 0)
                 {
                     HANDLE process = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processEntry.th32ProcessID);
                     if (process != NULL)
@@ -1021,9 +1021,9 @@ UINT __stdcall InstallPrinter(
     DWORD er = ERROR_SUCCESS;
 
     int nResult = 0;
-    LPWSTR installFolder = NULL;
-    LPWSTR pwz = NULL;
     LPWSTR pwzData = NULL;
+    std::wstring appNameValue;
+    std::wstring installFolderValue;
 
     hr = WcaInitialize(hInstall, "InstallPrinter");
     ExitOnFailure(hr, "Failed to initialize");
@@ -1031,12 +1031,27 @@ UINT __stdcall InstallPrinter(
     hr = WcaGetProperty(L"CustomActionData", &pwzData);
     ExitOnFailure(hr, "failed to get CustomActionData");
 
-    pwz = pwzData;
-    hr = WcaReadStringFromCaData(&pwz, &installFolder);
-    ExitOnFailure(hr, "failed to read database key from custom action data: %ls", pwz);
+    // "<app name>|<install folder>". Split here rather than through
+    // WcaReadStringFromCaData, whose delimiter is a literal wide char 128 that a
+    // Formatted property value cannot carry.
+    {
+        std::wstring data(pwzData);
+        size_t separator = data.find(L'|');
+        if (separator == std::wstring::npos)
+        {
+            // A package built before the name was passed in; keep the stock name.
+            appNameValue.clear();
+            installFolderValue = data;
+        }
+        else
+        {
+            appNameValue = data.substr(0, separator);
+            installFolderValue = data.substr(separator + 1);
+        }
+    }
 
-    WcaLog(LOGMSG_STANDARD, "Try to install RD printer in : %ls", installFolder);
-    RemotePrinter::installUpdatePrinter(installFolder);
+    WcaLog(LOGMSG_STANDARD, "Try to install RD printer in : %ls", installFolderValue.c_str());
+    RemotePrinter::installUpdatePrinter(installFolderValue, appNameValue);
     WcaLog(LOGMSG_STANDARD, "Install RD printer done");
 
 LExit:
@@ -1054,14 +1069,30 @@ UINT __stdcall UninstallPrinter(
     HRESULT hr = S_OK;
     DWORD er = ERROR_SUCCESS;
 
+    LPWSTR pwzData = NULL;
+    std::wstring appNameValue;
+
     hr = WcaInitialize(hInstall, "UninstallPrinter");
     ExitOnFailure(hr, "Failed to initialize");
 
+    // Must match the name install used, otherwise the printer is left behind. Absent
+    // on packages built before this was passed in, where it was the stock name.
+    hr = WcaGetProperty(L"CustomActionData", &pwzData);
+    ExitOnFailure(hr, "failed to get CustomActionData");
+    if (pwzData)
+    {
+        appNameValue = pwzData;
+    }
+
     WcaLog(LOGMSG_STANDARD, "Try to uninstall RD printer");
-    RemotePrinter::uninstallPrinter();
+    RemotePrinter::uninstallPrinter(appNameValue);
     WcaLog(LOGMSG_STANDARD, "Uninstall RD printer done");
 
 LExit:
+    if (pwzData) {
+        ReleaseStr(pwzData);
+    }
+
     er = SUCCEEDED(hr) ? ERROR_SUCCESS : ERROR_INSTALL_FAILURE;
     return WcaFinalize(er);
 }

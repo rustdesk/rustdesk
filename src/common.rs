@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     future::Future,
-    net::{SocketAddr, ToSocketAddrs},
+    net::SocketAddr,
     sync::{Arc, Mutex, RwLock},
     task::Poll,
 };
@@ -105,7 +105,7 @@ lazy_static::lazy_static! {
     // Is server logic running. The server code can invoked to run by the main process if --server is not running.
     static ref SERVER_RUNNING: Arc<RwLock<bool>> = Default::default();
     static ref IS_MAIN: bool = std::env::args().nth(1).map_or(true, |arg| !arg.starts_with("--"));
-    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned()) || std::env::args().nth(1) == Some("--cm-no-ui".to_owned());
+    static ref IS_CM: bool = std::env::args().nth(1) == Some("--cm".to_owned());
 }
 
 pub struct SimpleCallOnReturn {
@@ -122,6 +122,8 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
     {
         if !crate::platform::linux::is_x11() {
@@ -218,6 +220,61 @@ pub fn need_fs_cm_send_files() -> bool {
     {
         false
     }
+}
+
+/// Android is scoped-storage only: the peer may never touch anything outside the app
+/// workspace (`Config::get_home()`, i.e. the app-specific external files directory).
+///
+/// Every peer supplied path must be validated with this before it reaches the
+/// filesystem, for reads, writes, renames, creations and deletions alike. The path is
+/// resolved to its canonical form (of the deepest existing ancestor, so paths that are
+/// about to be created are handled too) so symlinks cannot escape the workspace.
+///
+/// Only the `ReadDir` protocol action treats an empty path as the home directory.
+/// Callers must opt in to that protocol-specific behavior with `allow_empty`.
+#[cfg(target_os = "android")]
+pub fn is_peer_path_allowed(path: &str, allow_empty: bool) -> bool {
+    use std::path::{Component, Path, PathBuf};
+
+    // Canonicalize the deepest existing ancestor and re-append the missing tail.
+    fn resolve(path: &Path) -> Option<PathBuf> {
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        let mut base = path.to_path_buf();
+        loop {
+            if let Ok(mut resolved) = base.canonicalize() {
+                while let Some(component) = tail.pop() {
+                    resolved.push(component);
+                }
+                return Some(resolved);
+            }
+            tail.push(base.file_name()?.to_os_string());
+            if !base.pop() {
+                return None;
+            }
+        }
+    }
+
+    if path.is_empty() {
+        return allow_empty;
+    }
+    let path = Path::new(path);
+    // `..` is never needed by the protocol and would defeat the prefix check below.
+    if !path.is_absolute() || path.components().any(|c| c == Component::ParentDir) {
+        return false;
+    }
+    let home = Config::get_home();
+    let home = home.canonicalize().unwrap_or(home);
+    if home.as_os_str().is_empty() {
+        return false;
+    }
+    // `Path::starts_with` compares whole components, and is true for equal paths.
+    resolve(path).map_or(false, |target| target.starts_with(&home))
+}
+
+#[inline]
+#[cfg(not(target_os = "android"))]
+pub fn is_peer_path_allowed(_path: &str, _allow_empty: bool) -> bool {
+    true
 }
 
 #[inline]
@@ -1085,8 +1142,22 @@ fn get_api_server_(api: String, custom: String) -> String {
 
 #[inline]
 pub fn is_public(url: &str) -> bool {
-    let url = url.to_ascii_lowercase();
-    url.contains("rustdesk.com/") || url.ends_with("rustdesk.com")
+    let parsed = url::Url::parse(url)
+        .ok()
+        .filter(|parsed| parsed.has_host())
+        .or_else(|| url::Url::parse(&format!("http://{url}")).ok());
+    let Some(host) = parsed.as_ref().and_then(url::Url::host_str) else {
+        return false;
+    };
+    let host = host.strip_suffix('.').unwrap_or(host);
+    host == "rustdesk.com" || host.ends_with(".rustdesk.com")
+}
+
+pub fn get_tcp_punch_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_TCP_PUNCH,
+        &get_local_option(keys::OPTION_ENABLE_TCP_PUNCH),
+    )
 }
 
 pub fn get_udp_punch_enabled() -> bool {
@@ -1103,9 +1174,19 @@ pub fn get_ipv6_punch_enabled() -> bool {
     )
 }
 
+pub fn get_webrtc_enabled() -> bool {
+    config::option2bool(
+        keys::OPTION_ENABLE_WEBRTC,
+        &get_local_option(keys::OPTION_ENABLE_WEBRTC),
+    )
+}
+
 pub fn get_local_option(key: &str) -> String {
     let v = LocalConfig::get_option(key);
-    if key == keys::OPTION_ENABLE_UDP_PUNCH || key == keys::OPTION_ENABLE_IPV6_PUNCH {
+    if key == keys::OPTION_ENABLE_UDP_PUNCH
+        || key == keys::OPTION_ENABLE_IPV6_PUNCH
+        || key == keys::OPTION_ENABLE_WEBRTC
+    {
         if v.is_empty() {
             if !is_public(&Config::get_rendezvous_server()) {
                 return "N".to_owned();
@@ -1403,6 +1484,58 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
         post_request_via_tcp_proxy(&url, &body, header),
     )
     .await
+}
+
+/// POST request via TCP proxy, preserving the HTTP status code.
+async fn post_request_via_tcp_proxy_status(
+    url: &str,
+    body: &str,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    let headers = parse_simple_header(header);
+    let resp = tcp_proxy_request("POST", url, body.as_bytes(), headers).await?;
+    if !resp.error.is_empty() {
+        bail!("TCP proxy error: {}", resp.error);
+    }
+    Ok((
+        resp.status as u16,
+        String::from_utf8_lossy(&resp.body).to_string(),
+    ))
+}
+
+/// Like `post_request`, but returns the HTTP status code so callers can tell
+/// a server-side failure from success. Same fallback rules: on connection
+/// failure or 5xx, retry once through the raw TCP proxy when eligible.
+pub async fn post_request_with_status(
+    url: String,
+    body: String,
+    header: &str,
+) -> ResultType<(u16, String)> {
+    if should_use_raw_tcp_for_api(&url) {
+        return post_request_via_tcp_proxy_status(&url, &body, header).await;
+    }
+    let http_result = post_request_http(&url, &body, header).await;
+    let should_fallback = match &http_result {
+        Err(_) => true,
+        Ok((status, _)) => *status >= 500,
+    };
+    if should_fallback && can_fallback_to_raw_tcp(&url) {
+        log::warn!(
+            "HTTP POST to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
+            tcp_proxy_log_target(&url),
+            http_result
+                .as_ref()
+                .map(|(s, _)| *s)
+                .map_err(|e| e.to_string()),
+        );
+        match post_request_via_tcp_proxy_status(&url, &body, header).await {
+            Ok(resp) => return Ok(resp),
+            Err(tcp_err) => {
+                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+            }
+        }
+    }
+    http_result
 }
 
 #[async_recursion]
@@ -2010,11 +2143,21 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
+    let (id, pk, _) = decode_id_pk_dtls(signed, key)?;
+    Ok((id, pk))
+}
+
+/// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity.
+pub fn decode_id_pk_dtls(
+    signed: &[u8],
+    key: &sign::PublicKey,
+) -> ResultType<(String, [u8; 32], String)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk))
+        Ok((res.id, pk, res.dtls_fingerprint))
     } else {
         bail!("Wrong their public length");
     }
@@ -2316,16 +2459,26 @@ pub fn is_udp_disabled() -> bool {
     Config::get_option(keys::OPTION_DISABLE_UDP) == "Y"
 }
 
+/// Run KCP with its congestion window (nc=0) instead of the turbo profile it has always shipped.
+///
+/// Opt-in: which profile wins depends on why packets are lost — nc=1 deepens real congestion,
+/// while nc=0 reads random loss as congestion and its RTO backoff drops cwnd to 1. Undecidable
+/// without a shaped link, so keep what users run today.
+#[inline]
+pub fn get_kcp_cc_enabled() -> bool {
+    let k = keys::OPTION_ALLOW_KCP_CC;
+    config::option2bool(k, &Config::get_option(k))
+}
+
 // this crate https://github.com/yoshd/stun-client supports nat type
-async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
+async fn stun_ipv6_test(stun_server: String) -> ResultType<(SocketAddr, String)> {
     use stunclient::StunClient;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
+    // Resolve via tokio so DNS never blocks the async runtime worker.
+    let Some(stun_addr) = tokio::net::lookup_host(&stun_server)
+        .await?
+        .find(|x| x.is_ipv6())
     else {
         bail!(
             "Failed to resolve STUN ipv6 server address: {}",
@@ -2335,81 +2488,36 @@ async fn stun_ipv6_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
     let client = StunClient::new(stun_addr);
     let addr = client.query_external_address_async(&socket).await?;
     Ok(if addr.ip().is_ipv6() {
-        (addr, stun_server.to_owned())
+        (addr, stun_server)
     } else {
         bail!("STUN server returned non-IPv6 address: {}", addr)
     })
-}
-
-async fn stun_ipv4_test(stun_server: &str) -> ResultType<(SocketAddr, String)> {
-    use std::net::ToSocketAddrs;
-    use stunclient::StunClient;
-    let local_addr = SocketAddr::from(([0u8; 4], 0));
-    let socket = UdpSocket::bind(&local_addr).await?;
-    let Some(stun_addr) = stun_server
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
-        .next()
-    else {
-        bail!(
-            "Failed to resolve STUN ipv4 server address: {}",
-            stun_server
-        );
-    };
-    let client = StunClient::new(stun_addr);
-    let addr = client.query_external_address_async(&socket).await?;
-    Ok(if addr.ip().is_ipv4() {
-        (addr, stun_server.to_owned())
-    } else {
-        bail!("STUN server returned non-IPv6 address: {}", addr)
-    })
-}
-
-static STUNS_V4: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-static STUNS_V6: [&str; 3] = [
-    "stun.l.google.com:19302",
-    "stun.cloudflare.com:3478",
-    "stun.nextcloud.com:3478",
-];
-
-pub async fn test_nat_ipv4() -> ResultType<(SocketAddr, String)> {
-    use hbb_common::futures::future::{select_ok, FutureExt};
-    let tests = STUNS_V4
-        .iter()
-        .map(|&stun| stun_ipv4_test(stun).boxed())
-        .collect::<Vec<_>>();
-
-    match select_ok(tests).await {
-        Ok(res) => {
-            return Ok(res.0);
-        }
-        Err(e) => {
-            bail!(
-                "Failed to get public IPv4 address via public STUN servers: {}",
-                e
-            );
-        }
-    };
 }
 
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
+    use hbb_common::futures::future::FutureExt;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    let addr = STUNS_V6[0]
-        .to_socket_addrs()?
-        .filter(|x| x.is_ipv6())
-        .next()
-        .ok_or_else(|| {
-            anyhow!(
-                "Failed to resolve STUN ipv6 server address: {}",
-                STUNS_V6[0]
-            )
-        })?;
+    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so any
+    // resolvable target answers equally and the whole cost is DNS. Race the lookups rather than
+    // walk them: this is awaited inline on the connection path, not every STUN host publishes a
+    // AAAA, and one resolver that hangs must not decide whether this host has v6.
+    let lookups = hbb_common::webrtc::WebRTCStream::default_stun_servers()
+        .into_iter()
+        .map(|stun| {
+            (async move {
+                let addr = tokio::net::lookup_host(&stun)
+                    .await?
+                    .find(|x| x.is_ipv6())
+                    .ok_or_else(|| {
+                        anyhow!("Failed to resolve STUN ipv6 server address: {}", stun)
+                    })?;
+                Ok::<SocketAddr, hbb_common::anyhow::Error>(addr)
+            })
+            .boxed()
+        })
+        .collect::<Vec<_>>();
+    let (addr, _) = hbb_common::futures::future::select_ok(lookups).await?;
     socket.connect(addr).await?;
     Ok(socket.local_addr()?)
 }
@@ -2476,9 +2584,9 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
 
     Some(tokio::spawn(async {
         use hbb_common::futures::future::{select_ok, FutureExt};
-        let tests = STUNS_V6
-            .iter()
-            .map(|&stun| stun_ipv6_test(stun).boxed())
+        let tests = hbb_common::webrtc::WebRTCStream::default_stun_servers()
+            .into_iter()
+            .map(|stun| stun_ipv6_test(stun).boxed())
             .collect::<Vec<_>>();
 
         match select_ok(tests).await {
@@ -2499,51 +2607,117 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
     }))
 }
 
+// A punch packet carries a magic and a transaction id so a reply can be *proven* to answer this
+// probe. The punch it replaces sent a zero-length datagram and called the hole open on whatever
+// arrived next - which the rendezvous NAT test's own leftover replies satisfied instantly, so the
+// retry loop below never actually ran and its success meant nothing.
+const PUNCH_PROBE: [u8; 4] = *b"RDP?";
+const PUNCH_ACK: [u8; 4] = *b"RDP!";
+const PUNCH_PACKET_LEN: usize = 12;
+
+fn punch_packet(tag: &[u8; 4], tid: u64) -> [u8; PUNCH_PACKET_LEN] {
+    let mut packet = [0u8; PUNCH_PACKET_LEN];
+    packet[..4].copy_from_slice(tag);
+    packet[4..].copy_from_slice(&tid.to_le_bytes());
+    packet
+}
+
+fn punch_tid(packet: &[u8], tag: &[u8; 4]) -> Option<u64> {
+    if packet.len() != PUNCH_PACKET_LEN || packet[..4] != tag[..] {
+        return None;
+    }
+    packet[4..].try_into().ok().map(u64::from_le_bytes)
+}
+
+/// Punch until one of our own probes is acknowledged. Both ends run this identically - each
+/// probes, each answers the other's probes - and each returns only once a reply carrying its own
+/// transaction id comes back, the one thing that proves the pair carries traffic both ways.
+///
+/// Returning is therefore a fact rather than a guess, which is what lets the caller stop instead
+/// of handing a dead socket to a transport whose only way to discover the truth is to time out.
+///
+/// A datagram that is neither probe nor acknowledgement is returned rather than dropped: it means
+/// the peer finished first and is already speaking KCP, whose SYN is never retransmitted.
+///
+/// Only the connector stops on its own acknowledgement, because only it has something to send
+/// next. An acknowledgement proves our probe came back, not that the peer's probe was answered -
+/// and after this returns nothing answers probes any more, since KCP's io loop drops anything
+/// shorter than its header. A listener that stopped here would go mute while a peer whose own
+/// probe or answer was lost - the normal state of a hole that is still opening - kept probing an
+/// endpoint that works, until it timed out. So the listener stops on the peer's first real packet.
 pub async fn punch_udp(
     socket: Arc<UdpSocket>,
     listen: bool,
 ) -> ResultType<Option<bytes::BytesMut>> {
+    let tid = ((hbb_common::time_based_rand() as u64) << 32) | hbb_common::time_based_rand() as u64;
+    let probe = punch_packet(&PUNCH_PROBE, tid);
+    let mut data = [0u8; 1500];
+    // `connect` does not flush the receive queue, so the NAT test's extra replies are still in it.
+    while socket.try_recv(&mut data).is_ok() {}
+
     let mut retry_interval = Duration::from_millis(20);
     const MAX_INTERVAL: Duration = Duration::from_millis(200);
-    const MAX_TIME: Duration = Duration::from_secs(20);
-    let mut packets_sent = 0;
-    socket.send(&[]).await.ok();
-    packets_sent += 1;
-    let mut last_send_time = Instant::now();
+    // Both ends start within one rendezvous round trip of each other and the acknowledgement is
+    // one peer round trip, so a pair that has not answered in this long is not going to. The old
+    // 20s came from having no way to tell "not yet" from "never".
+    const MAX_TIME: Duration = Duration::from_secs(3);
+    let mut probes_sent = 0u32;
+    let mut probes_seen = 0u32;
+    let mut acked = false;
+    let mut recv_errors = 0u32;
+    socket.send(&probe).await.ok();
+    probes_sent += 1;
     let tm = Instant::now();
-    let mut data = [0u8; 1500];
+    // Absolute instants, not relative sleeps: `select!` rebuilds every arm each iteration, so a
+    // peer that keeps the receive side ready restarts a relative timer before it can fire. That
+    // both defeats MAX_TIME and starves the retransmit, and the peer decides the rate - an
+    // old-build peer's empty datagrams match no arm below and loop without even a pause.
+    let deadline = tm + MAX_TIME;
+    let mut next_probe = tm + retry_interval;
 
     loop {
         tokio::select! {
-            _ = hbb_common::sleep(retry_interval.as_secs_f32()) => {
-                if tm.elapsed() > MAX_TIME {
-                    bail!("UDP punch is timed out, stop sending packets after {:?} packets", packets_sent);
-                }
-                let elapsed = last_send_time.elapsed();
-
-                if elapsed >= retry_interval {
-                    socket.send(&[]).await.ok();
-                    packets_sent += 1;
-
-                    // Exponentially increase interval to reduce network pressure
-                    retry_interval = std::cmp::min(
-                        Duration::from_millis((retry_interval.as_millis() as f64 * 1.5) as u64),
-                        MAX_INTERVAL
-                    );
-                    last_send_time = Instant::now();
-                }
+            _ = tokio::time::sleep_until(deadline) => {
+                bail!("UDP punch is timed out, {probes_sent} probes sent, {probes_seen} probes received, acked: {acked}, {recv_errors} recv errors absorbed");
+            }
+            _ = tokio::time::sleep_until(next_probe) => {
+                socket.send(&probe).await.ok();
+                probes_sent += 1;
+                retry_interval = std::cmp::min(retry_interval.mul_f64(1.5), MAX_INTERVAL);
+                next_probe = Instant::now() + retry_interval;
             }
             res = socket.recv(&mut data) => match res {
-                Err(e) => bail!("UDP punch failed, {packets_sent} packets sent: {e}"),
+                Err(e) => {
+                    // ICMP unreachable from the peer's NAT is expected while the hole forms and
+                    // surfaces here as ConnectionReset/Refused; treat it as loss, MAX_TIME bounds
+                    // the attempt. Log only the first - this retries every 10ms.
+                    recv_errors += 1;
+                    if recv_errors == 1 {
+                        log::debug!("UDP punch recv error (treated as loss): {e}");
+                    }
+                    hbb_common::sleep(0.01).await;
+                }
                 Ok(n) => {
-                    // log::debug!("UDP punch succeeded after sending {} packets after {:?}", packets_sent, tm.elapsed());
-                    if listen {
-                        if n == 0 {
-                            continue;
+                    let ack = punch_tid(&data[..n], &PUNCH_ACK);
+                    if ack == Some(tid) {
+                        if !listen {
+                            log::debug!(
+                                "UDP punch confirmed in {:?}, {probes_sent} probes sent, {probes_seen} received",
+                                tm.elapsed()
+                            );
+                            return Ok(None);
                         }
+                        acked = true;
+                    } else if let Some(peer_tid) = punch_tid(&data[..n], &PUNCH_PROBE) {
+                        probes_seen += 1;
+                        socket.send(&punch_packet(&PUNCH_ACK, peer_tid)).await.ok();
+                    } else if ack.is_none() && n > 0 {
+                        log::debug!(
+                            "UDP punch confirmed by {n} bytes of peer data in {:?}, {probes_sent} probes sent",
+                            tm.elapsed()
+                        );
                         return Ok(Some(bytes::BytesMut::from(&data[..n])));
                     }
-                    return Ok(None);
                 }
             }
         }
@@ -2665,6 +2839,38 @@ mod tests {
             Instant::now() + Duration::from_secs(1),
             Duration::from_secs(1),
         )
+    }
+
+    // The deadline must hold against a peer that keeps the receive side ready. `select!` rebuilds
+    // its arms every iteration, so a relative sleep would be restarted by every datagram and the
+    // punch would run for as long as the peer keeps talking, with no outer timeout to stop it.
+    #[tokio::test]
+    async fn test_udp_punch_deadline_survives_a_talkative_peer() {
+        let a = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let b = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let (a_addr, b_addr) = (a.local_addr().unwrap(), b.local_addr().unwrap());
+        a.connect(b_addr).await.unwrap();
+        b.connect(a_addr).await.unwrap();
+        // Empty datagrams answer no probe and match no return branch, so they only feed the loop.
+        // Sent well past the punch deadline so a restarted timer would show up as a long run.
+        let flooder = tokio::spawn(async move {
+            let end = Instant::now() + Duration::from_secs(12);
+            while Instant::now() < end {
+                if b.send(&[]).await.is_err() {
+                    break;
+                }
+                sleep(Duration::from_millis(5)).await;
+            }
+        });
+        let start = Instant::now();
+        let res = punch_udp(Arc::new(a), false).await;
+        let elapsed = start.elapsed();
+        flooder.abort();
+        assert!(res.is_err(), "the punch should have timed out");
+        assert!(
+            elapsed < Duration::from_secs(6),
+            "the punch ran for {elapsed:?}; its deadline did not hold"
+        );
     }
 
     #[test]
@@ -2824,6 +3030,16 @@ mod tests {
         assert!(!is_public("localhost"));
         assert!(!is_public("https://rustdesk.computer.com"));
         assert!(!is_public("rustdesk.comhello.com"));
+    }
+
+    #[test]
+    fn test_is_public_matches_rustdesk_root_domain() {
+        assert!(is_public("rustdesk.com/"));
+        assert!(is_public("rustdesk.com:21117"));
+        assert!(is_public("api.rustdesk.com:21117"));
+        assert!(!is_public("hello-rustdesk.com"));
+        assert!(!is_public("api.rustdesk.com.evil.test"));
+        assert!(!is_public("https://rustdesk.com@evil.test"));
     }
 
     #[test]

@@ -18,7 +18,6 @@ const kKeyMapMode = 'map';
 const kKeyTranslateMode = 'translate';
 
 const String kPlatformAdditionsIsWayland = "is_wayland";
-const String kPlatformAdditionsHeadless = "headless";
 const String kPlatformAdditionsIsInstalled = "is_installed";
 const String kPlatformAdditionsIddImpl = "idd_impl";
 const String kPlatformAdditionsRustDeskVirtualDisplays =
@@ -55,7 +54,6 @@ const String kAppTypeDesktopTerminal = "terminal";
 
 const String kWindowMainWindowOnTop = "main_window_on_top";
 const String kWindowRefreshCurrentUser = "refresh_current_user";
-const String kWindowGetWindowInfo = "get_window_info";
 const String kWindowGetScreenList = "get_screen_list";
 // This method is not used, maybe it can be removed.
 const String kWindowDisableGrabKeyboard = "disable_grab_keyboard";
@@ -95,6 +93,7 @@ const String kOptionForceAlwaysRelay = "force-always-relay";
 const String kOptionViewOnly = "view_only";
 const String kOptionEnableLanDiscovery = "enable-lan-discovery";
 const String kOptionWhitelist = "whitelist";
+const String kOptionIdWhitelist = "id-whitelist";
 const String kOptionEnableAbr = "enable-abr";
 const String kOptionEnableRecordSession = "enable-record-session";
 const String kOptionDirectServer = "direct-server";
@@ -104,6 +103,7 @@ const String kOptionAutoDisconnectTimeout = "auto-disconnect-timeout";
 const String kOptionEnableHwcodec = "enable-hwcodec";
 const String kOptionAllowAutoRecordIncoming = "allow-auto-record-incoming";
 const String kOptionAllowAutoRecordOutgoing = "allow-auto-record-outgoing";
+const String kOptionHideRecordingButton = "hide-recording-button";
 const String kOptionVideoSaveDirectory = "video-save-directory";
 const String kOptionAccessMode = "access-mode";
 const String kOptionEnableKeyboard = "enable-keyboard";
@@ -115,6 +115,11 @@ const String kOptionEnableAudio = "enable-audio";
 const String kOptionEnableCamera = "enable-camera";
 const String kOptionEnableTerminal = "enable-terminal";
 const String kOptionTerminalPersistent = "terminal-persistent";
+const String kOptionAllowTerminalClipboardWrite =
+    "allow-terminal-clipboard-write";
+const String kTerminalClipboardWriteUnconfigured = "";
+const String kTerminalClipboardWriteAllowed = "Y";
+const String kTerminalClipboardWriteDenied = "N";
 const String kOptionEnableTunnel = "enable-tunnel";
 const String kOptionEnableRemoteRestart = "enable-remote-restart";
 const String kOptionEnableBlockInput = "enable-block-input";
@@ -159,16 +164,20 @@ const String kOptionPeerTabVisible = "peer-tab-visible";
 const String kOptionPeerCardUiType = "peer-card-ui-type";
 const String kOptionCurrentAbName = "current-ab-name";
 const String kOptionEnableConfirmClosingTabs = "enable-confirm-closing-tabs";
+const String kOptionEnablePortForwardMux = "enable-port-forward-mux";
 const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
-const String kOptionAllowLinuxHeadless = "allow-linux-headless";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
 const String kOptionStopService = "stop-service";
 const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
+const String kOptionEnableTcpPunch = "enable-tcp-punch";
 const String kOptionEnableUdpPunch = "enable-udp-punch";
 const String kOptionEnableIpv6Punch = "enable-ipv6-punch";
+const String kOptionAllowSyncClipboardBetweenSessions =
+    "allow-sync-clipboard-between-sessions";
+const String kOptionEnableWebrtc = "enable-webrtc";
 const String kOptionEnableTrustedDevices = "enable-trusted-devices";
 const String kOptionShowVirtualMouse = "show-virtual-mouse";
 const String kOptionVirtualMouseScale = "virtual-mouse-scale";
@@ -177,6 +186,7 @@ const String kOptionAllowAskForNoteAtEndOfConnection = "allow-ask-for-note";
 const String kOptionAllowMonitorSwitchMainToolbar = "allow-monitor-switch-main-toolbar";
 const String kOptionAllowMonitorSwitchMinToolbar = "allow-monitor-switch-min-toolbar";
 const String kOptionEnableShowTerminalExtraKeys = "enable-show-terminal-extra-keys";
+const String kOptionShowTerminalCtrlKeys = "show-terminal-extra-ctrl-keys";
 
 // network options
 const String kOptionAllowWebSocket = "allow-websocket";
@@ -190,6 +200,7 @@ const String kOptionHideProxySetting = "hide-proxy-settings";
 const String kOptionHideWebSocketSetting = "hide-websocket-settings";
 const String kOptionHideStopService = "hide-stop-service";
 const String kOptionHideRemotePrinterSetting = "hide-remote-printer-settings";
+const String kOptionHideGeneralSetting = "hide-general-settings";
 const String kOptionHideSecuritySetting = "hide-security-settings";
 const String kOptionHideNetworkSetting = "hide-network-settings";
 const String kOptionRemovePresetPasswordWarning =
@@ -322,10 +333,11 @@ double kNewWindowOffset = isWindows
             ? 30.0
             : 50.0;
 
+const kDragToResizeAreaPaddingSize = 5.0;
 EdgeInsets get kDragToResizeAreaPadding => !kUseCompatibleUiMode && isLinux
     ? stateGlobal.fullscreen.isTrue || stateGlobal.isMaximized.value
         ? EdgeInsets.zero
-        : EdgeInsets.all(5.0)
+        : EdgeInsets.all(kDragToResizeAreaPaddingSize)
     : EdgeInsets.zero;
 // https://en.wikipedia.org/wiki/Non-breaking_space
 const int $nbsp = 0x00A0;
@@ -437,7 +449,6 @@ const kActionApplicationDetailsSettings =
 const kActionAccessibilitySettings = "android.settings.ACCESSIBILITY_SETTINGS";
 
 const kRecordAudio = "android.permission.RECORD_AUDIO";
-const kManageExternalStorage = "android.permission.MANAGE_EXTERNAL_STORAGE";
 const kRequestIgnoreBatteryOptimizations =
     "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
 const kSystemAlertWindow = "android.permission.SYSTEM_ALERT_WINDOW";
@@ -449,6 +460,12 @@ class AndroidChannel {
   static const kGetStartOnBootOpt = "get_start_on_boot_opt";
   static const kSetStartOnBootOpt = "set_start_on_boot_opt";
   static const kSyncAppDirConfigPath = "sync_app_dir";
+  static const kPickImportFiles = "pick_import_files";
+  static const kImportFile = "import_file";
+  static const kExportFile = "export_file";
+  static const kPickImportDirectory = "pick_import_directory";
+  static const kImportDirectory = "import_directory";
+  static const kExportFiles = "export_files";
   static const kSetTrackpadScrollEnabled = "set_trackpad_scroll_enabled";
   static const kOnTrackpadScroll = "on_trackpad_scroll";
 }

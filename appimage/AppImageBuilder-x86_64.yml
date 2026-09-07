@@ -18,7 +18,7 @@ AppDir:
     id: rustdesk
     name: rustdesk
     icon: rustdesk
-    version: 1.4.9
+    version: 1.5.0
     exec: usr/share/rustdesk/rustdesk
     exec_args: $@
   apt:
@@ -61,7 +61,6 @@ AppDir:
     - libpulse0
     - packagekit-gtk3-module
     - libcanberra-gtk3-module
-    - libpam0g
     - libdrm2
     exclude:
     - humanity-icon-theme
@@ -80,6 +79,13 @@ AppDir:
     env:
       GIO_MODULE_DIR: /lib64/gio/modules:/usr/lib/x86_64-linux-gnu/gio/modules:$APPDIR/usr/lib/x86_64-linux-gnu/gio/modules
       GDK_BACKEND: x11
+      # AppRun sets these to "$APPDIR/...:$XDG_DATA_DIRS", and setting them at all suppresses the XDG
+      # defaults, so a host that leaves them unset loses /usr/share and /etc/xdg. gdk-pixbuf 2.43+
+      # (Arch, Fedora) then finds no glycin loaders and every PNG decode fails, aborting on the first
+      # remote cursor. The host value goes last: unset it expands to an empty element, which GLib
+      # resolves against the CWD, and that must not outrank the defaults below.
+      XDG_DATA_DIRS: $APPDIR/usr/local/share:$APPDIR/usr/share:/usr/local/share:/usr/share:$XDG_DATA_DIRS
+      XDG_CONFIG_DIRS: $APPDIR/etc/xdg:/etc/xdg:$XDG_CONFIG_DIRS
       APPDIR_LIBRARY_PATH: /lib64:/usr/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu:$APPDIR/lib/x86_64-linux-gnu/security:$APPDIR/lib/systemd:$APPDIR/usr/lib/x86_64-linux-gnu:$APPDIR/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules:$APPDIR/usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/printbackends:$APPDIR/usr/lib/x86_64-linux-gnu/krb5/plugins/preauth:$APPDIR/usr/lib/x86_64-linux-gnu/libcanberra-0.30:$APPDIR/usr/lib/x86_64-linux-gnu/pulseaudio:$APPDIR/usr/lib/x86_64-linux-gnu/sasl2:$APPDIR/usr/lib/x86_64-linux-gnu/vdpau:$APPDIR/usr/share/rustdesk/lib:$APPDIR/lib/x86_64
       GST_PLUGIN_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0
       GST_PLUGIN_SYSTEM_PATH: /lib64/gstreamer-1.0:/usr/lib/x86_64-linux-gnu/gstreamer-1.0:$APPDIR/usr/lib/x86_64-linux-gnu/gstreamer-1.0

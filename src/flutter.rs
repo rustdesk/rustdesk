@@ -225,8 +225,6 @@ pub struct FlutterHandler {
     session_handlers: Arc<RwLock<HashMap<SessionID, SessionHandler>>>,
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    hooks: Arc<RwLock<HashMap<String, SessionHook>>>,
     use_texture_render: Arc<AtomicBool>,
 }
 
@@ -236,8 +234,6 @@ impl Default for FlutterHandler {
             session_handlers: Default::default(),
             display_rgbas: Default::default(),
             peer_info: Default::default(),
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            hooks: Default::default(),
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
@@ -634,30 +630,6 @@ impl FlutterHandler {
             msg_vec.push(h);
         }
         serde_json::ser::to_string(&msg_vec).unwrap_or("".to_owned())
-    }
-
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) fn add_session_hook(&self, key: String, hook: SessionHook) -> bool {
-        let mut hooks = self.hooks.write().unwrap();
-        if hooks.contains_key(&key) {
-            // Already has the hook with this key.
-            return false;
-        }
-        let _ = hooks.insert(key, hook);
-        true
-    }
-
-    #[cfg(feature = "plugin_framework")]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) fn remove_session_hook(&self, key: &String) -> bool {
-        let mut hooks = self.hooks.write().unwrap();
-        if !hooks.contains_key(key) {
-            // The hook with this key does not found.
-            return false;
-        }
-        let _ = hooks.remove(key);
-        true
     }
 
     pub fn update_use_texture_render(&self) {
@@ -1194,15 +1166,6 @@ impl InvokeUiSession for FlutterHandler {
 impl FlutterHandler {
     #[inline]
     fn on_rgba_soft_render(&self, display: usize, rgba: &mut scrap::ImageRgb) {
-        // Give a chance for plugins or etc to hook a rgba data.
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        for (key, hook) in self.hooks.read().unwrap().iter() {
-            match hook {
-                SessionHook::OnSessionRgba(cb) => {
-                    cb(key.to_owned(), rgba);
-                }
-            }
-        }
         // If the current rgba is not fetched by flutter, i.e., is valid.
         // We give up sending a new event to flutter.
         let mut rgba_write_lock = self.display_rgbas.write().unwrap();
@@ -1459,9 +1422,25 @@ pub fn update_file_clipboard_required() {
 
 #[cfg(not(target_os = "ios"))]
 pub fn send_clipboard_msg(msg: Message, _is_file: bool) {
+    send_clipboard_msg_impl(msg, _is_file, None);
+}
+
+// `except_session_id` is the session the content came from, to avoid sending it back.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn send_clipboard_msg_to_other_sessions(msg: Message, except_session_id: u64) {
+    send_clipboard_msg_impl(msg, false, Some(except_session_id));
+}
+
+#[cfg(not(target_os = "ios"))]
+fn send_clipboard_msg_impl(msg: Message, _is_file: bool, except_session_id: Option<u64>) {
     for s in sessions::get_sessions() {
         if !s.is_default() {
             continue;
+        }
+        if let Some(except_session_id) = except_session_id {
+            if s.lc.read().unwrap().session_id == except_session_id {
+                continue;
+            }
         }
         #[cfg(feature = "unix-file-copy-paste")]
         if _is_file {
@@ -1589,20 +1568,8 @@ pub mod connection_manager {
         }
     }
 
-    #[inline]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn start_cm_no_ui() {
-        start_listen_ipc(false);
-    }
-
-    #[inline]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_listen_ipc_thread() {
-        start_listen_ipc(true);
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn start_listen_ipc(new_thread: bool) {
+    fn start_listen_ipc() {
         use crate::ui_cm_interface::{start_ipc, ConnectionManager};
 
         #[cfg(target_os = "linux")]
@@ -1611,17 +1578,13 @@ pub mod connection_manager {
         let cm = ConnectionManager {
             ui_handler: FlutterHandler {},
         };
-        if new_thread {
-            std::thread::spawn(move || start_ipc(cm));
-        } else {
-            start_ipc(cm);
-        }
+        std::thread::spawn(move || start_ipc(cm));
     }
 
     #[inline]
     pub fn cm_init() {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        start_listen_ipc_thread();
+        start_listen_ipc();
     }
 
     #[cfg(target_os = "android")]
@@ -1963,12 +1926,6 @@ pub fn session_on_waiting_for_image_dialog_show(session_id: SessionID) {
     }
 }
 
-/// Hooks for session.
-#[derive(Clone)]
-pub enum SessionHook {
-    OnSessionRgba(fn(String, &mut scrap::ImageRgb)),
-}
-
 #[inline]
 pub fn get_cur_session() -> Option<FlutterSession> {
     sessions::get_session_by_session_id(&*CUR_SESSION_ID.read().unwrap())
@@ -2129,6 +2086,45 @@ pub mod sessions {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         update_session_count_to_server();
         s
+    }
+
+    /// Close every client session, returning how many peer sessions were closed.
+    ///
+    /// Used when the UI is gone but the process keeps running, e.g. the Android
+    /// task is swiped away from recents while a foreground service keeps the
+    /// process alive. The orphaned `io_loop` would otherwise keep answering
+    /// `TestDelay`, so the peer never hits its inactivity timeout and the
+    /// session stays established with no way to close it.
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    pub fn close_all_sessions() -> usize {
+        // Release held keys before draining: the release path sends through
+        // `get_cur_session()`, which resolves against SESSIONS, so draining
+        // first would take TO_RELEASE and then silently drop every key-up,
+        // leaving the key stuck on the controlled side. A no-op when nothing
+        // is held.
+        crate::keyboard::release_remote_keys("map");
+        // Drain so the map lock is released before closing each session.
+        let sessions: Vec<FlutterSession> = SESSIONS
+            .write()
+            .unwrap()
+            .drain()
+            .map(|(_, session)| session)
+            .collect();
+        for session in sessions.iter() {
+            let session_ids: Vec<SessionID> = session
+                .ui_handler
+                .session_handlers
+                .read()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            for session_id in session_ids {
+                session.close_event_stream(session_id);
+            }
+            session.close();
+        }
+        sessions.len()
     }
 
     /// Check if removing a session by session_id would result in removing the entire peer.

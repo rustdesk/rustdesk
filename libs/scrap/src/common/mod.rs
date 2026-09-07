@@ -16,6 +16,12 @@ cfg_if! {
                 mod linux;
                 mod wayland;
                 mod x11;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drmtap_dl;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drm_reader;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drm_render;
                 pub use self::linux::*;
                 pub use self::wayland::set_map_err;
                 pub use self::x11::PixelBuffer;

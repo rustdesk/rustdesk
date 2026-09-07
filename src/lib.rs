@@ -45,10 +45,7 @@ mod custom_server;
 mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
-
-#[cfg(all(feature = "flutter", feature = "plugin_framework"))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod plugin;
+mod port_forward_mux;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;
