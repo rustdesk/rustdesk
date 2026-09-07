@@ -1,14 +1,14 @@
 use super::{send_f32, GenericService};
-use crossbeam_queue::ArrayQueue;
 use hbb_common::{
     anyhow::{bail, Context, Result},
     log,
 };
 use magnum_opus::{Application::LowDelay, Channels, Encoder};
 use std::{
+    collections::VecDeque,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, OnceLock,
+        Arc, Mutex, OnceLock, TryLockError,
     },
     thread::{JoinHandle, Thread},
 };
@@ -56,8 +56,7 @@ impl CapturePcmStats {
 }
 
 struct CapturePcmHandoff {
-    available: ArrayQueue<Vec<f32>>,
-    ready: ArrayQueue<(usize, Vec<f32>)>,
+    buffers: Mutex<CapturePcmBuffers>,
     wake_thread: OnceLock<Thread>,
     dropped: AtomicUsize,
     oversized: AtomicUsize,
@@ -66,9 +65,13 @@ struct CapturePcmHandoff {
     max_samples: usize,
 }
 
+struct CapturePcmBuffers {
+    available: Vec<Vec<f32>>,
+    ready: VecDeque<(usize, Vec<f32>)>,
+}
+
 pub(super) struct CapturePcmSender {
     handoff: Arc<CapturePcmHandoff>,
-    spare: Option<Vec<f32>>,
     sequence: usize,
 }
 
@@ -114,8 +117,10 @@ pub(super) fn new_pcm_handoff(
         bail!("Audio capture PCM handoff requires nonzero capacity and packet size");
     }
     let handoff = Arc::new(CapturePcmHandoff {
-        available: ArrayQueue::new(capacity),
-        ready: ArrayQueue::new(capacity),
+        buffers: Mutex::new(CapturePcmBuffers {
+            available: Vec::with_capacity(capacity),
+            ready: VecDeque::with_capacity(capacity),
+        }),
         wake_thread: OnceLock::new(),
         dropped: AtomicUsize::new(0),
         oversized: AtomicUsize::new(0),
@@ -123,19 +128,16 @@ pub(super) fn new_pcm_handoff(
         max_queued_packets: AtomicUsize::new(0),
         max_samples,
     });
-    for _ in 0..capacity {
-        if handoff
-            .available
-            .push(Vec::with_capacity(max_samples))
-            .is_err()
-        {
-            bail!("Failed to initialize audio capture PCM buffer pool");
+    {
+        // Initialize the mutex on this thread, including on platforms with lazy allocation.
+        let mut buffers = handoff.buffers.lock().unwrap();
+        for _ in 0..capacity {
+            buffers.available.push(Vec::with_capacity(max_samples));
         }
     }
     Ok((
         CapturePcmSender {
             handoff: handoff.clone(),
-            spare: None,
             sequence: 0,
         },
         CapturePcmReceiver { handoff },
@@ -158,37 +160,40 @@ impl CapturePcmSender {
             self.wake();
             return;
         }
-        let Some(mut buffer) = self.take_buffer() else {
-            self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
-            self.wake();
-            return;
+        // Reject this packet on contention; never wait for the encoder to release the handoff.
+        let mut buffers = match self.handoff.buffers.try_lock() {
+            Ok(buffers) => buffers,
+            Err(error) => {
+                self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
+                if let TryLockError::Poisoned(error) = error {
+                    log::error!("Audio capture PCM handoff is poisoned: {error}");
+                }
+                self.wake();
+                return;
+            }
         };
-        buffer.clear();
-        buffer.extend_from_slice(input);
-        if let Err((_, buffer)) = self.handoff.ready.push((sequence, buffer)) {
-            self.handoff
-                .recycle_failures
-                .fetch_add(1, Ordering::Relaxed);
-            self.spare = Some(buffer);
-        } else {
+        if let Some(mut buffer) = self.take_buffer(&mut buffers) {
+            buffer.clear();
+            buffer.extend_from_slice(input);
+            buffers.ready.push_back((sequence, buffer));
             self.handoff
                 .max_queued_packets
-                .fetch_max(self.handoff.ready.len(), Ordering::Relaxed);
+                .fetch_max(buffers.ready.len(), Ordering::Relaxed);
+        } else {
+            self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
         }
+        drop(buffers);
         self.wake();
     }
 
-    fn take_buffer(&mut self) -> Option<Vec<f32>> {
-        self.spare
-            .take()
-            .or_else(|| self.handoff.available.pop())
-            .or_else(|| {
-                let buffer = self.handoff.ready.pop().map(|(_, buffer)| buffer);
-                if buffer.is_some() {
-                    self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
-                }
-                buffer
-            })
+    fn take_buffer(&self, buffers: &mut CapturePcmBuffers) -> Option<Vec<f32>> {
+        buffers.available.pop().or_else(|| {
+            let buffer = buffers.ready.pop_front().map(|(_, buffer)| buffer);
+            if buffer.is_some() {
+                self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
+            }
+            buffer
+        })
     }
 
     fn wake(&self) {
@@ -205,20 +210,23 @@ impl CapturePcmReceiver {
     }
 
     fn pop_packet(&self) -> Option<(usize, Vec<f32>)> {
-        self.handoff.ready.pop()
+        self.handoff.buffers.lock().unwrap().ready.pop_front()
     }
 
     pub(super) fn recycle(&self, mut buffer: Vec<f32>) {
         buffer.clear();
-        if self.handoff.available.push(buffer).is_err() {
+        let mut buffers = self.handoff.buffers.lock().unwrap();
+        if buffers.available.len() == buffers.available.capacity() {
             self.handoff
                 .recycle_failures
                 .fetch_add(1, Ordering::Relaxed);
+        } else {
+            buffers.available.push(buffer);
         }
     }
 
     pub(super) fn is_empty(&self) -> bool {
-        self.handoff.ready.is_empty()
+        self.handoff.buffers.lock().unwrap().ready.is_empty()
     }
 
     pub(super) fn take_loss(&self) -> CapturePcmLoss {
@@ -262,3 +270,7 @@ pub(super) fn start_capture_encoder(
     sender.set_wake_thread(wake_thread)?;
     Ok((sender, worker))
 }
+
+#[cfg(test)]
+#[path = "audio_capture_queue_tests.rs"]
+mod tests;
