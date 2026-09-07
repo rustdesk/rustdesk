@@ -69,6 +69,8 @@ impl PipewireDisplayOffsetCache {
 
 #[inline]
 pub fn close_session() {
+    #[cfg(feature = "portal-cursor")]
+    super::pipewire_cursor::stop_cursor_capture();
     let _ = RDP_SESSION_INFO.lock().unwrap().take();
     clear_wayland_displays_cache();
     HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
@@ -89,6 +91,8 @@ pub fn try_close_session() {
         }
     }
     if close {
+        #[cfg(feature = "portal-cursor")]
+        super::pipewire_cursor::stop_cursor_capture();
         *rdp_info = None;
         clear_wayland_displays_cache();
         HAS_POSITION_ATTR.store(false, Ordering::SeqCst);
@@ -786,6 +790,20 @@ fn on_create_session_response(
                 });
             }
 
+            // The real capture session runs with `capture_cursor == false` (the embedded branch above
+            // is only the temporary monitor-disambiguation session). Ask the portal for the Metadata
+            // cursor mode so the shape can be read from `SPA_META_Cursor` instead of the stale
+            // XWayland XFixes cursor. Falls back to the default (unchanged behaviour) when the
+            // compositor does not advertise the Metadata bit.
+            #[cfg(feature = "portal-cursor")]
+            if !capture_cursor {
+                if let Ok(modes) = get_available_cursor_modes() {
+                    if modes & 0x4 != 0 {
+                        args.insert("cursor_mode".to_string(), Variant(Box::new(4u32)));
+                    }
+                }
+            }
+
             handle_response(
                 c,
                 get_request_path(c, select_sources_handle_token)?,
@@ -853,6 +871,15 @@ fn on_select_devices_response(
             args.insert("multiple".into(), Variant(Box::new(true)));
         }
         args.insert("types".into(), Variant(Box::new(1u32))); //| 2u32)));
+
+        // Remote-desktop portal path: request the Metadata cursor mode for the same reason as the
+        // ScreenCast path (see `on_create_session_response`). Unchanged when unavailable.
+        #[cfg(feature = "portal-cursor")]
+        if let Ok(modes) = get_available_cursor_modes() {
+            if modes & 0x4 != 0 {
+                args.insert("cursor_mode".to_string(), Variant(Box::new(4u32)));
+            }
+        }
 
         let session = session.clone();
         handle_response(
@@ -971,6 +998,13 @@ pub fn get_capturables() -> Result<Vec<PipeWireCapturable>, Box<dyn Error>> {
             is_support_restore_token,
             resolution: Arc::new(Mutex::new(None)),
         };
+        // Start the parallel native-PipeWire cursor listener for the freshly created session, reusing
+        // its fd and stream node ids. The GStreamer video pipeline is left untouched.
+        #[cfg(feature = "portal-cursor")]
+        {
+            let nodes: Vec<u64> = rdp_info.streams.iter().map(|s| s.path).collect();
+            super::pipewire_cursor::start_cursor_capture(rdp_info.fd.as_raw_fd(), &nodes);
+        }
         *rdp_connection = Some(rdp_info);
     }
 

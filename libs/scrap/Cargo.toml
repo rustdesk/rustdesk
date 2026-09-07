@@ -21,6 +21,12 @@ wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "
 # common/mod.rs, so `scrap/drm` on its own would compile nothing. The root crate happens to always
 # enable `scrap/wayland`, which is what hid this.
 drm = ["wayland", "hbb_common/wayland_probe"]
+# `portal-cursor` reads the Wayland host cursor shape from the xdg-desktop-portal ScreenCast
+# `SPA_META_Cursor` metadata via a parallel native-PipeWire stream, instead of the XWayland XFixes
+# cursor that native Wayland clients never update. Opt-in because it pulls in `pipewire`/`libspa`;
+# when off, the cursor path is unchanged (XFixes fallback). Depends on `wayland` (the portal session
+# and the module both live under the `wayland` arm).
+portal-cursor = ["wayland", "dep:pipewire", "dep:libspa"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -68,6 +74,8 @@ gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
 zbus = { version = "3.15", optional = true }
+pipewire = { version = "0.10", optional = true }
+libspa = { version = "0.10", optional = true }
 
 [dependencies.hwcodec]
 git = "https://github.com/rustdesk-org/hwcodec"

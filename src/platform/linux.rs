@@ -584,6 +584,16 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
             }
         }
     }
+    // Wayland portal cursor: the shape arrives over a parallel native-PipeWire stream reading
+    // `SPA_META_Cursor`, not from XFixes. Prefer it over the XWayland XFixes serial, which native
+    // Wayland clients never update (the stale-shape bug). Falls through to XFixes until the first
+    // metadata frame is seen, preserving the current behaviour.
+    #[cfg(feature = "portal-cursor")]
+    if !is_x11() {
+        if let Some(id) = scrap::portal_cursor_id() {
+            return Ok(Some(id));
+        }
+    }
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(d) = conn.try_borrow_mut() {
@@ -626,6 +636,21 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 cd.colors = c.colors.into();
                 return Ok(cd);
             }
+        }
+    }
+    // Wayland portal cursor: see get_cursor(). Return the latest metadata snapshot, whose id may have
+    // advanced past `hcursor` between get_cursor() and here, so return the latest rather than bailing.
+    #[cfg(feature = "portal-cursor")]
+    if !is_x11() {
+        if let Some(c) = scrap::portal_cursor() {
+            let mut cd: CursorData = Default::default();
+            cd.id = c.id;
+            cd.width = c.width;
+            cd.height = c.height;
+            cd.hotx = c.hotx;
+            cd.hoty = c.hoty;
+            cd.colors = c.colors.into();
+            return Ok(cd);
         }
     }
     let mut res = None;
