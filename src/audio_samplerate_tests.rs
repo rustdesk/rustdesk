@@ -51,23 +51,6 @@ fn stereo_config() -> AudioResamplerConfig {
 }
 
 #[test]
-fn capture_resampler_emits_complete_continuous_frames() {
-    let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
-    let mut resampler =
-        FixedFrameAudioResampler::new(stereo_config(), OUTPUT_PACKET_FRAMES).unwrap();
-    let packets: Vec<_> = input
-        .chunks(INPUT_PACKET_FRAMES * CHANNELS as usize)
-        .flat_map(|packet| resampler.process(packet).unwrap())
-        .collect();
-
-    assert!(packets.len() >= MIN_CONTINUITY_PACKETS);
-    assert!(packets
-        .iter()
-        .all(|packet| packet.len() == OUTPUT_PACKET_FRAMES * CHANNELS as usize));
-    assert!(maximum_boundary_residual(&packets) <= MAX_BOUNDARY_RESIDUAL);
-}
-
-#[test]
 fn moving_capture_resampler_preserves_pending_audio() {
     let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
     let packet_samples = INPUT_PACKET_FRAMES * CHANNELS as usize;
@@ -91,6 +74,10 @@ fn moving_capture_resampler_preserves_pending_audio() {
     output.extend(remaining);
 
     assert!(output.len() >= MIN_CONTINUITY_PACKETS);
+    assert!(output
+        .iter()
+        .all(|packet| packet.len() == OUTPUT_PACKET_FRAMES * CHANNELS as usize));
+    assert!(maximum_boundary_residual(&output) <= MAX_BOUNDARY_RESIDUAL);
     assert_eq!(output, expected);
 }
 

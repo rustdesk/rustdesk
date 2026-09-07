@@ -65,9 +65,11 @@ fn capture_resampling_reuses_buffers() {
     const PACKET_COUNT: usize = 100;
     const MAX_STARTUP_DELAY_PACKETS: usize = 1;
     const SIGNAL_LEVEL: f32 = 0.25;
-    const RATE_PAIRS: [(u32, u32); 4] = [
+    const RATE_PAIRS: [(u32, u32); 6] = [
+        (32_000, 24_000),
         (44_100, 24_000),
         (44_100, 48_000),
+        (48_000, 24_000),
         (96_000, 48_000),
         (192_000, 48_000),
     ];

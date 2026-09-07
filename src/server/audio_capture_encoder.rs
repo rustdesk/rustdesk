@@ -37,7 +37,7 @@ impl CaptureEncoderState {
     }
 
     fn next_packet(&mut self, receiver: &CapturePcmReceiver) -> Option<Vec<f32>> {
-        self.reporter.record(receiver.take_stats());
+        self.reporter.pending.add(receiver.take_stats());
         self.reporter.report(false);
         let (sequence, mut packet) = receiver.pop_packet()?;
         self.smooth_packet(sequence, &mut packet);
@@ -78,10 +78,6 @@ impl CaptureStatsReporter {
         }
     }
 
-    fn record(&mut self, stats: CapturePcmStats) {
-        self.pending.add(stats);
-    }
-
     fn report(&mut self, force: bool) {
         if self.pending.is_empty() {
             return;
@@ -119,7 +115,7 @@ pub(super) fn run_capture_encoder(
             context.receiver.recycle(packet);
         }
         if context.stop.load(Ordering::Acquire) && context.receiver.is_empty() {
-            state.reporter.record(context.receiver.take_stats());
+            state.reporter.pending.add(context.receiver.take_stats());
             state.reporter.report(true);
             return;
         }

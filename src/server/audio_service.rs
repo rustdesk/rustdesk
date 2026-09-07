@@ -455,8 +455,11 @@ mod cpal_impl {
         let ch = if config.channels() > 1 { Stereo } else { Mono };
         let max_channels = config.channels().max(ch as u16);
         let (_, max_packet_samples) = capture_packet_layout(sample_rate, max_channels)?;
-        let encoder_config =
-            audio_capture_queue::CaptureEncoderConfig::new(sample_rate, ch, max_packet_samples);
+        let encoder_config = audio_capture_queue::CaptureEncoderConfig {
+            sample_rate,
+            encode_channel: ch,
+            max_packet_samples,
+        };
         let (sender, encoder_worker) =
             audio_capture_queue::start_capture_encoder(encoder_config, sp)?;
         let output = CaptureStreamOutput {
@@ -586,43 +589,30 @@ mod cpal_impl {
 
         #[test]
         fn capture_callback_pipeline_does_not_allocate_after_warmup() {
-            for config in [
-                CaptureFrameProcessorConfig {
-                    input_rate: RATE_48_KHZ,
-                    output_rate: RATE_48_KHZ,
-                    device_channel: MONO_CHANNELS,
-                    encode_channel: MONO_CHANNELS,
-                },
-                CaptureFrameProcessorConfig {
-                    input_rate: RATE_48_KHZ,
-                    output_rate: RATE_48_KHZ,
-                    device_channel: STEREO_CHANNELS,
-                    encode_channel: STEREO_CHANNELS,
-                },
-                CaptureFrameProcessorConfig {
-                    input_rate: RATE_44_1_KHZ,
-                    output_rate: RATE_24_KHZ,
-                    device_channel: STEREO_CHANNELS,
-                    encode_channel: STEREO_CHANNELS,
-                },
-                CaptureFrameProcessorConfig {
-                    input_rate: RATE_48_KHZ,
-                    output_rate: RATE_48_KHZ,
-                    device_channel: SURROUND_CHANNELS,
-                    encode_channel: STEREO_CHANNELS,
-                },
+            for (input_rate, output_rate, device_channel, encode_channel) in [
+                (RATE_48_KHZ, RATE_48_KHZ, MONO_CHANNELS, MONO_CHANNELS),
+                (RATE_48_KHZ, RATE_48_KHZ, STEREO_CHANNELS, STEREO_CHANNELS),
+                (RATE_44_1_KHZ, RATE_24_KHZ, STEREO_CHANNELS, STEREO_CHANNELS),
+                (RATE_48_KHZ, RATE_48_KHZ, SURROUND_CHANNELS, STEREO_CHANNELS),
             ] {
-                assert_capture_processor_does_not_allocate(config);
+                assert_capture_processor_does_not_allocate(CaptureFrameProcessorConfig {
+                    input_rate,
+                    output_rate,
+                    device_channel,
+                    encode_channel,
+                });
             }
         }
 
         #[test]
-        fn capture_pcm_handoff_reuses_buffers_and_discards_oldest_packet() {
+        fn capture_pcm_handoff_reuses_buffers_and_accounts_for_loss() {
             const QUEUE_CAPACITY: usize = 2;
             const PACKET_SAMPLES: usize = 4;
             const FIRST: [f32; PACKET_SAMPLES] = [1.0; PACKET_SAMPLES];
             const SECOND: [f32; PACKET_SAMPLES] = [2.0; PACKET_SAMPLES];
             const THIRD: [f32; PACKET_SAMPLES] = [3.0; PACKET_SAMPLES];
+            const OVERSIZED_SAMPLES: usize = PACKET_SAMPLES + 1;
+            const OVERSIZED: [f32; OVERSIZED_SAMPLES] = [1.0; OVERSIZED_SAMPLES];
 
             let (mut sender, receiver) = new_pcm_handoff(QUEUE_CAPACITY, PACKET_SAMPLES).unwrap();
             sender.set_wake_thread(std::thread::current()).unwrap();
@@ -643,29 +633,19 @@ mod cpal_impl {
             receiver.recycle(second);
             receiver.recycle(third);
             assert!(receiver.is_empty());
+
+            assert_no_allocations(|| sender.submit(&OVERSIZED));
+            let loss = receiver.take_loss();
+            assert_eq!(loss.dropped, 0);
+            assert_eq!(loss.oversized, 1);
+            assert_eq!(loss.recycle_failures, 0);
+            assert!(receiver.is_empty());
         }
 
         #[test]
         fn capture_pcm_handoff_rejects_invalid_layouts() {
             assert!(new_pcm_handoff(0, 1).is_err());
             assert!(new_pcm_handoff(1, 0).is_err());
-        }
-
-        #[test]
-        fn capture_pcm_handoff_counts_oversized_packets_without_allocating() {
-            const PACKET_SAMPLES: usize = 4;
-            const OVERSIZED_SAMPLES: usize = PACKET_SAMPLES + 1;
-            const INPUT: [f32; OVERSIZED_SAMPLES] = [1.0; OVERSIZED_SAMPLES];
-
-            let (mut sender, receiver) = new_pcm_handoff(1, PACKET_SAMPLES).unwrap();
-            sender.set_wake_thread(std::thread::current()).unwrap();
-            assert_no_allocations(|| sender.submit(&INPUT));
-
-            let loss = receiver.take_loss();
-            assert_eq!(loss.dropped, 0);
-            assert_eq!(loss.oversized, 1);
-            assert_eq!(loss.recycle_failures, 0);
-            assert!(receiver.is_empty());
         }
 
         fn assert_capture_processor_does_not_allocate(config: CaptureFrameProcessorConfig) {
@@ -678,12 +658,12 @@ mod cpal_impl {
             } else {
                 Stereo
             };
-            let encoder_config = CaptureEncoderConfig::new(
-                config.output_rate,
+            let encoder_config = CaptureEncoderConfig {
+                sample_rate: config.output_rate,
                 encode_channel,
-                config.output_rate as usize / super::AUDIO_PACKETS_PER_SECOND
+                max_packet_samples: config.output_rate as usize / super::AUDIO_PACKETS_PER_SECOND
                     * config.device_channel.max(config.encode_channel) as usize,
-            );
+            };
             let (sender, worker) = start_capture_encoder(encoder_config, service).unwrap();
             let mut processor = CaptureFrameProcessor::new(config, sender).unwrap();
             let input = vec![

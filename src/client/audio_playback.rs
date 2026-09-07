@@ -185,73 +185,52 @@ mod tests {
 
     fn maximum_sample_step(samples: &[f32]) -> f32 {
         samples
-            .chunks_exact(CHANNELS)
-            .collect::<Vec<_>>()
-            .windows(2)
-            .fold(0.0, |maximum, frames| {
-                (0..CHANNELS).fold(maximum, |maximum, channel| {
-                    maximum.max((frames[1][channel] - frames[0][channel]).abs())
-                })
-            })
+            .windows(CHANNELS + 1)
+            .map(|window| (window[CHANNELS] - window[0]).abs())
+            .fold(0.0, f32::max)
     }
 
     #[test]
-    fn smooths_forced_underflow_edges() {
-        let config = AudioPlaybackConfig {
-            sample_rate: SAMPLE_RATE,
-            channels: CHANNELS,
-        };
-        let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-        let mut output = Vec::new();
-        for _ in 0..ACTIVE_FRAMES {
-            output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
-        }
-        let transition_end = TRANSITION_FRAMES * CHANNELS;
-        assert_eq!(
-            &output[transition_end - CHANNELS..transition_end],
-            ACTIVE_FRAME.as_slice()
-        );
-        for _ in 0..SILENT_FRAMES {
-            output.extend_from_slice(recovery.process_frame(None).unwrap());
-        }
-        for _ in 0..ACTIVE_FRAMES {
-            output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
-        }
-        let maximum = maximum_sample_step(&output);
-
-        assert!(
-            maximum <= MAX_SAMPLE_STEP,
-            "underflow transition step {maximum} exceeded {MAX_SAMPLE_STEP}"
-        );
-    }
-
-    #[test]
-    fn smooths_explicit_active_audio_discontinuity() {
-        let config = AudioPlaybackConfig {
-            sample_rate: SAMPLE_RATE,
-            channels: CHANNELS,
-        };
-        let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-        let mut output = Vec::new();
-        for _ in 0..ACTIVE_FRAMES {
-            output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
-        }
-
-        recovery.begin_discontinuity();
-        for _ in 0..ACTIVE_FRAMES {
-            output.extend_from_slice(
-                recovery
-                    .process_frame(Some(&OPPOSITE_ACTIVE_FRAME))
-                    .unwrap(),
+    fn smooths_underflow_and_explicit_audio_discontinuities() {
+        for explicit_discontinuity in [false, true] {
+            let config = AudioPlaybackConfig {
+                sample_rate: SAMPLE_RATE,
+                channels: CHANNELS,
+            };
+            let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
+            let mut output = Vec::new();
+            for _ in 0..ACTIVE_FRAMES {
+                output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
+            }
+            let transition_end = TRANSITION_FRAMES * CHANNELS;
+            assert_eq!(
+                &output[transition_end - CHANNELS..transition_end],
+                ACTIVE_FRAME.as_slice(),
+                "explicit_discontinuity={explicit_discontinuity}"
+            );
+            let resumed_frame = if explicit_discontinuity {
+                recovery.begin_discontinuity();
+                &OPPOSITE_ACTIVE_FRAME
+            } else {
+                for _ in 0..SILENT_FRAMES {
+                    output.extend_from_slice(recovery.process_frame(None).unwrap());
+                }
+                &ACTIVE_FRAME
+            };
+            for _ in 0..ACTIVE_FRAMES {
+                output.extend_from_slice(recovery.process_frame(Some(resumed_frame)).unwrap());
+            }
+            let maximum = maximum_sample_step(&output);
+            assert!(
+                maximum <= MAX_SAMPLE_STEP,
+                "step {maximum} exceeded {MAX_SAMPLE_STEP}, explicit={explicit_discontinuity}"
+            );
+            assert_eq!(
+                &output[output.len() - CHANNELS..],
+                resumed_frame,
+                "explicit_discontinuity={explicit_discontinuity}"
             );
         }
-        let maximum = maximum_sample_step(&output);
-
-        assert!(
-            maximum <= MAX_SAMPLE_STEP,
-            "buffer discontinuity step {maximum} exceeded {MAX_SAMPLE_STEP}"
-        );
-        assert_eq!(&output[output.len() - CHANNELS..], OPPOSITE_ACTIVE_FRAME);
     }
 
     #[test]

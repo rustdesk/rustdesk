@@ -40,6 +40,13 @@ fn encoded_audio(dropped: usize, channels: Channels) -> Vec<f32> {
         if (PAUSE_PACKET..resume_packet).contains(&index) {
             continue;
         }
+        if index == resume_packet {
+            let stats = receiver.take_stats();
+            assert_eq!(stats.max_queued_packets, CAPTURE_PCM_QUEUE_PACKETS);
+            assert_eq!(stats.loss.dropped, dropped);
+            assert_eq!(stats.loss.oversized, 0);
+            assert_eq!(stats.loss.recycle_failures, 0);
+        }
         while let Some(packet) = state.next_packet(&receiver) {
             let encoded = encoder
                 .encode_vec_float(&packet, samples * MAX_ENCODE_BYTES_PER_SAMPLE)
@@ -175,20 +182,4 @@ fn capture_loss_is_reported_while_packets_remain_queued() {
     assert!(state.reporter.pending.is_empty());
     assert!(receiver.take_loss().is_empty());
     receiver.recycle(packet);
-}
-
-#[test]
-fn capture_queue_reports_its_high_water_mark() {
-    const CAPACITY: usize = 3;
-    let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
-    let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
-    let packet = vec![ACTIVE_LEVEL; samples];
-    for _ in 0..CAPACITY {
-        sender.submit(&packet);
-    }
-
-    let stats = receiver.take_stats();
-
-    assert_eq!(stats.max_queued_packets, CAPACITY);
-    assert!(stats.loss.is_empty());
 }

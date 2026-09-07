@@ -77,23 +77,9 @@ pub(super) struct CapturePcmReceiver {
 }
 
 pub(super) struct CaptureEncoderConfig {
-    sample_rate: u32,
-    encode_channel: Channels,
-    max_packet_samples: usize,
-}
-
-impl CaptureEncoderConfig {
-    pub(super) fn new(
-        sample_rate: u32,
-        encode_channel: Channels,
-        max_packet_samples: usize,
-    ) -> Self {
-        Self {
-            sample_rate,
-            encode_channel,
-            max_packet_samples,
-        }
-    }
+    pub(super) sample_rate: u32,
+    pub(super) encode_channel: Channels,
+    pub(super) max_packet_samples: usize,
 }
 
 pub(super) struct CaptureEncoderWorker {
@@ -137,22 +123,6 @@ pub(super) fn new_pcm_handoff(
         max_queued_packets: AtomicUsize::new(0),
         max_samples,
     });
-    initialize_buffers(&handoff, capacity, max_samples)?;
-    Ok((
-        CapturePcmSender {
-            handoff: handoff.clone(),
-            spare: None,
-            sequence: 0,
-        },
-        CapturePcmReceiver { handoff },
-    ))
-}
-
-fn initialize_buffers(
-    handoff: &CapturePcmHandoff,
-    capacity: usize,
-    max_samples: usize,
-) -> Result<()> {
     for _ in 0..capacity {
         if handoff
             .available
@@ -162,7 +132,14 @@ fn initialize_buffers(
             bail!("Failed to initialize audio capture PCM buffer pool");
         }
     }
-    Ok(())
+    Ok((
+        CapturePcmSender {
+            handoff: handoff.clone(),
+            spare: None,
+            sequence: 0,
+        },
+        CapturePcmReceiver { handoff },
+    ))
 }
 
 impl CapturePcmSender {

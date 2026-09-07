@@ -18,10 +18,7 @@ const SECOND_DOWNSAMPLE_PACKET: [f32; 4] = [3.0, 4.0, 5.0, 6.0];
 const EXPECTED_DOWNSAMPLED_OUTPUT: [f32; 4] = [0.0, 2.0, 4.0, 6.0];
 const PACKETS_PER_SECOND: usize = 100;
 const OUTPUT_PACKET_FRAMES: usize = OUTPUT_RATE as usize / PACKETS_PER_SECOND;
-const RATE_32_KHZ: u32 = 32_000;
 const RATE_44_1_KHZ: u32 = 44_100;
-const RATE_96_KHZ: u32 = 96_000;
-const RATE_192_KHZ: u32 = 192_000;
 const FLOAT_TOLERANCE: f32 = 0.000_001;
 const MIN_CONTINUITY_PACKETS: usize = 2;
 
@@ -164,38 +161,6 @@ fn sender_resampler_emits_only_complete_continuous_frames() {
         .iter()
         .all(|packet| packet.len() == OUTPUT_PACKET_FRAMES * CHANNELS as usize));
     assert!(maximum_boundary_residual(&output) <= MAX_BOUNDARY_RESIDUAL);
-}
-
-#[test]
-fn sender_framing_supports_the_capture_rate_matrix() {
-    let rate_pairs = [
-        (RATE_32_KHZ, INPUT_RATE),
-        (RATE_44_1_KHZ, INPUT_RATE),
-        (RATE_44_1_KHZ, OUTPUT_RATE),
-        (OUTPUT_RATE, INPUT_RATE),
-        (RATE_96_KHZ, OUTPUT_RATE),
-        (RATE_192_KHZ, OUTPUT_RATE),
-    ];
-    for (input_rate, output_rate) in rate_pairs {
-        let input_packet_frames = input_rate as usize / PACKETS_PER_SECOND;
-        let output_packet_frames = output_rate as usize / PACKETS_PER_SECOND;
-        let input = vec![0.0; input_packet_frames * CHANNELS as usize * CHUNK_COUNT];
-        let config = AudioResamplerConfig {
-            input_rate,
-            output_rate,
-            channels: CHANNELS,
-        };
-        let mut resampler = FixedFrameAudioResampler::new(config, output_packet_frames).unwrap();
-        let packets: Vec<_> = input
-            .chunks(input_packet_frames * CHANNELS as usize)
-            .flat_map(|packet| resampler.process(packet).unwrap())
-            .collect();
-
-        assert!(!packets.is_empty());
-        assert!(packets
-            .iter()
-            .all(|packet| packet.len() == output_packet_frames * CHANNELS as usize));
-    }
 }
 
 #[test]
