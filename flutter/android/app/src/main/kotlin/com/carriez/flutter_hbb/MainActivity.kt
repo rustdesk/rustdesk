@@ -19,6 +19,8 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
@@ -49,6 +51,75 @@ class MainActivity : FlutterActivity() {
 
     private var isAudioStart = false
     private val audioRecordHandle = AudioRecordHandle(this, { false }, { isAudioStart })
+
+    // [FIX #15630] Trackpad scroll interception — see common.kt's
+    // SET_TRACKPAD_SCROLL_ENABLED for why this has to live natively.
+    // Enabled by the remote page (and only it) over the channel; while on, the
+    // synthesized 2-finger drag is consumed here so no Flutter widget or
+    // gesture recognizer ever sees it.
+    private var trackpadScrollEnabled = false
+    private var trackpadDragActive = false
+    private var trackpadLastX = 0f
+    private var trackpadLastY = 0f
+
+    private fun isSyntheticTrackpadDrag(event: MotionEvent): Boolean {
+        // SOURCE_MOUSE + TOOL_TYPE_FINGER: the Xiaomi-style trackpad's 2-finger
+        // gesture. A real touchscreen finger is SOURCE_TOUCHSCREEN; a real
+        // mouse (including the trackpad's own 1-finger tap-to-click) is
+        // TOOL_TYPE_MOUSE. Both fall through untouched.
+        return !event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)
+            && event.isFromSource(InputDevice.SOURCE_MOUSE)
+            && event.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER
+    }
+
+    private fun sendTrackpadScroll(
+        phase: String, dx: Float, dy: Float, x: Float, y: Float
+    ) {
+        // dispatchTouchEvent runs on the platform (main) thread, which is where
+        // invokeMethod must be called from.
+        flutterMethodChannel?.invokeMethod(
+            ON_TRACKPAD_SCROLL,
+            mapOf(
+                "phase" to phase,
+                "dx" to dx.toDouble(),
+                "dy" to dy.toDouble(),
+                "x" to x.toDouble(),
+                "y" to y.toDouble()
+            )
+        )
+    }
+
+    private fun handleTrackpadDrag(ev: MotionEvent) {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                trackpadDragActive = true
+                trackpadLastX = ev.rawX
+                trackpadLastY = ev.rawY
+                sendTrackpadScroll("begin", 0f, 0f, ev.rawX, ev.rawY)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!trackpadDragActive) return
+                val dx = ev.rawX - trackpadLastX
+                val dy = ev.rawY - trackpadLastY
+                trackpadLastX = ev.rawX
+                trackpadLastY = ev.rawY
+                sendTrackpadScroll("update", dx, dy, ev.rawX, ev.rawY)
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (!trackpadDragActive) return
+                trackpadDragActive = false
+                sendTrackpadScroll("end", 0f, 0f, ev.rawX, ev.rawY)
+            }
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev != null && trackpadScrollEnabled && isSyntheticTrackpadDrag(ev)) {
+            handleTrackpadDrag(ev)
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -230,6 +301,19 @@ class MainActivity : FlutterActivity() {
                 "try_sync_clipboard" -> {
                     rdClipboardManager?.syncClipboard(true)
                     result.success(true)
+                }
+                SET_TRACKPAD_SCROLL_ENABLED -> {
+                    if (call.arguments is Boolean) {
+                        trackpadScrollEnabled = call.arguments as Boolean
+                        if (!trackpadScrollEnabled) {
+                            // A gesture in flight when the remote page goes away
+                            // must not leak into the next one.
+                            trackpadDragActive = false
+                        }
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
                 }
                 GET_START_ON_BOOT_OPT -> {
                     val prefs = getSharedPreferences(KEY_SHARED_PREFERENCES, MODE_PRIVATE)

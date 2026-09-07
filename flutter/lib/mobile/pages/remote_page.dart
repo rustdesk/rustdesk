@@ -100,6 +100,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       isSharedPassword: widget.isSharedPassword,
       forceRelay: widget.forceRelay,
     );
+    // [FIX #15630] Let MainActivity intercept the trackpad's synthesized
+    // 2-finger drag (see InputModel.onNativeTrackpadScroll). Only this page
+    // enables it: while on, that drag is consumed natively and never reaches
+    // Flutter, so anywhere else it would silently break trackpad scrolling in
+    // ordinary Flutter lists. Paired with the disable in dispose().
+    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       gFFI.dialogManager
@@ -163,6 +169,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
     _waylandKeyboardGateWorker?.dispose();
     inputModel.keyboardInputAllowed = true;
+    // [FIX #15630] Stop consuming the trackpad's 2-finger drag (paired with
+    // the enable in initState). If this dispose is suspended by the app being
+    // backgrounded, it resumes — or the Activity is destroyed, which resets
+    // the flag anyway — so the interception cannot outlive this page.
+    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, false);
     await gFFI.close();
     _timer?.cancel();
     _iosKeyboardWorkaroundTimer?.cancel();

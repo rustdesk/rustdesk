@@ -48,6 +48,16 @@ const val GET_START_ON_BOOT_OPT = "get_start_on_boot_opt"
 const val SET_START_ON_BOOT_OPT = "set_start_on_boot_opt"
 const val SYNC_APP_DIR_CONFIG_PATH = "sync_app_dir"
 const val GET_VALUE = "get_value"
+// [FIX #15630] Native trackpad discrimination. Flutter's PointerEvent.device is
+// Android's per-gesture pointer slot (MotionEvent.getPointerId), not a hardware
+// id, so the trackpad and the touchscreen are indistinguishable on the Dart side
+// (both kind=touch, buttons=kPrimaryButton). The MotionEvent available here
+// carries the real source and tool type: the Xiaomi-style trackpad synthesizes
+// its 2-finger gesture as SOURCE_MOUSE + TOOL_TYPE_FINGER. MainActivity
+// intercepts that stream, forwards the per-frame deltas over the channel, and
+// consumes the events so Flutter only ever sees genuine input.
+const val SET_TRACKPAD_SCROLL_ENABLED = "set_trackpad_scroll_enabled"
+const val ON_TRACKPAD_SCROLL = "on_trackpad_scroll"
 
 const val KEY_IS_SUPPORT_VOICE_CALL = "KEY_IS_SUPPORT_VOICE_CALL"
 

@@ -947,6 +947,19 @@ void androidChannelInit() {
             }
             break;
           }
+        case AndroidChannel.kOnTrackpadScroll:
+          {
+            // [FIX #15630] Native trackpad 2-finger drag, intercepted in
+            // MainActivity.dispatchTouchEvent (see common.kt). Only arrives
+            // while the remote page has the interception enabled.
+            var phase = arguments["phase"] as String;
+            var dx = (arguments["dx"] as num?)?.toDouble() ?? 0.0;
+            var dy = (arguments["dy"] as num?)?.toDouble() ?? 0.0;
+            var x = (arguments["x"] as num?)?.toDouble() ?? 0.0;
+            var y = (arguments["y"] as num?)?.toDouble() ?? 0.0;
+            gFFI.inputModel.onNativeTrackpadScroll(phase, dx, dy, x, y);
+            break;
+          }
       }
     } catch (e) {
       debugPrintStack(label: "MethodCallHandler err:$e");

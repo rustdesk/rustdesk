@@ -10,34 +10,12 @@ enum GestureState {
   threeFingerVerticalDrag
 }
 
-/// Lets a gesture recognizer ignore pointers from a specific device id — the
-/// Android trackpad (Xiaomi-style), whose 2-finger gesture is synthesized as a
-/// left-button drag with `kind=touch` and routed to scroll in `InputModel`.
-/// Without this, that same drag is replayed by every recognizer in the mobile
-/// gesture arena (Tap, LongPress, pan, ...) as stray clicks/drags on top of the
-/// scroll output.
-///
-/// Recognizers that do not override [addAllowedPointer] get the filter via the
-/// override below (used by the built-in Tap/LongPress/DoubleTap subclasses).
-/// Recognizers that DO override it (the custom ones here) must call
-/// [shouldIgnore] at the top of their own override and return early. The field
-/// is set to `inputModel.trackpadHoverDeviceId`, which is null on desktop / until
-/// a trackpad hover is seen, so no filtering is applied there.
-mixin IgnoreDeviceGestureRecognizerMixin on GestureRecognizer {
-  int? Function()? ignoredDeviceIdOf;
+// [FIX #15630] note: the Android trackpad's synthesized 2-finger drag is
+// consumed in MainActivity.dispatchTouchEvent before Flutter's pointer
+// pipeline (see InputModel._trackpadTwoFinger), so no recognizer-level
+// device filtering is needed here — these are plain recognizers again.
 
-  bool shouldIgnore(PointerDownEvent event) =>
-      event.device == ignoredDeviceIdOf?.call();
-
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    if (shouldIgnore(event)) return;
-    super.addAllowedPointer(event);
-  }
-}
-
-class CustomTouchGestureRecognizer extends ScaleGestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {
+class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
@@ -220,21 +198,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer
   }
 }
 
-// Built-in recognizers filtered through [IgnoreDeviceGestureRecognizerMixin] so
-// the Android trackpad's synthesized drag cannot trigger stray taps/long-presses
-// alongside the scroll path. Empty bodies: the mixin supplies addAllowedPointer.
-class IgnoreDeviceTapGestureRecognizer extends TapGestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {}
-
-class IgnoreDeviceLongPressGestureRecognizer extends LongPressGestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {}
-
-class IgnoreDeviceDoubleTapGestureRecognizer
-    extends DoubleTapGestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {}
-
-class HoldTapMoveGestureRecognizer extends GestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {
+class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   HoldTapMoveGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
@@ -281,7 +245,6 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    if (shouldIgnore(event)) return;
     if (_firstTap != null) {
       if (!_firstTap!.isWithinGlobalTolerance(event, kDoubleTapSlop)) {
         // Ignore out-of-bounds second taps.
@@ -503,8 +466,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer
   String get debugDescription => 'double tap';
 }
 
-class DoubleFinerTapGestureRecognizer extends GestureRecognizer
-    with IgnoreDeviceGestureRecognizerMixin {
+class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   DoubleFinerTapGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
@@ -548,7 +510,6 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    if (shouldIgnore(event)) return;
     if (_isStart) {
       // second
       if (onDoubleFinerTapDown != null) {
