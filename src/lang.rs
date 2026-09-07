@@ -2,6 +2,7 @@ use hbb_common::regex::Regex;
 use std::ops::Deref;
 
 mod ar;
+mod az;
 mod be;
 mod bg;
 mod ca;
@@ -105,6 +106,7 @@ pub const LANGS: &[(&str, &str)] = &[
     ("ml", "മലയാളം"),
     ("hi", "हिंदी"),
     ("gu", "ગુજરાતી"),
+    ("az", "Azərbaycan dili"),
 ];
 
 pub(crate) fn cjk_ui_unavailable() -> bool {
@@ -220,6 +222,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "hi" => hi::T.deref(),
         "gu" => gu::T.deref(),
         "gl" => gl::T.deref(),
+        "az" => az::T.deref(),
         _ => en::T.deref(),
     };
     let (name, placeholder_value) = extract_placeholder(&name);
