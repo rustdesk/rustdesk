@@ -1,8 +1,15 @@
 use hbb_common::thiserror;
-use std::collections::VecDeque;
 
-#[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
+#[cfg(test)]
+#[path = "audio_allocation_tests.rs"]
+pub(crate) mod allocation_tests;
+
+#[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+#[path = "audio_resampler_sinc.rs"]
+mod sinc;
+
 const INTERPOLATION_MARGIN_FRAMES: usize = 2;
+const PENDING_PACKET_CAPACITY: usize = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct AudioResamplerConfig {
@@ -32,7 +39,7 @@ pub(crate) enum AudioResamplerError {
 pub(crate) struct FixedFrameAudioResampler {
     resampler: AudioResampler,
     output_samples: usize,
-    pending_samples: VecDeque<f32>,
+    pending_samples: Vec<f32>,
 }
 
 #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
@@ -48,23 +55,47 @@ impl FixedFrameAudioResampler {
         if output_frames == 0 {
             return Err(AudioResamplerError::InvalidOutputFrameSize { output_frames });
         }
+        let channels = validate_config(config)?;
         let output_samples = output_frames
-            .checked_mul(config.channels as usize)
+            .checked_mul(channels)
             .ok_or(AudioResamplerError::CapacityOverflow)?;
+        let input_frames = output_frames
+            .checked_mul(config.input_rate as usize)
+            .ok_or(AudioResamplerError::CapacityOverflow)?
+            .div_ceil(config.output_rate as usize);
+        let capacity = output_samples
+            .checked_mul(PENDING_PACKET_CAPACITY)
+            .and_then(|samples| samples.checked_add(channels * INTERPOLATION_MARGIN_FRAMES))
+            .ok_or(AudioResamplerError::CapacityOverflow)?;
+        let mut resampler = AudioResampler::new(config)?;
+        resampler.reserve_input(input_frames)?;
         Ok(Self {
-            resampler: AudioResampler::new(config)?,
+            resampler,
             output_samples,
-            pending_samples: VecDeque::new(),
+            pending_samples: Vec::with_capacity(capacity),
         })
     }
 
-    pub(crate) fn process(&mut self, input: &[f32]) -> Result<Vec<Vec<f32>>, AudioResamplerError> {
-        self.pending_samples.extend(self.resampler.process(input)?);
-        let packet_count = self.pending_samples.len() / self.output_samples;
-        let mut packets = Vec::with_capacity(packet_count);
-        for _ in 0..packet_count {
-            packets.push(self.pending_samples.drain(..self.output_samples).collect());
+    pub(crate) fn process_with(
+        &mut self,
+        input: &[f32],
+        mut on_packet: impl FnMut(&[f32]),
+    ) -> Result<(), AudioResamplerError> {
+        self.resampler
+            .process_into(input, &mut self.pending_samples)?;
+        let complete_samples =
+            self.pending_samples.len() / self.output_samples * self.output_samples;
+        for packet in self.pending_samples[..complete_samples].chunks_exact(self.output_samples) {
+            on_packet(packet);
         }
+        self.pending_samples.drain(..complete_samples);
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn process(&mut self, input: &[f32]) -> Result<Vec<Vec<f32>>, AudioResamplerError> {
+        let mut packets = Vec::new();
+        self.process_with(input, |packet| packets.push(packet.to_owned()))?;
         Ok(packets)
     }
 }
@@ -73,11 +104,9 @@ pub(crate) struct AudioResampler {
     #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
     backend: StreamingLinearAudioResampler,
     #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-    config: AudioResamplerConfig,
-    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
     channels: usize,
     #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-    backend: samplerate::Samplerate,
+    backend: sinc::SincAudioResampler,
 }
 
 impl AudioResampler {
@@ -85,23 +114,8 @@ impl AudioResampler {
         #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
         {
             let channels = validate_config(config)?;
-            let backend = samplerate::Samplerate::new(
-                samplerate::ConverterType::SincBestQuality,
-                config.input_rate as _,
-                config.output_rate as _,
-                channels,
-            )
-            .map_err(|error| {
-                AudioResamplerError::Backend(format!(
-                    "input_rate={}, output_rate={}, channels={}: {error:?}",
-                    config.input_rate, config.output_rate, config.channels
-                ))
-            })?;
-            Ok(Self {
-                config,
-                channels,
-                backend,
-            })
+            let backend = sinc::SincAudioResampler::new(config)?;
+            Ok(Self { channels, backend })
         }
         #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
         {
@@ -112,23 +126,34 @@ impl AudioResampler {
     }
 
     pub(crate) fn process(&mut self, input: &[f32]) -> Result<Vec<f32>, AudioResamplerError> {
+        let mut output = Vec::new();
+        self.process_into(input, &mut output)?;
+        Ok(output)
+    }
+
+    // Append samples so capture can retain an incomplete output packet in the same buffer.
+    fn process_into(
+        &mut self,
+        input: &[f32],
+        output: &mut Vec<f32>,
+    ) -> Result<(), AudioResamplerError> {
         #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
         {
             validate_input(input, self.channels)?;
-            self.backend.process(input).map_err(|error| {
-                AudioResamplerError::Backend(format!(
-                    "input_rate={}, output_rate={}, channels={}, samples={}: {error:?}",
-                    self.config.input_rate,
-                    self.config.output_rate,
-                    self.config.channels,
-                    input.len()
-                ))
-            })
         }
+        self.backend.process_into(input, output)
+    }
+
+    fn reserve_input(&mut self, _frames: usize) -> Result<(), AudioResamplerError> {
         #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
         {
-            self.backend.process(input)
+            let capacity = _frames
+                .checked_add(INTERPOLATION_MARGIN_FRAMES)
+                .and_then(|frames| frames.checked_mul(self.backend.channels))
+                .ok_or(AudioResamplerError::CapacityOverflow)?;
+            self.backend.buffered_samples.reserve(capacity);
         }
+        Ok(())
     }
 }
 
@@ -151,16 +176,20 @@ impl StreamingLinearAudioResampler {
         })
     }
 
-    fn process(&mut self, input: &[f32]) -> Result<Vec<f32>, AudioResamplerError> {
+    fn process_into(
+        &mut self,
+        input: &[f32],
+        output: &mut Vec<f32>,
+    ) -> Result<(), AudioResamplerError> {
         validate_input(input, self.channels)?;
-        self.buffered_samples.extend_from_slice(input);
         let capacity = self.output_capacity(input.len())?;
-        let mut output = Vec::with_capacity(capacity);
-        while self.write_next_frame(&mut output) {
+        output.reserve(capacity);
+        self.buffered_samples.extend_from_slice(input);
+        while self.write_next_frame(output) {
             self.next_position += self.config.input_rate as u64;
         }
         self.discard_consumed_frames();
-        Ok(output)
+        Ok(())
     }
 
     fn output_capacity(&self, input_samples: usize) -> Result<usize, AudioResamplerError> {
