@@ -561,6 +561,11 @@ pub enum Data {
         height: u32,
         hotx: i32,
         hoty: i32,
+        /// True when the kernel gave the hotspot (a DRIVER_CURSOR_HOTSPOT driver). False means
+        /// it is the reader's bounding-box guess and may be measured and corrected. Absent from
+        /// an older producer, which decodes as false: guessed, which is what it was.
+        #[serde(default)]
+        hot_from_property: bool,
     },
 }
 

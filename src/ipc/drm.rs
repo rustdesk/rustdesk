@@ -117,6 +117,9 @@ enum DrmProducerMsg {
         hotx: i32,
         hoty: i32,
         colors: Vec<u8>,
+        /// True when the kernel gave the hotspot; false when it is the reader's guess and the
+        /// consumer may measure and correct it.
+        hot_from_property: bool,
     },
 }
 
@@ -925,6 +928,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     hotx,
                     hoty,
                     colors,
+                    hot_from_property,
                 } => {
                     conn.send_msg(
                         &Data::DrmCursor {
@@ -933,6 +937,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
+                            hot_from_property,
                         },
                         None,
                     )
@@ -1143,6 +1148,7 @@ fn drm_capture_worker(
                         hotx: c.hotx,
                         hoty: c.hoty,
                         colors: c.colors,
+                        hot_from_property: c.hot_from_property,
                     })
                     .is_err()
                 {

@@ -403,6 +403,113 @@ mod cursor_calibration_tests {
     }
 }
 
+/// What one stream needs to measure the hotspot of the shape it is currently showing.
+struct CursorCal {
+    /// The id the wire delivered, which is what the cache is keyed by.
+    id: u64,
+    width: i32,
+    height: i32,
+    /// Kept so a measurement can re-deliver the same pixels under a corrected hotspot.
+    raw: Vec<u8>,
+    /// The correction currently published, from the cache or from a measurement.
+    applied: Option<(i32, i32)>,
+    /// Last plane position seen, and how many consecutive frames have reported it.
+    plane: Option<(i32, i32)>,
+    stable: u32,
+    /// Frames left in the current attempt window; 0 means closed until the plane moves.
+    window: u32,
+    /// A measurement is published at once but only enters the cross-shape cache once a SECOND
+    /// window agrees with it, so one race - a local user parking the pointer near the peer's
+    /// stale point - cannot poison every future instance of the shape.
+    pending: Option<(i32, i32)>,
+}
+
+/// The logical rect the peer's coordinates live in, and this display's physical scanout size.
+/// Read ONCE per attempt window, never per frame: the enumeration behind it is backed off and
+/// fork-heavy when it fails.
+fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))> {
+    let info = display_info_of(display)?;
+    let wl = scrap::wayland::display::get_displays();
+    let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
+    let r = rects.iter().find(|r| r.name == info.name)?;
+    Some((
+        (r.x, r.y, r.w, r.h),
+        (info.width as i32, info.height as i32),
+    ))
+}
+
+/// One frame reported where the cursor plane is. Advance the settle count and, inside an open
+/// window, try to measure. A measurement that differs from what the client already draws is
+/// published immediately under a derived id; the cache waits for a second window to agree.
+fn note_cursor_plane(
+    cal: &mut Option<CursorCal>,
+    pos: Option<(i32, i32)>,
+    display: i32,
+    cursor_epoch: u64,
+    transform: i32,
+) {
+    let (Some(c), Some(p)) = (cal.as_mut(), pos) else {
+        return;
+    };
+    if c.plane != Some(p) {
+        // The plane moved: this is the first sample of a new position, and it re-opens a window.
+        c.plane = Some(p);
+        c.stable = 0;
+        c.window = CURSOR_CAL_WINDOW_TICKS;
+        return;
+    }
+    c.stable = c.stable.saturating_add(1);
+    if c.window == 0 {
+        return;
+    }
+    c.window -= 1;
+    let Some((rect, phys)) = cal_rect_and_size(display) else {
+        return;
+    };
+    let injected = crate::server::input_service::last_peer_input_pos_and_age_ms();
+    let Some(h) = calibrated_hotspot(
+        false,
+        (c.width, c.height),
+        injected,
+        rect,
+        phys,
+        p,
+        c.stable,
+    ) else {
+        return;
+    };
+    // Within tolerance of what is already drawn this is jitter from the peer's logical
+    // quantization, and re-publishing would only mint ids and churn the client's shape cache.
+    if let Some((ax, ay)) = c.applied {
+        if (h.0 - ax).abs() <= CURSOR_CAL_TOLERANCE && (h.1 - ay).abs() <= CURSOR_CAL_TOLERANCE {
+            return;
+        }
+    }
+    match c.pending {
+        Some((px, py))
+            if (h.0 - px).abs() <= CURSOR_CAL_TOLERANCE
+                && (h.1 - py).abs() <= CURSOR_CAL_TOLERANCE =>
+        {
+            store_cursor_cal(c.id, h)
+        }
+        _ => c.pending = Some(h),
+    }
+    c.applied = Some(h);
+    // Measured: stay quiet until the plane moves and re-opens a window.
+    c.window = 0;
+    deliver_drm_cursor(
+        display,
+        cursor_epoch,
+        remix_cursor_id(c.id, h.0, h.1),
+        c.width as u32,
+        c.height as u32,
+        h.0,
+        h.1,
+        c.raw.clone(),
+        transform,
+    );
+}
+
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
 fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
     match &*DRM_STATE.lock().unwrap() {
@@ -850,6 +957,9 @@ async fn recv_thread(
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
     // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
     let mut pending_cursor: Option<(u64, u32, u32, i32, i32, Vec<u8>)> = None;
+    // The shape being measured, or None when there is nothing to measure: the cursor is hidden,
+    // or the kernel gave a real hotspot. Cleared and re-seeded on every shape change.
+    let mut cal: Option<CursorCal> = None;
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
@@ -869,6 +979,13 @@ async fn recv_thread(
         };
         match msg {
             Data::DrmFrameDmabuf(desc) => {
+                note_cursor_plane(
+                    &mut cal,
+                    desc.cursor_pos,
+                    display,
+                    cursor_epoch,
+                    shared.transform.load(std::sync::atomic::Ordering::Acquire),
+                );
                 let conv = match converter.as_mut() {
                     Some(c) => c,
                     None => break "no DRM render node; cannot convert dma-buf frame".to_owned(),
@@ -929,7 +1046,13 @@ async fn recv_thread(
                 height,
                 cursor_pos,
             } => {
-                let _ = cursor_pos;
+                note_cursor_plane(
+                    &mut cal,
+                    cursor_pos,
+                    display,
+                    cursor_epoch,
+                    shared.transform.load(std::sync::atomic::Ordering::Acquire),
+                );
                 // `frame()` hands this to PixelBuffer::new, which derives the stride as
                 // `data.len() / height`: height==0 would DIVIDE BY ZERO.
                 if width == 0 || height == 0 {
@@ -965,6 +1088,7 @@ async fn recv_thread(
                 height,
                 hotx,
                 hoty,
+                hot_from_property,
             } => {
                 // get_cursor_data() hands `colors` straight to the client, which renders
                 // width*height*4 RGBA bytes: a short body would make it READ PAST THE BUFFER. A
@@ -983,6 +1107,31 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
+                        // A new shape restarts the measurement: the pointer usually moves at
+                        // the instant the shape flips, since that is what flipped it, so the
+                        // position frozen here is a first stability sample and not an answer.
+                        // Kernel truth is remembered but never measured against.
+                        cal = if id == scrap::drm_reader::HIDDEN_CURSOR_ID || hot_from_property {
+                            None
+                        } else {
+                            let seeded = cached_cursor_cal(id)
+                                .filter(|(cx, cy)| *cx < width as i32 && *cy < height as i32);
+                            Some(CursorCal {
+                                id,
+                                width: width as i32,
+                                height: height as i32,
+                                raw: raw.clone(),
+                                applied: seeded,
+                                plane: None,
+                                stable: 0,
+                                window: 0,
+                                pending: None,
+                            })
+                        };
+                        let (hotx, hoty, id) = match cal.as_ref().and_then(|c| c.applied) {
+                            Some((cx, cy)) => (cx, cy, remix_cursor_id(id, cx, cy)),
+                            None => (hotx, hoty, id),
+                        };
                         let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
                         if t == TRANSFORM_PENDING {
                             pending_cursor = Some((id, width, height, hotx, hoty, raw));

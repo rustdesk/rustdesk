@@ -982,6 +982,19 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 
 // Update time to avoid send cursor position event to the peer.
 // See `run_pos` --> `set_cursor_position` --> `exclude`
+/// The last ABSOLUTE peer-injected pointer position (post-remap desktop px) and its age in ms.
+/// `None` until a peer has moved the mouse this session. The DRM cursor calibration subtracts
+/// the cursor-plane position from this to recover the hotspot the kernel does not expose.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn last_peer_input_pos_and_age_ms() -> Option<((i32, i32), i64)> {
+    let lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
+    // Both sentinels are huge negatives: INVALID_CURSOR_POS (unpolled) and half it (inactive).
+    if lock.time == 0 || lock.x <= INVALID_CURSOR_POS / 2 {
+        return None;
+    }
+    Some(((lock.x, lock.y), get_time() - lock.time))
+}
+
 #[inline]
 pub fn update_latest_input_cursor_time(conn: i32) {
     let mut lock = LATEST_PEER_INPUT_CURSOR.lock().unwrap();
