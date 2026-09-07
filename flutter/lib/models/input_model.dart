@@ -1547,6 +1547,7 @@ class InputModel {
   final Set<int> _ignoredTouchPointers = {};
 
   void onPointDownImage(PointerDownEvent e) {
+    debugPrint("onPointDownImage ${e.kind}");
     _stopFling = true;
     if (isDesktop) _queryOtherWindowCoords = true;
     _remoteWindowCoords = [];
