@@ -10,6 +10,8 @@ FPS adjust:
 a. new user connected => set to INIT_FPS
 b. TestDelay reply => update the user's fps from the excess delay, the reply's delay
    above the baseline this connection has shown so far:
+     startup: two consecutive replies with excess < 50 ms permit doubling toward
+       the viewer's cap; a higher excess or a brake ends this acceleration;
      excess < DELAY_THRESHOLD_150MS: a good reply; grows the fps, and after a
        reduction returns to the level held before it after two good replies;
      excess >= DELAY_THRESHOLD_150MS: a bad reply; nothing happens until three in a
@@ -79,6 +81,7 @@ struct UserDelay {
     fps_before_congestion: Option<u32>, // level to return to once replies are good again
     samples_since_restore: Option<u8>,  // set by a restore, cleared once it proved stable
     stall_reference_fps: Option<u32>,   // fps when the outstanding probe passed two seconds
+    startup_good_samples: u8,           // u8::MAX permanently ends startup acceleration
 }
 
 impl UserDelay {
@@ -171,8 +174,39 @@ impl UserDelay {
         }
     }
 
+    fn accelerate_startup(
+        &mut self,
+        current_fps: u32,
+        fps: u32,
+        cap: u32,
+        delay: u32,
+        braked: bool,
+    ) -> u32 {
+        if self.startup_good_samples == u8::MAX {
+            return fps;
+        }
+        let excess = delay.saturating_sub(self.rtt_calculator.get_rtt().unwrap_or_default());
+        // A low-load sample does not establish capacity: require two clean replies
+        // per step and abandon startup probing on the first sign of queue growth.
+        if braked || excess >= 50 || current_fps >= cap {
+            self.startup_good_samples = u8::MAX;
+            return fps;
+        }
+        self.startup_good_samples += 1;
+        if self.startup_good_samples < 2 {
+            return fps;
+        }
+        self.startup_good_samples = 0;
+        let accelerated = fps.max(current_fps.saturating_mul(2)).min(cap);
+        if accelerated >= cap {
+            self.startup_good_samples = u8::MAX;
+        }
+        accelerated
+    }
+
     // The first reduction of an episode remembers the level to return to.
     fn on_reduction(&mut self, current_fps: u32) {
+        self.startup_good_samples = u8::MAX;
         self.good_samples = 0;
         self.fps_bad_samples = 0;
         if self.fps_before_congestion.is_none() {
@@ -526,6 +560,9 @@ impl VideoQoS {
             fps = user
                 .delay
                 .limit_fps_change(current_fps, fps, delay, bitrate_first, braked);
+            fps = user
+                .delay
+                .accelerate_startup(current_fps, fps, user_cap, delay, braked);
             reduce_bitrate = bitrate_first
                 && user.delay.needs_bitrate_reduction()
                 && user.delay.replies_after_bitrate_reduction.is_none();
@@ -982,4 +1019,5 @@ mod tests {
     mod robustness;
     mod sim;
     mod smoke;
+    mod startup;
 }
