@@ -157,6 +157,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    // [FIX #15630] Stop consuming the trackpad's 2-finger drag (paired with the
+    // enable in initState). Like sessionClose above, this must run before the
+    // first await: dispose() can be suspended there by the app being
+    // backgrounded, and a new RemotePage enabled in the meantime — when this
+    // dispose then resumes, a disable posted after that enable would switch
+    // interception off underneath the new session, and its trackpad 2-finger
+    // drags would reach Flutter as synthesized touch drags again.
+    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, false);
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -169,11 +177,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
     _waylandKeyboardGateWorker?.dispose();
     inputModel.keyboardInputAllowed = true;
-    // [FIX #15630] Stop consuming the trackpad's 2-finger drag (paired with
-    // the enable in initState). If this dispose is suspended by the app being
-    // backgrounded, it resumes — or the Activity is destroyed, which resets
-    // the flag anyway — so the interception cannot outlive this page.
-    gFFI.invokeMethod(AndroidChannel.kSetTrackpadScrollEnabled, false);
     await gFFI.close();
     _timer?.cancel();
     _iosKeyboardWorkaroundTimer?.cancel();
