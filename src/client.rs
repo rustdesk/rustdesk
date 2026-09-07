@@ -1249,6 +1249,7 @@ struct AudioBuffer(
     pub Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     usize,
     [usize; 30],
+    Arc<std::sync::atomic::AtomicUsize>,
 );
 
 #[cfg(not(target_os = "linux"))]
@@ -1260,6 +1261,7 @@ impl Default for AudioBuffer {
             )),
             48000 * 2,
             [0; 30],
+            Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         )
     }
 }
@@ -1334,8 +1336,17 @@ impl AudioBuffer {
         let skip = (cap * max / (30 * N) + 1) & (!1);
         if (having > skip * 3) && (skip > 0) {
             lock.skip(skip);
-            log::info!("skip {skip}, based {max} {zero}");
+            let generation = self.signal_discontinuity();
+            drop(lock);
+            log::info!("skip {skip}, based {max} {zero}, generation={generation}");
         }
+    }
+
+    /// The caller must hold the PCM buffer lock while signaling the discard.
+    fn signal_discontinuity(&self) -> usize {
+        self.3
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .wrapping_add(1)
     }
 
     /// append pcm to audio buffer, if buffered data
@@ -1345,16 +1356,31 @@ impl AudioBuffer {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
         if buffer.len() > cap {
+            let discarded = lock.occupied_len() + buffer.len() - cap;
             lock.push_slice_overwrite(buffer);
+            let generation = self.signal_discontinuity();
+            drop(lock);
+            log::debug!(
+                "Audio buffer capacity discard: samples={discarded}, generation={generation}"
+            );
             return cap;
         }
 
         let having = lock.occupied_len() + buffer.len();
-        if having > cap {
-            lock.skip(having - cap);
-        }
+        let discard = (having > cap).then(|| {
+            let discarded = having - cap;
+            lock.skip(discarded);
+            (discarded, self.signal_discontinuity())
+        });
         lock.push_slice_overwrite(buffer);
-        lock.occupied_len()
+        let occupied = lock.occupied_len();
+        drop(lock);
+        if let Some((discarded, generation)) = discard {
+            log::debug!(
+                "Audio buffer capacity discard: samples={discarded}, generation={generation}"
+            );
+        }
+        occupied
     }
 
     /// append pcm to audio buffer, trying to drop data
@@ -1363,6 +1389,41 @@ impl AudioBuffer {
     pub fn append_pcm(&mut self, buffer: &[f32]) {
         let having = self.append_pcm2(buffer);
         self.try_shrink(having);
+    }
+}
+
+#[cfg(all(test, not(target_os = "linux")))]
+mod audio_buffer_discontinuity_tests {
+    use super::AudioBuffer;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    };
+
+    const BUFFER_CAPACITY: usize = 4;
+    const BUFFER_LEVELS: usize = 30;
+    const FIRST_INPUT: [f32; 2] = [0.1, 0.2];
+    const OVERFLOWING_INPUT: [f32; 3] = [0.3, 0.4, 0.5];
+    const OVERSIZED_INPUT: [f32; 5] = [0.6, 0.7, 0.8, 0.9, 1.0];
+
+    #[test]
+    fn capacity_discards_signal_discontinuities() {
+        let audio_buffer = AudioBuffer(
+            Arc::new(Mutex::new(ringbuf::HeapRb::new(BUFFER_CAPACITY))),
+            BUFFER_CAPACITY,
+            [0; BUFFER_LEVELS],
+            Arc::new(AtomicUsize::new(0)),
+        );
+
+        assert_eq!(audio_buffer.append_pcm2(&FIRST_INPUT), FIRST_INPUT.len());
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            audio_buffer.append_pcm2(&OVERFLOWING_INPUT),
+            BUFFER_CAPACITY
+        );
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 1);
+        assert_eq!(audio_buffer.append_pcm2(&OVERSIZED_INPUT), BUFFER_CAPACITY);
+        assert_eq!(audio_buffer.3.load(Ordering::Relaxed), 2);
     }
 }
 
@@ -1556,6 +1617,7 @@ impl AudioHandler {
         self.audio_buffer
             .resize(config.sample_rate.0 as _, config.channels as _);
         let audio_buffer = self.audio_buffer.0.clone();
+        let discontinuity_generation = self.audio_buffer.3.clone();
         let ready = self.ready.clone();
         let mut playback_writer = audio_playback::AudioPlaybackWriter::new(
             audio_playback::AudioPlaybackConfig {
@@ -1563,6 +1625,7 @@ impl AudioHandler {
                 channels: config.channels as usize,
             },
             audio_buffer,
+            discontinuity_generation,
         )?;
         let timeout = None;
         let stream = device.build_output_stream(

@@ -1,5 +1,6 @@
 use hbb_common::{log, thiserror};
 use ringbuf::Rb;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
 const MILLISECONDS_PER_SECOND: usize = 1_000;
@@ -34,6 +35,8 @@ pub(super) struct AudioPlaybackRecovery {
 
 pub(super) struct AudioPlaybackWriter {
     audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+    discontinuity_generation: std::sync::Arc<AtomicUsize>,
+    observed_discontinuity_generation: usize,
     channels: std::num::NonZeroUsize,
     buffered_input: Vec<f32>,
     recovery: AudioPlaybackRecovery,
@@ -43,12 +46,16 @@ impl AudioPlaybackWriter {
     pub(super) fn new(
         config: AudioPlaybackConfig,
         audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
+        discontinuity_generation: std::sync::Arc<AtomicUsize>,
     ) -> Result<Self, AudioPlaybackError> {
         let channels = std::num::NonZeroUsize::new(config.channels)
             .ok_or(AudioPlaybackError::InvalidConfig(config))?;
         let buffer_capacity = audio_buffer.lock().unwrap().capacity();
+        let observed_discontinuity_generation = discontinuity_generation.load(Ordering::Relaxed);
         Ok(Self {
             audio_buffer,
+            discontinuity_generation,
+            observed_discontinuity_generation,
             channels,
             buffered_input: vec![0.0; buffer_capacity],
             recovery: AudioPlaybackRecovery::new(config)?,
@@ -60,11 +67,19 @@ impl AudioPlaybackWriter {
         T: cpal::Sample + cpal::FromSample<f32>,
     {
         let requested_samples = output.len().min(self.buffered_input.len());
-        let available_samples = super::audio_buffer::drain_audio_samples(
-            &self.audio_buffer,
+        let drained = super::audio_buffer::drain_audio_samples(
+            super::audio_buffer::AudioBufferSource {
+                buffer: &self.audio_buffer,
+                discontinuity_generation: &self.discontinuity_generation,
+            },
             &mut self.buffered_input[..requested_samples],
             self.channels,
         );
+        if drained.discontinuity_generation != self.observed_discontinuity_generation {
+            self.recovery.begin_discontinuity();
+            self.observed_discontinuity_generation = drained.discontinuity_generation;
+        }
+        let available_samples = drained.samples;
         let channel_count = self.channels.get();
         let available_frames = available_samples / channel_count;
         for (frame_index, output_frame) in output.chunks_mut(channel_count).enumerate() {
@@ -131,6 +146,11 @@ impl AudioPlaybackRecovery {
         Ok(&self.output_frame)
     }
 
+    pub(super) fn begin_discontinuity(&mut self) {
+        self.transition_start.copy_from_slice(&self.output_frame);
+        self.transition_frame = 0;
+    }
+
     fn begin_transition(&mut self, has_input: bool) {
         if has_input == self.had_input {
             return;
@@ -156,6 +176,7 @@ mod tests {
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: usize = 2;
     const ACTIVE_FRAME: [f32; CHANNELS] = [0.8, -0.8];
+    const OPPOSITE_ACTIVE_FRAME: [f32; CHANNELS] = [-0.8, 0.8];
     const ACTIVE_FRAMES: usize = 300;
     const SILENT_FRAMES: usize = 300;
     const TRANSITION_FRAMES: usize =
@@ -202,6 +223,35 @@ mod tests {
             maximum <= MAX_SAMPLE_STEP,
             "underflow transition step {maximum} exceeded {MAX_SAMPLE_STEP}"
         );
+    }
+
+    #[test]
+    fn smooths_explicit_active_audio_discontinuity() {
+        let config = AudioPlaybackConfig {
+            sample_rate: SAMPLE_RATE,
+            channels: CHANNELS,
+        };
+        let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
+        let mut output = Vec::new();
+        for _ in 0..ACTIVE_FRAMES {
+            output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
+        }
+
+        recovery.begin_discontinuity();
+        for _ in 0..ACTIVE_FRAMES {
+            output.extend_from_slice(
+                recovery
+                    .process_frame(Some(&OPPOSITE_ACTIVE_FRAME))
+                    .unwrap(),
+            );
+        }
+        let maximum = maximum_sample_step(&output);
+
+        assert!(
+            maximum <= MAX_SAMPLE_STEP,
+            "buffer discontinuity step {maximum} exceeded {MAX_SAMPLE_STEP}"
+        );
+        assert_eq!(&output[output.len() - CHANNELS..], OPPOSITE_ACTIVE_FRAME);
     }
 
     #[test]
