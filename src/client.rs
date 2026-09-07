@@ -47,13 +47,11 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     bail,
     config::{
-        self, keys, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
+        self, use_ws, Config, LocalConfig, PeerConfig, PeerInfoSerde, Resolution,
         CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS,
     },
-    fs::JobType,
     futures::future::{select_ok, BoxFuture, FutureExt},
     get_version_number, log,
-    message_proto::{option_message::BoolOption, *},
     protobuf::{Message as _, MessageField},
     rand,
     rendezvous_proto::*,
@@ -72,6 +70,11 @@ use hbb_common::{
     },
     webrtc::WebRTCStream,
     AddrMangle, ResultType, Stream,
+};
+use base::{
+    config::keys,
+    fs::JobType,
+    message_proto::{option_message::BoolOption, *},
 };
 pub use helper::*;
 use scrap::{
@@ -4020,7 +4023,7 @@ async fn do_sync_cpu_usage() {
                 if let Ok(Some(data)) = conn.next_timeout(50).await {
                     match data {
                         Data::SyncWinCpuUsage(cpu_usage) => {
-                            hbb_common::platform::windows::sync_cpu_usage(cpu_usage);
+                            base::platform::windows::sync_cpu_usage(cpu_usage);
                         }
                         _ => {}
                     }
@@ -4680,7 +4683,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
         }
     }
 
-    fn swap_modifier_mouse(&self, _msg: &mut hbb_common::protos::message::MouseEvent) {}
+    fn swap_modifier_mouse(&self, _msg: &mut base::protos::message::MouseEvent) {}
 
     fn update_direct(&self, direct: Option<bool>) {
         self.get_lch().write().unwrap().direct = direct;

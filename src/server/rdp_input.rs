@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod client {
-    use hbb_common::platform::linux::{DISPLAY_DESKTOP_KDE, XDG_CURRENT_DESKTOP};
+    use base::platform::linux::{DISPLAY_DESKTOP_KDE, XDG_CURRENT_DESKTOP};
 
     use super::*;
 

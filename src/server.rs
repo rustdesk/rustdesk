@@ -17,13 +17,13 @@ use hbb_common::{
     bail,
     config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
-    message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
+use base::message_proto::*;
 use scrap::camera;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
@@ -597,7 +597,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
         }
         #[cfg(windows)]
-        hbb_common::platform::windows::start_cpu_performance_monitor();
+        base::platform::windows::start_cpu_performance_monitor();
     });
 
     if is_server {

@@ -30,13 +30,11 @@ use hbb_common::protobuf::EnumOrUnknown;
 use hbb_common::{
     config::{
         self, decode_permanent_password_h1_from_storage, decode_preset_password_h1_from_storage,
-        keys, local_permanent_password_storage_is_usable_for_auth,
+        local_permanent_password_storage_is_usable_for_auth,
         preset_permanent_password_storage_is_usable_for_auth, Config, TrustedDevice,
     },
-    fs::{self, can_enable_overwrite_detection, JobType},
     futures::{SinkExt, StreamExt},
     get_time, get_version_number,
-    message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security::{self as password, ApproveMode},
     sha2::{Digest, Sha256},
     sleep, timeout,
@@ -46,6 +44,11 @@ use hbb_common::{
         time::{self, Duration, Instant},
     },
     tokio_util::codec::{BytesCodec, Framed},
+};
+use base::{
+    config::keys,
+    fs::{self, can_enable_overwrite_detection, JobType},
+    message_proto::{option_message::BoolOption, permission_info::Permission},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
@@ -5980,7 +5983,7 @@ impl Connection {
             "Process clipboard message from clip, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
             stop, is_stopping_allowed, file_transfer_enabled);
         if !stop {
-            use hbb_common::config::keys::OPTION_ONE_WAY_FILE_TRANSFER;
+            use base::config::keys::OPTION_ONE_WAY_FILE_TRANSFER;
             // Note: Code will not reach here if `crate::get_builtin_option(OPTION_ONE_WAY_FILE_TRANSFER) == "Y"` is true.
             // Because `file-clipboard` service will not be subscribed.
             // But we still check it here to keep the same logic to windows version in `ui_cm_interface.rs`.

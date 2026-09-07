@@ -15,7 +15,10 @@ use sciter::{
 };
 
 use hbb_common::{
-    allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
+    allow_err, log, rendezvous_proto::ConnType,
+};
+use base::{
+    fs::TransferJobMeta, message_proto::*,
 };
 
 use crate::{

@@ -17,6 +17,14 @@ const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
+use base::{
+    config::keys,
+    fs::{
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        DigestCheckResult, RemoveJobMeta,
+    },
+    message_proto::{permission_info::Permission, *},
+};
 #[cfg(any(
     target_os = "windows",
     all(target_os = "macos", feature = "unix-file-copy-paste")
@@ -28,12 +36,7 @@ use hbb_common::tokio::sync::mpsc::error::TryRecvError;
 use hbb_common::{
     allow_err,
     config::{self, LocalConfig, PeerConfig, TransferSerde},
-    fs::{
-        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
-        DigestCheckResult, RemoveJobMeta,
-    },
     get_time, log,
-    message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
     timeout,
@@ -2036,9 +2039,8 @@ impl<T: InvokeUiSession> Remote<T> {
                         #[cfg(target_os = "windows")]
                         Ok(file_transfer_send_request::FileType::Printer) => {
                             #[cfg(feature = "flutter")]
-                            let action = LocalConfig::get_option(
-                                config::keys::OPTION_PRINTER_INCOMING_JOB_ACTION,
-                            );
+                            let action =
+                                LocalConfig::get_option(keys::OPTION_PRINTER_INCOMING_JOB_ACTION);
                             #[cfg(not(feature = "flutter"))]
                             let action = "";
                             if action == "dismiss" {
@@ -2047,7 +2049,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 let id = fs::get_next_job_id();
                                 #[cfg(feature = "flutter")]
                                 let allow_auto_print = LocalConfig::get_bool_option(
-                                    config::keys::OPTION_PRINTER_ALLOW_AUTO_PRINT,
+                                    keys::OPTION_PRINTER_ALLOW_AUTO_PRINT,
                                 );
                                 #[cfg(not(feature = "flutter"))]
                                 let allow_auto_print = false;
@@ -2055,9 +2057,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                     let printer_name = if action == "" {
                                         "".to_string()
                                     } else {
-                                        LocalConfig::get_option(
-                                            config::keys::OPTION_PRINTER_SELECTED_NAME,
-                                        )
+                                        LocalConfig::get_option(keys::OPTION_PRINTER_SELECTED_NAME)
                                     };
                                     self.handler.printer_response(id, _s.path, printer_name);
                                 } else {
@@ -2123,7 +2123,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         .handle_screenshot_resp(response.sid, response.msg);
                 }
                 Some(message::Union::TerminalResponse(response)) => {
-                    use hbb_common::message_proto::terminal_response::Union;
+                    use base::message_proto::terminal_response::Union;
                     if let Some(Union::Opened(opened)) = &response.union {
                         if opened.success && !opened.service_id.is_empty() {
                             let mut lc = self.handler.lc.write().unwrap();
@@ -2347,14 +2347,10 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
-    async fn handle_cliprdr_msg(
-        &mut self,
-        clip: hbb_common::message_proto::Cliprdr,
-        _peer: &mut Stream,
-    ) {
+    async fn handle_cliprdr_msg(&mut self, clip: base::message_proto::Cliprdr, _peer: &mut Stream) {
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
-        if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
+        if let Some(base::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
             if self.client_conn_id
                 != clipboard::get_client_conn_id(&crate::flutter::get_cur_peer_id()).unwrap_or(0)
             {
@@ -2464,8 +2460,7 @@ impl<T: InvokeUiSession> Remote<T> {
         );
         self.video_threads.insert(display, video_thread);
         if self.video_threads.len() == 1 {
-            let auto_record =
-                LocalConfig::get_bool_option(config::keys::OPTION_ALLOW_AUTO_RECORD_OUTGOING);
+            let auto_record = LocalConfig::get_bool_option(keys::OPTION_ALLOW_AUTO_RECORD_OUTGOING);
             self.handler.lc.write().unwrap().record_state = auto_record;
             self.update_record_state();
         }

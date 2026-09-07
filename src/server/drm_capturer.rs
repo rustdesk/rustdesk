@@ -2,7 +2,8 @@
 // privileged export (open + grab the scanout dma-buf fd), the EGL detile / RGBA convert runs here.
 
 use crate::ipc::{connect_drm, Data, DrmDisplayInfo};
-use hbb_common::{anyhow::anyhow, bail, log, message_proto::DisplayInfo, tokio, ResultType};
+use hbb_common::{anyhow::anyhow, bail, log, tokio, ResultType};
+use base::message_proto::DisplayInfo;
 use scrap::drm_render::RenderConverter;
 use scrap::drmtap_dl::drmtap_dmabuf_desc;
 use scrap::{Frame, Pixfmt, PixelBuffer, TraitCapturer};
@@ -1581,7 +1582,7 @@ fn augment_with_wayland_geometry_from(
 /// earlier connector must never steal an exact name match from a later one.
 fn identity_matches(
     drm: &[DrmDisplayInfo],
-    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+    wl: &[base::platform::linux::WaylandDisplayInfo],
 ) -> Vec<Option<usize>> {
     let mut taken = vec![false; wl.len()];
     let mut matched: Vec<Option<usize>> = vec![None; drm.len()];
@@ -1621,7 +1622,7 @@ fn identity_matches(
 
 fn assign_wayland_outputs(
     drm: &[DrmDisplayInfo],
-    wl: &[hbb_common::platform::linux::WaylandDisplayInfo],
+    wl: &[base::platform::linux::WaylandDisplayInfo],
 ) -> Vec<Option<usize>> {
     let mut matched = identity_matches(drm, wl);
     let mut taken = vec![false; wl.len()];
@@ -2107,8 +2108,8 @@ mod drm_capturer_tests {
         y: i32,
         w: i32,
         h: i32,
-    ) -> hbb_common::platform::linux::WaylandDisplayInfo {
-        hbb_common::platform::linux::WaylandDisplayInfo {
+    ) -> base::platform::linux::WaylandDisplayInfo {
+        base::platform::linux::WaylandDisplayInfo {
             name: name.to_owned(),
             x,
             y,

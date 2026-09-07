@@ -7,16 +7,16 @@ use crate::{
     ui_interface::use_texture_render,
 };
 use async_trait::async_trait;
-use bytes::Bytes;
 #[cfg(all(target_os = "windows", not(feature = "flutter")))]
-use hbb_common::config::keys;
+use base::config::keys;
 #[cfg(not(feature = "flutter"))]
-use hbb_common::fs;
+use base::fs;
+use base::message_proto::*;
+use bytes::Bytes;
 use hbb_common::{
     allow_err,
     config::{Config, LocalConfig, PeerConfig},
     get_version_number, log,
-    message_proto::*,
     rendezvous_proto::ConnType,
     tokio::{
         self,
@@ -1666,7 +1666,7 @@ impl<T: InvokeUiSession> Session<T> {
         let to = std::env::temp_dir().join(format!("rustdesk_printer_{id}"));
         self.send(Data::SendFiles((
             id,
-            hbb_common::fs::JobType::Printer,
+            base::fs::JobType::Printer,
             path,
             to.to_string_lossy().to_string(),
             0,
@@ -1908,7 +1908,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         }
     }
 
-    fn swap_modifier_mouse(&self, msg: &mut hbb_common::protos::message::MouseEvent) {
+    fn swap_modifier_mouse(&self, msg: &mut base::protos::message::MouseEvent) {
         let allow_swap_key = self.get_toggle_option("allow_swap_key".to_string());
         if allow_swap_key {
             msg.modifiers = msg

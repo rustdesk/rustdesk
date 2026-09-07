@@ -7,10 +7,11 @@ use std::{
 #[cfg(not(any(target_os = "ios")))]
 use crate::{ui_interface::get_builtin_option, Connection};
 use hbb_common::{
-    config::{self, keys, Config, LocalConfig},
+    config::{self, Config, LocalConfig},
     log,
     tokio::{self, sync::broadcast, time::Instant},
 };
+use base::config::keys;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

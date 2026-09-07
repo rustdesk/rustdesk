@@ -13,10 +13,9 @@ use crate::{EncodeInput, EncodeYuvFormat, Pixfmt};
 use hbb_common::{
     anyhow::{anyhow, Context},
     bytes::Bytes,
-    log,
-    message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
-    ResultType,
+    log, ResultType,
 };
+use base::message_proto::{Chroma, EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use std::{ptr, slice};
 
 generate_call_macro!(call_aom, false);

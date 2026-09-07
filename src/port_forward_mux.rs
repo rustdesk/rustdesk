@@ -1,7 +1,6 @@
 use hbb_common::{
     bytes::Bytes,
     log,
-    message_proto::*,
     tokio::{
         self,
         io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -10,6 +9,7 @@ use hbb_common::{
     },
     ResultType,
 };
+use base::message_proto::*;
 use std::sync::{Arc, Mutex};
 
 /// On the wire and fixed forever: what the controller may have in flight on a
@@ -892,7 +892,7 @@ mod tests {
 
     #[test]
     fn frame_builders_set_the_expected_union_variant() {
-        use hbb_common::message_proto::{message, port_forward_channel};
+        use base::message_proto::{message, port_forward_channel};
         let m = data_msg(7, Bytes::from_static(b"abc"));
         match m.union {
             Some(message::Union::PortForwardChannel(ch)) => match ch.union {
@@ -917,7 +917,7 @@ mod tests {
         }
     }
 
-    use hbb_common::message_proto::{message, port_forward_channel};
+    use base::message_proto::{message, port_forward_channel};
     use hbb_common::tokio::{self, io::AsyncReadExt, io::AsyncWriteExt, sync::mpsc};
     use std::sync::{Arc, Mutex};
 

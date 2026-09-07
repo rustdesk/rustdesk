@@ -60,10 +60,8 @@ pub(super) fn validate_file_name(name: &str) -> Result<(), CliprdrError> {
             description: "clipboard file name is not a normalized relative path".to_string(),
         });
     }
-    hbb_common::fs::validate_file_name_no_traversal(name).map_err(|error| {
-        CliprdrError::InvalidRequest {
-            description: error.to_string(),
-        }
+    base::fs::validate_file_name_no_traversal(name).map_err(|error| CliprdrError::InvalidRequest {
+        description: error.to_string(),
     })
 }
 

@@ -1,6 +1,6 @@
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
-pub use hbb_common::platform::linux::*;
+pub use base::platform::linux::*;
 
 #[cfg(feature = "drm")]
 pub fn dispatch_wayland_display_probe() {
@@ -17,10 +17,10 @@ use hbb_common::{
     config::Config,
     libc::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     log,
-    message_proto::{DisplayInfo, Resolution},
     regex::{Captures, Regex},
     users::{get_user_by_name, os::unix::UserExt},
 };
+use base::message_proto::{DisplayInfo, Resolution};
 use libxdo_sys::{self, xdo_t, Window};
 use std::{
     cell::RefCell,
@@ -64,7 +64,7 @@ lazy_static::lazy_static! {
     /// serve but the DRM path can. Unmemoised lookup on purpose: this may run mid-boot, and
     /// a "no" cached that early would be wrong for the rest of the process.
     pub static ref IS_X11: bool = {
-        let x11 = hbb_common::platform::linux::is_x11_or_headless();
+        let x11 = base::platform::linux::is_x11_or_headless();
         #[cfg(feature = "drm")]
         {
             if x11 && !display_server_forced() && is_login_screen_wayland() {

@@ -1076,7 +1076,7 @@ fn get_recorder(
 
 #[cfg(target_os = "android")]
 fn check_change_scale(hardware: bool) -> ResultType<()> {
-    use hbb_common::config::keys::OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
+    use base::config::keys::OPTION_ENABLE_ANDROID_SOFTWARE_ENCODING_HALF_SCALE as SCALE_SOFT;
 
     // isStart flag is set at the end of startCapture() in Android, wait it to be set.
     let n = 60; // 3s

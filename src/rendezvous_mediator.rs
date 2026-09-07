@@ -14,9 +14,7 @@ use uuid::Uuid;
 use hbb_common::{
     allow_err,
     anyhow::{self, bail},
-    config::{
-        self, keys::*, option2bool, use_ws, Config, CONNECT_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT,
-    },
+    config::{self, option2bool, use_ws, Config, CONNECT_TIMEOUT, REG_INTERVAL, RENDEZVOUS_PORT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -32,6 +30,7 @@ use hbb_common::{
     webrtc::WebRTCStream,
     AddrMangle, IntoTargetAddr, ResultType, Stream, TargetAddr,
 };
+use base::config::keys::*;
 
 use crate::{
     check_port,

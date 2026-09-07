@@ -8,18 +8,24 @@
 * `src/platform/` platform-specific code
 * `src/ui/` legacy Sciter UI (deprecated)
 * `flutter/` current UI
-* `libs/hbb_common/` config / proto / shared utils
+* `libs/hbb_common/` shared with the server: rendezvous proto, sockets, `Config` core
+* `libs/base/` (crate `base`) client-only: option keys, message proto, file transfer, platform code
 * `libs/scrap/` screen capture
 * `libs/enigo/` input control
 * `libs/clipboard/` clipboard
-* `libs/hbb_common/src/config.rs` all options
+* `libs/base/src/config/keys.rs` the single import path for all options
 
 ### Key Components
 - **Remote Desktop Protocol**: Custom protocol implemented in `src/rendezvous_mediator.rs` for communicating with rustdesk-server
 - **Screen Capture**: Platform-specific screen capture in `libs/scrap/`
 - **Input Handling**: Cross-platform input simulation in `libs/enigo/`
 - **Audio/Video Services**: Real-time audio/video streaming in `src/server/`
-- **File Transfer**: Secure file transfer implementation in `libs/hbb_common/`
+- **File Transfer**: Secure file transfer implementation in `libs/base/src/fs.rs`
+
+`hbb_common` is a git submodule shared with the server, so changing it costs a
+round-trip. Put client-only code in `libs/base` instead; it is a normal
+workspace member. `base::config::keys` re-exports the handful of keys
+`hbb_common` still reads, so callers get the whole set from that one path.
 
 ### UI Architecture
 - **Legacy UI**: Sciter-based (deprecated) - files in `src/ui/`

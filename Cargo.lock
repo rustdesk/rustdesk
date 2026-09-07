@@ -649,6 +649,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "base"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "backtrace",
+ "bytes",
+ "filetime",
+ "hbb_common",
+ "lazy_static",
+ "libc",
+ "log",
+ "osascript",
+ "protobuf",
+ "protobuf-codegen",
+ "serde 1.0.228",
+ "serde_derive",
+ "serde_json 1.0.118",
+ "smithay-client-toolkit 0.20.0",
+ "tokio",
+ "users",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1251,6 +1275,7 @@ checksum = "a1d728cc89cf3aee9ff92b05e62b19ee65a02b5702cff7d5a377e32c6ae29d8d"
 name = "clipboard"
 version = "0.1.0"
 dependencies = [
+ "base",
  "cacao",
  "cc",
  "dashmap 5.5.3",
@@ -2477,6 +2502,7 @@ dependencies = [
 name = "enigo"
 version = "0.0.14"
 dependencies = [
+ "base",
  "core-graphics 0.22.3",
  "hbb_common",
  "libxdo-sys",
@@ -3664,7 +3690,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-recursion",
- "backtrace",
  "base64 0.22.1",
  "bytes",
  "chrono",
@@ -3675,7 +3700,6 @@ dependencies = [
  "dirs-next",
  "dlopen",
  "env_logger 0.11.6",
- "filetime",
  "flexi_logger",
  "futures",
  "futures-util",
@@ -3686,7 +3710,6 @@ dependencies = [
  "log",
  "mac_address",
  "machine-uid",
- "osascript",
  "percent-encoding",
  "protobuf",
  "protobuf-codegen",
@@ -3699,7 +3722,6 @@ dependencies = [
  "serde_derive",
  "serde_json 1.0.118",
  "sha2",
- "smithay-client-toolkit 0.20.0",
  "socket2 0.3.19",
  "sodiumoxide",
  "sysinfo",
@@ -3718,7 +3740,6 @@ dependencies = [
  "webpki-roots 1.0.9",
  "webrtc",
  "whoami",
- "winapi 0.3.9",
  "x11 2.21.0",
  "zstd",
 ]
@@ -7076,6 +7097,7 @@ dependencies = [
  "arboard",
  "async-process",
  "async-trait",
+ "base",
  "bytemuck",
  "bytes",
  "cc",
@@ -7396,6 +7418,7 @@ name = "scrap"
 version = "0.5.0"
 dependencies = [
  "android_logger",
+ "base",
  "bindgen 0.72.1",
  "block",
  "cfg-if 1.0.0",

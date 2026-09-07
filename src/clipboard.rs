@@ -2,7 +2,8 @@
 use arboard::{ClipboardData, ClipboardFormat};
 #[cfg(target_os = "linux")]
 use arboard::{LinuxClipboardKind, SetExtLinux};
-use hbb_common::{bail, log, message_proto::*, ResultType};
+use hbb_common::{bail, log, ResultType};
+use base::message_proto::*;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -515,10 +516,10 @@ impl ClipboardContext {
                 // The host-side clear file clipboard `let _ = self.inner.clear();`,
                 // does not work on KDE Plasma for the installed version.
 
-                // Don't use `hbb_common::platform::linux::is_kde()` here.
+                // Don't use `base::platform::linux::is_kde()` here.
                 // It's not correct in the server process.
                 #[cfg(target_os = "linux")]
-                let is_kde_x11 = hbb_common::platform::linux::is_kde_session()
+                let is_kde_x11 = base::platform::linux::is_kde_session()
                     && crate::platform::linux::is_x11();
                 #[cfg(target_os = "macos")]
                 let is_kde_x11 = false;
@@ -581,7 +582,7 @@ pub fn get_current_clipboard_msg(
         multi_clipboards
             .clipboards
             .iter()
-            .find(|c| c.format.enum_value() == Ok(hbb_common::message_proto::ClipboardFormat::Text))
+            .find(|c| c.format.enum_value() == Ok(base::message_proto::ClipboardFormat::Text))
             .map(|c| {
                 let mut msg = Message::new();
                 msg.set_clipboard(c.clone());
@@ -629,8 +630,8 @@ mod proto {
     use arboard::ClipboardData;
     use hbb_common::{
         compress::{compress as compress_func, decompress},
-        message_proto::{Clipboard, ClipboardFormat, Message, MultiClipboards},
     };
+    use base::message_proto::{Clipboard, ClipboardFormat, Message, MultiClipboards};
 
     fn plain_to_proto(s: String, format: ClipboardFormat) -> Clipboard {
         let compressed = compress_func(s.as_bytes());

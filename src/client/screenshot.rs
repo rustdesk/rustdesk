@@ -1,6 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{update_clipboard, ClipboardSide};
-use hbb_common::{message_proto::*, ResultType};
+use base::message_proto::*;
+use hbb_common::ResultType;
 use std::sync::Mutex;
 
 lazy_static::lazy_static! {

@@ -3,11 +3,11 @@ use crate::{
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
+use base::message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame};
 use hbb_common::{
     anyhow::{anyhow, bail, Context},
     bytes::Bytes,
     log,
-    message_proto::{EncodedVideoFrame, EncodedVideoFrames, VideoFrame},
     serde_derive::{Deserialize, Serialize},
     serde_json, ResultType,
 };

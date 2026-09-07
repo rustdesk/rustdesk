@@ -2,7 +2,8 @@ use crate::{
     platform::unix::{FileDescription, FileType, BLOCK_SIZE},
     send_data, ClipboardFile, CliprdrError, ProgressPercent,
 };
-use hbb_common::{allow_err, fs::join_validated_path, log, tokio::time::Instant};
+use base::fs::join_validated_path;
+use hbb_common::{allow_err, log, tokio::time::Instant};
 use std::{
     cmp::min,
     fs::{File, FileTimes, OpenOptions},
