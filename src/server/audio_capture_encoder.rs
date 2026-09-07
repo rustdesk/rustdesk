@@ -1,5 +1,6 @@
 use super::{
-    send_f32, CaptureEncoderConfig, CaptureEncoderContext, CapturePcmLoss, CapturePcmReceiver,
+    send_f32, CaptureEncoderConfig, CaptureEncoderContext, CapturePcmReceiver, CapturePcmStats,
+    CAPTURE_PCM_QUEUE_PACKETS,
 };
 use hbb_common::log;
 use magnum_opus::Channels;
@@ -9,16 +10,17 @@ use std::{
 };
 
 const CAPTURE_DECLICK_MS: usize = 5;
+const CAPTURE_PACKET_MS: usize = 10;
 const MILLISECONDS_PER_SECOND: usize = 1_000;
 const MAX_ENCODE_CHANNELS: usize = Channels::Stereo as usize;
-const CAPTURE_LOSS_LOG_INTERVAL: Duration = Duration::from_secs(5);
+const CAPTURE_STATS_LOG_INTERVAL: Duration = Duration::from_secs(5);
 
 struct CaptureEncoderState {
     channels: usize,
     expected_sequence: usize,
     fade_frames: usize,
     last_frame: [f32; MAX_ENCODE_CHANNELS],
-    reporter: CaptureLossReporter,
+    reporter: CaptureStatsReporter,
 }
 
 impl CaptureEncoderState {
@@ -30,12 +32,12 @@ impl CaptureEncoderState {
             expected_sequence: 0,
             fade_frames,
             last_frame: [0.0; MAX_ENCODE_CHANNELS],
-            reporter: CaptureLossReporter::new(),
+            reporter: CaptureStatsReporter::new(),
         }
     }
 
     fn next_packet(&mut self, receiver: &CapturePcmReceiver) -> Option<Vec<f32>> {
-        self.reporter.record(receiver.take_loss());
+        self.reporter.record(receiver.take_stats());
         self.reporter.report(false);
         let (sequence, mut packet) = receiver.pop_packet()?;
         self.smooth_packet(sequence, &mut packet);
@@ -63,12 +65,12 @@ impl CaptureEncoderState {
     }
 }
 
-struct CaptureLossReporter {
-    pending: CapturePcmLoss,
+struct CaptureStatsReporter {
+    pending: CapturePcmStats,
     last_report: Instant,
 }
 
-impl CaptureLossReporter {
+impl CaptureStatsReporter {
     fn new() -> Self {
         Self {
             pending: Default::default(),
@@ -76,24 +78,32 @@ impl CaptureLossReporter {
         }
     }
 
-    fn record(&mut self, loss: CapturePcmLoss) {
-        self.pending.add(loss);
+    fn record(&mut self, stats: CapturePcmStats) {
+        self.pending.add(stats);
     }
 
     fn report(&mut self, force: bool) {
         if self.pending.is_empty() {
             return;
         }
-        if !force && self.last_report.elapsed() < CAPTURE_LOSS_LOG_INTERVAL {
+        if !force && self.last_report.elapsed() < CAPTURE_STATS_LOG_INTERVAL {
             return;
         }
-        let loss = std::mem::take(&mut self.pending);
-        log::warn!(
-            "Audio capture PCM handoff loss: dropped={}, oversized={}, recycle_failures={}",
-            loss.dropped,
-            loss.oversized,
-            loss.recycle_failures
+        let stats = std::mem::take(&mut self.pending);
+        log::debug!(
+            "Audio capture PCM handoff stats: observed_max_queued_packets={}, approx_queued_audio_ms={}, capacity_packets={}",
+            stats.max_queued_packets,
+            stats.max_queued_packets.saturating_mul(CAPTURE_PACKET_MS),
+            CAPTURE_PCM_QUEUE_PACKETS
         );
+        if !stats.loss.is_empty() {
+            log::warn!(
+                "Audio capture PCM handoff loss: dropped={}, oversized={}, recycle_failures={}",
+                stats.loss.dropped,
+                stats.loss.oversized,
+                stats.loss.recycle_failures
+            );
+        }
         self.last_report = Instant::now();
     }
 }
@@ -109,11 +119,11 @@ pub(super) fn run_capture_encoder(
             context.receiver.recycle(packet);
         }
         if context.stop.load(Ordering::Acquire) && context.receiver.is_empty() {
-            state.reporter.record(context.receiver.take_loss());
+            state.reporter.record(context.receiver.take_stats());
             state.reporter.report(true);
             return;
         }
-        std::thread::park_timeout(CAPTURE_LOSS_LOG_INTERVAL);
+        std::thread::park_timeout(CAPTURE_STATS_LOG_INTERVAL);
     }
 }
 

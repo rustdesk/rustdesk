@@ -163,7 +163,7 @@ fn capture_loss_is_reported_while_packets_remain_queued() {
     let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
     let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
     let mut state = CaptureEncoderState::new(SAMPLE_RATE, Channels::Mono);
-    let before_report = Instant::now() - CAPTURE_LOSS_LOG_INTERVAL;
+    let before_report = Instant::now() - CAPTURE_STATS_LOG_INTERVAL;
     state.reporter.last_report = before_report;
     let packet = vec![ACTIVE_LEVEL; samples];
     for _ in 0..=CAPACITY {
@@ -175,4 +175,20 @@ fn capture_loss_is_reported_while_packets_remain_queued() {
     assert!(state.reporter.pending.is_empty());
     assert!(receiver.take_loss().is_empty());
     receiver.recycle(packet);
+}
+
+#[test]
+fn capture_queue_reports_its_high_water_mark() {
+    const CAPACITY: usize = 3;
+    let samples = SAMPLE_RATE as usize / PACKETS_PER_SECOND;
+    let (mut sender, receiver) = new_pcm_handoff(CAPACITY, samples).unwrap();
+    let packet = vec![ACTIVE_LEVEL; samples];
+    for _ in 0..CAPACITY {
+        sender.submit(&packet);
+    }
+
+    let stats = receiver.take_stats();
+
+    assert_eq!(stats.max_queued_packets, CAPACITY);
+    assert!(stats.loss.is_empty());
 }

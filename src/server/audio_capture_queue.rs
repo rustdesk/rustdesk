@@ -38,6 +38,23 @@ impl CapturePcmLoss {
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct CapturePcmStats {
+    pub(super) loss: CapturePcmLoss,
+    pub(super) max_queued_packets: usize,
+}
+
+impl CapturePcmStats {
+    pub(super) fn is_empty(&self) -> bool {
+        self.loss.is_empty() && self.max_queued_packets == 0
+    }
+
+    pub(super) fn add(&mut self, other: Self) {
+        self.loss.add(other.loss);
+        self.max_queued_packets = self.max_queued_packets.max(other.max_queued_packets);
+    }
+}
+
 struct CapturePcmHandoff {
     available: ArrayQueue<Vec<f32>>,
     ready: ArrayQueue<(usize, Vec<f32>)>,
@@ -45,6 +62,7 @@ struct CapturePcmHandoff {
     dropped: AtomicUsize,
     oversized: AtomicUsize,
     recycle_failures: AtomicUsize,
+    max_queued_packets: AtomicUsize,
     max_samples: usize,
 }
 
@@ -116,6 +134,7 @@ pub(super) fn new_pcm_handoff(
         dropped: AtomicUsize::new(0),
         oversized: AtomicUsize::new(0),
         recycle_failures: AtomicUsize::new(0),
+        max_queued_packets: AtomicUsize::new(0),
         max_samples,
     });
     initialize_buffers(&handoff, capacity, max_samples)?;
@@ -174,6 +193,10 @@ impl CapturePcmSender {
                 .recycle_failures
                 .fetch_add(1, Ordering::Relaxed);
             self.spare = Some(buffer);
+        } else {
+            self.handoff
+                .max_queued_packets
+                .fetch_max(self.handoff.ready.len(), Ordering::Relaxed);
         }
         self.wake();
     }
@@ -226,6 +249,13 @@ impl CapturePcmReceiver {
             dropped: self.handoff.dropped.swap(0, Ordering::Relaxed),
             oversized: self.handoff.oversized.swap(0, Ordering::Relaxed),
             recycle_failures: self.handoff.recycle_failures.swap(0, Ordering::Relaxed),
+        }
+    }
+
+    pub(super) fn take_stats(&self) -> CapturePcmStats {
+        CapturePcmStats {
+            loss: self.take_loss(),
+            max_queued_packets: self.handoff.max_queued_packets.swap(0, Ordering::Relaxed),
         }
     }
 }
