@@ -187,6 +187,222 @@ fn transform_and_origin(
     (transform, origin)
 }
 
+// The kernel only exposes a cursor hotspot on DRIVER_CURSOR_HOTSPOT drivers (VMs), so on real
+// hardware the wire carries the reader's bounding-box guess - wrong by half a glyph for a wide
+// center-hotspot shape like the horizontal resize arrow, which the client then draws visibly
+// off target. But `plane_origin = pointer_tip - hotspot`, this process INJECTS the tip itself,
+// and the plane position rides every frame: once both sit still, the difference IS the hotspot,
+// measured rather than guessed.
+
+/// The plane must hold one position this many consecutive frames before it counts as settled.
+const CURSOR_CAL_STABLE_TICKS: u32 = 3;
+/// Measurement attempts run for this many frames (~1 s) after a settle, then stop until the
+/// plane moves again or fresh peer input reopens one window.
+const CURSOR_CAL_WINDOW_TICKS: u32 = 30;
+/// Corrections within this many px of what the client already renders are jitter, not news:
+/// the peer coordinate is quantized to LOGICAL px, so at a fractional scale the measurement
+/// legitimately wobbles +/- ceil(scale) physical px between windows, and re-publishing inside
+/// that band would only mint ids and churn the client's shape caches.
+const CURSOR_CAL_TOLERANCE: i32 = 2;
+/// The last injected move must be at least this old (the compositor has consumed it) ...
+const CURSOR_CAL_MIN_INPUT_AGE_MS: i64 = 150;
+/// ... and at most this old: on a seated box a LOCAL user may have moved the pointer since the
+/// peer last did, and the stale injected point would calibrate garbage.
+const CURSOR_CAL_MAX_INPUT_AGE_MS: i64 = 10_000;
+
+/// Measured hotspots per WIRE cursor id: a shape the compositor re-uses (arrow -> beam ->
+/// arrow) keeps its id, so it is corrected again from its first frame. Bounded by wholesale
+/// clearing; ids churn on theme/size changes, and re-measuring is cheap.
+static CURSOR_CAL_CACHE: Mutex<BTreeMap<u64, (i32, i32)>> = Mutex::new(BTreeMap::new());
+const CURSOR_CAL_CACHE_CAP: usize = 64;
+
+fn cached_cursor_cal(wire_id: u64) -> Option<(i32, i32)> {
+    CURSOR_CAL_CACHE.lock().unwrap().get(&wire_id).copied()
+}
+
+fn store_cursor_cal(wire_id: u64, h: (i32, i32)) {
+    let mut cache = CURSOR_CAL_CACHE.lock().unwrap();
+    if cache.len() >= CURSOR_CAL_CACHE_CAP && !cache.contains_key(&wire_id) {
+        cache.clear();
+    }
+    cache.insert(wire_id, h);
+}
+
+/// Domain-separated from the reader's FNV fold, so a corrected id cannot collide with a wire id
+/// and the client's shape cache treats the corrected cursor as new.
+fn remix_cursor_id(wire_id: u64, hotx: i32, hoty: i32) -> u64 {
+    let mut id = wire_id ^ 0x9e37_79b9_7f4a_7c15;
+    for v in [hotx as u32 as u64, hoty as u32 as u64] {
+        id ^= v;
+        id = id.wrapping_mul(1099511628211);
+    }
+    id
+}
+
+/// Measure the hotspot, or say why not: kernel truth is never overridden, the plane and the
+/// injected point must both be settled, and the answer must lie inside the bitmap (anything
+/// else is a race, an edge clip, or a local user having moved the pointer). Pure, so every gate
+/// is testable.
+///
+/// SPACES, measured on a kwin panel at scale 1.45: the peer injects in the ADVERTISED layout
+/// (`get_display_rects_for_uinput` - logical px on a multi-display session), while the plane is
+/// PHYSICAL scanout px of one CRTC. The point is first required to fall inside this display's
+/// advertised rect (otherwise the cursor is on another monitor and that stream calibrates), then
+/// scaled into scanout space; only then is the plane subtracted. On a scale-1 single display the
+/// mapping degenerates to a plain subtraction.
+fn calibrated_hotspot(
+    hot_from_property: bool,
+    dims: (i32, i32),
+    injected: Option<((i32, i32), i64)>,
+    advertised_rect: (i32, i32, i32, i32),
+    physical_size: (i32, i32),
+    plane: (i32, i32),
+    plane_stable_ticks: u32,
+) -> Option<(i32, i32)> {
+    if hot_from_property || plane_stable_ticks < CURSOR_CAL_STABLE_TICKS {
+        return None;
+    }
+    let ((ix, iy), age_ms) = injected?;
+    if !(CURSOR_CAL_MIN_INPUT_AGE_MS..=CURSOR_CAL_MAX_INPUT_AGE_MS).contains(&age_ms) {
+        return None;
+    }
+    let (ax, ay, aw, ah) = advertised_rect;
+    if aw <= 0 || ah <= 0 || physical_size.0 <= 0 || physical_size.1 <= 0 {
+        return None;
+    }
+    if ix < ax || ix >= ax + aw || iy < ay || iy >= ay + ah {
+        return None;
+    }
+    let tipx = ((ix - ax) as f64 * physical_size.0 as f64 / aw as f64).round() as i32;
+    let tipy = ((iy - ay) as f64 * physical_size.1 as f64 / ah as f64).round() as i32;
+    let h = (tipx - plane.0, tipy - plane.1);
+    if h.0 < 0 || h.1 < 0 || h.0 >= dims.0 || h.1 >= dims.1 {
+        return None;
+    }
+    Some(h)
+}
+
+
+#[cfg(test)]
+mod cursor_calibration_tests {
+    use super::*;
+
+    const DIMS: (i32, i32) = (32, 32);
+    const SETTLED: Option<((i32, i32), i64)> = Some(((500, 300), 400));
+    // A scale-1 single display: advertised rect == scanout.
+    const RECT1: (i32, i32, i32, i32) = (0, 0, 1920, 1080);
+    const PHYS1: (i32, i32) = (1920, 1080);
+
+    #[test]
+    fn a_settled_pointer_and_plane_yield_the_difference() {
+        // Plane origin at (488, 288), tip injected at (500, 300): hotspot (12, 12).
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 3),
+            Some((12, 12))
+        );
+    }
+
+    #[test]
+    fn a_scaled_display_maps_the_injected_point_into_scanout_space() {
+        // The T2 measurement that found the space mismatch: kwin panel 2880x1800 advertised
+        // as 1986x1241 (scale ~1.4502). inj (1643, 577) -> tip (2383, 837); plane (2357, 814)
+        // under a resize glyph whose real hotspot is its center.
+        assert_eq!(
+            calibrated_hotspot(
+                false,
+                (128, 128),
+                Some(((1643, 577), 400)),
+                (0, 0, 1986, 1241),
+                (2880, 1800),
+                (2357, 814),
+                3
+            ),
+            Some((26, 23))
+        );
+    }
+
+    #[test]
+    fn a_point_on_another_display_is_not_this_streams_to_measure() {
+        // The advertised rect of THIS display starts at x=1920; the peer sits left of it.
+        assert_eq!(
+            calibrated_hotspot(
+                false,
+                DIMS,
+                SETTLED,
+                (1920, 0, 1920, 1080),
+                PHYS1,
+                (488, 288),
+                3
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_degenerate_advertised_rect_measures_nothing() {
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, (0, 0, 0, 0), PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn kernel_truth_is_never_overridden() {
+        assert_eq!(
+            calibrated_hotspot(true, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn an_unsettled_plane_is_not_measured() {
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, SETTLED, RECT1, PHYS1, (488, 288), 2),
+            None
+        );
+    }
+
+    #[test]
+    fn input_too_fresh_or_too_stale_is_rejected() {
+        let fresh = Some(((500, 300), 50));
+        let stale = Some(((500, 300), 60_000));
+        assert_eq!(calibrated_hotspot(false, DIMS, fresh, RECT1, PHYS1, (488, 288), 3), None);
+        assert_eq!(calibrated_hotspot(false, DIMS, stale, RECT1, PHYS1, (488, 288), 3), None);
+        assert_eq!(calibrated_hotspot(false, DIMS, None, RECT1, PHYS1, (488, 288), 3), None);
+    }
+
+    #[test]
+    fn an_answer_outside_the_bitmap_is_a_race_not_a_hotspot() {
+        // Injected point far from the plane (a local user moved the mouse).
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, Some(((900, 300), 400)), RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+        // Negative: plane ahead of the injected point.
+        assert_eq!(
+            calibrated_hotspot(false, DIMS, Some(((480, 300), 400)), RECT1, PHYS1, (488, 288), 3),
+            None
+        );
+    }
+
+    #[test]
+    fn a_corrected_id_differs_from_the_wire_id_and_is_deterministic() {
+        let wire = 0xabcdef0123456789u64;
+        let a = remix_cursor_id(wire, 12, 12);
+        assert_ne!(a, wire);
+        assert_eq!(a, remix_cursor_id(wire, 12, 12));
+        assert_ne!(a, remix_cursor_id(wire, 13, 12));
+    }
+
+    #[test]
+    fn the_calibration_cache_is_bounded() {
+        for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
+            store_cursor_cal(i, (1, 1));
+        }
+        assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
+    }
+}
+
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
 fn display_info_of(display: i32) -> Option<DrmDisplayInfo> {
     match &*DRM_STATE.lock().unwrap() {
