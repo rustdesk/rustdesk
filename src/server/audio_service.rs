@@ -172,6 +172,10 @@ pub fn is_screen_capture_kit_available() -> bool {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[path = "audio_capture.rs"]
+mod audio_capture;
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
     use super::*;
@@ -179,11 +183,9 @@ mod cpal_impl {
         traits::{DeviceTrait, HostTrait, StreamTrait},
         Device, Host, InputCallbackInfo, SupportedStreamConfig,
     };
-    use std::borrow::Cow;
 
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
-        static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
     }
 
     const AUDIO_PACKETS_PER_SECOND: usize = 100;
@@ -257,6 +259,7 @@ mod cpal_impl {
         resampler: Option<crate::audio_resampler::FixedFrameAudioResampler>,
         encoder: Encoder,
         sp: GenericService,
+        rechannel_buffer: Vec<f32>,
     }
 
     struct CaptureStreamOutput {
@@ -289,39 +292,33 @@ mod cpal_impl {
                 resampler,
                 encoder,
                 sp,
+                rechannel_buffer: Vec::with_capacity(
+                    capture_packet_layout(config.output_rate, config.encode_channel)?.1,
+                ),
             })
         }
 
         fn process(&mut self, data: &[f32]) -> ResultType<()> {
+            let config = self.config;
+            let encoder = &mut self.encoder;
+            let sp = &self.sp;
+            let rechannel_buffer = &mut self.rechannel_buffer;
+            let mut send_packet = |packet: &[f32]| {
+                let packet =
+                    audio_capture::rechannel(packet, config.device_channel, rechannel_buffer);
+                send_f32(packet, encoder, sp);
+            };
             if let Some(resampler) = self.resampler.as_mut() {
-                let packets = resampler.process(data).with_context(|| {
+                resampler.process_with(data, send_packet).with_context(|| {
                     format!(
                         "Failed to resample captured audio from {} Hz to {} Hz",
-                        self.config.input_rate, self.config.output_rate
+                        config.input_rate, config.output_rate
                     )
                 })?;
-                for packet in packets {
-                    self.send_ready(Cow::Owned(packet));
-                }
-                return Ok(());
-            }
-            self.send_ready(Cow::Borrowed(data));
-            Ok(())
-        }
-
-        fn send_ready(&mut self, data: Cow<'_, [f32]>) {
-            let data = if self.config.device_channel == self.config.encode_channel {
-                data
             } else {
-                Cow::Owned(crate::common::audio_rechannel(
-                    data.into_owned(),
-                    self.config.output_rate,
-                    self.config.output_rate,
-                    self.config.device_channel,
-                    self.config.encode_channel,
-                ))
-            };
-            send_f32(&data, &mut self.encoder, &self.sp);
+                send_packet(data);
+            }
+            Ok(())
         }
     }
 
@@ -336,21 +333,6 @@ mod cpal_impl {
             )
         })?;
         Ok((frames, samples))
-    }
-
-    fn take_input_frame(
-        buffer: &Mutex<std::collections::VecDeque<f32>>,
-        frame: &mut [f32],
-    ) -> bool {
-        let mut buffer = buffer.lock().unwrap();
-        let frame_samples = frame.len();
-        if buffer.len() < frame_samples {
-            return false;
-        }
-        for (sample, value) in frame.iter_mut().zip(buffer.drain(..frame_samples)) {
-            *sample = value;
-        }
-        true
     }
 
     #[cfg(feature = "screencapturekit")]
@@ -512,7 +494,7 @@ mod cpal_impl {
         }
         let device_channel = config.channels();
         let (_, capture_frame_samples) = capture_packet_layout(sample_rate_0, device_channel)?;
-        let mut frame = vec![0.0; capture_frame_samples];
+        let mut frame = audio_capture::CaptureFrameBuffer::new(capture_frame_samples)?;
         let encoder = Encoder::new(output.sample_rate, output.encode_channel, LowDelay)?;
         let processor_config = CaptureFrameProcessorConfig {
             input_rate: sample_rate_0,
@@ -522,20 +504,15 @@ mod cpal_impl {
         };
         let mut processor =
             CaptureFrameProcessor::new(processor_config, encoder, output.service)?;
-        INPUT_BUFFER.lock().unwrap().clear();
         let timeout = None;
         let stream = device.build_input_stream(
             &config.config(),
             move |data: &[T], _: &InputCallbackInfo| {
-                INPUT_BUFFER
-                    .lock()
-                    .unwrap()
-                    .extend(convert_input_samples(data));
-                while take_input_frame(&INPUT_BUFFER, &mut frame) {
-                    if let Err(error) = processor.process(&frame) {
+                frame.process(convert_input_samples(data), |frame| {
+                    if let Err(error) = processor.process(frame) {
                         log::error!("Failed to process captured audio frame: {error:#}");
                     }
-                }
+                });
             },
             err_fn,
             timeout,
@@ -545,7 +522,7 @@ mod cpal_impl {
 
     #[cfg(test)]
     mod tests {
-        use super::{capture_packet_layout, convert_input_samples, take_input_frame};
+        use super::{capture_packet_layout, convert_input_samples};
 
         const INVALID_CAPTURE_RATE: u32 = 99;
         const RATE_48_KHZ: u32 = 48_000;
@@ -554,10 +531,6 @@ mod cpal_impl {
         const POSITIVE_FULL_SCALE_LIMIT: f32 = 0.99;
         const STEREO_CHANNELS: u16 = 2;
         const ZERO_CHANNELS: u16 = 0;
-        const CAPTURE_FRAME_SAMPLES: usize = 4;
-        const FIRST_CAPTURE_INPUT: [f32; 6] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
-        const SECOND_CAPTURE_INPUT: [f32; 2] = [0.7, 0.8];
-        const SECOND_CAPTURE_FRAME: [f32; CAPTURE_FRAME_SAMPLES] = [0.5, 0.6, 0.7, 0.8];
 
         #[test]
         fn capture_sample_conversion_uses_cpal_traits() {
@@ -579,24 +552,6 @@ mod cpal_impl {
             );
             assert!(capture_packet_layout(INVALID_CAPTURE_RATE, MONO_CHANNELS).is_err());
             assert!(capture_packet_layout(RATE_48_KHZ, ZERO_CHANNELS).is_err());
-        }
-
-        #[test]
-        fn capture_draining_retains_partial_frames() {
-            let input =
-                std::sync::Mutex::new(std::collections::VecDeque::from(FIRST_CAPTURE_INPUT));
-            let mut frame = [0.0; CAPTURE_FRAME_SAMPLES];
-
-            assert!(take_input_frame(&input, &mut frame));
-            assert_eq!(frame, FIRST_CAPTURE_INPUT[..CAPTURE_FRAME_SAMPLES]);
-            assert!(!take_input_frame(&input, &mut frame));
-            assert_eq!(frame, FIRST_CAPTURE_INPUT[..CAPTURE_FRAME_SAMPLES]);
-
-            input.lock().unwrap().extend(SECOND_CAPTURE_INPUT);
-            assert!(take_input_frame(&input, &mut frame));
-            assert_eq!(frame, SECOND_CAPTURE_FRAME);
-            assert!(input.lock().unwrap().is_empty());
-            assert!(!take_input_frame(&input, &mut frame));
         }
     }
 }
