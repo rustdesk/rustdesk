@@ -2084,19 +2084,7 @@ class InputModel {
     if (isViewCamera) return PointerEventSendResult.droppedTransient;
     double x = offset.dx;
     double y = offset.dy;
-    if (type == kMouseEventTypePanUpdate) {
-      // A pan_update payload is a scroll delta, not a canvas position:
-      // _checkPeerControlProtected unconditionally writes its arguments into
-      // the shared lastMousePos (even when the check passes), which would
-      // pollute the mouse path's coordinate state and make the
-      // distance-based control arbitration always pass for deltas. Honor
-      // only the hard protection flag here — the pan_start already ran the
-      // full check with a real position.
-      if (parent.target!.cursorModel.isPeerControlProtected) {
-        return PointerEventSendResult.droppedProtected;
-      }
-    } else if (_checkPeerControlProtected(
-        checkPos?.dx ?? x, checkPos?.dy ?? y)) {
+    if (_checkPeerControlProtected(checkPos?.dx ?? x, checkPos?.dy ?? y)) {
       return PointerEventSendResult.droppedProtected;
     }
     // Only touch events are handled for now. So we can just ignore buttons.
