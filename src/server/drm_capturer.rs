@@ -708,7 +708,12 @@ async fn recv_thread(
                     break format!("frame ack: {err}");
                 }
             }
-            Data::DrmFrame { width, height } => {
+            Data::DrmFrame {
+                width,
+                height,
+                cursor_pos,
+            } => {
+                let _ = cursor_pos;
                 // `frame()` hands this to PixelBuffer::new, which derives the stride as
                 // `data.len() / height`: height==0 would DIVIDE BY ZERO.
                 if width == 0 || height == 0 {
