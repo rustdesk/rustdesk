@@ -531,6 +531,64 @@ class _RawTouchGestureDetectorRegionState
         };
 
   makeGestures(BuildContext context) {
+    if (isDesktop || isWebDesktop) {
+      return <Type, GestureRecognizerFactory>{
+        TapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                () => TapGestureRecognizer(), (instance) {
+          instance
+            ..onTapDown = onTapDown
+            ..onTapUp = onTapUp
+            ..onTap = onTap;
+        }),
+        DoubleTapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+                () => DoubleTapGestureRecognizer(), (instance) {
+          instance
+            ..onDoubleTapDown = onDoubleTapDown
+            ..onDoubleTap = onDoubleTap;
+        }),
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(), (instance) {
+          instance
+            ..onLongPressDown = onLongPressDown
+            ..onLongPressUp = onLongPressUp
+            ..onLongPress = onLongPress
+            ..onLongPressMoveUpdate = onLongPressMoveUpdate;
+        }),
+        HoldTapMoveGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<HoldTapMoveGestureRecognizer>(
+                () => HoldTapMoveGestureRecognizer(),
+                (instance) => instance
+                  ..onHoldDragStart = onHoldDragStart
+                  ..onHoldDragUpdate = onHoldDragUpdate
+                  ..onHoldDragCancel = onHoldDragCancel
+                  ..onHoldDragEnd = onHoldDragEnd),
+        DoubleFinerTapGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<DoubleFinerTapGestureRecognizer>(
+                () => DoubleFinerTapGestureRecognizer(), (instance) {
+          instance
+            ..onDoubleFinerTap = onDoubleFinerTap
+            ..onDoubleFinerTapDown = onDoubleFinerTapDown;
+        }),
+        CustomTouchGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<CustomTouchGestureRecognizer>(
+                () => CustomTouchGestureRecognizer(), (instance) {
+          instance.onOneFingerPanStart =
+              (DragStartDetails d) => onOneFingerPanStart(context, d);
+          instance
+            ..onOneFingerPanUpdate = onOneFingerPanUpdate
+            ..onOneFingerPanEnd = onOneFingerPanEnd
+            ..onOneFingerPanCancel = onOneFingerPanCancel
+            ..onTwoFingerScaleStart = onTwoFingerScaleStart
+            ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
+            ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
+            ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+        }),
+      };
+    }
+
     final isPhysical = inputModel.isPhysicalPointerDeviceId;
     return <Type, GestureRecognizerFactory>{
       // Official
