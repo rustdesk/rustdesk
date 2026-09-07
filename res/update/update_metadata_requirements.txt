@@ -1,0 +1,7 @@
+# Locked for the CPython 3.12 Linux x86_64 release-signing runner.
+cryptography==50.0.0 \
+    --hash=sha256:82148ec5bddac30b51a5b3c1945075f896fa022cb93f8e4a01e9f6ee95292c5f
+cffi==2.1.0 \
+    --hash=sha256:1e9f50d192a3e525b15a75ab5114e442d83d657b7ec29182a991bc9a88fd3a66
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
