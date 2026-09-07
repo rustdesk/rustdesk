@@ -7225,6 +7225,7 @@ dependencies = [
  "lazy_static",
  "libpulse-binding",
  "libpulse-simple-binding",
+ "libsamplerate-sys",
  "libxdo-sys",
  "mac_address",
  "magnum-opus",
