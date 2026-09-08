@@ -248,6 +248,13 @@ pub fn wayland_failure_stamped() -> bool {
     LAST_FAILED_LOOKUP.lock().unwrap().is_some()
 }
 
+/// The cached snapshot, or `None` if nothing has been enumerated yet. Unlike `get_displays` this
+/// NEVER enumerates, so it cannot block or fork: a caller that must not stall reads this and
+/// declines on `None`.
+pub fn cached_displays() -> Option<Arc<Displays>> {
+    DISPLAYS.lock().unwrap().clone()
+}
+
 pub fn get_displays() -> Arc<Displays> {
     let mut lock = DISPLAYS.lock().unwrap();
     match lock.as_ref() {

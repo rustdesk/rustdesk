@@ -152,6 +152,12 @@ pub(crate) fn wayland_layout_drifted() -> bool {
     WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed)
 }
 
+/// Test-only: flip the drift flag directly. Production writes it from the layout poll alone.
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+pub(crate) fn test_set_layout_drifted(v: bool) {
+    WAYLAND_LAYOUT_DRIFTED.store(v, Ordering::Relaxed);
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);

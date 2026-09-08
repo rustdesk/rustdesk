@@ -63,6 +63,9 @@ struct Shared {
     // Session transform, TRANSFORM_PENDING until new() stores it post-handshake; the receive
     // thread turns cursor bitmaps with it and defers any cursor that races the store.
     transform: std::sync::atomic::AtomicI32,
+    // The UNFOLDED output rotation, for the hotspot calibration only: see raw_output_transform.
+    // Stored beside `transform` from the same snapshot, so the two never disagree on the output.
+    cal_transform: std::sync::atomic::AtomicI32,
 }
 
 pub struct IpcDrmCapturer {
@@ -185,6 +188,28 @@ fn transform_and_origin(
         .get(wire_idx)
         .map(|di| (di.x, di.y));
     (transform, origin)
+}
+
+/// The output's wl_output transform as reported, NOT folded. `transform_and_origin` folds 180 to
+/// 0 for the frame, because a hardware rotate-180 already scans out upright and wl_output cannot
+/// tell hardware from software rotation. The hotspot calibration cannot afford that ambiguity:
+/// it subtracts a cursor-plane position (scanout space) from an injected point (oriented logical
+/// space), and for a software 180 those differ. So it declines on ANY reported rotation, and
+/// this is what it reads. Same identity match as the frame path, so both agree on which output.
+fn raw_output_transform(
+    drm: &[DrmDisplayInfo],
+    wire_idx: usize,
+    wl: &scrap::wayland::display::Displays,
+) -> i32 {
+    if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
+        return 0;
+    }
+    identity_matches(drm, &wl.displays)
+        .get(wire_idx)
+        .copied()
+        .flatten()
+        .map(|j| wl.displays[j].transform)
+        .unwrap_or(0)
 }
 
 // The kernel only exposes a cursor hotspot on DRIVER_CURSOR_HOTSPOT drivers (VMs), so on real
@@ -425,6 +450,26 @@ mod cursor_calibration_tests {
     }
 
     #[test]
+    fn drift_starting_mid_window_stops_further_attempts() {
+        // The geometry was already looked up for this window (memoized), the plane is settled and
+        // the window is open. If drift switches on now, the next attempt must not reuse that
+        // geometry against a remapped point.
+        let mut cal = a_cal(Some((10, 20)));
+        let c = cal.as_mut().unwrap();
+        c.stable = CURSOR_CAL_STABLE_TICKS;
+        c.window = 5;
+        c.rect = Some(Some(((0, 0, 1920, 1080), (1920, 1080))));
+        crate::server::display_service::test_set_layout_drifted(true);
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        crate::server::display_service::test_set_layout_drifted(false);
+        let c = cal.as_ref().unwrap();
+        // Declined: nothing published, nothing pending, and the window drained by one as usual.
+        assert_eq!(c.applied, None);
+        assert_eq!(c.pending, None);
+        assert_eq!(c.window, 4);
+    }
+
+    #[test]
     fn a_rotated_output_and_a_missing_position_are_both_declined() {
         // No position at all: nothing is recorded.
         let mut cal = a_cal(None);
@@ -446,8 +491,13 @@ mod cursor_calibration_tests {
     // The near-wire band has to hold on BOTH exits: not just "publish nothing now" but also "cache
     // nothing", or the next arrival of the same shape is seeded from the cache and published under
     // a fresh id with no visual change.
+    // The two tests below both write CURSOR_CAL_CACHE, and one of them fills it past the cap,
+    // which clears it. libtest runs them concurrently in one process, so they take this lock.
+    static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn a_measurement_that_matches_the_guess_is_not_cached_even_when_confirmed() {
+        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         const SHAPE: u64 = 4242;
         CURSOR_CAL_CACHE.lock().unwrap().remove(&SHAPE);
         let mut cal = a_cal(Some((10, 20)));
@@ -573,6 +623,7 @@ mod cursor_calibration_tests {
 
     #[test]
     fn the_calibration_cache_is_bounded() {
+        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
             store_cursor_cal(i, (1, 1));
         }
@@ -613,8 +664,7 @@ struct CursorCal {
 }
 
 /// The logical rect the peer's coordinates live in, and this display's physical scanout size.
-/// Reached only after the cheap gates, because the enumeration behind it backs off and forks on
-/// failure and must not run on every frame.
+/// Reads the cached wayland snapshot and never enumerates: see the note at the lookup.
 ///
 /// The connector is matched to a wayland output through `identity_matches`, the same
 /// progressive-taken pass the transform and the advertised swap key off. Raw name equality is
@@ -633,7 +683,12 @@ fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))>
         _ => return None,
     };
     let info = drm.get(idx)?.clone();
-    let wl = scrap::wayland::display::get_displays();
+    // Never enumerate from here. `get_displays()` enumerates on a cache miss, and a miss forks a
+    // probe with a 2 s deadline, on the thread that owes the frame ack against a 5 s stall. The
+    // once-per-window memo bounds how OFTEN that could happen, not how long ONE call takes. The
+    // calibration only ever needs what the session already looked up; if that is not there the
+    // capturer was built blind and the right answer is to decline, not to go and look.
+    let wl = scrap::wayland::display::cached_displays()?;
     let j = identity_matches(&drm, &wl.displays).get(idx).copied().flatten()?;
     let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
     let r = rects.get(j)?;
@@ -720,6 +775,12 @@ fn note_cursor_plane(
     // a rotation this fix deliberately does not carry. Declining costs the rotated case its
     // measurement, which leaves it exactly where master already is: on the guess.
     if transform != 0 {
+        return;
+    }
+    // The geometry is looked up once per window, but the drift flag is a live atomic and drift
+    // can start mid-window. Read it on every attempt, so a window that opened on a settled layout
+    // does not go on measuring against baseline geometry once the remap has switched on.
+    if crate::server::display_service::wayland_layout_drifted() {
         return;
     }
     let Some((rect, phys)) = *c.rect.get_or_insert_with(|| cal_rect_and_size(display)) else {
@@ -897,6 +958,7 @@ impl IpcDrmCapturer {
             }),
             cv: Condvar::new(),
             transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
+            cal_transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -922,12 +984,16 @@ impl IpcDrmCapturer {
         let snapshot_gen = scrap::wayland::display::wayland_snapshot_generation();
         let wl = scrap::wayland::display::get_displays();
         let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
+        let cal_transform = raw_output_transform(&displays, wire_idx, &wl);
         // This capturer now shows that layout. If the session init's own wayland query failed it
         // saved an empty baseline, so this is the only record of what the stream is built on.
         super::display_service::note_capturer_layout(&wl.displays, snapshot_gen);
         shared
             .transform
             .store(transform, std::sync::atomic::Ordering::Release);
+        shared
+            .cal_transform
+            .store(cal_transform, std::sync::atomic::Ordering::Release);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -1233,7 +1299,7 @@ async fn recv_thread(
                     desc.cursor_pos,
                     display,
                     cursor_epoch,
-                    shared.transform.load(std::sync::atomic::Ordering::Acquire),
+                    shared.cal_transform.load(std::sync::atomic::Ordering::Acquire),
                 );
                 let conv = match converter.as_mut() {
                     Some(c) => c,
@@ -1300,7 +1366,7 @@ async fn recv_thread(
                     cursor_pos,
                     display,
                     cursor_epoch,
-                    shared.transform.load(std::sync::atomic::Ordering::Acquire),
+                    shared.cal_transform.load(std::sync::atomic::Ordering::Acquire),
                 );
                 // `frame()` hands this to PixelBuffer::new, which derives the stride as
                 // `data.len() / height`: height==0 would DIVIDE BY ZERO.
@@ -2408,6 +2474,7 @@ mod drm_capturer_tests {
                 }),
                 cv: Condvar::new(),
                 transform: std::sync::atomic::AtomicI32::new(0),
+                cal_transform: std::sync::atomic::AtomicI32::new(0),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
@@ -2786,6 +2853,25 @@ mod drm_capturer_tests {
             displays: vec![wl_display("HDMI-1", 0, 0, 1920, 1080)],
         };
         assert_eq!(transform_and_origin(&drm, 1, &lone), (0, None));
+    }
+
+    #[test]
+    fn a_180_output_folds_for_the_frame_but_not_for_the_calibration() {
+        // Same output, same snapshot: the frame path keeps master behaviour on 180 (no unrotate,
+        // because it may be hardware rotation), while the calibration must see the rotation and
+        // decline. The two readings coming from one identity match is the point of the test.
+        let drm = [drm_display("HDMI-A-1", 1920, 1080)];
+        let mut flipped = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        flipped.transform = 180;
+        let wl = scrap::wayland::display::Displays { primary: 0, displays: vec![flipped] };
+        assert_eq!(transform_and_origin(&drm, 0, &wl).0, 0);
+        assert_eq!(raw_output_transform(&drm, 0, &wl), 180);
+        // 90 and 270 agree on both paths.
+        let mut turned = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        turned.transform = 90;
+        let wl = scrap::wayland::display::Displays { primary: 0, displays: vec![turned] };
+        assert_eq!(transform_and_origin(&drm, 0, &wl).0, 90);
+        assert_eq!(raw_output_transform(&drm, 0, &wl), 90);
     }
 
     #[test]
