@@ -355,7 +355,13 @@ impl<T: InvokeUiSession> Remote<T> {
                                     .map_or(false, |silent| silent >= KCP_PEER_SILENCE_LIMIT);
                             if peer_gone {
                                 log::info!("Peer stopped answering, reconnecting");
+                                #[cfg(feature = "flutter")]
                                 self.handler.msgbox("restarting-show", "Connecting...", "Connection in progress. Please wait.", "");
+                                // Sciter knows no `restarting-show` and would show a dialog that
+                                // waits for a click, where the timeout this arrives ahead of is
+                                // retryable and reconnects on its own. Keep that message for it.
+                                #[cfg(not(feature = "flutter"))]
+                                self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
                             }
                             let elapsed = fps_instant.elapsed().as_millis();
