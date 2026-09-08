@@ -136,6 +136,16 @@ impl WaylandLayout {
 #[cfg(target_os = "linux")]
 static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 
+/// True while the compositor layout differs from the baseline the peer was told about. The DRM
+/// cursor calibration declines to measure in that state: the injected point it reads has been
+/// remapped onto the live layout while the rect it would subtract comes from the cached baseline
+/// snapshot, so the two halves are from different layouts. Restarting the measurement after the
+/// promotion re-baselines is safer than carrying a correction through the drift.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn wayland_layout_drifted() -> bool {
+    WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed)
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);

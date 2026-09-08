@@ -194,10 +194,13 @@ fn transform_and_origin(
 // and the plane position rides every frame: once both sit still, the difference IS the hotspot,
 // measured rather than guessed.
 
-/// The plane must hold one position this many consecutive frames before it counts as settled.
+/// The plane must hold one position this many consecutive frames, NOT COUNTING the frame that
+/// first reported the position, before it counts as settled: that frame takes the plane-moved
+/// branch and leaves the counter at zero, so a settle lands on the (this + 1)th sample.
 const CURSOR_CAL_STABLE_TICKS: u32 = 3;
 /// Measurement attempts run for this many frames (~1 s) after a settle, then stop until the
-/// plane moves again or fresh peer input reopens one window.
+/// plane moves again. Nothing else reopens a window; peer input is a condition for measuring
+/// inside one, not a trigger for one.
 const CURSOR_CAL_WINDOW_TICKS: u32 = 30;
 /// Corrections within this many px of what the client already renders are jitter, not news:
 /// the peer coordinate is quantized to LOGICAL px, so at a fractional scale the measurement
@@ -464,6 +467,11 @@ struct CursorCal {
     raw: Vec<u8>,
     /// The correction currently published, from the cache or from a measurement.
     applied: Option<(i32, i32)>,
+    /// The hotspot the wire delivered for this shape, which is what the client draws until a
+    /// correction replaces it. A measurement that lands on it is not worth publishing: for the
+    /// ordinary arrow the reader's guess is already right, and re-publishing would mint a new id
+    /// and re-send the whole bitmap for no visual change.
+    wire_hot: (i32, i32),
     /// Last plane position seen, and how many consecutive frames have reported it.
     plane: Option<(i32, i32)>,
     stable: u32,
@@ -473,6 +481,12 @@ struct CursorCal {
     /// window agrees with it, so one race - a local user parking the pointer near the peer's
     /// stale point - cannot poison every future instance of the shape.
     pending: Option<(i32, i32)>,
+    /// The geometry for this window, looked up at most ONCE per window. Outer `None` means not
+    /// looked up yet; `Some(None)` means it was and there is no answer. The lookup enumerates
+    /// wayland outputs, which does not cache its failures and forks a probe with a 2 s deadline,
+    /// and it runs on the thread that owes the frame ack against a 5 s stall timeout. A window is
+    /// ~27 attempts long, so without this the failing case is 27 forks deep in that budget.
+    rect: Option<Option<((i32, i32, i32, i32), (i32, i32))>>,
 }
 
 /// The logical rect the peer's coordinates live in, and this display's physical scanout size.
@@ -484,6 +498,12 @@ struct CursorCal {
 /// not the same thing: two cards can present the same bare connector name, and the normalized
 /// comparison is what the rest of this file trusts.
 fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))> {
+    // The injected point has been remapped onto the LIVE layout while the rect below comes from
+    // the cached baseline snapshot. While those differ the two halves of the subtraction are from
+    // different layouts, so decline rather than measure across them.
+    if crate::server::display_service::wayland_layout_drifted() {
+        return None;
+    }
     let idx = display.max(0) as usize;
     let drm = match &*DRM_STATE.lock().unwrap() {
         ProbeState::Available(_, list) => list.clone(),
@@ -552,6 +572,7 @@ fn note_cursor_plane(
         c.plane = Some(p);
         c.stable = 0;
         c.window = CURSOR_CAL_WINDOW_TICKS;
+        c.rect = None;
         return;
     }
     c.stable = c.stable.saturating_add(1);
@@ -578,7 +599,7 @@ fn note_cursor_plane(
     if transform != 0 {
         return;
     }
-    let Some((rect, phys)) = cal_rect_and_size(display) else {
+    let Some((rect, phys)) = *c.rect.get_or_insert_with(|| cal_rect_and_size(display)) else {
         return;
     };
     let Some(h) = calibrated_hotspot(false, (c.width, c.height), injected, rect, phys, p, c.stable)
@@ -592,7 +613,9 @@ fn note_cursor_plane(
     c.pending = candidate;
     // Measured either way: stay quiet until the plane moves and re-opens a window.
     c.window = 0;
-    if !publish {
+    let near_wire = (h.0 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
+        && (h.1 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
+    if !publish || (c.applied.is_none() && near_wire) {
         return;
     }
     c.applied = Some(h);
@@ -1215,18 +1238,22 @@ async fn recv_thread(
                         cal = if !should_calibrate(id, hot_from_property) {
                             None
                         } else {
-                            let seeded = cached_cursor_cal(id)
-                                .filter(|(cx, cy)| *cx < width as i32 && *cy < height as i32);
+                            // No dimension filter: the wire id already folds width, height and
+                            // the delivered hotspot, so a cache hit is the same shape by
+                            // construction.
+                            let seeded = cached_cursor_cal(id);
                             Some(CursorCal {
                                 id,
                                 width: width as i32,
                                 height: height as i32,
                                 raw: raw.clone(),
                                 applied: seeded,
+                                wire_hot: (hotx, hoty),
                                 plane: None,
                                 stable: 0,
                                 window: 0,
                                 pending: None,
+                                rect: None,
                             })
                         };
                         let (hotx, hoty, id) = match cal.as_ref().and_then(|c| c.applied) {
