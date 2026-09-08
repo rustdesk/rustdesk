@@ -230,8 +230,8 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # the SACK settle the rest (F-RTO), timed from the latest send, so a stall no longer resends the
 # whole backlog behind itself while a short lost tail still comes back at once.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "b221f13b1d6f21fbce09f9f63096be27dd392265" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "b221f13b1d6f21fbce09f9f63096be27dd392265" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "db3b07a9dd8f195916c89c2e62a8911402b11d27" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "db3b07a9dd8f195916c89c2e62a8911402b11d27" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
