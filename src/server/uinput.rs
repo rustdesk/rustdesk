@@ -30,7 +30,9 @@ const SMOOTH_SCROLL_SETTINGS_POLL_MS: u64 = 1_000;
 const SMOOTH_SCROLL_HANDSHAKE_TIMEOUT_MS: u64 = SMOOTH_SCROLL_READY_TIMEOUT_MS + 500;
 const SCROLL_FINISH_RESPONSE_TIMEOUT_MS: u64 = IPC_REQUEST_TIMEOUT + 500;
 const SMOOTH_SCROLL_DEVICE_NAME_PREFIX: &str = "RustDesk Smooth Scroll";
+const HIGH_RESOLUTION_SCROLL_DEVICE_NAME: &str = "RustDesk High Resolution Scroll";
 const SCROLL_SERVICE_READY_KEY: &str = "scroll_service_ready";
+const SCROLL_DEVICE_NAME_KEY: &str = "scroll_device_name";
 
 pub mod client {
     use super::*;
@@ -227,9 +229,17 @@ pub mod client {
             })
         }
 
-        pub async fn new_high_resolution_scroll() -> ResultType<Self> {
+        pub async fn new_scroll() -> ResultType<Self> {
             let mut mouse = Self::new_high_resolution_scroll_state();
-            mouse.enable_high_resolution_scroll().await?;
+            if let Err(err) = mouse.enable_high_resolution_scroll().await {
+                log::warn!("High-resolution uinput scrolling is unavailable: {err}");
+            }
+            if let Err(err) = mouse.enable_smooth_scroll().await {
+                log::warn!("Smooth uinput scrolling is unavailable: {err}");
+            }
+            if !mouse.supports_high_resolution_scroll() && !mouse.supports_smooth_scroll() {
+                bail!("no uinput scroll backend is available");
+            }
             Ok(mouse)
         }
 
@@ -291,8 +301,22 @@ pub mod client {
                 ),
                 None => bail!("high-resolution uinput scroll service closed"),
             }
+            let device_name = if crate::platform::is_x11() {
+                Some(prepare_x11_high_resolution_device(&mut conn).await?)
+            } else {
+                None
+            };
             let (tx, rx) = channel(SCROLL_IPC_QUEUE_CAPACITY);
-            let task = tokio::spawn(forward_scroll_requests(conn, rx, "high-resolution"));
+            let task = tokio::spawn(async move {
+                if let Some(device_name) = device_name {
+                    tokio::select! {
+                        () = forward_scroll_requests(conn, rx, "high-resolution") => {}
+                        () = monitor_x11_scroll_device(device_name, false) => {}
+                    }
+                } else {
+                    forward_scroll_requests(conn, rx, "high-resolution").await;
+                }
+            });
             self.high_resolution = Some(ScrollConnection { tx, task });
             Ok(())
         }
@@ -494,6 +518,27 @@ pub mod client {
         }
     }
 
+    async fn prepare_x11_high_resolution_device(conn: &mut Connection) -> ResultType<String> {
+        // Keep the initial ready reply unchanged for old clients. Query identity separately.
+        conn.send(&Data::Config((SCROLL_DEVICE_NAME_KEY.to_owned(), None)))
+            .await?;
+        let device_name = match conn.next_timeout(IPC_REQUEST_TIMEOUT).await {
+            Ok(Some(Data::Config((key, Some(name)))))
+                if key == SCROLL_DEVICE_NAME_KEY
+                    && name.starts_with(&format!("{HIGH_RESOLUTION_SCROLL_DEVICE_NAME} "))
+                    && !name.contains('\0') =>
+            {
+                name
+            }
+            Ok(Some(response)) => bail!("unexpected high-resolution device identity: {response:?}"),
+            Ok(None) => bail!("high-resolution service closed before providing its device identity"),
+            Err(err) => bail!(
+                "Failed to query high-resolution device identity; update the local RustDesk service if it is older: {err}"
+            ),
+        };
+        wait_for_x11_scroll_device(device_name, false).await
+    }
+
     async fn connect_smooth_scroll_service() -> ResultType<ScrollConnection> {
         if !crate::platform::is_x11() {
             bail!("smooth virtual-touchpad scrolling is unavailable with Wayland uinput");
@@ -509,12 +554,12 @@ pub mod client {
             Some(resp) => bail!("unexpected smooth uinput scroll response: {:?}", &resp),
             None => bail!("smooth uinput scroll service closed"),
         };
-        let device_name = wait_for_x11_smooth_scroll_device(device_name).await?;
+        let device_name = wait_for_x11_scroll_device(device_name, true).await?;
         let (tx, rx) = channel(SCROLL_IPC_QUEUE_CAPACITY);
         let task = tokio::spawn(async move {
             tokio::select! {
                 () = forward_scroll_requests(conn, rx, "smooth") => {}
-                () = monitor_x11_smooth_scroll_device(device_name) => {}
+                () = monitor_x11_scroll_device(device_name, true) => {}
             }
         });
         Ok(ScrollConnection { tx, task })
@@ -526,48 +571,49 @@ pub mod client {
     const X11_CLICK_BUTTONS: usize = 3;
     const X11_DISABLED_BUTTON: u8 = 0;
 
-    async fn wait_for_x11_smooth_scroll_device(device_name: String) -> ResultType<String> {
+    async fn wait_for_x11_scroll_device(device_name: String, smooth: bool) -> ResultType<String> {
         tokio::task::spawn_blocking(move || -> ResultType<String> {
             let attempts = SMOOTH_SCROLL_READY_TIMEOUT_MS / SMOOTH_SCROLL_READY_POLL_MS;
             for _ in 0..attempts {
-                if x11_smooth_scroll_device_ready(device_name.as_bytes()) {
+                if x11_scroll_device_ready(device_name.as_bytes(), smooth) {
                     return Ok(device_name);
                 }
                 std::thread::sleep(Duration::from_millis(SMOOTH_SCROLL_READY_POLL_MS));
             }
-            bail!("X11 smooth uinput device requires enabled two-finger/horizontal scrolling, event delivery and disabled clicks")
+            bail!("X11 scroll device '{device_name}' did not become ready with the required scroll settings and natural scrolling disabled")
         })
         .await?
     }
 
-    async fn monitor_x11_smooth_scroll_device(device_name: String) {
+    async fn monitor_x11_scroll_device(device_name: String, smooth: bool) {
         loop {
             tokio::time::sleep(Duration::from_millis(SMOOTH_SCROLL_SETTINGS_POLL_MS)).await;
             let name = device_name.clone();
             match tokio::task::spawn_blocking(move || {
-                x11_smooth_scroll_device_ready(name.as_bytes())
+                x11_scroll_device_ready(name.as_bytes(), smooth)
             })
             .await
             {
                 Ok(true) => continue,
                 Ok(false) => log::warn!(
-                    "X11 smooth-scroll device is no longer usable; disconnecting smooth scrolling"
+                    "X11 scroll device '{device_name}' is no longer usable; disconnecting scrolling"
                 ),
-                Err(err) => log::error!("Failed to check X11 smooth-scroll settings: {err}"),
+                Err(err) => log::error!("Failed to check X11 scroll device '{device_name}': {err}"),
             }
             return;
         }
     }
 
-    fn x11_smooth_scroll_device_ready(device_name: &[u8]) -> bool {
+    fn x11_scroll_device_ready(device_name: &[u8], smooth: bool) -> bool {
         x11_error::with_display(|display| unsafe {
-            x11_smooth_scroll_device_ready_on_display(display, device_name)
+            x11_scroll_device_ready_on_display(display, device_name, smooth)
         })
     }
 
-    unsafe fn x11_smooth_scroll_device_ready_on_display(
+    unsafe fn x11_scroll_device_ready_on_display(
         display: *mut xlib::Display,
         device_name: &[u8],
+        smooth: bool,
     ) -> bool {
         let extension_name = b"XInputExtension\0";
         let (mut opcode, mut event, mut error) = (0, 0, 0);
@@ -594,23 +640,25 @@ pub mod client {
         if devices.is_null() {
             return false;
         }
+        // The service supplies a unique name for this connection's device.
         let ready = device_count > 0
             && slice::from_raw_parts(devices, device_count as usize)
                 .iter()
-                .any(|info| x11_device_supports_smooth_scroll(display, info, device_name));
+                .any(|info| {
+                    !info.name.is_null()
+                        && CStr::from_ptr(info.name).to_bytes() == device_name
+                        && x11_device_supports_scroll(display, info, smooth)
+                });
         xinput2::XIFreeDeviceInfo(devices);
         ready
     }
 
-    unsafe fn x11_device_supports_smooth_scroll(
+    unsafe fn x11_device_supports_scroll(
         display: *mut xlib::Display,
         info: &xinput2::XIDeviceInfo,
-        device_name: &[u8],
+        smooth: bool,
     ) -> bool {
-        if info.enabled == 0 || info.name.is_null() || info.classes.is_null() {
-            return false;
-        }
-        if CStr::from_ptr(info.name).to_bytes() != device_name {
+        if info.enabled == 0 || info.classes.is_null() {
             return false;
         }
         let classes = slice::from_raw_parts(info.classes, info.num_classes.max(0) as usize);
@@ -622,8 +670,12 @@ pub mod client {
             Some((*(class.cast::<xinput2::XIScrollClassInfo>())).scroll_type)
         });
         has_required_x11_scroll_axes(scroll_types)
-            && x11_settings::scrolling_enabled(display, info.deviceid)
-            && x11_disable_touchpad_clicks(display, info.deviceid)
+            && if smooth {
+                x11_settings::scrolling_enabled(display, info.deviceid)
+                    && x11_disable_touchpad_clicks(display, info.deviceid)
+            } else {
+                x11_settings::disable_natural_scrolling(display, info.deviceid)
+            }
     }
 
     unsafe fn x11_disable_touchpad_clicks(display: *mut xlib::Display, device_id: i32) -> bool {

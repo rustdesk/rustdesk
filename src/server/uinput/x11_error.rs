@@ -14,7 +14,7 @@ pub(super) fn with_display(check: impl FnOnce(*mut xlib::Display) -> bool) -> bo
     let data =
         unsafe { libc::calloc(1, std::mem::size_of::<xlib::XExtData>()) }.cast::<xlib::XExtData>();
     if data.is_null() {
-        log::error!("Failed to allocate X11 smooth-scroll error context");
+        log::error!("Failed to allocate X11 scroll error context");
         unsafe { xlib::XCloseDisplay(display) };
         return false;
     }
@@ -47,6 +47,10 @@ pub(super) unsafe fn install(display: *mut xlib::Display, error_base: i32) {
         error_base + XI_BAD_DEVICE,
         i32::from(xlib::BadValue),
         i32::from(xlib::BadMatch),
+        // Readiness also writes device properties to normalize scroll direction.
+        i32::from(xlib::BadAccess),
+        i32::from(xlib::BadAtom),
+        i32::from(xlib::BadAlloc),
     ] {
         xlib::XESetWireToError(display, error_code, Some(handle_error));
     }
@@ -63,11 +67,11 @@ unsafe extern "C" fn handle_error(
     if !data.is_null() && !(*data).private_data.is_null() {
         *(*data).private_data.cast::<bool>() = true;
     } else {
-        log::error!("Missing X11 smooth-scroll error context");
+        log::error!("Missing X11 scroll error context");
     }
     let event = &*event;
     log::error!(
-        "X11 smooth-scroll setup failed: error={}, request={}:{}, resource={}",
+        "X11 scroll setup failed: error={}, request={}:{}, resource={}",
         event.error_code,
         event.request_code,
         event.minor_code,

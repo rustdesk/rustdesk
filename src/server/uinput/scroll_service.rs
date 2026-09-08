@@ -14,6 +14,8 @@ use std::{
     time::Duration,
 };
 
+mod high_resolution_connection;
+
 static SMOOTH_SCROLL_DEVICE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn split_high_resolution_scroll(remainder: i32, delta: i32) -> (i32, i32) {
@@ -91,12 +93,12 @@ fn high_resolution_scroll_events(
 }
 
 impl HighResolutionScrollDevice {
-    fn new() -> ResultType<Self> {
+    fn new(device_name: &str) -> ResultType<Self> {
         // udev needs mouse buttons and relative coordinates to classify this as a mouse.
         let keys: AttributeSet<_> = [HIGH_RESOLUTION_SCROLL_BUTTON].into_iter().collect();
         let axes: AttributeSet<_> = HIGH_RESOLUTION_SCROLL_AXES.into_iter().collect();
         let device = VirtualDeviceBuilder::new()?
-            .name("RustDesk High Resolution Scroll")
+            .name(device_name)
             .with_keys(&keys)?
             .with_relative_axes(&axes)?
             .build()?;
@@ -119,7 +121,8 @@ impl HighResolutionScrollDevice {
 
 pub(super) fn spawn_high_resolution_scroll_handler(mut stream: ipc::Connection) {
     tokio::spawn(async move {
-        let mut mouse = match HighResolutionScrollDevice::new() {
+        let device_name = high_resolution_connection::device_name();
+        let mut mouse = match HighResolutionScrollDevice::new(&device_name) {
             Ok(mouse) => mouse,
             Err(err) => {
                 log::error!("Failed to create high-resolution uinput scroll device: {err}");
@@ -138,18 +141,15 @@ pub(super) fn spawn_high_resolution_scroll_handler(mut stream: ipc::Connection) 
             return;
         }
         loop {
-            let (x, y) = match stream.next().await {
-                Ok(Some(Data::Mouse(DataMouse::ScrollHighResolution(x, y)))) => (x, y),
-                Ok(Some(data)) => {
-                    log::warn!("Unexpected high-resolution uinput data: {data:?}");
-                    continue;
-                }
-                Ok(None) => break,
-                Err(err) => {
-                    log::info!("High-resolution uinput ipc connection closed: {err}");
-                    break;
-                }
-            };
+            let (x, y) =
+                match high_resolution_connection::next_scroll(&mut stream, &device_name).await {
+                    Ok(Some(delta)) => delta,
+                    Ok(None) => break,
+                    Err(err) => {
+                        log::info!("High-resolution uinput ipc connection closed: {err}");
+                        break;
+                    }
+                };
             if let Err(err) = mouse.scroll(x, y) {
                 log::error!("Failed to inject high-resolution uinput scroll: {err}");
                 continue;

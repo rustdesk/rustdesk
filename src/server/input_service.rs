@@ -746,11 +746,8 @@ pub async fn setup_rdp_input() -> ResultType<bool, Box<dyn std::error::Error>> {
 
 #[cfg(target_os = "linux")]
 pub async fn setup_uinput_scroll() -> ResultType<()> {
-    let mut mouse = super::uinput::client::UInputMouse::new_high_resolution_scroll().await?;
-    if let Err(err) = mouse.enable_smooth_scroll().await {
-        log::warn!("Smooth uinput scrolling is unavailable: {err}");
-    }
-    log::info!("UInput high-resolution scroll mouse created");
+    let mouse = super::uinput::client::UInputMouse::new_scroll().await?;
+    log::info!("UInput scroll mouse created");
     ENIGO.lock().unwrap().set_custom_mouse(Box::new(mouse));
     Ok(())
 }
