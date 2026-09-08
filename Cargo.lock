@@ -1735,7 +1735,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/fufesou/cpal?rev=c2657388dc255fe99ad7a1f5cdfde0f0091f1dc4#c2657388dc255fe99ad7a1f5cdfde0f0091f1dc4"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#41c8a2a75903ffe9cd44cf176ce6b69e5d916d47"
 dependencies = [
  "alsa",
  "cidre",
