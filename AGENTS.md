@@ -67,6 +67,34 @@ workspace member. `base::config::keys` re-exports the handful of keys
 * Do not make formatting-only changes.
 * Keep naming/style consistent with nearby code.
 
+### Imports
+
+* One `use` per crate. Everything a file takes from the same crate goes in a
+  single braced block, not one statement per item:
+
+  ```rust
+  // no
+  use base::fs;
+  use base::message_proto::*;
+
+  // yes
+  use base::{fs, message_proto::*};
+  ```
+
+* The only reason to split is a `#[cfg(...)]` that does not apply to the whole
+  block -- an attribute binds to one item, so a differently-gated import has to
+  stand on its own. A `pub use` re-export likewise cannot join a plain `use`.
+
+  ```rust
+  #[cfg(not(feature = "flutter"))]
+  use base::fs;
+  use base::message_proto::*;
+  ```
+
+* When splitting an existing `use` because some of its items moved to another
+  crate, fold each side into that crate's existing block rather than leaving a
+  second statement behind.
+
 ### Comments
 
 * Avoid comments unless they explain a non-obvious reason, constraint, or workaround.

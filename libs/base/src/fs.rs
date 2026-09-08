@@ -16,11 +16,13 @@ use tokio::{
 };
 
 use crate::message_proto::*;
-use hbb_common::{anyhow::anyhow, bail, get_version_number, ResultType, Stream};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use hbb_common::{
+    anyhow::anyhow,
+    bail,
     compress::{compress, decompress},
     config::Config,
+    get_version_number, ResultType, Stream,
 };
 
 static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
