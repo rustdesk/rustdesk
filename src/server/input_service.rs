@@ -552,7 +552,6 @@ pub(crate) fn clear_relative_mouse_active(conn: i32) {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn clear_scroll_sequence(conn: i32) {
-    let mut en = ENIGO.lock().unwrap();
     let mut owner = SCROLL_SEQUENCE_OWNER.lock().unwrap();
     let Some((active_conn, kind)) = *owner else {
         return;
@@ -560,7 +559,7 @@ pub(crate) fn clear_scroll_sequence(conn: i32) {
     if active_conn != conn {
         return;
     }
-    finish_scroll_sequence(&mut en, kind);
+    finish_scroll_sequence(kind);
     *owner = None;
 }
 
@@ -1180,6 +1179,14 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
+    #[cfg(target_os = "linux")]
+    if evt_type == MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION {
+        handle_scroll_sequence(evt, conn, ScrollSequenceKind::HighResolution);
+        return;
+    } else if evt_type == MOUSE_TYPE_TRACKPAD_SMOOTH {
+        handle_scroll_sequence(evt, conn, ScrollSequenceKind::Smooth);
+        return;
+    }
     let mut en = ENIGO.lock().unwrap();
     #[cfg(target_os = "macos")]
     en.set_ignore_flags(enigo_ignore_flags());
@@ -1341,14 +1348,6 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
                 }
             }
         }
-        #[cfg(target_os = "linux")]
-        MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION => {
-            handle_scroll_sequence(&mut en, evt, conn, ScrollSequenceKind::HighResolution)
-        }
-        #[cfg(target_os = "linux")]
-        MOUSE_TYPE_TRACKPAD_SMOOTH => {
-            handle_scroll_sequence(&mut en, evt, conn, ScrollSequenceKind::Smooth)
-        }
         _ => {}
     }
     #[cfg(not(target_os = "macos"))]
@@ -1363,44 +1362,56 @@ fn inverted_scroll_delta(x: i32, y: i32) -> Option<(i32, i32)> {
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn dispatch_inverted_scroll(
+fn dispatch_inverted_scroll<T>(
     x: i32,
     y: i32,
-    dispatch: impl FnOnce(i32, i32) -> enigo::ResultType,
-) -> Option<enigo::ResultType> {
+    dispatch: impl FnOnce(i32, i32) -> Result<T, Box<dyn std::error::Error>>,
+) -> Option<Result<T, Box<dyn std::error::Error>>> {
     let (x, y) = inverted_scroll_delta(x, y)?;
     Some(dispatch(x, y))
 }
 
 #[cfg(target_os = "linux")]
 fn inject_scroll_sequence(
-    en: &mut Enigo,
     kind: ScrollSequenceKind,
     x: i32,
     y: i32,
-) -> enigo::ResultType {
-    match kind {
-        ScrollSequenceKind::HighResolution => en.mouse_scroll_high_resolution(x, y),
-        ScrollSequenceKind::Smooth => en.mouse_scroll_smooth(x, y),
+) -> Result<Option<super::uinput::client::ScrollCompletion>, Box<dyn std::error::Error>> {
+    let mut en = ENIGO.lock().unwrap();
+    if let Some(mouse) = en.get_custom_mouse().as_mut().and_then(|mouse| {
+        mouse
+            .as_mut_any()
+            .downcast_mut::<super::uinput::client::UInputMouse>()
+    }) {
+        return match kind {
+            ScrollSequenceKind::HighResolution => mouse.queue_high_resolution_scroll(x, y),
+            ScrollSequenceKind::Smooth => mouse.queue_smooth_scroll(x, y),
+        };
     }
+    match kind {
+        ScrollSequenceKind::HighResolution => en.mouse_scroll_high_resolution(x, y)?,
+        ScrollSequenceKind::Smooth => en.mouse_scroll_smooth(x, y)?,
+    };
+    Ok(None)
 }
 
 #[cfg(target_os = "linux")]
-fn handle_scroll_sequence(en: &mut Enigo, evt: &MouseEvent, conn: i32, kind: ScrollSequenceKind) {
+fn handle_scroll_sequence(evt: &MouseEvent, conn: i32, kind: ScrollSequenceKind) {
     let is_finish = evt.x == 0 && evt.y == 0;
+    // Serialize scroll backends while allowing unrelated input during a finish acknowledgement.
     let mut owner = SCROLL_SEQUENCE_OWNER.lock().unwrap();
     if is_finish && *owner != Some((conn, kind)) {
         return;
     }
     if !is_finish && *owner != Some((conn, kind)) {
         if let Some((_, active_kind)) = *owner {
-            finish_scroll_sequence(en, active_kind);
+            finish_scroll_sequence(active_kind);
         }
         *owner = Some((conn, kind));
     }
-    match dispatch_inverted_scroll(evt.x, evt.y, |x, y| inject_scroll_sequence(en, kind, x, y)) {
+    match dispatch_inverted_scroll(evt.x, evt.y, |x, y| inject_scroll_sequence(kind, x, y)) {
         None => {
-            finish_scroll_sequence(en, kind);
+            finish_scroll_sequence(kind);
             *owner = None;
             log::error!(
                 "Rejected overflowing {} scroll delta ({}, {})",
@@ -1410,19 +1421,38 @@ fn handle_scroll_sequence(en: &mut Enigo, evt: &MouseEvent, conn: i32, kind: Scr
             );
         }
         Some(Err(err)) => {
-            finish_scroll_sequence(en, kind);
+            finish_scroll_sequence(kind);
             *owner = None;
             log::error!("Failed to inject {} scroll: {err}", kind.label());
         }
-        Some(Ok(())) if is_finish => *owner = None,
-        Some(Ok(())) => {}
+        Some(Ok(completion)) if is_finish => {
+            wait_for_scroll_completion(completion, kind);
+            *owner = None;
+        }
+        Some(Ok(_)) => {}
     }
 }
 
 #[cfg(target_os = "linux")]
-fn finish_scroll_sequence(en: &mut Enigo, kind: ScrollSequenceKind) {
-    if let Err(err) = inject_scroll_sequence(en, kind, 0, 0) {
-        log::error!("Failed to finish {} scroll: {err}", kind.label());
+fn finish_scroll_sequence(kind: ScrollSequenceKind) {
+    match inject_scroll_sequence(kind, 0, 0) {
+        Ok(completion) => wait_for_scroll_completion(completion, kind),
+        Err(err) => log::error!("Failed to finish {} scroll: {err}", kind.label()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_scroll_completion(
+    completion: Option<super::uinput::client::ScrollCompletion>,
+    kind: ScrollSequenceKind,
+) {
+    if let Some(completion) = completion {
+        if let Err(err) = completion.wait() {
+            log::error!(
+                "Failed to receive {} scroll finish acknowledgement: {err}",
+                kind.label()
+            );
+        }
     }
 }
 

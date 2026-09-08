@@ -12,6 +12,7 @@ use hbb_common::{
 
 mod scroll_service;
 mod smooth_scroll;
+mod x11_error;
 
 static IPC_CONN_TIMEOUT: u64 = 1000;
 static IPC_POSTFIX_KEYBOARD: &str = "_uinput_keyboard";
@@ -32,7 +33,7 @@ const SCROLL_SERVICE_READY_KEY: &str = "scroll_service_ready";
 pub mod client {
     use super::*;
     use hbb_common::tokio::sync::mpsc::{channel, error::TrySendError, Sender};
-    use hbb_common::x11::{xinput2, xlib};
+    use hbb_common::x11::{xinput, xinput2, xlib};
     use std::{
         ffi::CStr,
         io::{Error, ErrorKind},
@@ -184,6 +185,23 @@ pub mod client {
         }
     }
 
+    pub(crate) struct ScrollCompletion {
+        receiver: std_mpsc::Receiver<Result<(), String>>,
+        scroll_kind: &'static str,
+        task: tokio::task::AbortHandle,
+    }
+
+    impl ScrollCompletion {
+        pub(crate) fn wait(self) -> enigo::ResultType {
+            let result = wait_for_scroll_completion(self.receiver, self.scroll_kind);
+            if result.is_err() {
+                // Cancel this connection's queued events, even if the mouse backend was replaced.
+                self.task.abort();
+            }
+            result
+        }
+    }
+
     impl Drop for ScrollConnection {
         fn drop(&mut self) {
             self.task.abort();
@@ -234,6 +252,30 @@ pub mod client {
 
         fn send_smooth(&mut self, data: Data) -> enigo::ResultType {
             send_scroll_data(&mut self.smooth, data, "smooth")
+        }
+
+        pub(crate) fn queue_high_resolution_scroll(
+            &mut self,
+            x: i32,
+            y: i32,
+        ) -> Result<Option<ScrollCompletion>, Box<dyn std::error::Error>> {
+            queue_scroll_data(
+                &mut self.high_resolution,
+                Data::Mouse(DataMouse::ScrollHighResolution(x, y)),
+                "high-resolution",
+            )
+        }
+
+        pub(crate) fn queue_smooth_scroll(
+            &mut self,
+            x: i32,
+            y: i32,
+        ) -> Result<Option<ScrollCompletion>, Box<dyn std::error::Error>> {
+            queue_scroll_data(
+                &mut self.smooth,
+                Data::Mouse(DataMouse::ScrollSmooth(x, y)),
+                "smooth",
+            )
         }
 
         pub async fn enable_high_resolution_scroll(&mut self) -> ResultType<()> {
@@ -333,27 +375,39 @@ pub mod client {
     fn send_scroll_data(
         connection: &mut Option<ScrollConnection>,
         data: Data,
-        scroll_kind: &str,
+        scroll_kind: &'static str,
     ) -> enigo::ResultType {
+        let completion = queue_scroll_data(connection, data, scroll_kind)?;
+        let Some(completion) = completion else {
+            return Ok(());
+        };
+        match completion.wait() {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                connection.take();
+                Err(err)
+            }
+        }
+    }
+
+    fn queue_scroll_data(
+        connection: &mut Option<ScrollConnection>,
+        data: Data,
+        scroll_kind: &'static str,
+    ) -> Result<Option<ScrollCompletion>, Box<dyn std::error::Error>> {
         let (request, completion) = ScrollRequest::new(data);
-        let result = connection
-            .as_ref()
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::NotConnected,
-                    format!("{scroll_kind} uinput scroll service is not connected"),
-                )
-            })?
-            .tx
-            .try_send(request);
-        match result {
-            Ok(()) => match wait_for_scroll_completion(completion, scroll_kind) {
-                Ok(()) => Ok(()),
-                Err(err) => {
-                    connection.take();
-                    Err(err)
-                }
-            },
+        let active = connection.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorKind::NotConnected,
+                format!("{scroll_kind} uinput scroll service is not connected"),
+            )
+        })?;
+        match active.tx.try_send(request) {
+            Ok(()) => Ok(completion.map(|receiver| ScrollCompletion {
+                receiver,
+                scroll_kind,
+                task: active.task.abort_handle(),
+            })),
             Err(TrySendError::Full(_)) => {
                 connection.take();
                 Err(Error::new(
@@ -374,12 +428,9 @@ pub mod client {
     }
 
     fn wait_for_scroll_completion(
-        completion: Option<std_mpsc::Receiver<Result<(), String>>>,
+        completion: std_mpsc::Receiver<Result<(), String>>,
         scroll_kind: &str,
     ) -> enigo::ResultType {
-        let Some(completion) = completion else {
-            return Ok(());
-        };
         match completion.recv_timeout(Duration::from_millis(SCROLL_FINISH_RESPONSE_TIMEOUT_MS)) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(err)) => Err(Error::new(ErrorKind::BrokenPipe, err).into()),
@@ -442,6 +493,9 @@ pub mod client {
     }
 
     async fn connect_smooth_scroll_service() -> ResultType<ScrollConnection> {
+        if !crate::platform::is_x11() {
+            bail!("smooth virtual-touchpad scrolling is unavailable with Wayland uinput");
+        }
         let mut conn = ipc::connect(IPC_CONN_TIMEOUT, IPC_POSTFIX_SMOOTH_SCROLL).await?;
         let device_name = match conn
             .next_timeout(SMOOTH_SCROLL_HANDSHAKE_TIMEOUT_MS)
@@ -453,9 +507,7 @@ pub mod client {
             Some(resp) => bail!("unexpected smooth uinput scroll response: {:?}", &resp),
             None => bail!("smooth uinput scroll service closed"),
         };
-        if crate::platform::is_x11() {
-            wait_for_x11_smooth_scroll_device(device_name).await?;
-        }
+        wait_for_x11_smooth_scroll_device(device_name).await?;
         let (tx, rx) = channel(SCROLL_IPC_QUEUE_CAPACITY);
         let task = tokio::spawn(forward_scroll_requests(conn, rx, "smooth"));
         Ok(ScrollConnection { tx, task })
@@ -463,6 +515,9 @@ pub mod client {
 
     const XI_MAJOR_VERSION: i32 = 2;
     const XI_MINOR_VERSION: i32 = 1;
+    const X11_MAX_BUTTONS: usize = u8::MAX as usize;
+    const X11_CLICK_BUTTONS: usize = 3;
+    const X11_DISABLED_BUTTON: u8 = 0;
 
     async fn wait_for_x11_smooth_scroll_device(device_name: String) -> ResultType<()> {
         tokio::task::spawn_blocking(move || -> ResultType<()> {
@@ -473,21 +528,15 @@ pub mod client {
                 }
                 std::thread::sleep(Duration::from_millis(SMOOTH_SCROLL_READY_POLL_MS));
             }
-            bail!("X11 did not expose the smooth uinput device as scroll-capable")
+            bail!("X11 did not expose a scroll-capable smooth uinput device with clicks disabled")
         })
         .await?
     }
 
     fn x11_smooth_scroll_device_ready(device_name: &[u8]) -> bool {
-        let display = unsafe { xlib::XOpenDisplay(std::ptr::null()) };
-        if display.is_null() {
-            return false;
-        }
-        let ready = unsafe { x11_smooth_scroll_device_ready_on_display(display, device_name) };
-        unsafe {
-            xlib::XCloseDisplay(display);
-        }
-        ready
+        x11_error::with_display(|display| unsafe {
+            x11_smooth_scroll_device_ready_on_display(display, device_name)
+        })
     }
 
     unsafe fn x11_smooth_scroll_device_ready_on_display(
@@ -506,6 +555,7 @@ pub mod client {
         {
             return false;
         }
+        x11_error::install(display, error);
         let (mut major, mut minor) = (XI_MAJOR_VERSION, XI_MINOR_VERSION);
         if xinput2::XIQueryVersion(display, &mut major, &mut minor) != 0
             || major < XI_MAJOR_VERSION
@@ -521,12 +571,13 @@ pub mod client {
         let ready = device_count > 0
             && slice::from_raw_parts(devices, device_count as usize)
                 .iter()
-                .any(|info| x11_device_supports_smooth_scroll(info, device_name));
+                .any(|info| x11_device_supports_smooth_scroll(display, info, device_name));
         xinput2::XIFreeDeviceInfo(devices);
         ready
     }
 
     unsafe fn x11_device_supports_smooth_scroll(
+        display: *mut xlib::Display,
         info: &xinput2::XIDeviceInfo,
         device_name: &[u8],
     ) -> bool {
@@ -545,6 +596,31 @@ pub mod client {
             Some((*(class.cast::<xinput2::XIScrollClassInfo>())).scroll_type)
         });
         has_required_x11_scroll_axes(scroll_types)
+            && x11_disable_touchpad_clicks(display, info.deviceid)
+    }
+
+    unsafe fn x11_disable_touchpad_clicks(display: *mut xlib::Display, device_id: i32) -> bool {
+        let device = xinput::XOpenDevice(display, device_id as _);
+        if device.is_null() {
+            return false;
+        }
+        let mut mapping = [X11_DISABLED_BUTTON; X11_MAX_BUTTONS];
+        let count = xinput::XGetDeviceButtonMapping(
+            display,
+            device,
+            mapping.as_mut_ptr(),
+            mapping.len() as _,
+        );
+        if count < X11_CLICK_BUTTONS as i32 || count as usize > mapping.len() {
+            xinput::XCloseDevice(display, device);
+            return false;
+        }
+        // Suppress tap clicks even if desktop settings later enable tapping. Keep wheel
+        // buttons mapped for applications that do not consume XInput scroll valuators.
+        mapping[..X11_CLICK_BUTTONS].fill(X11_DISABLED_BUTTON);
+        let status = xinput::XSetDeviceButtonMapping(display, device, mapping.as_mut_ptr(), count);
+        xinput::XCloseDevice(display, device);
+        status == i32::from(xlib::MappingSuccess)
     }
 
     fn has_required_x11_scroll_axes(scroll_types: impl IntoIterator<Item = i32>) -> bool {
@@ -594,7 +670,12 @@ pub mod client {
             mouse.smooth = Some(ScrollConnection { tx, task });
             let (result_tx, result_rx) = std_mpsc::channel();
 
-            thread::spawn(move || result_tx.send(mouse.mouse_scroll_smooth(0, 0)).unwrap());
+            thread::spawn(move || {
+                let result = mouse
+                    .mouse_scroll_smooth(0, 0)
+                    .map_err(|err| err.to_string());
+                result_tx.send(result).unwrap();
+            });
             request_seen_rx
                 .recv_timeout(Duration::from_secs(1))
                 .unwrap();

@@ -7,7 +7,10 @@ use evdev::{
 use hbb_common::log;
 use std::{io, path::PathBuf};
 
+mod motion;
 mod udev;
+
+use motion::{fitting_delta, initial_position, moved_positions};
 
 const DEVICE_VENDOR: u16 = 0x5255;
 const DEVICE_PRODUCT: u16 = 0x5353;
@@ -86,14 +89,7 @@ impl SmoothScrollDevice {
         }
         let (dx, x_remainder) = convert_delta(self.remainders.0, x)?;
         let (dy, y_remainder) = convert_delta(self.remainders.1, y)?;
-        // A finite virtual pad must lift and recenter before contacts reach an edge.
-        if self.active && !contacts_fit(self.positions, dx, dy) {
-            self.finish()?;
-        }
-        if !self.active {
-            self.start(dx, dy)?;
-        }
-        self.move_contacts(dx, dy)?;
+        self.move_delta((dx, dy))?;
         self.remainders = (x_remainder, y_remainder);
         Ok(())
     }
@@ -137,11 +133,31 @@ impl SmoothScrollDevice {
         (first, second)
     }
 
+    fn move_delta(&mut self, delta: (i32, i32)) -> io::Result<()> {
+        let mut remaining = delta;
+        while remaining != (0, 0) {
+            if !self.active {
+                self.start(remaining.0, remaining.1)?;
+            }
+            let step = fitting_delta(self.positions, remaining);
+            if step == (0, 0) {
+                self.finish()?;
+                continue;
+            }
+            self.move_contacts(step.0, step.1)?;
+            remaining = (remaining.0 - step.0, remaining.1 - step.1);
+            if remaining != (0, 0) {
+                self.finish()?;
+            }
+        }
+        Ok(())
+    }
+
     fn move_contacts(&mut self, dx: i32, dy: i32) -> io::Result<()> {
         if dx == 0 && dy == 0 {
             return Ok(());
         }
-        let positions = match moved_positions(self.positions, dx, dy) {
+        let positions = match moved_positions(self.positions, (dx, dy)) {
             Ok(positions) => positions,
             Err(move_error) => return self.finish_after_error(move_error),
         };
@@ -201,6 +217,8 @@ impl Drop for SmoothScrollDevice {
 fn create_device(device_name: &[u8]) -> io::Result<VirtualDevice> {
     let mut keys = AttributeSet::<Key>::new();
     for key in [
+        // Keep libinput's default tap-to-click setting disabled.
+        Key::BTN_LEFT,
         Key::BTN_TOUCH,
         Key::BTN_TOOL_FINGER,
         Key::BTN_TOOL_DOUBLETAP,
@@ -239,47 +257,6 @@ fn convert_delta(remainder: i32, delta: i32) -> io::Result<(i32, i32)> {
     let units = i32::try_from(total / divisor)
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "smooth scroll delta overflow"))?;
     Ok((units, (total % divisor) as i32))
-}
-
-fn initial_position(delta: i32, maximum: i32, margin: i32) -> i32 {
-    if delta > 0 {
-        AXIS_MIN + margin
-    } else if delta < 0 {
-        maximum - margin
-    } else {
-        (AXIS_MIN + maximum) / 2
-    }
-}
-
-fn moved_positions(positions: [(i32, i32); 2], dx: i32, dy: i32) -> io::Result<[(i32, i32); 2]> {
-    let mut moved = positions;
-    for position in &mut moved {
-        position.0 = position.0.checked_add(dx).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "smooth scroll x delta overflow",
-            )
-        })?;
-        position.1 = position.1.checked_add(dy).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "smooth scroll y delta overflow",
-            )
-        })?;
-        if !(AXIS_MIN..=AXIS_X_MAX).contains(&position.0)
-            || !(AXIS_MIN..=AXIS_Y_MAX).contains(&position.1)
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "smooth scroll exceeded virtual touchpad bounds",
-            ));
-        }
-    }
-    Ok(moved)
-}
-
-fn contacts_fit(positions: [(i32, i32); 2], dx: i32, dy: i32) -> bool {
-    moved_positions(positions, dx, dy).is_ok()
 }
 
 fn next_tracking_id(current: i32) -> i32 {
