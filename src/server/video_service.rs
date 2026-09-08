@@ -655,6 +655,12 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_width = c.width;
     let capture_height = c.height;
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
+    // Diagnostics only.  `send_counter` counts capture rounds, which is not the
+    // number of frames that reached a connection: the encoder's own rate control
+    // drops frames when the bitrate cannot carry them.  `wait_max_ms` is how long
+    // a round waited for the previous frame to be picked up, so a blocked write
+    // shows up here as capture stalling rather than as a slow network.
+    let (mut sent_counter, mut wait_max_ms) = (0usize, 0u32);
 
     while sp.ok() {
         #[cfg(windows)]
@@ -665,6 +671,8 @@ fn run(vs: VideoService) -> ResultType<()> {
             &mut spf,
             client_record,
             &mut send_counter,
+            &mut sent_counter,
+            &mut wait_max_ms,
             &mut second_instant,
             &sp.name(),
         )?;
@@ -785,6 +793,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
+                    if !send_conn_ids.is_empty() {
+                        sent_counter += 1;
+                    }
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }
@@ -844,6 +855,9 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
+                        if !send_conn_ids.is_empty() {
+                            sent_counter += 1;
+                        }
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
                     }
@@ -885,6 +899,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 break;
             }
         }
+        wait_max_ms = wait_max_ms.max(wait_begin.elapsed().as_millis() as u32);
         DISPLAY_CONN_IDS.lock().unwrap().remove(&display_idx);
 
         let elapsed = now.elapsed();
@@ -1315,12 +1330,22 @@ pub fn make_display_changed_msg(
     Some(msg_out)
 }
 
+/// Per-second pipeline diagnostics, off unless `RUSTDESK_QOS_VERBOSE` is set.
+/// The default log level is `debug`, so an unconditional line here would land in
+/// every user's log file once a second forever.  Nothing enables it implicitly.
+pub(crate) fn qos_diag_verbose() -> bool {
+    static VERBOSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *VERBOSE.get_or_init(|| std::env::var("RUSTDESK_QOS_VERBOSE").is_ok())
+}
+
 fn check_qos(
     encoder: &mut Encoder,
     ratio: &mut f32,
     spf: &mut Duration,
     client_record: bool,
     send_counter: &mut usize,
+    sent_counter: &mut usize,
+    wait_max_ms: &mut u32,
     second_instant: &mut Instant,
     name: &str,
 ) -> ResultType<()> {
@@ -1346,7 +1371,21 @@ fn check_qos(
     if second_instant.elapsed() > Duration::from_secs(1) {
         *second_instant = Instant::now();
         video_qos.update_display_data(&name, *send_counter);
+        // Diagnostics only, joined with `qos_trace` on `t`: the controller's target
+        // is not the rate the encoder produced, and neither is the rate the send
+        // path accepted.
+        if qos_diag_verbose() {
+            log::debug!(
+                "qos_video t={} display={name} captured={} sent={} wait_max={}",
+                hbb_common::get_time(),
+                *send_counter,
+                *sent_counter,
+                *wait_max_ms
+            );
+        }
         *send_counter = 0;
+        *sent_counter = 0;
+        *wait_max_ms = 0;
     }
     drop(video_qos);
     Ok(())
