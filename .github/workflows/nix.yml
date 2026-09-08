@@ -1,0 +1,90 @@
+name: Nix flake
+
+# Validates the flake (flake.nix). The full RustDesk build takes 30+ minutes,
+# so this workflow runs only on manual dispatch, on published releases, or
+# when flake-related files change on a PR — not on every push.
+#
+# Steps, in order of what they catch:
+#   1. nix flake check --all-systems  — every system's outputs evaluate
+#      (including darwin on an ubuntu runner).
+#   2. nix build .#default            — the from-source build realises for
+#      the runner's system.
+#   3. nix run .#default -- --version — the built binary actually execs.
+#      This is the only step that catches the class of bug where evaluation
+#      passes but the wrapper/binary fails at runtime. Do NOT drop it.
+#   4. nix build .#source (if exists) — exercises the from-source build
+#      path. In this flake #source is the same as #default, but the step
+#      is kept for consistency with the nixify template.
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [master]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - ".github/workflows/nix.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: nix flake check (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-26-intel, macos-26]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Enable Nix binary cache
+        uses: DeterminateSystems/magic-nix-cache-action@6221693898146dc97e38ad0e013488a16477a4c4 # v9
+        with:
+          use-flakehub: false
+
+      - name: nix flake check --all-systems
+        # --no-build: evaluate every system's outputs (including darwin on
+        # ubuntu) without realising them. Without --no-build, `nix flake
+        # check` builds every derivation in `checks`, which fails for
+        # non-native systems (darwin stdenv can't run on linux). The
+        # build/run steps below handle realisation for the runner's system.
+        run: nix flake check --all-systems --no-build
+
+      - name: nix build .#default
+        run: nix build .#default --print-build-logs
+
+      - name: nix run .#default -- --version
+        # SECURITY: Gate behind non-PR events. `nix run` executes the built
+        # binary outside the Nix sandbox on the runner, where it can reach
+        # GitHub's OIDC endpoint and the GITHUB_TOKEN. On a PR, that binary
+        # is PR-controlled code. `nix build` above is safe (realises inside
+        # the sandbox, no network).
+        if: github.event_name != 'pull_request'
+        run: nix run .#default -- --version
+
+      - name: nix build .#source (if exists)
+        # Exercises the from-source build path. Skip if the flake does not
+        # expose a #source output (source-build-only flakes use #default).
+        run: |
+          if nix flake show --json 2>/dev/null | jq -e 'any(.packages[]?; has("source"))' >/dev/null 2>&1; then
+            nix build .#source --print-build-logs
+          else
+            echo "No #source output — skipping"
+          fi
