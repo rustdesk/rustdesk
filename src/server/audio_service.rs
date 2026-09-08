@@ -781,4 +781,3 @@ fn send_f32(data: &[f32], encoder: &mut AudioEncoder, sp: &GenericService) {
         Err(error) => log::warn!("Failed to encode audio frame: {error:?}"),
     }
 }
-

@@ -59,6 +59,7 @@ fn assert_callback_progress(point: PausePoint) {
         resume: resume_rx,
     };
     let worker = std::thread::spawn(move || paused_worker(receiver, point, pause));
+    sender.set_wake_thread(worker.thread().clone()).unwrap();
     entered_rx.recv_timeout(TEST_TIMEOUT).unwrap();
     let (completed_tx, completed_rx) = mpsc::channel();
     let callback = std::thread::spawn(move || {
