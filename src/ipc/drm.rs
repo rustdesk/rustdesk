@@ -937,7 +937,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
-                            hot_from_property,
+                            hot_from_property: Some(hot_from_property),
                         },
                         None,
                     )

@@ -561,11 +561,14 @@ pub enum Data {
         height: u32,
         hotx: i32,
         hoty: i32,
-        /// True when the kernel gave the hotspot (a DRIVER_CURSOR_HOTSPOT driver). False means
-        /// it is the reader's bounding-box guess and may be measured and corrected. Absent from
-        /// an older producer, which decodes as false: guessed, which is what it was.
+        /// `Some(true)` when the kernel gave the hotspot (a DRIVER_CURSOR_HOTSPOT driver),
+        /// `Some(false)` when it is the reader's bounding-box guess and may be measured and
+        /// corrected. `None` from a producer too old to send the field, and that case is NOT the
+        /// same as `Some(false)`: such a producer already put the kernel's hotspot on the wire
+        /// when it had one, with nothing to distinguish it from a guess. Measuring over that
+        /// would overwrite kernel truth, so an absent field declines the measurement.
         #[serde(default)]
-        hot_from_property: bool,
+        hot_from_property: Option<bool>,
     },
 }
 

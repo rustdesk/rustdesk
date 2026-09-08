@@ -354,6 +354,25 @@ mod cursor_calibration_tests {
         );
     }
 
+    // The gate above is the one inside the arithmetic. This is the gate the receive loop actually
+    // uses, which is a different thing: the loop passes a literal `false` to `calibrated_hotspot`
+    // and decides here whether a shape is a candidate at all.
+    #[test]
+    fn only_a_hotspot_the_producer_called_a_guess_is_measured() {
+        const SHAPE: u64 = 7;
+        assert!(should_calibrate(SHAPE, Some(false)));
+        // Kernel truth: never measured.
+        assert!(!should_calibrate(SHAPE, Some(true)));
+        // A producer too old to say. It already sent the kernel's hotspot when it had one, with
+        // nothing marking it, so this must NOT be read as "guessed".
+        assert!(!should_calibrate(SHAPE, None));
+        // The hidden-cursor sentinel is not a shape and has no hotspot to measure.
+        assert!(!should_calibrate(
+            scrap::drm_reader::HIDDEN_CURSOR_ID,
+            Some(false)
+        ));
+    }
+
     #[test]
     fn an_unsettled_plane_is_not_measured() {
         assert_eq!(
@@ -479,6 +498,17 @@ fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))>
         (r.x, r.y, r.w, r.h),
         (info.width as i32, info.height as i32),
     ))
+}
+
+/// Whether a cursor shape is a candidate for measurement at all. Pure so the real gate can be
+/// tested; the async receive loop only calls this.
+///
+/// `hot_from_property` is what the producer said about the hotspot it sent: `Some(true)` kernel,
+/// `Some(false)` its own guess, `None` a producer too old to say. `None` is NOT `Some(false)`: a
+/// producer that old already sent the kernel's hotspot when it had one, indistinguishable from a
+/// guess, so measuring over it could overwrite kernel truth. Decline instead.
+fn should_calibrate(id: u64, hot_from_property: Option<bool>) -> bool {
+    id != scrap::drm_reader::HIDDEN_CURSOR_ID && hot_from_property == Some(false)
 }
 
 /// What one measurement does to the calibration state.
@@ -1179,8 +1209,10 @@ async fn recv_thread(
                         // A new shape restarts the measurement: the pointer usually moves at
                         // the instant the shape flips, since that is what flipped it, so the
                         // position frozen here is a first stability sample and not an answer.
-                        // Kernel truth is remembered but never measured against.
-                        cal = if id == scrap::drm_reader::HIDDEN_CURSOR_ID || hot_from_property {
+                        // Kernel truth is remembered but never measured against, and a producer
+                        // that does not say which it sent is treated as kernel truth: it is the
+                        // only reading that cannot overwrite one.
+                        cal = if !should_calibrate(id, hot_from_property) {
                             None
                         } else {
                             let seeded = cached_cursor_cal(id)
