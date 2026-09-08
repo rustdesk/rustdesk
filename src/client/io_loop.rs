@@ -16,18 +16,22 @@ use crate::{
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
 // A peer that is killed, logged out or rebooted sends nothing at all over UDP, so the session
-// sees silence and only a timeout ends it. This bounds that wait for WebRTC, which has a liveness
-// signal of its own; TCP and WebSocket are left exactly as they were, and the 30s timeout below
-// still backs all of them.
+// sees silence and only a timeout ends it. These bound that wait for the two transports that
+// have a liveness signal of their own; TCP and WebSocket are left exactly as they were, and the
+// 30s timeout below still backs all of them.
 //
-// Not a hard upper bound on how soon this notices: sends are awaited inline in this same loop, so
-// one in progress keeps the tick below from running, capped by the transport's own send timeout.
-// Removing that needs the framing work that would stop one message owning the link.
+// Neither is a hard upper bound on how soon this notices: sends are awaited inline in this same
+// loop, so one in progress keeps the tick below from running. WebRTC caps that at its existing
+// send timeout; KCP sets none, so a large message can delay the check by however long it takes
+// to drain. Removing that needs the framing work that would stop one message owning the link.
 //
 // Grace after ICE reports Disconnected, which it does ~5s after it stops hearing from the peer,
 // for ~8s in total. Disconnected is transient by design, so this waits out a Wi-Fi roam or a
 // sleep/wake rather than acting on the first hint.
 const WEBRTC_SUSPECT_GRACE: Duration = Duration::from_secs(3);
+// KCP has no equivalent hint, only how long since a packet last arrived; its endpoint pings an
+// idle peer about every 2s, so this is several missed pings.
+const KCP_PEER_SILENCE_LIMIT: Duration = Duration::from_secs(8);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 use base::{
@@ -339,7 +343,11 @@ impl<T: InvokeUiSession> Remote<T> {
                                 webrtc_suspect_since = None;
                             }
                             let peer_gone = webrtc_suspect_since
-                                .map_or(false, |since| since.elapsed() >= WEBRTC_SUSPECT_GRACE);
+                                .map_or(false, |since| since.elapsed() >= WEBRTC_SUSPECT_GRACE)
+                                || kcp
+                                    .as_ref()
+                                    .and_then(|k| k.peer_silent_for())
+                                    .map_or(false, |silent| silent >= KCP_PEER_SILENCE_LIMIT);
                             if peer_gone {
                                 log::info!("Peer stopped answering, reconnecting");
                                 self.handler.msgbox("restarting-show", "Connecting...", "Connection in progress. Please wait.", "");
