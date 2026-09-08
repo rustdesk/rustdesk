@@ -15,6 +15,7 @@ use crate::{
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
+const KCP_CLOSE_REASON_GONE_TIMEOUT: u64 = 500;
 // A peer that is killed, logged out or rebooted sends nothing at all over UDP, so the session
 // sees silence and only a timeout ends it. These bound that wait for the two transports that
 // have a liveness signal of their own; TCP and WebSocket are left exactly as they were, and the
@@ -266,6 +267,8 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut last_recv_time = Instant::now();
                 let mut webrtc_suspect_since: Option<Instant> = None;
                 let mut last_rx_progress = peer.rx_progress();
+                let mut last_rx_progress_at = last_recv_time;
+                let mut peer_gone = false;
 
                 loop {
                     tokio::select! {
@@ -311,7 +314,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
-                            if last_recv_time.elapsed() >= SEC30 {
+                            // Not `last_recv_time` alone: a message larger than the transport's
+                            // fragment size yields nothing until its last fragment, so a peer
+                            // sending one steadily - a clipboard image is the case that occurs -
+                            // would otherwise be timed out mid-transfer. Transports that report no
+                            // progress leave this at its starting value and are unaffected.
+                            if last_recv_time.max(last_rx_progress_at).elapsed() >= SEC30 {
                                 self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
                             }
@@ -337,12 +345,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             let rx_progress = peer.rx_progress();
                             let progressed = rx_progress.is_some() && rx_progress != last_rx_progress;
                             last_rx_progress = rx_progress;
+                            if progressed {
+                                last_rx_progress_at = Instant::now();
+                            }
                             if peer.webrtc_disconnected() && !progressed {
                                 webrtc_suspect_since.get_or_insert_with(Instant::now);
                             } else {
                                 webrtc_suspect_since = None;
                             }
-                            let peer_gone = webrtc_suspect_since
+                            peer_gone = webrtc_suspect_since
                                 .map_or(false, |since| since.elapsed() >= WEBRTC_SUSPECT_GRACE)
                                 || kcp
                                     .as_ref()
@@ -398,6 +409,15 @@ impl<T: InvokeUiSession> Remote<T> {
                     s.send(()).ok();
                 }
                 if kcp.is_some() {
+                    // Bounded once the peer has been declared gone: KCP waits for send capacity
+                    // with no deadline of its own, and a queue that a dead peer will never drain
+                    // would hold this thread until the endpoint reaps the connection. Still
+                    // attempted rather than skipped - if the loss was one-way the peer does get
+                    // it, and drops its side of the session instead of waiting out its own
+                    // timeout.
+                    if peer_gone {
+                        peer.set_send_timeout(KCP_CLOSE_REASON_GONE_TIMEOUT);
+                    }
                     // Send the close reason if it hasn't been sent yet, as KCP cannot detect the socket close event.
                     self.send_close_reason(&mut peer, "kcp").await;
                     // KCP does not send messages immediately, so wait to ensure the last message is sent.
