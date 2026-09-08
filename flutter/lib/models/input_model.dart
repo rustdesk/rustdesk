@@ -1318,9 +1318,21 @@ class InputModel {
   /// delta in raw screen pixels for "update" (0 otherwise); [x]/[y] the
   /// gesture's raw screen pixel position. Only arrives while the remote page
   /// has the interception enabled, so the session is live.
+  ///
+  /// The deltas are normalized to logical pixels here, exactly once, before
+  /// they enter the scroll path: the framework's pointer converter divides
+  /// both positions and deltas by the device pixel ratio, so
+  /// PointerMoveEvent.delta — which this gesture historically arrived as, and
+  /// which [_sendTrackpadTwoFingerScroll]'s speed, dominant-axis filter and
+  /// fractional accumulator are tuned for — is logical. Passing the raw
+  /// physical deltas through would make the scroll speed, the axis-noise
+  /// threshold, and the accumulator all scale with display density.
   void onNativeTrackpadScroll(
       String phase, double dx, double dy, double x, double y) {
     if (isDesktop) return;
+    final dpr = MediaQueryData.fromView(
+            WidgetsBinding.instance.platformDispatcher.views.first)
+        .devicePixelRatio;
     switch (phase) {
       case 'begin':
         // The consumed drag is touch-kind input, not mouse — clear the
@@ -1341,7 +1353,7 @@ class InputModel {
         return;
       case 'update':
         _sendTrackpadTwoFingerScroll(
-            dx, dy, _nativePositionForRemoteCanvas(x, y));
+            dx / dpr, dy / dpr, _nativePositionForRemoteCanvas(x, y));
         return;
       case 'end':
         _endTrackpadTwoFingerGesture();
