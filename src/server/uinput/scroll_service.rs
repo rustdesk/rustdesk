@@ -194,7 +194,7 @@ pub(super) fn spawn_smooth_scroll_handler(mut stream: ipc::Connection) {
                     break;
                 }
             };
-            if let Err(err) = touchpad.scroll(x, y) {
+            if let Err(err) = touchpad.scroll(x, y).await {
                 log::error!("Failed to inject smooth uinput scroll: {err}");
                 break;
             }

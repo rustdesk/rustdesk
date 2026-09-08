@@ -4,7 +4,7 @@ use evdev::{
     AbsInfo, AbsoluteAxisType, AttributeSet, BusType, EventType, InputEvent, InputId, Key,
     PropType, UinputAbsSetup,
 };
-use hbb_common::log;
+use hbb_common::{log, tokio};
 use std::{io, path::PathBuf};
 
 mod motion;
@@ -83,13 +83,27 @@ impl SmoothScrollDevice {
         })
     }
 
-    pub(super) fn scroll(&mut self, x: i32, y: i32) -> io::Result<()> {
+    pub(super) async fn scroll(&mut self, x: i32, y: i32) -> io::Result<()> {
         if x == 0 && y == 0 {
             return self.finish();
         }
         let (dx, x_remainder) = convert_delta(self.remainders.0, x)?;
         let (dy, y_remainder) = convert_delta(self.remainders.1, y)?;
-        self.move_delta((dx, dy))?;
+        // One input update must not outlive the IPC acknowledgement budget.
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(super::IPC_REQUEST_TIMEOUT),
+            self.move_delta((dx, dy)),
+        )
+        .await
+        {
+            Ok(result) => result?,
+            Err(_) => {
+                return self.finish_after_error(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "smooth scroll update exceeded the IPC response deadline",
+                ));
+            }
+        }
         self.remainders = (x_remainder, y_remainder);
         Ok(())
     }
@@ -133,7 +147,7 @@ impl SmoothScrollDevice {
         (first, second)
     }
 
-    fn move_delta(&mut self, delta: (i32, i32)) -> io::Result<()> {
+    async fn move_delta(&mut self, delta: (i32, i32)) -> io::Result<()> {
         let mut remaining = delta;
         while remaining != (0, 0) {
             if !self.active {
@@ -142,12 +156,15 @@ impl SmoothScrollDevice {
             let step = fitting_delta(self.positions, remaining);
             if step == (0, 0) {
                 self.finish()?;
+                tokio::task::yield_now().await;
                 continue;
             }
             self.move_contacts(step.0, step.1)?;
             remaining = (remaining.0 - step.0, remaining.1 - step.1);
             if remaining != (0, 0) {
                 self.finish()?;
+                // Bound each poll's work so other scroll clients and the deadline can run.
+                tokio::task::yield_now().await;
             }
         }
         Ok(())

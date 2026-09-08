@@ -13,6 +13,7 @@ use hbb_common::{
 mod scroll_service;
 mod smooth_scroll;
 mod x11_error;
+mod x11_settings;
 
 static IPC_CONN_TIMEOUT: u64 = 1000;
 static IPC_POSTFIX_KEYBOARD: &str = "_uinput_keyboard";
@@ -25,6 +26,7 @@ const SCROLL_IPC_QUEUE_CAPACITY: usize = 256;
 const HIGH_RESOLUTION_SCROLL_DEVICE_READY_DELAY_MS: u64 = 300;
 const SMOOTH_SCROLL_READY_POLL_MS: u64 = 50;
 const SMOOTH_SCROLL_READY_TIMEOUT_MS: u64 = 1_500;
+const SMOOTH_SCROLL_SETTINGS_POLL_MS: u64 = 1_000;
 const SMOOTH_SCROLL_HANDSHAKE_TIMEOUT_MS: u64 = SMOOTH_SCROLL_READY_TIMEOUT_MS + 500;
 const SCROLL_FINISH_RESPONSE_TIMEOUT_MS: u64 = IPC_REQUEST_TIMEOUT + 500;
 const SMOOTH_SCROLL_DEVICE_NAME_PREFIX: &str = "RustDesk Smooth Scroll";
@@ -507,9 +509,14 @@ pub mod client {
             Some(resp) => bail!("unexpected smooth uinput scroll response: {:?}", &resp),
             None => bail!("smooth uinput scroll service closed"),
         };
-        wait_for_x11_smooth_scroll_device(device_name).await?;
+        let device_name = wait_for_x11_smooth_scroll_device(device_name).await?;
         let (tx, rx) = channel(SCROLL_IPC_QUEUE_CAPACITY);
-        let task = tokio::spawn(forward_scroll_requests(conn, rx, "smooth"));
+        let task = tokio::spawn(async move {
+            tokio::select! {
+                () = forward_scroll_requests(conn, rx, "smooth") => {}
+                () = monitor_x11_smooth_scroll_device(device_name) => {}
+            }
+        });
         Ok(ScrollConnection { tx, task })
     }
 
@@ -519,18 +526,37 @@ pub mod client {
     const X11_CLICK_BUTTONS: usize = 3;
     const X11_DISABLED_BUTTON: u8 = 0;
 
-    async fn wait_for_x11_smooth_scroll_device(device_name: String) -> ResultType<()> {
-        tokio::task::spawn_blocking(move || -> ResultType<()> {
+    async fn wait_for_x11_smooth_scroll_device(device_name: String) -> ResultType<String> {
+        tokio::task::spawn_blocking(move || -> ResultType<String> {
             let attempts = SMOOTH_SCROLL_READY_TIMEOUT_MS / SMOOTH_SCROLL_READY_POLL_MS;
             for _ in 0..attempts {
                 if x11_smooth_scroll_device_ready(device_name.as_bytes()) {
-                    return Ok(());
+                    return Ok(device_name);
                 }
                 std::thread::sleep(Duration::from_millis(SMOOTH_SCROLL_READY_POLL_MS));
             }
-            bail!("X11 did not expose a scroll-capable smooth uinput device with clicks disabled")
+            bail!("X11 smooth uinput device requires enabled two-finger/horizontal scrolling, event delivery and disabled clicks")
         })
         .await?
+    }
+
+    async fn monitor_x11_smooth_scroll_device(device_name: String) {
+        loop {
+            tokio::time::sleep(Duration::from_millis(SMOOTH_SCROLL_SETTINGS_POLL_MS)).await;
+            let name = device_name.clone();
+            match tokio::task::spawn_blocking(move || {
+                x11_smooth_scroll_device_ready(name.as_bytes())
+            })
+            .await
+            {
+                Ok(true) => continue,
+                Ok(false) => log::warn!(
+                    "X11 smooth-scroll device is no longer usable; disconnecting smooth scrolling"
+                ),
+                Err(err) => log::error!("Failed to check X11 smooth-scroll settings: {err}"),
+            }
+            return;
+        }
     }
 
     fn x11_smooth_scroll_device_ready(device_name: &[u8]) -> bool {
@@ -596,6 +622,7 @@ pub mod client {
             Some((*(class.cast::<xinput2::XIScrollClassInfo>())).scroll_type)
         });
         has_required_x11_scroll_axes(scroll_types)
+            && x11_settings::scrolling_enabled(display, info.deviceid)
             && x11_disable_touchpad_clicks(display, info.deviceid)
     }
 
@@ -614,6 +641,10 @@ pub mod client {
         if count < X11_CLICK_BUTTONS as i32 || count as usize > mapping.len() {
             xinput::XCloseDevice(display, device);
             return false;
+        }
+        if mapping[..X11_CLICK_BUTTONS] == [X11_DISABLED_BUTTON; X11_CLICK_BUTTONS] {
+            xinput::XCloseDevice(display, device);
+            return true;
         }
         // Suppress tap clicks even if desktop settings later enable tapping. Keep wheel
         // buttons mapped for applications that do not consume XInput scroll valuators.
