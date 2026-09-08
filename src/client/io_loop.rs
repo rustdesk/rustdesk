@@ -15,24 +15,19 @@ use crate::{
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
-const KCP_CLOSE_REASON_GONE_TIMEOUT: u64 = 500;
-// A peer that is killed, logged out or rebooted sends nothing at all over UDP, so the session
-// sees silence and only a timeout ends it. These bound that wait for the two transports that
-// have a liveness signal of their own; TCP and WebSocket are left exactly as they were, and the
-// 30s timeout below still backs all of them.
-//
-// Neither is a hard upper bound on how soon this notices: sends are awaited inline in this same
-// loop, so one in progress keeps the tick below from running. WebRTC caps that at its existing
-// send timeout; KCP sets none, so a large message can delay the check by however long it takes
-// to drain. Removing that needs the framing work that would stop one message owning the link.
-//
+// Deadline for the parting close-reason send once the peer is presumed gone; KCP waits for send
+// capacity with no deadline of its own.
+const KCP_CLOSE_REASON_GONE_DEADLINE: Duration = Duration::from_millis(500);
 // Grace after ICE reports Disconnected, which it does ~5s after it stops hearing from the peer,
 // for ~8s in total. Disconnected is transient by design, so this waits out a Wi-Fi roam or a
 // sleep/wake rather than acting on the first hint.
 const WEBRTC_SUSPECT_GRACE: Duration = Duration::from_secs(3);
-// KCP has no equivalent hint, only how long since a packet last arrived; its endpoint pings an
-// idle peer about every 2s, so this is several missed pings.
+// KCP gets no such hint, only how long since a packet arrived; its endpoint pings an idle peer
+// about every 2s, so this is several missed pings, and matches the 8s WebRTC arrives at.
 const KCP_PEER_SILENCE_LIMIT: Duration = Duration::from_secs(8);
+// Neither is a hard upper bound: sends are awaited inline in this loop, so one in progress keeps
+// the tick that checks them from running, capped only by the transport's own send timeout.
+// Removing that needs the framing work that would stop one message owning the link.
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 use base::{
@@ -317,8 +312,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // Not `last_recv_time` alone: a message larger than the transport's
                             // fragment size yields nothing until its last fragment, so a peer
                             // sending one steadily - a clipboard image is the case that occurs -
-                            // would otherwise be timed out mid-transfer. Transports that report no
-                            // progress leave this at its starting value and are unaffected.
+                            // would otherwise be timed out mid-transfer.
                             if last_recv_time.max(last_rx_progress_at).elapsed() >= SEC30 {
                                 self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
@@ -340,10 +334,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.msgbox("restarting-show", "Restarting remote device", "Connection in progress. Please wait.", "");
                                 break;
                             }
-                            // Bytes seen by the transport, so a message too large to have arrived
-                            // whole still counts, and it clears a suspicion ICE raised late.
                             let rx_progress = peer.rx_progress();
-                            let progressed = rx_progress.is_some() && rx_progress != last_rx_progress;
+                            // `None` for transports that report none, and it never changes for a
+                            // given one, so they are inert here.
+                            let progressed = rx_progress != last_rx_progress;
                             last_rx_progress = rx_progress;
                             if progressed {
                                 last_rx_progress_at = Instant::now();
@@ -409,14 +403,10 @@ impl<T: InvokeUiSession> Remote<T> {
                     s.send(()).ok();
                 }
                 if kcp.is_some() {
-                    // Bounded once the peer has been declared gone: KCP waits for send capacity
-                    // with no deadline of its own, and a queue that a dead peer will never drain
-                    // would hold this thread until the endpoint reaps the connection. Still
-                    // attempted rather than skipped - if the loss was one-way the peer does get
-                    // it, and drops its side of the session instead of waiting out its own
-                    // timeout.
+                    // Attempted rather than skipped even here: if the loss was one-way the peer
+                    // does get it, and drops its side instead of waiting out its own timeout.
                     if peer_gone {
-                        peer.set_send_timeout(KCP_CLOSE_REASON_GONE_TIMEOUT);
+                        peer.set_send_timeout(KCP_CLOSE_REASON_GONE_DEADLINE.as_millis() as u64);
                     }
                     // Send the close reason if it hasn't been sent yet, as KCP cannot detect the socket close event.
                     self.send_close_reason(&mut peer, "kcp").await;
