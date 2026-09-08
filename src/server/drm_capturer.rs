@@ -357,6 +357,92 @@ mod cursor_calibration_tests {
         );
     }
 
+    fn a_cal(plane: Option<(i32, i32)>) -> Option<CursorCal> {
+        Some(CursorCal {
+            id: 7,
+            width: 64,
+            height: 64,
+            raw: Vec::new(),
+            applied: None,
+            wire_hot: (0, 0),
+            plane,
+            stable: 0,
+            window: 0,
+            pending: None,
+            rect: None,
+        })
+    }
+
+    // The window accounting, which had no test at all and is the layer the dead-cache bug lived
+    // in. Every call below stops before the geometry lookup, so nothing here touches the
+    // enumeration or the peer-input state.
+    #[test]
+    fn a_new_plane_position_opens_a_window_and_restarts_the_count() {
+        let mut cal = a_cal(None);
+        // First sighting of a position: opens the window, counts nothing yet.
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        let c = cal.as_ref().unwrap();
+        assert_eq!(c.plane, Some((10, 20)));
+        assert_eq!(c.stable, 0);
+        assert_eq!(c.window, CURSOR_CAL_WINDOW_TICKS);
+
+        // Same position: the count rises and the window drains.
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        let c = cal.as_ref().unwrap();
+        assert_eq!(c.stable, 1);
+        assert_eq!(c.window, CURSOR_CAL_WINDOW_TICKS - 1);
+
+        // A move restarts both, which is what makes the settle count mean "held still".
+        note_cursor_plane(&mut cal, Some((11, 20)), 0, 0, 0);
+        let c = cal.as_ref().unwrap();
+        assert_eq!(c.plane, Some((11, 20)));
+        assert_eq!(c.stable, 0);
+        assert_eq!(c.window, CURSOR_CAL_WINDOW_TICKS);
+    }
+
+    #[test]
+    fn a_settle_lands_one_sample_later_than_the_constant_reads() {
+        let mut cal = a_cal(None);
+        for _ in 0..=CURSOR_CAL_STABLE_TICKS {
+            note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        }
+        // The frame that first reported the position took the moved branch and left the counter
+        // at zero, so CURSOR_CAL_STABLE_TICKS+1 samples are needed to reach it.
+        assert_eq!(cal.as_ref().unwrap().stable, CURSOR_CAL_STABLE_TICKS);
+    }
+
+    #[test]
+    fn a_closed_window_stays_closed_until_the_plane_moves() {
+        let mut cal = a_cal(Some((10, 20)));
+        cal.as_mut().unwrap().window = 0;
+        cal.as_mut().unwrap().stable = 99;
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        // Same position with a closed window: nothing reopens it and the count does not move.
+        assert_eq!(cal.as_ref().unwrap().window, 0);
+        assert_eq!(cal.as_ref().unwrap().stable, 100);
+        note_cursor_plane(&mut cal, Some((10, 21)), 0, 0, 0);
+        assert_eq!(cal.as_ref().unwrap().window, CURSOR_CAL_WINDOW_TICKS);
+    }
+
+    #[test]
+    fn a_rotated_output_and_a_missing_position_are_both_declined() {
+        // No position at all: nothing is recorded.
+        let mut cal = a_cal(None);
+        note_cursor_plane(&mut cal, None, 0, 0, 0);
+        assert_eq!(cal.as_ref().unwrap().plane, None);
+
+        // A rotated output settles normally but must never reach a measurement: the plane
+        // position is unrotated scanout space while the injected point is not.
+        let mut cal = a_cal(None);
+        for _ in 0..=CURSOR_CAL_STABLE_TICKS {
+            note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 1);
+        }
+        assert_eq!(cal.as_ref().unwrap().applied, None);
+        assert_eq!(cal.as_ref().unwrap().pending, None);
+        // And the geometry lookup was never even attempted.
+        assert!(cal.as_ref().unwrap().rect.is_none());
+    }
+
     // The gate above is the one inside the arithmetic. This is the gate the receive loop actually
     // uses, which is a different thing: the loop passes a literal `false` to `calibrated_hotspot`
     // and decides here whether a shape is a candidate at all.
