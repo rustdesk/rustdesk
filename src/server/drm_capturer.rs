@@ -443,6 +443,43 @@ mod cursor_calibration_tests {
         assert!(cal.as_ref().unwrap().rect.is_none());
     }
 
+    // The near-wire band has to hold on BOTH exits: not just "publish nothing now" but also "cache
+    // nothing", or the next arrival of the same shape is seeded from the cache and published under
+    // a fresh id with no visual change.
+    #[test]
+    fn a_measurement_that_matches_the_guess_is_not_cached_even_when_confirmed() {
+        const SHAPE: u64 = 4242;
+        CURSOR_CAL_CACHE.lock().unwrap().remove(&SHAPE);
+        let mut cal = a_cal(Some((10, 20)));
+        let c = cal.as_mut().unwrap();
+        c.id = SHAPE;
+        c.wire_hot = (12, 12);
+        // A previous window already proposed the same in-band answer, so this one confirms it.
+        c.pending = Some((13, 12));
+        c.stable = CURSOR_CAL_STABLE_TICKS;
+        c.window = 1;
+        // Drive the tail of note_cursor_plane directly: the measurement is 1 px off the guess.
+        let (confirms, _publish, candidate) = cal_outcome(c.applied, c.pending, (13, 12));
+        assert!(confirms);
+        let near_wire = (13 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
+            && (12 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
+        assert!(near_wire);
+        if confirms && !near_wire {
+            store_cursor_cal(c.id, (13, 12));
+        }
+        c.pending = candidate;
+        assert_eq!(cached_cursor_cal(SHAPE), None, "an in-band measurement must not be cached");
+        // Control: the same confirmation OUT of band does enter the cache.
+        let (confirms, _, _) = cal_outcome(None, Some((30, 4)), (30, 4));
+        assert!(confirms);
+        let far = (30 - c.wire_hot.0).abs() > CURSOR_CAL_TOLERANCE;
+        if confirms && far {
+            store_cursor_cal(SHAPE, (30, 4));
+        }
+        assert_eq!(cached_cursor_cal(SHAPE), Some((30, 4)));
+        CURSOR_CAL_CACHE.lock().unwrap().remove(&SHAPE);
+    }
+
     // The gate above is the one inside the arithmetic. This is the gate the receive loop actually
     // uses, which is a different thing: the loop passes a literal `false` to `calibrated_hotspot`
     // and decides here whether a shape is a candidate at all.
@@ -693,14 +730,18 @@ fn note_cursor_plane(
         return;
     };
     let (confirms, publish, candidate) = cal_outcome(c.applied, c.pending, h);
-    if confirms {
+    // A measurement that lands on the hotspot the wire already carries is not a correction: the
+    // reader's guess was right. It must not enter the cache either, or the shape's NEXT arrival
+    // would be seeded from it and delivered under a fresh id with nothing to show for it, which is
+    // exactly the churn the tolerance exists to prevent.
+    let near_wire = (h.0 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
+        && (h.1 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
+    if confirms && !near_wire {
         store_cursor_cal(c.id, h);
     }
     c.pending = candidate;
     // Measured either way: stay quiet until the plane moves and re-opens a window.
     c.window = 0;
-    let near_wire = (h.0 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
-        && (h.1 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
     if !publish || (c.applied.is_none() && near_wire) {
         return;
     }
