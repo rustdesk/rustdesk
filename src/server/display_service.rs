@@ -136,11 +136,17 @@ impl WaylandLayout {
 #[cfg(target_os = "linux")]
 static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 
-/// True while the compositor layout differs from the baseline the peer was told about. The DRM
-/// cursor calibration declines to measure in that state: the injected point it reads has been
-/// remapped onto the live layout while the rect it would subtract comes from the cached baseline
-/// snapshot, so the two halves are from different layouts. Restarting the measurement after the
-/// promotion re-baselines is safer than carrying a correction through the drift.
+/// True while the layout has drifted AND the matching uinput range was applied, which is the
+/// same condition `remap_wayland_uinput_coord` uses to decide whether to remap. It is NOT "the
+/// layout differs": a failed range apply stores false, and then nothing is remapped either, so
+/// the injected point stays in the baseline the peer was told about.
+///
+/// The DRM cursor calibration declines to measure while this is true, because that is exactly
+/// when the injected point has been moved onto the live layout while the rect it would subtract
+/// still comes from the cached baseline snapshot. Reading the same flag as the remap is what
+/// keeps the two halves in one coordinate system in every case: remapped and declined, or not
+/// remapped and measured. Restarting after the promotion re-baselines is safer than carrying a
+/// correction through the drift.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) fn wayland_layout_drifted() -> bool {
     WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed)
