@@ -90,8 +90,6 @@ use crate::ui_session_interface::SessionPermissionConfig;
 pub use super::lang::*;
 
 #[cfg(not(target_os = "linux"))]
-mod audio_buffer;
-#[cfg(not(target_os = "linux"))]
 mod audio_playback;
 #[cfg(all(test, not(target_os = "linux")))]
 mod audio_state_tests;
@@ -1355,24 +1353,9 @@ impl AudioBuffer {
     fn append_pcm2(&self, buffer: &[f32]) -> usize {
         let mut lock = self.0.lock().unwrap();
         let cap = lock.capacity();
-        if buffer.len() > cap {
-            let discarded = lock.occupied_len() + buffer.len() - cap;
-            lock.push_slice_overwrite(buffer);
-            let generation = self.signal_discontinuity();
-            drop(lock);
-            log::debug!(
-                "Audio buffer capacity discard: samples={discarded}, generation={generation}"
-            );
-            return cap;
-        }
-
         let having = lock.occupied_len() + buffer.len();
-        let discard = (having > cap).then(|| {
-            let discarded = having - cap;
-            lock.skip(discarded);
-            (discarded, self.signal_discontinuity())
-        });
         lock.push_slice_overwrite(buffer);
+        let discard = (having > cap).then(|| (having - cap, self.signal_discontinuity()));
         let occupied = lock.occupied_len();
         drop(lock);
         if let Some((discarded, generation)) = discard {

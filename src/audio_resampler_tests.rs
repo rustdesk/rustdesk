@@ -67,22 +67,26 @@ fn stereo_config() -> AudioResamplerConfig {
 #[test]
 fn preserves_decoded_packet_continuity_and_output_ratio() {
     let input = stereo_tone(CHUNK_FRAMES * CHUNK_COUNT);
-    let mut resampler = AudioResampler::new(stereo_config()).unwrap();
-    let output: Vec<_> = input
-        .chunks(CHUNK_FRAMES * CHANNELS as usize)
-        .map(|chunk| resampler.process(chunk).unwrap())
-        .collect();
-    let residual = maximum_boundary_residual(&output);
-
-    assert!(
-        residual <= MAX_BOUNDARY_RESIDUAL,
-        "packet boundary residual {residual} exceeded {MAX_BOUNDARY_RESIDUAL}"
-    );
-    let output_frames = output.iter().map(Vec::len).sum::<usize>() / CHANNELS as usize;
+    let mut whole_resampler = AudioResampler::new(stereo_config()).unwrap();
+    let whole_output = whole_resampler.process(&input).unwrap();
     let expected_frames = CHUNK_FRAMES * CHUNK_COUNT * OUTPUT_RATE as usize / INPUT_RATE as usize
         - LOOK_AHEAD_OUTPUT_FRAMES;
 
-    assert_eq!(output_frames, expected_frames);
+    for chunk_frames in [CHUNK_FRAMES, UNEVEN_CHUNK_FRAMES] {
+        let mut resampler = AudioResampler::new(stereo_config()).unwrap();
+        let output: Vec<_> = input
+            .chunks(chunk_frames * CHANNELS as usize)
+            .map(|chunk| resampler.process(chunk).unwrap())
+            .collect();
+        let residual = maximum_boundary_residual(&output);
+        assert!(
+            residual <= MAX_BOUNDARY_RESIDUAL,
+            "packet boundary residual {residual} exceeded {MAX_BOUNDARY_RESIDUAL}, chunk_frames={chunk_frames}"
+        );
+        let output_frames = output.iter().map(Vec::len).sum::<usize>() / CHANNELS as usize;
+        assert_eq!(output_frames, expected_frames);
+        assert_eq!(output.concat(), whole_output, "chunk_frames={chunk_frames}");
+    }
 }
 
 #[test]
@@ -90,20 +94,6 @@ fn rejects_incomplete_interleaved_frames() {
     let mut resampler = AudioResampler::new(stereo_config()).unwrap();
 
     assert!(resampler.process(&[TONE_AMPLITUDE]).is_err());
-}
-
-#[test]
-fn chunk_boundaries_do_not_change_output() {
-    let input = stereo_tone(CHUNK_FRAMES * CHUNK_COUNT);
-    let mut whole_resampler = AudioResampler::new(stereo_config()).unwrap();
-    let whole_output = whole_resampler.process(&input).unwrap();
-    let mut chunked_resampler = AudioResampler::new(stereo_config()).unwrap();
-    let mut chunked_output = Vec::new();
-    for chunk in input.chunks(UNEVEN_CHUNK_FRAMES * CHANNELS as usize) {
-        chunked_output.extend(chunked_resampler.process(chunk).unwrap());
-    }
-
-    assert_eq!(chunked_output, whole_output);
 }
 
 #[test]

@@ -11,6 +11,7 @@ pub(super) struct SincAudioResampler {
 
 impl SincAudioResampler {
     pub(super) fn new(config: AudioResamplerConfig) -> Result<Self, AudioResamplerError> {
+        super::validate_config(config)?;
         let ratio = f64::from(config.output_rate) / f64::from(config.input_rate);
         if unsafe { sys::src_is_valid_ratio(ratio) } == 0 {
             return Err(backend_error(
@@ -36,6 +37,7 @@ impl SincAudioResampler {
         input: &[f32],
         output: &mut Vec<f32>,
     ) -> Result<(), AudioResamplerError> {
+        super::validate_input(input, self.config.channels as usize)?;
         let mut consumed = 0;
         loop {
             let (used, generated) = self.process_block(&input[consumed..], output)?;

@@ -104,25 +104,17 @@ pub(crate) struct AudioResampler {
     #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
     backend: StreamingLinearAudioResampler,
     #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-    channels: usize,
-    #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
     backend: sinc::SincAudioResampler,
 }
 
 impl AudioResampler {
     pub(crate) fn new(config: AudioResamplerConfig) -> Result<Self, AudioResamplerError> {
-        #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-        {
-            let channels = validate_config(config)?;
-            let backend = sinc::SincAudioResampler::new(config)?;
-            Ok(Self { channels, backend })
-        }
-        #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
-        {
-            Ok(Self {
-                backend: StreamingLinearAudioResampler::new(config)?,
-            })
-        }
+        Ok(Self {
+            #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
+            backend: sinc::SincAudioResampler::new(config)?,
+            #[cfg(not(all(feature = "use_samplerate", not(feature = "use_dasp"))))]
+            backend: StreamingLinearAudioResampler::new(config)?,
+        })
     }
 
     pub(crate) fn process(&mut self, input: &[f32]) -> Result<Vec<f32>, AudioResamplerError> {
@@ -137,10 +129,6 @@ impl AudioResampler {
         input: &[f32],
         output: &mut Vec<f32>,
     ) -> Result<(), AudioResamplerError> {
-        #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-        {
-            validate_input(input, self.channels)?;
-        }
         self.backend.process_into(input, output)
     }
 

@@ -1,5 +1,5 @@
 use hbb_common::{log, thiserror};
-use ringbuf::Rb;
+use ringbuf::{ring_buffer::RbBase, Rb};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
@@ -37,7 +37,6 @@ pub(super) struct AudioPlaybackWriter {
     audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     discontinuity_generation: std::sync::Arc<AtomicUsize>,
     observed_discontinuity_generation: usize,
-    channels: std::num::NonZeroUsize,
     buffered_input: Vec<f32>,
     recovery: AudioPlaybackRecovery,
 }
@@ -48,17 +47,15 @@ impl AudioPlaybackWriter {
         audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
         discontinuity_generation: std::sync::Arc<AtomicUsize>,
     ) -> Result<Self, AudioPlaybackError> {
-        let channels = std::num::NonZeroUsize::new(config.channels)
-            .ok_or(AudioPlaybackError::InvalidConfig(config))?;
+        let recovery = AudioPlaybackRecovery::new(config)?;
         let buffer_capacity = audio_buffer.lock().unwrap().capacity();
         let observed_discontinuity_generation = discontinuity_generation.load(Ordering::Relaxed);
         Ok(Self {
             audio_buffer,
             discontinuity_generation,
             observed_discontinuity_generation,
-            channels,
             buffered_input: vec![0.0; buffer_capacity],
-            recovery: AudioPlaybackRecovery::new(config)?,
+            recovery,
         })
     }
 
@@ -67,20 +64,19 @@ impl AudioPlaybackWriter {
         T: cpal::Sample + cpal::FromSample<f32>,
     {
         let requested_samples = output.len().min(self.buffered_input.len());
-        let drained = super::audio_buffer::drain_audio_samples(
-            super::audio_buffer::AudioBufferSource {
-                buffer: &self.audio_buffer,
-                discontinuity_generation: &self.discontinuity_generation,
-            },
-            &mut self.buffered_input[..requested_samples],
-            self.channels,
-        );
-        if drained.discontinuity_generation != self.observed_discontinuity_generation {
+        let channel_count = self.recovery.channels;
+        let (available_samples, generation) = {
+            let mut buffer = self.audio_buffer.lock().unwrap();
+            let generation = self.discontinuity_generation.load(Ordering::Relaxed);
+            let samples =
+                buffer.occupied_len().min(requested_samples) / channel_count * channel_count;
+            buffer.pop_slice(&mut self.buffered_input[..samples]);
+            (samples, generation)
+        };
+        if generation != self.observed_discontinuity_generation {
             self.recovery.begin_discontinuity();
-            self.observed_discontinuity_generation = drained.discontinuity_generation;
+            self.observed_discontinuity_generation = generation;
         }
-        let available_samples = drained.samples;
-        let channel_count = self.channels.get();
         let available_frames = available_samples / channel_count;
         for (frame_index, output_frame) in output.chunks_mut(channel_count).enumerate() {
             let input = if frame_index < available_frames {
@@ -171,7 +167,11 @@ impl AudioPlaybackRecovery {
 
 #[cfg(test)]
 mod tests {
-    use super::{AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery};
+    use super::{
+        AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackWriter,
+    };
+    use ringbuf::{ring_buffer::RbBase, Rb};
+    use std::sync::{atomic::Ordering, Arc, Mutex};
 
     const SAMPLE_RATE: u32 = 48_000;
     const CHANNELS: usize = 2;
@@ -182,6 +182,32 @@ mod tests {
     const TRANSITION_FRAMES: usize =
         SAMPLE_RATE as usize * super::UNDERRUN_DECLICK_MS / super::MILLISECONDS_PER_SECOND;
     const MAX_SAMPLE_STEP: f32 = 0.01;
+
+    #[test]
+    fn writing_audio_observes_discard_and_releases_buffer_lock() {
+        const INPUT: [f32; 4] = [0.1, 0.2, 0.3, 0.4];
+        const GENERATION: usize = 7;
+        let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(INPUT.len())));
+        let generation = Arc::new(super::AtomicUsize::new(0));
+        let config = AudioPlaybackConfig {
+            sample_rate: SAMPLE_RATE,
+            channels: CHANNELS,
+        };
+        let mut writer =
+            AudioPlaybackWriter::new(config, buffer.clone(), generation.clone()).unwrap();
+        {
+            let mut buffer = buffer.lock().unwrap();
+            buffer.push_slice(&INPUT);
+            generation.store(GENERATION, Ordering::Relaxed);
+        }
+        let mut output = [0.0_f32; INPUT.len()];
+
+        writer.write_output(&mut output);
+
+        assert_eq!(writer.buffered_input, INPUT);
+        assert_eq!(writer.observed_discontinuity_generation, GENERATION);
+        assert_eq!(buffer.try_lock().unwrap().occupied_len(), 0);
+    }
 
     fn maximum_sample_step(samples: &[f32]) -> f32 {
         samples

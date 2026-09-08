@@ -81,16 +81,7 @@ fn moving_capture_resampler_preserves_pending_audio() {
     assert_eq!(output, expected);
 }
 
-#[test]
-fn capture_downsampling_filters_out_of_band_audio() {
-    let input: Vec<_> = (0..INPUT_PACKET_FRAMES * PACKET_COUNT)
-        .flat_map(|frame| {
-            let phase =
-                std::f64::consts::TAU * REJECTED_TONE_HZ * frame as f64 / f64::from(INPUT_RATE);
-            let sample = (f64::from(TONE_AMPLITUDE) * phase.sin()) as f32;
-            [sample, sample]
-        })
-        .collect();
+fn downsampled_rms(input: &[f32]) -> f64 {
     let config = AudioResamplerConfig {
         output_rate: DOWNSAMPLE_RATE,
         ..stereo_config()
@@ -108,25 +99,27 @@ fn capture_downsampling_filters_out_of_band_audio() {
         .map(|sample| f64::from(*sample).powi(2))
         .sum::<f64>()
         / output.len() as f64;
-    let rms = mean_square.sqrt();
+    mean_square.sqrt()
+}
+
+#[test]
+fn capture_downsampling_filters_out_of_band_audio() {
+    let input: Vec<_> = (0..INPUT_PACKET_FRAMES * PACKET_COUNT)
+        .flat_map(|frame| {
+            let phase =
+                std::f64::consts::TAU * REJECTED_TONE_HZ * frame as f64 / f64::from(INPUT_RATE);
+            let sample = (f64::from(TONE_AMPLITUDE) * phase.sin()) as f32;
+            [sample, sample]
+        })
+        .collect();
+    let rms = downsampled_rms(&input);
     assert!(
         rms < MAX_ALIAS_RMS,
         "out-of-band output RMS {rms} exceeded {MAX_ALIAS_RMS}"
     );
 
     let input = stereo_tone(INPUT_PACKET_FRAMES * PACKET_COUNT);
-    let mut resampler = FixedFrameAudioResampler::new(config, output_frames).unwrap();
-    let output: Vec<f32> = input
-        .chunks(INPUT_PACKET_FRAMES * CHANNELS as usize)
-        .flat_map(|packet| resampler.process(packet).unwrap().into_iter().flatten())
-        .collect();
-    assert!(output.len() >= output_frames * CHANNELS as usize * MIN_CONTINUITY_PACKETS);
-    let mean_square = output
-        .iter()
-        .map(|sample| f64::from(*sample).powi(2))
-        .sum::<f64>()
-        / output.len() as f64;
-    let rms = mean_square.sqrt();
+    let rms = downsampled_rms(&input);
     assert!(
         rms > MIN_PASSBAND_RMS,
         "in-band output RMS {rms} fell below {MIN_PASSBAND_RMS}"
