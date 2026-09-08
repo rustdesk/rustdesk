@@ -1,3 +1,4 @@
+use super::super::AudioEncoder;
 use super::{
     send_f32, CaptureEncoderConfig, CaptureEncoderContext, CapturePcmReceiver, CapturePcmStats,
     CAPTURE_PCM_QUEUE_PACKETS,
@@ -104,14 +105,12 @@ impl CaptureStatsReporter {
     }
 }
 
-pub(super) fn run_capture_encoder(
-    mut context: CaptureEncoderContext,
-    config: CaptureEncoderConfig,
-) {
+pub(super) fn run_capture_encoder(context: CaptureEncoderContext, config: CaptureEncoderConfig) {
+    let mut encoder = AudioEncoder::new(context.encoder);
     let mut state = CaptureEncoderState::new(config.sample_rate, config.encode_channel);
     loop {
         while let Some(packet) = state.next_packet(&context.receiver) {
-            send_f32(&packet, &mut context.encoder, &context.service);
+            send_f32(&packet, &mut encoder, &context.service);
             context.receiver.recycle(packet);
         }
         if context.stop.load(Ordering::Acquire) && context.receiver.is_empty() {

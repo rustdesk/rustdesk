@@ -99,10 +99,11 @@ mod pa_impl {
         RESTARTING.store(false, Ordering::SeqCst);
         #[cfg(target_os = "linux")]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
-        }
-        let mut encoder = Encoder::new(crate::platform::PA_SAMPLE_RATE, Stereo, LowDelay)?;
+        let mut encoder = AudioEncoder::new(Encoder::new(
+            crate::platform::PA_SAMPLE_RATE,
+            Stereo,
+            LowDelay,
+        )?);
         #[cfg(target_os = "linux")]
         allow_err!(
             stream
@@ -512,9 +513,6 @@ mod cpal_impl {
         };
         let sample_rate_0 = config.sample_rate().0;
         log::debug!("Audio sample rate : {}", output.sample_rate);
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
-        }
         let device_channel = config.channels();
         let (_, capture_frame_samples) = capture_packet_layout(sample_rate_0, device_channel)?;
         let mut frame = audio_capture::CaptureFrameBuffer::new(capture_frame_samples)?;
@@ -701,28 +699,43 @@ fn create_format_msg(sample_rate: u32, channels: u16) -> Message {
     msg
 }
 
-// use AUDIO_ZERO_COUNT for the Noise(Zero) Gate Attack Time
+// Use a per-encoder counter for the Noise(Zero) Gate Attack Time.
 // every audio data length is set to 480
 // MAX_AUDIO_ZERO_COUNT=800 is similar as Gate Attack Time 3~5s(Linux) || 6~8s(Windows)
 const MAX_AUDIO_ZERO_COUNT: u16 = 800;
-static mut AUDIO_ZERO_COUNT: u16 = 0;
 
-fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
-    if data.iter().filter(|x| **x != 0.).next().is_some() {
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
+struct AudioEncoder {
+    encoder: Encoder,
+    zero_count: u16,
+}
+
+impl AudioEncoder {
+    fn new(encoder: Encoder) -> Self {
+        Self {
+            encoder,
+            zero_count: 0,
         }
-    } else {
-        unsafe {
-            if AUDIO_ZERO_COUNT > MAX_AUDIO_ZERO_COUNT {
-                if AUDIO_ZERO_COUNT == MAX_AUDIO_ZERO_COUNT + 1 {
-                    log::debug!("Audio Zero Gate Attack");
-                    AUDIO_ZERO_COUNT += 1;
-                }
-                return;
+    }
+
+    fn should_encode(&mut self, data: &[f32]) -> bool {
+        if data.iter().filter(|x| **x != 0.).next().is_some() {
+            self.zero_count = 0;
+        } else if self.zero_count > MAX_AUDIO_ZERO_COUNT {
+            if self.zero_count == MAX_AUDIO_ZERO_COUNT + 1 {
+                log::debug!("Audio Zero Gate Attack");
+                self.zero_count += 1;
             }
-            AUDIO_ZERO_COUNT += 1;
+            return false;
+        } else {
+            self.zero_count += 1;
         }
+        true
+    }
+}
+
+fn send_f32(data: &[f32], encoder: &mut AudioEncoder, sp: &GenericService) {
+    if !encoder.should_encode(data) {
+        return;
     }
     #[cfg(target_os = "android")]
     {
@@ -735,6 +748,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             let n = input_size / BATCH_SIZE;
             for i in 0..n {
                 match encoder
+                    .encoder
                     .encode_vec_float(&data[i * BATCH_SIZE..(i + 1) * BATCH_SIZE], BATCH_SIZE)
                 {
                     Ok(data) => {
@@ -755,7 +769,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
     }
 
     #[cfg(not(target_os = "android"))]
-    match encoder.encode_vec_float(data, data.len() * 6) {
+    match encoder.encoder.encode_vec_float(data, data.len() * 6) {
         Ok(data) => {
             let mut msg_out = Message::new();
             msg_out.set_audio_frame(AudioFrame {
@@ -767,3 +781,4 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
         Err(error) => log::warn!("Failed to encode audio frame: {error:?}"),
     }
 }
+
