@@ -896,9 +896,13 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
 
+    // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
+    // it needs naming here too. By its own title, not the type: an explicitly restarted remote
+    // device reaches the same type from a path this change does not touch.
     if (isAndroid &&
         _androidDocumentPickerActive &&
-        title == 'Connection Error') {
+        (title == 'Connection Error' ||
+            (type == 'restarting-show' && title == 'Connecting...'))) {
       _androidDocumentPickerInterruptedConnection = true;
       return;
     }

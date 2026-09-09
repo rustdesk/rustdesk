@@ -25,9 +25,6 @@ const WEBRTC_SUSPECT_GRACE: Duration = Duration::from_secs(3);
 // KCP gets no such hint, only how long since a packet arrived; its endpoint pings an idle peer
 // about every 2s, so this is several missed pings, and matches the 8s WebRTC arrives at.
 const KCP_PEER_SILENCE_LIMIT: Duration = Duration::from_secs(8);
-// Neither is a hard upper bound: sends are awaited inline in this loop, so one in progress keeps
-// the tick that checks them from running, capped only by the transport's own send timeout.
-// Removing that needs the framing work that would stop one message owning the link.
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 use base::{
@@ -262,7 +259,6 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut last_recv_time = Instant::now();
                 let mut webrtc_suspect_since: Option<Instant> = None;
                 let mut last_rx_progress = peer.rx_progress();
-                let mut last_rx_progress_at = last_recv_time;
                 let mut peer_gone = false;
 
                 loop {
@@ -309,11 +305,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
                         _ = self.timer.tick() => {
-                            // Not `last_recv_time` alone: a message larger than the transport's
-                            // fragment size yields nothing until its last fragment, so a peer
-                            // sending one steadily - a clipboard image is the case that occurs -
-                            // would otherwise be timed out mid-transfer.
-                            if last_recv_time.max(last_rx_progress_at).elapsed() >= SEC30 {
+                            if last_recv_time.elapsed() >= SEC30 {
                                 self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
                             }
@@ -339,14 +331,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             // given one, so they are inert here.
                             let progressed = rx_progress != last_rx_progress;
                             last_rx_progress = rx_progress;
-                            if progressed {
-                                last_rx_progress_at = Instant::now();
-                            }
                             if peer.webrtc_disconnected() && !progressed {
                                 webrtc_suspect_since.get_or_insert_with(Instant::now);
                             } else {
                                 webrtc_suspect_since = None;
                             }
+                            // Neither limit is a hard upper bound. A send is awaited inline in
+                            // this loop, so one in progress delays this tick - bounded on WebRTC
+                            // by the timeout the stream was built with, not bounded at all on
+                            // KCP. The 30s watchdog above shares the loop and the same delay.
                             peer_gone = webrtc_suspect_since
                                 .map_or(false, |since| since.elapsed() >= WEBRTC_SUSPECT_GRACE)
                                 || kcp
