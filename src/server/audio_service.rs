@@ -172,8 +172,13 @@ pub fn is_screen_capture_kit_available() -> bool {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[path = "audio_capture_error.rs"]
+mod audio_capture_error;
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
+    use super::audio_capture_error::CaptureErrorHandler;
     use super::*;
     use cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -192,7 +197,7 @@ mod cpal_impl {
 
     #[derive(Default)]
     pub struct State {
-        stream: Option<(Box<dyn StreamTrait>, Arc<Message>)>,
+        stream: Option<(Box<dyn StreamTrait>, Arc<Message>, CaptureErrorHandler)>,
     }
 
     impl super::service::Reset for State {
@@ -210,8 +215,10 @@ mod cpal_impl {
             }
             _ => {}
         }
-        if let Some((_, format)) = &state.stream {
+        if let Some((_, format, _)) = &state.stream {
             sp.send_shared(format.clone());
+            #[cfg(target_os = "macos")]
+            log::info!("Audio capture stream recreated; replacement format sent");
         }
         RESTARTING.store(false, Ordering::SeqCst);
         Ok(())
@@ -225,7 +232,7 @@ mod cpal_impl {
                 }
                 _ => {}
             }
-            if let Some((_, format)) = &state.stream {
+            if let Some((_, format, _)) = &state.stream {
                 sps.send_shared(format.clone());
             }
             Ok(())
@@ -234,6 +241,13 @@ mod cpal_impl {
     }
 
     pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
+        if let Some((_, _, errors)) = &state.stream {
+            if errors.needs_restart() {
+                // Recreate on the service thread, outside the backend's error callback.
+                log::warn!("Recreating interrupted audio capture stream");
+                super::restart();
+            }
+        }
         if !RESTARTING.load(Ordering::SeqCst) {
             run_serv_snapshot(sp, state)
         } else {
@@ -353,7 +367,9 @@ mod cpal_impl {
         Ok((device, format))
     }
 
-    fn play(sp: &GenericService) -> ResultType<(Box<dyn StreamTrait>, Arc<Message>)> {
+    fn play(
+        sp: &GenericService,
+    ) -> ResultType<(Box<dyn StreamTrait>, Arc<Message>, CaptureErrorHandler)> {
         use cpal::SampleFormat::*;
         let (device, config) = get_device()?;
         let sp = sp.clone();
@@ -371,7 +387,7 @@ mod cpal_impl {
             48000
         };
         let ch = if config.channels() > 1 { Stereo } else { Mono };
-        let stream = match config.sample_format() {
+        let (stream, errors) = match config.sample_format() {
             I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
             I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
             I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
@@ -385,9 +401,12 @@ mod cpal_impl {
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
+        #[cfg(target_os = "macos")]
+        log::info!("Audio capture start call succeeded");
         Ok((
             Box::new(stream),
             Arc::new(create_format_msg(sample_rate, ch as _)),
+            errors,
         ))
     }
 
@@ -397,14 +416,15 @@ mod cpal_impl {
         sp: GenericService,
         sample_rate: u32,
         encode_channel: magnum_opus::Channels,
-    ) -> ResultType<cpal::Stream>
+    ) -> ResultType<(cpal::Stream, CaptureErrorHandler)>
     where
         T: cpal::SizedSample + dasp::sample::ToSample<f32>,
     {
-        let err_fn = move |err| {
-            // too many UnknownErrno, will improve later
-            log::trace!("an error occurred on stream: {}", err);
-        };
+        let errors = CaptureErrorHandler::default();
+        let callback_errors = errors.clone();
+        let err_fn = move |err| callback_errors.handle(err);
+        #[cfg(target_os = "macos")]
+        let (mut received_samples, mut received_signal) = (false, false);
         let sample_rate_0 = config.sample_rate().0;
         log::debug!("Audio sample rate : {}", sample_rate);
         unsafe {
@@ -431,6 +451,25 @@ mod cpal_impl {
             &stream_config,
             move |data: &[T], _: &InputCallbackInfo| {
                 let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                #[cfg(target_os = "macos")]
+                {
+                    // Starting capture does not guarantee sample delivery or audible data.
+                    if !received_samples && !buffer.is_empty() {
+                        received_samples = true;
+                        log::info!(
+                            "Audio capture received first PCM block: {} samples",
+                            buffer.len()
+                        );
+                    }
+                    if !received_signal
+                        && buffer
+                            .iter()
+                            .any(|sample| sample.is_finite() && *sample != 0.0)
+                    {
+                        received_signal = true;
+                        log::info!("Audio capture received first nonzero PCM");
+                    }
+                }
                 let mut lock = INPUT_BUFFER.lock().unwrap();
                 lock.extend(buffer);
                 while lock.len() >= rechannel_len {
@@ -449,7 +488,7 @@ mod cpal_impl {
             err_fn,
             timeout,
         )?;
-        Ok(stream)
+        Ok((stream, errors))
     }
 }
 
