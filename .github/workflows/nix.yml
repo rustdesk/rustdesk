@@ -18,6 +18,8 @@ name: Nix flake
 
 on:
   workflow_dispatch: {}
+  release:
+    types: [published]
   pull_request:
     branches: [master]
     paths:
@@ -55,6 +57,10 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       - name: Enable Nix binary cache
+        # Skip on release events to avoid cache-poisoning risk: release
+        # builds should not write to the cache. PR and manual runs
+        # populate the cache; release runs only read.
+        if: github.event_name != 'release'
         uses: DeterminateSystems/magic-nix-cache-action@6221693898146dc97e38ad0e013488a16477a4c4 # v9
         with:
           use-flakehub: false

@@ -1,0 +1,9 @@
+rules:
+  cache-poisoning:
+    ignore:
+      # The magic-nix-cache-action is guarded by `if: github.event_name != 'release'`
+      # so it never runs on release events. Cache poisoning requires the cache
+      # action to execute on a release-triggered workflow; skipping it entirely
+      # on releases eliminates the poisoning vector. zizmor's static analysis
+      # does not follow step-level `if:` conditionals.
+      - nix.yml:64

@@ -100,6 +100,40 @@
 
           patches = [ ./nix/make-build-reproducible.patch ];
 
+          desktopItems = lib.optionals pkgs.stdenv.isLinux [
+            (pkgs.makeDesktopItem {
+              name = "rustdesk";
+              desktopName = "RustDesk";
+              genericName = "Remote Desktop";
+              comment = "Remote Desktop";
+              exec = "rustdesk %u";
+              icon = "rustdesk";
+              terminal = false;
+              type = "Application";
+              startupNotify = true;
+              categories = [ "Network" "RemoteAccess" "GTK" ];
+              keywords = [ "internet" "linux" "dart" "rust" "remote-control" "p2p" "teamviewer" "rust-lang" "rdp" "remote-desktop" "vnc" ];
+              startupWMClass = "rustdesk";
+              actions.new-window = {
+                name = "Open a New Window";
+                exec = "rustdesk %u";
+              };
+            })
+            (pkgs.makeDesktopItem {
+              name = "rustdesk-link";
+              desktopName = "RustDesk";
+              noDisplay = true;
+              mimeTypes = [ "x-scheme-handler/rustdesk" ];
+              tryExec = "rustdesk";
+              exec = "rustdesk %u";
+              icon = "rustdesk";
+              terminal = false;
+              type = "Application";
+              startupNotify = false;
+              startupWMClass = "rustdesk";
+            })
+          ];
+
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.perl
@@ -150,6 +184,9 @@
             libsciter-darwin
           ];
 
+          # Replace the hbb_common submodule with the flake input pin.
+          # The pin in flake.lock must be updated when the submodule gitlink
+          # changes; the flake input is the source of truth for reproducibility.
           prePatch = ''
             rm -rf libs/hbb_common
             cp -r ${hbb_common} libs/hbb_common
@@ -172,7 +209,9 @@
             cp -a $src/src/ui $out/share/src
             install -Dm0644 $src/res/logo.svg $out/share/icons/hicolor/scalable/apps/rustdesk.svg
           '' + lib.optionalString pkgs.stdenv.isDarwin ''
+            mkdir -p $out/share/src
             ln -s ${libsciter-darwin}/lib/libsciter.dylib $out/lib/rustdesk/libsciter.dylib
+            cp -a $src/src/ui $out/share/src
           '';
 
           postFixup = lib.optionalString pkgs.stdenv.isLinux ''
@@ -225,18 +264,67 @@
         };
 
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ pkgs.pkg-config ];
+          nativeBuildInputs = [
+            pkgs.pkg-config
+            pkgs.perl
+            pkgs.makeWrapper
+            pkgs.rustPlatform.bindgenHook
+          ] ++ lib.optionals pkgs.stdenv.isLinux [
+            pkgs.copyDesktopItems
+            pkgs.wrapGAppsHook3
+          ];
+
           buildInputs = [
             pkgs.rustc
             pkgs.cargo
+            pkgs.bzip2
+            pkgs.libgit2
+            pkgs.libsodium
+            pkgs.libvpx
+            pkgs.libyuv
+            pkgs.libopus
+            pkgs.libaom
             pkgs.openssl
+            pkgs.zlib
+            pkgs.zstd
           ] ++ lib.optionals pkgs.stdenv.isLinux [
+            pkgs.atk
+            pkgs.cairo
+            pkgs.dbus
+            pkgs.gdk-pixbuf
+            pkgs.glib
+            pkgs.gst_all_1.gst-plugins-base
+            pkgs.gst_all_1.gstreamer
             pkgs.gtk3
+            pkgs.libpulseaudio
+            pkgs.libxtst
+            pkgs.libxkbcommon
+            pkgs.pam
+            pkgs.pango
+            pkgs.alsa-lib
+            pkgs.xdotool
             pkgs.libsciter
+            pkgs.libayatana-appindicator
           ] ++ lib.optionals pkgs.stdenv.isDarwin [
             pkgs.libiconv
             pkgs.apple-sdk
+            vcpkgRoot
+            libsciter-darwin
           ];
+
+          RUSTDESK_BUILD_FEATURES = lib.optionalString pkgs.stdenv.isLinux "linux-pkg-config";
+
+          shellHook = ''
+            # Set up hbb_common so cargo build works from the source tree.
+            if [ ! -e libs/hbb_common/Cargo.toml ]; then
+              rm -rf libs/hbb_common
+              cp -r ${hbb_common} libs/hbb_common
+              chmod -R u+w libs/hbb_common
+            fi
+          '' + lib.optionalString pkgs.stdenv.isDarwin ''
+            export VCPKG_ROOT="${vcpkgRoot}"
+            export VCPKG_INSTALLED_ROOT="${vcpkgRoot}/installed"
+          '';
         };
       }
     );
