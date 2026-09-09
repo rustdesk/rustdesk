@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Vede všechna připojení jednoho přesměrování portů přes jediné připojení k protějšku místo opakovaného připojování a přihlašování pro každé z nich."),
         ("Enable WebRTC P2P connection", "Povolit připojení WebRTC P2P"),
         ("Enable TCP hole punching", "Povolit TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Žádost o sdílení obrazovky byla na vzdáleném zařízení odmítnuta"),
+        ("The screen sharing request timed out on the remote device", "Vypršel časový limit žádosti o sdílení obrazovky na vzdáleném zařízení"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk nemůže získat přístup k relaci plochy na vzdáleném zařízení, ověřte, že relace běží a že ji RustDesk může použít"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portálu plochy na vzdáleném zařízení chybí funkce potřebná pro sdílení obrazovky nebo vzdálené ovládání, jeho implementace možná není nainstalována"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Sdílení obrazovky bylo na vzdáleném zařízení schváleno, ale připojení PipeWire se nepodařilo otevřít"),
+        ("The screen sharing request ended without completing on the remote device", "Žádost o sdílení obrazovky na vzdáleném zařízení skončila, aniž by byla dokončena"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nezískal z XDG Desktop Portal použitelnou obrazovku, knihovna PipeWire může být příliš stará"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nemohl načíst komponentu GStreameru potřebnou k zachycení obrazovky ({})"),
     ].iter().cloned().collect();
 }

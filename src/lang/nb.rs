@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Fører alle tilkoblinger i en portvideresending gjennom én enkelt tilkobling til motparten i stedet for å koble til og logge inn på nytt for hver enkelt."),
         ("Enable WebRTC P2P connection", "Aktiver WebRTC P2P-tilkobling"),
         ("Enable TCP hole punching", "Aktiver TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Forespørselen om skjermdeling ble avvist på den eksterne enheten"),
+        ("The screen sharing request timed out on the remote device", "Forespørselen om skjermdeling fikk tidsavbrudd på den eksterne enheten"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk får ikke tilgang til skrivebordsøkten på den eksterne enheten, kontroller at en økt kjører og at RustDesk kan bruke den"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Skrivebordsportalen på den eksterne enheten mangler en funksjon som kreves for skjermdeling eller fjernstyring, bakstykket er kanskje ikke installert"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Skjermdeling ble godkjent på den eksterne enheten, men PipeWire-tilkoblingen kunne ikke åpnes"),
+        ("The screen sharing request ended without completing on the remote device", "Forespørselen om skjermdeling på den eksterne enheten ble avsluttet uten å bli fullført"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk fikk ingen brukbar skjerm fra XDG Desktop Portal, PipeWire-biblioteket kan være for gammelt"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk kunne ikke laste en GStreamer-komponent som kreves for skjermopptak ({})"),
     ].iter().cloned().collect();
 }

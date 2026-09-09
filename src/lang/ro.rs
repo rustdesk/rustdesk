@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Trece toate conexiunile unei redirecționări de porturi printr-o singură conexiune către celălalt calculator, în loc să se conecteze și să se autentifice din nou pentru fiecare."),
         ("Enable WebRTC P2P connection", "Activează conexiunea P2P prin WebRTC"),
         ("Enable TCP hole punching", "Activează traversarea TCP (hole punching)"),
+        ("The screen sharing request was declined on the remote device", "Cererea de partajare a ecranului a fost refuzată pe dispozitivul de la distanță"),
+        ("The screen sharing request timed out on the remote device", "Cererea de partajare a ecranului a expirat pe dispozitivul de la distanță"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk nu poate accesa sesiunea de desktop de pe dispozitivul de la distanță, verificați dacă o sesiune rulează și dacă RustDesk o poate folosi"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portalului de desktop de pe dispozitivul de la distanță îi lipsește o funcționalitate necesară pentru partajarea ecranului sau controlul de la distanță, componenta sa de bază poate lipsi"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Partajarea ecranului a fost aprobată pe dispozitivul de la distanță, dar conexiunea PipeWire nu a putut fi deschisă"),
+        ("The screen sharing request ended without completing on the remote device", "Cererea de partajare a ecranului pe dispozitivul de la distanță s-a încheiat fără a fi finalizată"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nu a putut obține un ecran utilizabil de la XDG Desktop Portal, biblioteca PipeWire poate fi prea veche"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nu a putut încărca o componentă GStreamer necesară pentru capturarea ecranului ({})"),
     ].iter().cloned().collect();
 }

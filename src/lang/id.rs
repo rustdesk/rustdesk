@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Menyalurkan semua koneksi dari satu penerusan port melalui satu koneksi ke perangkat lain, alih-alih menyambung dan masuk lagi untuk setiap koneksi."),
         ("Enable WebRTC P2P connection", "Aktifkan koneksi P2P WebRTC"),
         ("Enable TCP hole punching", "Aktifkan TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Permintaan berbagi layar ditolak di perangkat jarak jauh"),
+        ("The screen sharing request timed out on the remote device", "Permintaan berbagi layar kehabisan waktu di perangkat jarak jauh"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk tidak dapat mengakses sesi desktop di perangkat jarak jauh, pastikan sesi desktop berjalan dan dapat digunakan oleh RustDesk"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portal desktop di perangkat jarak jauh tidak memiliki kemampuan yang diperlukan untuk berbagi layar atau kendali jarak jauh, backend-nya mungkin belum terpasang"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Berbagi layar disetujui di perangkat jarak jauh, tetapi koneksi PipeWire tidak dapat dibuka"),
+        ("The screen sharing request ended without completing on the remote device", "Permintaan berbagi layar di perangkat jarak jauh berakhir tanpa diselesaikan"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk tidak mendapatkan layar yang dapat digunakan dari XDG Desktop Portal, pustaka PipeWire mungkin terlalu lama"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk tidak dapat memuat komponen GStreamer yang diperlukan untuk merekam layar ({})"),
     ].iter().cloned().collect();
 }

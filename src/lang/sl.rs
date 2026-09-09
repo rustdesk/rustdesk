@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Vse povezave enega posredovanja vrat potekajo prek ene same povezave do druge strani, namesto ponovnega povezovanja in prijave za vsako od njih."),
         ("Enable WebRTC P2P connection", "Omogoči povezavo WebRTC P2P"),
         ("Enable TCP hole punching", "Omogoči preboj lukenj TCP"),
+        ("The screen sharing request was declined on the remote device", "Zahteva za skupno rabo zaslona je bila na oddaljeni napravi zavrnjena"),
+        ("The screen sharing request timed out on the remote device", "Zahteva za skupno rabo zaslona je na oddaljeni napravi potekla"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ne more dostopati do namizne seje na oddaljeni napravi, preverite, ali seja teče in ali jo RustDesk lahko uporablja"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Namiznemu portalu na oddaljeni napravi manjka zmožnost, potrebna za skupno rabo zaslona ali oddaljeno upravljanje, njegovo zaledje morda ni nameščeno"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Skupna raba zaslona je bila na oddaljeni napravi odobrena, vendar povezave PipeWire ni bilo mogoče odpreti"),
+        ("The screen sharing request ended without completing on the remote device", "Zahteva za skupno rabo zaslona na oddaljeni napravi se je končala, ne da bi bila dokončana"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk od XDG Desktop Portala ni dobil uporabnega zaslona, knjižnica PipeWire je morda prestara"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ni mogel naložiti komponente GStreamer, potrebne za zajem zaslona ({})"),
     ].iter().cloned().collect();
 }

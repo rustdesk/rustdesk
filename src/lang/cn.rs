@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "同一条端口转发规则上的所有连接共用一条到对方的连接，而不是每条连接都重新连接并登录一次。"),
         ("Enable WebRTC P2P connection", "启用 WebRTC P2P 连接"),
         ("Enable TCP hole punching", "启用 TCP 打洞"),
+        ("The screen sharing request was declined on the remote device", "远程设备上的用户拒绝了屏幕共享请求"),
+        ("The screen sharing request timed out on the remote device", "远程设备上的屏幕共享请求超时了"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk 无法访问远程设备的桌面会话，请确认桌面会话已启动并且 RustDesk 可以使用它"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "远程设备上的桌面门户缺少屏幕共享或远程控制所需的功能，可能没有安装它的后端"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "远程设备上已批准屏幕共享，但无法打开 PipeWire 连接"),
+        ("The screen sharing request ended without completing on the remote device", "远程设备上的屏幕共享请求已结束，但未完成"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk 无法从 XDG Desktop Portal 获取可用的屏幕，PipeWire 库可能过旧"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk 无法加载屏幕捕获所需的 GStreamer 组件 ({})"),
     ].iter().cloned().collect();
 }

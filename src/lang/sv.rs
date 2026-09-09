@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Låt alla anslutningar i en portvidarebefordran gå via en enda anslutning till motparten, i stället för att ansluta och logga in på nytt för varje anslutning."),
         ("Enable WebRTC P2P connection", "Aktivera WebRTC P2P anslutning"),
         ("Enable TCP hole punching", "Aktivera TCP hålslagning"),
+        ("The screen sharing request was declined on the remote device", "Begäran om skärmdelning avvisades på fjärrenheten"),
+        ("The screen sharing request timed out on the remote device", "Begäran om skärmdelning nådde tidsgränsen på fjärrenheten"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk kan inte nå skrivbordssessionen på fjärrenheten, kontrollera att en session körs och att RustDesk kan använda den"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Skrivbordsportalen på fjärrenheten saknar en funktion som krävs för skärmdelning eller fjärrstyrning, dess bakände är kanske inte installerad"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Skärmdelning godkändes på fjärrenheten, men PipeWire-anslutningen kunde inte öppnas"),
+        ("The screen sharing request ended without completing on the remote device", "Begäran om skärmdelning på fjärrenheten avslutades utan att slutföras"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk fick ingen användbar skärm från XDG Desktop Portal, PipeWire-biblioteket kan vara för gammalt"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk kunde inte läsa in en GStreamer-komponent som krävs för skärminspelning ({})"),
     ].iter().cloned().collect();
 }
