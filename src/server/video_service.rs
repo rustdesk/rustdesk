@@ -62,6 +62,8 @@ use std::{
 
 pub const OPTION_REFRESH: &'static str = "refresh";
 
+mod static_refresh;
+
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
 type FrameFetchedNotifierReceiver = Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>;
 
@@ -648,16 +650,20 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut would_block_count = 0u32;
     let mut yuv = Vec::new();
     let mut mid_data = Vec::new();
-    let mut last_encode = Instant::now();
-    let mut static_repeat_counter = 0;
-    #[cfg(all(windows, feature = "vram"))]
-    let mut repeat_texture = Some(scrap::dxgi::repeat::RepeatTexture::default());
     let mut repeat_encode_counter = 0;
     let repeat_encode_max = 10;
     let mut encode_fail_counter = 0;
     let mut first_frame = true;
     let capture_width = c.width;
     let capture_height = c.height;
+    let mut static_refresh = static_refresh::StaticRefresh::new(
+        vs.source,
+        &sp,
+        &recorder,
+        display_idx,
+        capture_width,
+        capture_height,
+    );
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
     // Diagnostics only.  `send_counter` counts capture rounds, which is not the
     // number of frames that reached a connection: the encoder's own rate control
@@ -737,7 +743,6 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
-                    static_repeat_counter = 0;
                     let screenshot_key = (vs.source, display_idx);
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
                     if let Some(mut screenshot) = screenshot {
@@ -786,15 +791,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
 
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
-                    #[cfg(all(windows, feature = "vram"))]
-                    if vs.source.is_monitor() {
-                        if let Some(texture) = repeat_texture.as_mut() {
-                            if let Err(err) = texture.update(&frame) {
-                                log::warn!("Disable static texture refresh: {err}");
-                                repeat_texture = None;
-                            }
-                        }
-                    }
+                    static_refresh.on_frame(&frame);
                     let send_conn_ids = handle_one_frame(
                         display_idx,
                         &sp,
@@ -811,7 +808,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         sent_counter += 1;
                     }
                     frame_controller.set_send(now, send_conn_ids);
-                    last_encode = Instant::now();
+                    static_refresh.on_encoded();
                     send_counter += 1;
                 }
                 #[cfg(windows)]
@@ -874,43 +871,21 @@ fn run(vs: VideoService) -> ResultType<()> {
                             sent_counter += 1;
                         }
                         frame_controller.set_send(now, send_conn_ids);
-                        last_encode = Instant::now();
+                        static_refresh.on_encoded();
                         send_counter += 1;
                     }
                 }
-                if vs.source.is_monitor()
-                    && static_repeat_counter < 300
-                    && last_encode.elapsed() >= Duration::from_millis(100).max(spf)
-                {
-                    let frame = if yuv.is_empty() {
-                        None
-                    } else {
-                        Some(EncodeInput::YUV(&yuv))
-                    };
-                    #[cfg(all(windows, feature = "vram"))]
-                    let frame = frame.or_else(|| repeat_texture.as_ref().and_then(|t| t.frame()));
-                    if let Some(frame) = frame {
-                        let send_conn_ids = handle_one_frame(
-                            display_idx,
-                            &sp,
-                            frame,
-                            ms,
-                            &mut encoder,
-                            recorder.clone(),
-                            &mut encode_fail_counter,
-                            &mut first_frame,
-                            capture_width,
-                            capture_height,
-                        )?;
-                        static_repeat_counter += 1;
-                        if !send_conn_ids.is_empty() {
-                            sent_counter += 1;
-                        }
-                        last_encode = Instant::now();
-                        frame_controller.set_send(now, send_conn_ids);
-                        // Static refinement must not count as motion for adaptive bitrate.
-                    }
-                }
+                static_refresh.try_encode(
+                    &yuv,
+                    spf,
+                    now,
+                    ms,
+                    &mut encoder,
+                    &mut encode_fail_counter,
+                    &mut first_frame,
+                    &mut sent_counter,
+                    &mut frame_controller,
+                )?;
             }
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
