@@ -98,6 +98,12 @@ impl EncoderApi for VRamEncoder {
         frame: EncodeInput,
         ms: i64,
     ) -> ResultType<base::message_proto::VideoFrame> {
+        #[cfg(all(windows, feature = "vram"))]
+        if matches!(&frame, EncodeInput::RepeatTexture(_)) {
+            // Identical small packets are normal when refining an unchanged desktop.
+            self.same_bad_len_counter = 0;
+            self.last_frame_len = 0;
+        }
         let (texture, rotation) = frame.texture()?;
         if rotation != 0 {
             // to-do: support rotation

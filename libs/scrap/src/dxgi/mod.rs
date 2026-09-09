@@ -2,6 +2,8 @@ use std::{io, mem, ptr, slice};
 pub mod gdi;
 pub use gdi::CapturerGDI;
 pub mod mag;
+#[cfg(feature = "vram")]
+pub mod repeat;
 
 use winapi::{
     shared::{
