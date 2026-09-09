@@ -658,6 +658,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let capture_height = c.height;
     let mut static_refresh = static_refresh::StaticRefresh::new(
         vs.source,
+        codec_format,
         &sp,
         &recorder,
         display_idx,

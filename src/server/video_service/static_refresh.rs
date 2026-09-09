@@ -1,6 +1,6 @@
 use super::{handle_one_frame, GenericService, VideoFrameController, VideoSource};
 use hbb_common::ResultType;
-use scrap::{codec::Encoder, record::Recorder, EncodeInput};
+use scrap::{codec::Encoder, record::Recorder, CodecFormat, EncodeInput};
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -8,6 +8,7 @@ use std::{
 
 pub(super) struct StaticRefresh<'a> {
     source: VideoSource,
+    codec_format: CodecFormat,
     sp: &'a GenericService,
     recorder: &'a Arc<Mutex<Option<Recorder>>>,
     display_idx: usize,
@@ -22,6 +23,7 @@ pub(super) struct StaticRefresh<'a> {
 impl<'a> StaticRefresh<'a> {
     pub(super) fn new(
         source: VideoSource,
+        codec_format: CodecFormat,
         sp: &'a GenericService,
         recorder: &'a Arc<Mutex<Option<Recorder>>>,
         display_idx: usize,
@@ -30,6 +32,7 @@ impl<'a> StaticRefresh<'a> {
     ) -> Self {
         Self {
             source,
+            codec_format,
             sp,
             recorder,
             display_idx,
@@ -72,6 +75,7 @@ impl<'a> StaticRefresh<'a> {
         frame_controller: &mut VideoFrameController,
     ) -> ResultType<()> {
         if !self.source.is_monitor()
+            || self.codec_format == CodecFormat::AV1
             || self.repeat_counter >= 100
             || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
         {
@@ -194,7 +198,15 @@ mod tests {
     fn long_network_waits_preserve_budget_and_new_frames_restart_it() {
         let sp = GenericService::new("static-refresh-test".to_owned(), false);
         let recorder = Arc::new(Mutex::new(None));
-        let mut refresh = StaticRefresh::new(VideoSource::Monitor, &sp, &recorder, 0, 1, 1);
+        let mut refresh = StaticRefresh::new(
+            VideoSource::Monitor,
+            CodecFormat::VP9,
+            &sp,
+            &recorder,
+            0,
+            1,
+            1,
+        );
         let calls = Rc::new(Cell::new(0));
         let spf = Duration::from_millis(100);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
@@ -217,7 +229,15 @@ mod tests {
     fn recent_encodes_and_qos_limit_refresh_rate() {
         let sp = GenericService::new("static-refresh-test".to_owned(), false);
         let recorder = Arc::new(Mutex::new(None));
-        let mut refresh = StaticRefresh::new(VideoSource::Monitor, &sp, &recorder, 0, 1, 1);
+        let mut refresh = StaticRefresh::new(
+            VideoSource::Monitor,
+            CodecFormat::VP9,
+            &sp,
+            &recorder,
+            0,
+            1,
+            1,
+        );
         let calls = Rc::new(Cell::new(0));
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded();
@@ -236,15 +256,17 @@ mod tests {
     }
 
     #[test]
-    fn cameras_and_missing_frames_are_not_refreshed() {
+    fn cameras_av1_and_missing_frames_are_not_refreshed() {
         let sp = GenericService::new("static-refresh-test".to_owned(), false);
         let recorder = Arc::new(Mutex::new(None));
         let calls = Rc::new(Cell::new(0));
-        for (source, yuv) in [
-            (VideoSource::Camera, &[1][..]),
-            (VideoSource::Monitor, &[][..]),
+        for (source, codec_format, yuv) in [
+            (VideoSource::Camera, CodecFormat::VP9, &[1][..]),
+            (VideoSource::Monitor, CodecFormat::AV1, &[1][..]),
+            (VideoSource::Monitor, CodecFormat::VP9, &[][..]),
         ] {
-            let mut refresh = StaticRefresh::new(source, &sp, &recorder, 0, 1, 1);
+            let mut refresh = StaticRefresh::new(source, codec_format, &sp, &recorder, 0, 1, 1);
+            refresh.on_frame(&EncodeInput::YUV(yuv));
             refresh.last_encode = Instant::now() - Duration::from_secs(60);
             attempt(&mut refresh, &calls, yuv, Duration::from_millis(100));
         }
