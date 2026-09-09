@@ -21,8 +21,6 @@ This file contains the declaration of all the localizable strings.
 	<!-- Client related strings -->
 	<String Id="F_Client" Value="Client" />
 	<String Id="F_Client_Desc" Value="The user interface. Plays media files." />
-	<String Id="F_Client_Plugins" Value="Plugins" />
-	<String Id="F_Client_Plugins_Desc" Value="Plugins for the client." />
 	<String Id="F_LAVFilters" Value="LAV Filters" />
 	<String Id="F_LAVFilters_Desc" Value="Recommended directshow filters for best audio and video playback experience." />
 
@@ -35,8 +33,6 @@ This file contains the declaration of all the localizable strings.
 	<!-- Server related strings -->
 	<String Id="F_Server" Value="Server" />
 	<String Id="F_Server_Desc" Value="The server part of RustDesk. Provides the MediaLibrary and other services." />
-	<String Id="F_Server_Plugins" Value="Plugins" />
-	<String Id="F_Server_Plugins_Desc" Value="Plugins for the server." />
 
 	<String Id="Service_DisplayName" Value="RustDesk Service" />
 	<String Id="Service_Description" Value="This service runs the RustDesk Server." />

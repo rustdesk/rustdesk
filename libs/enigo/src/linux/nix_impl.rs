@@ -42,6 +42,13 @@ impl Enigo {
         &mut self.custom_mouse
     }
 
+    /// Override the display server guessed in `Default::default`: on "x11" every method here
+    /// routes to `xdo`, and a null xdo context makes all of them silent no-ops. A caller
+    /// installing custom devices knows better than the guess.
+    pub fn set_is_x11(&mut self, is_x11: bool) {
+        self.is_x11 = is_x11;
+    }
+
     /// Clear remapped keycodes
     pub fn tfc_clear_remapped(&mut self) {
         if let Some(tfc) = &mut self.tfc {
@@ -115,7 +122,7 @@ impl Enigo {
 
 impl Default for Enigo {
     fn default() -> Self {
-        let is_x11 = hbb_common::platform::linux::is_x11_or_headless();
+        let is_x11 = base::platform::linux::is_x11_or_headless();
         Self {
             is_x11,
             tfc: if is_x11 {
@@ -261,6 +268,8 @@ impl KeyboardControllable for Enigo {
         } else {
             if let Some(keyboard) = &mut self.custom_keyboard {
                 keyboard.key_sequence(sequence)
+            } else {
+                log::warn!("Enigo::key_sequence: no custom_keyboard set for Wayland!");
             }
         }
     }
@@ -277,6 +286,7 @@ impl KeyboardControllable for Enigo {
             if let Some(keyboard) = &mut self.custom_keyboard {
                 keyboard.key_down(key)
             } else {
+                log::warn!("Enigo::key_down: no custom_keyboard set for Wayland!");
                 Ok(())
             }
         }
@@ -290,13 +300,24 @@ impl KeyboardControllable for Enigo {
         } else {
             if let Some(keyboard) = &mut self.custom_keyboard {
                 keyboard.key_up(key)
+            } else {
+                log::warn!("Enigo::key_up: no custom_keyboard set for Wayland!");
             }
         }
     }
     fn key_click(&mut self, key: Key) {
-        if self.tfc_key_click(key).is_err() {
-            self.key_down(key).ok();
-            self.key_up(key);
+        if self.is_x11 {
+            // X11: try tfc first, then fallback to key_down/key_up
+            if self.tfc_key_click(key).is_err() {
+                self.key_down(key).ok();
+                self.key_up(key);
+            }
+        } else {
+            if let Some(keyboard) = &mut self.custom_keyboard {
+                keyboard.key_click(key);
+            } else {
+                log::warn!("Enigo::key_click: no custom_keyboard set for Wayland!");
+            }
         }
     }
 }
@@ -375,4 +396,53 @@ fn test_key_seq() {
     // Get 6^ in French.
     let mut en = Enigo::new();
     en.key_sequence("^^");
+}
+
+/// Both directions: the failure is silent, so a one-directional test passes against the bug.
+#[test]
+fn test_custom_mouse_dispatch_follows_is_x11() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    struct CountingMouse(Arc<AtomicUsize>);
+    impl MouseControllable for CountingMouse {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_mut_any(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+        fn mouse_move_to(&mut self, _x: i32, _y: i32) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+        fn mouse_move_relative(&mut self, _x: i32, _y: i32) {}
+        fn mouse_down(&mut self, _button: MouseButton) -> crate::ResultType {
+            Ok(())
+        }
+        fn mouse_up(&mut self, _button: MouseButton) {}
+        fn mouse_click(&mut self, _button: MouseButton) {}
+        fn mouse_scroll_x(&mut self, _length: i32) {}
+        fn mouse_scroll_y(&mut self, _length: i32) {}
+    }
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut en = Enigo::new();
+    en.set_custom_mouse(Box::new(CountingMouse(calls.clone())));
+
+    en.set_is_x11(false);
+    en.mouse_move_to(10, 20);
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        1,
+        "custom mouse was not reached on the non-x11 branch"
+    );
+
+    // Negative control: on the x11 branch the custom device must be bypassed entirely.
+    en.set_is_x11(true);
+    en.mouse_move_to(30, 40);
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        1,
+        "custom mouse was reached on the x11 branch"
+    );
 }

@@ -1,7 +1,5 @@
-use hbb_common::{
-    get_time,
-    message_proto::{Message, VoiceCallRequest, VoiceCallResponse},
-};
+use base::message_proto::{Message, VoiceCallRequest, VoiceCallResponse};
+use hbb_common::get_time;
 use scrap::CodecFormat;
 use std::collections::HashMap;
 

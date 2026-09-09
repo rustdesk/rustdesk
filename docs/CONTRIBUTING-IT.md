@@ -30,7 +30,7 @@ Per istruzioni specifiche su git, vedi [Workflow GitHub - 101](https://github.co
 
 ## Condotta
 
-https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT-IT.md
+https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## Comunicazioni
 

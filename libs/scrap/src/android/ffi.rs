@@ -9,7 +9,8 @@ use jni::{
     JavaVM,
 };
 
-use hbb_common::{message_proto::MultiClipboards, protobuf::Message};
+use base::message_proto::MultiClipboards;
+use hbb_common::protobuf::Message;
 use jni::errors::{Error as JniError, Result as JniResult};
 use lazy_static::lazy_static;
 use serde::Deserialize;

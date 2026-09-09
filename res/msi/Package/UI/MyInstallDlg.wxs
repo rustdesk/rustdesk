@@ -23,12 +23,13 @@ Patch dialog sequence:
 -->
 
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+    <?include ../Includes.wxi?>
     <?foreach WIXUIARCH in X86;X64;A64 ?>
     <Fragment>
         <UI Id="UI_MyInstallDialog_$(WIXUIARCH)">
             <Publish Dialog="LicenseAgreementDlg" Control="Print" Event="DoAction" Value="WixUIPrintEula_$(WIXUIARCH)" />
             <Publish Dialog="BrowseDlg" Control="OK" Event="DoAction" Value="WixUIValidatePath_$(WIXUIARCH)" Order="3" Condition="NOT WIXUI_DONTVALIDATEPATH" />
-            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="DoAction" Value="WixUIValidatePath_$(WIXUIARCH)" Order="2" Condition="NOT WIXUI_DONTVALIDATEPATH" />
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="DoAction" Value="WixUIValidatePath_$(WIXUIARCH)" Order="5" Condition="NOT WIXUI_DONTVALIDATEPATH" />
         </UI>
 
         <UIRef Id="UI_MyInstallDialog" />
@@ -64,9 +65,16 @@ Patch dialog sequence:
             <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="MyInstallDirDlg" Condition="LicenseAccepted = &quot;1&quot;" />
 
             <Publish Dialog="MyInstallDirDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />
-            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" Order="1" />
-            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="SpawnDialog" Value="InvalidDirDlg" Order="3" Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;" />
-            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="4" Condition="WIXUI_DONTVALIDATEPATH OR WIXUI_INSTALLDIR_VALID=&quot;1&quot;" />
+            <!-- Normalize INSTALLFOLDER_INNER before SetTargetPath and WixUIValidatePath run. -->
+            <!-- UI case 1: already ends with \$(var.Product) but has no trailing slash, add the slash. -->
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Property="INSTALLFOLDER_INNER" Value="[INSTALLFOLDER_INNER]\" Order="1" Condition="INSTALLFOLDER_INNER AND INSTALLFOLDER_INNER ~&gt;&gt; &quot;\$(var.Product)&quot;" />
+            <!-- UI case 2: ends with a slash but not \$(var.Product)\, append $(var.Product)\. -->
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Property="INSTALLFOLDER_INNER" Value="[INSTALLFOLDER_INNER]$(var.Product)\" Order="2" Condition="INSTALLFOLDER_INNER AND INSTALLFOLDER_INNER ~&gt;&gt; &quot;\&quot; AND NOT (INSTALLFOLDER_INNER ~&gt;&gt; &quot;\$(var.Product)\&quot; OR INSTALLFOLDER_INNER ~&gt;&gt; &quot;\$(var.Product)&quot;)" />
+            <!-- UI case 3: has no trailing slash and does not end with \$(var.Product), append \$(var.Product)\. -->
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Property="INSTALLFOLDER_INNER" Value="[INSTALLFOLDER_INNER]\$(var.Product)\" Order="3" Condition="INSTALLFOLDER_INNER AND NOT INSTALLFOLDER_INNER ~&gt;&gt; &quot;\&quot; AND NOT (INSTALLFOLDER_INNER ~&gt;&gt; &quot;\$(var.Product)\&quot; OR INSTALLFOLDER_INNER ~&gt;&gt; &quot;\$(var.Product)&quot;)" />
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" Order="4" />
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="SpawnDialog" Value="InvalidDirDlg" Order="6" Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;" />
+            <Publish Dialog="MyInstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="7" Condition="WIXUI_DONTVALIDATEPATH OR WIXUI_INSTALLDIR_VALID=&quot;1&quot;" />
             <Publish Dialog="MyInstallDirDlg" Control="ChangeFolder" Property="_BrowseProperty" Value="[WIXUI_INSTALLDIR]" Order="1" />
             <Publish Dialog="MyInstallDirDlg" Control="ChangeFolder" Event="SpawnDialog" Value="BrowseDlg" Order="2" />
             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MyInstallDirDlg" Order="1" Condition="NOT Installed" />

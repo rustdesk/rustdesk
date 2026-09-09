@@ -20,18 +20,65 @@ use std::{
 // Windows-specific imports from terminal_helper module
 #[cfg(target_os = "windows")]
 use super::terminal_helper::{
-    create_named_pipe_server, encode_helper_message, encode_resize_message,
-    is_helper_process_running, launch_terminal_helper_with_token, wait_for_pipe_connection,
-    HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle, WinTerminateProcess,
-    WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS, WIN_WAIT_OBJECT_0,
+    configure_utf8_shell_command, create_named_pipe_server, encode_helper_message,
+    encode_resize_message, is_helper_process_running, launch_terminal_helper_with_token,
+    wait_for_pipe_connection, HelperProcessGuard, OwnedHandle, SendableHandle, WinCloseHandle,
+    WinTerminateProcess, WinWaitForSingleObject, MSG_TYPE_DATA, PIPE_CONNECTION_TIMEOUT_MS,
+    WIN_WAIT_OBJECT_0,
 };
 
 const MAX_OUTPUT_BUFFER_SIZE: usize = 1024 * 1024; // 1MB per terminal
 const MAX_BUFFER_LINES: usize = 10000;
 const MAX_SERVICES: usize = 100; // Maximum number of persistent terminal services
 const SERVICE_IDLE_TIMEOUT: Duration = Duration::from_secs(3600); // 1 hour idle timeout
-const CHANNEL_BUFFER_SIZE: usize = 100; // Number of messages to buffer in channel
+const CHANNEL_BUFFER_SIZE: usize = 500; // Channel buffer size. Max per-message size ~4KB (reader buffer), so worst case ~500*4KB ≈ 2MB/terminal. Increased from 100 to reduce data loss during disconnects.
 const COMPRESS_THRESHOLD: usize = 512; // Compress terminal data larger than this
+                                       // Default max bytes for reconnection buffer replay.
+const DEFAULT_RECONNECT_BUFFER_BYTES: usize = 8 * 1024;
+const MAX_SIGWINCH_PHASE_ATTEMPTS: u8 = 3; // Max attempts per SIGWINCH phase before giving up
+
+/// Two-phase SIGWINCH trigger for TUI app redraw on reconnection.
+///
+/// Why two phases? A single resize-then-restore done back-to-back is too fast:
+/// by the time the TUI app handles the asynchronous SIGWINCH signal and calls
+/// `ioctl(TIOCGWINSZ)`, the PTY size has already been restored to the original.
+/// ncurses sees no size change and skips the full redraw.
+///
+/// Splitting across two `read_outputs()` calls (~30ms apart) ensures the app
+/// sees a real size change on each SIGWINCH, forcing a complete redraw.
+#[derive(Debug, Clone)]
+enum SigwinchPhase {
+    /// No SIGWINCH needed.
+    Idle,
+    /// Phase 1: Resize PTY to temp dimensions (rows±1). The app handles SIGWINCH
+    /// and redraws at the temporary size.
+    TempResize { retries: u8 },
+    /// Phase 2: Restore PTY to correct dimensions. The app handles SIGWINCH,
+    /// detects the size change, and performs a full redraw at the correct size.
+    Restore { retries: u8 },
+}
+
+/// Which resize to perform in the two-phase SIGWINCH sequence.
+enum SigwinchAction {
+    /// Phase 1: resize to temp dimensions (rows±1) to trigger SIGWINCH with a visible size change.
+    TempResize,
+    /// Phase 2: restore to correct dimensions to trigger SIGWINCH and force full redraw.
+    Restore,
+}
+
+/// Session state machine for terminal streaming.
+#[derive(Debug)]
+enum SessionState {
+    /// Session is closed, not streaming data to client.
+    Closed,
+    /// Session is active, streaming data to client.
+    /// pending_buffer: historical buffer to send before real-time data (set on reconnection).
+    /// sigwinch: two-phase SIGWINCH trigger state for TUI app redraw.
+    Active {
+        pending_buffer: Option<Vec<u8>>,
+        sigwinch: SigwinchPhase,
+    },
+}
 
 lazy_static::lazy_static! {
     // Global registry of persistent terminal services indexed by service_id
@@ -85,6 +132,26 @@ fn get_default_shell() -> String {
         // Final fallback to /bin/sh which should exist on all POSIX systems
         "/bin/sh".to_string()
     }
+}
+
+#[cfg(target_os = "macos")]
+fn locale_value_is_utf8(value: &str) -> bool {
+    let value = value.to_ascii_uppercase();
+    value.contains("UTF-8") || value.contains("UTF8")
+}
+
+#[cfg(target_os = "macos")]
+fn should_force_process_utf8_ctype() -> bool {
+    if let Ok(value) = std::env::var("LC_ALL") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LC_CTYPE") {
+        return !locale_value_is_utf8(&value);
+    }
+    if let Ok(value) = std::env::var("LANG") {
+        return !locale_value_is_utf8(&value);
+    }
+    true
 }
 
 pub fn is_service_specified_user(service_id: &str) -> Option<bool> {
@@ -389,6 +456,7 @@ impl OutputBuffer {
                 // Find first newline in new data
                 if let Some(newline_pos) = data.iter().position(|&b| b == b'\n') {
                     last_line.extend_from_slice(&data[..=newline_pos]);
+                    self.total_size += newline_pos + 1;
                     start = newline_pos + 1;
                     self.last_line_incomplete = false;
                 } else {
@@ -427,25 +495,222 @@ impl OutputBuffer {
         // Trim old data if buffer is too large
         while self.total_size > MAX_OUTPUT_BUFFER_SIZE || self.lines.len() > MAX_BUFFER_LINES {
             if let Some(removed) = self.lines.pop_front() {
-                self.total_size -= removed.len();
+                if removed.len() > self.total_size {
+                    log::error!(
+                        "OutputBuffer total_size underflow avoided: total_size={}, removed_len={}, lines_len={}",
+                        self.total_size,
+                        removed.len(),
+                        self.lines.len()
+                    );
+                    self.total_size = self.lines.iter().map(|line| line.len()).sum();
+                } else {
+                    self.total_size -= removed.len();
+                }
+                if self.lines.is_empty() {
+                    self.last_line_incomplete = false;
+                }
+            } else {
+                log::error!(
+                    "OutputBuffer trim invariant broken: total_size={}, lines_len=0",
+                    self.total_size
+                );
+                self.total_size = 0;
+                self.last_line_incomplete = false;
+                break;
             }
         }
     }
 
     fn get_recent(&self, max_bytes: usize) -> Vec<u8> {
-        let mut result = Vec::new();
+        if max_bytes == 0 {
+            return Vec::new();
+        }
+        let mut chunks: Vec<&[u8]> = Vec::new();
         let mut size = 0;
 
-        // Get recent lines up to max_bytes
+        // Collect whole chunks from newest to oldest, preserving chronological continuity.
+        // If the newest chunk alone exceeds max_bytes, take its tail (truncation may split
+        // an ANSI escape, but the terminal will self-correct on subsequent output).
         for line in self.lines.iter().rev() {
             if size + line.len() > max_bytes {
+                if size == 0 && line.len() > max_bytes {
+                    // Single oversized chunk: take the tail to preserve the most recent content.
+                    // Align offset forward to a UTF-8 char boundary so that downstream
+                    // clients (e.g. Dart) that decode the payload as UTF-8 text don't
+                    // encounter split code points. The protobuf bytes field itself allows
+                    // arbitrary bytes; this is a best-effort mitigation for client-side decoding.
+                    let mut offset = line.len() - max_bytes;
+                    // Skip at most 3 continuation bytes (UTF-8 max 4-byte sequence).
+                    // Prevents runaway skipping on non-UTF-8 binary data.
+                    let mut skipped = 0u8;
+                    while skipped < 3
+                        && offset < line.len()
+                        && (line[offset] & 0b1100_0000) == 0b1000_0000
+                    {
+                        offset += 1;
+                        skipped += 1;
+                    }
+                    // If we skipped past all remaining bytes (degenerate data), drop the
+                    // chunk entirely rather than emitting a slice that decodes poorly on the client.
+                    if offset < line.len() {
+                        chunks.push(&line[offset..]);
+                        size = line.len() - offset;
+                    }
+                }
                 break;
             }
             size += line.len();
-            result.splice(0..0, line.iter().cloned());
+            chunks.push(line);
+        }
+
+        // Reverse to restore chronological order and concatenate
+        chunks.reverse();
+        let mut result = Vec::with_capacity(size);
+        for chunk in chunks {
+            result.extend_from_slice(chunk);
         }
 
         result
+    }
+}
+
+/// Find the largest prefix of `buf` that does not end in the middle of a UTF-8
+/// code point. Invalid bytes are treated as complete so they can continue
+/// downstream and be rendered with replacement characters if needed.
+fn find_utf8_split_point(buf: &[u8]) -> usize {
+    if buf.is_empty() {
+        return 0;
+    }
+
+    let start = buf.len().saturating_sub(3);
+    for i in (start..buf.len()).rev() {
+        let b = buf[i];
+        if b & 0x80 == 0 {
+            return buf.len();
+        }
+        if b & 0xC0 == 0x80 {
+            continue;
+        }
+
+        let seq_len = if b & 0xE0 == 0xC0 {
+            2
+        } else if b & 0xF0 == 0xE0 {
+            3
+        } else if b & 0xF8 == 0xF0 {
+            4
+        } else {
+            return buf.len();
+        };
+
+        return if buf.len() - i >= seq_len {
+            buf.len()
+        } else {
+            i
+        };
+    }
+
+    buf.len()
+}
+
+// Terminal output currently follows a UTF-8 text model end to end: the service
+// keeps replay buffers on UTF-8 boundaries, and Flutter decodes payload bytes as
+// UTF-8 before writing to xterm. This accumulator only prevents splitting a
+// trailing UTF-8 code point across PTY reads. Supporting non-UTF-8 terminals
+// would need a separate design covering remote encoding detection, Flutter
+// decoding, replay truncation, and input transcoding.
+#[derive(Default)]
+struct Utf8ChunkAccumulator {
+    remainder: Vec<u8>,
+}
+
+impl Utf8ChunkAccumulator {
+    fn push_chunk(&mut self, mut data: Vec<u8>) -> Option<Vec<u8>> {
+        if data.is_empty() {
+            return None;
+        }
+
+        let had_remainder = !self.remainder.is_empty();
+        if had_remainder {
+            let mut combined = std::mem::take(&mut self.remainder);
+            combined.extend_from_slice(&data);
+            data = combined;
+        }
+
+        let split = find_utf8_split_point(&data);
+        if split == data.len() {
+            return Some(data);
+        }
+
+        // Only hold back a candidate incomplete suffix when we have evidence that
+        // the bytes before it are already UTF-8 text. If split is 0, the whole
+        // read may be the start of a UTF-8 character, so keep it for the next read.
+        if !had_remainder && split > 0 && std::str::from_utf8(&data[..split]).is_err() {
+            return Some(data);
+        }
+
+        self.remainder = data.split_off(split);
+        if data.is_empty() {
+            None
+        } else {
+            Some(data)
+        }
+    }
+
+    fn finish(&mut self) -> Option<Vec<u8>> {
+        if self.remainder.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.remainder))
+        }
+    }
+}
+
+/// Try to send data through the output channel with rate-limited drop logging.
+/// Returns `true` if the caller should break out of the read loop (channel disconnected).
+fn try_send_output(
+    output_tx: &mpsc::SyncSender<Vec<u8>>,
+    data: Vec<u8>,
+    terminal_id: i32,
+    label: &str,
+    drop_count: &mut u64,
+    last_drop_warn: &mut Instant,
+) -> bool {
+    match output_tx.try_send(data) {
+        Ok(_) => {
+            if *drop_count > 0 {
+                log::trace!(
+                    "Terminal {}{} output channel recovered, dropped {} chunks since last report",
+                    terminal_id,
+                    label,
+                    *drop_count
+                );
+                *drop_count = 0;
+            }
+            false
+        }
+        Err(mpsc::TrySendError::Full(_)) => {
+            *drop_count += 1;
+            if last_drop_warn.elapsed() >= Duration::from_secs(5) {
+                log::trace!(
+                    "Terminal {}{} output channel full, dropped {} chunks in last {:?}",
+                    terminal_id,
+                    label,
+                    *drop_count,
+                    last_drop_warn.elapsed()
+                );
+                *drop_count = 0;
+                *last_drop_warn = Instant::now();
+            }
+            false
+        }
+        Err(mpsc::TrySendError::Disconnected(_)) => {
+            log::debug!(
+                "Terminal {}{} output channel disconnected",
+                terminal_id,
+                label
+            );
+            true
+        }
     }
 }
 
@@ -469,7 +734,8 @@ pub struct TerminalSession {
     cols: u16,
     // Track if we've already sent the closed message
     closed_message_sent: bool,
-    is_opened: bool,
+    // Session state machine for reconnection handling
+    state: SessionState,
     // Helper mode: PTY is managed by helper process, communication via message protocol
     #[cfg(target_os = "windows")]
     is_helper_mode: bool,
@@ -496,7 +762,7 @@ impl TerminalSession {
             rows,
             cols,
             closed_message_sent: false,
-            is_opened: false,
+            state: SessionState::Closed,
             #[cfg(target_os = "windows")]
             is_helper_mode: false,
             #[cfg(target_os = "windows")]
@@ -511,7 +777,7 @@ impl TerminalSession {
     // This helper function is to ensure that the threads are joined before the child process is dropped.
     // Though this is not strictly necessary on macOS.
     fn stop(&mut self) {
-        self.is_opened = false;
+        self.state = SessionState::Closed;
         self.exiting.store(true, Ordering::SeqCst);
 
         // Drop the input channel to signal writer thread to exit
@@ -668,7 +934,9 @@ impl PersistentTerminalService {
             (
                 session.rows,
                 session.cols,
-                session.output_buffer.get_recent(4096),
+                session
+                    .output_buffer
+                    .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES),
             )
         })
     }
@@ -683,7 +951,7 @@ impl PersistentTerminalService {
         self.needs_session_sync = true;
         for session in self.sessions.values() {
             let mut session = session.lock().unwrap();
-            session.is_opened = false;
+            session.state = SessionState::Closed;
         }
     }
 }
@@ -777,17 +1045,86 @@ impl TerminalServiceProxy {
     ) -> Result<Option<TerminalResponse>> {
         let mut response = TerminalResponse::new();
 
+        // When the client requests a terminal_id that doesn't exist but there are
+        // surviving persistent sessions, remap the lowest-ID session to the requested
+        // terminal_id. This handles the case where _nextTerminalId resets to 1 on
+        // reconnect but the server-side sessions have non-contiguous IDs (e.g. {2: htop}).
+        //
+        // The client's requested terminal_id may not match any surviving session ID
+        // (e.g. _nextTerminalId incremented beyond the surviving IDs). This remap is a
+        // one-time handle reassignment — only the first reconnect triggers it because
+        // needs_session_sync is cleared afterward. Remaining sessions are communicated
+        // back via `persistent_sessions` with their original server-side IDs.
+        if !service.sessions.contains_key(&open.terminal_id)
+            && service.needs_session_sync
+            && !service.sessions.is_empty()
+        {
+            if let Some(&lowest_id) = service.sessions.keys().min() {
+                log::info!(
+                    "Remapping persistent session {} -> {} for reconnection",
+                    lowest_id,
+                    open.terminal_id
+                );
+                if let Some(session_arc) = service.sessions.remove(&lowest_id) {
+                    service.sessions.insert(open.terminal_id, session_arc);
+                }
+            }
+        }
+
         // Check if terminal already exists
         if let Some(session_arc) = service.sessions.get(&open.terminal_id) {
             // Reconnect to existing terminal
             let mut session = session_arc.lock().unwrap();
-            session.is_opened = true;
+            // Directly enter Active state with pending replay for immediate streaming.
+            // The replay combines output_buffer history and the channel backlog that was
+            // already pending at reconnect time so the client can suppress stale xterm
+            // query answers without requiring a protobuf schema change.
+            // During disconnect, read_outputs() is not called; channel data can still be lost
+            // if output_rx fills before reconnect drains it.
+            let mut buffer = session
+                .output_buffer
+                .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES);
+            let mut reconnect_backlog = Vec::new();
+            if let Some(output_rx) = &session.output_rx {
+                // Cap reconnect-time drain so a chatty PTY cannot keep OpenTerminal
+                // inside this loop indefinitely. Remaining output is drained by read_outputs().
+                for _ in 0..CHANNEL_BUFFER_SIZE {
+                    let Ok(data) = output_rx.try_recv() else {
+                        break;
+                    };
+                    reconnect_backlog.push(data);
+                }
+            }
+            let has_reconnect_backlog = !reconnect_backlog.is_empty();
+            for data in reconnect_backlog {
+                session.output_buffer.append(&data);
+            }
+            if has_reconnect_backlog {
+                buffer = session
+                    .output_buffer
+                    .get_recent(DEFAULT_RECONNECT_BUFFER_BYTES);
+            }
+            let has_pending = !buffer.is_empty();
+            session.state = SessionState::Active {
+                pending_buffer: if has_pending { Some(buffer) } else { None },
+                // Always trigger two-phase SIGWINCH on reconnect to force TUI app redraw,
+                // regardless of whether there's pending buffer data. This avoids edge cases
+                // where buffer is empty but a TUI app (top/htop) still needs a full redraw.
+                sigwinch: SigwinchPhase::TempResize {
+                    retries: MAX_SIGWINCH_PHASE_ATTEMPTS,
+                },
+            };
             let mut opened = TerminalOpened::new();
             opened.terminal_id = open.terminal_id;
             opened.success = true;
-            opened.message = "Reconnected to existing terminal".to_string();
+            opened.message = if has_pending {
+                "Reconnected to existing terminal with pending output".to_string()
+            } else {
+                "Reconnected to existing terminal".to_string()
+            };
             opened.pid = session.pid;
             opened.service_id = self.service_id.clone();
+            opened.replay_terminal_output = has_pending;
             if service.needs_session_sync {
                 if service.sessions.len() > 1 {
                     // No need to include the current terminal in the list.
@@ -803,13 +1140,6 @@ impl TerminalServiceProxy {
             }
             response.set_opened(opened);
 
-            // Send buffered output
-            let buffer = session.output_buffer.get_recent(4096);
-            if !buffer.is_empty() {
-                // We'll need to send this separately or extend the protocol
-                // For now, just acknowledge the reconnection
-            }
-
             return Ok(Some(response));
         }
 
@@ -824,7 +1154,7 @@ impl TerminalServiceProxy {
 
         // Create new terminal session
         log::info!(
-            "Creating new terminal {} for service: {}",
+            "Creating new terminal {} for service {}",
             open.terminal_id,
             service.service_id
         );
@@ -849,6 +1179,9 @@ impl TerminalServiceProxy {
         #[allow(unused_mut)]
         let mut cmd = CommandBuilder::new(&shell);
 
+        #[cfg(target_os = "windows")]
+        configure_utf8_shell_command(&shell, &mut cmd);
+
         // macOS-specific terminal configuration
         // 1. Use login shell (-l) to load user's shell profile (~/.zprofile, ~/.bash_profile)
         //    This ensures PATH includes Homebrew paths (/opt/homebrew/bin, /usr/local/bin)
@@ -869,6 +1202,12 @@ impl TerminalServiceProxy {
             };
             cmd.env("TERM", term);
             log::debug!("Set TERM={} for macOS PTY", term);
+
+            if should_force_process_utf8_ctype() {
+                cmd.env_remove("LC_ALL");
+                cmd.env("LC_CTYPE", "en_US.UTF-8");
+                log::debug!("Set LC_CTYPE=en_US.UTF-8 for macOS PTY");
+            }
         }
 
         // Note: On Windows with user_token, we use helper mode (handle_open_with_helper)
@@ -919,32 +1258,51 @@ impl TerminalServiceProxy {
         let reader_thread = thread::spawn(move || {
             let mut reader = reader;
             let mut buf = vec![0u8; 4096];
+            let mut utf8_chunks = Utf8ChunkAccumulator::default();
+            let mut drop_count: u64 = 0;
+            // Initialize to > 5s ago so the first drop triggers a warning immediately.
+            let mut last_drop_warn = Instant::now() - Duration::from_secs(6);
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         // EOF
                         // This branch can be reached when the child process exits on macOS.
                         // But not on Linux and Windows in my tests.
+                        if let Some(data) = utf8_chunks.finish() {
+                            let _ = try_send_output(
+                                &output_tx,
+                                data,
+                                terminal_id,
+                                "",
+                                &mut drop_count,
+                                &mut last_drop_warn,
+                            );
+                        }
                         break;
                     }
                     Ok(n) => {
                         if exiting.load(Ordering::SeqCst) {
                             break;
                         }
-                        let data = buf[..n].to_vec();
-                        // Try to send, if channel is full, drop the data
-                        match output_tx.try_send(data) {
-                            Ok(_) => {}
-                            Err(mpsc::TrySendError::Full(_)) => {
-                                log::debug!(
-                                    "Terminal {} output channel full, dropping data",
-                                    terminal_id
-                                );
-                            }
-                            Err(mpsc::TrySendError::Disconnected(_)) => {
-                                log::debug!("Terminal {} output channel disconnected", terminal_id);
-                                break;
-                            }
+                        let Some(data) = utf8_chunks.push_chunk(buf[..n].to_vec()) else {
+                            continue;
+                        };
+                        // Use try_send to avoid blocking the reader thread when channel is full.
+                        // During disconnect, the run loop (sp.ok()) stops and read_outputs() is
+                        // no longer called, so the channel won't be drained. Blocking send would
+                        // deadlock the reader thread in that case.
+                        // Note: data produced during disconnect may be lost if channel fills up,
+                        // since output_buffer is only updated in read_outputs(). The buffer will
+                        // contain history from before the disconnect, not data produced after it.
+                        if try_send_output(
+                            &output_tx,
+                            data,
+                            terminal_id,
+                            "",
+                            &mut drop_count,
+                            &mut last_drop_warn,
+                        ) {
+                            break;
                         }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -970,7 +1328,10 @@ impl TerminalServiceProxy {
         session.output_rx = Some(output_rx);
         session.reader_thread = Some(reader_thread);
         session.writer_thread = Some(writer_thread);
-        session.is_opened = true;
+        session.state = SessionState::Active {
+            pending_buffer: None,
+            sigwinch: SigwinchPhase::Idle,
+        };
 
         let mut opened = TerminalOpened::new();
         opened.terminal_id = open.terminal_id;
@@ -1132,9 +1493,23 @@ impl TerminalServiceProxy {
         let terminal_id = open.terminal_id;
         let reader_thread = thread::spawn(move || {
             let mut buf = vec![0u8; 4096];
+            let mut utf8_chunks = Utf8ChunkAccumulator::default();
+            let mut drop_count: u64 = 0;
+            // Initialize to > 5s ago so the first drop triggers a warning immediately.
+            let mut last_drop_warn = Instant::now() - Duration::from_secs(6);
             loop {
                 match output_pipe.read(&mut buf) {
                     Ok(0) => {
+                        if let Some(data) = utf8_chunks.finish() {
+                            let _ = try_send_output(
+                                &output_tx,
+                                data,
+                                terminal_id,
+                                " (helper)",
+                                &mut drop_count,
+                                &mut last_drop_warn,
+                            );
+                        }
                         // EOF - helper process exited
                         log::debug!("Terminal {} helper output EOF", terminal_id);
                         break;
@@ -1143,19 +1518,19 @@ impl TerminalServiceProxy {
                         if exiting.load(Ordering::SeqCst) {
                             break;
                         }
-                        let data = buf[..n].to_vec();
-                        match output_tx.try_send(data) {
-                            Ok(_) => {}
-                            Err(mpsc::TrySendError::Full(_)) => {
-                                log::debug!(
-                                    "Terminal {} output channel full, dropping data",
-                                    terminal_id
-                                );
-                            }
-                            Err(mpsc::TrySendError::Disconnected(_)) => {
-                                log::debug!("Terminal {} output channel disconnected", terminal_id);
-                                break;
-                            }
+                        let Some(data) = utf8_chunks.push_chunk(buf[..n].to_vec()) else {
+                            continue;
+                        };
+                        // Use try_send to avoid blocking the reader thread (same as direct PTY mode)
+                        if try_send_output(
+                            &output_tx,
+                            data,
+                            terminal_id,
+                            " (helper)",
+                            &mut drop_count,
+                            &mut last_drop_warn,
+                        ) {
+                            break;
                         }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -1185,7 +1560,10 @@ impl TerminalServiceProxy {
         session.output_rx = Some(output_rx);
         session.reader_thread = Some(reader_thread);
         session.writer_thread = Some(writer_thread);
-        session.is_opened = true;
+        session.state = SessionState::Active {
+            pending_buffer: None,
+            sigwinch: SigwinchPhase::Idle,
+        };
         session.is_helper_mode = true;
         session.helper_process_handle = Some(SendableHandle::new(helper_raw_handle));
 
@@ -1226,6 +1604,11 @@ impl TerminalServiceProxy {
             session.update_activity();
             session.rows = resize.rows as u16;
             session.cols = resize.cols as u16;
+
+            // Note: we do NOT clear the sigwinch phase here. The server-side two-phase
+            // SIGWINCH mechanism in read_outputs() is self-contained (temp resize → restore
+            // across two polling cycles), so client resize is purely a dimension sync and
+            // doesn't affect it.
 
             // Windows: handle helper mode vs direct PTY mode
             #[cfg(target_os = "windows")]
@@ -1277,20 +1660,28 @@ impl TerminalServiceProxy {
         data: &TerminalData,
     ) -> Result<Option<TerminalResponse>> {
         if let Some(session_arc) = session {
-            let mut session = session_arc.lock().unwrap();
-            session.update_activity();
-            if let Some(input_tx) = &session.input_tx {
-                // Encode data for helper mode or send raw for direct PTY mode
-                #[cfg(target_os = "windows")]
-                let msg = if session.is_helper_mode {
-                    encode_helper_message(MSG_TYPE_DATA, &data.data)
-                } else {
-                    data.data.to_vec()
-                };
-                #[cfg(not(target_os = "windows"))]
-                let msg = data.data.to_vec();
+            let input = {
+                let mut session = session_arc.lock().unwrap();
+                session.update_activity();
+                if let Some(input_tx) = session.input_tx.clone() {
+                    // Encode data for helper mode or send raw for direct PTY mode
+                    #[cfg(target_os = "windows")]
+                    let msg = if session.is_helper_mode {
+                        encode_helper_message(MSG_TYPE_DATA, &data.data)
+                    } else {
+                        data.data.to_vec()
+                    };
+                    #[cfg(not(target_os = "windows"))]
+                    let msg = data.data.to_vec();
 
-                // Send data to writer thread
+                    Some((input_tx, msg))
+                } else {
+                    None
+                }
+            };
+
+            if let Some((input_tx, msg)) = input {
+                // Send outside the session lock; SyncSender::send can block when full.
                 if let Err(e) = input_tx.send(msg) {
                     log::error!(
                         "Failed to send data to terminal {}: {}",
@@ -1332,6 +1723,116 @@ impl TerminalServiceProxy {
         }
     }
 
+    /// Perform a single PTY resize as part of the two-phase SIGWINCH sequence.
+    /// Returns true if the resize succeeded.
+    ///
+    /// Takes individual field references to avoid borrowing the entire TerminalSession,
+    /// which would conflict with the mutable borrow of session.state in read_outputs().
+    fn do_sigwinch_resize(
+        terminal_id: i32,
+        rows: u16,
+        cols: u16,
+        pty_pair: &Option<portable_pty::PtyPair>,
+        input_tx: &Option<SyncSender<Vec<u8>>>,
+        _is_helper_mode: bool,
+        action: &SigwinchAction,
+    ) -> bool {
+        // Skip if dimensions are not initialized (shouldn't happen on reconnect,
+        // but guard against it to avoid resizing to nonsensical values).
+        if rows == 0 || cols == 0 {
+            return false;
+        }
+
+        let target_rows = match action {
+            SigwinchAction::TempResize => {
+                // For very small terminals (≤2 rows), subtracting 1 would result in an unusable
+                // size (0 or 1 row), so we add 1 instead. Either direction triggers SIGWINCH.
+                if rows > 2 {
+                    rows.saturating_sub(1)
+                } else {
+                    rows.saturating_add(1)
+                }
+            }
+            SigwinchAction::Restore => rows,
+        };
+
+        let phase_name = match action {
+            SigwinchAction::TempResize => "temp resize",
+            SigwinchAction::Restore => "restore",
+        };
+
+        #[cfg(target_os = "windows")]
+        let use_helper = _is_helper_mode;
+        #[cfg(not(target_os = "windows"))]
+        let use_helper = false;
+
+        if use_helper {
+            #[cfg(target_os = "windows")]
+            {
+                let input_tx = match input_tx {
+                    Some(tx) => tx,
+                    None => return false,
+                };
+                let msg = encode_resize_message(target_rows, cols);
+                if let Err(e) = input_tx.try_send(msg) {
+                    log::warn!(
+                        "Terminal {} SIGWINCH {} via helper failed: {}",
+                        terminal_id,
+                        phase_name,
+                        e
+                    );
+                    return false;
+                }
+                true
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = (input_tx, phase_name);
+                false
+            }
+        } else if let Some(pty_pair) = pty_pair {
+            if let Err(e) = pty_pair.master.resize(PtySize {
+                rows: target_rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }) {
+                log::warn!(
+                    "Terminal {} SIGWINCH {} failed: {}",
+                    terminal_id,
+                    phase_name,
+                    e
+                );
+                return false;
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Helper to create a TerminalResponse with optional compression.
+    fn create_terminal_data_response(terminal_id: i32, data: Vec<u8>) -> TerminalResponse {
+        let mut response = TerminalResponse::new();
+        let mut terminal_data = TerminalData::new();
+        terminal_data.terminal_id = terminal_id;
+
+        if data.len() > COMPRESS_THRESHOLD {
+            let compressed = compress::compress(&data);
+            if compressed.len() < data.len() {
+                terminal_data.data = bytes::Bytes::from(compressed);
+                terminal_data.compressed = true;
+            } else {
+                terminal_data.data = bytes::Bytes::from(data);
+            }
+        } else {
+            terminal_data.data = bytes::Bytes::from(data);
+        }
+
+        response.set_data(terminal_data);
+        response
+    }
+
     pub fn read_outputs(&self) -> Vec<TerminalResponse> {
         let service = match get_service(&self.service_id) {
             Some(s) => s,
@@ -1356,14 +1857,32 @@ impl TerminalServiceProxy {
         // Process each session with its own lock
         for (terminal_id, session_arc) in sessions {
             if let Ok(mut session) = session_arc.try_lock() {
-                // Check if reader thread is still alive and we haven't sent closed message yet
+                // Check if the session has ended (reader thread finished or child exited).
+                // On Linux, the PTY reader thread may not return EOF when the shell exits
+                // (the cloned master fd keeps the read side open), so we also poll the child
+                // process via try_wait() as a fallback detection mechanism.
                 let mut should_send_closed = false;
                 if !session.closed_message_sent {
                     if let Some(thread) = &session.reader_thread {
                         if thread.is_finished() {
                             should_send_closed = true;
-                            session.closed_message_sent = true;
                         }
+                    }
+                    if !should_send_closed {
+                        if let Some(child) = &mut session.child {
+                            match child.try_wait() {
+                                Ok(Some(_)) => {
+                                    should_send_closed = true;
+                                }
+                                Ok(None) => {} // still running
+                                Err(e) => {
+                                    log::warn!("Terminal {} child wait error: {}", terminal_id, e);
+                                }
+                            }
+                        }
+                    }
+                    if should_send_closed {
+                        session.closed_message_sent = true;
                     }
                 }
                 // It's Ok to put the closed message here.
@@ -1373,12 +1892,11 @@ impl TerminalServiceProxy {
                     closed_terminals.push(terminal_id);
                 }
 
-                if !session.is_opened {
-                    // Skip the session if it is not opened.
-                    continue;
-                }
-
-                // Read from output channel
+                // Always drain the output channel regardless of session state.
+                // When Active: data is sent to client. When Closed (within the same
+                // connection): data is buffered in output_buffer for reconnection replay.
+                // Note: during actual disconnect, the run loop exits and read_outputs()
+                // is not called, so channel data produced after disconnect may be lost.
                 let mut has_activity = false;
                 let mut received_data = Vec::new();
                 if let Some(output_rx) = &session.output_rx {
@@ -1389,37 +1907,111 @@ impl TerminalServiceProxy {
                     }
                 }
 
-                // Update buffer after reading
+                // Update buffer (always buffer for reconnection support)
                 for data in &received_data {
                     session.output_buffer.append(data);
                 }
 
-                // Process received data for responses
-                for data in received_data {
-                    let mut response = TerminalResponse::new();
-                    let mut terminal_data = TerminalData::new();
-                    terminal_data.terminal_id = terminal_id;
+                // Skip sending responses if session is not Active.
+                // Data is already buffered above and will be sent on next reconnection.
+                // Use a scoped block to limit the mutable borrow of session.state,
+                // so we can immutably borrow other session fields afterwards.
+                let (replay_buffer, sigwinch_action) = {
+                    let (pending_buffer, sigwinch) = match &mut session.state {
+                        SessionState::Active {
+                            pending_buffer,
+                            sigwinch,
+                        } => (pending_buffer, sigwinch),
+                        _ => continue,
+                    };
 
-                    // Compress data if it exceeds threshold
-                    if data.len() > COMPRESS_THRESHOLD {
-                        let compressed = compress::compress(&data);
-                        if compressed.len() < data.len() {
-                            terminal_data.data = bytes::Bytes::from(compressed);
-                            terminal_data.compressed = true;
-                        } else {
-                            // Compression didn't help, send uncompressed
-                            terminal_data.data = bytes::Bytes::from(data);
+                    let replay_buffer = pending_buffer.take();
+
+                    // Two-phase SIGWINCH: see SigwinchPhase doc comments for rationale.
+                    // Each phase is a single PTY resize, spaced ~30ms apart by the polling
+                    // interval, ensuring the TUI app sees a real size change on each signal.
+                    let sigwinch_action = match sigwinch {
+                        SigwinchPhase::TempResize { retries } => {
+                            if *retries == 0 {
+                                log::warn!(
+                                    "Terminal {} SIGWINCH phase 1 (temp resize) failed after {} attempts, giving up",
+                                    terminal_id, MAX_SIGWINCH_PHASE_ATTEMPTS
+                                );
+                                *sigwinch = SigwinchPhase::Idle;
+                                None
+                            } else {
+                                *retries -= 1;
+                                Some(SigwinchAction::TempResize)
+                            }
                         }
-                    } else {
-                        terminal_data.data = bytes::Bytes::from(data);
-                    }
+                        SigwinchPhase::Restore { retries } => {
+                            if *retries == 0 {
+                                log::warn!(
+                                    "Terminal {} SIGWINCH phase 2 (restore) failed after {} attempts, giving up",
+                                    terminal_id, MAX_SIGWINCH_PHASE_ATTEMPTS
+                                );
+                                *sigwinch = SigwinchPhase::Idle;
+                                None
+                            } else {
+                                *retries -= 1;
+                                Some(SigwinchAction::Restore)
+                            }
+                        }
+                        SigwinchPhase::Idle => None,
+                    };
+                    (replay_buffer, sigwinch_action)
+                };
 
-                    response.set_data(terminal_data);
-                    responses.push(response);
+                if let Some(buffer) = replay_buffer {
+                    if !buffer.is_empty() {
+                        responses.push(Self::create_terminal_data_response(terminal_id, buffer));
+                    }
                 }
 
                 if has_activity {
                     session.update_activity();
+                }
+
+                // Execute SIGWINCH resize outside the mutable borrow scope of session.state.
+                if let Some(action) = sigwinch_action {
+                    #[cfg(target_os = "windows")]
+                    let is_helper = session.is_helper_mode;
+                    #[cfg(not(target_os = "windows"))]
+                    let is_helper = false;
+                    let resize_ok = Self::do_sigwinch_resize(
+                        terminal_id,
+                        session.rows,
+                        session.cols,
+                        &session.pty_pair,
+                        &session.input_tx,
+                        is_helper,
+                        &action,
+                    );
+                    if let SessionState::Active { sigwinch, .. } = &mut session.state {
+                        match action {
+                            SigwinchAction::TempResize => {
+                                if resize_ok {
+                                    // Phase 1 succeeded — advance to phase 2 (restore).
+                                    *sigwinch = SigwinchPhase::Restore {
+                                        retries: MAX_SIGWINCH_PHASE_ATTEMPTS,
+                                    };
+                                }
+                                // If failed, retries already decremented; will retry phase 1.
+                            }
+                            SigwinchAction::Restore => {
+                                if resize_ok {
+                                    // Phase 2 succeeded — SIGWINCH sequence complete.
+                                    *sigwinch = SigwinchPhase::Idle;
+                                }
+                                // If failed, retries already decremented; will retry phase 2.
+                            }
+                        }
+                    }
+                }
+
+                // Send real-time data after historical buffer
+                for data in received_data {
+                    responses.push(Self::create_terminal_data_response(terminal_id, data));
                 }
             }
         }
@@ -1444,7 +2036,8 @@ impl TerminalServiceProxy {
                         }
                     }
                 } else {
-                    // For persistent sessions, just clear the child reference
+                    // For persistent sessions, clear the child reference and remove the session
+                    // if the closed message has been sent (shell has exited).
                     if let Some(session_arc) = sessions.get(&terminal_id) {
                         let mut session = session_arc.lock().unwrap();
                         if let Some(mut child) = session.child.take() {
@@ -1453,6 +2046,12 @@ impl TerminalServiceProxy {
                                 exit_code = status.exit_code() as i32;
                             }
                             add_to_reaper(child);
+                        }
+                        if session.closed_message_sent {
+                            // Shell has exited, remove the dead session
+                            drop(session);
+                            sessions.remove(&terminal_id);
+                            service.lock().unwrap().sessions.remove(&terminal_id);
                         }
                     }
                 }
@@ -1475,5 +2074,118 @@ impl TerminalServiceProxy {
             // Remove non-persistent service
             remove_service(&self.service_id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_utf8_split_point, OutputBuffer, Utf8ChunkAccumulator, MAX_BUFFER_LINES};
+
+    #[test]
+    fn utf8_split_point_returns_full_len_for_complete_input() {
+        assert_eq!(find_utf8_split_point(b"hello"), 5);
+        assert_eq!(find_utf8_split_point("中文".as_bytes()), "中文".len());
+        assert_eq!(find_utf8_split_point("😀".as_bytes()), "😀".len());
+    }
+
+    #[test]
+    fn utf8_split_point_detects_incomplete_trailing_sequence() {
+        let data = [b'a', 0xE4, 0xB8];
+        assert_eq!(find_utf8_split_point(&data), 1);
+    }
+
+    #[test]
+    fn utf8_split_point_keeps_malformed_prefix_but_buffers_trailing_lead_byte() {
+        let data = [0xFF, 0xE4];
+        assert_eq!(find_utf8_split_point(&data), 1);
+    }
+
+    #[test]
+    fn utf8_split_point_treats_orphan_continuations_as_complete() {
+        let data = [0x80, 0x81, 0x82];
+        assert_eq!(find_utf8_split_point(&data), data.len());
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_reassembles_split_multibyte_output() {
+        let full = "你好世界".as_bytes();
+        let mut chunker = Utf8ChunkAccumulator::default();
+        let mut output = Vec::new();
+
+        for chunk in full.chunks(5) {
+            if let Some(data) = chunker.push_chunk(chunk.to_vec()) {
+                output.extend_from_slice(&data);
+            }
+        }
+
+        if let Some(data) = chunker.finish() {
+            output.extend_from_slice(&data);
+        }
+
+        assert_eq!(output, full);
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_buffers_leading_split_multibyte_output() {
+        let mut chunker = Utf8ChunkAccumulator::default();
+
+        assert!(chunker.push_chunk(vec![0xE4]).is_none());
+        assert!(chunker.push_chunk(vec![0xB8]).is_none());
+        assert_eq!(
+            chunker.push_chunk(vec![0xAD]),
+            Some("中".as_bytes().to_vec())
+        );
+        assert!(chunker.finish().is_none());
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_flushes_incomplete_tail_on_finish() {
+        let mut chunker = Utf8ChunkAccumulator::default();
+        assert_eq!(chunker.push_chunk(vec![b'a', 0xE4]), Some(vec![b'a']));
+        assert_eq!(chunker.finish(), Some(vec![0xE4]));
+        assert!(chunker.finish().is_none());
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_does_not_stall_on_malformed_bytes() {
+        let mut chunker = Utf8ChunkAccumulator::default();
+        assert_eq!(chunker.push_chunk(vec![0xFF]), Some(vec![0xFF]));
+        assert!(chunker.finish().is_none());
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_buffers_lone_utf8_lead_bytes() {
+        let mut chunker = Utf8ChunkAccumulator::default();
+        assert!(chunker.push_chunk(vec![0xE4]).is_none());
+        assert_eq!(chunker.finish(), Some(vec![0xE4]));
+    }
+
+    #[test]
+    fn utf8_chunk_accumulator_does_not_hold_back_non_utf8_prefixes() {
+        let mut chunker = Utf8ChunkAccumulator::default();
+        assert_eq!(chunker.push_chunk(vec![0xFF, 0xE4]), Some(vec![0xFF, 0xE4]));
+        assert!(chunker.finish().is_none());
+    }
+
+    #[test]
+    fn output_buffer_trim_after_incomplete_merge_does_not_underflow() {
+        let mut buffer = OutputBuffer::new();
+
+        // Create an incomplete line first.
+        buffer.append(b"hello");
+
+        // Merge a large chunk that contains the first newline at the tail.
+        // This exercises the "append to last incomplete line" branch.
+        let mut large = vec![b'a'; 30_000];
+        large.push(b'\n');
+        buffer.append(&large);
+
+        // Exceed MAX_BUFFER_LINES so trim pops the first large merged line.
+        for _ in 0..=MAX_BUFFER_LINES {
+            buffer.append(b"x\n");
+        }
+
+        let actual_size: usize = buffer.lines.iter().map(|line| line.len()).sum();
+        assert_eq!(buffer.total_size, actual_size);
     }
 }

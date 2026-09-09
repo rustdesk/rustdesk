@@ -340,7 +340,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: b47e8385e5a75d38319ad706a64b0ead3108b093
+      resolved-ref: 8b774a66671cbb9bcb2631af6ac28f9bdd469ce3
       url: "https://github.com/rustdesk-org/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -409,14 +409,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "12.0.1"
-  external_path:
-    dependency: "direct main"
-    description:
-      name: external_path
-      sha256: "2095c626fbbefe70d5a4afc9b1137172a68ee2c276e51c3c1283394485bea8f4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.3"
   ffi:
     dependency: "direct main"
     description:
@@ -529,11 +521,12 @@ packages:
   flutter_custom_cursor:
     dependency: "direct main"
     description:
-      name: flutter_custom_cursor
-      sha256: "3850a32ac6de351ccc5e4286b6d94ff70c10abecd44479ea6c5aaea17264285d"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.4"
+      path: "."
+      ref: db63b785c38153603e9fb84b50d3ec46f0d7e05e
+      resolved-ref: db63b785c38153603e9fb84b50d3ec46f0d7e05e
+      url: "https://github.com/rustdesk-org/flutter_custom_cursor"
+    source: git
+    version: "0.0.3"
   flutter_gpu_texture_renderer:
     dependency: "direct main"
     description:
@@ -1589,7 +1582,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "85789bfe6e4cfaf4ecc00c52857467fdb7f26879"
+      resolved-ref: cf4aef0512092fad9344a27ffe1c47ad83269dfc
       url: "https://github.com/rustdesk-org/window_manager"
     source: git
     version: "0.3.6"
@@ -1597,9 +1590,9 @@ packages:
     dependency: "direct main"
     description:
       path: "plugins/window_size"
-      ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
-      resolved-ref: eb3964990cf19629c89ff8cb4a37640c7b3d5601
-      url: "https://github.com/google/flutter-desktop-embedding.git"
+      ref: "51e67ce047c72b26810b99e8473ddb44612fe356"
+      resolved-ref: "51e67ce047c72b26810b99e8473ddb44612fe356"
+      url: "https://github.com/21pages/flutter-desktop-embedding.git"
     source: git
     version: "0.1.0"
   xdg_directories:

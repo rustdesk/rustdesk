@@ -5,17 +5,24 @@ use crate::ipc::{self, Data};
 #[cfg(target_os = "windows")]
 use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 #[cfg(target_os = "windows")]
-use clipboard::ContextSend;
+use base::config::keys::*;
 #[cfg(not(any(target_os = "ios")))]
-use hbb_common::fs::serialize_transfer_job;
+use base::fs::serialize_transfer_job;
+use base::{
+    config::keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
+    fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
+    message_proto::*,
+};
+#[cfg(target_os = "windows")]
+use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
+#[cfg(target_os = "windows")]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err, bail,
-    config::{keys::OPTION_FILE_TRANSFER_MAX_FILES, Config},
-    fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
+    config::{option2bool, Config},
     log,
-    message_proto::*,
     protobuf::Message as _,
     tokio::{
         self,
@@ -23,11 +30,6 @@ use hbb_common::{
         task::spawn_blocking,
     },
     ResultType,
-};
-#[cfg(target_os = "windows")]
-use hbb_common::{
-    config::{keys::*, option2bool},
-    tokio::sync::Mutex as TokioMutex,
 };
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
@@ -134,6 +136,7 @@ pub struct Client {
     pub is_terminal: bool,
     pub port_forward: String,
     pub name: String,
+    pub avatar: String,
     pub peer_id: String,
     pub keyboard: bool,
     pub clipboard: bool,
@@ -142,6 +145,7 @@ pub struct Client {
     pub restart: bool,
     pub recording: bool,
     pub block_input: bool,
+    pub privacy_mode: bool,
     pub from_switch: bool,
     pub in_voice_call: bool,
     pub incoming_voice_call: bool,
@@ -220,6 +224,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         port_forward: String,
         peer_id: String,
         name: String,
+        avatar: String,
         authorized: bool,
         keyboard: bool,
         clipboard: bool,
@@ -228,6 +233,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         restart: bool,
         recording: bool,
         block_input: bool,
+        privacy_mode: bool,
         from_switch: bool,
         #[cfg(not(any(target_os = "ios")))] tx: mpsc::UnboundedSender<Data>,
     ) {
@@ -240,6 +246,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             is_terminal,
             port_forward,
             name: name.clone(),
+            avatar,
             peer_id: peer_id.clone(),
             keyboard,
             clipboard,
@@ -248,6 +255,7 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
             restart,
             recording,
             block_input,
+            privacy_mode,
             from_switch,
             #[cfg(not(any(target_os = "ios")))]
             tx,
@@ -371,6 +379,15 @@ pub fn close(id: i32) {
     };
 }
 
+/// Like `close`, but says the CM's WINDOW closed rather than a person disconnecting this peer.
+/// See `ipc::Data::CmWindowClosed`.
+#[cfg(target_os = "linux")]
+pub fn close_window(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::CmWindowClosed));
+    };
+}
+
 #[inline]
 pub fn remove(id: i32) {
     CLIENTS.write().unwrap().remove(&id);
@@ -389,6 +406,23 @@ pub fn send_chat(id: i32, text: String) {
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
+    #[cfg(target_os = "android")]
+    let is_keyboard_permission = name == "keyboard";
+    #[cfg(not(target_os = "android"))]
+    let is_keyboard_permission = false;
+    if !option2bool(
+        OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+        &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+    ) && !is_keyboard_permission
+    {
+        log::info!(
+            "blocked cm switch_permission by policy, conn_id={}, permission={}, enabled={}",
+            id,
+            name,
+            enabled
+        );
+        return;
+    }
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
     };
@@ -397,6 +431,19 @@ pub fn switch_permission(id: i32, name: String, enabled: bool) {
 #[inline]
 #[cfg(target_os = "android")]
 pub fn switch_permission_all(name: String, enabled: bool) {
+    if name != "keyboard"
+        && !option2bool(
+            OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW,
+            &crate::get_builtin_option(OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW),
+        )
+    {
+        log::info!(
+            "blocked cm switch_permission_all by policy, permission={}, enabled={}",
+            name,
+            enabled
+        );
+        return;
+    }
     for (_, client) in CLIENTS.read().unwrap().iter() {
         allow_err!(client.tx.send(Data::SwitchPermission {
             name: name.clone(),
@@ -420,8 +467,15 @@ pub fn get_clients_length() -> usize {
 }
 
 #[inline]
+#[cfg(target_os = "android")]
+pub fn has_active_clients() -> bool {
+    let clients = CLIENTS.read().unwrap();
+    clients.values().any(|c| !c.disconnected)
+}
+
+#[inline]
 #[cfg(feature = "flutter")]
-#[cfg(not(any(target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn switch_back(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::SwitchSidesBack));
@@ -500,9 +554,9 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                         }
                         Ok(Some(data)) => {
                             match data {
-                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, from_switch} => {
+                                Data::Login{id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart, recording, block_input, privacy_mode, from_switch} => {
                                     log::debug!("conn_id: {}", id);
-                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, from_switch, self.tx.clone());
+                                    self.cm.add_connection(id, is_file_transfer, is_view_camera, is_terminal, port_forward, peer_id, name, avatar, authorized, keyboard, clipboard, audio, file, restart, recording, block_input, privacy_mode, from_switch, self.tx.clone());
                                     self.conn_id = id;
                                     #[cfg(target_os = "windows")]
                                     {
@@ -529,6 +583,26 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                 }
                                 Data::ChatMessage { text } => {
                                     self.cm.new_message(self.conn_id, text);
+                                }
+                                Data::SwitchPermission { name, enabled } => {
+                                    // Keep this branch scoped to privacy mode rollback.
+                                    // Other CM permission toggles are updated optimistically by the UI itself.
+                                    // The backend currently sends SwitchPermission back to CM only when
+                                    // privacy-mode turn-off fails and the UI state must be restored.
+                                    if name == "privacy_mode" {
+                                        let client = {
+                                            let mut clients = CLIENTS.write().unwrap();
+                                            clients.get_mut(&self.conn_id).map(|c| {
+                                                c.privacy_mode = enabled;
+                                                c.clone()
+                                            })
+                                        };
+                                        if let Some(client) = client {
+                                            // This reuses add_connection(), and cm.tis only selectively updates
+                                            // existing rows (authorized/privacy_mode) for this fallback path.
+                                            self.cm.ui_handler.add_connection(&client);
+                                        }
+                                    }
                                 }
                                 Data::FS(mut fs) => {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {
@@ -823,6 +897,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 port_forward,
                 peer_id,
                 name,
+                avatar,
                 authorized,
                 keyboard,
                 clipboard,
@@ -831,6 +906,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                 restart,
                 recording,
                 block_input,
+                privacy_mode,
                 from_switch,
                 ..
             }) => {
@@ -843,6 +919,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     port_forward,
                     peer_id,
                     name,
+                    avatar,
                     authorized,
                     keyboard,
                     clipboard,
@@ -851,6 +928,7 @@ pub async fn start_listen<T: InvokeUiCM>(
                     restart,
                     recording,
                     block_input,
+                    privacy_mode,
                     from_switch,
                     tx.clone(),
                 );
@@ -901,6 +979,61 @@ async fn handle_fs(
     tx_log: Option<&UnboundedSender<String>>,
     _conn_id: i32,
 ) {
+    // Android is scoped-storage only, so every peer supplied path has to stay inside the
+    // app workspace. This is the filesystem boundary, keep it enforced here even though
+    // `Connection` rejects out-of-workspace requests earlier as well.
+    #[cfg(target_os = "android")]
+    {
+        // (path, job id, file num, allow empty) of the peer supplied path this message
+        // acts on.
+        let checked: Option<(&str, i32, i32, bool)> = match &fs {
+            ipc::FS::ReadEmptyDirs { dir, .. } => Some((dir.as_str(), -1, -1, false)),
+            ipc::FS::ReadDir { dir, .. } => Some((dir.as_str(), -1, -1, true)),
+            ipc::FS::RemoveDir { path, id, .. } | ipc::FS::CreateDir { path, id } => {
+                Some((path.as_str(), *id, 0, false))
+            }
+            ipc::FS::Rename { path, id, .. } => Some((path.as_str(), *id, 0, false)),
+            ipc::FS::RemoveFile { path, id, file_num } => {
+                Some((path.as_str(), *id, *file_num, false))
+            }
+            ipc::FS::ReadAllFiles { path, id, .. } => Some((path.as_str(), *id, -1, false)),
+            ipc::FS::NewWrite {
+                path, id, file_num, ..
+            }
+            | ipc::FS::ReadFile {
+                path, id, file_num, ..
+            } => Some((path.as_str(), *id, *file_num, false)),
+            _ => None,
+        };
+        if let Some((path, id, file_num, allow_empty)) = checked {
+            if !crate::common::is_peer_path_allowed(path, allow_empty) {
+                log::warn!("Reject file operation outside the app workspace: {}", path);
+                if id >= 0 {
+                    send_raw(fs::new_error(id, "Permission denied", file_num), tx);
+                }
+                return;
+            }
+        }
+        if let ipc::FS::Rename { path, new_name, id } = &fs {
+            let destination = std::path::Path::new(path)
+                .parent()
+                .map(|parent| parent.join(new_name));
+            let allowed = destination
+                .as_deref()
+                .and_then(std::path::Path::to_str)
+                .map_or(false, |path| {
+                    crate::common::is_peer_path_allowed(path, false)
+                });
+            if !allowed {
+                log::warn!(
+                    "Reject rename destination outside the app workspace: {:?}",
+                    destination
+                );
+                send_raw(fs::new_error(*id, "Permission denied", 0), tx);
+                return;
+            }
+        }
+    }
     match fs {
         ipc::FS::ReadEmptyDirs {
             dir,
@@ -936,15 +1069,6 @@ async fn handle_fs(
             total_size,
             conn_id,
         } => {
-            // Validate file names to prevent path traversal attacks.
-            // This must be done BEFORE any path operations to ensure attackers cannot
-            // escape the target directory using names like "../../malicious.txt"
-            if let Err(e) = validate_transfer_file_names(&files) {
-                log::warn!("Path traversal attempt detected for {}: {}", path, e);
-                send_raw(fs::new_error(id, e, file_num), tx);
-                return;
-            }
-
             // Convert files to FileEntry
             let file_entries: Vec<FileEntry> = files
                 .drain(..)
@@ -965,9 +1089,13 @@ async fn handle_fs(
                 file_num,
                 false,
                 false,
-                file_entries,
                 overwrite_detection,
             );
+            if let Err(e) = job.set_files(file_entries) {
+                log::warn!("Reject unsafe transfer file list for {}: {}", path, e);
+                send_raw(fs::new_error(id, e, file_num), tx);
+                return;
+            }
             job.total_size = total_size;
             job.conn_id = conn_id;
             write_jobs.push(job);
@@ -1155,73 +1283,6 @@ async fn handle_fs(
     }
 }
 
-/// Validates that a file name does not contain path traversal sequences.
-/// This prevents attackers from escaping the base directory by using names like
-/// "../../../etc/passwd" or "..\\..\\Windows\\System32\\malicious.dll".
-#[cfg(not(any(target_os = "ios")))]
-fn validate_file_name_no_traversal(name: &str) -> ResultType<()> {
-    // Check for null bytes which could cause path truncation in some APIs
-    if name.bytes().any(|b| b == 0) {
-        bail!("file name contains null bytes");
-    }
-
-    // Check for path traversal patterns
-    // We check for both Unix and Windows path separators
-    if name
-        .split(|c| c == '/' || c == '\\')
-        .filter(|s| !s.is_empty())
-        .any(|component| component == "..")
-    {
-        bail!("path traversal detected in file name");
-    }
-
-    // On Windows, also check for drive letters (e.g., "C:")
-    #[cfg(windows)]
-    {
-        if name.len() >= 2 {
-            let bytes = name.as_bytes();
-            if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-                bail!("absolute path detected in file name");
-            }
-        }
-    }
-
-    // Check for names starting with path separator:
-    // - Unix absolute paths (e.g., "/etc/passwd")
-    // - Windows UNC paths (e.g., "\\server\share")
-    if name.starts_with('/') || name.starts_with('\\') {
-        bail!("absolute path detected in file name");
-    }
-
-    Ok(())
-}
-
-#[inline]
-fn is_single_file_with_empty_name(files: &[(String, u64)]) -> bool {
-    files.len() == 1 && files.first().map_or(false, |f| f.0.is_empty())
-}
-
-/// Validates all file names in a transfer request to prevent path traversal attacks.
-/// Returns an error if any file name contains dangerous path components.
-#[cfg(not(any(target_os = "ios")))]
-fn validate_transfer_file_names(files: &[(String, u64)]) -> ResultType<()> {
-    if is_single_file_with_empty_name(files) {
-        // Allow empty name for single file.
-        // The full path is provided in the `path` parameter for single file transfers.
-        return Ok(());
-    }
-
-    for (name, _) in files {
-        // In multi-file transfers, empty names are not allowed.
-        // Each file must have a valid name to construct the destination path.
-        if name.is_empty() {
-            bail!("empty file name in multi-file transfer");
-        }
-        validate_file_name_no_traversal(name)?;
-    }
-    Ok(())
-}
-
 /// Start a read job in CM for file transfer from server to client (Windows only).
 ///
 /// This creates a `TransferJob` using `new_read()`, validates it, and sends the
@@ -1341,7 +1402,7 @@ async fn start_read_job(
 /// Process read jobs periodically, reading file blocks and sending them via IPC.
 ///
 /// NOTE: This is the CM-side equivalent of `handle_read_jobs()` in
-/// `libs/hbb_common/src/fs.rs`. The logic mirrors that implementation
+/// `libs/base/src/fs.rs`. The logic mirrors that implementation
 /// but communicates via IPC instead of direct network stream.
 /// When modifying job processing logic, ensure both implementations stay in sync.
 #[cfg(not(any(target_os = "ios")))]
@@ -1440,7 +1501,7 @@ async fn handle_read_jobs_tick(
 /// Initialize a read job's data stream and handle digest sending for overwrite detection.
 ///
 /// NOTE: This is the CM-side equivalent of `TransferJob::init_data_stream()` in
-/// `libs/hbb_common/src/fs.rs`. It calls `init_data_stream_for_cm()` and sends
+/// `libs/base/src/fs.rs`. It calls `init_data_stream_for_cm()` and sends
 /// digest via IPC instead of direct network stream.
 /// When modifying initialization or digest logic, ensure both paths stay in sync.
 #[cfg(not(any(target_os = "ios")))]
@@ -1542,13 +1603,19 @@ async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
             fs::get_path(dir)
         }
     };
-    if let Ok(Ok(fd)) = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await {
-        let mut msg_out = Message::new();
-        let mut file_response = FileResponse::new();
-        file_response.set_dir(fd);
-        msg_out.set_file_response(file_response);
-        send_raw(msg_out, tx);
-    }
+    let result = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await;
+    let msg_out = match result {
+        Ok(Ok(fd)) => {
+            let mut msg_out = Message::new();
+            let mut file_response = FileResponse::new();
+            file_response.set_dir(fd);
+            msg_out.set_file_response(file_response);
+            msg_out
+        }
+        Ok(Err(err)) => fs::new_error(0, err, -1),
+        Err(err) => fs::new_error(0, err, -1),
+    };
+    send_raw(msg_out, tx);
 }
 
 #[cfg(not(any(target_os = "ios")))]
@@ -1596,16 +1663,7 @@ async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
 #[cfg(not(any(target_os = "ios")))]
 async fn rename_file(path: String, new_name: String, id: i32, tx: &UnboundedSender<Data>) {
     handle_result(
-        spawn_blocking(move || {
-            // Rename target must not be empty
-            if new_name.is_empty() {
-                bail!("new file name cannot be empty");
-            }
-            // Validate that new_name doesn't contain path traversal
-            validate_file_name_no_traversal(&new_name)?;
-            fs::rename_file(&path, &new_name)
-        })
-        .await,
+        spawn_blocking(move || fs::rename_file(&path, &new_name)).await,
         id,
         0,
         tx,
@@ -1700,6 +1758,19 @@ pub fn quit_cm() {
     // in case of std::process::exit not work
     log::info!("quit cm");
     CLIENTS.write().unwrap().clear();
+    // `quit_gui()` ends the process on Windows and macOS, but on Linux it calls
+    // `gtk_main_quit()`, which has no effect in the Flutter connection manager:
+    // `flutter/linux/main.cc` runs `g_application_run()` (GtkApplication), so
+    // `gtk_main()` is never called. Exit directly instead, otherwise this
+    // process keeps running while no longer serving the `_cm` ipc endpoint, so
+    // the server can't reuse it and spawns one more connection manager.
+    //
+    // NOTE: a client merely disconnecting does not come here, the Flutter side
+    // closes the window then, so this is a fallback rather than an explanation
+    // for the stale processes of #15698.
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    std::process::exit(0);
+    #[cfg(not(all(target_os = "linux", feature = "flutter")))]
     crate::platform::quit_gui();
 }
 
@@ -1708,10 +1779,8 @@ mod tests {
     use super::*;
 
     use crate::ipc::Data;
-    use hbb_common::{
-        message_proto::{FileDirectory, Message},
-        tokio::{runtime::Runtime, sync::mpsc::unbounded_channel},
-    };
+    use base::message_proto::{FileDirectory, Message};
+    use hbb_common::tokio::{runtime::Runtime, sync::mpsc::unbounded_channel};
     use std::fs;
 
     #[test]
@@ -1742,7 +1811,7 @@ mod tests {
 
     #[test]
     #[cfg(not(any(target_os = "ios")))]
-    fn read_dir_success() {
+    fn read_dir_reports_success_and_error() {
         let rt = Runtime::new().unwrap();
         rt.block_on(async {
             let (tx, mut rx) = unbounded_channel();
@@ -1765,43 +1834,19 @@ mod tests {
                 _ => panic!("unexpected data"),
             }
             let _ = fs::remove_dir_all(&dir);
+
+            super::read_dir(&dir.to_string_lossy(), false, &tx).await;
+
+            match rx.recv().await.unwrap() {
+                Data::RawMessage(bytes) => {
+                    let mut msg = Message::new();
+                    msg.merge_from_bytes(&bytes).unwrap();
+                    assert_eq!(msg.file_response().error().id, 0);
+                    assert!(!msg.file_response().error().error.is_empty());
+                }
+                _ => panic!("unexpected data"),
+            }
         });
-    }
-
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn validate_file_name_security() {
-        // Null byte injection
-        assert!(super::validate_file_name_no_traversal("file\0.txt").is_err());
-        assert!(super::validate_file_name_no_traversal("test\0").is_err());
-
-        // Path traversal
-        assert!(super::validate_file_name_no_traversal("../etc/passwd").is_err());
-        assert!(super::validate_file_name_no_traversal("foo/../bar").is_err());
-        assert!(super::validate_file_name_no_traversal("..").is_err());
-
-        // Absolute paths
-        assert!(super::validate_file_name_no_traversal("/etc/passwd").is_err());
-        assert!(super::validate_file_name_no_traversal("\\Windows").is_err());
-        #[cfg(windows)]
-        assert!(super::validate_file_name_no_traversal("C:\\Windows").is_err());
-
-        // Valid paths
-        assert!(super::validate_file_name_no_traversal("file.txt").is_ok());
-        assert!(super::validate_file_name_no_traversal("subdir/file.txt").is_ok());
-        assert!(super::validate_file_name_no_traversal("").is_ok());
-    }
-
-    #[test]
-    #[cfg(not(any(target_os = "ios")))]
-    fn validate_transfer_file_names_security() {
-        assert!(super::validate_transfer_file_names(&[("file.txt".into(), 100)]).is_ok());
-        assert!(super::validate_transfer_file_names(&[("".into(), 100)]).is_ok());
-        assert!(
-            super::validate_transfer_file_names(&[("".into(), 100), ("file.txt".into(), 100)])
-                .is_err()
-        );
-        assert!(super::validate_transfer_file_names(&[("../passwd".into(), 100)]).is_err());
     }
 
     /// Tests that symlink creation works on this platform.

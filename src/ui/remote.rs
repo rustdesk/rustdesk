@@ -15,7 +15,10 @@ use sciter::{
 };
 
 use hbb_common::{
-    allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
+    allow_err, log, rendezvous_proto::ConnType,
+};
+use base::{
+    fs::TransferJobMeta, message_proto::*,
 };
 
 use crate::{
@@ -84,6 +87,22 @@ impl SciterHandler {
                     }
                     serde_json::Value::Bool(b) => {
                         value.set_item(k, b);
+                    }
+                    serde_json::Value::Array(arr) if k == "supported_privacy_mode_impl" => {
+                        let mut impls = Value::array(0);
+                        for item in arr {
+                            if let serde_json::Value::Array(entry) = item {
+                                let impl_key = entry.get(0).and_then(|v| v.as_str());
+                                let impl_name = entry.get(1).and_then(|v| v.as_str());
+                                if let (Some(impl_key), Some(impl_name)) = (impl_key, impl_name) {
+                                    let mut impl_item = Value::array(0);
+                                    impl_item.push(impl_key);
+                                    impl_item.push(impl_name);
+                                    impls.push(impl_item);
+                                }
+                            }
+                        }
+                        value.set_item(k, impls);
                     }
                     _ => {
                         // ignore for now
@@ -488,6 +507,7 @@ impl sciter::EventHandler for SciterSession {
         fn get_id();
         fn get_default_pi();
         fn get_option(String);
+        fn get_local_option(String);
         fn t(String);
         fn set_option(String, String);
         fn input_os_password(String, bool);
@@ -497,6 +517,7 @@ impl sciter::EventHandler for SciterSession {
         fn is_rdp();
         fn login(String, String, String, bool);
         fn send2fa(String, bool);
+        fn continue_insecure_connection(bool);
         fn get_enable_trusted_devices();
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
@@ -550,6 +571,7 @@ impl sciter::EventHandler for SciterSession {
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
         fn toggle_option(String);
+        fn toggle_privacy_mode(String, bool);
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
@@ -618,6 +640,10 @@ impl SciterSession {
 
     pub fn t(&self, name: String) -> String {
         crate::client::translate(name)
+    }
+
+    pub fn get_local_option(&self, key: String) -> String {
+        crate::ui_interface::get_local_option(key)
     }
 
     pub fn get_icon(&self) -> String {

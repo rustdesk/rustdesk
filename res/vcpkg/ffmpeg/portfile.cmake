@@ -87,7 +87,7 @@ if(VCPKG_HOST_IS_WINDOWS)
     vcpkg_acquire_msys(MSYS_ROOT PACKAGES automake1.16)
     set(SHELL "${MSYS_ROOT}/usr/bin/bash.exe")
     vcpkg_add_to_path("${MSYS_ROOT}/usr/share/automake-1.16")
-    string(APPEND OPTIONS " --pkg-config=${CURRENT_HOST_INSTALLED_DIR}/tools/pkgconf/pkgconf${VCPKG_HOST_EXECUTABLE_SUFFIX}")
+    string(APPEND OPTIONS " --pkg-config=${CURRENT_HOST_INSTALLED_DIR}/tools/pkgconf/pkgconf${VCPKG_HOST_EXECUTABLE_SUFFIX} ")
 else()
     find_program(SHELL bash)
 endif()
@@ -130,14 +130,18 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --cc=cl \
 --enable-gpl \
 --enable-d3d11va \
---enable-cuda \
---enable-ffnvcodec \
---enable-hwaccel=h264_nvdec \
---enable-hwaccel=hevc_nvdec \
 --enable-hwaccel=h264_d3d11va \
 --enable-hwaccel=hevc_d3d11va \
 --enable-hwaccel=h264_d3d11va2 \
 --enable-hwaccel=hevc_d3d11va2 \
+")
+
+    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
+        string(APPEND OPTIONS "\
+--enable-cuda \
+--enable-ffnvcodec \
+--enable-hwaccel=h264_nvdec \
+--enable-hwaccel=hevc_nvdec \
 --enable-amf \
 --enable-encoder=h264_amf \
 --enable-encoder=hevc_amf \
@@ -147,6 +151,7 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
 --enable-encoder=h264_qsv \
 --enable-encoder=hevc_qsv \
 ")
+    endif()
 
     if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
         set(LIB_MACHINE_ARG /machine:x86)
@@ -154,6 +159,9 @@ elseif(VCPKG_TARGET_IS_WINDOWS)
     elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
         set(LIB_MACHINE_ARG /machine:x64)
         string(APPEND OPTIONS " --arch=x86_64")
+    elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+        set(LIB_MACHINE_ARG /machine:arm64)
+        string(APPEND OPTIONS " --arch=aarch64 --enable-cross-compile")
     else()
         message(FATAL_ERROR "Unsupported target architecture")
     endif()

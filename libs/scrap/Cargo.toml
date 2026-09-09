@@ -11,6 +11,16 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "zbus"]
+# `drm` is a pure runtime-dlopen backend: rustdesk loads `libdrmtap.so.0` at runtime (`drmtap_dl.rs`)
+# and NEVER link-time links it, so the graceful PipeWire fallback when the .so or EGL is absent is
+# preserved and the drm build pulls in no libdrm/seccomp/cap/EGL link-time deps. The .so is pinned by
+# `DRMTAP_SHA` in build.py, which fetches that exact commit (libdrmtap v0.5.4). We deliberately do
+# NOT depend on the `libdrmtap-sys` crate: its build.rs statically compiles the whole libdrmtap C tree
+# and a CAP_SYS_ADMIN helper and emits `-ldrm -lseccomp -lcap`, which would defeat the dlopen model.
+# Depends on `wayland`: the three drm modules live inside the `#[cfg(feature = "wayland")]` arm of
+# common/mod.rs, so `scrap/drm` on its own would compile nothing. The root crate happens to always
+# enable `scrap/wayland`, which is what hid this.
+drm = ["wayland", "base/wayland_probe"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -21,6 +31,7 @@ cfg-if = "1.0"
 num_cpus = "1.15"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
+base = { path = "../base" }
 webm = { git = "https://github.com/rustdesk-org/rust-webm" }
 serde = {version="1.0", features=["derive"]}
 
@@ -48,7 +59,7 @@ quest = "0.3"
 
 [build-dependencies]
 target_build_utils = "0.3"
-bindgen = "0.65"
+bindgen = "0.72.1"
 pkg-config = { version = "0.3.27", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

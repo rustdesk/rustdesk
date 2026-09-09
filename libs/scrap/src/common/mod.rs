@@ -1,9 +1,6 @@
 pub use self::vpxcodec::*;
-use hbb_common::{
-    bail, log,
-    message_proto::{video_frame, Chroma, VideoFrame},
-    ResultType,
-};
+use base::message_proto::{video_frame, Chroma, VideoFrame};
+use hbb_common::{bail, log, ResultType};
 use std::{ffi::c_void, slice};
 
 cfg_if! {
@@ -16,6 +13,12 @@ cfg_if! {
                 mod linux;
                 mod wayland;
                 mod x11;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drmtap_dl;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drm_reader;
+                #[cfg(all(target_os = "linux", feature = "drm"))]
+                pub mod drm_render;
                 pub use self::linux::*;
                 pub use self::wayland::set_map_err;
                 pub use self::x11::PixelBuffer;
@@ -262,7 +265,7 @@ pub struct EncodeYuvFormat {
 #[cfg(x11)]
 #[inline]
 pub fn is_x11() -> bool {
-    hbb_common::platform::linux::is_x11_or_headless()
+    base::platform::linux::is_x11_or_headless()
 }
 
 #[cfg(x11)]

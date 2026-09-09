@@ -6,83 +6,82 @@ ANDROID_ABI=$1
 
 # Build RustDesk dependencies for Android using vcpkg.json
 # Required:
-#   1. set VCPKG_ROOT / ANDROID_NDK path environment variables
+#   1. set VCPKG_ROOT / ANDROID_NDK_HOME path environment variables
 #   2. vcpkg initialized
 #   3. ndk, version: r25c or newer
 
-if [ -z "$ANDROID_NDK_HOME" ]; then
-  echo "Failed! Please set ANDROID_NDK_HOME"
-  exit 1
+if [ -z "${ANDROID_NDK_HOME}" ]; then
+	echo "ERROR: Please set ANDROID_NDK_HOME environment variable" 1>&2
+	exit 1
 fi
 
-if [ -z "$VCPKG_ROOT" ]; then
-  echo "Failed! Please set VCPKG_ROOT"
-  exit 1
+if [ -z "${VCPKG_ROOT}" ]; then
+	echo "ERROR: Please set VCPKG_ROOT environment variable" 1>&2
+	exit 1
 fi
 
-API_LEVEL="21"
+case "${ANDROID_ABI}" in
+arm64-v8a)
+	VCPKG_TARGET=arm64-android
+	;;
+armeabi-v7a)
+	VCPKG_TARGET=arm-neon-android
+	;;
+x86_64)
+	VCPKG_TARGET=x64-android
+	;;
+x86)
+	VCPKG_TARGET=x86-android
+	;;
+*)
+	echo "Usage: build_android_deps.sh <arm64-v8a|armeabi-v7a|x86_64|x86>" 1>&2
+	exit 1
+	;;
+esac
 
 # Get directory of this script
 
 SCRIPTDIR="$(readlink -f "$0")"
-SCRIPTDIR="$(dirname "$SCRIPTDIR")"
+SCRIPTDIR="$(dirname "${SCRIPTDIR}")"
 
 # Check if vcpkg.json is one level up - in root directory of RD
 
-if [ ! -f "$SCRIPTDIR/../vcpkg.json" ]; then
-  echo "Failed! Please check where vcpkg.json is!"
-  exit 1
+if [ ! -f "${SCRIPTDIR}/../vcpkg.json" ]; then
+	echo "ERROR: Can not find vcpkg.json in RustDesk top-level directory" 1>&2
+	exit 1
 fi
 
-# NDK llvm toolchain
+echo "INFO: Building and install vcpkg dependencies for Android ${ANDROID_ABI} ..."
 
-HOST_TAG="linux-x86_64" # current platform, set as `ls $ANDROID_NDK/toolchains/llvm/prebuilt/`
-TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/$HOST_TAG
+pushd "${SCRIPTDIR}/.."
 
-function build {
-  ANDROID_ABI=$1
+"${VCPKG_ROOT}/vcpkg" install \
+	--triplet "${VCPKG_TARGET}" \
+	--x-install-root="${VCPKG_ROOT}/installed"
 
-  case "$ANDROID_ABI" in
-  arm64-v8a)
-     ABI=aarch64-linux-android$API_LEVEL
-     VCPKG_TARGET=arm64-android
-     ;;
-  armeabi-v7a)
-     ABI=armv7a-linux-androideabi$API_LEVEL
-     VCPKG_TARGET=arm-neon-android
-     ;;
-  x86_64)
-     ABI=x86_64-linux-android$API_LEVEL
-     VCPKG_TARGET=x64-android
-     ;;
-  x86)
-     ABI=i686-linux-android$API_LEVEL
-     VCPKG_TARGET=x86-android
-     ;;
-  *)
-     echo "ERROR: ANDROID_ABI must be one of: arm64-v8a, armeabi-v7a, x86_64, x86" >&2
-     return 1
-  esac
+popd
 
-  echo "*** [$ANDROID_ABI][Start] Build and install vcpkg dependencies"
-  pushd "$SCRIPTDIR/.."
-  $VCPKG_ROOT/vcpkg install --triplet $VCPKG_TARGET --x-install-root="$VCPKG_ROOT/installed"
-  popd
-  head -n 100 "${VCPKG_ROOT}/buildtrees/ffmpeg/build-$VCPKG_TARGET-rel-out.log" || true
-  echo "*** [$ANDROID_ABI][Finished] Build and install vcpkg dependencies"
+echo "INFO: Completed building vcpkg dependencies for Android ${ANDROID_ABI}"
 
-if [ -d "$VCPKG_ROOT/installed/arm-neon-android" ]; then
-  echo "*** [Start] Move arm-neon-android to arm-android"
+if [ "${ANDROID_ABI}" = 'armeabi-v7a' ]; then
+	# Symlink arm-neon-android to arm-android because cargo-ndk does not
+	# understand NEON suffix.
 
-  mv "$VCPKG_ROOT/installed/arm-neon-android" "$VCPKG_ROOT/installed/arm-android"
+	if [ -d "${VCPKG_ROOT}/installed/arm-neon-android" ]; then
+		echo 'INFO: Symlinking arm-neon-android to arm-android'
 
-  echo "*** [Finished] Move arm-neon-android to arm-android"
-fi
-}
+		ln -sf \
+			"${VCPKG_ROOT}/installed/arm-neon-android" \
+			"${VCPKG_ROOT}/installed/arm-android"
 
-if [ ! -z "$ANDROID_ABI" ]; then
-  build "$ANDROID_ABI"
-else
-  echo "Usage: build-android-deps.sh <ANDROID-ABI>" >&2
-  exit 1
+		echo 'INFO: Symlinked arm-neon-android to arm-android'
+	else
+		cat 0<<.a
+ERROR: 'vcpkg install' seem to complete successfully but
+directory '${VCPKG_ROOT}/installed/arm-neon-android' is missing!
+
+.a
+
+		exit 1
+	fi
 fi

@@ -1,0 +1,57 @@
+[package]
+name = "base"
+version = "0.1.0"
+authors = ["rustdesk <info@rustdesk.com>"]
+edition = "2018"
+
+# Code that only RustDesk itself uses. `hbb_common` stays the crate shared with
+# the server, so anything the server never touches belongs here instead.
+
+[features]
+default = []
+# The isolated Wayland socket-probe fallback (src/platform/linux/wayland_probe.rs).
+# Off by default so the base Wayland enumeration is untouched; the DRM login-screen
+# build (scrap/drm) turns it on.
+wayland_probe = []
+
+[dependencies]
+hbb_common = { path = "../hbb_common" }
+protobuf = { version = "3.7", features = ["with-bytes"] }
+# the generated protobuf code refers to `::bytes::Bytes` (tokio_bytes codegen)
+bytes = { version = "1.10", features = ["serde"] }
+tokio = { version = "1.44", features = ["full"] }
+serde_derive = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+filetime = "0.2"
+libc = "0.2"
+backtrace = "0.3"
+log = "0.4"
+lazy_static = "1.5"
+anyhow = "1.0"
+
+[build-dependencies]
+protobuf-codegen = { version = "3.7" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Every module the moved sources name, spelled out rather than left to feature
+# unification with the root crate.
+winapi = { version = "0.3", features = [
+    "fileapi",
+    "handleapi",
+    "minwindef",
+    "pdh",
+    "synchapi",
+    "sysinfoapi",
+    "winbase",
+    "winnt",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+osascript = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sctk = { package = "smithay-client-toolkit", version = "0.20.0", default-features = false, features = [
+    "calloop",
+] }
+users = { version = "0.11" }

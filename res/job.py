@@ -205,7 +205,7 @@ def sign_files(dir_path, only_ext=None):
             if not only_ext[i].startswith("."):
                 only_ext[i] = "." + only_ext[i]
     for root, dirs, files in os.walk(dir_path):
-        is_signed_dir = "KassatkaDeskPrinterDriver" in root or "usbmmidd_v2" in root
+        is_signed_dir = "RustDeskPrinterDriver" in root or "usbmmidd_v2" in root
         for file in files:
             file_path = os.path.join(root, file)
             _, ext = os.path.splitext(file_path)
