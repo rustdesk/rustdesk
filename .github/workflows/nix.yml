@@ -29,6 +29,7 @@ on:
       - ".github/workflows/nix.yml"
       - "Cargo.lock"
       - "Cargo.toml"
+      - "libs/hbb_common"
 
 permissions:
   contents: read
@@ -64,6 +65,24 @@ jobs:
         uses: DeterminateSystems/magic-nix-cache-action@6221693898146dc97e38ad0e013488a16477a4c4 # v9
         with:
           use-flakehub: false
+
+      - name: Verify hbb_common submodule pin matches flake input
+        # The flake builds against the hbb_common commit pinned in
+        # flake.lock, not the gitlink in libs/hbb_common. If the two
+        # diverge, the flake builds against a stale hbb_common. This
+        # step compares the gitlink SHA against the flake input rev and
+        # fails if they don't match.
+        run: |
+          gitlink_sha=$(git submodule status libs/hbb_common | awk '{print $1}' | tr -d '+-')
+          flake_rev=$(jq -r '.nodes.hbb_common.locked.rev' flake.lock)
+          echo "submodule gitlink: $gitlink_sha"
+          echo "flake.lock pin:    $flake_rev"
+          if [ "$gitlink_sha" != "$flake_rev" ]; then
+            echo "ERROR: hbb_common submodule pin ($gitlink_sha) does not match flake.lock ($flake_rev)."
+            echo "Update the hbb_common flake input in flake.nix to match the submodule, then run 'nix flake update hbb_common'."
+            exit 1
+          fi
+          echo "OK: pins match"
 
       - name: nix flake check --all-systems
         # --no-build: evaluate every system's outputs (including darwin on

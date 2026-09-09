@@ -185,8 +185,9 @@
           ];
 
           # Replace the hbb_common submodule with the flake input pin.
-          # The pin in flake.lock must be updated when the submodule gitlink
-          # changes; the flake input is the source of truth for reproducibility.
+          # CI verifies the flake.lock pin matches the submodule gitlink
+          # on every run — see the "Verify hbb_common submodule pin" step
+          # in .github/workflows/nix.yml.
           prePatch = ''
             rm -rf libs/hbb_common
             cp -r ${hbb_common} libs/hbb_common
