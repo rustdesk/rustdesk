@@ -20,9 +20,9 @@ use core_graphics::{
 use hbb_common::{
     anyhow::anyhow,
     bail, log,
-    message_proto::{DisplayInfo, Resolution},
     sysinfo::{Pid, Process, ProcessRefreshKind, System},
 };
+use base::message_proto::{DisplayInfo, Resolution};
 use include_dir::{include_dir, Dir};
 use objc::rc::autoreleasepool;
 use objc::{class, msg_send, sel, sel_impl};

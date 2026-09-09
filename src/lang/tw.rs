@@ -763,5 +763,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "鎖定畫布"),
         ("Sync clipboard between sessions", "在工作階段間同步剪貼簿"),
         ("sync-clipboard-between-sessions-tip", "在一個遠端工作階段中複製的文字或圖片也會傳送到其他已連線工作階段的剪貼簿。"),
+        ("terminal-clipboard-write-tip", ""),
+        ("Allow terminal apps to copy to clipboard", ""),
+        ("Enable", "啟用"),
+        ("Reuse one connection for port forwarding", "連接埠轉送重複使用同一條連線"),
+        ("port-forward-mux-tip", "同一條連接埠轉送規則上的所有連線共用一條到對方的連線，而不是每條連線都重新連線並登入一次。"),
+        ("Enable WebRTC P2P connection", "啟用 WebRTC P2P 連線"),
+        ("Enable TCP hole punching", "啟用 TCP 打洞"),
     ].iter().cloned().collect();
 }

@@ -4,12 +4,13 @@ use crate::ipc::Data;
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{allow_err, log};
+use base::config::keys;
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
 
 pub fn start_tray() {
-    if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
+    if crate::ui_interface::get_builtin_option(keys::OPTION_HIDE_TRAY) == "Y" {
         #[cfg(not(target_os = "macos"))]
         {
             return;
@@ -64,7 +65,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
 
     let tray_menu = Menu::new();
     let hide_stop_service = crate::ui_interface::get_builtin_option(
-        hbb_common::config::keys::OPTION_HIDE_STOP_SERVICE,
+        keys::OPTION_HIDE_STOP_SERVICE,
     ) == "Y";
     // The tray icon is only shown when the service is running, so we don't need to check
     // the `stop-service` option here.
@@ -147,7 +148,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
         if let tao::event::Event::NewEvents(tao::event::StartCause::Init) = event {
             // for fixing https://github.com/rustdesk/rustdesk/discussions/10210#discussioncomment-14600745
             // so we start tray, but not to show it
-            if crate::ui_interface::get_builtin_option(hbb_common::config::keys::OPTION_HIDE_TRAY) == "Y" {
+            if crate::ui_interface::get_builtin_option(keys::OPTION_HIDE_TRAY) == "Y" {
                 return;
             }
             // We create the icon once the event loop is actually running

@@ -5,20 +5,24 @@ use crate::ipc::{self, Data};
 #[cfg(target_os = "windows")]
 use crate::{clipboard::ClipboardSide, ipc::ClipboardNonFile};
 #[cfg(target_os = "windows")]
-use clipboard::ContextSend;
+use base::config::keys::*;
 #[cfg(not(any(target_os = "ios")))]
-use hbb_common::fs::serialize_transfer_job;
+use base::fs::serialize_transfer_job;
+use base::{
+    config::keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
+    fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
+    message_proto::*,
+};
+#[cfg(target_os = "windows")]
+use clipboard::ContextSend;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use hbb_common::tokio::sync::mpsc::unbounded_channel;
+#[cfg(target_os = "windows")]
+use hbb_common::tokio::sync::Mutex as TokioMutex;
 use hbb_common::{
     allow_err, bail,
-    config::{
-        keys::{OPTION_ENABLE_PERM_CHANGE_IN_ACCEPT_WINDOW, OPTION_FILE_TRANSFER_MAX_FILES},
-        option2bool, Config,
-    },
-    fs::{self, get_string, is_write_need_confirmation, new_send_confirm, DigestCheckResult},
+    config::{option2bool, Config},
     log,
-    message_proto::*,
     protobuf::Message as _,
     tokio::{
         self,
@@ -27,8 +31,6 @@ use hbb_common::{
     },
     ResultType,
 };
-#[cfg(target_os = "windows")]
-use hbb_common::{config::keys::*, tokio::sync::Mutex as TokioMutex};
 use serde_derive::Serialize;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 use std::iter::FromIterator;
@@ -1400,7 +1402,7 @@ async fn start_read_job(
 /// Process read jobs periodically, reading file blocks and sending them via IPC.
 ///
 /// NOTE: This is the CM-side equivalent of `handle_read_jobs()` in
-/// `libs/hbb_common/src/fs.rs`. The logic mirrors that implementation
+/// `libs/base/src/fs.rs`. The logic mirrors that implementation
 /// but communicates via IPC instead of direct network stream.
 /// When modifying job processing logic, ensure both implementations stay in sync.
 #[cfg(not(any(target_os = "ios")))]
@@ -1499,7 +1501,7 @@ async fn handle_read_jobs_tick(
 /// Initialize a read job's data stream and handle digest sending for overwrite detection.
 ///
 /// NOTE: This is the CM-side equivalent of `TransferJob::init_data_stream()` in
-/// `libs/hbb_common/src/fs.rs`. It calls `init_data_stream_for_cm()` and sends
+/// `libs/base/src/fs.rs`. It calls `init_data_stream_for_cm()` and sends
 /// digest via IPC instead of direct network stream.
 /// When modifying initialization or digest logic, ensure both paths stay in sync.
 #[cfg(not(any(target_os = "ios")))]
@@ -1777,10 +1779,8 @@ mod tests {
     use super::*;
 
     use crate::ipc::Data;
-    use hbb_common::{
-        message_proto::{FileDirectory, Message},
-        tokio::{runtime::Runtime, sync::mpsc::unbounded_channel},
-    };
+    use base::message_proto::{FileDirectory, Message};
+    use hbb_common::tokio::{runtime::Runtime, sync::mpsc::unbounded_channel};
     use std::fs;
 
     #[test]

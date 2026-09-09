@@ -20,7 +20,7 @@ wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "
 # Depends on `wayland`: the three drm modules live inside the `#[cfg(feature = "wayland")]` arm of
 # common/mod.rs, so `scrap/drm` on its own would compile nothing. The root crate happens to always
 # enable `scrap/wayland`, which is what hid this.
-drm = ["wayland", "hbb_common/wayland_probe"]
+drm = ["wayland", "base/wayland_probe"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -31,6 +31,7 @@ cfg-if = "1.0"
 num_cpus = "1.15"
 lazy_static = "1.4"
 hbb_common = { path = "../hbb_common" }
+base = { path = "../base" }
 webm = { git = "https://github.com/rustdesk-org/rust-webm" }
 serde = {version="1.0", features=["derive"]}
 

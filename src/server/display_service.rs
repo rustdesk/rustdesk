@@ -158,7 +158,7 @@ pub(super) fn set_wayland_layout_baseline(baseline: Vec<scrap::wayland::display:
 /// before taking that layout. See `WaylandLayout::note_capturer`.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(super) fn note_capturer_layout(
-    displays: &[hbb_common::platform::linux::WaylandDisplayInfo],
+    displays: &[base::platform::linux::WaylandDisplayInfo],
     built_gen: u64,
 ) {
     if displays.is_empty() {

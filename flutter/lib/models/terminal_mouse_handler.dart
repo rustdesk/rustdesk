@@ -1,45 +1,17 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:xterm/xterm.dart';
 
+import 'platform_model.dart';
+import 'rustdesk_terminal.dart';
 import 'terminal_copy_shortcut.dart';
 import 'terminal_mouse_drag_reporter.dart';
 
-/// xterm 4.0.0 encodes wheel buttons as 68..71; the extra bit reads as a Shift
-/// modifier, so strict full-screen apps ignore the report and never scroll.
-/// Upstream fix: TerminalStudio/xterm.dart#238.
-class WheelButtonFixMouseHandler implements TerminalMouseHandler {
-  const WheelButtonFixMouseHandler({this.positionProvider});
-
-  final CellOffset? Function()? positionProvider;
-
-  @override
-  String? call(TerminalMouseEvent event) {
-    if (!event.button.isWheel) {
-      return defaultMouseHandler(event);
-    }
-    // Same gate as UpDownMouseHandler: only the scroll modes report a wheel,
-    // and a wheel release is never reported, so the report is always a press.
-    if (!event.state.mouseMode.reportScroll ||
-        event.buttonState == TerminalMouseButtonState.up) {
-      return null;
-    }
-    return _reportWheel(event);
-  }
-
-  String _reportWheel(TerminalMouseEvent event) {
-    // Wheel buttons 4..7 go on the wire as 64..67, but `id` is 64 + 4..7.
-    final button = event.button.id - 4;
-    final position = positionProvider?.call() ?? event.position;
-    return encodeTerminalMouseReport(
-      event.state.mouseReportMode,
-      button,
-      position,
-    );
-  }
-}
+part 'terminal_mouse_handler_input.dart';
+part 'terminal_web_clipboard_gesture.dart';
 
 class TerminalMouseInteraction extends StatefulWidget {
   const TerminalMouseInteraction(
@@ -47,6 +19,12 @@ class TerminalMouseInteraction extends StatefulWidget {
     super.key,
     required this.controller,
     this.focusNode,
+    this.autofocus = false,
+    this.textStyle = const TerminalStyle(),
+    this.deleteDetection = false,
+    this.reportTouchInput = false,
+    this.shortcuts,
+    this.onKeyEvent,
     this.backgroundOpacity = 1,
     this.padding,
     this.onSecondaryTapDown,
@@ -55,6 +33,12 @@ class TerminalMouseInteraction extends StatefulWidget {
   final Terminal terminal;
   final TerminalController controller;
   final FocusNode? focusNode;
+  final bool autofocus;
+  final TerminalStyle textStyle;
+  final bool deleteDetection;
+  final bool reportTouchInput;
+  final Map<ShortcutActivator, Intent>? shortcuts;
+  final FocusOnKeyEventCallback? onKeyEvent;
   final double backgroundOpacity;
   final EdgeInsets? padding;
   final void Function(TapDownDetails, CellOffset)? onSecondaryTapDown;
@@ -81,8 +65,13 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
   Buffer? _selectionBuffer;
   int? _selectionPointerId;
   Timer? _selectionScrollTimer;
+  Timer? _pendingTouchMouseTimer;
+  PointerDownEvent? _pendingTouchMouseDown;
   var _selectionHasScrolled = false;
   var _scrollDirection = _noScroll;
+  // xterm can finish its tap callbacks after the raw drag was reported.
+  var _suppressXtermLeftButton = false;
+  var _terminalClipboardGesturePrepared = false;
   TerminalViewState? get _terminalView => _terminalViewKey.currentState;
 
   @override
@@ -90,6 +79,7 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
     super.initState();
     _mouseHandler = WheelButtonFixMouseHandler(
       positionProvider: _cellAtPointer,
+      suppressLeftButton: kIsWeb ? _consumeXtermLeftButtonSuppression : null,
     );
     _installMouseHandler(widget.terminal);
   }
@@ -100,10 +90,15 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
     final terminalChanged = !identical(oldWidget.terminal, widget.terminal);
     final controllerChanged =
         !identical(oldWidget.controller, widget.controller);
+    final touchInputChanged =
+        oldWidget.reportTouchInput != widget.reportTouchInput;
+    if (!terminalChanged && !controllerChanged && !touchInputChanged) return;
+    _cancelPendingTouchMouseDrag();
     if (!terminalChanged && !controllerChanged) return;
     if (controllerChanged && !terminalChanged) {
       _mouseDrag.updateController(widget.controller);
     } else {
+      _discardPendingTerminalClipboardWrites();
       _mouseDrag.cancel();
     }
     _clearSelectionDrag();
@@ -123,46 +118,18 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
     }
   }
 
-  CellOffset? _cellAtPointer() {
-    final terminalView = _terminalView;
-    final pointerPosition = _pointerPosition;
-    if (terminalView == null || pointerPosition == null) return null;
-    final renderTerminal = terminalView.renderTerminal;
-    return renderTerminal.getCellOffset(
-      renderTerminal.globalToLocal(pointerPosition),
-    );
-  }
-
-  void _updatePointerPosition(PointerEvent event) =>
-      _pointerPosition = event.position;
-
-  void _handlePointerDown(PointerDownEvent event) {
-    _updatePointerPosition(event);
-    if (_mouseDrag.handleDown(event, widget.terminal, _terminalView)) {
-      _clearSelectionDrag();
-      return;
-    }
-    if (event.kind != PointerDeviceKind.mouse ||
-        (event.buttons & kPrimaryMouseButton) != kPrimaryMouseButton) {
-      return;
-    }
-    _clearSelectionDrag();
-    final terminalView = _terminalView;
-    if (terminalView == null) return;
-    final renderTerminal = terminalView.renderTerminal;
-    final localPosition = renderTerminal.globalToLocal(event.position);
-    final selectionBuffer = widget.terminal.buffer;
-    _selectionPointerId = event.pointer;
-    _selectionBase = selectionBuffer.createAnchorFromOffset(
-      renderTerminal.getCellOffset(localPosition),
-    );
-    _selectionBuffer = selectionBuffer;
-    _selectionPointer = localPosition;
-  }
-
   void _handlePointerMove(PointerMoveEvent event) {
     _updatePointerPosition(event);
-    if (_mouseDrag.handleMove(event, widget.terminal, _terminalView)) return;
+    if (_handlePendingTouchMove(event)) return;
+    if (_mouseDrag.handleMove(
+      event,
+      widget.terminal,
+      _terminalView,
+      beforeRelease: _finishTerminalClipboardWrite,
+      onCancel: _cancelTerminalClipboardWrite,
+    )) {
+      return;
+    }
     if (event.pointer != _selectionPointerId) return;
     if (event.kind != PointerDeviceKind.mouse ||
         (event.buttons & kPrimaryMouseButton) != kPrimaryMouseButton) {
@@ -241,8 +208,28 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
 
   void _handlePointerEnd(PointerEvent event) {
     _updatePointerPosition(event);
-    if (!_mouseDrag.handleEnd(event, widget.terminal, _terminalView) &&
-        event.pointer != _selectionPointerId) return;
+    final pendingTouch = _pendingTouchMouseDown;
+    if (pendingTouch != null && pendingTouch.pointer == event.pointer) {
+      final movedBeyondSlop =
+          (event.position - pendingTouch.position).distance > kTouchSlop;
+      if (event is PointerUpEvent && !movedBeyondSlop) {
+        _activatePendingTouchMouseDrag(cancelOnFailure: false);
+      } else {
+        _takePendingTouchMouseDrag(pointer: event.pointer);
+      }
+    }
+    final handledByMouseDrag = _mouseDrag.handleEnd(
+      event,
+      widget.terminal,
+      _terminalView,
+      beforeRelease: event is PointerUpEvent
+          ? _finishTerminalClipboardWrite
+          : (_) => _cancelTerminalClipboardWrite(),
+      onCancel: _cancelTerminalClipboardWrite,
+    );
+    if (!handledByMouseDrag && event.pointer != _selectionPointerId) {
+      return;
+    }
     if (_selectionHasScrolled) _scrollSelection(scroll: false);
     _clearSelectionDrag();
   }
@@ -265,6 +252,8 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
 
   @override
   void dispose() {
+    _discardPendingTerminalClipboardWrites();
+    _cancelPendingTouchMouseDrag();
     _mouseDrag.cancel();
     _clearSelectionDrag();
     _restoreMouseHandler(widget.terminal);
@@ -290,10 +279,14 @@ class _TerminalMouseInteractionState extends State<TerminalMouseInteraction> {
         controller: widget.controller,
         scrollController: _scrollController,
         focusNode: widget.focusNode,
+        autofocus: widget.autofocus,
+        textStyle: widget.textStyle,
+        deleteDetection: widget.deleteDetection,
         backgroundOpacity: widget.backgroundOpacity,
         padding: widget.padding,
-        shortcuts: platformTerminalShortcuts(),
-        onKeyEvent: terminalCopyHandler(widget.terminal, widget.controller),
+        shortcuts: widget.shortcuts ?? platformTerminalShortcuts(),
+        onKeyEvent: widget.onKeyEvent ??
+            terminalCopyHandler(widget.terminal, widget.controller),
         onSecondaryTapDown: widget.onSecondaryTapDown,
       ),
     );

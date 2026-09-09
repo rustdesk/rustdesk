@@ -1,4 +1,4 @@
-use hbb_common::platform::windows::is_windows_version_or_greater;
+use base::platform::windows::is_windows_version_or_greater;
 
 pub use super::win_topmost_window::PrivacyModeImpl;
 

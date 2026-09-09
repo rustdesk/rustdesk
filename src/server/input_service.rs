@@ -4,14 +4,13 @@ use super::*;
 use crate::input::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::whiteboard;
+use base::message_proto::{
+    pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate,
+};
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{
-    get_time,
-    message_proto::{pointer_device_event::Union::TouchEvent, touch_event::Union::ScaleUpdate},
-    protobuf::EnumOrUnknown,
-};
+use hbb_common::{get_time, protobuf::EnumOrUnknown};
 use rdev::{self, EventType, Key as RdevKey, KeyCode, RawKey};
 #[cfg(target_os = "macos")]
 use rdev::{CGEventSourceStateID, CGEventTapLocation, VirtualInput};

@@ -17,13 +17,13 @@ use hbb_common::{
     bail,
     config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
-    message_proto::*,
     protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, sign},
     timeout, tokio, ResultType, Stream,
 };
+use base::message_proto::*;
 use scrap::camera;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use service::ServiceTmpl;
@@ -70,6 +70,7 @@ pub mod input_service {
 
 mod connection;
 mod login_failure_check;
+pub(crate) mod port_forward_mux;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
@@ -211,11 +212,21 @@ pub async fn create_tcp_connection(
         let sk = sign::SecretKey(sk_);
         let mut msg_out = Message::new();
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
+        // On a WebRTC transport, bind our DTLS certificate fingerprint to our signed identity so
+        // the controller can verify the DTLS channel it negotiated actually terminates at us
+        // (not a rendezvous/relay that swapped the SDP fingerprint). Empty on other transports.
+        // Fail immediately on WebRTC if the local fingerprint is unavailable: signing "" would
+        // only make the client fail-closed after a wasted round-trip.
+        let dtls_fingerprint = stream.dtls_fingerprint(true).await.unwrap_or_default();
+        if stream.is_webrtc() && dtls_fingerprint.is_empty() {
+            bail!("WebRTC local DTLS fingerprint unavailable");
+        }
         msg_out.set_signed_id(SignedId {
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
                     pk: Bytes::from(our_pk_b.0.to_vec()),
+                    dtls_fingerprint,
                     ..Default::default()
                 }
                 .write_to_bytes()
@@ -586,7 +597,7 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
         }
         #[cfg(windows)]
-        hbb_common::platform::windows::start_cpu_performance_monitor();
+        base::platform::windows::start_cpu_performance_monitor();
     });
 
     if is_server {

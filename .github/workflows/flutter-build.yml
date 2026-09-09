@@ -916,6 +916,8 @@ jobs:
 
       - name: Codesign app and create signed dmg
         if: env.MACOS_P12_BASE64 != null && env.UPLOAD_ARTIFACT == 'true'
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
         run: |
           # Patch create-dmg to give more attempts to unmount image
           CREATE_DMG="$(command -v create-dmg)"
@@ -926,7 +928,10 @@ jobs:
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
           # start sign the rustdesk.app and dmg
           rm -rf *.dmg || true
-          codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict ./flutter/build/macos/Build/Products/Release/RustDesk.app -vvv
+          bash ./.github/scripts/sign-macos-app.sh \
+            ./flutter/build/macos/Build/Products/Release/RustDesk.app \
+            "$MACOS_CODESIGN_IDENTITY" \
+            ./flutter/macos/Runner/Release.entitlements
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
           codesign --force --options runtime -s ${{ secrets.MACOS_CODESIGN_IDENTITY }} --deep --strict rustdesk-${{ env.VERSION }}.dmg -vvv
           # notarize the rustdesk-${{ env.VERSION }}.dmg
@@ -1537,7 +1542,6 @@ jobs:
           submodules: recursive
 
       - name: Set Swap Space
-        if: ${{ matrix.job.arch == 'x86_64' }}
         uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
         with:
           swap-size-gb: 12
@@ -2151,6 +2155,12 @@ jobs:
           echo "Modified vcpkg.json for armv7 build:"
           grep -A 2 -B 2 '"baseline"' vcpkg.json
 
+      - name: Set Swap Space
+        if: matrix.job.arch == 'armv7'
+        uses: pierotofy/set-swap-space@49819abfb41bd9b44fb781159c033dba90353a7c # v1.0
+        with:
+          swap-size-gb: 12
+
       - name: Free Space
         run: |
           df -h
@@ -2295,6 +2305,16 @@ jobs:
             # build rustdesk
             python3 ./res/inline-sciter.py
             export CARGO_INCREMENTAL=0
+            # armv7 is the only 32-bit target in this job that links the whole binary, and the
+            # release profile uses fat LTO with codegen-units=1. LLVM then merges every module
+            # into a single unit and runs past the ~3GB address space a 32-bit process gets,
+            # aborting rustc with "Rust cannot catch foreign exceptions" (a C++ bad_alloc from
+            # LLVM unwinding into rustc's Rust frames). Thin LTO keeps peak memory bounded and
+            # still allows cross-crate inlining; 64-bit targets keep fat LTO untouched.
+            if [ "${{ matrix.job.arch }}" = "armv7" ]; then
+              export CARGO_PROFILE_RELEASE_LTO=thin
+              export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+            fi
             cargo build --locked --features inline${{ matrix.job.extra_features }} --release --bins --jobs 1
             # make debian package
             mkdir -p ./Release
