@@ -299,6 +299,12 @@ pub struct Connection {
     tx_input: std_mpsc::Sender<MessageInput>,
     // handle input messages
     video_ack_required: bool,
+    // Diagnostics only, gated by `RUSTDESK_QOS_VERBOSE`: how long the shared
+    // write path blocked this second.  The video send is inline in the message
+    // loop, so a slow write also delays the delay probe and its reply.
+    video_send_max_ms: u32,
+    video_send_sum_ms: u32,
+    video_send_count: u32,
     server_audit_conn: String,
     server_audit_file: String,
     controlled_context: Option<ControlledContext>,
@@ -504,6 +510,9 @@ impl Connection {
             show_my_cursor: false,
             tx_input,
             video_ack_required: false,
+            video_send_max_ms: 0,
+            video_send_sum_ms: 0,
+            video_send_count: 0,
             server_audit_conn: "".to_owned(),
             server_audit_file: "".to_owned(),
             controlled_context,
@@ -950,9 +959,16 @@ impl Connection {
                             video_service::notify_video_frame_fetched(vf.display as usize, id, Some(instant.into()));
                         }
                     }
+                    let send_begin = video_service::qos_diag_verbose().then(Instant::now);
                     if let Err(err) = conn.stream.send(&value as &Message).await {
                         conn.on_close(&err.to_string(), false).await;
                         break;
+                    }
+                    if let Some(begin) = send_begin {
+                        let blocked = begin.elapsed().as_millis() as u32;
+                        conn.video_send_max_ms = conn.video_send_max_ms.max(blocked);
+                        conn.video_send_sum_ms = conn.video_send_sum_ms.saturating_add(blocked);
+                        conn.video_send_count += 1;
                     }
                 },
                 Some((instant, value)) = rx.recv() => {
@@ -1039,6 +1055,21 @@ impl Connection {
                             conn.on_close("auto disconnect", true).await;
                             break;
                         }
+                    }
+                    if video_service::qos_diag_verbose() && conn.video_send_count > 0 {
+                        // Joined with `qos_trace` on `t`: a probe that waits behind a
+                        // blocked write is not a slow network.
+                        log::debug!(
+                            "qos_send t={} id={id} frames={} send_max={} send_sum={} queued={}",
+                            hbb_common::get_time(),
+                            conn.video_send_count,
+                            conn.video_send_max_ms,
+                            conn.video_send_sum_ms,
+                            rx_video.len()
+                        );
+                        conn.video_send_max_ms = 0;
+                        conn.video_send_sum_ms = 0;
+                        conn.video_send_count = 0;
                     }
                     conn.file_remove_log_control.on_timer().drain(..).map(|x| conn.send_to_cm(x)).count();
                     #[cfg(feature = "hwcodec")]
