@@ -2066,7 +2066,7 @@ pub struct AudioHandler {
     #[cfg(not(target_os = "linux"))]
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
-    ready: Arc<std::sync::Mutex<bool>>,
+    playback_status: Arc<audio_playback::AudioPlaybackStatus>,
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2413,7 +2413,14 @@ impl AudioHandler {
     #[inline]
     pub fn handle_frame(&mut self, frame: AudioFrame) {
         #[cfg(not(target_os = "linux"))]
-        if self.audio_stream.is_none() || !self.ready.lock().unwrap().clone() {
+        self.playback_status.report_errors();
+        #[cfg(not(target_os = "linux"))]
+        if self.audio_stream.is_none()
+            || !self
+                .playback_status
+                .ready
+                .load(std::sync::atomic::Ordering::Acquire)
+        {
             return;
         }
         #[cfg(target_os = "linux")]
@@ -2476,7 +2483,6 @@ impl AudioHandler {
             .resize(config.sample_rate.0 as _, config.channels as _);
         let audio_buffer = self.audio_buffer.0.clone();
         let discontinuity_generation = self.audio_buffer.3.clone();
-        let ready = self.ready.clone();
         let mut playback_writer = audio_playback::AudioPlaybackWriter::new(
             audio_playback::AudioPlaybackConfig {
                 sample_rate: config.sample_rate.0,
@@ -2485,14 +2491,11 @@ impl AudioHandler {
             audio_buffer,
             discontinuity_generation,
         )?;
+        let playback_status = playback_writer.status.clone();
         let timeout = None;
         let stream = device.build_output_stream(
             config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                if !*ready.lock().unwrap() {
-                    *ready.lock().unwrap() = true;
-                }
-
                 playback_writer.write_output(data);
             },
             err_fn,
@@ -2500,6 +2503,7 @@ impl AudioHandler {
         )?;
         stream.play()?;
         self.audio_stream = Some(Box::new(stream));
+        self.playback_status = playback_status;
         Ok(())
     }
 }

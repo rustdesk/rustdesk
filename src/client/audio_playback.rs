@@ -1,6 +1,9 @@
 use hbb_common::{log, thiserror};
 use ringbuf::{ring_buffer::RbBase, Rb};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    TryLockError,
+};
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
 const MILLISECONDS_PER_SECOND: usize = 1_000;
@@ -33,12 +36,33 @@ pub(super) struct AudioPlaybackRecovery {
     output_frame: Vec<f32>,
 }
 
+#[derive(Default)]
+pub(super) struct AudioPlaybackStatus {
+    pub(super) ready: AtomicBool,
+    contentions: AtomicUsize,
+    buffer_poisoned: AtomicBool,
+}
+
+impl AudioPlaybackStatus {
+    pub(super) fn report_errors(&self) {
+        let contentions = self.contentions.swap(0, Ordering::Relaxed);
+        if contentions != 0 {
+            log::debug!("Audio playback PCM buffer contention: callbacks={contentions}");
+        }
+        if self.buffer_poisoned.swap(false, Ordering::Relaxed) {
+            log::error!("Audio playback stopped reading a poisoned PCM buffer");
+        }
+    }
+}
+
 pub(super) struct AudioPlaybackWriter {
     audio_buffer: std::sync::Arc<std::sync::Mutex<ringbuf::HeapRb<f32>>>,
     discontinuity_generation: std::sync::Arc<AtomicUsize>,
     observed_discontinuity_generation: usize,
     buffered_input: Vec<f32>,
     recovery: AudioPlaybackRecovery,
+    pub(super) status: std::sync::Arc<AudioPlaybackStatus>,
+    buffer_failed: bool,
 }
 
 impl AudioPlaybackWriter {
@@ -56,27 +80,51 @@ impl AudioPlaybackWriter {
             observed_discontinuity_generation,
             buffered_input: vec![0.0; buffer_capacity],
             recovery,
+            status: Default::default(),
+            buffer_failed: false,
         })
+    }
+
+    fn read_buffer(&mut self, requested_samples: usize) -> usize {
+        if self.buffer_failed {
+            return 0;
+        }
+        let mut buffer = match self.audio_buffer.try_lock() {
+            Ok(buffer) => buffer,
+            Err(TryLockError::WouldBlock) => {
+                // Keep queued PCM and its generation for the next successful read.
+                self.status.contentions.fetch_add(1, Ordering::Relaxed);
+                return 0;
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                self.buffer_failed = true;
+                self.status.ready.store(false, Ordering::Release);
+                self.status.buffer_poisoned.store(true, Ordering::Relaxed);
+                return 0;
+            }
+        };
+        let generation = self.discontinuity_generation.load(Ordering::Relaxed);
+        let channels = self.recovery.channels;
+        let samples = buffer.occupied_len().min(requested_samples) / channels * channels;
+        buffer.pop_slice(&mut self.buffered_input[..samples]);
+        drop(buffer);
+        if generation != self.observed_discontinuity_generation {
+            self.recovery.begin_discontinuity();
+            self.observed_discontinuity_generation = generation;
+        }
+        samples
     }
 
     pub(super) fn write_output<T>(&mut self, output: &mut [T])
     where
         T: cpal::Sample + cpal::FromSample<f32>,
     {
+        self.status
+            .ready
+            .store(!self.buffer_failed, Ordering::Release);
         let requested_samples = output.len().min(self.buffered_input.len());
         let channel_count = self.recovery.channels;
-        let (available_samples, generation) = {
-            let mut buffer = self.audio_buffer.lock().unwrap();
-            let generation = self.discontinuity_generation.load(Ordering::Relaxed);
-            let samples =
-                buffer.occupied_len().min(requested_samples) / channel_count * channel_count;
-            buffer.pop_slice(&mut self.buffered_input[..samples]);
-            (samples, generation)
-        };
-        if generation != self.observed_discontinuity_generation {
-            self.recovery.begin_discontinuity();
-            self.observed_discontinuity_generation = generation;
-        }
+        let available_samples = self.read_buffer(requested_samples);
         let available_frames = available_samples / channel_count;
         for (frame_index, output_frame) in output.chunks_mut(channel_count).enumerate() {
             let input = if frame_index < available_frames {
@@ -166,121 +214,5 @@ impl AudioPlaybackRecovery {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackWriter,
-    };
-    use ringbuf::{ring_buffer::RbBase, Rb};
-    use std::sync::{atomic::Ordering, Arc, Mutex};
-
-    const SAMPLE_RATE: u32 = 48_000;
-    const CHANNELS: usize = 2;
-    const ACTIVE_FRAME: [f32; CHANNELS] = [0.8, -0.8];
-    const OPPOSITE_ACTIVE_FRAME: [f32; CHANNELS] = [-0.8, 0.8];
-    const ACTIVE_FRAMES: usize = 300;
-    const SILENT_FRAMES: usize = 300;
-    const TRANSITION_FRAMES: usize =
-        SAMPLE_RATE as usize * super::UNDERRUN_DECLICK_MS / super::MILLISECONDS_PER_SECOND;
-    const MAX_SAMPLE_STEP: f32 = 0.01;
-
-    #[test]
-    fn writing_audio_observes_discard_and_releases_buffer_lock() {
-        const INPUT: [f32; 4] = [0.1, 0.2, 0.3, 0.4];
-        const GENERATION: usize = 7;
-        let buffer = Arc::new(Mutex::new(ringbuf::HeapRb::new(INPUT.len())));
-        let generation = Arc::new(super::AtomicUsize::new(0));
-        let config = AudioPlaybackConfig {
-            sample_rate: SAMPLE_RATE,
-            channels: CHANNELS,
-        };
-        let mut writer =
-            AudioPlaybackWriter::new(config, buffer.clone(), generation.clone()).unwrap();
-        {
-            let mut buffer = buffer.lock().unwrap();
-            buffer.push_slice(&INPUT);
-            generation.store(GENERATION, Ordering::Relaxed);
-        }
-        let mut output = [0.0_f32; INPUT.len()];
-
-        writer.write_output(&mut output);
-
-        assert_eq!(writer.buffered_input, INPUT);
-        assert_eq!(writer.observed_discontinuity_generation, GENERATION);
-        assert_eq!(buffer.try_lock().unwrap().occupied_len(), 0);
-    }
-
-    fn maximum_sample_step(samples: &[f32]) -> f32 {
-        samples
-            .windows(CHANNELS + 1)
-            .map(|window| (window[CHANNELS] - window[0]).abs())
-            .fold(0.0, f32::max)
-    }
-
-    #[test]
-    fn smooths_underflow_and_explicit_audio_discontinuities() {
-        for explicit_discontinuity in [false, true] {
-            let config = AudioPlaybackConfig {
-                sample_rate: SAMPLE_RATE,
-                channels: CHANNELS,
-            };
-            let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-            let mut output = Vec::new();
-            for _ in 0..ACTIVE_FRAMES {
-                output.extend_from_slice(recovery.process_frame(Some(&ACTIVE_FRAME)).unwrap());
-            }
-            let transition_end = TRANSITION_FRAMES * CHANNELS;
-            assert_eq!(
-                &output[transition_end - CHANNELS..transition_end],
-                ACTIVE_FRAME.as_slice(),
-                "explicit_discontinuity={explicit_discontinuity}"
-            );
-            let resumed_frame = if explicit_discontinuity {
-                recovery.begin_discontinuity();
-                &OPPOSITE_ACTIVE_FRAME
-            } else {
-                for _ in 0..SILENT_FRAMES {
-                    output.extend_from_slice(recovery.process_frame(None).unwrap());
-                }
-                &ACTIVE_FRAME
-            };
-            for _ in 0..ACTIVE_FRAMES {
-                output.extend_from_slice(recovery.process_frame(Some(resumed_frame)).unwrap());
-            }
-            let maximum = maximum_sample_step(&output);
-            assert!(
-                maximum <= MAX_SAMPLE_STEP,
-                "step {maximum} exceeded {MAX_SAMPLE_STEP}, explicit={explicit_discontinuity}"
-            );
-            assert_eq!(
-                &output[output.len() - CHANNELS..],
-                resumed_frame,
-                "explicit_discontinuity={explicit_discontinuity}"
-            );
-        }
-    }
-
-    #[test]
-    fn validates_configuration_and_frame_size() {
-        let invalid_config = AudioPlaybackConfig {
-            sample_rate: 0,
-            channels: CHANNELS,
-        };
-        assert_eq!(
-            AudioPlaybackRecovery::new(invalid_config).err(),
-            Some(AudioPlaybackError::InvalidConfig(invalid_config))
-        );
-
-        let config = AudioPlaybackConfig {
-            sample_rate: SAMPLE_RATE,
-            channels: CHANNELS,
-        };
-        let mut recovery = AudioPlaybackRecovery::new(config).unwrap();
-        assert_eq!(
-            recovery.process_frame(Some(&[0.5])).err(),
-            Some(AudioPlaybackError::IncompleteFrame {
-                samples: 1,
-                channels: CHANNELS,
-            })
-        );
-    }
-}
+#[path = "audio_playback_tests.rs"]
+mod tests;

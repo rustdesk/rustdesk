@@ -51,7 +51,7 @@ fn active_handler(input_rate: u32) -> (AudioHandler, Arc<AtomicBool>) {
         device_channel: CHANNELS,
         ..Default::default()
     };
-    *handler.ready.lock().unwrap() = true;
+    handler.playback_status.ready.store(true, Ordering::Release);
     (handler, dropped)
 }
 
@@ -88,7 +88,7 @@ fn failed_format_change_discards_old_playback_state() {
     assert!(handler.audio_stream.is_none());
     assert!(handler.audio_resampler.is_none());
     assert!(handler.audio_decoder.is_none());
-    assert!(!*handler.ready.lock().unwrap());
+    assert!(!handler.playback_status.ready.load(Ordering::Acquire));
     handler.handle_frame(audio_frame());
     assert_eq!(handler.audio_buffer.0.lock().unwrap().occupied_len(), 0);
 }
