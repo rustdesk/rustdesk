@@ -217,6 +217,8 @@ mod cpal_impl {
         }
         if let Some((_, format, _)) = &state.stream {
             sp.send_shared(format.clone());
+            #[cfg(target_os = "macos")]
+            log::info!("Audio capture stream recreated; replacement format sent");
         }
         RESTARTING.store(false, Ordering::SeqCst);
         Ok(())
@@ -399,6 +401,8 @@ mod cpal_impl {
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
+        #[cfg(target_os = "macos")]
+        log::info!("Audio capture start call succeeded");
         Ok((
             Box::new(stream),
             Arc::new(create_format_msg(sample_rate, ch as _)),
@@ -419,6 +423,8 @@ mod cpal_impl {
         let errors = CaptureErrorHandler::default();
         let callback_errors = errors.clone();
         let err_fn = move |err| callback_errors.handle(err);
+        #[cfg(target_os = "macos")]
+        let (mut received_samples, mut received_signal) = (false, false);
         let sample_rate_0 = config.sample_rate().0;
         log::debug!("Audio sample rate : {}", sample_rate);
         unsafe {
@@ -445,6 +451,25 @@ mod cpal_impl {
             &stream_config,
             move |data: &[T], _: &InputCallbackInfo| {
                 let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                #[cfg(target_os = "macos")]
+                {
+                    // Starting capture does not guarantee sample delivery or audible data.
+                    if !received_samples && !buffer.is_empty() {
+                        received_samples = true;
+                        log::info!(
+                            "Audio capture received first PCM block: {} samples",
+                            buffer.len()
+                        );
+                    }
+                    if !received_signal
+                        && buffer
+                            .iter()
+                            .any(|sample| sample.is_finite() && *sample != 0.0)
+                    {
+                        received_signal = true;
+                        log::info!("Audio capture received first nonzero PCM");
+                    }
+                }
                 let mut lock = INPUT_BUFFER.lock().unwrap();
                 lock.extend(buffer);
                 while lock.len() >= rechannel_len {
