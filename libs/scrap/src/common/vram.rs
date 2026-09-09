@@ -99,11 +99,9 @@ impl EncoderApi for VRamEncoder {
         ms: i64,
     ) -> ResultType<base::message_proto::VideoFrame> {
         #[cfg(all(windows, feature = "vram"))]
-        if matches!(&frame, EncodeInput::RepeatTexture(_)) {
-            // Identical small packets are normal when refining an unchanged desktop.
-            self.same_bad_len_counter = 0;
-            self.last_frame_len = 0;
-        }
+        let repeated = matches!(&frame, EncodeInput::RepeatTexture(_));
+        #[cfg(not(all(windows, feature = "vram")))]
+        let repeated = false;
         let (texture, rotation) = frame.texture()?;
         if rotation != 0 {
             // to-do: support rotation
@@ -124,25 +122,28 @@ impl EncoderApi for VRamEncoder {
             });
         }
         if frames.len() > 0 {
-            // This kind of problem is occurred after a period of time when using AMD encoding,
-            // the encoding length is fixed at about 40, and the picture is still
-            const MIN_BAD_LEN: usize = 100;
-            const MAX_BAD_COUNTER: usize = 30;
-            let this_frame_len = frames[0].data.len();
-            if this_frame_len < MIN_BAD_LEN && this_frame_len == self.last_frame_len {
-                self.same_bad_len_counter += 1;
-                if self.same_bad_len_counter >= MAX_BAD_COUNTER {
-                    log::info!(
-                        "{} times encoding len is {}, switch",
-                        self.same_bad_len_counter,
-                        self.last_frame_len
-                    );
-                    bail!(crate::codec::ENCODE_NEED_SWITCH);
+            // Repeats must neither advance nor clear evidence from real captures.
+            if !repeated {
+                // This kind of problem is occurred after a period of time when using AMD encoding,
+                // the encoding length is fixed at about 40, and the picture is still
+                const MIN_BAD_LEN: usize = 100;
+                const MAX_BAD_COUNTER: usize = 30;
+                let this_frame_len = frames[0].data.len();
+                if this_frame_len < MIN_BAD_LEN && this_frame_len == self.last_frame_len {
+                    self.same_bad_len_counter += 1;
+                    if self.same_bad_len_counter >= MAX_BAD_COUNTER {
+                        log::info!(
+                            "{} times encoding len is {}, switch",
+                            self.same_bad_len_counter,
+                            self.last_frame_len
+                        );
+                        bail!(crate::codec::ENCODE_NEED_SWITCH);
+                    }
+                } else {
+                    self.same_bad_len_counter = 0;
                 }
-            } else {
-                self.same_bad_len_counter = 0;
+                self.last_frame_len = this_frame_len;
             }
-            self.last_frame_len = this_frame_len;
             let frames = EncodedVideoFrames {
                 frames: frames.into(),
                 ..Default::default()
