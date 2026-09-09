@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Vedie všetky pripojenia jedného presmerovania portov cez jediné pripojenie k druhej strane namiesto opakovaného pripájania a prihlasovania pre každé z nich."),
         ("Enable WebRTC P2P connection", "Povoliť pripojenie WebRTC P2P"),
         ("Enable TCP hole punching", "Povoliť TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Žiadosť o zdieľanie obrazovky bola na vzdialenom zariadení odmietnutá"),
+        ("The screen sharing request timed out on the remote device", "Vypršal časový limit žiadosti o zdieľanie obrazovky na vzdialenom zariadení"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk nemá prístup k relácii plochy na vzdialenom zariadení, overte, či relácia beží a či ju RustDesk môže použiť"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portálu plochy na vzdialenom zariadení chýba funkcia potrebná na zdieľanie obrazovky alebo vzdialené ovládanie, jeho implementácia možno nie je nainštalovaná"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Zdieľanie obrazovky bolo na vzdialenom zariadení schválené, ale pripojenie PipeWire sa nepodarilo otvoriť"),
+        ("The screen sharing request ended without completing on the remote device", "Žiadosť o zdieľanie obrazovky na vzdialenom zariadení sa skončila bez dokončenia"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nezískal z XDG Desktop Portal použiteľnú obrazovku, knižnica PipeWire môže byť príliš stará"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nedokázal načítať komponent GStreamera potrebný na zachytenie obrazovky ({})"),
     ].iter().cloned().collect();
 }

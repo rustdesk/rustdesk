@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Ĉiuj konektoj de unu pordo-plusendado iras tra unu sola konekto al la alia komputilo, anstataŭ konekti kaj ensaluti denove por ĉiu el ili."),
         ("Enable WebRTC P2P connection", "Ebligi WebRTC P2P-konekton"),
         ("Enable TCP hole punching", "Ebligi TCP-trapikadon"),
+        ("The screen sharing request was declined on the remote device", "La peto pri ekrandividado estis rifuzita sur la fora aparato"),
+        ("The screen sharing request timed out on the remote device", "La peto pri ekrandividado eltempiĝis sur la fora aparato"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ne povas atingi la labortablan seancon sur la fora aparato, kontrolu ke seanco funkcias kaj ke RustDesk povas uzi ĝin"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Al la labortabla portalo sur la fora aparato mankas kapablo necesa por ekrandividado aŭ fora regado, ĝia realigo eble ne estas instalita"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Ekrandividado estis aprobita sur la fora aparato, sed la konekto PipeWire ne malfermiĝis"),
+        ("The screen sharing request ended without completing on the remote device", "La peto pri ekrandividado sur la fora aparato finiĝis sen kompletiĝi"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk ne povis akiri uzeblan ekranon de XDG Desktop Portal, la biblioteko PipeWire eble estas tro malnova"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ne povis ŝargi komponanton de GStreamer necesan por ekrankapto ({})"),
     ].iter().cloned().collect();
 }

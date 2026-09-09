@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Egy portátirányítás összes kapcsolatát egyetlen, a másik géppel létesített kapcsolaton vezeti át, ahelyett hogy mindegyikhez újra csatlakozna és bejelentkezne."),
         ("Enable WebRTC P2P connection", "WebRTC P2P kapcsolat engedélyezése"),
         ("Enable TCP hole punching", "TCP résszűrés engedélyezése"),
+        ("The screen sharing request was declined on the remote device", "A képernyőmegosztási kérést elutasították a távoli eszközön"),
+        ("The screen sharing request timed out on the remote device", "A képernyőmegosztási kérés időtúllépést okozott a távoli eszközön"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "A RustDesk nem éri el az asztali munkamenetet a távoli eszközön, ellenőrizze, hogy fut-e munkamenet és hogy a RustDesk használhatja-e"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "A távoli eszköz asztali portáljából hiányzik a képernyőmegosztáshoz vagy távvezérléshez szükséges képesség, a háttérrendszere talán nincs telepítve"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "A képernyőmegosztást jóváhagyták a távoli eszközön, de a PipeWire-kapcsolatot nem sikerült megnyitni"),
+        ("The screen sharing request ended without completing on the remote device", "A képernyőmegosztási kérés a távoli eszközön befejeződött anélkül, hogy teljesült volna"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "A RustDesk nem kapott használható képernyőt az XDG Desktop Portaltól, a PipeWire programkönyvtár túl régi lehet"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "A RustDesk nem tudta betölteni a képernyőrögzítéshez szükséges GStreamer összetevőt ({})"),
     ].iter().cloned().collect();
 }

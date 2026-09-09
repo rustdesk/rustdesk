@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "એક પોર્ટ ફોરવર્ડિંગનાં બધાં કનેક્શન સામેના કમ્પ્યુટર સાથેના એક જ કનેક્શન મારફતે જાય છે, દરેક માટે ફરીથી કનેક્ટ અને લોગિન કરવાને બદલે."),
         ("Enable WebRTC P2P connection", "WebRTC P2P કનેક્શન સક્ષમ કરો"),
         ("Enable TCP hole punching", "TCP હોલ પંચિંગ સક્ષમ કરો"),
+        ("The screen sharing request was declined on the remote device", "રિમોટ ઉપકરણ પર સ્ક્રીન શેરિંગ વિનંતી નકારવામાં આવી"),
+        ("The screen sharing request timed out on the remote device", "રિમોટ ઉપકરણ પર સ્ક્રીન શેરિંગ વિનંતીનો સમય સમાપ્ત થયો"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk રિમોટ ઉપકરણના ડેસ્કટોપ સત્ર સુધી પહોંચી શકતું નથી, ખાતરી કરો કે ડેસ્કટોપ સત્ર ચાલુ છે અને RustDesk તેનો ઉપયોગ કરી શકે છે"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "રિમોટ ઉપકરણ પરના ડેસ્કટોપ પોર્ટલમાં સ્ક્રીન શેરિંગ અથવા રિમોટ કંટ્રોલ માટે જરૂરી ક્ષમતા નથી, તેનું બેકએન્ડ કદાચ ઇન્સ્ટોલ કરેલું નથી"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "રિમોટ ઉપકરણ પર સ્ક્રીન શેરિંગ મંજૂર થયું, પરંતુ PipeWire કનેક્શન ખોલી શકાયું નહીં"),
+        ("The screen sharing request ended without completing on the remote device", "રિમોટ ઉપકરણ પર સ્ક્રીન શેરિંગ વિનંતી પૂર્ણ થયા વિના સમાપ્ત થઈ"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk XDG Desktop Portal પાસેથી ઉપયોગી સ્ક્રીન મેળવી શક્યું નથી, PipeWire લાઇબ્રેરી કદાચ ઘણી જૂની છે"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk સ્ક્રીન કૅપ્ચર માટે જરૂરી GStreamer ઘટક લોડ કરી શક્યું નથી ({})"),
     ].iter().cloned().collect();
 }

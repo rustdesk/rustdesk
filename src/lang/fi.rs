@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Välittää kaikki yhden portin edelleenohjauksen yhteydet yhden vastapuoleen avatun yhteyden kautta sen sijaan, että jokaista varten muodostettaisiin yhteys ja kirjauduttaisiin uudelleen."),
         ("Enable WebRTC P2P connection", "Ota WebRTC P2P yhteys käyttöön"),
         ("Enable TCP hole punching", "Ota käyttöön TCP hole punching  tekniikka"),
+        ("The screen sharing request was declined on the remote device", "Näytön jakamispyyntö hylättiin etälaitteessa"),
+        ("The screen sharing request timed out on the remote device", "Näytön jakamispyyntö aikakatkaistiin etälaitteessa"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ei tavoita etälaitteen työpöytäistuntoa, tarkista että istunto on käynnissä ja että RustDesk voi käyttää sitä"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Etälaitteen työpöytäportaalista puuttuu näytön jakamiseen tai etäohjaukseen tarvittava ominaisuus, sen taustaosaa ei ehkä ole asennettu"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Näytön jakaminen hyväksyttiin etälaitteessa, mutta PipeWire-yhteyttä ei voitu avata"),
+        ("The screen sharing request ended without completing on the remote device", "Näytön jakamispyyntö etälaitteessa päättyi ilman että se saatiin valmiiksi"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk ei saanut XDG Desktop Portalilta käyttökelpoista näyttöä, PipeWire-kirjasto voi olla liian vanha"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ei voinut ladata näytön kaappaukseen tarvittavaa GStreamer-osaa ({})"),
     ].iter().cloned().collect();
 }

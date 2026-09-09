@@ -21,6 +21,7 @@ lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, u64>> = RwLock::new(HashMap::new());
     static ref PIPEWIRE_INITIALIZED: RwLock<bool> = RwLock::new(false);
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
+    static ref LAST_STAGE_ERR: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
     static ref ACTIVE_DISPLAY_COUNT: RwLock<usize> = RwLock::new(0);
 }
 
@@ -44,9 +45,21 @@ pub(super) fn decrement_active_display_count() -> usize {
 
 fn map_err_scrap(err: String) -> io::Error {
     // to-do: Handle error better, do not restart server
+    // Reached by the capture loop, which is what this crude self-heal was for. A no-reply
+    // during the portal handshake is tagged below and is reported instead of exiting: at
+    // login there is someone waiting to be told, and a portal that is slow to activate is
+    // not a reason to take the service down.
     if err.starts_with("Did not receive a reply") {
         log::error!("Fatal pipewire error, {}", &err);
         std::process::exit(-1);
+    }
+
+    if let Some(tag) = err.strip_prefix(WAYLAND_STAGE_TAG) {
+        log_staged_once(&err);
+        return io::Error::new(
+            io::ErrorKind::Other,
+            staged_message(tag, is_ubuntu_before_21()),
+        );
     }
 
     if DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() {
@@ -74,6 +87,38 @@ fn map_err_scrap(err: String) -> io::Error {
     }
 }
 
+/// `Display::all` and `Capturer::new` reach the peer through `map_err_scrap`, but
+/// `fill_displays` opens a portal session of its own and returns its error straight up, so a
+/// tag has to be resolved here or it lands in the login dialog verbatim.
+fn map_staged_err(err: anyhow::Error) -> anyhow::Error {
+    let text = err.to_string();
+    match text.strip_prefix(WAYLAND_STAGE_TAG) {
+        Some(tag) => {
+            log_staged_once(&text);
+            anyhow::anyhow!(staged_message(tag, is_ubuntu_before_21()))
+        }
+        None => err,
+    }
+}
+
+// The video service retries about once a second, so a wedged portal would otherwise write a
+// line a second forever. Repeat the message only when the cause changes, or after long
+// enough that a reader would want to see the fault is still there.
+const STAGE_ERR_REPEAT: std::time::Duration = std::time::Duration::from_secs(600);
+
+fn log_staged_once(err: &str) {
+    let now = std::time::Instant::now();
+    let mut last = LAST_STAGE_ERR.lock().unwrap();
+    let repeat = match last.as_ref() {
+        Some((seen, at)) => seen != err || now.duration_since(*at) >= STAGE_ERR_REPEAT,
+        None => true,
+    };
+    if repeat {
+        log::error!("Wayland portal handshake failed: {}", err);
+        *last = Some((err.to_owned(), now));
+    }
+}
+
 fn try_log(err: &String) {
     let mut lock_count = LOG_SCRAP_COUNT.lock().unwrap();
     if *lock_count >= 1000000 {
@@ -83,6 +128,168 @@ fn try_log(err: &String) {
         log::error!("Failed scrap {}", err);
     }
     *lock_count += 1;
+}
+
+// Translation keys, so the key itself is the English text: an older peer that has never heard
+// of them falls back to displaying the key and still reads as a sentence.
+const WAYLAND_DECLINED: &str = "The screen sharing request was declined on the remote device";
+const WAYLAND_TIMED_OUT: &str = "The screen sharing request timed out on the remote device";
+const WAYLAND_NO_SESSION: &str = "RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it";
+const WAYLAND_UNSUPPORTED: &str = "The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed";
+const WAYLAND_PIPEWIRE_HANDOVER: &str = "Screen sharing was approved on the remote device, but the PipeWire connection could not be opened";
+const WAYLAND_ENDED: &str =
+    "The screen sharing request ended without completing on the remote device";
+// The remedy the message it replaces used to carry, minus the link: this is the outcome
+// rustdesk/rustdesk#8600 is about.
+const WAYLAND_NO_USABLE_SCREEN: &str = "RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old";
+const WAYLAND_GST_UNAVAILABLE: &str =
+    "RustDesk could not load a GStreamer component needed for screen capture ({})";
+
+const WAYLAND_STAGE_TAG: &str = "wl-stage:";
+
+// `translate()` on the peer strips the braces itself, so what goes on the wire is the key
+// with the detail still *inside* the placeholder.
+fn with_detail(key: &str, detail: &str) -> String {
+    key.replace("{}", &format!("{{{}}}", detail))
+}
+
+fn is_ubuntu_before_21() -> bool {
+    DISTRO.name.to_uppercase() == "Ubuntu".to_uppercase() && DISTRO.version_id < "21".to_owned()
+}
+
+/// Maps a `<stage>:<kind>:<detail>` tag from the portal handshake, see
+/// `scrap::wayland::pipewire`, onto what to tell the peer. Everything the capture loop reports
+/// carries no tag and keeps the legacy substring heuristics above.
+fn staged_message(tag: &str, ubuntu_before_21: bool) -> String {
+    let mut parts = tag.splitn(3, ':');
+    let stage = parts.next().unwrap_or_default();
+    let kind = parts.next().unwrap_or_default();
+    let detail = parts.next().unwrap_or_default().trim();
+
+    // An outcome that says something about the machine is what the Ubuntu branch was written
+    // for, so that branch keeps it. An outcome that says what a person did is a fact no distro
+    // check can improve on.
+    let of_the_machine = |msg: &str| {
+        if ubuntu_before_21 {
+            SCRAP_UBUNTU_HIGHER_REQUIRED.to_owned()
+        } else {
+            msg.to_owned()
+        }
+    };
+
+    match (stage, kind) {
+        (_, "declined") => WAYLAND_DECLINED.to_owned(),
+        (_, "ended") => WAYLAND_ENDED.to_owned(),
+        (_, "no-response") => WAYLAND_TIMED_OUT.to_owned(),
+        ("streams", _) => of_the_machine(WAYLAND_NO_USABLE_SCREEN),
+        ("gst-plugin", _) => of_the_machine(&with_detail(WAYLAND_GST_UNAVAILABLE, detail)),
+        // The bus the portal lives on was never reached, so the portal has not been asked
+        // anything yet and telling anyone to restart it would be a guess.
+        ("session-bus", _) => of_the_machine(WAYLAND_NO_SESSION),
+        // The portal answered `Start`, so the request was granted and the only thing left
+        // was handing over the PipeWire connection. Whatever went wrong, it is not the
+        // portal being unavailable -- it had just answered.
+        ("open-pipewire-remote", _) => of_the_machine(WAYLAND_PIPEWIRE_HANDOVER),
+        // The portal is there and answering; it just does not implement what was called,
+        // which restarting it cannot fix.
+        (_, "unsupported") => of_the_machine(WAYLAND_UNSUPPORTED),
+        // Everything else is the portal not delivering, which is what this key already says --
+        // and unlike a message of our own it carries the `systemctl --user restart` remedy.
+        _ => of_the_machine(SCRAP_XDP_PORTAL_UNAVAILABLE),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn staged_message_names_the_outcome() {
+        let m = |tag| staged_message(tag, false);
+        assert_eq!(m("start:declined:"), WAYLAND_DECLINED);
+        assert_eq!(m("start:ended:"), WAYLAND_ENDED);
+        assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
+        // A restored session shows no picker at all, so a timeout anywhere is a timeout and
+        // never a claim about someone not answering.
+        assert_eq!(m("create-session:no-response:"), WAYLAND_TIMED_OUT);
+        assert_eq!(m("streams:empty:"), WAYLAND_NO_USABLE_SCREEN);
+    }
+
+    #[test]
+    fn only_a_portal_that_may_be_dead_is_told_to_restart() {
+        let m = |tag| staged_message(tag, false);
+        // Not reached the bus at all: the portal has not been asked anything yet.
+        assert_eq!(
+            m("session-bus:dbus:org.freedesktop.DBus.Error.NotSupported"),
+            WAYLAND_NO_SESSION
+        );
+        // Answering, but without an implementation behind the interface that was called --
+        // at any stage, not just the first one.
+        assert_eq!(
+            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            WAYLAND_UNSUPPORTED
+        );
+        assert_eq!(
+            m("select-sources:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            WAYLAND_UNSUPPORTED
+        );
+        // Absent or silent, which is what the existing key's remedy is for.
+        assert_eq!(
+            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
+            SCRAP_XDP_PORTAL_UNAVAILABLE
+        );
+        // Not this one: `Start` had already been answered, so the portal was alive and the
+        // request granted. Saying it may have crashed would walk the diagnosis backwards.
+        assert_eq!(
+            m("open-pipewire-remote:dbus:org.freedesktop.DBus.Error.Failed"),
+            WAYLAND_PIPEWIRE_HANDOVER
+        );
+        // A tag this build does not know must never fall back to a guess.
+        assert_eq!(
+            m("some-new-stage:some-new-kind:x"),
+            SCRAP_XDP_PORTAL_UNAVAILABLE
+        );
+        assert_eq!(m(""), SCRAP_XDP_PORTAL_UNAVAILABLE);
+    }
+
+    // The peer resolves a message by replacing its first `{...}` with `{}` and looking that
+    // up, so a detail-carrying message has to reduce back to its key exactly.
+    #[test]
+    fn a_detail_carrying_message_reduces_back_to_its_key() {
+        let gst = staged_message("gst-plugin:unavailable:pipewiresrc", false);
+        assert_eq!(
+            gst,
+            "RustDesk could not load a GStreamer component needed for screen capture ({pipewiresrc})"
+        );
+        let open = gst.find('{').expect("no placeholder");
+        let close = gst[open..].find('}').expect("unclosed placeholder") + open;
+        assert_eq!(
+            format!("{}{{}}{}", &gst[..open], &gst[close + 1..]),
+            WAYLAND_GST_UNAVAILABLE
+        );
+    }
+
+    #[test]
+    fn legacy_ubuntu_keeps_its_message_for_machine_faults_only() {
+        let m = |tag| staged_message(tag, true);
+        assert_eq!(
+            m("create-session:dbus:org.freedesktop.DBus.Error.ServiceUnknown"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(
+            m("create-session:unsupported:org.freedesktop.DBus.Error.UnknownMethod"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(
+            m("gst-plugin:unavailable:pipewiresrc"),
+            SCRAP_UBUNTU_HIGHER_REQUIRED
+        );
+        assert_eq!(m("streams:empty:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
+        assert_eq!(m("session-bus:dbus:"), SCRAP_UBUNTU_HIGHER_REQUIRED);
+        assert_eq!(m("start:declined:"), WAYLAND_DECLINED);
+        assert_eq!(m("start:ended:"), WAYLAND_ENDED);
+        assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
+    }
 }
 
 struct CapturerPtr(*mut Capturer);
@@ -312,7 +519,8 @@ pub(super) async fn check_init() -> ResultType<()> {
                 {
                     let temp_mouse_move_handle = input_service::TemporaryMouseMoveHandle::new();
                     let move_mouse_to = |x, y| temp_mouse_move_handle.move_mouse_to(x, y);
-                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)?;
+                    fill_displays(move_mouse_to, crate::get_cursor_pos, &mut all)
+                        .map_err(map_staged_err)?;
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
@@ -340,10 +548,9 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                 // Create individual CapDisplayInfo for each display with its own capturer
                 for (idx, display) in all.into_iter().enumerate() {
-                    let capturer =
-                        Box::into_raw(Box::new(Capturer::new(display).with_context(|| {
-                            format!("Failed to create capturer for display {}", idx)
-                        })?));
+                    // No `with_context` here: the peer is shown `format!("{}", err)`, which
+                    // renders only the outermost layer, and the mapped reason is the inner one.
+                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
                     let capturer = CapturerPtr(capturer);
 
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {

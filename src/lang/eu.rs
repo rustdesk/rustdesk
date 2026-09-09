@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Portu-birbideratze baten konexio guztiak beste ordenagailurako konexio bakar batetik eramaten ditu, bakoitzerako berriro konektatu eta saioa hasi beharrean."),
         ("Enable WebRTC P2P connection", "Gaitu WebRTC P2P konexioa"),
         ("Enable TCP hole punching", "Gaitu TCP zulo-egitea"),
+        ("The screen sharing request was declined on the remote device", "Pantaila partekatzeko eskaera baztertu egin da urruneko gailuan"),
+        ("The screen sharing request timed out on the remote device", "Pantaila partekatzeko eskaerak denbora-muga gainditu du urruneko gailuan"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk-ek ezin du urruneko gailuko mahaigaineko saioa atzitu, egiaztatu saio bat martxan dagoela eta RustDesk-ek erabil dezakeela"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Urruneko gailuko mahaigaineko atariari pantaila partekatzeko edo urrunetik kontrolatzeko behar den gaitasun bat falta zaio, agian ez dago haren backend-a instalatuta"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Pantaila partekatzea onartu da urruneko gailuan, baina ezin izan da PipeWire konexioa ireki"),
+        ("The screen sharing request ended without completing on the remote device", "Urruneko gailuko pantaila partekatzeko eskaera osatu gabe amaitu da"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk-ek ezin izan du pantaila erabilgarririk lortu XDG Desktop Portal-etik, PipeWire liburutegia zaharregia izan daiteke"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk-ek ezin izan du pantaila kapturatzeko beharrezkoa den GStreamer osagai bat kargatu ({})"),
     ].iter().cloned().collect();
 }

@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "همه اتصال‌های یک هدایت پورت از یک اتصال واحد به دستگاه مقابل عبور می‌کنند، به‌جای اتصال و ورود دوباره برای هر کدام."),
         ("Enable WebRTC P2P connection", "فعال‌سازی اتصال همتا‌به‌همتای WebRTC"),
         ("Enable TCP hole punching", "فعال‌سازی تکنیک TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "درخواست اشتراک‌گذاری صفحه در دستگاه راه دور رد شد"),
+        ("The screen sharing request timed out on the remote device", "مهلت درخواست اشتراک‌گذاری صفحه در دستگاه راه دور به پایان رسید"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk نمی‌تواند به نشست میزکار دستگاه راه دور دسترسی پیدا کند، بررسی کنید که نشست میزکار در حال اجرا باشد و RustDesk بتواند از آن استفاده کند"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "درگاه میزکار در دستگاه راه دور قابلیت لازم برای اشتراک‌گذاری صفحه یا کنترل از راه دور را ندارد، شاید پیاده‌سازی آن نصب نشده باشد"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "اشتراک‌گذاری صفحه در دستگاه راه دور تأیید شد، اما اتصال PipeWire باز نشد"),
+        ("The screen sharing request ended without completing on the remote device", "درخواست اشتراک‌گذاری صفحه در دستگاه راه دور بدون تکمیل شدن پایان یافت"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk نتوانست صفحه‌ای قابل استفاده از XDG Desktop Portal دریافت کند، ممکن است کتابخانه PipeWire خیلی قدیمی باشد"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk نتوانست مؤلفه GStreamer موردنیاز برای ضبط صفحه را بارگذاری کند ({})"),
     ].iter().cloned().collect();
 }

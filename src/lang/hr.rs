@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Sve veze jednog prosljeđivanja portova idu kroz jednu vezu prema drugoj strani, umjesto ponovnog povezivanja i prijave za svaku od njih."),
         ("Enable WebRTC P2P connection", "Omogući WebRTC P2P vezu"),
         ("Enable TCP hole punching", "Omogući TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Zahtjev za dijeljenje zaslona odbijen je na udaljenom uređaju"),
+        ("The screen sharing request timed out on the remote device", "Zahtjev za dijeljenje zaslona istekao je na udaljenom uređaju"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk ne može pristupiti sesiji radne površine na udaljenom uređaju, provjerite radi li sesija i može li je RustDesk koristiti"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portalu radne površine na udaljenom uređaju nedostaje mogućnost potrebna za dijeljenje zaslona ili daljinsko upravljanje, njegov pozadinski dio možda nije instaliran"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Dijeljenje zaslona odobreno je na udaljenom uređaju, ali PipeWire vezu nije bilo moguće otvoriti"),
+        ("The screen sharing request ended without completing on the remote device", "Zahtjev za dijeljenje zaslona na udaljenom uređaju završio je bez dovršetka"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nije mogao dobiti upotrebljiv zaslon od XDG Desktop Portala, PipeWire biblioteka je možda prestara"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nije mogao učitati GStreamer komponentu potrebnu za snimanje zaslona ({})"),
     ].iter().cloned().collect();
 }
