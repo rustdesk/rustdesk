@@ -1018,6 +1018,15 @@ impl Connection {
                 },
                 Some(data) = rx_from_authed.recv() => {
                     match data {
+                        // A newer connection from this session has taken over. Nothing is sent
+                        // to the peer and the screen is not locked: the session continues, on
+                        // the connection that replaced this one.
+                        ipc::Data::Displaced => {
+                            conn.chat_unanswered = false; // seen
+                            conn.file_transferred = false; //seen
+                            conn.on_close("displaced by a newer connection", false).await;
+                            break;
+                        }
                         #[cfg(all(target_os = "windows", feature = "flutter"))]
                         ipc::Data::PrinterData(data) => {
                             if Self::permission(keys::OPTION_ENABLE_REMOTE_PRINTER, &conn.control_permissions) {
@@ -2065,6 +2074,7 @@ impl Connection {
         } else if sub_service {
             if !wait_session_id_confirm {
                 self.try_sub_monitor_services();
+                raii::AuthedConnID::displace_others(self.inner.id(), &self.session_key());
             }
         }
         true
@@ -3850,6 +3860,10 @@ impl Connection {
                                 self.try_sub_camera_displays();
                             } else if !self.terminal {
                                 self.try_sub_monitor_services();
+                                raii::AuthedConnID::displace_others(
+                                    self.inner.id(),
+                                    &self.session_key(),
+                                );
                             }
                         }
                     }
@@ -6658,6 +6672,43 @@ mod raii {
     pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {
+        // Remote control only. It is where the cost is - a stale one stays a video subscriber
+        // the capture loop waits on and a viewer the rate control averages in - and the only
+        // kind that can lock the screen, `keyboard` being cleared for every other one. It is
+        // also the only kind where two under one session id cannot be legitimate: `connToken`
+        // hands a session's id to a transfer, a camera view, a terminal or a tunnel opened from
+        // its toolbar, never to a second remote control, and a port forward window gives every
+        // local socket it accepts its own login on that one id by design.
+        //
+        // Older, not merely other: ids come from a counter, so of any two that raced to
+        // register the higher always wins and neither can end the other.
+        pub(super) fn is_displaced(c: &AuthedConn, conn_id: i32, session_key: &SessionKey) -> bool {
+            c.conn_id < conn_id
+                && c.conn_type == AuthConnType::Remote
+                && &c.session_key == session_key
+        }
+
+        /// Ends the connections this one has replaced. Called where it has taken over, not where
+        /// it registered: until the services are subscribed, ending the old one would unsubscribe
+        /// a capturer nothing has resubscribed, and a login that failed on the way here would
+        /// have cost a session that was still working.
+        pub fn displace_others(conn_id: i32, session_key: &SessionKey) {
+            let displaced: Vec<_> = AUTHED_CONNS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| Self::is_displaced(c, conn_id, session_key))
+                .map(|c| (c.conn_id, c.sender.clone()))
+                .collect();
+            for (displaced_id, sender) in displaced {
+                log::info!("#{displaced_id} displaced by #{conn_id}");
+                if let Err(err) = sender.send(Data::Displaced) {
+                    // Its loop has already ended, which is the outcome this wanted anyway.
+                    log::debug!("#{displaced_id} was already gone: {err}");
+                }
+            }
+        }
+
         pub fn new(
             conn_id: i32,
             conn_type: AuthConnType,
@@ -7546,5 +7597,61 @@ mod test {
             scoped.terminal_persistent.enum_value(),
             Ok(BoolOption::NotSet)
         );
+    }
+
+    // Too wide and it ends a connection that should keep running; too narrow and the stale one
+    // lingers, still subscribed to video and still counted by the rate control.
+    #[test]
+    fn only_an_older_remote_control_in_the_same_session_is_displaced() {
+        use super::raii::AuthedConnID;
+
+        let key = |session_id: u64, peer: &str| SessionKey {
+            peer_id: peer.to_owned(),
+            name: "".to_owned(),
+            session_id,
+        };
+        let conn = |conn_id: i32, conn_type: AuthConnType, session_key: SessionKey| AuthedConn {
+            conn_id,
+            conn_type,
+            session_key,
+            sender: mpsc::unbounded_channel().0,
+            printer: false,
+        };
+        let mine = key(7, "peer");
+        let remote = AuthConnType::Remote;
+
+        assert!(AuthedConnID::is_displaced(
+            &conn(1, remote, mine.clone()),
+            2,
+            &mine
+        ));
+        // Itself, and anything that registered after it: of two that raced, the higher id wins.
+        for id in [2, 3] {
+            assert!(!AuthedConnID::is_displaced(
+                &conn(id, remote, mine.clone()),
+                2,
+                &mine
+            ));
+        }
+
+        // No other kind, whether beside this one or of its own kind: a window's port forward
+        // mappings log in concurrently on one session id, and ending a terminal connection
+        // destroys the service its replacement attached to.
+        for other in [
+            AuthConnType::FileTransfer,
+            AuthConnType::PortForward,
+            AuthConnType::ViewCamera,
+            AuthConnType::Terminal,
+        ] {
+            assert!(
+                !AuthedConnID::is_displaced(&conn(1, other, mine.clone()), 2, &mine),
+                "{other:?} must not be displaced"
+            );
+        }
+
+        // Another session, and another peer entirely.
+        for foreign in [key(8, "peer"), key(7, "other")] {
+            assert!(!AuthedConnID::is_displaced(&conn(1, remote, foreign), 2, &mine));
+        }
     }
 }

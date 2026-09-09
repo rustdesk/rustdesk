@@ -355,6 +355,10 @@ pub enum Data {
     MouseMoveTime(i64),
     Authorize,
     Close,
+    // A newer authorized connection has taken this one's place. Ends the superseded connection
+    // like `Close`, but sends the peer nothing: the peer has already moved on, and the link it
+    // would be sent over is the very one that stopped working.
+    Displaced,
     #[cfg(windows)]
     SAS,
     UserSid(Option<u32>),
