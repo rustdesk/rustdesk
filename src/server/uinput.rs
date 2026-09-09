@@ -389,9 +389,9 @@ pub mod client {
             self.send_high_resolution(Data::Mouse(DataMouse::ScrollHighResolution(x, y)))
         }
         fn supports_smooth_scroll(&self) -> bool {
-            self.smooth
-                .as_ref()
-                .is_some_and(ScrollConnection::is_connected)
+            // Keep accepting existing senders, but negotiate the wheel backend because
+            // libinput can discard complete gestures from the synthetic touchpad.
+            false
         }
         fn mouse_scroll_smooth(&mut self, x: i32, y: i32) -> enigo::ResultType {
             self.send_smooth(Data::Mouse(DataMouse::ScrollSmooth(x, y)))
@@ -732,10 +732,32 @@ pub mod client {
     #[cfg(test)]
     mod tests {
         use super::{ScrollConnection, ScrollRequest, UInputMouse};
-        use crate::ipc::Data;
         use enigo::MouseControllable;
         use hbb_common::tokio::{runtime::Runtime, sync::mpsc::channel};
         use std::{sync::mpsc as std_mpsc, thread, time::Duration};
+
+        #[test]
+        fn connected_touchpad_does_not_advertise_smooth_scrolling() {
+            let runtime = Runtime::new().unwrap();
+            let (tx, _rx) = channel(super::super::SCROLL_IPC_QUEUE_CAPACITY);
+            let task = runtime.spawn(std::future::pending::<()>());
+            let mut mouse = UInputMouse::new_high_resolution_scroll_state();
+            mouse.smooth = Some(ScrollConnection { tx, task });
+
+            assert!(!mouse.supports_smooth_scroll());
+            assert!(!mouse.supports_high_resolution_scroll());
+
+            let (tx, wheel_rx) = channel(super::super::SCROLL_IPC_QUEUE_CAPACITY);
+            let task = runtime.spawn(std::future::pending::<()>());
+            mouse.high_resolution = Some(ScrollConnection { tx, task });
+
+            assert!(mouse.supports_high_resolution_scroll());
+            assert!(!mouse.supports_smooth_scroll());
+
+            drop(wheel_rx);
+            assert!(!mouse.supports_high_resolution_scroll());
+            assert!(!mouse.supports_smooth_scroll());
+        }
 
         #[test]
         fn finish_waits_for_service_acknowledgement() {

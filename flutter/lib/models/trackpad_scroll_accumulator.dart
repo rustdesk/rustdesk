@@ -3,7 +3,8 @@ import 'dart:ui';
 enum LinuxTrackpadScrollMode {
   legacy(true),
   highResolutionWheel(true),
-  smooth(true);
+  // Finger-sequence completion lets the receiving application start inertia.
+  smooth(false);
 
   const LinuxTrackpadScrollMode(this.usesClientFling);
 
@@ -22,16 +23,7 @@ bool shouldStartTrackpadFling({
 
 class TrackpadScrollAccumulator {
   static const _integerPrecisionTolerance = 1e-9;
-  static const _flingStopDelta = 1.0;
-
   Offset _remainder = Offset.zero;
-
-  Offset takeFling(Offset delta, double unitsPerPoint) {
-    if (delta.dx.abs() < _flingStopDelta && delta.dy.abs() < _flingStopDelta) {
-      return Offset.zero;
-    }
-    return take(delta, unitsPerPoint);
-  }
 
   Offset take(Offset delta, double unitsPerPoint) {
     final total = _remainder + delta;

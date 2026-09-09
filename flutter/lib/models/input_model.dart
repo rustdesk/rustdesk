@@ -1424,10 +1424,9 @@ class InputModel {
           Offset delta, LinuxTrackpadScrollMode mode) =>
       switch (mode) {
         LinuxTrackpadScrollMode.legacy => delta * _trackpadAdjustPeerLinux,
-        LinuxTrackpadScrollMode.highResolutionWheel =>
+        LinuxTrackpadScrollMode.highResolutionWheel ||
+        LinuxTrackpadScrollMode.smooth =>
           _takeLinuxTrackpadDelta(delta, mode),
-        LinuxTrackpadScrollMode.smooth => _trackpadScrollAccumulator.takeFling(
-            delta, kSmoothScrollUnitsPerPoint.toDouble()),
       };
 
   String _trackpadEventTypeFor(LinuxTrackpadScrollMode mode) => switch (mode) {
