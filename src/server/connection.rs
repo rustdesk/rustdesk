@@ -5097,7 +5097,11 @@ impl Connection {
         // But it's not necessary now and we have to consider two audio services(client, server).
         crate::audio_service::set_voice_call_input_device(None, true);
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
-        if lock && self.lock_after_session_end && self.keyboard {
+        if lock
+            && self.lock_after_session_end
+            && self.keyboard
+            && !raii::AuthedConnID::session_reconnected(self.inner.id(), &self.session_key())
+        {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen().await;
         }
@@ -6658,6 +6662,21 @@ mod raii {
     pub struct AuthedConnID(i32, AuthConnType);
 
     impl AuthedConnID {
+        pub(super) fn is_newer_session_remote(c: &AuthedConn, id: i32, key: &SessionKey) -> bool {
+            c.conn_id > id && c.conn_type == AuthConnType::Remote && &c.session_key == key
+        }
+
+        /// Whether a newer remote control connection of this session has replaced this one. A
+        /// controlling peer whose link dies reconnects while the connection it left behind runs
+        /// on here until its own timeout; locking for that one would lock a session that has
+        /// already resumed on its replacement.
+        pub fn session_reconnected(id: i32, key: &SessionKey) -> bool {
+            let conns = AUTHED_CONNS.lock().unwrap();
+            conns
+                .iter()
+                .any(|c| Self::is_newer_session_remote(c, id, key))
+        }
+
         pub fn new(
             conn_id: i32,
             conn_type: AuthConnType,
@@ -7546,5 +7565,39 @@ mod test {
             scoped.terminal_persistent.enum_value(),
             Ok(BoolOption::NotSet)
         );
+    }
+    #[test]
+    fn only_a_newer_remote_control_of_the_same_session_keeps_the_screen_unlocked() {
+        let replaced_by = super::raii::AuthedConnID::is_newer_session_remote;
+
+        let key = |session_id, peer: &str| SessionKey {
+            peer_id: peer.to_owned(),
+            name: "".to_owned(),
+            session_id,
+        };
+        let conn = |conn_id, conn_type, session_key| AuthedConn {
+            conn_id,
+            conn_type,
+            session_key,
+            sender: mpsc::unbounded_channel().0,
+            printer: false,
+        };
+        let mine = key(7, "peer");
+        let remote = AuthConnType::Remote;
+
+        assert!(replaced_by(&conn(3, remote, mine.clone()), 2, &mine));
+        // An older one, and itself: of connections ending at once only the last still locks.
+        assert!(!replaced_by(&conn(1, remote, mine.clone()), 2, &mine));
+        assert!(!replaced_by(&conn(2, remote, mine.clone()), 2, &mine));
+        // A kind that keeps no screen in use.
+        assert!(!replaced_by(
+            &conn(3, AuthConnType::Terminal, mine.clone()),
+            2,
+            &mine
+        ));
+        // Another session of this peer, and another peer on the same session id: `SessionKey`
+        // is all three fields, and either of those is someone else's screen to lock.
+        assert!(!replaced_by(&conn(3, remote, key(8, "peer")), 2, &mine));
+        assert!(!replaced_by(&conn(3, remote, key(7, "other")), 2, &mine));
     }
 }
