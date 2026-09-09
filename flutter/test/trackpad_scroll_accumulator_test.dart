@@ -37,11 +37,12 @@ void main() {
         const Offset(72, 0));
   });
 
-  test('smooth gesture end uses client fling until delta is below one point',
-      () {
-    final accumulator = TrackpadScrollAccumulator();
-    final smoothUnitsPerPoint = kSmoothScrollUnitsPerPoint.toDouble();
+  testSmoothFlingOwnership();
+  testWheelFlingPolicy();
+}
 
+void testSmoothFlingOwnership() {
+  test('smooth gestures leave inertia to the receiving application', () {
     expect(
         shouldStartTrackpadFling(
           scrollMode: LinuxTrackpadScrollMode.smooth,
@@ -49,10 +50,45 @@ void main() {
           delta: const Offset(3, -2),
           minimumDelta: 2,
         ),
-        isTrue);
-    expect(accumulator.takeFling(const Offset(3, -2), smoothUnitsPerPoint),
-        const Offset(360, -240));
-    expect(accumulator.takeFling(const Offset(0.9, -0.9), smoothUnitsPerPoint),
-        Offset.zero);
+        isFalse);
   });
+}
+
+void testWheelFlingPolicy() {
+  for (final mode in [
+    LinuxTrackpadScrollMode.legacy,
+    LinuxTrackpadScrollMode.highResolutionWheel,
+  ]) {
+    test('${mode.name} gestures retain client inertia', () {
+      expect(
+          shouldStartTrackpadFling(
+            scrollMode: mode,
+            isViewOnly: false,
+            delta: const Offset(3, -2),
+            minimumDelta: 2,
+          ),
+          isTrue);
+    });
+    test('${mode.name} gestures at the fling threshold do not start inertia',
+        () {
+      expect(
+          shouldStartTrackpadFling(
+            scrollMode: mode,
+            isViewOnly: false,
+            delta: const Offset(2, -2),
+            minimumDelta: 2,
+          ),
+          isFalse);
+    });
+    test('${mode.name} gestures in view-only mode do not start inertia', () {
+      expect(
+          shouldStartTrackpadFling(
+            scrollMode: mode,
+            isViewOnly: true,
+            delta: const Offset(3, -2),
+            minimumDelta: 2,
+          ),
+          isFalse);
+    });
+  }
 }
