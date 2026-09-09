@@ -72,7 +72,7 @@ impl<'a> StaticRefresh<'a> {
         frame_controller: &mut VideoFrameController,
     ) -> ResultType<()> {
         if !self.source.is_monitor()
-            || self.repeat_counter >= 300
+            || self.repeat_counter >= 100
             || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
         {
             return Ok(());
@@ -198,19 +198,19 @@ mod tests {
         let calls = Rc::new(Cell::new(0));
         let spf = Duration::from_millis(100);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
-        for _ in 0..300 {
+        for _ in 0..100 {
             refresh.last_encode = Instant::now() - Duration::from_secs(60);
             attempt(&mut refresh, &calls, &[1], spf);
         }
-        assert_eq!(calls.get(), 300);
+        assert_eq!(calls.get(), 100);
 
         refresh.last_encode = Instant::now() - Duration::from_secs(600);
         attempt(&mut refresh, &calls, &[1], spf);
-        assert_eq!(calls.get(), 300);
+        assert_eq!(calls.get(), 100);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         attempt(&mut refresh, &calls, &[1], spf);
-        assert_eq!(calls.get(), 301);
+        assert_eq!(calls.get(), 101);
     }
 
     #[test]
