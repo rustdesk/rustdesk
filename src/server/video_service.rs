@@ -649,7 +649,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut yuv = Vec::new();
     let mut mid_data = Vec::new();
     let mut last_encode = Instant::now();
-    let mut last_capture = last_encode;
+    let mut static_repeat_counter = 0;
     #[cfg(all(windows, feature = "vram"))]
     let mut repeat_texture = Some(scrap::dxgi::repeat::RepeatTexture::default());
     let mut repeat_encode_counter = 0;
@@ -737,7 +737,7 @@ fn run(vs: VideoService) -> ResultType<()> {
             Ok(frame) => {
                 repeat_encode_counter = 0;
                 if frame.valid() {
-                    last_capture = Instant::now();
+                    static_repeat_counter = 0;
                     let screenshot_key = (vs.source, display_idx);
                     let screenshot = SCREENSHOTS.lock().unwrap().remove(&screenshot_key);
                     if let Some(mut screenshot) = screenshot {
@@ -879,7 +879,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
                 }
                 if vs.source.is_monitor()
-                    && last_capture.elapsed() < Duration::from_secs(10)
+                    && static_repeat_counter < 300
                     && last_encode.elapsed() >= Duration::from_millis(100).max(spf)
                 {
                     let frame = if yuv.is_empty() {
@@ -902,6 +902,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
+                        static_repeat_counter += 1;
                         if !send_conn_ids.is_empty() {
                             sent_counter += 1;
                         }
