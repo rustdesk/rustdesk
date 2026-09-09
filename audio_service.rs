@@ -2,8 +2,7 @@
 //! This module handles the audio capture and playback, specifically implementing
 //! the ASIO support to fix the "no sound" issue reported in #3762.
 
-use std::sync::{Arc, Mutex};
-use std::fmt;
+use std::{fmt, sync::{Arc, Mutex}};
 
 #[derive(Debug)]
 pub enum AudioError {
