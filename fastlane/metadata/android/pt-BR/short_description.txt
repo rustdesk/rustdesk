@@ -1,0 +1,1 @@
+Aplicativo de acesso remoto open source, alternativa ao TeamViewer.
