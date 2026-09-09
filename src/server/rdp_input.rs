@@ -308,11 +308,35 @@ pub mod client {
             .any(|name| name.eq_ignore_ascii_case("niri"))
     }
 
+    fn portal_supports_scroll_finish(desktop: &str) -> bool {
+        for name in desktop.split(':') {
+            if name.eq_ignore_ascii_case(DISPLAY_DESKTOP_KDE)
+                || name.eq_ignore_ascii_case("kwin_wayland")
+                || name.eq_ignore_ascii_case("COSMIC")
+            {
+                // KDE (also LXQt/KWin) and COSMIC Portal do not forward finger completion.
+                return false;
+            }
+            if name.eq_ignore_ascii_case("GNOME") {
+                return true;
+            }
+        }
+        true
+    }
+
     lazy_static::lazy_static! {
         static ref SHOULD_SCALE_POINTER_COORDINATES: bool =
             std::env::var(XDG_CURRENT_DESKTOP)
                 .map(|desktop| desktop == DISPLAY_DESKTOP_KDE || desktop_is_niri(&desktop))
                 .unwrap_or(false);
+        static ref PORTAL_SUPPORTS_SCROLL_FINISH: bool = {
+            let desktop = std::env::var(XDG_CURRENT_DESKTOP).unwrap_or_default();
+            let supported = portal_supports_scroll_finish(&desktop);
+            if !supported {
+                log::info!("Portal backend for desktop {desktop:?} does not forward scroll finish; using high-resolution wheel scrolling with client inertia");
+            }
+            supported
+        };
     }
 
     pub struct RdpInputMouse {
@@ -379,7 +403,57 @@ pub mod client {
 
     #[cfg(test)]
     mod tests {
-        use super::{desktop_is_niri, high_resolution_axis_delta, scroll_axis_options};
+        use super::{
+            desktop_is_niri, high_resolution_axis_delta, portal_supports_scroll_finish,
+            scroll_axis_options,
+        };
+
+        #[test]
+        fn kde_portal_keeps_client_inertia_without_scroll_finish() {
+            for desktop in ["KDE", "kde", "plasma:KDE", "KDE:GNOME"] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn kwin_portal_keeps_client_inertia_outside_plasma() {
+            for desktop in [
+                "kwin_wayland",
+                "LXQt:kwin_wayland",
+                "lxqt:KWIN_WAYLAND",
+                "LXQt:kwin_wayland:GNOME",
+            ] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn cosmic_portal_keeps_client_inertia_without_scroll_finish() {
+            for desktop in ["COSMIC", "cosmic", "COSMIC:GNOME"] {
+                assert!(!portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
+
+        #[test]
+        fn other_desktops_preserve_the_portal_finish_contract() {
+            for desktop in [
+                "GNOME",
+                "gnome",
+                "ubuntu:GNOME",
+                "GNOME:KDE",
+                "GNOME:kwin_wayland",
+                "GNOME:COSMIC",
+                "",
+                "niri",
+                "X-KDE",
+                "LXQt:labwc",
+                "X-kwin_wayland",
+                "kwin_wayland-extra",
+                "X-COSMIC",
+            ] {
+                assert!(portal_supports_scroll_finish(desktop), "{desktop}");
+            }
+        }
 
         #[test]
         fn detects_niri_in_desktop_list() {
@@ -508,7 +582,7 @@ pub mod client {
             Ok(())
         }
         fn supports_smooth_scroll(&self) -> bool {
-            true
+            *PORTAL_SUPPORTS_SCROLL_FINISH
         }
         fn mouse_scroll_smooth(&mut self, x: i32, y: i32) -> enigo::ResultType {
             let portal = get_portal(&self.conn);
