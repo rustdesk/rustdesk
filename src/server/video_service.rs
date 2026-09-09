@@ -808,8 +808,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                     if !send_conn_ids.is_empty() {
                         sent_counter += 1;
                     }
+                    static_refresh.on_encoded(!send_conn_ids.is_empty());
                     frame_controller.set_send(now, send_conn_ids);
-                    static_refresh.on_encoded();
                     send_counter += 1;
                 }
                 #[cfg(windows)]
@@ -871,8 +871,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                         if !send_conn_ids.is_empty() {
                             sent_counter += 1;
                         }
+                        static_refresh.on_encoded(!send_conn_ids.is_empty());
                         frame_controller.set_send(now, send_conn_ids);
-                        static_refresh.on_encoded();
                         send_counter += 1;
                     }
                 }
@@ -882,8 +882,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                     now,
                     ms,
                     &mut encoder,
-                    &mut encode_fail_counter,
-                    &mut first_frame,
                     &mut sent_counter,
                     &mut frame_controller,
                 )?;

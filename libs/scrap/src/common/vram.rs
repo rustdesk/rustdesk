@@ -24,6 +24,8 @@ use hwcodec::{
     },
 };
 
+mod repeat;
+
 // https://www.reddit.com/r/buildapc/comments/d2m4ny/two_graphics_cards_two_monitors/
 // https://www.reddit.com/r/techsupport/comments/t2v9u6/dual_monitor_setup_with_dual_gpu/
 // https://cybersided.com/two-monitors-two-gpus/
@@ -99,10 +101,17 @@ impl EncoderApi for VRamEncoder {
         ms: i64,
     ) -> ResultType<base::message_proto::VideoFrame> {
         #[cfg(all(windows, feature = "vram"))]
-        let repeated = matches!(&frame, EncodeInput::RepeatTexture(_));
+        let repeated = matches!(&frame, EncodeInput::Repeat);
         #[cfg(not(all(windows, feature = "vram")))]
         let repeated = false;
-        let (texture, rotation) = frame.texture()?;
+        let (texture, rotation) = if repeated {
+            (std::ptr::null_mut(), 0)
+        } else {
+            frame.texture()?
+        };
+        if !repeated && texture.is_null() {
+            bail!("null texture");
+        }
         if rotation != 0 {
             // to-do: support rotation
             // Both the encoder and display(w,h) information need to be changed.
@@ -110,16 +119,21 @@ impl EncoderApi for VRamEncoder {
         }
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
-        for frame in self
-            .encode(texture, ms)
-            .with_context(|| "Failed to encode")?
-        {
+        let result = if repeated {
+            self.encode_repeat(ms)
+        } else {
+            self.encode(texture, ms)
+        };
+        for frame in result.with_context(|| "Failed to encode")? {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts,
                 key: frame.key == 1,
                 ..Default::default()
             });
+        }
+        if repeated && frames.is_empty() {
+            return Ok(vf);
         }
         if frames.len() > 0 {
             // Repeats must neither advance nor clear evidence from real captures.

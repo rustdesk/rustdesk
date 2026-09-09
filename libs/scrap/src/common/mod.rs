@@ -210,7 +210,7 @@ pub enum EncodeInput<'a> {
     YUV(&'a [u8]),
     Texture((*mut c_void, usize)),
     #[cfg(all(windows, feature = "vram"))]
-    RepeatTexture((*mut c_void, usize)),
+    Repeat,
 }
 
 impl<'a> EncodeInput<'a> {
@@ -224,8 +224,6 @@ impl<'a> EncodeInput<'a> {
     pub fn texture(&self) -> ResultType<(*mut c_void, usize)> {
         match self {
             Self::Texture(f) => Ok(*f),
-            #[cfg(all(windows, feature = "vram"))]
-            Self::RepeatTexture(f) => Ok(*f),
             _ => bail!("not texture frame"),
         }
     }
