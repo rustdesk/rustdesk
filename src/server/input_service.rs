@@ -992,6 +992,18 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 static LATEST_PEER_ABS_POS: std::sync::Mutex<Option<((i32, i32), i64)>> =
     std::sync::Mutex::new(None);
 
+/// Test-only: seed the absolute-input state as if the peer moved `age_ms` ago. The gates in
+/// `note_cursor_plane` that sit AFTER the peer-input gate (transform, drift) are unreachable in a
+/// test process otherwise, and a test that never reaches its gate passes with the gate deleted.
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+pub(crate) fn test_seed_peer_abs_pos(x: i32, y: i32, age_ms: i64) {
+    *LATEST_PEER_ABS_POS.lock().unwrap() = Some(((x, y), get_time() - age_ms));
+}
+#[cfg(all(test, target_os = "linux", feature = "drm"))]
+pub(crate) fn test_clear_peer_abs_pos() {
+    *LATEST_PEER_ABS_POS.lock().unwrap() = None;
+}
+
 /// The last ABSOLUTE peer-injected pointer position (post-remap desktop px) and its age in ms.
 /// `None` until a peer has moved the mouse ABSOLUTELY this session. The DRM cursor calibration
 /// subtracts the cursor-plane position from this to recover the hotspot the kernel does not

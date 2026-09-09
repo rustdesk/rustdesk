@@ -248,11 +248,13 @@ pub fn wayland_failure_stamped() -> bool {
     LAST_FAILED_LOOKUP.lock().unwrap().is_some()
 }
 
-/// The cached snapshot, or `None` if nothing has been enumerated yet. Unlike `get_displays` this
-/// NEVER enumerates, so it cannot block or fork: a caller that must not stall reads this and
-/// declines on `None`.
+/// The cached snapshot, or `None` if nothing has been enumerated yet OR if the cache is busy.
+/// Unlike `get_displays` this never enumerates, and it does not wait on the lock either:
+/// `get_displays` holds that lock across an enumeration, which can fork a probe with a 2 s
+/// deadline, so a plain `lock()` here would just move that wait onto the caller. `try_lock`
+/// keeps the promise a caller that must not stall is relying on: an answer now, or `None`.
 pub fn cached_displays() -> Option<Arc<Displays>> {
-    DISPLAYS.lock().unwrap().clone()
+    DISPLAYS.try_lock().ok()?.clone()
 }
 
 pub fn get_displays() -> Arc<Displays> {

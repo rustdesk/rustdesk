@@ -179,9 +179,10 @@ fn transform_and_origin(
         .copied()
         .flatten()
         .map(|j| wl.displays[j].transform)
-        // Hardware-rotated 180 scans out already upright (i915 advertises rotate-180 and
-        // mutter uses it), and wl_output cannot tell hardware from software rotation, so 180
-        // keeps master behavior until the plane rotation property travels the wire.
+        // A hardware rotate-180 leaves the framebuffer we capture already upright (i915 advertises
+        // rotate-180 and mutter uses it; the rotation happens at scanout), and wl_output cannot
+        // tell hardware from software rotation, so 180 keeps master behavior until the plane
+        // rotation property travels the wire.
         .map(|t| if t == 90 || t == 270 { t } else { 0 })
         .unwrap_or(0);
     let origin = augment_with_wayland_geometry_from(drm, wl, &assignment)
@@ -191,7 +192,7 @@ fn transform_and_origin(
 }
 
 /// The output's wl_output transform as reported, NOT folded. `transform_and_origin` folds 180 to
-/// 0 for the frame, because a hardware rotate-180 already scans out upright and wl_output cannot
+/// 0 for the frame, because a hardware rotate-180 leaves the captured framebuffer upright and wl_output cannot
 /// tell hardware from software rotation. The hotspot calibration cannot afford that ambiguity:
 /// it subtracts a cursor-plane position (scanout space) from an injected point (oriented logical
 /// space), and for a software 180 those differ. So it declines on ANY reported rotation, and
@@ -449,48 +450,53 @@ mod cursor_calibration_tests {
         assert_eq!(cal.as_ref().unwrap().window, CURSOR_CAL_WINDOW_TICKS);
     }
 
+    // A settled plane, an open window, the geometry already resolved for it, and a peer point that
+    // would yield a valid in-bitmap measurement (plane (10,20), tip (20,30) -> hotspot (10,10)).
+    // `applied` is preset to that answer so a measurement would change `pending` without
+    // publishing anything. Then drift switches on. The attempt must decline: `pending` stays None.
+    // Verified by mutation: with the drift check deleted this test FAILS, because the measurement
+    // runs and sets `pending`.
     #[test]
     fn drift_starting_mid_window_stops_further_attempts() {
-        // The geometry was already looked up for this window (memoized), the plane is settled and
-        // the window is open. If drift switches on now, the next attempt must not reuse that
-        // geometry against a remapped point.
         let mut cal = a_cal(Some((10, 20)));
         let c = cal.as_mut().unwrap();
         c.stable = CURSOR_CAL_STABLE_TICKS;
         c.window = 5;
         c.rect = Some(Some(((0, 0, 1920, 1080), (1920, 1080))));
+        c.applied = Some((10, 10));
+        crate::server::input_service::test_seed_peer_abs_pos(20, 30, 500);
         crate::server::display_service::test_set_layout_drifted(true);
         note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
         crate::server::display_service::test_set_layout_drifted(false);
+        crate::server::input_service::test_clear_peer_abs_pos();
         let c = cal.as_ref().unwrap();
-        // Declined: nothing published, nothing pending, and the window drained by one as usual.
-        assert_eq!(c.applied, None);
-        assert_eq!(c.pending, None);
+        assert_eq!(c.pending, None, "the attempt must decline while drift is on");
         assert_eq!(c.window, 4);
     }
 
+    // Same shape as the drift test, gate under test = the transform. A missing position records
+    // nothing; a reported rotation of 180 with everything else valid must decline. Verified by
+    // mutation: with the transform check deleted this test FAILS.
     #[test]
     fn a_rotated_output_and_a_missing_position_are_both_declined() {
-        // No position at all: nothing is recorded.
         let mut cal = a_cal(None);
         note_cursor_plane(&mut cal, None, 0, 0, 0);
         assert_eq!(cal.as_ref().unwrap().plane, None);
 
-        // A rotated output settles normally but must never reach a measurement: the plane
-        // position is unrotated scanout space while the injected point is not.
-        let mut cal = a_cal(None);
-        for _ in 0..=CURSOR_CAL_STABLE_TICKS {
-            note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 1);
-        }
-        assert_eq!(cal.as_ref().unwrap().applied, None);
-        assert_eq!(cal.as_ref().unwrap().pending, None);
-        // And the geometry lookup was never even attempted.
-        assert!(cal.as_ref().unwrap().rect.is_none());
+        let mut cal = a_cal(Some((10, 20)));
+        let c = cal.as_mut().unwrap();
+        c.stable = CURSOR_CAL_STABLE_TICKS;
+        c.window = 5;
+        c.rect = Some(Some(((0, 0, 1920, 1080), (1920, 1080))));
+        c.applied = Some((10, 10));
+        crate::server::input_service::test_seed_peer_abs_pos(20, 30, 500);
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 180);
+        crate::server::input_service::test_clear_peer_abs_pos();
+        let c = cal.as_ref().unwrap();
+        assert_eq!(c.pending, None, "a 180 output must decline");
+        assert_eq!(c.window, 4);
     }
 
-    // The near-wire band has to hold on BOTH exits: not just "publish nothing now" but also "cache
-    // nothing", or the next arrival of the same shape is seeded from the cache and published under
-    // a fresh id with no visual change.
     // The two tests below both write CURSOR_CAL_CACHE, and one of them fills it past the cap,
     // which clears it. libtest runs them concurrently in one process, so they take this lock.
     static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
