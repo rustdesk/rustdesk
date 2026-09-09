@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "ഒരു പോർട്ട് ഫോർവേഡിംഗിന്റെ എല്ലാ കണക്ഷനുകളും മറ്റേ കമ്പ്യൂട്ടറിലേക്കുള്ള ഒരൊറ്റ കണക്ഷനിലൂടെ കടന്നുപോകുന്നു, ഓരോന്നിനും വീണ്ടും കണക്റ്റ് ചെയ്ത് ലോഗിൻ ചെയ്യുന്നതിനു പകരം."),
         ("Enable WebRTC P2P connection", "WebRTC P2P കണക്ഷൻ അനുവദിക്കുക"),
         ("Enable TCP hole punching", "TCP ഹോൾ പഞ്ചിംഗ് അനുവദിക്കുക"),
+        ("The screen sharing request was declined on the remote device", "വിദൂര ഉപകരണത്തിൽ സ്ക്രീൻ പങ്കിടൽ അഭ്യർത്ഥന നിരസിച്ചു"),
+        ("The screen sharing request timed out on the remote device", "വിദൂര ഉപകരണത്തിൽ സ്ക്രീൻ പങ്കിടൽ അഭ്യർത്ഥനയുടെ സമയം കഴിഞ്ഞു"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk-ന് വിദൂര ഉപകരണത്തിലെ ഡെസ്ക്ടോപ്പ് സെഷനിലേക്ക് എത്താൻ കഴിയുന്നില്ല, സെഷൻ പ്രവർത്തിക്കുന്നുണ്ടെന്നും RustDesk-ന് അത് ഉപയോഗിക്കാമെന്നും ഉറപ്പാക്കുക"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "വിദൂര ഉപകരണത്തിലെ ഡെസ്ക്ടോപ്പ് പോർട്ടലിന് സ്ക്രീൻ പങ്കിടലിനോ വിദൂര നിയന്ത്രണത്തിനോ ആവശ്യമായ ശേഷിയില്ല, അതിന്റെ ബാക്കെൻഡ് ഇൻസ്റ്റാൾ ചെയ്തിട്ടില്ലായിരിക്കാം"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "വിദൂര ഉപകരണത്തിൽ സ്ക്രീൻ പങ്കിടൽ അനുവദിച്ചു, പക്ഷേ PipeWire കണക്ഷൻ തുറക്കാനായില്ല"),
+        ("The screen sharing request ended without completing on the remote device", "വിദൂര ഉപകരണത്തിലെ സ്ക്രീൻ പങ്കിടൽ അഭ്യർത്ഥന പൂർത്തിയാകാതെ അവസാനിച്ചു"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "XDG Desktop Portal-ൽ നിന്ന് ഉപയോഗയോഗ്യമായ സ്ക്രീൻ RustDesk-ന് ലഭിച്ചില്ല, PipeWire ലൈബ്രറി വളരെ പഴയതാകാം"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "സ്ക്രീൻ പകർത്താൻ ആവശ്യമായ GStreamer ഘടകം RustDesk-ന് ലോഡ് ചെയ്യാനായില്ല ({})"),
     ].iter().cloned().collect();
 }

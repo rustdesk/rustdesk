@@ -178,12 +178,16 @@ pub fn is_screen_capture_kit_available() -> bool {
 #[path = "audio_capture.rs"]
 mod audio_capture;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[path = "audio_capture_error.rs"]
+mod audio_capture_error;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[path = "audio_capture_queue.rs"]
 mod audio_capture_queue;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use self::service::{Reset, ServiceSwap};
+    use super::audio_capture_error::CaptureErrorHandler;
     use super::*;
     use cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -210,6 +214,7 @@ mod cpal_impl {
         stream: Option<Box<dyn StreamTrait>>,
         format: Arc<Message>,
         _encoder_worker: audio_capture_queue::CaptureEncoderWorker,
+        errors: CaptureErrorHandler,
     }
 
     impl Drop for ActiveCaptureStream {
@@ -235,6 +240,8 @@ mod cpal_impl {
         }
         if let Some(stream) = &state.stream {
             sp.send_shared(stream.format.clone());
+            #[cfg(target_os = "macos")]
+            log::info!("Audio capture stream recreated; replacement format sent");
         }
         RESTARTING.store(false, Ordering::SeqCst);
         Ok(())
@@ -257,6 +264,13 @@ mod cpal_impl {
     }
 
     pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
+        if let Some(stream) = &state.stream {
+            if stream.errors.needs_restart() {
+                // Recreate on the service thread, outside the backend's error callback.
+                log::warn!("Recreating interrupted audio capture stream");
+                super::restart();
+            }
+        }
         if !RESTARTING.load(Ordering::SeqCst) {
             run_serv_snapshot(sp, state)
         } else {
@@ -468,7 +482,7 @@ mod cpal_impl {
             sample_rate,
             encode_channel: ch,
         };
-        let stream = match config.sample_format() {
+        let (stream, errors) = match config.sample_format() {
             I8 => build_input_stream::<i8>(device, &config, output)?,
             I16 => build_input_stream::<i16>(device, &config, output)?,
             I32 => build_input_stream::<i32>(device, &config, output)?,
@@ -482,10 +496,13 @@ mod cpal_impl {
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
+        #[cfg(target_os = "macos")]
+        log::info!("Audio capture start call succeeded");
         Ok(ActiveCaptureStream {
             stream: Some(Box::new(stream)),
             format: Arc::new(create_format_msg(sample_rate, ch as _)),
             _encoder_worker: encoder_worker,
+            errors,
         })
     }
 
@@ -498,19 +515,45 @@ mod cpal_impl {
             .map(|sample| <f32 as cpal::FromSample<T>>::from_sample_(*sample))
     }
 
-    fn build_input_stream<T>(
-        device: cpal::Device,
-        config: &cpal::SupportedStreamConfig,
-        output: CaptureStreamOutput,
-    ) -> ResultType<cpal::Stream>
+    #[cfg(target_os = "macos")]
+    fn log_capture_startup<T>(
+        data: &[T],
+        received_samples: bool,
+        received_signal: bool,
+    ) -> (bool, bool)
     where
         T: cpal::SizedSample,
         f32: cpal::FromSample<T>,
     {
-        let err_fn = move |err| {
-            // too many UnknownErrno, will improve later
-            log::trace!("an error occurred on stream: {}", err);
-        };
+        // Starting capture does not guarantee sample delivery or audible data.
+        if !received_samples && !data.is_empty() {
+            log::info!(
+                "Audio capture received first PCM block: {} samples",
+                data.len()
+            );
+        }
+        let has_signal = received_signal
+            || convert_input_samples(data).any(|sample| sample.is_finite() && sample != 0.0);
+        if !received_signal && has_signal {
+            log::info!("Audio capture received first nonzero PCM");
+        }
+        (received_samples || !data.is_empty(), has_signal)
+    }
+
+    fn build_input_stream<T>(
+        device: cpal::Device,
+        config: &cpal::SupportedStreamConfig,
+        output: CaptureStreamOutput,
+    ) -> ResultType<(cpal::Stream, CaptureErrorHandler)>
+    where
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
+    {
+        let errors = CaptureErrorHandler::default();
+        let callback_errors = errors.clone();
+        let err_fn = move |err| callback_errors.handle(err);
+        #[cfg(target_os = "macos")]
+        let (mut received_samples, mut received_signal) = (false, false);
         let sample_rate_0 = config.sample_rate().0;
         log::debug!("Audio sample rate : {}", output.sample_rate);
         let device_channel = config.channels();
@@ -527,6 +570,11 @@ mod cpal_impl {
         let stream = device.build_input_stream(
             &config.config(),
             move |data: &[T], _: &InputCallbackInfo| {
+                #[cfg(target_os = "macos")]
+                {
+                    (received_samples, received_signal) =
+                        log_capture_startup(data, received_samples, received_signal);
+                }
                 frame.process(convert_input_samples(data), |frame| {
                     if let Err(error) = processor.process(frame) {
                         log::error!("Failed to process captured audio frame: {error:#}");
@@ -536,7 +584,7 @@ mod cpal_impl {
             err_fn,
             timeout,
         )?;
-        Ok(stream)
+        Ok((stream, errors))
     }
 
     #[cfg(test)]

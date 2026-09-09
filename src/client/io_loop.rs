@@ -15,6 +15,16 @@ use crate::{
 // Restart msgbox text is kept as a legacy UI fallback; Flutter handles the type as a control event.
 const RESTART_REMOTE_DEVICE_NO_DATA_TIMEOUT: Duration = Duration::from_secs(5);
 const KCP_CLOSE_REASON_FLUSH_DELAY: Duration = Duration::from_millis(30);
+// Deadline for the parting close-reason send once the peer is presumed gone; KCP waits for send
+// capacity with no deadline of its own.
+const KCP_CLOSE_REASON_GONE_DEADLINE: Duration = Duration::from_millis(500);
+// Grace after ICE reports Disconnected, which it does ~5s after it stops hearing from the peer,
+// for ~8s in total. Disconnected is transient by design, so this waits out a Wi-Fi roam or a
+// sleep/wake rather than acting on the first hint.
+const WEBRTC_SUSPECT_GRACE: Duration = Duration::from_secs(3);
+// KCP gets no such hint, only how long since a packet arrived; its endpoint pings an idle peer
+// about every 2s, so this is several missed pings, and matches the 8s WebRTC arrives at.
+const KCP_PEER_SILENCE_LIMIT: Duration = Duration::from_secs(8);
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::try_empty_clipboard_files, clipboard_file::unix_file_clip};
 use base::{
@@ -247,6 +257,9 @@ impl<T: InvokeUiSession> Remote<T> {
 
                 let _keep_it = client::hc_connection(feedback, rendezvous_server, token).await;
                 let mut last_recv_time = Instant::now();
+                let mut webrtc_suspect_since: Option<Instant> = None;
+                let mut last_rx_progress = peer.rx_progress();
+                let mut peer_gone = false;
 
                 loop {
                     tokio::select! {
@@ -313,6 +326,37 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.msgbox("restarting-show", "Restarting remote device", "Connection in progress. Please wait.", "");
                                 break;
                             }
+                            let rx_progress = peer.rx_progress();
+                            // `None` for transports that report none, and it never changes for a
+                            // given one, so they are inert here.
+                            let progressed = rx_progress != last_rx_progress;
+                            last_rx_progress = rx_progress;
+                            if peer.webrtc_disconnected() && !progressed {
+                                webrtc_suspect_since.get_or_insert_with(Instant::now);
+                            } else {
+                                webrtc_suspect_since = None;
+                            }
+                            // Neither limit is a hard upper bound. A send is awaited inline in
+                            // this loop, so one in progress delays this tick - bounded on WebRTC
+                            // by the timeout the stream was built with, not bounded at all on
+                            // KCP. The 30s watchdog above shares the loop and the same delay.
+                            peer_gone = webrtc_suspect_since
+                                .map_or(false, |since| since.elapsed() >= WEBRTC_SUSPECT_GRACE)
+                                || kcp
+                                    .as_ref()
+                                    .and_then(|k| k.peer_silent_for())
+                                    .map_or(false, |silent| silent >= KCP_PEER_SILENCE_LIMIT);
+                            if peer_gone {
+                                log::info!("Peer stopped answering, reconnecting");
+                                #[cfg(feature = "flutter")]
+                                self.handler.msgbox("restarting-show", "Connecting...", "Connection in progress. Please wait.", "");
+                                // Sciter knows no `restarting-show` and would show a dialog that
+                                // waits for a click, where the timeout this arrives ahead of is
+                                // retryable and reconnects on its own. Keep that message for it.
+                                #[cfg(not(feature = "flutter"))]
+                                self.handler.msgbox("error", "Connection Error", "Timeout", "");
+                                break;
+                            }
                             let elapsed = fps_instant.elapsed().as_millis();
                             if elapsed < 1000 {
                                 continue;
@@ -358,6 +402,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     s.send(()).ok();
                 }
                 if kcp.is_some() {
+                    // Attempted rather than skipped even here: if the loss was one-way the peer
+                    // does get it, and drops its side instead of waiting out its own timeout.
+                    if peer_gone {
+                        peer.set_send_timeout(KCP_CLOSE_REASON_GONE_DEADLINE.as_millis() as u64);
+                    }
                     // Send the close reason if it hasn't been sent yet, as KCP cannot detect the socket close event.
                     self.send_close_reason(&mut peer, "kcp").await;
                     // KCP does not send messages immediately, so wait to ensure the last message is sent.

@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "ஒரு போர்ட் ஃபார்வேர்டிங்கின் அனைத்து இணைப்புகளும் மறுமுனைக்கான ஒரே இணைப்பின் வழியாகச் செல்லும், ஒவ்வொன்றுக்கும் மீண்டும் இணைந்து உள்நுழைவதற்குப் பதிலாக."),
         ("Enable WebRTC P2P connection", "WebRTC P2P இணைப்பு இயக்கு"),
         ("Enable TCP hole punching", "TCP hole punching இயக்கு"),
+        ("The screen sharing request was declined on the remote device", "தொலைநிலை சாதனத்தில் திரை பகிர்வு கோரிக்கை நிராகரிக்கப்பட்டது"),
+        ("The screen sharing request timed out on the remote device", "தொலைநிலை சாதனத்தில் திரை பகிர்வு கோரிக்கையின் நேரம் முடிந்தது"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk தொலைநிலை சாதனத்தின் டெஸ்க்டாப் அமர்வை அணுக முடியவில்லை, ஒரு அமர்வு இயங்குகிறதா என்பதையும் RustDesk அதைப் பயன்படுத்த முடியுமா என்பதையும் சரிபார்க்கவும்"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "தொலைநிலை சாதனத்தின் டெஸ்க்டாப் போர்ட்டலில் திரை பகிர்வுக்கோ தொலை கட்டுப்பாட்டுக்கோ தேவையான திறன் இல்லை, அதன் பின்தளம் நிறுவப்படாமல் இருக்கலாம்"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "தொலைநிலை சாதனத்தில் திரை பகிர்வு அனுமதிக்கப்பட்டது, ஆனால் PipeWire இணைப்பைத் திறக்க முடியவில்லை"),
+        ("The screen sharing request ended without completing on the remote device", "தொலைநிலை சாதனத்தில் திரை பகிர்வு கோரிக்கை நிறைவடையாமல் முடிந்தது"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "XDG Desktop Portal-லிருந்து பயன்படுத்தக்கூடிய திரையை RustDesk பெற முடியவில்லை, PipeWire நூலகம் மிகவும் பழையதாக இருக்கலாம்"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "திரைப் பதிவுக்குத் தேவையான GStreamer கூறை RustDesk ஏற்ற முடியவில்லை ({})"),
     ].iter().cloned().collect();
 }

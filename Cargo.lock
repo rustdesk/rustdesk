@@ -1717,7 +1717,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#41c8a2a75903ffe9cd44cf176ce6b69e5d916d47"
+source = "git+https://github.com/rustdesk-org/cpal?branch=osx-screencapturekit#69ad2578adc9200093fc81cdfbdad63dbc4274f9"
 dependencies = [
  "alsa",
  "cidre",
@@ -4280,7 +4280,7 @@ dependencies = [
 [[package]]
 name = "kcp-sys"
 version = "0.1.0"
-source = "git+https://github.com/rustdesk-org/kcp-sys?branch=rustdesk-patches#023a0065398968989f2ddfcf5cc72bb886d02675"
+source = "git+https://github.com/rustdesk-org/kcp-sys?branch=rustdesk-patches#938eda3e5e9757a612385503af7a6cb1189b2cdd"
 dependencies = [
  "anyhow",
  "auto_impl",

@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Të gjitha lidhjet e një përcjelljeje portesh kalojnë përmes një lidhjeje të vetme me kompjuterin tjetër, në vend që të lidhet dhe të hyjë sërish për secilën prej tyre."),
         ("Enable WebRTC P2P connection", "Aktivizo lidhjen WebRTC P2P"),
         ("Enable TCP hole punching", "Aktivizo TCP hole punching"),
+        ("The screen sharing request was declined on the remote device", "Kërkesa për ndarjen e ekranit u refuzua në pajisjen e largët"),
+        ("The screen sharing request timed out on the remote device", "Kërkesa për ndarjen e ekranit skadoi në pajisjen e largët"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk nuk mund të arrijë sesionin e desktopit në pajisjen e largët, kontrolloni që një sesion desktopi po funksionon dhe që RustDesk mund ta përdorë"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Portalit të desktopit në pajisjen e largët i mungon një aftësi e nevojshme për ndarjen e ekranit ose kontrollin në distancë, backend-i i tij mund të mos jetë i instaluar"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Ndarja e ekranit u miratua në pajisjen e largët, por lidhja PipeWire nuk mund të hapej"),
+        ("The screen sharing request ended without completing on the remote device", "Kërkesa për ndarjen e ekranit në pajisjen e largët përfundoi pa u kryer"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nuk mori një ekran të përdorshëm nga XDG Desktop Portal, biblioteka PipeWire mund të jetë shumë e vjetër"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nuk mundi të ngarkojë një komponent të GStreamer të nevojshëm për regjistrimin e ekranit ({})"),
     ].iter().cloned().collect();
 }

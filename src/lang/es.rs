@@ -770,5 +770,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Llevar todas las conexiones de una redirección de puertos por una única conexión con el otro equipo, en lugar de conectar e iniciar sesión de nuevo para cada una."),
         ("Enable WebRTC P2P connection", "Habilitar conexión WebRTC P2P"),
         ("Enable TCP hole punching", "Habilitar perforación de agujero TCP"),
+        ("The screen sharing request was declined on the remote device", "La solicitud de compartir pantalla fue rechazada en el dispositivo remoto"),
+        ("The screen sharing request timed out on the remote device", "La solicitud de compartir pantalla ha agotado el tiempo de espera en el dispositivo remoto"),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", "RustDesk no puede acceder a la sesión de escritorio del dispositivo remoto; compruebe que hay una sesión en marcha y que RustDesk puede usarla"),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", "Al portal de escritorio del dispositivo remoto le falta una función necesaria para compartir la pantalla o para el control remoto; puede que no tenga instalada su implementación"),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", "Se aprobó compartir la pantalla en el dispositivo remoto, pero no se pudo abrir la conexión PipeWire"),
+        ("The screen sharing request ended without completing on the remote device", "La solicitud de compartir pantalla en el dispositivo remoto terminó sin completarse"),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk no ha podido obtener una pantalla utilizable del XDG Desktop Portal; la biblioteca PipeWire puede ser demasiado antigua"),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk no ha podido cargar un componente de GStreamer necesario para capturar la pantalla ({})"),
     ].iter().cloned().collect();
 }
