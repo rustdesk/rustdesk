@@ -1410,8 +1410,8 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    double x = (m.x - hotx) * c.scale + cx;
-    double y = (m.y - hoty) * c.scale + cy;
+    double x = m.x * c.scale + cx - hotx;
+    double y = m.y * c.scale + cy - hoty;
     double scale = 1.0;
     final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
     if (zoomCursor.value || isViewOriginal) {
