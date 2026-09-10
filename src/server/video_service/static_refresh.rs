@@ -84,6 +84,7 @@ impl<'a> StaticRefresh<'a> {
             || self.repeat_failures >= 3
             || self.repeat_counter >= 100
             || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
+            || (self.repeat_counter == 0 && self.last_encode.elapsed() < Duration::from_millis(200))
         {
             return Ok(());
         }
@@ -256,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn recent_encodes_and_qos_limit_refresh_rate() {
+    fn initial_delay_repeat_interval_and_qos_limit_refresh_rate() {
         let sp = GenericService::new("static-refresh-test".to_owned(), false);
         let recorder = Arc::new(Mutex::new(None));
         let mut refresh = StaticRefresh::new(
@@ -274,15 +275,37 @@ mod tests {
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 0);
 
+        refresh.last_encode = Instant::now() - Duration::from_millis(150);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
+        assert_eq!(calls.get(), 0);
+
+        refresh.last_encode = Instant::now() - Duration::from_millis(200);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
+        assert_eq!(calls.get(), 1);
+
+        refresh.last_encode = Instant::now() - Duration::from_millis(50);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
+        assert_eq!(calls.get(), 1);
+
+        refresh.last_encode = Instant::now() - Duration::from_millis(100);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
+        assert_eq!(calls.get(), 2);
+
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        refresh.last_encode = Instant::now() - Duration::from_millis(150);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
+        assert_eq!(calls.get(), 2);
+
         refresh.last_encode = Instant::now() - Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 0);
+        assert_eq!(calls.get(), 2);
 
         refresh.last_encode = Instant::now() - Duration::from_secs(3);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 1);
+        assert_eq!(calls.get(), 3);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 1);
+        assert_eq!(calls.get(), 3);
     }
 
     #[test]
