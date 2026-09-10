@@ -22,6 +22,7 @@ use hbb_common::{
     futures_util::future::poll_fn,
     get_version_number, log,
     protobuf::{Enum, Message as _},
+    proxy::fallback,
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -36,7 +37,9 @@ use hbb_common::{
 };
 
 use crate::{
-    hbbs_http::{create_http_client_async, get_url_for_tls},
+    hbbs_http::{
+        create_http_client_async_with_proxy_fallback as create_http_client_async, get_url_for_tls,
+    },
     ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
 };
 
@@ -1009,12 +1012,12 @@ pub fn check_software_update() {
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
-    let proxy_conf = Config::get_socks();
+    let proxy_conf = fallback::get_socks().await;
     let tls_url = get_url_for_tls(&url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let is_tls_not_cached = tls_type.is_none();
     let tls_type = tls_type.unwrap_or(TlsType::Rustls);
-    let client = create_http_client_async(tls_type, false);
+    let client = create_http_client_async(tls_type, false).await;
     let latest_release_response = match client.post(&url).json(&request).send().await {
         Ok(resp) => {
             upsert_tls_cache(tls_url, tls_type, false);
@@ -1023,7 +1026,7 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
         Err(err) => {
             if is_tls_not_cached && err.is_request() {
                 let tls_type = TlsType::NativeTls;
-                let client = create_http_client_async(tls_type, false);
+                let client = create_http_client_async(tls_type, false).await;
                 let resp = client.post(&url).json(&request).send().await?;
                 upsert_tls_cache(tls_url, tls_type, false);
                 resp
@@ -1406,7 +1409,7 @@ fn parse_json_header_entries(header: &str) -> ResultType<Vec<HeaderEntry>> {
 
 /// Returns (status_code, body_text). Separating status so the wrapper can decide on fallback.
 async fn post_request_http(url: &str, body: &str, header: &str) -> ResultType<(u16, String)> {
-    let proxy_conf = Config::get_socks();
+    let proxy_conf = fallback::get_socks().await;
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);
@@ -1550,6 +1553,7 @@ async fn post_request_(
         tls_type.unwrap_or(TlsType::Rustls),
         danger_accept_invalid_cert.unwrap_or(false),
     )
+    .await
     .post(url);
     if !header.is_empty() {
         let tmp: Vec<&str> = header.split(": ").collect();
@@ -1640,7 +1644,8 @@ async fn get_http_response_async(
     let http_client = create_http_client_async(
         tls_type.unwrap_or(TlsType::Rustls),
         danger_accept_invalid_cert.unwrap_or(false),
-    );
+    )
+    .await;
     let normalized_method = method.to_ascii_lowercase();
     let mut http_client = match normalized_method.as_str() {
         "get" => http_client.get(url),
@@ -1738,7 +1743,7 @@ async fn http_request_http(
     body: Option<String>,
     header: &str,
 ) -> ResultType<(u16, String)> {
-    let proxy_conf = Config::get_socks();
+    let proxy_conf = fallback::get_socks().await;
     let tls_url = get_url_for_tls(url, &proxy_conf);
     let tls_type = get_cached_tls_type(tls_url);
     let danger_accept_invalid_cert = get_cached_tls_accept_invalid_cert(tls_url);

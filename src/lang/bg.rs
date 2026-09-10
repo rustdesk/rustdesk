@@ -778,5 +778,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "Заявката за споделяне на екрана на отдалеченото устройство приключи, без да бъде изпълнена"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk не можа да получи използваем екран от XDG Desktop Portal, библиотеката PipeWire може да е твърде стара"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk не можа да зареди компонент на GStreamer, необходим за заснемане на екрана ({})"),
+        ("Connect directly when the proxy is unreachable", ""),
     ].iter().cloned().collect();
 }
