@@ -175,13 +175,10 @@ pub fn is_screen_capture_kit_available() -> bool {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[path = "audio_capture.rs"]
 mod audio_capture;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[path = "audio_capture_error.rs"]
 mod audio_capture_error;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[path = "audio_capture_queue.rs"]
 mod audio_capture_queue;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -266,8 +263,8 @@ mod cpal_impl {
     pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
         if let Some(stream) = &state.stream {
             if stream.errors.needs_restart() {
-                // Recreate on the service thread, outside the backend's error callback.
-                log::warn!("Recreating interrupted audio capture stream");
+                // Recreate on the service thread, outside the capture callbacks.
+                log::warn!("Recreating audio capture stream after an error");
                 super::restart();
             }
         }
@@ -552,6 +549,7 @@ mod cpal_impl {
         let errors = CaptureErrorHandler::default();
         let callback_errors = errors.clone();
         let err_fn = move |err| callback_errors.handle(err);
+        let processor_errors = errors.clone();
         #[cfg(target_os = "macos")]
         let (mut received_samples, mut received_signal) = (false, false);
         let sample_rate_0 = config.sample_rate().0;
@@ -570,15 +568,16 @@ mod cpal_impl {
         let stream = device.build_input_stream(
             &config.config(),
             move |data: &[T], _: &InputCallbackInfo| {
+                if processor_errors.needs_restart() {
+                    return;
+                }
                 #[cfg(target_os = "macos")]
                 {
                     (received_samples, received_signal) =
                         log_capture_startup(data, received_samples, received_signal);
                 }
                 frame.process(convert_input_samples(data), |frame| {
-                    if let Err(error) = processor.process(frame) {
-                        log::error!("Failed to process captured audio frame: {error:#}");
-                    }
+                    processor_errors.process_frame(|| processor.process(frame));
                 });
             },
             err_fn,
@@ -712,6 +711,7 @@ mod cpal_impl {
             };
             let (sender, worker) = start_capture_encoder(encoder_config, service).unwrap();
             let mut processor = CaptureFrameProcessor::new(config, sender).unwrap();
+            let errors = super::CaptureErrorHandler::default();
             let input = vec![
                 INPUT_LEVEL;
                 config.input_rate as usize / super::AUDIO_PACKETS_PER_SECOND
@@ -721,13 +721,14 @@ mod cpal_impl {
                 super::audio_capture::CaptureFrameBuffer::new(input.len()).unwrap();
 
             frame_buffer.process(convert_input_samples(&input), |frame| {
-                processor.process(frame).unwrap();
+                errors.process_frame(|| processor.process(frame));
             });
             assert_no_allocations(|| {
                 frame_buffer.process(convert_input_samples(&input), |frame| {
-                    processor.process(frame).unwrap();
+                    errors.process_frame(|| processor.process(frame));
                 });
             });
+            assert!(!errors.needs_restart());
             drop(processor);
             drop(worker);
         }

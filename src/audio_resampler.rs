@@ -1,11 +1,9 @@
 use hbb_common::thiserror;
 
 #[cfg(test)]
-#[path = "audio_allocation_tests.rs"]
 pub(crate) mod allocation_tests;
 
 #[cfg(all(feature = "use_samplerate", not(feature = "use_dasp")))]
-#[path = "audio_resampler_sinc.rs"]
 mod sinc;
 
 const INTERPOLATION_MARGIN_FRAMES: usize = 2;
@@ -238,9 +236,7 @@ fn validate_input(input: &[f32], channels: usize) -> Result<(), AudioResamplerEr
 }
 
 #[cfg(all(test, not(all(feature = "use_samplerate", not(feature = "use_dasp")))))]
-#[path = "audio_resampler_tests.rs"]
 mod tests;
 
 #[cfg(all(test, feature = "use_samplerate", not(feature = "use_dasp")))]
-#[path = "audio_samplerate_tests.rs"]
 mod samplerate_tests;
