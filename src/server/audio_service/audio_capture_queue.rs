@@ -8,13 +8,18 @@ use std::{
     collections::VecDeque,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex, OnceLock, TryLockError,
+        Arc, Mutex, TryLockError,
     },
-    thread::{JoinHandle, Thread},
+    thread::JoinHandle,
 };
+#[cfg(not(target_os = "windows"))]
+use std::{sync::OnceLock, thread::Thread};
 
 #[path = "audio_capture_encoder.rs"]
 mod encoder;
+#[cfg(target_os = "windows")]
+#[path = "audio_capture_wake.rs"]
+mod wake;
 
 const CAPTURE_PCM_QUEUE_PACKETS: usize = 10;
 const CAPTURE_ENCODER_THREAD_NAME: &str = "audio-encoder";
@@ -59,7 +64,10 @@ impl CapturePcmStats {
 
 struct CapturePcmHandoff {
     buffers: Mutex<CapturePcmBuffers>,
+    #[cfg(not(target_os = "windows"))]
     wake_thread: OnceLock<Thread>,
+    #[cfg(target_os = "windows")]
+    wake: wake::CaptureWake,
     other_dropped: AtomicUsize,
     contention_dropped: AtomicUsize,
     oversized: AtomicUsize,
@@ -91,18 +99,8 @@ pub(super) struct CaptureEncoderConfig {
 pub(super) struct CaptureEncoderWorker {
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
-}
-
-impl Drop for CaptureEncoderWorker {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if let Some(handle) = self.handle.take() {
-            handle.thread().unpark();
-            if let Err(error) = handle.join() {
-                log::error!("Failed to join audio encoder thread: {error:?}");
-            }
-        }
-    }
+    #[cfg(target_os = "windows")]
+    handoff: Arc<CapturePcmHandoff>,
 }
 
 struct CaptureEncoderContext {
@@ -124,7 +122,10 @@ pub(super) fn new_pcm_handoff(
             available: Vec::with_capacity(capacity),
             ready: VecDeque::with_capacity(capacity),
         }),
+        #[cfg(not(target_os = "windows"))]
         wake_thread: OnceLock::new(),
+        #[cfg(target_os = "windows")]
+        wake: wake::CaptureWake::new().context("Failed to create audio capture notification")?,
         other_dropped: AtomicUsize::new(0),
         contention_dropped: AtomicUsize::new(0),
         oversized: AtomicUsize::new(0),
@@ -149,6 +150,7 @@ pub(super) fn new_pcm_handoff(
 }
 
 impl CapturePcmSender {
+    #[cfg(not(target_os = "windows"))]
     pub(super) fn set_wake_thread(&self, thread: Thread) -> Result<()> {
         if self.handoff.wake_thread.set(thread).is_err() {
             bail!("Audio capture PCM wake thread is already configured");
@@ -207,6 +209,7 @@ impl CapturePcmSender {
         })
     }
 
+    #[cfg(not(target_os = "windows"))]
     fn wake(&self) {
         if let Some(thread) = self.handoff.wake_thread.get() {
             thread.unpark();
@@ -275,11 +278,15 @@ pub(super) fn start_capture_encoder(
         .name(CAPTURE_ENCODER_THREAD_NAME.to_owned())
         .spawn(move || encoder::run_capture_encoder(context, config))
         .with_context(|| "Failed to start audio encoder thread")?;
+    #[cfg(not(target_os = "windows"))]
     let wake_thread = handle.thread().clone();
     let worker = CaptureEncoderWorker {
         stop,
         handle: Some(handle),
+        #[cfg(target_os = "windows")]
+        handoff: sender.handoff.clone(),
     };
+    #[cfg(not(target_os = "windows"))]
     sender.set_wake_thread(wake_thread)?;
     Ok((sender, worker))
 }

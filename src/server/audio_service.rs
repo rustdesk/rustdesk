@@ -660,6 +660,7 @@ mod cpal_impl {
             const OVERSIZED: [f32; OVERSIZED_SAMPLES] = [1.0; OVERSIZED_SAMPLES];
 
             let (mut sender, receiver) = new_pcm_handoff(QUEUE_CAPACITY, PACKET_SAMPLES).unwrap();
+            #[cfg(not(target_os = "windows"))]
             sender.set_wake_thread(std::thread::current()).unwrap();
             assert_no_allocations(|| {
                 sender.submit(&FIRST);

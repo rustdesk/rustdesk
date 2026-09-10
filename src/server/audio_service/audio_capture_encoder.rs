@@ -1,7 +1,7 @@
 use super::super::AudioEncoder;
 use super::{
-    send_f32, CaptureEncoderConfig, CaptureEncoderContext, CapturePcmReceiver, CapturePcmStats,
-    CAPTURE_PCM_QUEUE_PACKETS,
+    send_f32, CaptureEncoderConfig, CaptureEncoderContext, CaptureEncoderWorker,
+    CapturePcmReceiver, CapturePcmStats, CAPTURE_PCM_QUEUE_PACKETS,
 };
 use hbb_common::log;
 use magnum_opus::Channels;
@@ -15,6 +15,21 @@ const CAPTURE_PACKET_MS: usize = 10;
 const MILLISECONDS_PER_SECOND: usize = 1_000;
 const MAX_ENCODE_CHANNELS: usize = Channels::Stereo as usize;
 const CAPTURE_STATS_LOG_INTERVAL: Duration = Duration::from_secs(5);
+
+impl Drop for CaptureEncoderWorker {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            #[cfg(not(target_os = "windows"))]
+            handle.thread().unpark();
+            #[cfg(target_os = "windows")]
+            self.handoff.notify();
+            if let Err(error) = handle.join() {
+                log::error!("Failed to join audio encoder thread: {error:?}");
+            }
+        }
+    }
+}
 
 struct CaptureEncoderState {
     channels: usize,
@@ -119,6 +134,18 @@ pub(super) fn run_capture_encoder(context: CaptureEncoderContext, config: Captur
             state.reporter.report(true);
             return;
         }
+        #[cfg(target_os = "windows")]
+        if let Err(error) = context
+            .receiver
+            .handoff
+            .wake
+            .wait(CAPTURE_STATS_LOG_INTERVAL)
+        {
+            log::error!("Failed to wait for captured audio: {error}");
+            super::super::restart();
+            return;
+        }
+        #[cfg(not(target_os = "windows"))]
         std::thread::park_timeout(CAPTURE_STATS_LOG_INTERVAL);
     }
 }
