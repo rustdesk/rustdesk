@@ -18,6 +18,14 @@ lazy_static! {
     static ref DOWNLOADERS: Mutex<HashMap<String, Downloader>> = Default::default();
 }
 
+fn schedule_auto_delete(id: String, dur: Duration) {
+    // Keep the cleanup alive after do_download's temporary Tokio runtime is dropped.
+    std::thread::spawn(move || {
+        std::thread::sleep(dur);
+        DOWNLOADERS.lock().unwrap().remove(&id);
+    });
+}
+
 /// This struct is used to return the download data to the caller.
 /// The caller should check if the file is downloaded successfully and remove the job from the map.
 /// If the file is not downloaded successfully, the `data` field will be empty.
@@ -260,12 +268,8 @@ async fn do_download(
         downloader.finished = true;
     }
     if is_all_downloaded {
-        let id_del = id.to_string();
         if let Some(dur) = auto_del_dur {
-            tokio::spawn(async move {
-                tokio::time::sleep(dur).await;
-                DOWNLOADERS.lock().unwrap().remove(&id_del);
-            });
+            schedule_auto_delete(id.to_string(), dur);
         }
     }
     Ok(is_all_downloaded)
@@ -306,4 +310,50 @@ pub fn cancel(id: &str) {
 
 pub fn remove(id: &str) {
     let _ = DOWNLOADERS.lock().unwrap().remove(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{schedule_auto_delete, Downloader, DOWNLOADERS};
+    use hbb_common::tokio::{runtime::Builder, sync::mpsc::unbounded_channel};
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn auto_delete_outlives_download_runtime() {
+        let id = format!(
+            "auto-delete-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let (tx_cancel, _) = unbounded_channel();
+        DOWNLOADERS.lock().unwrap().insert(
+            id.clone(),
+            Downloader {
+                data: Vec::new(),
+                path: None,
+                total_size: Some(0),
+                downloaded_size: 0,
+                error: None,
+                finished: true,
+                tx_cancel,
+            },
+        );
+
+        Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap()
+            .block_on(async {
+                schedule_auto_delete(id.clone(), Duration::from_millis(10));
+            });
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while DOWNLOADERS.lock().unwrap().contains_key(&id) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!DOWNLOADERS.lock().unwrap().contains_key(&id));
+    }
 }
