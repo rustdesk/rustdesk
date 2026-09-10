@@ -22,6 +22,7 @@ const CAPTURE_ENCODER_THREAD_NAME: &str = "audio-encoder";
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct CapturePcmLoss {
     pub(super) dropped: usize,
+    pub(super) contention_dropped: usize,
     pub(super) oversized: usize,
     pub(super) recycle_failures: usize,
 }
@@ -33,6 +34,7 @@ impl CapturePcmLoss {
 
     pub(super) fn add(&mut self, other: Self) {
         self.dropped += other.dropped;
+        self.contention_dropped += other.contention_dropped;
         self.oversized += other.oversized;
         self.recycle_failures += other.recycle_failures;
     }
@@ -58,7 +60,8 @@ impl CapturePcmStats {
 struct CapturePcmHandoff {
     buffers: Mutex<CapturePcmBuffers>,
     wake_thread: OnceLock<Thread>,
-    dropped: AtomicUsize,
+    other_dropped: AtomicUsize,
+    contention_dropped: AtomicUsize,
     oversized: AtomicUsize,
     recycle_failures: AtomicUsize,
     max_queued_packets: AtomicUsize,
@@ -122,7 +125,8 @@ pub(super) fn new_pcm_handoff(
             ready: VecDeque::with_capacity(capacity),
         }),
         wake_thread: OnceLock::new(),
-        dropped: AtomicUsize::new(0),
+        other_dropped: AtomicUsize::new(0),
+        contention_dropped: AtomicUsize::new(0),
         oversized: AtomicUsize::new(0),
         recycle_failures: AtomicUsize::new(0),
         max_queued_packets: AtomicUsize::new(0),
@@ -160,14 +164,21 @@ impl CapturePcmSender {
             self.wake();
             return;
         }
-        // Reject this packet on contention; never wait for the encoder to release the handoff.
+        // Do not wait for a descheduled worker. Contention rejects the current
+        // packet even if buffers are available; this is separate from drop-oldest
+        // when the buffer pool is exhausted.
         let mut buffers = match self.handoff.buffers.try_lock() {
             Ok(buffers) => buffers,
-            Err(error) => {
-                self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
-                if let TryLockError::Poisoned(error) = error {
-                    log::error!("Audio capture PCM handoff is poisoned: {error}");
-                }
+            Err(TryLockError::WouldBlock) => {
+                self.handoff
+                    .contention_dropped
+                    .fetch_add(1, Ordering::Relaxed);
+                self.wake();
+                return;
+            }
+            Err(TryLockError::Poisoned(error)) => {
+                self.handoff.other_dropped.fetch_add(1, Ordering::Relaxed);
+                log::error!("Audio capture PCM handoff is poisoned: {error}");
                 self.wake();
                 return;
             }
@@ -180,7 +191,7 @@ impl CapturePcmSender {
                 .max_queued_packets
                 .fetch_max(buffers.ready.len(), Ordering::Relaxed);
         } else {
-            self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
+            self.handoff.other_dropped.fetch_add(1, Ordering::Relaxed);
         }
         drop(buffers);
         self.wake();
@@ -190,7 +201,7 @@ impl CapturePcmSender {
         buffers.available.pop().or_else(|| {
             let buffer = buffers.ready.pop_front().map(|(_, buffer)| buffer);
             if buffer.is_some() {
-                self.handoff.dropped.fetch_add(1, Ordering::Relaxed);
+                self.handoff.other_dropped.fetch_add(1, Ordering::Relaxed);
             }
             buffer
         })
@@ -230,8 +241,10 @@ impl CapturePcmReceiver {
     }
 
     pub(super) fn take_loss(&self) -> CapturePcmLoss {
+        let contention_dropped = self.handoff.contention_dropped.swap(0, Ordering::Relaxed);
         CapturePcmLoss {
-            dropped: self.handoff.dropped.swap(0, Ordering::Relaxed),
+            dropped: self.handoff.other_dropped.swap(0, Ordering::Relaxed) + contention_dropped,
+            contention_dropped,
             oversized: self.handoff.oversized.swap(0, Ordering::Relaxed),
             recycle_failures: self.handoff.recycle_failures.swap(0, Ordering::Relaxed),
         }

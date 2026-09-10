@@ -95,8 +95,9 @@ impl CaptureStatsReporter {
         );
         if !stats.loss.is_empty() {
             log::warn!(
-                "Audio capture PCM handoff loss: dropped={}, oversized={}, recycle_failures={}",
+                "Audio capture PCM handoff loss: dropped={}, contention_dropped={}, oversized={}, recycle_failures={}",
                 stats.loss.dropped,
+                stats.loss.contention_dropped,
                 stats.loss.oversized,
                 stats.loss.recycle_failures
             );

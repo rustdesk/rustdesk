@@ -78,6 +78,7 @@ fn assert_callback_progress(point: PausePoint) {
         receiver.take_loss(),
         CapturePcmLoss {
             dropped: 1,
+            contention_dropped: 1,
             ..Default::default()
         }
     );

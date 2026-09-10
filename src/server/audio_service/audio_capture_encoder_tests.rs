@@ -44,6 +44,7 @@ fn encoded_audio(dropped: usize, channels: Channels) -> Vec<f32> {
             let stats = receiver.take_stats();
             assert_eq!(stats.max_queued_packets, CAPTURE_PCM_QUEUE_PACKETS);
             assert_eq!(stats.loss.dropped, dropped);
+            assert_eq!(stats.loss.contention_dropped, 0);
             assert_eq!(stats.loss.oversized, 0);
             assert_eq!(stats.loss.recycle_failures, 0);
         }
