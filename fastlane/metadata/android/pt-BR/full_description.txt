@@ -6,6 +6,6 @@ Para que um dispositivo remoto controle seu Android via mouse ou toque, você pr
 
 Além do controle remoto, você também pode transferir arquivos entre dispositivos Android e PCs com facilidade usando o RustDesk.
 
-Você tem controle total dos seus dados, sem preocupações com segurança. Você pode usar nosso servidor rendezvous/relay, optar pela auto-hospedagem, ou escrever seu próprio servidor rendezvous/relay. O servidor auto-hospedado é gratuito e open source: https://github.com/rustdesk/rustdesk-server
+Você tem controle total dos seus dados, sem preocupações com segurança. Você pode usar nosso servidor rendezvous/relay, optar pela auto-hospedagem ou criar seu próprio servidor de rendezvous/relay. O servidor auto-hospedado é gratuito e open source: https://github.com/rustdesk/rustdesk-server
 
 Baixe e instale a versão desktop em: https://rustdesk.com — então você pode acessar e controlar seu desktop pelo celular, ou controlar seu celular pelo desktop.
