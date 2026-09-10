@@ -146,6 +146,17 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
         }
     }
     if lang.is_empty() {
+        // pt_PT on Linux, pt-PT on mac, pt_PT on Android
+        if locale.starts_with("pt") {
+            lang = (if locale.contains("pt") {
+                "pt-pt"
+            } else {
+                "pt-br"
+            })
+            .to_owned();
+        }
+    }
+    if lang.is_empty() {
         lang = locale
             .split("-")
             .next()
