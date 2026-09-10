@@ -2879,9 +2879,21 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
+  bool get _usesLogicalCursorPixels => isLinux || isMacOS;
+  int get scaledWidth => _scaledDimension(width, scale);
+  int get scaledHeight => _scaledDimension(height, scale);
+
+  int _scaledDimension(int dimension, double scale) {
+    const minBitmapSize = 1;
+    final pixels = dimension * scale;
+    return _usesLogicalCursorPixels
+        ? max(minBitmapSize, pixels.round())
+        : pixels.toInt();
+  }
+
   double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (scale != 1.0) {
+    if (!_usesLogicalCursorPixels && scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
       final tgtHeight = (height * scale).toInt();
@@ -2907,8 +2919,8 @@ class CursorData {
           img2.encodePng(
             img2.copyResize(
               image,
-              width: (width * scale).toInt(),
-              height: (height * scale).toInt(),
+              width: _scaledDimension(width, scale),
+              height: _scaledDimension(height, scale),
               interpolation: img2.Interpolation.average,
             ),
           ),
@@ -2917,8 +2929,8 @@ class CursorData {
     }
 
     this.scale = scale;
-    hotx = hotxOrigin * scale;
-    hoty = hotyOrigin * scale;
+    hotx = hotxOrigin * (_usesLogicalCursorPixels ? scaledWidth / width : scale);
+    hoty = hotyOrigin * (_usesLogicalCursorPixels ? scaledHeight / height : scale);
     return scale;
   }
 
