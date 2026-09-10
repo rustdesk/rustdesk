@@ -28,11 +28,17 @@ class AudioInput extends StatelessWidget {
   }
 
   static Future<String> getDefaultForHost() async {
-    final audioHost = await bind.mainGetOption(key: 'audio-host');
+    final audioHost = await getEffectiveHost();
     if (bind.mainAudioSupportLoopback() && audioHost.isEmpty) {
       return getDefault();
     }
     return '';
+  }
+
+  static Future<String> getEffectiveHost() async {
+    final configured = await bind.mainGetOption(key: 'audio-host');
+    final hosts = (await bind.mainGetAudioHosts()).toList();
+    return configured.isNotEmpty && hosts.contains(configured) ? configured : '';
   }
 
   static Future<String> getAudioInput(bool isCm, bool isVoiceCall) {
@@ -70,7 +76,7 @@ class AudioInput extends StatelessWidget {
   static Future<Map<String, Object>> getDevicesInfo(
       bool isCm, bool isVoiceCall) async {
     List<String> devices = (await bind.mainGetSoundInputs()).toList();
-    final audioHost = await bind.mainGetOption(key: 'audio-host');
+    final audioHost = await getEffectiveHost();
     if (bind.mainAudioSupportLoopback() && audioHost.isEmpty) {
       devices.insert(0, translate(_kSystemSound));
     }
@@ -105,7 +111,7 @@ class AudioHost extends StatelessWidget {
   static Future<Map<String, Object>> getHostsInfo() async {
     final hosts = (await bind.mainGetAudioHosts()).toList();
     final configured = await bind.mainGetOption(key: 'audio-host');
-    final current = configured.isEmpty ? 'wasapi' : configured;
+    final current = hosts.contains(configured) ? configured : 'wasapi';
     return {'hosts': hosts, 'current': current};
   }
 

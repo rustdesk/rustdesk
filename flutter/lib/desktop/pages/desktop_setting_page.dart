@@ -771,7 +771,7 @@ class _GeneralState extends State<_General> {
           setState(() {});
         },
       ).marginOnly(left: _kContentHMargin);
-      return _Card(title: 'Audio Host', children: [child]);
+      return _Card(title: translate('Audio host'), children: [child]);
     }
 
     return AudioHost(builder: builder);

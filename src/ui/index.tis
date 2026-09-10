@@ -152,6 +152,11 @@ var myIdMenu;
 var audioInputMenu;
 var audioHostMenu;
 
+function audio_host_is_asio() {
+    var hosts = handler.get_audio_hosts();
+    return hosts.length > 1 && handler.get_option("audio-host") == "asio";
+}
+
 class AudioHosts: Reactor.Component {
     function this() {
         audioHostMenu = this;
@@ -162,7 +167,7 @@ class AudioHosts: Reactor.Component {
         if (hosts.length < 2) return <li style="display:hidden" />;
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Audio Host')}
+        return <li>{translate('Audio host')}
             <menu #audio-host key={hosts.length}>
                 {hosts.map(function(name) {
                 var label = name == "asio" ? "ASIO" : "WASAPI";
@@ -200,7 +205,7 @@ class AudioInputs: Reactor.Component {
     function render() {
         if (!this.show) return <li />;
         var inputs = handler.get_sound_inputs();
-        if (is_win && handler.get_option("audio-host") != "asio") {
+        if (is_win && !audio_host_is_asio()) {
             inputs = ["System Sound"].concat(inputs);
         }
         if (!inputs.length) return <li style="display:hidden" />;
@@ -218,7 +223,7 @@ class AudioInputs: Reactor.Component {
     }
 
     function get_default() {
-        if (is_win && handler.get_option("audio-host") != "asio") return "System Sound";
+        if (is_win && !audio_host_is_asio()) return "System Sound";
         return "";
     }
 
