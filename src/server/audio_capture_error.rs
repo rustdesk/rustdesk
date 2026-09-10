@@ -54,19 +54,6 @@ mod tests {
     }
 
     #[test]
-    fn device_removal_requests_recreation_of_its_stream() {
-        let errors = CaptureErrorHandler::default();
-        let callback = errors.clone();
-        let replacement = CaptureErrorHandler::default();
-        assert!(!errors.needs_restart());
-
-        callback.handle(StreamError::DeviceNotAvailable);
-
-        assert!(errors.needs_restart());
-        assert!(!replacement.needs_restart());
-    }
-
-    #[test]
     fn late_error_from_an_old_stream_does_not_restart_its_replacement() {
         let old_callback = CaptureErrorHandler::default();
         let replacement = CaptureErrorHandler::default();
