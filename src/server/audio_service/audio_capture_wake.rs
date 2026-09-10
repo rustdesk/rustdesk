@@ -1,13 +1,12 @@
 use std::{
     io,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
-    time::Duration,
 };
 use winapi::{
     shared::{minwindef::FALSE, winerror::WAIT_TIMEOUT},
     um::{
         synchapi::{CreateEventW, SetEvent, WaitForSingleObject},
-        winbase::{INFINITE, WAIT_FAILED, WAIT_OBJECT_0},
+        winbase::{WAIT_FAILED, WAIT_OBJECT_0},
     },
 };
 
@@ -36,16 +35,7 @@ impl CaptureWake {
         Ok(())
     }
 
-    pub(super) fn wait(&self, timeout: Duration) -> io::Result<()> {
-        let milliseconds = u32::try_from(timeout.as_millis())
-            .ok()
-            .filter(|milliseconds| *milliseconds != INFINITE)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Audio capture wait timeout is too large",
-                )
-            })?;
+    pub(super) fn wait(&self, milliseconds: u32) -> io::Result<()> {
         match unsafe { WaitForSingleObject(self.event.as_raw_handle() as _, milliseconds) } {
             WAIT_OBJECT_0 | WAIT_TIMEOUT => Ok(()),
             WAIT_FAILED => Err(io::Error::last_os_error()),
@@ -76,9 +66,12 @@ mod tests {
     use super::super::{new_pcm_handoff, CaptureEncoderWorker};
     use super::*;
     use crate::audio_resampler::allocation_tests::assert_no_allocations;
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+    use std::{
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            mpsc, Arc,
+        },
+        time::Duration,
     };
 
     const PACKET_SAMPLES: usize = 4;
@@ -95,74 +88,47 @@ mod tests {
         Contended,
     }
 
-    fn assert_notification_before_native_wait(submission: Submission) {
-        let (mut sender, receiver) = new_pcm_handoff(HANDOFF_CAPACITY, PACKET_SAMPLES).unwrap();
-        let (entered_tx, entered_rx) = mpsc::channel();
-        let (resume_tx, resume_rx) = mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            assert!(receiver.is_empty());
-            let held = matches!(submission, Submission::Contended)
-                .then(|| receiver.handoff.buffers.lock().unwrap());
-            entered_tx.send(()).unwrap();
-            resume_rx.recv().unwrap();
-            drop(held);
-            unsafe { WaitForSingleObject(receiver.handoff.wake.event.as_raw_handle() as _, 0) }
-        });
-        entered_rx.recv_timeout(TEST_TIMEOUT).unwrap();
-        let (completed_tx, completed_rx) = mpsc::channel();
-        let callback = std::thread::spawn(move || {
-            assert_no_allocations(|| match submission {
-                Submission::Oversized => sender.submit(&[SAMPLE_VALUE; PACKET_SAMPLES + 1]),
-                _ => sender.submit(&PACKET),
-            });
-            completed_tx.send(()).unwrap();
-        });
-        let completed = completed_rx.recv_timeout(TEST_TIMEOUT);
-        resume_tx.send(()).unwrap();
-        callback.join().unwrap();
-        let wait_result = worker.join().unwrap();
-        assert!(
-            completed.is_ok(),
-            "{submission:?} notification waited for the worker"
-        );
-        assert_eq!(
-            wait_result, WAIT_OBJECT_0,
-            "{submission:?} notification was lost"
-        );
+    fn wait_result(wake: &CaptureWake, milliseconds: u32) -> u32 {
+        unsafe { WaitForSingleObject(wake.event.as_raw_handle() as _, milliseconds) }
     }
 
     #[test]
-    fn callback_notification_finishes_before_worker_enters_native_wait() {
+    fn callback_notification_precedes_wait_and_retains_coalesced_signals() {
         for submission in [
             Submission::Queued,
             Submission::Oversized,
             Submission::Contended,
         ] {
-            assert_notification_before_native_wait(submission);
+            let (mut sender, receiver) = new_pcm_handoff(HANDOFF_CAPACITY, PACKET_SAMPLES).unwrap();
+            assert!(receiver.is_empty());
+            let held = matches!(submission, Submission::Contended)
+                .then(|| receiver.handoff.buffers.lock().unwrap());
+            let (completed_tx, completed_rx) = mpsc::channel();
+            let callback = std::thread::spawn(move || {
+                assert_no_allocations(|| match submission {
+                    Submission::Oversized => sender.submit(&[SAMPLE_VALUE; PACKET_SAMPLES + 1]),
+                    _ => sender.submit(&PACKET),
+                });
+                completed_tx.send(()).unwrap();
+            });
+            assert!(
+                completed_rx.recv_timeout(TEST_TIMEOUT).is_ok(),
+                "{submission:?} notification waited for the receiver"
+            );
+            callback.join().unwrap();
+            drop(held);
+            let wake = &receiver.handoff.wake;
+            assert_eq!(wait_result(wake, 0), WAIT_OBJECT_0);
+            assert_no_allocations(|| {
+                wake.notify().unwrap();
+                wake.notify().unwrap();
+            });
+            assert_eq!(wait_result(wake, 0), WAIT_OBJECT_0);
+            assert_eq!(wait_result(wake, 0), WAIT_TIMEOUT);
+            wake.notify().unwrap();
+            wake.wait(TEST_TIMEOUT_MILLIS).unwrap();
+            assert_eq!(wait_result(wake, 0), WAIT_TIMEOUT);
         }
-    }
-
-    #[test]
-    fn repeated_notifications_retain_one_signal_until_consumed() {
-        let wake = CaptureWake::new().unwrap();
-        assert_no_allocations(|| {
-            wake.notify().unwrap();
-            wake.notify().unwrap();
-        });
-        assert_eq!(
-            unsafe { WaitForSingleObject(wake.event.as_raw_handle() as _, 0) },
-            WAIT_OBJECT_0
-        );
-        assert_eq!(
-            unsafe { WaitForSingleObject(wake.event.as_raw_handle() as _, 0) },
-            WAIT_TIMEOUT
-        );
-        wake.notify().unwrap();
-        wake.wait(TEST_TIMEOUT).unwrap();
-        assert_eq!(
-            unsafe { WaitForSingleObject(wake.event.as_raw_handle() as _, 0) },
-            WAIT_TIMEOUT
-        );
     }
 
     #[test]
@@ -174,12 +140,7 @@ mod tests {
         let (completed_tx, completed_rx) = mpsc::channel();
         let handle = std::thread::spawn(move || {
             entered_tx.send(()).unwrap();
-            let result = unsafe {
-                WaitForSingleObject(
-                    receiver.handoff.wake.event.as_raw_handle() as _,
-                    TEST_TIMEOUT_MILLIS,
-                )
-            };
+            let result = wait_result(&receiver.handoff.wake, TEST_TIMEOUT_MILLIS);
             completed_tx
                 .send((result, worker_stop.load(Ordering::Acquire)))
                 .unwrap();

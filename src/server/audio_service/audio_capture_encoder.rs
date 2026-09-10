@@ -139,7 +139,7 @@ pub(super) fn run_capture_encoder(context: CaptureEncoderContext, config: Captur
             .receiver
             .handoff
             .wake
-            .wait(CAPTURE_STATS_LOG_INTERVAL)
+            .wait(CAPTURE_STATS_LOG_INTERVAL.as_millis() as u32)
         {
             log::error!("Failed to wait for captured audio: {error}");
             super::super::restart();

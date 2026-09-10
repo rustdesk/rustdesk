@@ -113,19 +113,8 @@ fn successful_start_or_compatible_failure_preserves_audio_packet_duration() {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum StartupFailure {
-    DeviceLookup,
-    ConfigLookup,
-    StreamBuild,
-    StreamPlay,
-}
-
-fn fail_start(handler: &mut AudioHandler, failure: StartupFailure) -> hbb_common::ResultType<()> {
-    if matches!(
-        failure,
-        StartupFailure::StreamBuild | StartupFailure::StreamPlay
-    ) {
+fn fail_start(handler: &mut AudioHandler, mutate_candidate: bool) -> hbb_common::ResultType<()> {
+    if mutate_candidate {
         handler.sample_rate = (INPUT_RATE, INPUT_RATE);
         handler.device_channel = MONO_CHANNELS;
         handler
@@ -136,7 +125,9 @@ fn fail_start(handler: &mut AudioHandler, failure: StartupFailure) -> hbb_common
             .ready
             .store(false, Ordering::Release);
     }
-    Err(anyhow!("Injected playback failure: {failure:?}"))
+    Err(anyhow!(
+        "Injected playback failure (mutated: {mutate_candidate})"
+    ))
 }
 
 fn format(sample_rate: u32, channels: u16) -> AudioFormat {
@@ -149,43 +140,42 @@ fn format(sample_rate: u32, channels: u16) -> AudioFormat {
 
 #[test]
 fn identical_format_failure_preserves_playback_and_resampler_history() {
-    for failure in [
-        StartupFailure::DeviceLookup,
-        StartupFailure::ConfigLookup,
-        StartupFailure::StreamBuild,
-        StartupFailure::StreamPlay,
-    ] {
-        let (mut handler, dropped) = active_handler(INPUT_RATE);
-        let (mut uninterrupted, _) = active_handler(INPUT_RATE);
-        handler.handle_frame(audio_frame());
-        uninterrupted.handle_frame(audio_frame());
-        let buffer = handler.audio_buffer.0.clone();
-        let status = handler.playback_status.clone();
-        let generation = handler.audio_buffer.3.clone();
+    for input_rate in [INPUT_RATE, OUTPUT_RATE] {
+        for mutate_candidate in [false, true] {
+            let (mut handler, dropped) = active_handler(input_rate);
+            let (mut reference, _) = active_handler(input_rate);
+            let (mut retained_decoder, _) = active_handler(input_rate);
+            retained_decoder.handle_frame(audio_frame());
+            retained_decoder.handle_frame(audio_frame());
+            handler.handle_frame(audio_frame());
+            reference.handle_frame(audio_frame());
+            let buffer = handler.audio_buffer.0.clone();
+            let status = handler.playback_status.clone();
+            let generation = handler.audio_buffer.3.clone();
 
-        handler.handle_format_with_start(format(INPUT_RATE, CHANNELS), |candidate, _| {
-            fail_start(candidate, failure)
-        });
-        handler.handle_frame(audio_frame());
-        uninterrupted.handle_frame(audio_frame());
+            handler.handle_format_with_start(format(input_rate, CHANNELS), |candidate, _| {
+                fail_start(candidate, mutate_candidate)
+            });
+            reference.audio_decoder = Some(decoder(input_rate));
+            handler.handle_frame(audio_frame());
+            reference.handle_frame(audio_frame());
 
-        assert!(!dropped.load(Ordering::SeqCst), "{failure:?}");
-        assert!(Arc::ptr_eq(&buffer, &handler.audio_buffer.0));
-        assert!(Arc::ptr_eq(&status, &handler.playback_status));
-        assert!(Arc::ptr_eq(&generation, &handler.audio_buffer.3));
-        assert_eq!(handler.sample_rate, (INPUT_RATE, OUTPUT_RATE));
-        assert_eq!(handler.device_channel, CHANNELS);
-        assert!(handler.playback_status.ready.load(Ordering::Acquire));
-        let expected: Vec<_> = uninterrupted
-            .audio_buffer
-            .0
-            .lock()
-            .unwrap()
-            .pop_iter()
-            .collect();
-        let actual: Vec<_> = handler.audio_buffer.0.lock().unwrap().pop_iter().collect();
-        assert!(!actual.is_empty());
-        assert_eq!(actual, expected, "{failure:?}");
+            assert!(
+                !dropped.load(Ordering::SeqCst),
+                "mutated: {mutate_candidate}"
+            );
+            assert!(Arc::ptr_eq(&buffer, &handler.audio_buffer.0));
+            assert!(Arc::ptr_eq(&status, &handler.playback_status));
+            assert!(Arc::ptr_eq(&generation, &handler.audio_buffer.3));
+            assert_eq!(handler.sample_rate, (input_rate, OUTPUT_RATE));
+            assert_eq!(handler.device_channel, CHANNELS);
+            assert!(handler.playback_status.ready.load(Ordering::Acquire));
+            let expected = drain_audio(&reference);
+            let actual = drain_audio(&handler);
+            assert!(!actual.is_empty());
+            assert_ne!(drain_audio(&retained_decoder), expected);
+            assert_eq!(actual, expected, "mutated: {mutate_candidate}");
+        }
     }
 }
 
@@ -196,9 +186,8 @@ fn incompatible_format_failure_invalidates_playback() {
         format(INPUT_RATE, MONO_CHANNELS),
     ] {
         let (mut handler, dropped) = active_handler(INPUT_RATE);
-        handler.handle_format_with_start(changed_format, |candidate, _| {
-            fail_start(candidate, StartupFailure::DeviceLookup)
-        });
+        handler
+            .handle_format_with_start(changed_format, |candidate, _| fail_start(candidate, false));
         assert!(dropped.load(Ordering::SeqCst));
         assert!(handler.audio_stream.is_none());
         assert!(handler.audio_resampler.is_none());
@@ -238,4 +227,8 @@ fn successful_format_replacement_commits_independent_playback_state() {
         handler.audio_buffer.0.lock().unwrap().occupied_len(),
         OUTPUT_RATE as usize / PACKETS_PER_SECOND * CHANNELS as usize
     );
+}
+
+fn drain_audio(handler: &AudioHandler) -> Vec<f32> {
+    handler.audio_buffer.0.lock().unwrap().pop_iter().collect()
 }

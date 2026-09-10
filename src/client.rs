@@ -2396,17 +2396,15 @@ impl AudioHandler {
                     && u32::from(self.channels) == f.channels;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
                 #[cfg(not(target_os = "linux"))]
-                let mut replacement = Self::default();
+                let mut previous = std::mem::take(self);
+                self.audio_decoder = Some((d, buffer));
+                self.channels = f.channels as _;
+                let result = start(self, f);
                 #[cfg(not(target_os = "linux"))]
-                let handler = &mut replacement;
-                #[cfg(target_os = "linux")]
-                let handler = &mut *self;
-                handler.audio_decoder = Some((d, buffer));
-                handler.channels = f.channels as _;
-                let result = start(handler, f);
-                #[cfg(not(target_os = "linux"))]
-                if result.is_ok() {
-                    *self = replacement;
+                if result.is_err() && keep_existing_stream {
+                    // The restarted capture has new Opus history even when output startup fails.
+                    previous.audio_decoder = self.audio_decoder.take();
+                    *self = previous;
                 }
                 self.handle_audio_start_result(result, keep_existing_stream);
             }
