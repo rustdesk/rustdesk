@@ -1117,6 +1117,12 @@ class _ImagePaintState extends State<ImagePaint> {
             } else {
               if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = s;
+              } else {
+                // NSCursor and GdkCursor treat the bitmap size as logical
+                // pixels, so an unzoomed cursor must be shrunk by the DPR to
+                // keep 1 remote px == 1 physical px, the size Original view
+                // already renders it at.
+                cursorScale = 1.0 / c.devicePixelRatio;
               }
             }
             return cursorScale;
@@ -1412,6 +1418,12 @@ class CursorPaint extends StatelessWidget {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
+    } else if (!isWindows) {
+      // Keep the painted cursor the same physical size as the native one
+      // built by getCursorScale() above.
+      scale = 1.0 / c.devicePixelRatio;
+      x = (m.x * c.scale + cx) / scale - hotx;
+      y = (m.y * c.scale + cy) / scale - hoty;
     }
 
     return CustomPaint(
