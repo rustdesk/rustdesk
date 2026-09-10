@@ -2378,6 +2378,14 @@ impl AudioHandler {
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
+        self.handle_format_with_start(f, Self::start_audio);
+    }
+
+    fn handle_format_with_start(
+        &mut self,
+        f: AudioFormat,
+        start: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
+    ) {
         if !is_supported_audio_channel_count(f.channels) {
             log::error!("Unsupported audio channel count: {}", f.channels);
             return;
@@ -2388,14 +2396,29 @@ impl AudioHandler {
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
-                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-                let keep_existing_stream = false;
+                #[cfg(not(target_os = "linux"))]
+                let keep_existing_stream = self.audio_stream.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
+                let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
+                #[cfg(not(target_os = "linux"))]
+                let mut previous = std::mem::take(self);
                 #[cfg(target_os = "windows")]
                 self.prepare_playback(&f);
-                let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
-                let result = self.start_audio(f);
+                let result = start(self, f);
+                #[cfg(target_os = "windows")]
+                let keep_existing_stream =
+                    keep_existing_stream && !previous.playback_recovery.report_pending();
+                #[cfg(not(target_os = "linux"))]
+                if result.is_err() && keep_existing_stream {
+                    // The restarted capture has new Opus history even when output startup fails.
+                    previous.audio_decoder = self.audio_decoder.take();
+                    *self = previous;
+                    self.handle_audio_start_result(result, true);
+                    return;
+                }
                 #[cfg(target_os = "windows")]
                 self.finish_playback_start(result);
                 #[cfg(not(target_os = "windows"))]
@@ -2407,7 +2430,6 @@ impl AudioHandler {
         }
     }
 
-    #[cfg(any(test, not(target_os = "windows")))]
     fn handle_audio_start_result(&mut self, result: ResultType<()>, keep_existing_stream: bool) {
         if let Err(error) = result {
             if keep_existing_stream {

@@ -31,7 +31,7 @@ impl PlaybackRecovery {
         move |error| errors.push(error)
     }
 
-    fn report_pending(&self) -> bool {
+    pub(super) fn report_pending(&self) -> bool {
         let mut failed = false;
         while let Some(error) = self.errors.pop() {
             if matches!(&error, StreamError::BackendSpecific { err }
