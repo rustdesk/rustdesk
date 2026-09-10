@@ -99,6 +99,7 @@ use winreg::{enums::*, RegKey};
 mod acl;
 mod installer_handoff;
 mod installer_shell;
+pub(crate) mod local_input;
 mod msi_registry;
 pub(crate) use acl::current_process_user_sid_string;
 pub use acl::{

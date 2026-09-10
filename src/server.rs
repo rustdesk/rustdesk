@@ -601,6 +601,15 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     });
 
     if is_server {
+        #[cfg(windows)]
+        let _local_mouse_observer =
+            match crate::platform::windows::local_input::start_local_mouse_observer() {
+                Ok(observer) => Some(observer),
+                Err(err) => {
+                    log::warn!("Local mouse priority is unavailable: {}", err);
+                    None
+                }
+            };
         crate::common::set_server_running(true);
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {

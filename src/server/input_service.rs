@@ -1115,6 +1115,14 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
     }
 
     #[cfg(windows)]
+    match crate::platform::windows::local_input::arbitrate_remote_mouse() {
+        crate::platform::windows::local_input::RemoteMouseAction::Allow => {}
+        crate::platform::windows::local_input::RemoteMouseAction::Suppress => {
+            return;
+        }
+    }
+
+    #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
@@ -1281,6 +1289,8 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
         }
         _ => {}
     }
+    #[cfg(windows)]
+    crate::platform::windows::local_input::record_remote_mouse_injected(evt_type, buttons);
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
         en.key_up(key.clone());
