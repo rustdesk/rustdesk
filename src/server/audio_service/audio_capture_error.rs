@@ -11,7 +11,10 @@ pub(super) struct CaptureErrorHandler {
 
 impl CaptureErrorHandler {
     pub(super) fn handle(&self, error: cpal::StreamError) {
-        if matches!(error, cpal::StreamError::StreamInterrupted { .. }) {
+        if matches!(
+            error,
+            cpal::StreamError::StreamInterrupted { .. } | cpal::StreamError::DeviceNotAvailable
+        ) {
             // ScreenCaptureKit can stop capture while the remote session stays open.
             // The observed -3821 error does not identify its underlying trigger.
             // https://developer.apple.com/documentation/screencapturekit/scstreamdelegate/stream(_:didstopwitherror:)
