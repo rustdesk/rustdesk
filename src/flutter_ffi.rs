@@ -1008,6 +1008,7 @@ pub fn main_set_option(key: String, value: String) {
     // and restarting mediator is safe even https proxy is not used.
     let is_allow_tls_fallback = key.eq(keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
     if is_allow_tls_fallback
+        || key.eq(keys::OPTION_ALLOW_PROXY_FALLBACK)
         || key.eq("custom-rendezvous-server")
         || key.eq(keys::OPTION_ALLOW_WEBSOCKET)
         || key.eq(keys::OPTION_DISABLE_UDP)

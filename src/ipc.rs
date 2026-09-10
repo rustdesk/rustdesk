@@ -742,6 +742,7 @@ pub struct CheckIfRestart {
     ws: String,
     disable_udp: String,
     allow_insecure_tls_fallback: String,
+    allow_proxy_fallback: String,
     api_server: String,
 }
 
@@ -757,6 +758,7 @@ impl CheckIfRestart {
             allow_insecure_tls_fallback: Config::get_option(
                 keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK,
             ),
+            allow_proxy_fallback: Config::get_option(keys::OPTION_ALLOW_PROXY_FALLBACK),
             api_server: Config::get_option("api-server"),
         }
     }
@@ -769,6 +771,7 @@ impl Drop for CheckIfRestart {
         let allow_insecure_tls_fallback_changed = self.allow_insecure_tls_fallback
             != Config::get_option(keys::OPTION_ALLOW_INSECURE_TLS_FALLBACK);
         if allow_insecure_tls_fallback_changed
+            || self.allow_proxy_fallback != Config::get_option(keys::OPTION_ALLOW_PROXY_FALLBACK)
             || self.stop_service != Config::get_option("stop-service")
             || self.rendezvous_servers != Config::get_rendezvous_servers()
             || self.ws != Config::get_option(OPTION_ALLOW_WEBSOCKET)

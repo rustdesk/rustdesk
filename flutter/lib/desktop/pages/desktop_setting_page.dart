@@ -3063,6 +3063,8 @@ void changeSocks5Proxy() async {
   // The following option is a not real key, it is just used for custom client advanced settings.
   const String optionProxyUrl = "proxy-url";
   final isOptFixed = isOptionFixed(optionProxyUrl);
+  final isFallbackFixed = isOptionFixed(kOptionAllowProxyFallback);
+  var allowFallback = mainGetBoolOptionSync(kOptionAllowProxyFallback);
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close, context) {
@@ -3081,7 +3083,8 @@ void changeSocks5Proxy() async {
       username = userController.text.trim();
       password = pwdController.text.trim();
 
-      if (proxy.isNotEmpty) {
+      if (proxy.isNotEmpty &&
+          !(allowFallback && socks.length == 3 && proxy == socks[0])) {
         String domainPort = proxy;
         if (domainPort.contains('://')) {
           domainPort = domainPort.split('://')[1];
@@ -3095,8 +3098,13 @@ void changeSocks5Proxy() async {
           return;
         }
       }
-      await bind.mainSetSocks(
-          proxy: proxy, username: username, password: password);
+      if (!isFallbackFixed) {
+        await mainSetBoolOption(kOptionAllowProxyFallback, allowFallback);
+      }
+      if (!isOptFixed) {
+        await bind.mainSetSocks(
+            proxy: proxy, username: username, password: password);
+      }
       close();
     }
 
@@ -3197,6 +3205,16 @@ void changeSocks5Proxy() async {
                 ),
               ],
             ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                  translate('Connect directly when the proxy is unreachable')),
+              value: allowFallback,
+              onChanged: isFallbackFixed || isInProgress
+                  ? null
+                  : (value) => setState(() => allowFallback = value == true),
+            ),
             // NOT use Offstage to wrap LinearProgressIndicator
             if (isInProgress)
               const LinearProgressIndicator().marginOnly(top: 8),
@@ -3205,7 +3223,7 @@ void changeSocks5Proxy() async {
       ),
       actions: [
         dialogButton('Cancel', onPressed: close, isOutline: true),
-        if (!isOptFixed) dialogButton('OK', onPressed: submit),
+        if (!isOptFixed || !isFallbackFixed) dialogButton('OK', onPressed: submit),
       ],
       onSubmit: submit,
       onCancel: close,
