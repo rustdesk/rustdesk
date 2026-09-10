@@ -2372,6 +2372,14 @@ impl AudioHandler {
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
+        self.handle_format_with_start(f, Self::start_audio);
+    }
+
+    fn handle_format_with_start(
+        &mut self,
+        f: AudioFormat,
+        start: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
+    ) {
         if !is_supported_audio_channel_count(f.channels) {
             log::error!("Unsupported audio channel count: {}", f.channels);
             return;
@@ -2383,11 +2391,23 @@ impl AudioHandler {
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
                 #[cfg(not(target_os = "linux"))]
-                let keep_existing_stream = false;
+                let keep_existing_stream = self.audio_stream.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
-                self.audio_decoder = Some((d, buffer));
-                self.channels = f.channels as _;
-                let result = self.start_audio(f);
+                #[cfg(not(target_os = "linux"))]
+                let mut replacement = Self::default();
+                #[cfg(not(target_os = "linux"))]
+                let handler = &mut replacement;
+                #[cfg(target_os = "linux")]
+                let handler = &mut *self;
+                handler.audio_decoder = Some((d, buffer));
+                handler.channels = f.channels as _;
+                let result = start(handler, f);
+                #[cfg(not(target_os = "linux"))]
+                if result.is_ok() {
+                    *self = replacement;
+                }
                 self.handle_audio_start_result(result, keep_existing_stream);
             }
             Err(err) => {
