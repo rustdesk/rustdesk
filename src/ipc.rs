@@ -646,6 +646,9 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 }
 
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
+    #[cfg(windows)]
+    let path = ipc_path_for_current_context(postfix)?;
+    #[cfg(not(windows))]
     let path = Config::ipc_path(postfix);
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let should_scrub_parent_entries = ensure_secure_ipc_parent_dir(&path, postfix)?;
@@ -1413,6 +1416,23 @@ fn user_main_ipc_server_uid() -> ResultType<u32> {
     select_server_uid_for_user_main_ipc(&server_uids, active_uid(), prefer_root)
 }
 
+// Windows-only: pick the session-isolated pipe path for every channel except
+// the deliberately machine-wide, privileged `_service` channel. See the
+// comment on `Config::ipc_path_for_session` in hbb_common for the full
+// rationale (RDS/Citrix hosts running multiple concurrent user sessions of
+// the same RustDesk binary).
+#[cfg(windows)]
+fn ipc_path_for_current_context(postfix: &str) -> ResultType<String> {
+    if postfix == crate::POSTFIX_SERVICE {
+        Ok(Config::ipc_path(postfix))
+    } else {
+        match crate::platform::windows::get_current_process_session_id() {
+            Some(session_id) => Ok(Config::ipc_path_for_session(session_id, postfix)),
+            None => bail!("Failed to determine current Windows session id for IPC path"),
+        }
+    }
+}
+
 pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
@@ -1427,7 +1447,12 @@ pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmp
         let path = Config::ipc_path(postfix);
         return connect_with_path(ms_timeout, &path).await;
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    {
+        let path = ipc_path_for_current_context(postfix)?;
+        return connect_with_path(ms_timeout, &path).await;
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         let path = Config::ipc_path(postfix);
         connect_with_path(ms_timeout, &path).await
