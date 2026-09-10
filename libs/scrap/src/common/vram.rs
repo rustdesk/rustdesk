@@ -109,9 +109,6 @@ impl EncoderApi for VRamEncoder {
         } else {
             frame.texture()?
         };
-        if !repeated && texture.is_null() {
-            bail!("null texture");
-        }
         if rotation != 0 {
             // to-do: support rotation
             // Both the encoder and display(w,h) information need to be changed.
@@ -262,6 +259,7 @@ impl VRamEncoder {
         let v: Vec<_> = crate::hwcodec::HwCodecConfig::get()
             .vram_encode
             .drain(..)
+            .filter(|c| c.driver == Driver::FFMPEG)
             .filter(|c| c.data_format == data_format)
             .collect();
         if crate::hwcodec::HwRamEncoder::try_get(format).is_some() {
@@ -358,6 +356,7 @@ impl VRamDecoder {
         crate::hwcodec::HwCodecConfig::get()
             .vram_decode
             .drain(..)
+            .filter(|c| c.driver == Driver::FFMPEG)
             .filter(|c| c.data_format == data_format && c.luid == luid && luid != 0)
             .collect()
     }
@@ -368,8 +367,10 @@ impl VRamDecoder {
         }
         let v = crate::hwcodec::HwCodecConfig::get().vram_decode;
         (
-            v.iter().any(|d| d.data_format == DataFormat::H264),
-            v.iter().any(|d| d.data_format == DataFormat::H265),
+            v.iter()
+                .any(|d| d.driver == Driver::FFMPEG && d.data_format == DataFormat::H264),
+            v.iter()
+                .any(|d| d.driver == Driver::FFMPEG && d.data_format == DataFormat::H265),
         )
     }
 
