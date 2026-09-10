@@ -12,10 +12,100 @@ use hbb_common::{
     ResultType,
 };
 use serde_derive::Serialize;
-use std::{collections::HashMap, path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+    path::PathBuf,
+    sync::{mpsc, Mutex},
+    time::{Duration, Instant},
+};
+use uuid::Uuid;
 
 lazy_static! {
     static ref DOWNLOADERS: Mutex<HashMap<String, Downloader>> = Default::default();
+    static ref AUTO_DELETE_TX: std::io::Result<mpsc::Sender<AutoDeleteTask>> = {
+        let (tx, rx) = mpsc::channel();
+        // Share one worker that outlives each download's temporary Tokio runtime.
+        std::thread::Builder::new()
+            .name("download-cleanup".to_owned())
+            .spawn(move || auto_delete_worker(rx))
+            .map(|_| tx)
+    };
+}
+
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
+struct AutoDeleteTask {
+    deadline: Instant,
+    id: String,
+    generation: Uuid,
+}
+
+impl AutoDeleteTask {
+    fn remove(self) {
+        let mut downloaders = DOWNLOADERS.lock().unwrap();
+        if downloaders.get(&self.id).map(|d| d.generation) == Some(self.generation) {
+            downloaders.remove(&self.id);
+        }
+    }
+}
+
+fn auto_delete_worker(rx: mpsc::Receiver<AutoDeleteTask>) {
+    let mut pending = BinaryHeap::<Reverse<AutoDeleteTask>>::new();
+    loop {
+        let task = if let Some(Reverse(task)) = pending.peek() {
+            let now = Instant::now();
+            if task.deadline <= now {
+                if let Some(Reverse(task)) = pending.pop() {
+                    task.remove();
+                }
+                continue;
+            }
+            match rx.recv_timeout(task.deadline - now) {
+                Ok(task) => task,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            match rx.recv() {
+                Ok(task) => task,
+                Err(_) => break,
+            }
+        };
+        pending.push(Reverse(task));
+    }
+    // Do not abandon queued entries if the worker's sender is dropped.
+    for Reverse(task) in pending {
+        task.remove();
+    }
+}
+
+fn enqueue_auto_delete(
+    sender: Result<&mpsc::Sender<AutoDeleteTask>, &std::io::Error>,
+    task: AutoDeleteTask,
+) {
+    match sender {
+        Ok(sender) => {
+            if let Err(err) = sender.send(task) {
+                log::warn!("Failed to schedule download cleanup: {}", err);
+                err.0.remove();
+            }
+        }
+        Err(err) => {
+            log::warn!("Failed to start download cleanup worker: {}", err);
+            task.remove();
+        }
+    }
+}
+
+fn schedule_auto_delete(id: String, generation: Uuid, dur: Duration) {
+    enqueue_auto_delete(
+        AUTO_DELETE_TX.as_ref(),
+        AutoDeleteTask {
+            deadline: Instant::now() + dur,
+            id,
+            generation,
+        },
+    );
 }
 
 /// This struct is used to return the download data to the caller.
@@ -36,6 +126,7 @@ pub struct DownloadData {
 }
 
 struct Downloader {
+    generation: Uuid,
     data: Vec<u8>,
     path: Option<PathBuf>,
     // Some file may be empty, so we use Option<u64> to indicate if the size is known
@@ -83,7 +174,9 @@ pub fn download_file(
         }
     }
     let (tx, rx) = unbounded_channel();
+    let generation = Uuid::new_v4();
     let downloader = Downloader {
+        generation,
         data: Vec::new(),
         path: path.clone(),
         total_size: None,
@@ -115,7 +208,7 @@ pub fn download_file(
 
     let id2 = id.clone();
     std::thread::spawn(
-        move || match do_download(&id2, url, path, auto_del_dur, rx) {
+        move || match do_download(&id2, generation, url, path, auto_del_dur, rx) {
             Ok(is_all_downloaded) => {
                 let mut downloaded_size = 0;
                 let mut total_size = 0;
@@ -162,6 +255,7 @@ pub fn download_file(
 #[tokio::main(flavor = "current_thread")]
 async fn do_download(
     id: &str,
+    generation: Uuid,
     url: String,
     path: Option<PathBuf>,
     auto_del_dur: Option<Duration>,
@@ -260,12 +354,8 @@ async fn do_download(
         downloader.finished = true;
     }
     if is_all_downloaded {
-        let id_del = id.to_string();
         if let Some(dur) = auto_del_dur {
-            tokio::spawn(async move {
-                tokio::time::sleep(dur).await;
-                DOWNLOADERS.lock().unwrap().remove(&id_del);
-            });
+            schedule_auto_delete(id.to_string(), generation, dur);
         }
     }
     Ok(is_all_downloaded)
@@ -306,4 +396,138 @@ pub fn cancel(id: &str) {
 
 pub fn remove(id: &str) {
     let _ = DOWNLOADERS.lock().unwrap().remove(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        auto_delete_worker, enqueue_auto_delete, schedule_auto_delete, AutoDeleteTask, Downloader,
+        DOWNLOADERS,
+    };
+    use hbb_common::tokio::{runtime::Builder, sync::mpsc::unbounded_channel};
+    use std::{
+        sync::mpsc,
+        time::{Duration, Instant},
+    };
+    use uuid::Uuid;
+
+    fn insert_downloader(id: &str) -> Uuid {
+        let generation = Uuid::new_v4();
+        let (tx_cancel, _) = unbounded_channel();
+        DOWNLOADERS.lock().unwrap().insert(
+            id.to_owned(),
+            Downloader {
+                generation,
+                data: Vec::new(),
+                path: None,
+                total_size: Some(0),
+                downloaded_size: 0,
+                error: None,
+                finished: true,
+                tx_cancel,
+            },
+        );
+        generation
+    }
+
+    fn wait_until_removed(id: &str) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while DOWNLOADERS.lock().unwrap().contains_key(id) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(!DOWNLOADERS.lock().unwrap().contains_key(id));
+    }
+
+    #[test]
+    fn auto_delete_outlives_download_runtime() {
+        let id = Uuid::new_v4().to_string();
+        let generation = insert_downloader(&id);
+
+        Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap()
+            .block_on(async {
+                schedule_auto_delete(id.clone(), generation, Duration::from_millis(20));
+            });
+
+        wait_until_removed(&id);
+    }
+
+    #[test]
+    fn auto_delete_preserves_replacement() {
+        let id = Uuid::new_v4().to_string();
+        let generation = insert_downloader(&id);
+        let (tx, rx) = mpsc::channel();
+        enqueue_auto_delete(
+            Ok(&tx),
+            AutoDeleteTask {
+                deadline: Instant::now(),
+                id: id.clone(),
+                generation,
+            },
+        );
+        DOWNLOADERS.lock().unwrap().remove(&id);
+        let replacement = insert_downloader(&id);
+
+        // A later deadline acts as a barrier: the old cleanup must run first.
+        let barrier_id = Uuid::new_v4().to_string();
+        enqueue_auto_delete(
+            Ok(&tx),
+            AutoDeleteTask {
+                deadline: Instant::now() + Duration::from_millis(20),
+                generation: insert_downloader(&barrier_id),
+                id: barrier_id.clone(),
+            },
+        );
+        let worker = std::thread::spawn(move || auto_delete_worker(rx));
+        wait_until_removed(&barrier_id);
+        drop(tx);
+        worker.join().unwrap();
+        let remaining = DOWNLOADERS.lock().unwrap().remove(&id).unwrap();
+        assert_eq!(remaining.generation, replacement);
+    }
+
+    #[test]
+    fn auto_delete_honors_earlier_deadlines() {
+        let late_id = Uuid::new_v4().to_string();
+        schedule_auto_delete(
+            late_id.clone(),
+            insert_downloader(&late_id),
+            Duration::from_secs(60),
+        );
+        let early_id = Uuid::new_v4().to_string();
+        schedule_auto_delete(
+            early_id.clone(),
+            insert_downloader(&early_id),
+            Duration::from_millis(20),
+        );
+        wait_until_removed(&early_id);
+        assert!(DOWNLOADERS.lock().unwrap().remove(&late_id).is_some());
+    }
+
+    #[test]
+    fn failed_scheduling_removes_only_the_original_instance() {
+        let startup_error =
+            std::io::Error::new(std::io::ErrorKind::Other, "thread creation failed");
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+        for sender in [Err(&startup_error), Ok(&tx)] {
+            for replace in [false, true] {
+                let id = Uuid::new_v4().to_string();
+                let generation = insert_downloader(&id);
+                let replacement = replace.then(|| insert_downloader(&id));
+                enqueue_auto_delete(
+                    sender,
+                    AutoDeleteTask {
+                        deadline: Instant::now() + Duration::from_secs(60),
+                        id: id.clone(),
+                        generation,
+                    },
+                );
+                let remaining = DOWNLOADERS.lock().unwrap().remove(&id);
+                assert_eq!(remaining.map(|d| d.generation), replacement);
+            }
+        }
+    }
 }
