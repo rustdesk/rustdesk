@@ -59,6 +59,19 @@ Please download Sciter dynamic library yourself.
 
 ## [Build](https://rustdesk.com/docs/en/dev/build/)
 
+### ASIO audio on Windows
+
+Windows builds can opt into CPAL's ASIO host with `--asio`:
+
+```sh
+python3 build.py --flutter --asio
+```
+
+The resulting build keeps WASAPI as the default. On a machine with an ASIO
+driver installed, select `ASIO` under the desktop audio settings; the audio
+service and remote playback will then use the selected host. The ASIO SDK and
+LLVM/Clang build prerequisites are documented in the CPAL README.
+
 ## How to Build on Linux
 
 ### Ubuntu 18 (Debian 10)
@@ -179,4 +192,3 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 ![File Transfer](https://github.com/rustdesk/rustdesk/assets/28412477/39511ad3-aa9a-4f8c-8947-1cce286a46ad)
 
 ![TCP Tunneling](https://github.com/rustdesk/rustdesk/assets/28412477/78e8708f-e87e-4570-8373-1360033ea6c5)
-

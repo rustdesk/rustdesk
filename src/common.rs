@@ -322,7 +322,7 @@ pub fn get_default_sound_input() -> Option<String> {
     #[cfg(not(target_os = "linux"))]
     {
         use cpal::traits::{DeviceTrait, HostTrait};
-        let host = cpal::default_host();
+        let host = crate::audio_service::get_audio_host();
         let dev = host.default_input_device();
         return if let Some(dev) = dev {
             match dev.name() {

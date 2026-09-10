@@ -938,6 +938,10 @@ pub fn main_get_sound_inputs() -> Vec<String> {
     vec![String::from("")]
 }
 
+pub fn main_get_audio_hosts() -> Vec<String> {
+    crate::audio_service::get_audio_hosts()
+}
+
 pub fn main_get_login_device_info() -> SyncReturn<String> {
     SyncReturn(get_login_device_info_json())
 }
