@@ -84,7 +84,6 @@ impl<'a> StaticRefresh<'a> {
             || self.repeat_failures >= 3
             || self.repeat_counter >= 100
             || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
-            || (self.repeat_counter == 0 && self.last_encode.elapsed() < Duration::from_millis(200))
         {
             return Ok(());
         }
@@ -275,11 +274,11 @@ mod tests {
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 0);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(150);
+        refresh.last_encode = Instant::now() - Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 0);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(200);
+        refresh.last_encode = Instant::now() - Duration::from_millis(100);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
@@ -293,7 +292,7 @@ mod tests {
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
-        refresh.last_encode = Instant::now() - Duration::from_millis(150);
+        refresh.last_encode = Instant::now() - Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 2);
 
