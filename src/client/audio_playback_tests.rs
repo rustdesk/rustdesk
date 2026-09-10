@@ -173,6 +173,9 @@ fn playback_contention_preserves_queued_audio_and_recovers_after_release() {
     assert_eq!(gap[1], -gap[0]);
     assert!(gap[CALLBACK_SAMPLES - CHANNELS] > 0.0);
     writer.write_output(&mut output);
+    let mut transition = gap[gap.len() - CHANNELS..].to_vec();
+    transition.extend_from_slice(&output[..TRANSITION_FRAMES * CHANNELS]);
+    assert!(maximum_sample_step(&transition) <= MAX_SAMPLE_STEP);
     assert_eq!(
         writer.buffered_input,
         OPPOSITE_ACTIVE_FRAME.repeat(ACTIVE_FRAMES)
