@@ -24,7 +24,7 @@ impl Drop for TestStream {
     }
 }
 
-fn format() -> AudioFormat {
+pub(super) fn format() -> AudioFormat {
     AudioFormat {
         sample_rate: SAMPLE_RATE,
         channels: CHANNELS,
@@ -44,7 +44,7 @@ fn active_handler() -> (AudioHandler, Arc<AtomicBool>) {
     (handler, dropped)
 }
 
-fn backend_error(description: &str) -> StreamError {
+pub(super) fn backend_error(description: &str) -> StreamError {
     StreamError::BackendSpecific {
         err: BackendSpecificError {
             description: description.to_owned(),
@@ -52,25 +52,40 @@ fn backend_error(description: &str) -> StreamError {
     }
 }
 
+pub(super) fn report_error(handler: &AudioHandler, error: StreamError) {
+    handler.playback_recovery.errors.push(error);
+}
+
+fn assert_restarts_once(handler: &mut AudioHandler, now: Instant) {
+    let mut attempts = 0;
+    handler.recover_playback_with(now, |_, _| {
+        attempts += 1;
+        Ok(())
+    });
+    assert_eq!(attempts, 1);
+}
+
 #[test]
 fn terminal_error_is_delivered_to_the_owner() {
-    let errors = PlaybackErrors::default();
-    errors.report(StreamError::DeviceNotAvailable);
+    let mut recovery = PlaybackRecovery::default();
+    let mut failed = recovery.new_error_callback();
+    failed(StreamError::DeviceNotAvailable);
+    let mut replacement = recovery.new_error_callback();
+    failed(StreamError::DeviceNotAvailable);
+    assert!(recovery.errors.pop().is_none());
+    replacement(StreamError::DeviceNotAvailable);
     assert!(matches!(
-        errors.pop(),
+        recovery.errors.pop(),
         Some(StreamError::DeviceNotAvailable)
     ));
-    assert!(errors.pop().is_none());
+    assert!(recovery.errors.pop().is_none());
 }
 
 #[test]
 fn runtime_failure_drops_the_dead_stream_and_clears_stale_state() {
     let (mut handler, dropped) = active_handler();
     let old_status = handler.playback_status.clone();
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::DeviceNotAvailable);
+    report_error(&handler, StreamError::DeviceNotAvailable);
     let mut attempts = 0;
     handler.recover_playback_with(Instant::now(), |state, requested| {
         attempts += 1;
@@ -89,33 +104,28 @@ fn runtime_failure_drops_the_dead_stream_and_clears_stale_state() {
 #[test]
 fn backend_failure_requests_recovery_but_priority_warning_does_not() {
     let (mut handler, dropped) = active_handler();
-    handler
-        .playback_recovery
-        .errors
-        .report(backend_error("SetThreadPriority failed: access denied"));
+    report_error(
+        &handler,
+        backend_error("SetThreadPriority failed: access denied"),
+    );
     handler.recover_playback_with(Instant::now(), |_, _| {
         panic!("Nonfatal warning restarted playback")
     });
     assert!(!dropped.load(Ordering::Relaxed));
     assert!(handler.playback_status.ready.load(Ordering::Acquire));
-    handler
-        .playback_recovery
-        .errors
-        .report(backend_error("IAudioClient::GetCurrentPadding failed"));
-    let mut restarted = false;
-    handler.recover_playback_with(Instant::now(), |_, _| {
-        restarted = true;
-        Ok(())
-    });
-    assert!(restarted);
+    report_error(
+        &handler,
+        backend_error("IAudioClient::GetCurrentPadding failed"),
+    );
+    assert_restarts_once(&mut handler, Instant::now());
 }
 
 #[test]
 fn warning_does_not_hide_a_subsequent_terminal_error() {
     let (mut handler, dropped) = active_handler();
     let errors = handler.playback_recovery.errors.clone();
-    errors.report(backend_error("SetThreadPriority failed: access denied"));
-    errors.report(StreamError::DeviceNotAvailable);
+    errors.push(backend_error("SetThreadPriority failed: access denied"));
+    errors.push(StreamError::DeviceNotAvailable);
     handler.recover_playback_with(Instant::now(), |_, _| Ok(()));
     assert!(dropped.load(Ordering::Relaxed));
 }
@@ -123,10 +133,7 @@ fn warning_does_not_hide_a_subsequent_terminal_error() {
 #[test]
 fn failed_rebuild_retries_without_another_error_and_without_busy_looping() {
     let (mut handler, _) = active_handler();
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::DeviceNotAvailable);
+    report_error(&handler, StreamError::DeviceNotAvailable);
     handler.recover_playback_with(Instant::now(), |_, _| bail!("No default output device"));
     let retry_at = handler
         .playback_recovery
@@ -135,12 +142,7 @@ fn failed_rebuild_retries_without_another_error_and_without_busy_looping() {
     handler.recover_playback_with(retry_at - Duration::from_millis(1), |_, _| {
         panic!("Retried before the deadline")
     });
-    let mut attempts = 0;
-    handler.recover_playback_with(retry_at, |_, _| {
-        attempts += 1;
-        Ok(())
-    });
-    assert_eq!(attempts, 1);
+    assert_restarts_once(&mut handler, retry_at);
     assert!(handler.playback_recovery.retry_at.is_none());
 }
 
@@ -164,7 +166,7 @@ fn late_error_and_readiness_from_old_stream_do_not_affect_replacement() {
     let old_errors = handler.playback_recovery.errors.clone();
     let old_status = handler.playback_status.clone();
     handler.prepare_playback(&format());
-    old_errors.report(StreamError::DeviceNotAvailable);
+    old_errors.push(StreamError::DeviceNotAvailable);
     old_status.ready.store(true, Ordering::Release);
     handler.recover_playback_with(Instant::now(), |_, _| {
         panic!("Stale callback requested recovery")
@@ -195,26 +197,15 @@ fn latest_remote_format_replaces_a_pending_retry() {
 fn new_stream_error_is_not_cleared_by_successful_start_result() {
     let mut handler = AudioHandler::default();
     handler.prepare_playback(&format());
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::DeviceNotAvailable);
+    report_error(&handler, StreamError::DeviceNotAvailable);
     handler.finish_playback_start(Ok(()));
-    let mut attempts = 0;
-    handler.recover_playback_with(Instant::now() + Duration::from_secs(1), |_, _| {
-        attempts += 1;
-        Ok(())
-    });
-    assert_eq!(attempts, 1);
+    assert_restarts_once(&mut handler, Instant::now() + Duration::from_secs(1));
 }
 
 #[test]
 fn no_format_does_not_open_an_output_device() {
     let mut handler = AudioHandler::default();
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::DeviceNotAvailable);
+    report_error(&handler, StreamError::DeviceNotAvailable);
     handler.recover_playback_with(Instant::now(), |_, _| panic!("Invented a remote format"));
 }
 
@@ -222,7 +213,7 @@ fn no_format_does_not_open_an_output_device() {
 fn recovery_runs_on_owner_not_error_callback_thread() {
     let (mut handler, dropped) = active_handler();
     let errors = handler.playback_recovery.errors.clone();
-    std::thread::spawn(move || errors.report(StreamError::DeviceNotAvailable))
+    std::thread::spawn(move || errors.push(StreamError::DeviceNotAvailable))
         .join()
         .unwrap();
     assert!(!dropped.load(Ordering::Relaxed));
@@ -283,10 +274,7 @@ fn pending_format_is_handled_before_retrying_the_old_format() {
 fn successful_open_followed_by_immediate_runtime_failure_is_paced() {
     let (mut handler, _) = active_handler();
     handler.finish_playback_start(Ok(()));
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::DeviceNotAvailable);
+    report_error(&handler, StreamError::DeviceNotAvailable);
     let now = Instant::now();
     handler.recover_playback_with(now, |_, _| {
         panic!("Runtime failure caused a tight reopen loop")

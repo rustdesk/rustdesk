@@ -1,9 +1,10 @@
 use super::{
     super::{
         audio_playback::{AudioPlaybackConfig, AudioPlaybackWriter},
+        audio_playback_recovery_tests::{backend_error, format, report_error},
         create_audio_resampler,
     },
-    AudioDecoder, AudioFormat, AudioHandler, Instant, Ordering, Stereo, StreamError,
+    AudioDecoder, AudioFormat, AudioHandler, Instant, Ordering, Stereo,
 };
 use hbb_common::anyhow::anyhow;
 use ringbuf::ring_buffer::RbBase;
@@ -16,14 +17,6 @@ const BLOCK_FRAMES: usize = 480;
 const BLOCK_SAMPLES: usize = BLOCK_FRAMES * CHANNELS as usize;
 const SAMPLE_VALUE: f32 = 0.25;
 const OLD_GENERATION: usize = 7;
-
-fn format() -> AudioFormat {
-    AudioFormat {
-        sample_rate: INPUT_RATE,
-        channels: u32::from(CHANNELS),
-        ..Default::default()
-    }
-}
 
 fn configured_handler() -> AudioHandler {
     let mut handler = AudioHandler::default();
@@ -61,6 +54,12 @@ fn failed_start_clears_decoded_state_but_keeps_the_retry_format() {
     assert_cleared(&handler);
 
     let due = handler.playback_recovery.retry_at.unwrap();
+    let cooldown = handler.playback_recovery.restart_not_before.unwrap();
+    handler.clear_playback_stream();
+    assert_cleared(&handler);
+    assert_eq!(handler.playback_recovery.format, Some(format()));
+    assert_eq!(handler.playback_recovery.retry_at, Some(due));
+    assert_eq!(handler.playback_recovery.restart_not_before, Some(cooldown));
     handler.recover_playback_with(due, |_, requested| {
         assert_eq!(requested, format());
         Ok(())
@@ -117,14 +116,10 @@ fn priority_warning_preserves_resampler_history() {
         resampler.process(&first).unwrap(),
         reference.process(&first).unwrap()
     );
-    handler
-        .playback_recovery
-        .errors
-        .report(StreamError::BackendSpecific {
-            err: cpal::BackendSpecificError {
-                description: "SetThreadPriority failed: access denied".to_owned(),
-            },
-        });
+    report_error(
+        &handler,
+        backend_error("SetThreadPriority failed: access denied"),
+    );
     handler.recover_playback_with(Instant::now(), |_, _| panic!("Warning reopened playback"));
     assert_eq!(
         handler

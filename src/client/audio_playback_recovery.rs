@@ -1,4 +1,4 @@
-use super::{AudioBuffer, AudioDecoder, AudioFormat, AudioHandler, MediaData, Mono, Stereo};
+use super::{AudioDecoder, AudioFormat, AudioHandler, MediaData, Mono, Stereo};
 use cpal::StreamError;
 use crossbeam_queue::SegQueue;
 use hbb_common::{log, tokio::time::Instant, ResultType};
@@ -15,21 +15,25 @@ const PRIORITY_WARNING_PREFIX: &str = "SetThreadPriority failed: ";
 #[path = "audio_playback_recovery_state_tests.rs"]
 mod state_tests;
 
-#[derive(Clone, Default)]
-pub(super) struct PlaybackErrors(Arc<SegQueue<StreamError>>);
+#[derive(Default)]
+pub(super) struct PlaybackRecovery {
+    pub(super) errors: Arc<SegQueue<StreamError>>,
+    format: Option<AudioFormat>,
+    pub(super) retry_at: Option<Instant>,
+    restart_not_before: Option<Instant>,
+    awaiting_callback: bool,
+}
 
-impl PlaybackErrors {
-    pub(super) fn report(&self, error: StreamError) {
-        self.0.push(error);
-    }
-
-    pub(super) fn pop(&self) -> Option<StreamError> {
-        self.0.pop()
+impl PlaybackRecovery {
+    pub(super) fn new_error_callback(&mut self) -> impl FnMut(StreamError) + Send + 'static {
+        self.errors = Default::default();
+        let errors = self.errors.clone();
+        move |error| errors.push(error)
     }
 
     fn report_pending(&self) -> bool {
         let mut failed = false;
-        while let Some(error) = self.pop() {
+        while let Some(error) = self.errors.pop() {
             if matches!(&error, StreamError::BackendSpecific { err }
                 if err.description.starts_with(PRIORITY_WARNING_PREFIX))
             {
@@ -43,30 +47,16 @@ impl PlaybackErrors {
     }
 }
 
-#[derive(Default)]
-pub(super) struct PlaybackRecovery {
-    pub(super) errors: PlaybackErrors,
-    format: Option<AudioFormat>,
-    pub(super) retry_at: Option<Instant>,
-    restart_not_before: Option<Instant>,
-    awaiting_callback: bool,
-}
-
 impl AudioHandler {
     fn clear_playback_stream(&mut self) {
         // Dropping CPAL may join its worker; run this on the owner, not its callback.
         self.audio_stream = None;
-        self.playback_recovery.errors.report_pending();
+        self.playback_recovery.report_pending();
         self.playback_status.report_errors();
-        self.playback_status = Default::default();
-        self.audio_buffer = AudioBuffer::default();
-        self.audio_resampler = None;
-        self.audio_decoder = None;
-        self.sample_rate = (0, 0);
-        self.channels = 0;
-        self.device_channel = 0;
-        self.playback_recovery.errors = PlaybackErrors::default();
-        self.playback_recovery.awaiting_callback = false;
+        let recovery = std::mem::take(self).playback_recovery;
+        self.playback_recovery.format = recovery.format;
+        self.playback_recovery.retry_at = recovery.retry_at;
+        self.playback_recovery.restart_not_before = recovery.restart_not_before;
     }
 
     pub(super) fn prepare_playback(&mut self, format: &AudioFormat) {
@@ -111,7 +101,7 @@ impl AudioHandler {
         now: Instant,
         restart: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
     ) {
-        if self.playback_recovery.errors.report_pending() {
+        if self.playback_recovery.report_pending() {
             self.clear_playback_stream();
             self.playback_recovery.retry_at = Some(
                 self.playback_recovery

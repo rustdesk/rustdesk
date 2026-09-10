@@ -2488,12 +2488,7 @@ impl AudioHandler {
     ) -> ResultType<()> {
         self.device_channel = config.channels;
         #[cfg(target_os = "windows")]
-        let errors = audio_playback_recovery::PlaybackErrors::default();
-        #[cfg(target_os = "windows")]
-        let err_fn = {
-            let errors = errors.clone();
-            move |error| errors.report(error)
-        };
+        let err_fn = self.playback_recovery.new_error_callback();
         #[cfg(not(target_os = "windows"))]
         let err_fn = move |err| {
             // too many errors, will improve later
@@ -2524,10 +2519,6 @@ impl AudioHandler {
         stream.play()?;
         self.audio_stream = Some(Box::new(stream));
         self.playback_status = playback_status;
-        #[cfg(target_os = "windows")]
-        {
-            self.playback_recovery.errors = errors;
-        }
         Ok(())
     }
 }
