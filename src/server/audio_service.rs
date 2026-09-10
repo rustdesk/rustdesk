@@ -28,6 +28,41 @@ lazy_static::lazy_static! {
     static ref VOICE_CALL_INPUT_DEVICE: Arc::<Mutex::<Option<String>>> = Default::default();
 }
 
+/// Return the configured audio host. WASAPI remains the default on Windows;
+/// ASIO is used only when RustDesk was built with the `asio` feature and the
+/// user explicitly selected it.
+#[cfg(not(target_os = "linux"))]
+pub fn get_audio_host() -> cpal::Host {
+    #[cfg(all(target_os = "windows", feature = "asio"))]
+    if Config::get_option("audio-host").eq_ignore_ascii_case("asio") {
+        match cpal::host_from_id(cpal::HostId::Asio) {
+            Ok(host) => {
+                log::info!("Using ASIO audio host");
+                return host;
+            }
+            Err(err) => {
+                log::warn!("Failed to initialise ASIO audio host, falling back to WASAPI: {err}");
+            }
+        }
+    }
+    cpal::default_host()
+}
+
+/// Hosts that can be selected by the desktop audio settings.
+pub fn get_audio_hosts() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut hosts = vec!["wasapi".to_owned()];
+        #[cfg(feature = "asio")]
+        if cpal::available_hosts().contains(&cpal::HostId::Asio) {
+            hosts.push("asio".to_owned());
+        }
+        return hosts;
+    }
+    #[cfg(not(target_os = "windows"))]
+    Vec::new()
+}
+
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn new() -> GenericService {
     let svc = EmptyExtraFieldService::new(NAME.to_owned(), true);
@@ -190,10 +225,6 @@ mod cpal_impl {
         traits::{DeviceTrait, HostTrait, StreamTrait},
         Device, Host, InputCallbackInfo, SupportedStreamConfig,
     };
-
-    lazy_static::lazy_static! {
-        static ref HOST: Host = cpal::default_host();
-    }
 
     const AUDIO_PACKETS_PER_SECOND: usize = 100;
 
@@ -362,12 +393,13 @@ mod cpal_impl {
 
     #[cfg(feature = "screencapturekit")]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+        let host = super::get_audio_host();
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
-            return get_audio_input(&audio_input);
+            return get_audio_input(&host, &audio_input);
         }
         if !is_screen_capture_kit_available() {
-            return get_audio_input("");
+            return get_audio_input(&host, "");
         }
         let device = HOST_SCREEN_CAPTURE_KIT
             .as_ref()?
@@ -383,11 +415,12 @@ mod cpal_impl {
 
     #[cfg(windows)]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+        let host = super::get_audio_host();
         let audio_input = super::get_audio_input();
         if !audio_input.is_empty() {
-            return get_audio_input(&audio_input);
+            return get_audio_input(&host, &audio_input);
         }
-        let device = HOST
+        let device = host
             .default_output_device()
             .with_context(|| "Failed to get default output device for loopback")?;
         log::info!(
@@ -404,11 +437,15 @@ mod cpal_impl {
 
     #[cfg(not(any(windows, feature = "screencapturekit")))]
     fn get_device() -> ResultType<(Device, SupportedStreamConfig)> {
+        let host = super::get_audio_host();
         let audio_input = super::get_audio_input();
-        get_audio_input(&audio_input)
+        get_audio_input(&host, &audio_input)
     }
 
-    fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
+    fn get_audio_input(
+        host: &Host,
+        audio_input: &str,
+    ) -> ResultType<(Device, SupportedStreamConfig)> {
         let mut device = None;
         #[cfg(feature = "screencapturekit")]
         if !audio_input.is_empty() && is_screen_capture_kit_available() {
@@ -424,7 +461,7 @@ mod cpal_impl {
             }
         }
         if device.is_none() && !audio_input.is_empty() {
-            for d in HOST
+            for d in host
                 .devices()
                 .with_context(|| "Failed to get audio devices")?
             {
@@ -435,7 +472,7 @@ mod cpal_impl {
             }
         }
         let device = device.unwrap_or(
-            HOST.default_input_device()
+            host.default_input_device()
                 .with_context(|| "Failed to get default input device for loopback")?,
         );
         log::info!("Input device: {}", device.name().unwrap_or("".to_owned()));

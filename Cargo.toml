@@ -46,6 +46,9 @@ unix-file-copy-paste = [
     "clipboard/unix-file-copy-paste",
 ]
 screencapturekit = ["cpal/screencapturekit"]
+# Enables CPAL's ASIO backend on Windows. It is opt-in because ASIO requires
+# the Steinberg SDK and a compatible driver at build/runtime.
+asio = ["cpal/asio"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

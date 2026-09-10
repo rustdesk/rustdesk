@@ -370,7 +370,7 @@ pub fn get_sound_inputs() -> Vec<String> {
             use cpal::traits::{DeviceTrait, HostTrait};
             // Do not use `cpal::host_from_id(cpal::HostId::ScreenCaptureKit)` for feature = "screencapturekit"
             // Because we explicitly handle the "System Sound" device.
-            let host = cpal::default_host();
+            let host = crate::audio_service::get_audio_host();
             if let Ok(devices) = host.devices() {
                 for device in devices {
                     if device.default_input_config().is_err() {
@@ -409,6 +409,11 @@ pub fn get_sound_inputs() -> Vec<String> {
 }
 
 #[inline]
+pub fn get_audio_hosts() -> Vec<String> {
+    crate::audio_service::get_audio_hosts()
+}
+
+#[inline]
 pub fn set_options(m: HashMap<String, String>) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -444,7 +449,7 @@ pub fn set_option(key: String, value: String) {
                 return;
             }
         }
-    } else if &key == "audio-input" {
+    } else if &key == "audio-input" || &key == "audio-host" {
         #[cfg(not(target_os = "ios"))]
         crate::audio_service::restart();
     }

@@ -778,5 +778,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "Uzak cihazdaki ekran paylaşımı isteği tamamlanmadan sona erdi"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk, XDG Desktop Portal'dan kullanılabilir bir ekran alamadı, PipeWire kitaplığı çok eski olabilir"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ekran yakalama için gereken GStreamer bileşenini yükleyemedi ({})"),
+        ("Audio host", ""),
     ].iter().cloned().collect();
 }

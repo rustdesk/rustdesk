@@ -334,6 +334,10 @@ impl UI {
         Value::from_iter(get_sound_inputs())
     }
 
+    fn get_audio_hosts(&self) -> Value {
+        Value::from_iter(crate::audio_service::get_audio_hosts())
+    }
+
     fn set_options(&self, v: Value) {
         let mut m = HashMap::new();
         for (k, v) in v.items() {
@@ -785,6 +789,7 @@ impl sciter::EventHandler for UI {
         fn get_license();
         fn test_if_valid_server(String, bool);
         fn get_sound_inputs();
+        fn get_audio_hosts();
         fn set_options(Value);
         fn set_option(String, String);
         fn get_software_update_url();
@@ -835,7 +840,7 @@ impl sciter::host::HostHandler for UIHostHandler {
 fn get_sound_inputs() -> Vec<String> {
     let mut out = Vec::new();
     use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
+    let host = crate::audio_service::get_audio_host();
     if let Ok(devices) = host.devices() {
         for device in devices {
             if device.default_input_config().is_err() {

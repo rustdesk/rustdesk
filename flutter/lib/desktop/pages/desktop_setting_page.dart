@@ -416,6 +416,7 @@ class _GeneralState extends State<_General> {
         theme(),
         _Card(title: 'Language', children: [language()]),
         if (!isWeb) hwcodec(),
+        if (!isWeb) audioHost(context),
         if (!isWeb) audio(context),
         if (!isWeb) record(context),
         if (!isWeb) WaylandCard(),
@@ -757,6 +758,23 @@ class _GeneralState extends State<_General> {
     }
 
     return AudioInput(builder: builder, isCm: false, isVoiceCall: false);
+  }
+
+  Widget audioHost(BuildContext context) {
+    builder(hosts, currentHost, setHost) {
+      final child = ComboBox(
+        keys: hosts,
+        values: hosts.map((host) => host.toUpperCase()).toList(),
+        initialKey: currentHost,
+        onChanged: (key) async {
+          await setHost(key);
+          setState(() {});
+        },
+      ).marginOnly(left: _kContentHMargin);
+      return _Card(title: translate('Audio host'), children: [child]);
+    }
+
+    return AudioHost(builder: builder);
   }
 
   Widget record(BuildContext context) {

@@ -7,7 +7,7 @@ use clipboard_master::CallbackResult;
 #[cfg(not(target_os = "linux"))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, StreamConfig,
+    Device, StreamConfig,
 };
 use crossbeam_queue::ArrayQueue;
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
@@ -153,11 +153,6 @@ struct ClipboardState {
     #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
     is_file_required: bool,
     running: bool,
-}
-
-#[cfg(not(target_os = "linux"))]
-lazy_static::lazy_static! {
-    static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2318,7 +2313,8 @@ impl AudioHandler {
     /// Start the audio playback.
     #[cfg(not(target_os = "linux"))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
-        let device = AUDIO_HOST
+        let host = crate::audio_service::get_audio_host();
+        let device = host
             .default_output_device()
             .with_context(|| "Failed to get default output device")?;
         log::info!(

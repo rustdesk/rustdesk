@@ -21,8 +21,24 @@ class AudioInput extends StatelessWidget {
       : super(key: key);
 
   static String getDefault() {
-    if (bind.mainAudioSupportLoopback()) return translate(_kSystemSound);
+    if (bind.mainAudioSupportLoopback()) {
+      return translate(_kSystemSound);
+    }
     return '';
+  }
+
+  static Future<String> getDefaultForHost() async {
+    final audioHost = await getEffectiveHost();
+    if (bind.mainAudioSupportLoopback() && audioHost.isEmpty) {
+      return getDefault();
+    }
+    return '';
+  }
+
+  static Future<String> getEffectiveHost() async {
+    final configured = await bind.mainGetOption(key: 'audio-host');
+    final hosts = (await bind.mainGetAudioHosts()).toList();
+    return configured.isNotEmpty && hosts.contains(configured) ? configured : '';
   }
 
   static Future<String> getAudioInput(bool isCm, bool isVoiceCall) {
@@ -38,13 +54,18 @@ class AudioInput extends StatelessWidget {
     if (device.isNotEmpty) {
       return device;
     } else {
-      return getDefault();
+      return getDefaultForHost();
     }
   }
 
   static Future<void> setDevice(
       String device, bool isCm, bool isVoiceCall) async {
-    if (device == getDefault()) device = '';
+    if (device == await getDefaultForHost()) {
+      device = '';
+      if (!isVoiceCall) {
+        await bind.mainSetOption(key: 'audio-host', value: '');
+      }
+    }
     if (isVoiceCall) {
       await bind.setVoiceCallInputDevice(isCm: isCm, device: device);
     } else {
@@ -55,7 +76,8 @@ class AudioInput extends StatelessWidget {
   static Future<Map<String, Object>> getDevicesInfo(
       bool isCm, bool isVoiceCall) async {
     List<String> devices = (await bind.mainGetSoundInputs()).toList();
-    if (bind.mainAudioSupportLoopback()) {
+    final audioHost = await getEffectiveHost();
+    if (bind.mainAudioSupportLoopback() && audioHost.isEmpty) {
       devices.insert(0, translate(_kSystemSound));
     }
     String current = await getValue(isCm, isVoiceCall);
@@ -75,6 +97,38 @@ class AudioInput extends StatelessWidget {
         return builder(devices, currentDevice, (devices) {
           setDevice(devices, isCm, isVoiceCall);
         });
+      },
+    );
+  }
+}
+
+class AudioHost extends StatelessWidget {
+  final Widget Function(List<String> hosts, String currentHost,
+      Future<void> Function(String) setHost) builder;
+
+  const AudioHost({Key? key, required this.builder}) : super(key: key);
+
+  static Future<Map<String, Object>> getHostsInfo() async {
+    final hosts = (await bind.mainGetAudioHosts()).toList();
+    final configured = await bind.mainGetOption(key: 'audio-host');
+    final current = hosts.contains(configured) ? configured : 'wasapi';
+    return {'hosts': hosts, 'current': current};
+  }
+
+  static Future<void> setAudioHost(String host) async {
+    await bind.mainSetOption(
+        key: 'audio-host', value: host == 'wasapi' ? '' : host);
+    await bind.mainSetOption(key: 'audio-input', value: '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return futureBuilder(
+      future: getHostsInfo(),
+      hasData: (data) {
+        final hosts = data['hosts'] as List<String>;
+        if (hosts.length < 2) return const Offstage();
+        return builder(hosts, data['current'] as String, setAudioHost);
       },
     );
   }

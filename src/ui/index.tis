@@ -150,6 +150,53 @@ class DirectServer: Reactor.Component {
 
 var myIdMenu;
 var audioInputMenu;
+var audioHostMenu;
+
+function audio_host_is_asio() {
+    var hosts = handler.get_audio_hosts();
+    return hosts.length > 1 && handler.get_option("audio-host") == "asio";
+}
+
+class AudioHosts: Reactor.Component {
+    function this() {
+        audioHostMenu = this;
+    }
+
+    function render() {
+        var hosts = handler.get_audio_hosts();
+        if (hosts.length < 2) return <li style="display:hidden" />;
+        var me = this;
+        self.timer(1ms, function() { me.toggleMenuState() });
+        return <li>{translate('Audio host')}
+            <menu #audio-host key={hosts.length}>
+                {hosts.map(function(name) {
+                var label = name == "asio" ? "ASIO" : "WASAPI";
+                return <li id={name}><span>{svg_checkmark}</span>{label}</li>;
+                })}
+            </menu>
+        </li>;
+    }
+
+    function get_value() {
+        return handler.get_option("audio-host") || "wasapi";
+    }
+
+    function toggleMenuState() {
+        var v = this.get_value();
+        for (var el in this.$$(menu#audio-host>li)) {
+            el.attributes.toggleClass("selected", el.id == v);
+        }
+    }
+
+    event click $(menu#audio-host>li) (_, me) {
+        if (me.id == this.get_value()) return;
+        handler.set_option("audio-host", me.id == "wasapi" ? "" : me.id);
+        handler.set_option("audio-input", "");
+        this.toggleMenuState();
+        if (audioInputMenu) audioInputMenu.update({ show: true });
+    }
+};
+
 class AudioInputs: Reactor.Component {
     function this() {
         audioInputMenu = this;
@@ -158,7 +205,9 @@ class AudioInputs: Reactor.Component {
     function render() {
         if (!this.show) return <li />;
         var inputs = handler.get_sound_inputs();
-        if (is_win) inputs = ["System Sound"].concat(inputs);
+        if (is_win && !audio_host_is_asio()) {
+            inputs = ["System Sound"].concat(inputs);
+        }
         if (!inputs.length) return <li style="display:hidden" />;
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
@@ -174,7 +223,7 @@ class AudioInputs: Reactor.Component {
     }
 
     function get_default() {
-        if (is_win) return "System Sound";
+        if (is_win && !audio_host_is_asio()) return "System Sound";
         return "";
     }
 
@@ -205,7 +254,10 @@ class AudioInputs: Reactor.Component {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : default_option_yes);
         } else {
           if (v == this.get_value()) return;
-          if (v == this.get_default()) v = "";
+          if (v == this.get_default()) {
+            handler.set_option("audio-host", "");
+            v = "";
+          }
           handler.set_option("audio-input", v);
         }
         this.toggleMenuState();
@@ -523,6 +575,7 @@ class MyIdMenu: Reactor.Component {
                 {!disable_settings && is_win ? <li #enable-block-input><span>{svg_checkmark}</span>{translate('Enable blocking user input')}</li> : ""}
                 {!disable_settings && (handler.get_supported_privacy_mode_impls() != '[]') && <li #enable-privacy-mode><span>{svg_checkmark}</span>{translate('Enable privacy mode')}</li>}
                 {!disable_settings && <li #enable-lan-discovery><span>{svg_checkmark}</span>{translate('Enable LAN discovery')}</li>}
+                <AudioHosts />
                 <AudioInputs />
                 <Enhancements />
                 {!disable_settings && <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>}
@@ -557,6 +610,7 @@ class MyIdMenu: Reactor.Component {
     }
 
     function showSettingMenu() {
+        if (audioHostMenu) audioHostMenu.update({ show: true });
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
         if (direct_server) direct_server.update();
@@ -1408,6 +1462,7 @@ function showSettings() {
     // show immediately at button, then update menu state asynchronously
     anchor.popup(menu);
     self.timer(1ms, function() {
+        if (audioHostMenu) audioHostMenu.update({ show: true });
         audioInputMenu.update({ show: true });
         myIdMenu.toggleMenuState();
         if (direct_server) direct_server.update();
