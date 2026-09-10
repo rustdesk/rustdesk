@@ -11,7 +11,10 @@ pub(super) struct CaptureErrorHandler {
 
 impl CaptureErrorHandler {
     pub(super) fn handle(&self, error: cpal::StreamError) {
-        if matches!(error, cpal::StreamError::StreamInterrupted { .. }) {
+        if matches!(
+            error,
+            cpal::StreamError::StreamInterrupted { .. } | cpal::StreamError::DeviceNotAvailable
+        ) {
             // ScreenCaptureKit can stop capture while the remote session stays open.
             // The observed -3821 error does not identify its underlying trigger.
             // https://developer.apple.com/documentation/screencapturekit/scstreamdelegate/stream(_:didstopwitherror:)
@@ -20,6 +23,20 @@ impl CaptureErrorHandler {
         } else {
             // Keep frequent sample-buffer errors at the existing trace level.
             hbb_common::log::trace!("an error occurred on stream: {error}");
+        }
+    }
+
+    pub(super) fn process_frame(&self, process: impl FnOnce() -> hbb_common::ResultType<()>) {
+        // Defensive recovery: persistent processing failures with valid capture input
+        // have not been reproduced. Stop using a failed processor until stream replacement.
+        if self.needs_restart() {
+            return;
+        }
+        if let Err(error) = process() {
+            self.interrupted.store(true, Ordering::Relaxed);
+            hbb_common::log::error!(
+                "Failed to process captured audio frame; requesting stream restart: {error:#}"
+            );
         }
     }
 
@@ -68,5 +85,45 @@ mod tests {
             },
         });
         assert!(!errors.needs_restart());
+    }
+
+    #[test]
+    fn processing_failure_skips_remaining_frames_until_stream_replacement() {
+        const FRAME_SAMPLES: usize = 2;
+        const FRAMES_PER_CALLBACK: usize = 3;
+        const CALLBACK_COUNT: usize = 2;
+        const FAILURE_CALL: usize = 2;
+        let errors = CaptureErrorHandler::default();
+        let callback_errors = errors.clone();
+        let mut framer =
+            super::super::audio_capture::CaptureFrameBuffer::new(FRAME_SAMPLES).unwrap();
+        let input = [0.0; FRAME_SAMPLES * FRAMES_PER_CALLBACK];
+        let mut processed = 0;
+        let mut failures = 0;
+
+        // Inject an error to test recovery; this is not a valid-input backend failure reproduction.
+        for _ in 0..CALLBACK_COUNT {
+            framer.process(input.iter().copied(), |_| {
+                callback_errors.process_frame(|| {
+                    processed += 1;
+                    if processed >= FAILURE_CALL {
+                        failures += 1;
+                        hbb_common::anyhow::bail!("Injected capture processing failure");
+                    }
+                    Ok(())
+                });
+            });
+        }
+
+        assert_eq!(processed, FAILURE_CALL);
+        assert_eq!(failures, 1);
+        assert!(errors.needs_restart());
+        let replacement = CaptureErrorHandler::default();
+        replacement.process_frame(|| {
+            processed += 1;
+            Ok(())
+        });
+        assert_eq!(processed, FAILURE_CALL + 1);
+        assert!(!replacement.needs_restart());
     }
 }
