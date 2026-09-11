@@ -198,7 +198,46 @@ class MainFlutterWindow: NSWindow {
         }
     }
 
+    private func registerCursorSizeChannel(registrar: FlutterPluginRegistrar) {
+        let channel = FlutterMethodChannel(name: "org.rustdesk.rustdesk/cursor", binaryMessenger: registrar.messenger)
+        channel.setMethodCallHandler { call, result in
+            guard call.method == "getSystemCursorSize" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
+            guard let size = self.systemCursorSize() else {
+                result(FlutterError(code: "cursor_size", message: "Could not measure the local system cursor", details: nil))
+                return
+            }
+            result(size)
+        }
+    }
+
+    private func systemCursorSize() -> Double? {
+        let image = NSCursor.arrow.image
+        guard let data = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: data),
+              bitmap.pixelsWide > 0, bitmap.pixelsHigh > 0 else { return nil }
+        var left = bitmap.pixelsWide, top = bitmap.pixelsHigh
+        var right = -1, bottom = -1
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y) else { return nil }
+                if color.alphaComponent == 0 { continue }
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = max(bottom, y)
+            }
+        }
+        guard right >= left else { return nil }
+        let width = Double(right - left + 1) * image.size.width / Double(bitmap.pixelsWide)
+        let height = Double(bottom - top + 1) * image.size.height / Double(bitmap.pixelsHigh)
+        return max(width, height)
+    }
+
     public func setMethodHandler(registrar: FlutterPluginRegistrar) {
+        registerCursorSizeChannel(registrar: registrar)
         let channel = FlutterMethodChannel(name: "org.rustdesk.rustdesk/host", binaryMessenger: registrar.messenger)
         channel.setMethodCallHandler({
             (call, result) -> Void in
