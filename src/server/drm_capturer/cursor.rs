@@ -9,7 +9,7 @@ use hbb_common::{anyhow::anyhow, bail, log, tokio, ResultType};
 use std::{
     sync::{
         mpsc::{self, Receiver, Sender, TryRecvError},
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -18,6 +18,8 @@ use std::{
 mod ffi;
 mod metadata;
 mod pipewire;
+#[cfg(test)]
+mod tests;
 
 const BUS: &str = "org.gnome.Mutter.ScreenCast";
 const SESSION_INTERFACE: &str = "org.gnome.Mutter.ScreenCast.Session";
@@ -27,10 +29,14 @@ const DBUS_TIMEOUT: Duration = Duration::from_secs(2);
 const START_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
+pub(super) type WireCursor = (u64, u32, u32, i32, i32, Vec<u8>);
+
 pub struct Capture {
     stop: Option<Sender<()>>,
     thread: Option<JoinHandle<()>>,
     error: Arc<Mutex<Option<String>>>,
+    ready: Arc<Mutex<bool>>,
+    pub(super) wire_cursor: Option<WireCursor>,
 }
 
 impl Capture {
@@ -41,10 +47,15 @@ impl Capture {
         let (stop, receiver) = mpsc::channel();
         let error = Arc::new(Mutex::new(None));
         let worker_error = error.clone();
+        let ready = Arc::new(Mutex::new(false));
+        let worker_ready = ready.clone();
         let thread = thread::Builder::new()
             .name("drm-cursor".into())
             .spawn(move || {
-                if let Err(error) = run((display, epoch), connector, receiver) {
+                let result = run(connector, receiver, move |cursor| {
+                    publish((display, epoch), &worker_ready, cursor);
+                });
+                if let Err(error) = result {
                     log::error!("drm: Mutter cursor capture failed: {error:#}");
                     *worker_error.lock().unwrap() =
                         Some(format!("Mutter cursor capture: {error:#}"));
@@ -54,11 +65,17 @@ impl Capture {
             stop: Some(stop),
             thread: Some(thread),
             error,
+            ready,
+            wire_cursor: None,
         }))
     }
 
     pub fn error(&self) -> Option<String> {
         self.error.lock().unwrap().clone()
+    }
+
+    pub fn ready(&self) -> MutexGuard<'_, bool> {
+        self.ready.lock().unwrap()
     }
 
     pub async fn stop(mut self) -> ResultType<()> {
@@ -92,27 +109,30 @@ fn stopped(receiver: &Receiver<()>) -> bool {
     !matches!(receiver.try_recv(), Err(TryRecvError::Empty))
 }
 
-fn run(target: (i32, u64), connector: String, stop: Receiver<()>) -> ResultType<()> {
+fn publish(target: (i32, u64), ready: &Mutex<bool>, cursor: DrmCursorData) {
+    // Serialize source switching with wire publication, including pending replay.
+    let mut ready = ready.lock().unwrap();
+    if !*ready {
+        log::info!("drm: using Mutter cursor metadata for display {}", target.0);
+    }
+    *ready = true;
+    // These sprites already have the monitor's upright orientation and physical scale.
+    super::set_drm_cursor(target.0, target.1, cursor);
+}
+
+fn run(
+    connector: String,
+    stop: Receiver<()>,
+    publish: impl FnMut(DrmCursorData) + Send + 'static,
+) -> ResultType<()> {
     let session = Session::new()?;
     let Some(node) = session.start(&super::normalize_connector(&connector), &stop)? else {
         return Ok(());
     };
-    let stream = pipewire::Stream::new(node, move |cursor| {
-        // These sprites already have the monitor's upright orientation and physical scale.
-        super::set_drm_cursor(target.0, target.1, cursor);
-    })?;
+    let stream = pipewire::Stream::new(node, publish)?;
     let started = Instant::now();
-    let mut ready = false;
     while !stopped(&stop) {
-        if stream.received()? {
-            if !ready {
-                log::info!(
-                    "drm: using Mutter cursor metadata for display {} ({connector})",
-                    target.0
-                );
-                ready = true;
-            }
-        } else if started.elapsed() >= START_TIMEOUT {
+        if !stream.received()? && started.elapsed() >= START_TIMEOUT {
             bail!("Timed out waiting for PipeWire cursor metadata");
         }
         session.conn.process(POLL_INTERVAL)?;

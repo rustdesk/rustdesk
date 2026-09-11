@@ -25,15 +25,17 @@ class _Image extends ChangeNotifier implements ImageModel {
 }
 
 class _Canvas extends ChangeNotifier implements CanvasModel {
-  _Canvas(this.devicePixelRatio);
+  _Canvas(this.devicePixelRatio, {required this.style, required this.scale});
+
+  final String style;
 
   @override
   final double devicePixelRatio;
   @override
   final imageOverflow = false.obs;
   @override
-  final viewStyle = ViewStyle(
-    style: kRemoteViewStyleAdaptive,
+  late final viewStyle = ViewStyle(
+    style: style,
     width: _viewport.width,
     height: _viewport.height,
     displayWidth: 400,
@@ -44,7 +46,7 @@ class _Canvas extends ChangeNotifier implements CanvasModel {
   @override
   Size get size => _viewport;
   @override
-  double get scale => 0.5;
+  final double scale;
   @override
   double get x => 0;
   @override
@@ -200,8 +202,15 @@ void main() {
     if (Platform.isWindows) expect(cursor.data!.length, 25 * 34 * 4);
   });
 
-  for (final dpr in [1.0, 2.0, 3.0]) {
-    testWidgets('Zoom off at local DPR $dpr ignores remote raster density',
+  for (final (dpr, style, scale) in [
+    for (final dpr in [1.0, 2.0, 3.0])
+      for (final (style, scale) in [
+        (kRemoteViewStyleAdaptive, 0.5),
+        (kRemoteViewStyleCustom, 0.25),
+        (kRemoteViewStyleCustom, 2.0),
+      ]) (dpr, style, scale),
+  ]) {
+    testWidgets('$style scale=$scale DPR=$dpr preserves local size and hotspot',
         (tester) async {
       final channel = Platform.isWindows
           ? SystemChannels.mouseCursor
@@ -227,18 +236,20 @@ void main() {
       addTearDown(() => tester.binding.defaultBinaryMessenger
           .setMockMethodCallHandler(sizeChannel, null));
       final cursor = _Cursor(_arrow(1));
+      final zoom = false.obs;
       await tester.pumpWidget(MediaQuery(
         data: MediaQueryData(devicePixelRatio: dpr),
         child: MultiProvider(
           providers: [
             ChangeNotifierProvider<ImageModel>(create: (_) => _Image()),
-            ChangeNotifierProvider<CanvasModel>(create: (_) => _Canvas(dpr)),
+            ChangeNotifierProvider<CanvasModel>(
+                create: (_) => _Canvas(dpr, style: style, scale: scale)),
             ChangeNotifierProvider<CursorModel>.value(value: cursor),
           ],
           child: ImagePaint(
             ffi: _FFI(),
             id: 'local-size-test',
-            zoomCursor: false.obs,
+            zoomCursor: zoom,
             cursorOverImage: true.obs,
             keyboardEnabled: true.obs,
             remoteCursorMoved: false.obs,
@@ -246,12 +257,14 @@ void main() {
         ),
       ));
       await tester.pump();
-      expect(registered, hasLength(1));
-      final original = registered.single;
+      expect(registered, isNotEmpty);
+      expect(cursor.cache.localSize, Platform.isWindows ? 23.0 * dpr : 23.0);
+      final original = registered.last;
+      final beforeDensityChange = registered.length;
       cursor.cache = _arrow(2);
       cursor.notifyListeners();
       await tester.pump();
-      expect(registered, hasLength(2));
+      expect(registered, hasLength(beforeDensityChange + 1));
       final retina = registered.last;
       expect(
         [retina['width'], retina['height'], retina['hotX'], retina['hotY']],
@@ -264,6 +277,14 @@ void main() {
         reason: 'Only the remote raster density changed; the local cursor must '
             'retain its size and hotspot.',
       );
+      zoom.value = true;
+      await tester.pump();
+      expect(cursor.cache.localSize, isNull);
+      final zoomScale = scale * (Platform.isWindows ? dpr : 1);
+      expect(cursor.cache.scale,
+          zoomScale < kMinCursorSize / 34 ? kMinCursorSize / 34 : zoomScale);
+      expect(cursor.cache.hotx / cursor.cache.scaledWidth, closeTo(4 / 17, 1e-9));
+      expect(cursor.cache.hoty / cursor.cache.scaledHeight, closeTo(4 / 23, 1e-9));
       await tester.pumpWidget(const SizedBox.shrink());
       cursor.dispose();
     });

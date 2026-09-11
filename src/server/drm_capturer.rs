@@ -632,7 +632,7 @@ async fn recv_thread(
         let _ = tx.send(Err(err));
         return;
     }
-    let mutter_cursor = match cursor::Capture::start(
+    let mut mutter_cursor = match cursor::Capture::start(
         display,
         cursor_epoch,
         displays[wire_idx].name.clone(),
@@ -641,8 +641,8 @@ async fn recv_thread(
     {
         Ok(cursor) => cursor,
         Err(error) => {
-            let _ = tx.send(Err(error));
-            return;
+            log::error!("drm: could not start Mutter cursor capture; using wire cursor: {error:#}");
+            None
         }
     };
     let _ = tx.send(Ok((displays, wire_idx)));
@@ -655,11 +655,20 @@ async fn recv_thread(
             break "stopped".to_owned();
         }
         if let Some(error) = mutter_cursor.as_ref().and_then(cursor::Capture::error) {
-            break error;
+            log::error!("drm: {error}; resuming wire cursor capture");
+            if let Some(mut cursor) = mutter_cursor.take() {
+                if let Some(wire) = cursor.wire_cursor.take() {
+                    pending_cursor = Some(wire);
+                }
+                if let Err(error) = cursor.stop().await {
+                    log::error!("drm: could not join the Mutter cursor worker: {error:#}");
+                }
+            }
         }
         if pending_cursor.is_some() {
+            let ready = mutter_cursor.as_ref().map(cursor::Capture::ready);
             let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
-            if t != TRANSFORM_PENDING {
+            if t != TRANSFORM_PENDING && ready.as_deref() != Some(&true) {
                 if let Some((id, width, height, hotx, hoty, raw)) = pending_cursor.take() {
                     deliver_drm_cursor(display, cursor_epoch, id, width, height, hotx, hoty, raw, t);
                 }
@@ -781,7 +790,13 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        if mutter_cursor.is_some() {
+                        // Retain the latest wire shape for a failed Mutter worker, even when
+                        // that shape arrived before the first Mutter sprite.
+                        if let Some(cursor) = mutter_cursor.as_mut() {
+                            cursor.wire_cursor = Some((id, width, height, hotx, hoty, raw.clone()));
+                        }
+                        let ready = mutter_cursor.as_ref().map(cursor::Capture::ready);
+                        if ready.as_deref() == Some(&true) {
                             continue;
                         }
                         let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);

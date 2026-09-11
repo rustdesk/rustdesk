@@ -98,7 +98,10 @@ inline void Register(FlView* view) {
     }
     if (error) g_warning("Cursor size response failed: %s", error->message);
   }, view, nullptr);
-  g_object_set_data_full(G_OBJECT(view), "cursor-size-channel", channel, g_object_unref);
+  g_object_set_data_full(G_OBJECT(view), "cursor-size-channel", channel, [](gpointer data) {
+    fl_method_channel_set_method_call_handler(FL_METHOD_CHANNEL(data), nullptr, nullptr, nullptr);
+    g_object_unref(data);
+  });
 }
 
 }  // namespace cursor_size

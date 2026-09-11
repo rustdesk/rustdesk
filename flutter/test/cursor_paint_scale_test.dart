@@ -107,6 +107,10 @@ void main() {
     (kRemoteViewStyleAdaptive, true, 3.0, (48, 64), 0.375, 0.375, true),
     (kRemoteViewStyleOriginal, false, 2.0, (48, 64), 0.5, 0.5, true),
     (kRemoteViewStyleOriginal, true, 2.0, (48, 64), 0.5, 0.5, true),
+    for (final zoom in [false, true])
+      for (final scale in [0.25, 2.0])
+        for (final texture in [false, true])
+          (kRemoteViewStyleCustom, zoom, 2.0, (48, 64), scale, scale, texture),
     (
       kRemoteViewStyleAdaptive,
       false,

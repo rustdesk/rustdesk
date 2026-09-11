@@ -1121,21 +1121,23 @@ class _ImagePaintState extends State<ImagePaint> {
     // changes, so read it live to follow the window across monitors.
     final dpr = MediaQuery.devicePixelRatioOf(context);
 
-    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
+    bool isViewScaled() =>
+        c.viewStyle.style == kRemoteViewStyleAdaptive ||
+        c.viewStyle.style == kRemoteViewStyleCustom;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
           final useLocalSize = !isWeb &&
               (isLinux || isMacOS || isWindows) &&
               !zoomCursor.value &&
-              isViewAdaptive();
+              isViewScaled();
           if (useLocalSize) _localCursorSize.ensureLoaded(dpr);
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             var cursorScale = 1.0;
             if (isWindows) {
               // debug win10
-              if (zoomCursor.value && isViewAdaptive()) {
+              if (zoomCursor.value && isViewScaled()) {
                 cursorScale = s * c.devicePixelRatio;
               }
             } else {
@@ -1296,7 +1298,6 @@ class _ImagePaintState extends State<ImagePaint> {
       {bool useLocalSize = false}) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = cursor.cache ?? preDefaultCursor.cache;
-    if (useLocalSize && _localCursorSize.value == null) return MouseCursor.defer;
     cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }
@@ -1305,7 +1306,6 @@ class _ImagePaintState extends State<ImagePaint> {
       {bool useLocalSize = false}) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = preForbiddenCursor.cache;
-    if (useLocalSize && _localCursorSize.value == null) return MouseCursor.defer;
     cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }

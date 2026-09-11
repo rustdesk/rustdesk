@@ -2900,6 +2900,15 @@ class CursorData {
       scale = _visibleSize == 0
           ? 1.0
           : max(localSize!, kMinCursorSize) / _visibleSize;
+      // Sparse peer artwork must not amplify the native bitmap allocation.
+      const maxNativeCursorBitmapSize = 512;
+      final maxScale = maxNativeCursorBitmapSize / max(width, height);
+      if (scale > maxScale) {
+        if (oldScale != maxScale) {
+          debugPrint('Cursor $id exceeds the native bitmap limit; reducing scale');
+        }
+        scale = maxScale;
+      }
     } else if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
@@ -3461,6 +3470,8 @@ class CursorModel with ChangeNotifier {
     if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
       _images[id]?.item1.dispose();
       _images[id] = Tuple3(image, hotx, hoty);
+    } else {
+      image.dispose();
     }
 
     // Update last cursor data.
@@ -3484,7 +3495,8 @@ class CursorModel with ChangeNotifier {
       final pixels =
           await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
       if (pixels == null) {
-        throw StateError('Could not read straight-alpha cursor pixels');
+        debugPrint('Could not read straight-alpha cursor pixels: $id');
+        return false;
       }
       imgOrigin = img2.Image.fromBytes(
           width: w, height: h, bytes: pixels.buffer, order: img2.ChannelOrder.rgba);
@@ -3493,13 +3505,18 @@ class CursorModel with ChangeNotifier {
       ByteData? imgBytes =
           await image.toByteData(format: ui.ImageByteFormat.png);
       if (imgBytes == null) {
+        debugPrint('Could not encode cursor PNG: $id');
         return false;
       }
       data = imgBytes.buffer.asUint8List();
       if (isLinux || isMacOS) {
         // Preserve the PNG's straight-alpha colors when resizing native cursors.
-        imgOrigin = img2.decodePng(data) ??
-            (throw const FormatException('Invalid native cursor PNG'));
+        final decoded = img2.decodePng(data);
+        if (decoded == null) {
+          debugPrint('Invalid native cursor PNG: $id');
+          return false;
+        }
+        imgOrigin = decoded;
       }
     }
     final cache = CursorData(

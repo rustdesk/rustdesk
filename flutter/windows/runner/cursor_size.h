@@ -71,7 +71,30 @@ inline void IncludeVisiblePixels(const Surface& surface, uint32_t background,
   }
 }
 
-inline double SystemSize() {
+inline double WindowScale(HWND window) {
+  const auto user32 = GetModuleHandleW(L"user32.dll");
+  const auto window_dpi = reinterpret_cast<UINT(WINAPI*)(HWND)>(
+      GetProcAddress(user32, "GetDpiForWindow"));
+  const auto system_dpi = reinterpret_cast<UINT(WINAPI*)()>(
+      GetProcAddress(user32, "GetDpiForSystem"));
+  const auto metrics = reinterpret_cast<int(WINAPI*)(int, UINT)>(
+      GetProcAddress(user32, "GetSystemMetricsForDpi"));
+  // Preserve the system-DPI path on Windows versions without per-window metrics.
+  if (!window_dpi || !system_dpi || !metrics) return 1.0;
+  const UINT target_dpi = window_dpi(window);
+  const UINT source_dpi = system_dpi();
+  if (!target_dpi || !source_dpi) {
+    throw std::runtime_error("Could not read the cursor window DPI");
+  }
+  const int target_size = metrics(SM_CXCURSOR, target_dpi);
+  const int source_size = metrics(SM_CXCURSOR, source_dpi);
+  if (target_size <= 0 || source_size <= 0) {
+    throw std::runtime_error("Could not read the DPI-specific cursor metrics");
+  }
+  return static_cast<double>(target_size) / source_size;
+}
+
+inline double SystemSize(HWND window) {
   HCURSOR cursor = LoadCursorW(nullptr, IDC_ARROW);
   IconBitmaps bitmaps;
   if (!cursor || !GetIconInfo(cursor, &bitmaps.info)) {
@@ -97,20 +120,21 @@ inline double SystemSize() {
   if (bounds.right <= bounds.left) {
     throw std::runtime_error("System cursor has no visible pixels");
   }
-  return (std::max)(bounds.right - bounds.left, bounds.bottom - bounds.top);
+  return (std::max)(bounds.right - bounds.left, bounds.bottom - bounds.top) *
+         WindowScale(window);
 }
 
-inline void Register(flutter::BinaryMessenger* messenger) {
+inline void Register(flutter::BinaryMessenger* messenger, HWND window) {
   flutter::MethodChannel<> channel(messenger, "org.rustdesk.rustdesk/cursor",
                                   &flutter::StandardMethodCodec::GetInstance());
-  channel.SetMethodCallHandler([](const flutter::MethodCall<>& call,
+  channel.SetMethodCallHandler([window](const flutter::MethodCall<>& call,
                                   std::unique_ptr<flutter::MethodResult<>> result) {
     if (call.method_name() != "getSystemCursorSize") {
       result->NotImplemented();
       return;
     }
     try {
-      result->Success(flutter::EncodableValue(SystemSize()));
+      result->Success(flutter::EncodableValue(SystemSize(window)));
     } catch (const std::exception& error) {
       result->Error("cursor_size", error.what());
     }
