@@ -240,10 +240,13 @@ impl HwRamEncoder {
         }
     }
 
-    fn rate_control(_config: &HwRamEncoderConfig) -> RateControl {
+    fn rate_control(config: &HwRamEncoderConfig) -> RateControl {
         #[cfg(target_os = "android")]
-        if _config.name.contains("mediacodec") {
+        if config.name.contains("mediacodec") {
             return RC_VBR;
+        }
+        if config.name.contains("vaapi") {
+            return RC_CQ;
         }
         RC_CBR
     }
