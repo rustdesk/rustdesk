@@ -19,6 +19,7 @@ import '../../models/input_model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
+import '../../utils/cursor_size.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
@@ -1088,6 +1089,21 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
+  final _localCursorSize = LocalCursorSize();
+
+  @override
+  void initState() {
+    super.initState();
+    _localCursorSize.addListener(_cursorSizeChanged);
+  }
+
+  void _cursorSizeChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _localCursorSize.dispose();
+    super.dispose();
+  }
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -1109,6 +1125,11 @@ class _ImagePaintState extends State<ImagePaint> {
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
+          final useLocalSize = !isWeb &&
+              (isLinux || isMacOS || isWindows) &&
+              !zoomCursor.value &&
+              isViewAdaptive();
+          if (useLocalSize) _localCursorSize.ensureLoaded(dpr);
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             var cursorScale = 1.0;
@@ -1149,11 +1170,16 @@ class _ImagePaintState extends State<ImagePaint> {
                                       _firstEnterImage.value = true;
                                     }
                                     return _buildCustomCursor(
-                                        context, getCursorScale());
+                                        context, getCursorScale(),
+                                        useLocalSize: useLocalSize);
                                   }
                                 }())
-                              : _buildDisabledCursor(context, getCursorScale())
+                              : _buildDisabledCursor(context, getCursorScale(),
+                                  useLocalSize: useLocalSize)
                   : MouseCursor.defer,
+              onEnter: (_) {
+                if (useLocalSize) _localCursorSize.refresh();
+              },
               onHover: (evt) {},
               child: child);
         });
@@ -1266,15 +1292,21 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
+  MouseCursor _buildCustomCursor(BuildContext context, double scale,
+      {bool useLocalSize = false}) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = cursor.cache ?? preDefaultCursor.cache;
+    if (useLocalSize && _localCursorSize.value == null) return MouseCursor.defer;
+    cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }
 
-  MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
+  MouseCursor _buildDisabledCursor(BuildContext context, double scale,
+      {bool useLocalSize = false}) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = preForbiddenCursor.cache;
+    if (useLocalSize && _localCursorSize.value == null) return MouseCursor.defer;
+    cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }
 

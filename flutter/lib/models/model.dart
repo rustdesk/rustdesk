@@ -39,6 +39,7 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
 import '../utils/image.dart' as img;
+import '../utils/cursor_size.dart';
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
@@ -2863,6 +2864,8 @@ class CursorData {
   double hoty;
   final int width;
   final int height;
+  double? localSize;
+  late final int _visibleSize = cursorVisibleSize(image);
 
   CursorData({
     required this.peerId,
@@ -2886,14 +2889,18 @@ class CursorData {
   int _scaledDimension(int dimension, double scale) {
     const minBitmapSize = 1;
     final pixels = dimension * scale;
-    return _usesLogicalCursorPixels
+    return _usesLogicalCursorPixels || localSize != null
         ? max(minBitmapSize, pixels.round())
         : pixels.toInt();
   }
 
   double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (scale != 1.0) {
+    if (localSize != null) {
+      scale = _visibleSize == 0
+          ? 1.0
+          : max(localSize!, kMinCursorSize) / _visibleSize;
+    } else if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
       final tgtHeight = (height * scale).toInt();
@@ -2904,13 +2911,17 @@ class CursorData {
       }
     }
 
-    if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
+    const bytesPerPixel = 4;
+    final byteLength = _scaledDimension(width, scale) *
+        _scaledDimension(height, scale) * bytesPerPixel;
+    if (_doubleToInt(oldScale) != _doubleToInt(scale) ||
+        (isWindows && data != null && data!.length != byteLength)) {
       if (isWindows) {
         data = img2
             .copyResize(
               image,
-              width: (width * scale).toInt(),
-              height: (height * scale).toInt(),
+              width: _scaledDimension(width, scale),
+              height: _scaledDimension(height, scale),
               interpolation: img2.Interpolation.average,
             )
             .getBytes(order: img2.ChannelOrder.bgra);
@@ -2936,7 +2947,7 @@ class CursorData {
 
   String updateGetKey(double scale) {
     scale = _checkUpdateScale(scale);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}${localSize == null ? '' : '_local'}';
   }
 }
 
