@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -27,6 +28,11 @@ class _CursorModel implements CursorModel {
   @override
   void addKey(String key) => cachedKeys.add(key);
 
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _CursorFFI implements FFI {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -83,6 +89,46 @@ void _expectArtwork(img.Image native, img.Image artwork) {
 }
 
 void main() {
+  testWidgets('received cursor keeps edge colors across scale changes',
+      (tester) async {
+    const side = 4;
+    for (final (rgba, expected) in [
+      ([128, 64, 32, 128], [255, 128, 64, 128]),
+      ([0, 0, 0, 0], [0, 0, 0, 0]),
+      ([32, 64, 128, 255], [32, 64, 128, 255]),
+    ]) {
+      final cursor = CursorModel(WeakReference<FFI>(_CursorFFI()))
+        ..id = 'edge-colors';
+      addTearDown(cursor.disposeImages);
+      addTearDown(cursor.dispose);
+      await tester.runAsync(() => cursor.updateCursorData({
+            'id': 'edge-colors',
+            'hotx': '1',
+            'hoty': '1',
+            'width': '$side',
+            'height': '$side',
+            'colors': jsonEncode(List.generate(side * side, (_) => rgba)
+                .expand((pixel) => pixel)
+                .toList()),
+          }));
+      final data = cursor.cache!;
+      for (final scale in [1.0, 0.5, 1.0]) {
+        data.updateGetKey(scale);
+        final image = Platform.isWindows
+            ? img.Image.fromBytes(
+                width: data.scaledWidth,
+                height: data.scaledHeight,
+                bytes: data.data!.buffer,
+                order: img.ChannelOrder.bgra)
+            : img.decodePng(data.data!)!;
+        for (final pixel in image) {
+          expect([pixel.r, pixel.g, pixel.b, pixel.a], expected,
+              reason: 'Edge color must survive scale $scale');
+        }
+      }
+    }
+  });
+
   for (final (source, hotspot, scale, size, linuxHotspot) in _cases) {
     testWidgets('${source.$1}x${source.$2} cursor at scale $scale',
         (tester) async {

@@ -97,6 +97,8 @@ use windows_service::{
 use winreg::{enums::*, RegKey};
 
 mod acl;
+#[cfg(feature = "flutter")]
+mod cursor;
 mod installer_handoff;
 mod installer_shell;
 mod msi_registry;
@@ -215,7 +217,14 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
         if ci.flags & CURSOR_SHOWING == 0 {
             Ok(None)
         } else {
-            Ok(Some(ci.hCursor as _))
+            #[cfg(feature = "flutter")]
+            {
+                cursor::current(&ci)
+            }
+            #[cfg(not(feature = "flutter"))]
+            {
+                Ok(Some(ci.hCursor as _))
+            }
         }
     }
 }
@@ -260,6 +269,10 @@ impl Drop for IconInfo {
 // https://github.com/TurboVNC/tightvnc/blob/a235bae328c12fd1c3aed6f3f034a37a6ffbbd22/vnc_winsrc/winvnc/vncEncoder.cpp
 // https://github.com/TigerVNC/tigervnc/blob/master/win/rfb_win32/DeviceFrameBuffer.cxx
 pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
+    #[cfg(feature = "flutter")]
+    if let Some(data) = cursor::data(hcursor)? {
+        return Ok(data);
+    }
     unsafe {
         let mut ii = IconInfo::new(hcursor as _)?;
         let bm_mask = get_bitmap(ii.0.hbmMask)?;
@@ -4749,6 +4762,44 @@ pub(super) fn get_pids_with_first_arg_by_wmic<S1: AsRef<str>, S2: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_outline_preserves_pixels_at_hotspot_offset() {
+        const CHANNELS: usize = 4;
+        const BORDER: usize = 1;
+        const WIDTH: usize = 3;
+        const HEIGHT: usize = 9;
+        const INK: [u8; CHANNELS] = [32, 64, 96, 255];
+        let mut source = vec![0; WIDTH * HEIGHT * CHANNELS];
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                if x == WIDTH / 2 || y == 0 || y == HEIGHT - 1 {
+                    let offset = (y * WIDTH + x) * CHANNELS;
+                    source[offset..offset + CHANNELS].copy_from_slice(&INK);
+                }
+            }
+        }
+        let stride = WIDTH + BORDER * 2;
+        let mut outlined = vec![0; stride * (HEIGHT + BORDER * 2) * CHANNELS];
+        unsafe {
+            drawOutline(
+                outlined.as_mut_ptr(),
+                source.as_ptr(),
+                WIDTH as _,
+                HEIGHT as _,
+                outlined.len() as _,
+            );
+        }
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let input = (y * WIDTH + x) * CHANNELS;
+                if source[input + CHANNELS - 1] != 0 {
+                    let output = ((y + BORDER) * stride + x + BORDER) * CHANNELS;
+                    assert_eq!(&outlined[output..output + CHANNELS], &INK, "({x}, {y})");
+                }
+            }
+        }
+    }
 
     // Test-only reusable Win32 HANDLE RAII helper.
     // If a future non-test path needs the same pattern, move it out of this test module.

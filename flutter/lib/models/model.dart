@@ -3470,6 +3470,13 @@ class CursorModel with ChangeNotifier {
     img2.Image imgOrigin = img2.Image.fromBytes(
         width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
     if (isWindows) {
+      final pixels =
+          await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+      if (pixels == null) {
+        throw StateError('Could not read straight-alpha cursor pixels');
+      }
+      imgOrigin = img2.Image.fromBytes(
+          width: w, height: h, bytes: pixels.buffer, order: img2.ChannelOrder.rgba);
       data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
       ByteData? imgBytes =
@@ -3478,6 +3485,11 @@ class CursorModel with ChangeNotifier {
         return false;
       }
       data = imgBytes.buffer.asUint8List();
+      if (isLinux || isMacOS) {
+        // Preserve the PNG's straight-alpha colors when resizing native cursors.
+        imgOrigin = img2.decodePng(data) ??
+            (throw const FormatException('Invalid native cursor PNG'));
+      }
     }
     final cache = CursorData(
       peerId: peerId,
