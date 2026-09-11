@@ -1,7 +1,6 @@
 #include "my_application.h"
 
 #include "bump_mouse.h"
-#include "cursor_size.h"
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -95,7 +94,6 @@ static void on_subwindow_created(FlPluginRegistry* registry) {
   // Set up side button forwarding for sub-windows.
   if (registry == NULL || !FL_IS_VIEW(registry)) return;
   FlView* view = FL_VIEW(registry);
-  cursor_size::Register(view);
   GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
   if (toplevel != NULL && GTK_IS_WINDOW(toplevel)) {
     FlMethodChannel* channel = side_buttons_create_channel(fl_view_get_engine(view));
@@ -180,7 +178,6 @@ static void my_application_activate(GApplication* application) {
       (WindowCreatedCallback)on_subwindow_created);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
-  cursor_size::Register(view);
 
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   self->host_channel = fl_method_channel_new(

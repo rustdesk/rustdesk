@@ -52,8 +52,8 @@ class CursorManager {
         'cursor',
         jsonEncode({
           'url': cursorData.url,
-          'hotx': cursorData.hotX.round(),
-          'hoty': cursorData.hotY.round(),
+          'hotx': cursorData.hotX.toInt(),
+          'hoty': cursorData.hotY.toInt(),
         })
       ]);
     }
@@ -116,8 +116,8 @@ MouseCursor buildCursorOfCache(
       CursorManager.instance.registerCursor(CursorData(
           key: key,
           url: 'data:image/rgba;base64,${base64Encode(data)}',
-          width: cache.scaledWidth,
-          height: cache.scaledHeight,
+          width: (cache.width * cache.scale).toInt(),
+          height: (cache.height * cache.scale).toInt(),
           hotX: cache.hotx,
           hotY: cache.hoty));
       cursor.addKey(key);

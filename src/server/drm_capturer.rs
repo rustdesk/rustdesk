@@ -14,8 +14,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-mod cursor;
-
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
 const DRM_CONNECT_TIMEOUT_MS: u64 = 1000;
 /// The service may hold the list back while it wakes sleeping displays: ~3.6s (DRM_WAKE_*).
@@ -632,19 +630,6 @@ async fn recv_thread(
         let _ = tx.send(Err(err));
         return;
     }
-    let mut mutter_cursor = match cursor::Capture::start(
-        display,
-        cursor_epoch,
-        displays[wire_idx].name.clone(),
-    )
-    .await
-    {
-        Ok(cursor) => cursor,
-        Err(error) => {
-            log::error!("drm: could not start Mutter cursor capture; using wire cursor: {error:#}");
-            None
-        }
-    };
     let _ = tx.send(Ok((displays, wire_idx)));
 
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
@@ -654,21 +639,9 @@ async fn recv_thread(
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
         }
-        if let Some(error) = mutter_cursor.as_ref().and_then(cursor::Capture::error) {
-            log::error!("drm: {error}; resuming wire cursor capture");
-            if let Some(mut cursor) = mutter_cursor.take() {
-                if let Some(wire) = cursor.wire_cursor.take() {
-                    pending_cursor = Some(wire);
-                }
-                if let Err(error) = cursor.stop().await {
-                    log::error!("drm: could not join the Mutter cursor worker: {error:#}");
-                }
-            }
-        }
         if pending_cursor.is_some() {
-            let ready = mutter_cursor.as_ref().map(cursor::Capture::ready);
             let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
-            if t != TRANSFORM_PENDING && ready.as_deref() != Some(&true) {
+            if t != TRANSFORM_PENDING {
                 if let Some((id, width, height, hotx, hoty, raw)) = pending_cursor.take() {
                     deliver_drm_cursor(display, cursor_epoch, id, width, height, hotx, hoty, raw, t);
                 }
@@ -790,15 +763,6 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        // Retain the latest wire shape for a failed Mutter worker, even when
-                        // that shape arrived before the first Mutter sprite.
-                        if let Some(cursor) = mutter_cursor.as_mut() {
-                            cursor.wire_cursor = Some((id, width, height, hotx, hoty, raw.clone()));
-                        }
-                        let ready = mutter_cursor.as_ref().map(cursor::Capture::ready);
-                        if ready.as_deref() == Some(&true) {
-                            continue;
-                        }
                         let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
                         if t == TRANSFORM_PENDING {
                             pending_cursor = Some((id, width, height, hotx, hoty, raw));
@@ -894,11 +858,6 @@ async fn recv_thread(
     // Drop the render context on THIS thread: its EGL state + cached imports are thread-local and
     // a cross-thread close strands them. Never in `Drop`, which runs on the encoder thread.
     drop(converter);
-    if let Some(cursor) = mutter_cursor {
-        if let Err(error) = cursor.stop().await {
-            log::error!("drm: could not join the Mutter cursor worker: {error:#}");
-        }
-    }
     remove_drm_cursor(display, cursor_epoch);
     let mut slot = shared.slot.lock().unwrap();
     slot.ended = Some(format!("drm stream ended ({end_reason})"));

@@ -53,7 +53,6 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
-pkg_check_modules(XCURSOR REQUIRED IMPORTED_TARGET xcursor)
 
 # Wayland protocol for keyboard shortcuts inhibit
 pkg_check_modules(WAYLAND_CLIENT IMPORTED_TARGET wayland-client)
@@ -127,7 +126,6 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
-target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::XCURSOR)
 target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
 # target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 

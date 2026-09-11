@@ -35,14 +35,12 @@ use std::{
     sync::Mutex,
 };
 
-mod cursor;
-
 // macOS boolean_t is defined as `int` in <mach/boolean.h>
 type BooleanT = hbb_common::libc::c_int;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
-static mut LATEST_SEED: (i32, f64) = (0, 0.0);
+static mut LATEST_SEED: i32 = 0;
 
 #[inline]
 fn get_update_temp_dir() -> PathBuf {
@@ -563,7 +561,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 
 fn unsafe_get_cursor() -> ResultType<Option<u64>> {
     unsafe {
-        let seed = (CGSCurrentCursorSeed(), cursor::scale()?);
+        let seed = CGSCurrentCursorSeed();
         if seed == LATEST_SEED {
             return Ok(None);
         }
@@ -575,11 +573,11 @@ fn unsafe_get_cursor() -> ResultType<Option<u64>> {
 
 pub fn reset_input_cache() {
     unsafe {
-        LATEST_SEED = (0, 0.0);
+        LATEST_SEED = 0;
     }
 }
 
-fn get_cursor_id() -> ResultType<(id, u64, f64)> {
+fn get_cursor_id() -> ResultType<(id, u64)> {
     unsafe {
         let c: id = msg_send![class!(NSCursor), currentSystemCursor];
         if c == nil {
@@ -622,8 +620,7 @@ fn get_cursor_id() -> ResultType<(id, u64, f64)> {
                 hcursor += (r + g + b + a) * (255 << i) as f64;
             }
         }
-        let scale = cursor::scale()?;
-        Ok((c, cursor::cache_id(hcursor as _, scale), scale))
+        Ok((c, hcursor as _))
     }
 }
 
@@ -634,12 +631,9 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
 // https://github.com/stweil/OSXvnc/blob/master/OSXvnc-server/mousecursor.c
 fn unsafe_get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     unsafe {
-        let (c, hcursor2, scale) = get_cursor_id()?;
+        let (c, hcursor2) = get_cursor_id()?;
         if hcursor != hcursor2 {
             bail!("cursor changed");
-        }
-        if scale > 1.0 {
-            return cursor::data(c, hcursor, scale);
         }
         let hotspot: NSPoint = msg_send![c, hotSpot];
         let img: id = msg_send![c, image];
@@ -674,9 +668,9 @@ fn unsafe_get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 let g: f64 = msg_send![color, greenComponent];
                 let b: f64 = msg_send![color, blueComponent];
                 let a: f64 = msg_send![color, alphaComponent];
-                colors.push((r * a * 255.).round() as _);
-                colors.push((g * a * 255.).round() as _);
-                colors.push((b * a * 255.).round() as _);
+                colors.push((r * 255.) as _);
+                colors.push((g * 255.) as _);
+                colors.push((b * 255.) as _);
                 colors.push((a * 255.) as _);
             }
         }

@@ -310,7 +310,7 @@ message KeyEvent {
 }
 
 message CursorData {
-  uint64 id = 1 [jstype = JS_STRING];
+  uint64 id = 1;
   sint32 hotx = 2;
   sint32 hoty = 3;
   int32 width = 4;
@@ -999,7 +999,7 @@ message Message {
     AudioFrame audio_frame = 11;
     CursorData cursor_data = 12;
     CursorPosition cursor_position = 13;
-    uint64 cursor_id = 14 [jstype = JS_STRING];
+    uint64 cursor_id = 14;
     KeyEvent key_event = 15;
     Clipboard clipboard = 16;
     FileAction file_action = 17;

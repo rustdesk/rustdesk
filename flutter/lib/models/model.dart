@@ -39,7 +39,6 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 
 import '../common.dart';
 import '../utils/image.dart' as img;
-import '../utils/cursor_size.dart';
 import '../common/widgets/dialog.dart';
 import 'input_model.dart';
 import 'platform_model.dart';
@@ -2864,8 +2863,6 @@ class CursorData {
   double hoty;
   final int width;
   final int height;
-  double? localSize;
-  late final int _visibleSize = cursorVisibleSize(image);
 
   CursorData({
     required this.peerId,
@@ -2882,34 +2879,9 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  bool get _usesLogicalCursorPixels => isLinux || isMacOS || isWeb;
-  int get scaledWidth => _scaledDimension(width, scale);
-  int get scaledHeight => _scaledDimension(height, scale);
-
-  int _scaledDimension(int dimension, double scale) {
-    const minBitmapSize = 1;
-    final pixels = dimension * scale;
-    return _usesLogicalCursorPixels || localSize != null
-        ? max(minBitmapSize, pixels.round())
-        : pixels.toInt();
-  }
-
   double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (localSize != null) {
-      scale = _visibleSize == 0
-          ? 1.0
-          : max(localSize!, kMinCursorSize) / _visibleSize;
-      // Sparse peer artwork must not amplify the native bitmap allocation.
-      const maxNativeCursorBitmapSize = 512;
-      final maxScale = maxNativeCursorBitmapSize / max(width, height);
-      if (scale > maxScale) {
-        if (oldScale != maxScale) {
-          debugPrint('Cursor $id exceeds the native bitmap limit; reducing scale');
-        }
-        scale = maxScale;
-      }
-    } else if (scale != 1.0) {
+    if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
       final tgtHeight = (height * scale).toInt();
@@ -2920,17 +2892,13 @@ class CursorData {
       }
     }
 
-    const bytesPerPixel = 4;
-    final byteLength = _scaledDimension(width, scale) *
-        _scaledDimension(height, scale) * bytesPerPixel;
-    if (_doubleToInt(oldScale) != _doubleToInt(scale) ||
-        (isWindows && data != null && data!.length != byteLength)) {
+    if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
       if (isWindows) {
         data = img2
             .copyResize(
               image,
-              width: _scaledDimension(width, scale),
-              height: _scaledDimension(height, scale),
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
               interpolation: img2.Interpolation.average,
             )
             .getBytes(order: img2.ChannelOrder.bgra);
@@ -2939,8 +2907,8 @@ class CursorData {
           img2.encodePng(
             img2.copyResize(
               image,
-              width: _scaledDimension(width, scale),
-              height: _scaledDimension(height, scale),
+              width: (width * scale).toInt(),
+              height: (height * scale).toInt(),
               interpolation: img2.Interpolation.average,
             ),
           ),
@@ -2949,14 +2917,14 @@ class CursorData {
     }
 
     this.scale = scale;
-    hotx = hotxOrigin * scaledWidth / width;
-    hoty = hotyOrigin * scaledHeight / height;
+    hotx = hotxOrigin * scale;
+    hoty = hotyOrigin * scale;
     return scale;
   }
 
   String updateGetKey(double scale) {
     scale = _checkUpdateScale(scale);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}${localSize == null ? '' : '_local'}';
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
   }
 }
 
@@ -3470,8 +3438,6 @@ class CursorModel with ChangeNotifier {
     if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
       _images[id]?.item1.dispose();
       _images[id] = Tuple3(image, hotx, hoty);
-    } else {
-      image.dispose();
     }
 
     // Update last cursor data.
@@ -3492,32 +3458,14 @@ class CursorModel with ChangeNotifier {
     img2.Image imgOrigin = img2.Image.fromBytes(
         width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
     if (isWindows) {
-      final pixels =
-          await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
-      if (pixels == null) {
-        debugPrint('Could not read straight-alpha cursor pixels: $id');
-        return false;
-      }
-      imgOrigin = img2.Image.fromBytes(
-          width: w, height: h, bytes: pixels.buffer, order: img2.ChannelOrder.rgba);
       data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
       ByteData? imgBytes =
           await image.toByteData(format: ui.ImageByteFormat.png);
       if (imgBytes == null) {
-        debugPrint('Could not encode cursor PNG: $id');
         return false;
       }
       data = imgBytes.buffer.asUint8List();
-      if (isLinux || isMacOS) {
-        // Preserve the PNG's straight-alpha colors when resizing native cursors.
-        final decoded = img2.decodePng(data);
-        if (decoded == null) {
-          debugPrint('Invalid native cursor PNG: $id');
-          return false;
-        }
-        imgOrigin = decoded;
-      }
     }
     final cache = CursorData(
       peerId: peerId,

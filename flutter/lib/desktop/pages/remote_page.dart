@@ -19,7 +19,6 @@ import '../../models/input_model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import '../../utils/image.dart';
-import '../../utils/cursor_size.dart';
 import '../widgets/remote_toolbar.dart';
 import '../widgets/kb_layout_type_chooser.dart';
 import '../widgets/tabbar_widget.dart';
@@ -1089,21 +1088,6 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
-  final _localCursorSize = LocalCursorSize();
-
-  @override
-  void initState() {
-    super.initState();
-    _localCursorSize.addListener(_cursorSizeChanged);
-  }
-
-  void _cursorSizeChanged() => setState(() {});
-
-  @override
-  void dispose() {
-    _localCursorSize.dispose();
-    super.dispose();
-  }
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -1121,29 +1105,22 @@ class _ImagePaintState extends State<ImagePaint> {
     // changes, so read it live to follow the window across monitors.
     final dpr = MediaQuery.devicePixelRatioOf(context);
 
-    bool isViewScaled() =>
-        c.viewStyle.style == kRemoteViewStyleAdaptive ||
-        c.viewStyle.style == kRemoteViewStyleCustom;
+    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
-          final useLocalSize = !isWeb &&
-              (isLinux || isMacOS || isWindows) &&
-              !zoomCursor.value &&
-              isViewScaled();
-          if (useLocalSize) _localCursorSize.ensureLoaded(dpr);
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             var cursorScale = 1.0;
             if (isWindows) {
               // debug win10
-              if (zoomCursor.value && isViewScaled()) {
+              if (zoomCursor.value && isViewAdaptive()) {
                 cursorScale = s * c.devicePixelRatio;
               }
             } else {
               if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = s;
-              } else if (isLinux || isMacOS) {
+              } else {
                 // NSCursor and GdkCursor treat the bitmap size as logical
                 // pixels, so an unzoomed cursor must be shrunk by the DPR to
                 // keep 1 remote px == 1 physical px, the size Original view
@@ -1172,16 +1149,11 @@ class _ImagePaintState extends State<ImagePaint> {
                                       _firstEnterImage.value = true;
                                     }
                                     return _buildCustomCursor(
-                                        context, getCursorScale(),
-                                        useLocalSize: useLocalSize);
+                                        context, getCursorScale());
                                   }
                                 }())
-                              : _buildDisabledCursor(context, getCursorScale(),
-                                  useLocalSize: useLocalSize)
+                              : _buildDisabledCursor(context, getCursorScale())
                   : MouseCursor.defer,
-              onEnter: (_) {
-                if (useLocalSize) _localCursorSize.refresh();
-              },
               onHover: (evt) {},
               child: child);
         });
@@ -1294,19 +1266,15 @@ class _ImagePaintState extends State<ImagePaint> {
     );
   }
 
-  MouseCursor _buildCustomCursor(BuildContext context, double scale,
-      {bool useLocalSize = false}) {
+  MouseCursor _buildCustomCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = cursor.cache ?? preDefaultCursor.cache;
-    cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }
 
-  MouseCursor _buildDisabledCursor(BuildContext context, double scale,
-      {bool useLocalSize = false}) {
+  MouseCursor _buildDisabledCursor(BuildContext context, double scale) {
     final cursor = Provider.of<CursorModel>(context);
     final cache = preForbiddenCursor.cache;
-    cache?.localSize = useLocalSize ? _localCursorSize.value : null;
     return buildCursorOfCache(cursor, scale, cache);
   }
 
@@ -1425,9 +1393,8 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    final imageOffset = _softwareImageOffset(c);
-    double cx = imageOffset?.dx ?? c.x;
-    double cy = imageOffset?.dy ?? c.y;
+    double cx = c.x;
+    double cy = c.y;
     if (c.viewStyle.style == kRemoteViewStyleOriginal &&
         c.scrollStyle == ScrollStyle.scrollbar) {
       final rect = c.parent.target!.ffiModel.rect;
@@ -1446,44 +1413,38 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    final image = m.image ?? preDefaultCursor.image;
-    final nativePixels = isWindows ? MediaQuery.devicePixelRatioOf(context) : 1.0;
-    double scale = c.scale;
-    if (image != null && scale * nativePixels != 1.0) {
-      final sx = kMinCursorSize / (image.width * nativePixels);
-      final sy = kMinCursorSize / (image.height * nativePixels);
-      final minimumScale = sx > sy ? sx : sy;
-      if (scale < minimumScale) scale = minimumScale;
+    double x = m.x * c.scale + cx - hotx;
+    double y = m.y * c.scale + cy - hoty;
+    double scale = 1.0;
+    final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
+    if (zoomCursor.value || isViewOriginal) {
+      x = m.x - hotx + cx / c.scale;
+      y = m.y - hoty + cy / c.scale;
+      scale = c.scale;
+    } else if (!isWindows) {
+      // Keep the painted cursor the same physical size as the native one
+      // built by getCursorScale() above, including its min-size clamp.
+      scale = 1.0 / MediaQuery.devicePixelRatioOf(context);
+      final image = m.image ?? preDefaultCursor.image;
+      if (scale != 1.0 &&
+          image != null &&
+          ((image.width * scale).toInt() < kMinCursorSize ||
+              (image.height * scale).toInt() < kMinCursorSize)) {
+        final sw = kMinCursorSize / image.width;
+        final sh = kMinCursorSize / image.height;
+        scale = sw < sh ? sh : sw;
+      }
+      x = (m.x * c.scale + cx) / scale - hotx;
+      y = (m.y * c.scale + cy) / scale - hoty;
     }
-    final x = (m.x * c.scale + cx) / scale - hotx;
-    final y = (m.y * c.scale + cy) / scale - hoty;
 
     return CustomPaint(
       painter: ImagePainter(
-        image: image,
+        image: m.image ?? preDefaultCursor.image,
         x: x,
         y: y,
         scale: scale,
-        useIntegerPosition: false,
       ),
     );
-  }
-
-  Offset? _softwareImageOffset(CanvasModel canvas) {
-    if (canvas.imageOverflow.isTrue &&
-        canvas.scrollStyle != ScrollStyle.scrollauto) {
-      return null;
-    }
-    final ffi = canvas.parent.target!;
-    final peer = ffi.ffiModel;
-    if (ffi.imageModel.useTextureRender || peer.pi.forceTextureRender) {
-      return null;
-    }
-    var scale = canvas.scale;
-    final displays = peer.pi.getCurDisplays();
-    if (peer.isPeerLinux && displays.isNotEmpty) scale /= displays[0].scale;
-    // Match the origin used by _buildScrollAutoNonTextureRender's ImagePainter.
-    return Offset(
-        (canvas.x / scale).toInt() * scale, (canvas.y / scale).toInt() * scale);
   }
 }

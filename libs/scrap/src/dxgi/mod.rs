@@ -2,8 +2,6 @@ use std::{io, mem, ptr, slice};
 pub mod gdi;
 pub use gdi::CapturerGDI;
 pub mod mag;
-#[cfg(feature = "cursor")]
-pub mod cursor;
 
 use winapi::{
     shared::{
@@ -44,8 +42,6 @@ impl<T> Drop for ComPtr<T> {
 }
 
 pub struct Capturer {
-    #[cfg(feature = "cursor")]
-    cursor: Option<cursor::Capture>,
     device: ComPtr<ID3D11Device>,
     display: Display,
     context: ComPtr<ID3D11DeviceContext>,
@@ -162,9 +158,6 @@ impl Capturer {
         let rotate = Self::create_rotations(device.0, context.0, &display);
 
         Ok(Capturer {
-            #[cfg(feature = "cursor")]
-            cursor: (!duplication.is_null())
-                .then(|| cursor::Capture::new(display.hmonitor() as usize)),
             device,
             context,
             duplication: ComPtr(duplication),
@@ -323,25 +316,12 @@ impl Capturer {
 
     pub fn set_gdi(&mut self) -> bool {
         self.gdi_capturer = self.display.create_gdi();
-        #[cfg(feature = "cursor")]
-        if self.is_gdi() {
-            if let Some(cursor) = &self.cursor {
-                cursor.deactivate();
-            }
-        }
         self.is_gdi()
     }
 
     pub fn cancel_gdi(&mut self) {
         self.gdi_buffer = Vec::new();
         self.gdi_capturer.take();
-        #[cfg(feature = "cursor")]
-        if !self.duplication.is_null() {
-            let monitor = self.display.hmonitor() as usize;
-            self.cursor
-                .get_or_insert_with(|| cursor::Capture::new(monitor))
-                .activate();
-        }
     }
 
     #[cfg(feature = "vram")]
@@ -356,10 +336,6 @@ impl Capturer {
 
         wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
         let frame = ComPtr(frame);
-        #[cfg(feature = "cursor")]
-        if let Some(cursor) = &self.cursor {
-            cursor.update(self.duplication.0, &info);
-        }
 
         if *info.LastPresentTime.QuadPart() == 0 {
             return Err(std::io::ErrorKind::WouldBlock.into());
@@ -503,10 +479,6 @@ impl Capturer {
 
             wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
             let frame = ComPtr(frame);
-            #[cfg(feature = "cursor")]
-            if let Some(cursor) = &self.cursor {
-                cursor.update(self.duplication.0, &info);
-            }
 
             if info.AccumulatedFrames == 0 || *info.LastPresentTime.QuadPart() == 0 {
                 return Err(std::io::ErrorKind::WouldBlock.into());
