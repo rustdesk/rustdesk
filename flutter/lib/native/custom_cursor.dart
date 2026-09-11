@@ -16,8 +16,8 @@ deleteCustomCursor(String key) =>
 resetSystemCursor() {}
 
 double _nativeHotspot(double hotspot, int bitmapSize) {
-  if (!isLinux) return hotspot;
-  // GDK takes integer hotspots inside the bitmap; avoid truncating toward zero.
+  if (!isLinux && !isWindows) return hotspot;
+  // GDK and Win32 take integer hotspots inside the bitmap; use the nearest pixel.
   return min(hotspot.round(), bitmapSize - 1).toDouble();
 }
 

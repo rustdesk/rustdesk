@@ -2893,7 +2893,7 @@ class CursorData {
 
   double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (!_usesLogicalCursorPixels && scale != 1.0) {
+    if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
       final tgtHeight = (height * scale).toInt();
@@ -2929,8 +2929,8 @@ class CursorData {
     }
 
     this.scale = scale;
-    hotx = hotxOrigin * (_usesLogicalCursorPixels ? scaledWidth / width : scale);
-    hoty = hotyOrigin * (_usesLogicalCursorPixels ? scaledHeight / height : scale);
+    hotx = hotxOrigin * scaledWidth / width;
+    hoty = hotyOrigin * scaledHeight / height;
     return scale;
   }
 
