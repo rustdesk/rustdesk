@@ -1,5 +1,7 @@
 use crate::{
-    codec::{base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg},
+    codec::{
+        base_bitrate, codec_thread_num, enable_hwcodec_option, EncoderApi, EncoderCfg, BR_BALANCED,
+    },
     convert::*,
     CodecFormat, EncodeInput, ImageFormat, ImageRgb, Pixfmt, HW_STRIDE_ALIGN,
 };
@@ -81,7 +83,11 @@ impl EncoderApi for HwRamEncoder {
                     gop,
                     quality: DEFAULT_HW_QUALITY,
                     rc,
-                    q: -1,
+                    q: if config.name.contains("vaapi") {
+                        Self::vaapi_qp(config.quality)
+                    } else {
+                        -1
+                    },
                     thread_count: codec_thread_num(16) as _, // ffmpeg's thread_count is used for cpu
                 };
                 let format = match Encoder::format_from_name(config.name.clone()) {
@@ -249,6 +255,18 @@ impl HwRamEncoder {
             return RC_CQ;
         }
         RC_CBR
+    }
+
+    fn vaapi_qp(ratio: f32) -> i32 {
+        const DEFAULT_QP: i32 = 23;
+        if !ratio.is_finite() || ratio <= 0.0 {
+            return DEFAULT_QP;
+        }
+        // Keep the balanced preset at QP 23. Each doubling of the quality
+        // ratio lowers QP by six; this is a quality curve, not a bitrate cap.
+        (DEFAULT_QP as f32 - 6.0 * (ratio / BR_BALANCED).log2())
+            .round()
+            .clamp(1.0, 51.0) as i32
     }
 
     pub fn bitrate(name: &str, width: usize, height: usize, ratio: f32) -> u32 {
@@ -763,4 +781,37 @@ pub fn start_check_process() {
     ONCE.call_once(|| {
         std::thread::spawn(f);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::codec::{BR_BEST, BR_SPEED};
+
+    #[test]
+    fn vaapi_quality_presets() {
+        assert_eq!(HwRamEncoder::vaapi_qp(BR_BALANCED), 23);
+        assert!(HwRamEncoder::vaapi_qp(BR_BEST) < HwRamEncoder::vaapi_qp(BR_BALANCED));
+        assert!(HwRamEncoder::vaapi_qp(BR_BALANCED) < HwRamEncoder::vaapi_qp(BR_SPEED));
+    }
+
+    #[test]
+    fn vaapi_custom_quality_is_monotonic_and_bounded() {
+        let mut previous = 51;
+        for i in 1..=2000 {
+            let qp = HwRamEncoder::vaapi_qp(i as f32 * 0.02);
+            assert!((1..=51).contains(&qp));
+            assert!(qp <= previous);
+            previous = qp;
+        }
+        assert_eq!(HwRamEncoder::vaapi_qp(f32::MIN_POSITIVE), 51);
+        assert_eq!(HwRamEncoder::vaapi_qp(f32::MAX), 1);
+    }
+
+    #[test]
+    fn vaapi_invalid_quality_uses_default() {
+        for ratio in [0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(HwRamEncoder::vaapi_qp(ratio), 23);
+        }
+    }
 }
