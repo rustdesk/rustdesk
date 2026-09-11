@@ -571,7 +571,7 @@ impl VideoQoS {
             adjust_ratio = user.delay.fps.is_none();
             user.delay.fps = Some(fps);
             let base = user.delay.rtt_calculator.get_rtt().unwrap_or_default();
-            log::debug!(
+            log::trace!(
                 "qos_trace t={} id={id} delay={delay} base={base} excess={} avg={avg_delay} bad={} good={} braked={braked} fps={fps} ratio={:.3} reduce_bitrate={reduce_bitrate}",
                 hbb_common::get_time(),
                 delay.saturating_sub(base),
