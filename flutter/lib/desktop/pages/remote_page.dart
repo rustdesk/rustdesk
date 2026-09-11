@@ -1425,8 +1425,9 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    double cx = c.x;
-    double cy = c.y;
+    final imageOffset = _softwareImageOffset(c);
+    double cx = imageOffset?.dx ?? c.x;
+    double cy = imageOffset?.dy ?? c.y;
     if (c.viewStyle.style == kRemoteViewStyleOriginal &&
         c.scrollStyle == ScrollStyle.scrollbar) {
       final rect = c.parent.target!.ffiModel.rect;
@@ -1466,5 +1467,23 @@ class CursorPaint extends StatelessWidget {
         useIntegerPosition: false,
       ),
     );
+  }
+
+  Offset? _softwareImageOffset(CanvasModel canvas) {
+    if (canvas.imageOverflow.isTrue &&
+        canvas.scrollStyle != ScrollStyle.scrollauto) {
+      return null;
+    }
+    final ffi = canvas.parent.target!;
+    final peer = ffi.ffiModel;
+    if (ffi.imageModel.useTextureRender || peer.pi.forceTextureRender) {
+      return null;
+    }
+    var scale = canvas.scale;
+    final displays = peer.pi.getCurDisplays();
+    if (peer.isPeerLinux && displays.isNotEmpty) scale /= displays[0].scale;
+    // Match the origin used by _buildScrollAutoNonTextureRender's ImagePainter.
+    return Offset(
+        (canvas.x / scale).toInt() * scale, (canvas.y / scale).toInt() * scale);
   }
 }
