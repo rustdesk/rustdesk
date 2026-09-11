@@ -494,7 +494,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: nightly-2023-10-13 # must use nightly here, because of abi_thiscall feature required
+          toolchain: ${{ env.RUST_VERSION }}
           targets: ${{ matrix.job.target }}
           components: "rustfmt"
 
@@ -532,8 +532,6 @@ jobs:
       - name: Build rustdesk
         id: build
         shell: bash
-        env:
-          RUSTFLAGS: --cfg curve25519_dalek_backend="u32"
         run: |
           python3 res/inline-sciter.py
           # Patch sciter x86
@@ -1641,7 +1639,6 @@ jobs:
             --volume "/opt/artifacts:/opt/artifacts"
           shell: /bin/bash
           install: |
-            sed -i -e 's/archive.ubuntu.com/old-releases.ubuntu.com/g' -e 's/security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list || true
             apt-get update -y
             echo -e "installing deps"
             apt-get install -y \
@@ -2197,7 +2194,6 @@ jobs:
             --volume "${PWD}:/workspace"
           shell: /bin/bash
           install: |
-            sed -i -e 's/archive.ubuntu.com/old-releases.ubuntu.com/g' -e 's/security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list || true
             apt-get update
             apt-get install -y \
                build-essential \
