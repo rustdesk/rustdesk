@@ -2882,7 +2882,7 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
-  bool get _usesLogicalCursorPixels => isLinux || isMacOS;
+  bool get _usesLogicalCursorPixels => isLinux || isMacOS || isWeb;
   int get scaledWidth => _scaledDimension(width, scale);
   int get scaledHeight => _scaledDimension(height, scale);
 
