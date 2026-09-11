@@ -15,7 +15,9 @@
 use super::*;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use hbb_common::anyhow::anyhow;
-use magnum_opus::{Application::*, Channels::*, Encoder};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use magnum_opus::Application::LowDelay;
+use magnum_opus::{Channels::*, Encoder};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const NAME: &'static str = "audio";
@@ -97,10 +99,11 @@ mod pa_impl {
         RESTARTING.store(false, Ordering::SeqCst);
         #[cfg(target_os = "linux")]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
-        }
-        let mut encoder = Encoder::new(crate::platform::PA_SAMPLE_RATE, Stereo, LowDelay)?;
+        let mut encoder = AudioEncoder::new(Encoder::new(
+            crate::platform::PA_SAMPLE_RATE,
+            Stereo,
+            LowDelay,
+        )?);
         #[cfg(target_os = "linux")]
         allow_err!(
             stream
@@ -172,8 +175,11 @@ pub fn is_screen_capture_kit_available() -> bool {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[path = "audio_capture_error.rs"]
+mod audio_capture;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod audio_capture_error;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+mod audio_capture_queue;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
@@ -182,13 +188,14 @@ mod cpal_impl {
     use super::*;
     use cpal::{
         traits::{DeviceTrait, HostTrait, StreamTrait},
-        BufferSize, Device, Host, InputCallbackInfo, StreamConfig, SupportedStreamConfig,
+        Device, Host, InputCallbackInfo, SupportedStreamConfig,
     };
 
     lazy_static::lazy_static! {
         static ref HOST: Host = cpal::default_host();
-        static ref INPUT_BUFFER: Arc<Mutex<std::collections::VecDeque<f32>>> = Default::default();
     }
+
+    const AUDIO_PACKETS_PER_SECOND: usize = 100;
 
     #[cfg(feature = "screencapturekit")]
     lazy_static::lazy_static! {
@@ -197,7 +204,20 @@ mod cpal_impl {
 
     #[derive(Default)]
     pub struct State {
-        stream: Option<(Box<dyn StreamTrait>, Arc<Message>, CaptureErrorHandler)>,
+        stream: Option<ActiveCaptureStream>,
+    }
+
+    struct ActiveCaptureStream {
+        stream: Option<Box<dyn StreamTrait>>,
+        format: Arc<Message>,
+        _encoder_worker: audio_capture_queue::CaptureEncoderWorker,
+        errors: CaptureErrorHandler,
+    }
+
+    impl Drop for ActiveCaptureStream {
+        fn drop(&mut self) {
+            self.stream.take();
+        }
     }
 
     impl super::service::Reset for State {
@@ -215,8 +235,8 @@ mod cpal_impl {
             }
             _ => {}
         }
-        if let Some((_, format, _)) = &state.stream {
-            sp.send_shared(format.clone());
+        if let Some(stream) = &state.stream {
+            sp.send_shared(stream.format.clone());
             #[cfg(target_os = "macos")]
             log::info!("Audio capture stream recreated; replacement format sent");
         }
@@ -232,8 +252,8 @@ mod cpal_impl {
                 }
                 _ => {}
             }
-            if let Some((_, format, _)) = &state.stream {
-                sps.send_shared(format.clone());
+            if let Some(stream) = &state.stream {
+                sps.send_shared(stream.format.clone());
             }
             Ok(())
         })?;
@@ -241,10 +261,10 @@ mod cpal_impl {
     }
 
     pub fn run(sp: EmptyExtraFieldService, state: &mut State) -> ResultType<()> {
-        if let Some((_, _, errors)) = &state.stream {
-            if errors.needs_restart() {
-                // Recreate on the service thread, outside the backend's error callback.
-                log::warn!("Recreating interrupted audio capture stream");
+        if let Some(stream) = &state.stream {
+            if stream.errors.needs_restart() {
+                // Recreate on the service thread, outside the capture callbacks.
+                log::warn!("Recreating audio capture stream after an error");
                 super::restart();
             }
         }
@@ -255,29 +275,89 @@ mod cpal_impl {
         }
     }
 
-    fn send(
-        data: Vec<f32>,
-        sample_rate0: u32,
-        sample_rate: u32,
+    #[derive(Clone, Copy)]
+    struct CaptureFrameProcessorConfig {
+        input_rate: u32,
+        output_rate: u32,
         device_channel: u16,
         encode_channel: u16,
-        encoder: &mut Encoder,
-        sp: &GenericService,
-    ) {
-        let mut data = data;
-        if sample_rate0 != sample_rate {
-            data = crate::common::audio_resample(&data, sample_rate0, sample_rate, device_channel);
+    }
+
+    struct CaptureFrameProcessor {
+        config: CaptureFrameProcessorConfig,
+        resampler: Option<crate::audio_resampler::FixedFrameAudioResampler>,
+        sender: audio_capture_queue::CapturePcmSender,
+        rechannel_buffer: Vec<f32>,
+    }
+
+    struct CaptureStreamOutput {
+        sender: audio_capture_queue::CapturePcmSender,
+        sample_rate: u32,
+        encode_channel: magnum_opus::Channels,
+    }
+
+    impl CaptureFrameProcessor {
+        fn new(
+            config: CaptureFrameProcessorConfig,
+            sender: audio_capture_queue::CapturePcmSender,
+        ) -> ResultType<Self> {
+            let resampler = if config.input_rate == config.output_rate {
+                None
+            } else {
+                let output_frames = config.output_rate as usize / AUDIO_PACKETS_PER_SECOND;
+                Some(crate::audio_resampler::FixedFrameAudioResampler::new(
+                    crate::audio_resampler::AudioResamplerConfig {
+                        input_rate: config.input_rate,
+                        output_rate: config.output_rate,
+                        channels: config.device_channel,
+                    },
+                    output_frames,
+                )?)
+            };
+            Ok(Self {
+                config,
+                resampler,
+                sender,
+                rechannel_buffer: Vec::with_capacity(
+                    capture_packet_layout(config.output_rate, config.encode_channel)?.1,
+                ),
+            })
         }
-        if device_channel != encode_channel {
-            data = crate::common::audio_rechannel(
-                data,
-                sample_rate,
-                sample_rate,
-                device_channel,
-                encode_channel,
+
+        fn process(&mut self, data: &[f32]) -> ResultType<()> {
+            let config = self.config;
+            let sender = &mut self.sender;
+            let rechannel_buffer = &mut self.rechannel_buffer;
+            let mut send_packet = |packet: &[f32]| {
+                let packet =
+                    audio_capture::rechannel(packet, config.device_channel, rechannel_buffer);
+                sender.submit(packet);
+            };
+            if let Some(resampler) = self.resampler.as_mut() {
+                resampler.process_with(data, send_packet).with_context(|| {
+                    format!(
+                        "Failed to resample captured audio from {} Hz to {} Hz",
+                        config.input_rate, config.output_rate
+                    )
+                })?;
+            } else {
+                send_packet(data);
+            }
+            Ok(())
+        }
+    }
+
+    fn capture_packet_layout(sample_rate: u32, channels: u16) -> ResultType<(usize, usize)> {
+        if sample_rate < AUDIO_PACKETS_PER_SECOND as u32 || channels == 0 {
+            bail!("Invalid audio capture layout: sample_rate={sample_rate}, channels={channels}");
+        }
+        let frames = sample_rate as usize / AUDIO_PACKETS_PER_SECOND;
+        let samples = frames.checked_mul(channels as usize).with_context(|| {
+            format!(
+                "Audio capture frame size overflow: sample_rate={sample_rate}, channels={channels}"
             )
-        }
-        send_f32(&data, encoder, sp);
+        })?;
+        Ok((frames, samples))
     }
 
     #[cfg(feature = "screencapturekit")]
@@ -367,9 +447,7 @@ mod cpal_impl {
         Ok((device, format))
     }
 
-    fn play(
-        sp: &GenericService,
-    ) -> ResultType<(Box<dyn StreamTrait>, Arc<Message>, CaptureErrorHandler)> {
+    fn play(sp: &GenericService) -> ResultType<ActiveCaptureStream> {
         use cpal::SampleFormat::*;
         let (device, config) = get_device()?;
         let sp = sp.clone();
@@ -387,108 +465,273 @@ mod cpal_impl {
             48000
         };
         let ch = if config.channels() > 1 { Stereo } else { Mono };
+        let max_channels = config.channels().max(ch as u16);
+        let (_, max_packet_samples) = capture_packet_layout(sample_rate, max_channels)?;
+        let encoder_config = audio_capture_queue::CaptureEncoderConfig {
+            sample_rate,
+            encode_channel: ch,
+            max_packet_samples,
+        };
+        let (sender, encoder_worker) =
+            audio_capture_queue::start_capture_encoder(encoder_config, sp)?;
+        let output = CaptureStreamOutput {
+            sender,
+            sample_rate,
+            encode_channel: ch,
+        };
         let (stream, errors) = match config.sample_format() {
-            I8 => build_input_stream::<i8>(device, &config, sp, sample_rate, ch)?,
-            I16 => build_input_stream::<i16>(device, &config, sp, sample_rate, ch)?,
-            I32 => build_input_stream::<i32>(device, &config, sp, sample_rate, ch)?,
-            I64 => build_input_stream::<i64>(device, &config, sp, sample_rate, ch)?,
-            U8 => build_input_stream::<u8>(device, &config, sp, sample_rate, ch)?,
-            U16 => build_input_stream::<u16>(device, &config, sp, sample_rate, ch)?,
-            U32 => build_input_stream::<u32>(device, &config, sp, sample_rate, ch)?,
-            U64 => build_input_stream::<u64>(device, &config, sp, sample_rate, ch)?,
-            F32 => build_input_stream::<f32>(device, &config, sp, sample_rate, ch)?,
-            F64 => build_input_stream::<f64>(device, &config, sp, sample_rate, ch)?,
+            I8 => build_input_stream::<i8>(device, &config, output)?,
+            I16 => build_input_stream::<i16>(device, &config, output)?,
+            I32 => build_input_stream::<i32>(device, &config, output)?,
+            I64 => build_input_stream::<i64>(device, &config, output)?,
+            U8 => build_input_stream::<u8>(device, &config, output)?,
+            U16 => build_input_stream::<u16>(device, &config, output)?,
+            U32 => build_input_stream::<u32>(device, &config, output)?,
+            U64 => build_input_stream::<u64>(device, &config, output)?,
+            F32 => build_input_stream::<f32>(device, &config, output)?,
+            F64 => build_input_stream::<f64>(device, &config, output)?,
             f => bail!("unsupported audio format: {:?}", f),
         };
         stream.play()?;
         #[cfg(target_os = "macos")]
         log::info!("Audio capture start call succeeded");
-        Ok((
-            Box::new(stream),
-            Arc::new(create_format_msg(sample_rate, ch as _)),
+        Ok(ActiveCaptureStream {
+            stream: Some(Box::new(stream)),
+            format: Arc::new(create_format_msg(sample_rate, ch as _)),
+            _encoder_worker: encoder_worker,
             errors,
-        ))
+        })
+    }
+
+    fn convert_input_samples<T>(data: &[T]) -> impl Iterator<Item = f32> + '_
+    where
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
+    {
+        data.iter()
+            .map(|sample| <f32 as cpal::FromSample<T>>::from_sample_(*sample))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn log_capture_startup<T>(
+        data: &[T],
+        received_samples: bool,
+        received_signal: bool,
+    ) -> (bool, bool)
+    where
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
+    {
+        // Starting capture does not guarantee sample delivery or audible data.
+        if !received_samples && !data.is_empty() {
+            log::info!(
+                "Audio capture received first PCM block: {} samples",
+                data.len()
+            );
+        }
+        let has_signal = received_signal
+            || convert_input_samples(data).any(|sample| sample.is_finite() && sample != 0.0);
+        if !received_signal && has_signal {
+            log::info!("Audio capture received first nonzero PCM");
+        }
+        (received_samples || !data.is_empty(), has_signal)
     }
 
     fn build_input_stream<T>(
         device: cpal::Device,
         config: &cpal::SupportedStreamConfig,
-        sp: GenericService,
-        sample_rate: u32,
-        encode_channel: magnum_opus::Channels,
+        output: CaptureStreamOutput,
     ) -> ResultType<(cpal::Stream, CaptureErrorHandler)>
     where
-        T: cpal::SizedSample + dasp::sample::ToSample<f32>,
+        T: cpal::SizedSample,
+        f32: cpal::FromSample<T>,
     {
         let errors = CaptureErrorHandler::default();
         let callback_errors = errors.clone();
         let err_fn = move |err| callback_errors.handle(err);
+        let processor_errors = errors.clone();
         #[cfg(target_os = "macos")]
         let (mut received_samples, mut received_signal) = (false, false);
         let sample_rate_0 = config.sample_rate().0;
-        log::debug!("Audio sample rate : {}", sample_rate);
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
-        }
+        log::debug!("Audio sample rate : {}", output.sample_rate);
         let device_channel = config.channels();
-        let mut encoder = Encoder::new(sample_rate, encode_channel, LowDelay)?;
-        // https://www.opus-codec.org/docs/html_api/group__opusencoder.html#gace941e4ef26ed844879fde342ffbe546
-        // https://chromium.googlesource.com/chromium/deps/opus/+/1.1.1/include/opus.h
-        // Do not set `frame_size = sample_rate as usize / 100;`
-        // Because we find `sample_rate as usize / 100` will cause encoder error in `encoder.encode_vec_float()` sometimes.
-        // https://github.com/xiph/opus/blob/2554a89e02c7fc30a980b4f7e635ceae1ecba5d6/src/opus_encoder.c#L725
-        let frame_size = sample_rate_0 as usize / 100; // 10 ms
-        let encode_len = frame_size * encode_channel as usize;
-        let rechannel_len = encode_len * device_channel as usize / encode_channel as usize;
-        INPUT_BUFFER.lock().unwrap().clear();
-        let timeout = None;
-        let stream_config = StreamConfig {
-            channels: device_channel,
-            sample_rate: config.sample_rate(),
-            buffer_size: BufferSize::Default,
+        let (_, capture_frame_samples) = capture_packet_layout(sample_rate_0, device_channel)?;
+        let mut frame = audio_capture::CaptureFrameBuffer::new(capture_frame_samples)?;
+        let processor_config = CaptureFrameProcessorConfig {
+            input_rate: sample_rate_0,
+            output_rate: output.sample_rate,
+            device_channel,
+            encode_channel: output.encode_channel as _,
         };
+        let mut processor = CaptureFrameProcessor::new(processor_config, output.sender)?;
+        let timeout = None;
         let stream = device.build_input_stream(
-            &stream_config,
+            &config.config(),
             move |data: &[T], _: &InputCallbackInfo| {
-                let buffer: Vec<f32> = data.iter().map(|s| T::to_sample(*s)).collect();
+                if processor_errors.needs_restart() {
+                    return;
+                }
                 #[cfg(target_os = "macos")]
                 {
-                    // Starting capture does not guarantee sample delivery or audible data.
-                    if !received_samples && !buffer.is_empty() {
-                        received_samples = true;
-                        log::info!(
-                            "Audio capture received first PCM block: {} samples",
-                            buffer.len()
-                        );
-                    }
-                    if !received_signal
-                        && buffer
-                            .iter()
-                            .any(|sample| sample.is_finite() && *sample != 0.0)
-                    {
-                        received_signal = true;
-                        log::info!("Audio capture received first nonzero PCM");
-                    }
+                    (received_samples, received_signal) =
+                        log_capture_startup(data, received_samples, received_signal);
                 }
-                let mut lock = INPUT_BUFFER.lock().unwrap();
-                lock.extend(buffer);
-                while lock.len() >= rechannel_len {
-                    let frame: Vec<f32> = lock.drain(0..rechannel_len).collect();
-                    send(
-                        frame,
-                        sample_rate_0,
-                        sample_rate,
-                        device_channel,
-                        encode_channel as _,
-                        &mut encoder,
-                        &sp,
-                    );
-                }
+                frame.process(convert_input_samples(data), |frame| {
+                    processor_errors.process_frame(|| processor.process(frame));
+                });
             },
             err_fn,
             timeout,
         )?;
         Ok((stream, errors))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::super::audio_capture_queue::{
+            new_pcm_handoff, start_capture_encoder, CaptureEncoderConfig,
+        };
+        use super::{
+            capture_packet_layout, convert_input_samples, CaptureFrameProcessor,
+            CaptureFrameProcessorConfig,
+        };
+        use crate::audio_resampler::allocation_tests::assert_no_allocations;
+        use crate::server::EmptyExtraFieldService;
+        use magnum_opus::Channels::{Mono, Stereo};
+
+        const INVALID_CAPTURE_RATE: u32 = 99;
+        const RATE_24_KHZ: u32 = 24_000;
+        const RATE_44_1_KHZ: u32 = 44_100;
+        const RATE_48_KHZ: u32 = 48_000;
+        const MONO_CHANNELS: u16 = 1;
+        const NEGATIVE_FULL_SCALE_LIMIT: f32 = -0.99;
+        const POSITIVE_FULL_SCALE_LIMIT: f32 = 0.99;
+        const STEREO_CHANNELS: u16 = 2;
+        const SURROUND_CHANNELS: u16 = 6;
+        const ZERO_CHANNELS: u16 = 0;
+
+        #[test]
+        fn capture_sample_conversion_uses_cpal_traits() {
+            let input = [i16::MIN, 0, i16::MAX];
+            let output: Vec<_> = convert_input_samples(&input).collect();
+
+            assert_eq!(output.len(), input.len());
+            assert!(output[0] <= NEGATIVE_FULL_SCALE_LIMIT);
+            assert_eq!(output[1], 0.0);
+            assert!(output[2] >= POSITIVE_FULL_SCALE_LIMIT);
+        }
+
+        #[test]
+        fn capture_packet_layout_validates_rate_and_channels() {
+            let expected_frames = RATE_48_KHZ as usize / super::AUDIO_PACKETS_PER_SECOND;
+            assert_eq!(
+                capture_packet_layout(RATE_48_KHZ, STEREO_CHANNELS).unwrap(),
+                (expected_frames, expected_frames * STEREO_CHANNELS as usize)
+            );
+            assert!(capture_packet_layout(INVALID_CAPTURE_RATE, MONO_CHANNELS).is_err());
+            assert!(capture_packet_layout(RATE_48_KHZ, ZERO_CHANNELS).is_err());
+        }
+
+        #[test]
+        fn capture_callback_pipeline_does_not_allocate_after_warmup() {
+            for (input_rate, output_rate, device_channel, encode_channel) in [
+                (RATE_48_KHZ, RATE_48_KHZ, MONO_CHANNELS, MONO_CHANNELS),
+                (RATE_48_KHZ, RATE_48_KHZ, STEREO_CHANNELS, STEREO_CHANNELS),
+                (RATE_44_1_KHZ, RATE_24_KHZ, STEREO_CHANNELS, STEREO_CHANNELS),
+                (RATE_48_KHZ, RATE_48_KHZ, SURROUND_CHANNELS, STEREO_CHANNELS),
+            ] {
+                assert_capture_processor_does_not_allocate(CaptureFrameProcessorConfig {
+                    input_rate,
+                    output_rate,
+                    device_channel,
+                    encode_channel,
+                });
+            }
+        }
+
+        #[test]
+        fn capture_pcm_handoff_reuses_buffers_and_accounts_for_loss() {
+            const QUEUE_CAPACITY: usize = 2;
+            const PACKET_SAMPLES: usize = 4;
+            const FIRST: [f32; PACKET_SAMPLES] = [1.0; PACKET_SAMPLES];
+            const SECOND: [f32; PACKET_SAMPLES] = [2.0; PACKET_SAMPLES];
+            const THIRD: [f32; PACKET_SAMPLES] = [3.0; PACKET_SAMPLES];
+            const OVERSIZED_SAMPLES: usize = PACKET_SAMPLES + 1;
+            const OVERSIZED: [f32; OVERSIZED_SAMPLES] = [1.0; OVERSIZED_SAMPLES];
+
+            let (mut sender, receiver) = new_pcm_handoff(QUEUE_CAPACITY, PACKET_SAMPLES).unwrap();
+            sender.set_wake_thread(std::thread::current()).unwrap();
+            assert_no_allocations(|| {
+                sender.submit(&FIRST);
+                sender.submit(&SECOND);
+                sender.submit(&THIRD);
+            });
+
+            let loss = receiver.take_loss();
+            assert_eq!(loss.dropped, 1);
+            assert_eq!(loss.oversized, 0);
+            assert_eq!(loss.recycle_failures, 0);
+            let second = receiver.pop().unwrap();
+            let third = receiver.pop().unwrap();
+            assert_eq!(second, SECOND);
+            assert_eq!(third, THIRD);
+            receiver.recycle(second);
+            receiver.recycle(third);
+            assert!(receiver.is_empty());
+
+            assert_no_allocations(|| sender.submit(&OVERSIZED));
+            let loss = receiver.take_loss();
+            assert_eq!(loss.dropped, 0);
+            assert_eq!(loss.oversized, 1);
+            assert_eq!(loss.recycle_failures, 0);
+            assert!(receiver.is_empty());
+        }
+
+        #[test]
+        fn capture_pcm_handoff_rejects_invalid_layouts() {
+            assert!(new_pcm_handoff(0, 1).is_err());
+            assert!(new_pcm_handoff(1, 0).is_err());
+        }
+
+        fn assert_capture_processor_does_not_allocate(config: CaptureFrameProcessorConfig) {
+            const INPUT_LEVEL: f32 = 0.25;
+            const TEST_SERVICE_NAME: &str = "audio-allocation-test";
+
+            let service = EmptyExtraFieldService::new(TEST_SERVICE_NAME.to_owned(), true).sp;
+            let encode_channel = if config.encode_channel == MONO_CHANNELS {
+                Mono
+            } else {
+                Stereo
+            };
+            let encoder_config = CaptureEncoderConfig {
+                sample_rate: config.output_rate,
+                encode_channel,
+                max_packet_samples: config.output_rate as usize / super::AUDIO_PACKETS_PER_SECOND
+                    * config.device_channel.max(config.encode_channel) as usize,
+            };
+            let (sender, worker) = start_capture_encoder(encoder_config, service).unwrap();
+            let mut processor = CaptureFrameProcessor::new(config, sender).unwrap();
+            let errors = super::CaptureErrorHandler::default();
+            let input = vec![
+                INPUT_LEVEL;
+                config.input_rate as usize / super::AUDIO_PACKETS_PER_SECOND
+                    * config.device_channel as usize
+            ];
+            let mut frame_buffer =
+                super::audio_capture::CaptureFrameBuffer::new(input.len()).unwrap();
+
+            frame_buffer.process(convert_input_samples(&input), |frame| {
+                errors.process_frame(|| processor.process(frame));
+            });
+            assert_no_allocations(|| {
+                frame_buffer.process(convert_input_samples(&input), |frame| {
+                    errors.process_frame(|| processor.process(frame));
+                });
+            });
+            assert!(!errors.needs_restart());
+            drop(processor);
+            drop(worker);
+        }
     }
 }
 
@@ -505,28 +748,43 @@ fn create_format_msg(sample_rate: u32, channels: u16) -> Message {
     msg
 }
 
-// use AUDIO_ZERO_COUNT for the Noise(Zero) Gate Attack Time
+// Use a per-encoder counter for the Noise(Zero) Gate Attack Time.
 // every audio data length is set to 480
 // MAX_AUDIO_ZERO_COUNT=800 is similar as Gate Attack Time 3~5s(Linux) || 6~8s(Windows)
 const MAX_AUDIO_ZERO_COUNT: u16 = 800;
-static mut AUDIO_ZERO_COUNT: u16 = 0;
 
-fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
-    if data.iter().filter(|x| **x != 0.).next().is_some() {
-        unsafe {
-            AUDIO_ZERO_COUNT = 0;
+struct AudioEncoder {
+    encoder: Encoder,
+    zero_count: u16,
+}
+
+impl AudioEncoder {
+    fn new(encoder: Encoder) -> Self {
+        Self {
+            encoder,
+            zero_count: 0,
         }
-    } else {
-        unsafe {
-            if AUDIO_ZERO_COUNT > MAX_AUDIO_ZERO_COUNT {
-                if AUDIO_ZERO_COUNT == MAX_AUDIO_ZERO_COUNT + 1 {
-                    log::debug!("Audio Zero Gate Attack");
-                    AUDIO_ZERO_COUNT += 1;
-                }
-                return;
+    }
+
+    fn should_encode(&mut self, data: &[f32]) -> bool {
+        if data.iter().filter(|x| **x != 0.).next().is_some() {
+            self.zero_count = 0;
+        } else if self.zero_count > MAX_AUDIO_ZERO_COUNT {
+            if self.zero_count == MAX_AUDIO_ZERO_COUNT + 1 {
+                log::debug!("Audio Zero Gate Attack");
+                self.zero_count += 1;
             }
-            AUDIO_ZERO_COUNT += 1;
+            return false;
+        } else {
+            self.zero_count += 1;
         }
+        true
+    }
+}
+
+fn send_f32(data: &[f32], encoder: &mut AudioEncoder, sp: &GenericService) {
+    if !encoder.should_encode(data) {
+        return;
     }
     #[cfg(target_os = "android")]
     {
@@ -539,6 +797,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             let n = input_size / BATCH_SIZE;
             for i in 0..n {
                 match encoder
+                    .encoder
                     .encode_vec_float(&data[i * BATCH_SIZE..(i + 1) * BATCH_SIZE], BATCH_SIZE)
                 {
                     Ok(data) => {
@@ -549,7 +808,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
                         });
                         sp.send(msg_out);
                     }
-                    Err(_) => {}
+                    Err(error) => log::warn!("Failed to encode audio frame: {error:?}"),
                 }
             }
         } else {
@@ -559,7 +818,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
     }
 
     #[cfg(not(target_os = "android"))]
-    match encoder.encode_vec_float(data, data.len() * 6) {
+    match encoder.encoder.encode_vec_float(data, data.len() * 6) {
         Ok(data) => {
             let mut msg_out = Message::new();
             msg_out.set_audio_frame(AudioFrame {
@@ -568,6 +827,6 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             });
             sp.send(msg_out);
         }
-        Err(_) => {}
+        Err(error) => log::warn!("Failed to encode audio frame: {error:?}"),
     }
 }
