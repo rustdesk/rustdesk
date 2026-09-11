@@ -1413,26 +1413,25 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    double x = m.x * c.scale + cx - hotx;
-    double y = m.y * c.scale + cy - hoty;
-    double scale = 1.0;
-    final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
-    if (zoomCursor.value || isViewOriginal) {
-      x = m.x - hotx + cx / c.scale;
-      y = m.y - hoty + cy / c.scale;
-      scale = c.scale;
-    } else if (isLinux || isMacOS) {
-      scale = 1.0 / MediaQuery.devicePixelRatioOf(context);
-      x = (m.x * c.scale + cx) / scale - hotx;
-      y = (m.y * c.scale + cy) / scale - hoty;
+    final image = m.image ?? preDefaultCursor.image;
+    final nativePixels = isWindows ? MediaQuery.devicePixelRatioOf(context) : 1.0;
+    double scale = c.scale;
+    if (image != null && scale * nativePixels != 1.0) {
+      final sx = kMinCursorSize / (image.width * nativePixels);
+      final sy = kMinCursorSize / (image.height * nativePixels);
+      final minimumScale = sx > sy ? sx : sy;
+      if (scale < minimumScale) scale = minimumScale;
     }
+    final x = (m.x * c.scale + cx) / scale - hotx;
+    final y = (m.y * c.scale + cy) / scale - hoty;
 
     return CustomPaint(
       painter: ImagePainter(
-        image: m.image ?? preDefaultCursor.image,
+        image: image,
         x: x,
         y: y,
         scale: scale,
+        useIntegerPosition: false,
       ),
     );
   }

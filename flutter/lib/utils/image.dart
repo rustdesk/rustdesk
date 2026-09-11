@@ -96,12 +96,14 @@ class ImagePainter extends CustomPainter {
     required this.x,
     required this.y,
     required this.scale,
+    this.useIntegerPosition = true,
   });
 
   ui.Image? image;
   double x;
   double y;
   double scale;
+  final bool useIntegerPosition;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -122,8 +124,10 @@ class ImagePainter extends CustomPainter {
     if (isWeb) {
       paint.filterQuality = FilterQuality.high;
     }
-    canvas.drawImage(
-        image!, Offset(x.toInt().toDouble(), y.toInt().toDouble()), paint);
+    final position = useIntegerPosition
+        ? Offset(x.toInt().toDouble(), y.toInt().toDouble())
+        : Offset(x, y);
+    canvas.drawImage(image!, position, paint);
   }
 
   @override
