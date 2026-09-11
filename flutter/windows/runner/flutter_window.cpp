@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "win32_desktop.h"
+#include "cursor_size.h"
 
 namespace {
 
@@ -100,6 +101,7 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  cursor_size::Register(flutter_controller_->engine()->messenger());
 
   flutter::MethodChannel<> channel(
     flutter_controller_->engine()->messenger(),
@@ -146,6 +148,7 @@ bool FlutterWindow::OnCreate() {
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);
     auto *registry = flutter_view_controller->engine();
+    cursor_size::Register(registry->messenger());
     TextureRgbaRendererPluginCApiRegisterWithRegistrar(
         registry->GetRegistrarForPlugin("TextureRgbaRendererPlugin"));
     FlutterGpuTextureRendererPluginCApiRegisterWithRegistrar(
