@@ -12,6 +12,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
 import './gestures.dart';
+import './touch_mode_gesture_tracker.dart';
 
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
@@ -95,6 +96,7 @@ class _RawTouchGestureDetectorRegionState
 
   // Workaround tap down event when two fingers are used to scale(mobile)
   TapDownDetails? _lastTapDownDetails;
+  int? _lastTapDownSequence;
 
   PointerDeviceKind? lastDeviceKind;
 
@@ -102,6 +104,8 @@ class _RawTouchGestureDetectorRegionState
   // `onDoubleTap()` does not provide the position of the tap event.
   Offset _lastPosOfDoubleTapDown = Offset.zero;
   bool _touchModePanStarted = false;
+  final TouchModeGestureTracker _touchModeGestureTracker =
+      TouchModeGestureTracker();
   Offset _doubleFinerTapPosition = Offset.zero;
 
   // For mouse mode, we need to block the events when the cursor is in a blocked area.
@@ -119,10 +123,32 @@ class _RawTouchGestureDetectorRegionState
 
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
+    final detector = RawGestureDetector(
       child: widget.child,
       gestures: makeGestures(context),
     );
+    if (!isIOS) {
+      return detector;
+    }
+    return Listener(
+      onPointerDown: _onTouchPointerDown,
+      onPointerUp: _onTouchPointerEnd,
+      onPointerCancel: _onTouchPointerEnd,
+      child: detector,
+    );
+  }
+
+  void _onTouchPointerDown(PointerDownEvent event) {
+    if (!kTouchBasedDeviceKinds.contains(event.kind)) {
+      return;
+    }
+    _touchModeGestureTracker.pointerDown(event.pointer);
+  }
+
+  void _onTouchPointerEnd(PointerEvent event) {
+    if (kTouchBasedDeviceKinds.contains(event.kind)) {
+      _touchModeGestureTracker.pointerEnd(event.pointer);
+    }
   }
 
   bool isNotTouchBasedDevice() {
@@ -147,14 +173,24 @@ class _RawTouchGestureDetectorRegionState
       _lastPosOfDoubleTapDown = d.localPosition;
       // Desktop or mobile "Touch mode"
       _lastTapDownDetails = d;
+      if (isIOS) {
+        _lastTapDownSequence = _touchModeGestureTracker.recordTapDown();
+      }
     } else {
       _lastTapDownPositionForMouseMode = d.localPosition;
     }
   }
 
   onTapUp(TapUpDetails d) async {
-    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
-    _lastTapDownDetails = null;
+    final touchSequence =
+        isIOS ? _touchModeGestureTracker.takeNextTapDown() : null;
+    final TapDownDetails? lastTapDownDetails;
+    if (isIOS) {
+      lastTapDownDetails = _takeTapDownDetails(touchSequence);
+    } else {
+      lastTapDownDetails = _lastTapDownDetails;
+      _lastTapDownDetails = null;
+    }
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -163,16 +199,45 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
-      final isMoved =
-          await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-      if (isMoved) {
+      Future<void> sendTap() async {
         // If pan already handled 'down', don't send it again.
         if (lastTapDownDetails != null && !_touchModePanStarted) {
           await inputModel.tapDown(MouseButtons.left);
         }
         await inputModel.tapUp(MouseButtons.left);
       }
+      if (isIOS) {
+        if (touchSequence == null) {
+          return;
+        }
+        await handleTrackedTap(
+          tracker: _touchModeGestureTracker,
+          sequence: touchSequence,
+          move: () =>
+              ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy),
+          sendTap: sendTap,
+        );
+      } else if (await ffi.cursorModel
+          .move(d.localPosition.dx, d.localPosition.dy)) {
+        await sendTap();
+      }
     }
+  }
+
+  onTapCancel() {
+    if (isIOS) {
+      _touchModeGestureTracker.takeNextTapDown();
+    }
+  }
+
+  TapDownDetails? _takeTapDownDetails(int? touchSequence) {
+    if (touchSequence == null || _lastTapDownSequence != touchSequence) {
+      return null;
+    }
+    final details = _lastTapDownDetails;
+    _lastTapDownDetails = null;
+    _lastTapDownSequence = null;
+    return details;
   }
 
   onTap() async {
@@ -211,6 +276,12 @@ class _RawTouchGestureDetectorRegionState
   onDoubleTap() async {
     if (isNotTouchBasedDevice()) {
       return;
+    }
+    if (isIOS) {
+      // A double tap can emit two tap-downs but only one tap-cancel.
+      _touchModeGestureTracker.clearTapDowns();
+      _lastTapDownDetails = null;
+      _lastTapDownSequence = null;
     }
     if (ffiModel.touchMode && ffi.cursorModel.lastIsBlocked) {
       return;
@@ -353,13 +424,22 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onOneFingerPanStart(BuildContext context, DragStartDetails d) async {
-    final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
-    _lastTapDownDetails = null;
+    final touchSequence = isIOS ? _touchModeGestureTracker.sequence : null;
+    final TapDownDetails? lastTapDownDetails;
+    if (isIOS) {
+      lastTapDownDetails = _takeTapDownDetails(touchSequence);
+    } else {
+      lastTapDownDetails = _lastTapDownDetails;
+      _lastTapDownDetails = null;
+    }
     lastDeviceKind = d.kind ?? lastDeviceKind;
     if (isNotTouchBasedDevice()) {
       return;
     }
     if (handleTouch) {
+      if (isIOS) {
+        _touchModeGestureTracker.claimPan(touchSequence!);
+      }
       if (lastTapDownDetails != null) {
         await ffi.cursorModel.move(lastTapDownDetails.localPosition.dx,
             lastTapDownDetails.localPosition.dy);
@@ -449,6 +529,10 @@ class _RawTouchGestureDetectorRegionState
   // scale + pan event
   onTwoFingerScaleStart(ScaleStartDetails d) {
     _lastTapDownDetails = null;
+    _lastTapDownSequence = null;
+    if (isIOS) {
+      _touchModeGestureTracker.clearTapDowns();
+    }
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -539,6 +623,7 @@ class _RawTouchGestureDetectorRegionState
         instance
           ..onTapDown = onTapDown
           ..onTapUp = onTapUp
+          ..onTapCancel = onTapCancel
           ..onTap = onTap;
       }),
       DoubleTapGestureRecognizer:
