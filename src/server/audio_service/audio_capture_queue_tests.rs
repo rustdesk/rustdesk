@@ -8,6 +8,7 @@ const CONCURRENT_PACKETS: usize = 10_000;
 
 #[derive(Clone, Copy)]
 enum PausePoint {
+    BeforeRecycle,
     Recycle,
     Consume,
 }
@@ -17,39 +18,41 @@ struct WorkerPause {
     resume: mpsc::Receiver<()>,
 }
 
+impl WorkerPause {
+    fn wait(&self) {
+        self.entered.send(()).unwrap();
+        self.resume.recv().unwrap();
+    }
+}
+
 fn paused_worker(
     receiver: CapturePcmReceiver,
     point: PausePoint,
     pause: WorkerPause,
 ) -> CapturePcmReceiver {
-    let recycled = match point {
-        PausePoint::Recycle => Some(receiver.pop_packet().unwrap().1),
-        PausePoint::Consume => None,
-    };
-    let consumed = {
-        let mut buffers = receiver.handoff.buffers.lock().unwrap();
-        let consumed = match recycled {
-            Some(mut packet) => {
-                packet.clear();
-                buffers.available.push(packet);
-                None
-            }
-            None => Some(buffers.ready.pop_front().unwrap().1),
-        };
-        pause.entered.send(()).unwrap();
-        pause.resume.recv().unwrap();
-        consumed
-    };
-    if let Some(packet) = consumed {
-        receiver.recycle(packet);
+    let (index, _) = receiver.handoff.buffers.claim(false).unwrap();
+    let mut slot = receiver.handoff.buffers.slots[index].lock().unwrap();
+    let mut packet = std::mem::take(&mut slot.1);
+    if matches!(point, PausePoint::Consume) {
+        pause.wait();
+    }
+    packet.clear();
+    slot.1 = packet;
+    if matches!(point, PausePoint::BeforeRecycle) {
+        pause.wait();
+    }
+    drop(slot);
+    receiver.handoff.buffers.publish_available(index);
+    if matches!(point, PausePoint::Recycle) {
+        pause.wait();
     }
     receiver
 }
 
-fn assert_callback_progress(point: PausePoint) {
+fn assert_callback_progress(point: PausePoint, initial_packets: usize) {
     let (mut sender, receiver) =
         new_pcm_handoff(CAPTURE_PCM_QUEUE_PACKETS, PACKET_SAMPLES).unwrap();
-    for sequence in 0..CAPTURE_PCM_QUEUE_PACKETS {
+    for sequence in 0..initial_packets {
         sender.submit(&[sequence as f32; PACKET_SAMPLES]);
     }
     let (entered_tx, entered_rx) = mpsc::channel();
@@ -63,7 +66,7 @@ fn assert_callback_progress(point: PausePoint) {
     entered_rx.recv_timeout(TEST_TIMEOUT).unwrap();
     let (completed_tx, completed_rx) = mpsc::channel();
     let callback = std::thread::spawn(move || {
-        let packet = [CAPTURE_PCM_QUEUE_PACKETS as f32; PACKET_SAMPLES];
+        let packet = [initial_packets as f32; PACKET_SAMPLES];
         assert_no_allocations(|| sender.submit(&packet));
         completed_tx.send(()).unwrap();
         sender
@@ -74,21 +77,29 @@ fn assert_callback_progress(point: PausePoint) {
     let receiver = worker.join().unwrap();
     let mut sender = callback.join().unwrap();
     assert!(completed.is_ok(), "callback waited for the encoder worker");
+    let dropped = usize::from(
+        initial_packets == CAPTURE_PCM_QUEUE_PACKETS && !matches!(point, PausePoint::Recycle),
+    );
     assert_eq!(
         receiver.take_loss(),
         CapturePcmLoss {
-            dropped: 1,
-            contention_dropped: 1,
+            dropped,
             ..Default::default()
         }
     );
-    assert_packets_after_contention(&mut sender, &receiver);
+    assert_retained_packets(&mut sender, &receiver, (dropped + 1)..=initial_packets);
 }
 
-fn assert_packets_after_contention(sender: &mut CapturePcmSender, receiver: &CapturePcmReceiver) {
-    let next_sequence = CAPTURE_PCM_QUEUE_PACKETS + 1;
-    sender.submit(&[next_sequence as f32; PACKET_SAMPLES]);
-    for expected in (1..CAPTURE_PCM_QUEUE_PACKETS).chain(std::iter::once(next_sequence)) {
+fn assert_retained_packets(
+    sender: &mut CapturePcmSender,
+    receiver: &CapturePcmReceiver,
+    retained: std::ops::RangeInclusive<usize>,
+) {
+    let next_sequence = retained.end() + 1;
+    for expected in retained.chain(std::iter::once(next_sequence)) {
+        if expected == next_sequence {
+            sender.submit(&[next_sequence as f32; PACKET_SAMPLES]);
+        }
         let (sequence, packet) = receiver.pop_packet().unwrap();
         assert_eq!(sequence, expected);
         assert_eq!(packet, [expected as f32; PACKET_SAMPLES]);
@@ -100,22 +111,29 @@ fn assert_packets_after_contention(sender: &mut CapturePcmSender, receiver: &Cap
 }
 
 fn assert_pool_restored(receiver: &CapturePcmReceiver, capacity: usize) {
-    let buffers = receiver.handoff.buffers.lock().unwrap();
-    assert_eq!(buffers.available.len(), capacity);
+    let buffers = &receiver.handoff.buffers;
+    assert_eq!(buffers.available_len(), capacity);
+    assert!(buffers.is_empty());
+    assert_eq!(buffers.slots.len(), capacity);
     assert!(buffers
-        .available
+        .slots
         .iter()
-        .all(|buffer| buffer.capacity() >= PACKET_SAMPLES));
+        .all(|slot| slot.lock().unwrap().1.capacity() >= PACKET_SAMPLES));
 }
 
 #[test]
 fn callback_finishes_while_worker_recycles_a_buffer() {
-    assert_callback_progress(PausePoint::Recycle);
+    for queued in [1, CAPTURE_PCM_QUEUE_PACKETS - 1, CAPTURE_PCM_QUEUE_PACKETS] {
+        assert_callback_progress(PausePoint::BeforeRecycle, queued);
+        assert_callback_progress(PausePoint::Recycle, queued);
+    }
 }
 
 #[test]
 fn callback_finishes_while_worker_releases_a_ready_packet() {
-    assert_callback_progress(PausePoint::Consume);
+    for queued in [1, CAPTURE_PCM_QUEUE_PACKETS - 1, CAPTURE_PCM_QUEUE_PACKETS] {
+        assert_callback_progress(PausePoint::Consume, queued);
+    }
 }
 
 fn consume_concurrently(
@@ -144,7 +162,7 @@ fn consume_concurrently(
 #[test]
 fn concurrent_handoff_preserves_order_buffers_and_loss_counts_across_sequence_wrap() {
     const FIRST_SEQUENCE: usize = usize::MAX - CONCURRENT_PACKETS / 2;
-    for capacity in [1, 2, CAPTURE_PCM_QUEUE_PACKETS] {
+    for capacity in [1, 2, CAPTURE_PCM_QUEUE_PACKETS, buffer_pool::MAX_BUFFERS] {
         let (mut sender, receiver) = new_pcm_handoff(capacity, PACKET_SAMPLES).unwrap();
         sender.sequence = FIRST_SEQUENCE;
         let finished = Arc::new(AtomicBool::new(false));
@@ -161,6 +179,7 @@ fn concurrent_handoff_preserves_order_buffers_and_loss_counts_across_sequence_wr
         let (receiver, received) = worker.join().unwrap();
         let stats = receiver.take_stats();
         assert_eq!(received + stats.loss.dropped, CONCURRENT_PACKETS);
+        assert_eq!(stats.loss.contention_dropped, 0);
         assert_eq!(stats.loss.oversized, 0);
         assert_eq!(stats.loss.recycle_failures, 0);
         assert!(stats.max_queued_packets <= capacity);
