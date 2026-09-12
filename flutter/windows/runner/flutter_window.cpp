@@ -13,6 +13,9 @@
 #include <flutter/standard_method_codec.h>
 
 #include <windows.h>
+#include <oleacc.h>
+#include <UIAutomation.h>
+#include <wrl/client.h>
 
 #include <optional>
 #include <memory>
@@ -20,6 +23,83 @@
 #include "win32_desktop.h"
 
 namespace {
+
+HRESULT NotifyKeyboardStatus(HWND window, const std::string& status) {
+  // Resolve dynamically so older Windows versions can still start the app.
+  static const auto raise_notification =
+      reinterpret_cast<decltype(&UiaRaiseNotificationEvent)>(GetProcAddress(
+          GetModuleHandleW(L"UIAutomationCore.dll"), "UiaRaiseNotificationEvent"));
+  if (!raise_notification || !UiaClientsAreListening()) {
+    return S_FALSE;
+  }
+
+  // Query Flutter directly: AccessibleObjectFromWindow can return a cached
+  // system proxy without the provider interface.
+  LRESULT object = SendMessageW(window, WM_GETOBJECT, 0, OBJID_CLIENT);
+  if (!object) {
+    return S_FALSE;
+  }
+  Microsoft::WRL::ComPtr<IAccessible> accessible;
+  HRESULT hr = ObjectFromLresult(object, __uuidof(IAccessible), 0, &accessible);
+  if (FAILED(hr)) {
+    return hr;
+  }
+  Microsoft::WRL::ComPtr<IRawElementProviderSimple> provider;
+  hr = accessible.As(&provider);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                   status.c_str(), -1, nullptr, 0);
+  if (!length) {
+    return HRESULT_FROM_WIN32(GetLastError());
+  }
+  BSTR text = SysAllocStringLen(nullptr, length - 1);
+  BSTR activity = SysAllocString(L"rustdesk.keyboard");
+  if (!text || !activity) {
+    hr = E_OUTOFMEMORY;
+  } else if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                 status.c_str(), -1, text, length)) {
+    hr = HRESULT_FROM_WIN32(GetLastError());
+  } else {
+    hr = raise_notification(provider.Get(), NotificationKind_Other,
+                            NotificationProcessing_ImportantMostRecent,
+                            text, activity);
+  }
+  SysFreeString(text);
+  SysFreeString(activity);
+  return hr;
+}
+
+void RegisterKeyboardStatusNotifications(
+    flutter::FlutterViewController* controller) {
+  flutter::MethodChannel<> channel(
+      controller->engine()->messenger(), "org.rustdesk.rustdesk/keyboard",
+      &flutter::StandardMethodCodec::GetInstance());
+  channel.SetMethodCallHandler(
+      [window = controller->view()->GetNativeWindow()](
+          const flutter::MethodCall<>& call,
+          std::unique_ptr<flutter::MethodResult<>> result) {
+        if (call.method_name() != "notifyStatus") {
+          result->NotImplemented();
+          return;
+        }
+        const auto* status = call.arguments()
+            ? std::get_if<std::string>(call.arguments()) : nullptr;
+        if (!status || status->empty()) {
+          result->Error("invalid_arguments", "Keyboard status must be a string");
+          return;
+        }
+        HRESULT hr = NotifyKeyboardStatus(window, *status);
+        if (FAILED(hr)) {
+          result->Error("uia_notification", "Could not notify keyboard status",
+                        flutter::EncodableValue(static_cast<int32_t>(hr)));
+        } else {
+          result->Success();
+        }
+      });
+}
 
 // If the window is resized between the creation of the Flutter surface and the
 // present of the first frame - which is what the PowerToys FancyZones option
@@ -146,6 +226,7 @@ bool FlutterWindow::OnCreate() {
     auto *flutter_view_controller =
         reinterpret_cast<flutter::FlutterViewController *>(controller);
     auto *registry = flutter_view_controller->engine();
+    RegisterKeyboardStatusNotifications(flutter_view_controller);
     TextureRgbaRendererPluginCApiRegisterWithRegistrar(
         registry->GetRegistrarForPlugin("TextureRgbaRendererPlugin"));
     FlutterGpuTextureRendererPluginCApiRegisterWithRegistrar(

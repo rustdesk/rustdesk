@@ -128,6 +128,7 @@ class FfiModel with ChangeNotifier {
   bool _androidDocumentPickerInterruptedConnection = false;
   bool _viewOnly = false;
   bool _showMyCursor = false;
+  bool keyboardGrabbed = false;
   WeakReference<FFI> parent;
   late final SessionID sessionId;
 
@@ -247,6 +248,20 @@ class FfiModel with ChangeNotifier {
   }
 
   bool get keyboard => _permissions['keyboard'] != false;
+
+  String? get keyboardGrabStatus {
+    if (!isDesktop ||
+        isInputSourceFlutter ||
+        parent.target?.connType != ConnType.defaultConn ||
+        !_pi.isSet.isTrue ||
+        !keyboard ||
+        viewOnly) {
+      return null;
+    }
+    return keyboardGrabbed ? 'Keyboard: remote' : 'Keyboard: local';
+  }
+
+  void refreshKeyboardGrabStatus() => notifyListeners();
 
   clear() {
     _pi = PeerInfo();
@@ -478,6 +493,21 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'exit_relative_mouse_mode') {
         // Handle exit shortcut from rdev grab loop (Ctrl+Alt on Win/Linux, Cmd+G on macOS)
         parent.target?.inputModel.exitRelativeMouseModeWithKeyRelease();
+      } else if (name == 'keyboard_grab') {
+        final grabbed = evt['grabbed'] == true;
+        if (keyboardGrabbed != grabbed) {
+          keyboardGrabbed = grabbed;
+          notifyListeners();
+          final status = keyboardGrabStatus;
+          if (isWindows && status != null) {
+            try {
+              await const MethodChannel('org.rustdesk.rustdesk/keyboard')
+                  .invokeMethod<void>('notifyStatus', translate(status));
+            } catch (e) {
+              debugPrint('Failed to notify keyboard status: $e');
+            }
+          }
+        }
       } else {
         debugPrint('Event is not handled in the fixed branch: $name');
       }
@@ -742,6 +772,7 @@ class FfiModel with ChangeNotifier {
       parent.target?.inputModel.updateKeyboardMode();
     } else if (k == 'input_source') {
       stateGlobal.getInputSource(force: true);
+      notifyListeners();
     }
   }
 

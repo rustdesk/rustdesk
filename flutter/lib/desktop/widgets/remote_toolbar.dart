@@ -2545,12 +2545,16 @@ class _KeyboardMenu extends StatelessWidget {
       return toggles;
     }
 
+    final status = ffiModel.keyboardGrabStatus;
+    final local = status != null && !ffiModel.keyboardGrabbed;
     return _IconSubmenuButton(
-        tooltip: 'Keyboard Settings',
+        tooltip: status ?? 'Keyboard Settings',
         svg: "assets/keyboard_mouse.svg",
         ffi: ffi,
-        color: _ToolbarTheme.blueColor,
-        hoverColor: _ToolbarTheme.hoverBlueColor,
+        color: local ? _ToolbarTheme.inactiveColor : _ToolbarTheme.blueColor,
+        hoverColor: local
+            ? _ToolbarTheme.hoverInactiveColor
+            : _ToolbarTheme.hoverBlueColor,
         menuChildrenGetter: (_) => [
               keyboardMode(),
               localKeyboardType(),
@@ -2692,6 +2696,7 @@ class _KeyboardMenu extends StatelessWidget {
             ? (v) async {
                 if (v != null) {
                   await stateGlobal.setInputSource(ffi.sessionId, v);
+                  ffi.ffiModel.refreshKeyboardGrabStatus();
                   // Release native input; see the macOS trade-offs in RemotePage.
                   if (isMacOS) ffi.inputModel.enterOrLeave(false);
                   await ffi.ffiModel.checkDesktopKeyboardMode();

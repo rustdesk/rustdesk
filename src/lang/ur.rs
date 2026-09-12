@@ -780,6 +780,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk اسکرین ریکارڈنگ کے لیے درکار GStreamer جزو لوڈ نہیں کر سکا ({})"),
         ("Relay fallback delay in seconds", "ریلے پر واپس جانے میں تاخیر سیکنڈ میں"),
         ("relay-fallback-delay-tip", "پہلے سے قائم ریلے کنکشن براہ راست WebRTC کنکشن کا کتنی دیر انتظار کرتا ہے، اس کے بعد اس کی جگہ استعمال ہوتا ہے۔ سست براہ راست کنکشن کو مزید وقت دینے کے لیے بڑھائیں؛ ان نیٹ ورکس پر جہاں براہ راست کنکشن ممکن نہیں، جلد ریلے پر جانے کے لیے کم کریں۔ پہلے سے طے شدہ 2.5 سیکنڈ کے لیے خالی چھوڑ دیں۔"),
+        ("Keyboard: local", ""),
+        ("Keyboard: remote", ""),
     ].iter().cloned().collect();
 }
 
