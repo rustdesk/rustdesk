@@ -24,6 +24,8 @@ use hwcodec::{
     },
 };
 
+mod repeat;
+
 // https://www.reddit.com/r/buildapc/comments/d2m4ny/two_graphics_cards_two_monitors/
 // https://www.reddit.com/r/techsupport/comments/t2v9u6/dual_monitor_setup_with_dual_gpu/
 // https://cybersided.com/two-monitors-two-gpus/
@@ -98,7 +100,15 @@ impl EncoderApi for VRamEncoder {
         frame: EncodeInput,
         ms: i64,
     ) -> ResultType<base::message_proto::VideoFrame> {
-        let (texture, rotation) = frame.texture()?;
+        #[cfg(all(windows, feature = "vram"))]
+        let repeated = matches!(&frame, EncodeInput::Repeat);
+        #[cfg(not(all(windows, feature = "vram")))]
+        let repeated = false;
+        let (texture, rotation) = if repeated {
+            (std::ptr::null_mut(), 0)
+        } else {
+            frame.texture()?
+        };
         if rotation != 0 {
             // to-do: support rotation
             // Both the encoder and display(w,h) information need to be changed.
@@ -106,10 +116,12 @@ impl EncoderApi for VRamEncoder {
         }
         let mut vf = VideoFrame::new();
         let mut frames = Vec::new();
-        for frame in self
-            .encode(texture, ms)
-            .with_context(|| "Failed to encode")?
-        {
+        let result = if repeated {
+            self.encode_repeat(ms)
+        } else {
+            self.encode(texture, ms)
+        };
+        for frame in result.with_context(|| "Failed to encode")? {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts,
@@ -117,26 +129,32 @@ impl EncoderApi for VRamEncoder {
                 ..Default::default()
             });
         }
+        if repeated && frames.is_empty() {
+            return Ok(vf);
+        }
         if frames.len() > 0 {
-            // This kind of problem is occurred after a period of time when using AMD encoding,
-            // the encoding length is fixed at about 40, and the picture is still
-            const MIN_BAD_LEN: usize = 100;
-            const MAX_BAD_COUNTER: usize = 30;
-            let this_frame_len = frames[0].data.len();
-            if this_frame_len < MIN_BAD_LEN && this_frame_len == self.last_frame_len {
-                self.same_bad_len_counter += 1;
-                if self.same_bad_len_counter >= MAX_BAD_COUNTER {
-                    log::info!(
-                        "{} times encoding len is {}, switch",
-                        self.same_bad_len_counter,
-                        self.last_frame_len
-                    );
-                    bail!(crate::codec::ENCODE_NEED_SWITCH);
+            // Repeats must neither advance nor clear evidence from real captures.
+            if !repeated {
+                // This kind of problem is occurred after a period of time when using AMD encoding,
+                // the encoding length is fixed at about 40, and the picture is still
+                const MIN_BAD_LEN: usize = 100;
+                const MAX_BAD_COUNTER: usize = 30;
+                let this_frame_len = frames[0].data.len();
+                if this_frame_len < MIN_BAD_LEN && this_frame_len == self.last_frame_len {
+                    self.same_bad_len_counter += 1;
+                    if self.same_bad_len_counter >= MAX_BAD_COUNTER {
+                        log::info!(
+                            "{} times encoding len is {}, switch",
+                            self.same_bad_len_counter,
+                            self.last_frame_len
+                        );
+                        bail!(crate::codec::ENCODE_NEED_SWITCH);
+                    }
+                } else {
+                    self.same_bad_len_counter = 0;
                 }
-            } else {
-                self.same_bad_len_counter = 0;
+                self.last_frame_len = this_frame_len;
             }
-            self.last_frame_len = this_frame_len;
             let frames = EncodedVideoFrames {
                 frames: frames.into(),
                 ..Default::default()
@@ -241,6 +259,7 @@ impl VRamEncoder {
         let v: Vec<_> = crate::hwcodec::HwCodecConfig::get()
             .vram_encode
             .drain(..)
+            .filter(|c| c.driver == Driver::FFMPEG)
             .filter(|c| c.data_format == data_format)
             .collect();
         if crate::hwcodec::HwRamEncoder::try_get(format).is_some() {
@@ -337,6 +356,7 @@ impl VRamDecoder {
         crate::hwcodec::HwCodecConfig::get()
             .vram_decode
             .drain(..)
+            .filter(|c| c.driver == Driver::FFMPEG)
             .filter(|c| c.data_format == data_format && c.luid == luid && luid != 0)
             .collect()
     }
@@ -347,8 +367,10 @@ impl VRamDecoder {
         }
         let v = crate::hwcodec::HwCodecConfig::get().vram_decode;
         (
-            v.iter().any(|d| d.data_format == DataFormat::H264),
-            v.iter().any(|d| d.data_format == DataFormat::H265),
+            v.iter()
+                .any(|d| d.driver == Driver::FFMPEG && d.data_format == DataFormat::H264),
+            v.iter()
+                .any(|d| d.driver == Driver::FFMPEG && d.data_format == DataFormat::H265),
         )
     }
 

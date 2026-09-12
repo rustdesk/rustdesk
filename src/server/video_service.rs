@@ -62,6 +62,8 @@ use std::{
 
 pub const OPTION_REFRESH: &'static str = "refresh";
 
+mod static_refresh;
+
 type FrameFetchedNotifierSender = UnboundedSender<(i32, Option<Instant>)>;
 type FrameFetchedNotifierReceiver = Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>;
 
@@ -654,6 +656,15 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut first_frame = true;
     let capture_width = c.width;
     let capture_height = c.height;
+    let mut static_refresh = static_refresh::StaticRefresh::new(
+        vs.source,
+        codec_format,
+        &sp,
+        &recorder,
+        display_idx,
+        capture_width,
+        capture_height,
+    );
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
     // Diagnostics only.  `send_counter` counts capture rounds, which is not the
     // number of frames that reached a connection: the encoder's own rate control
@@ -781,6 +792,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
 
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
+                    static_refresh.on_frame(&frame);
                     let send_conn_ids = handle_one_frame(
                         display_idx,
                         &sp,
@@ -796,6 +808,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     if !send_conn_ids.is_empty() {
                         sent_counter += 1;
                     }
+                    static_refresh.on_encoded(!send_conn_ids.is_empty());
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }
@@ -858,10 +871,20 @@ fn run(vs: VideoService) -> ResultType<()> {
                         if !send_conn_ids.is_empty() {
                             sent_counter += 1;
                         }
+                        static_refresh.on_encoded(!send_conn_ids.is_empty());
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
                     }
                 }
+                static_refresh.try_encode(
+                    &yuv,
+                    spf,
+                    now,
+                    ms,
+                    &mut encoder,
+                    &mut sent_counter,
+                    &mut frame_controller,
+                )?;
             }
             Err(err) => {
                 // This check may be redundant, but it is better to be safe.
