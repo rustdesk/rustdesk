@@ -248,6 +248,29 @@ pub fn wayland_failure_stamped() -> bool {
     LAST_FAILED_LOOKUP.lock().unwrap().is_some()
 }
 
+/// The cached snapshot, or `None` if nothing has been enumerated yet OR if the cache is busy.
+/// Unlike `get_displays` this never enumerates, and it does not wait on the lock either:
+/// `get_displays` holds that lock across an enumeration, which can fork a probe with a 2 s
+/// deadline, so a plain `lock()` here would just move that wait onto the caller. `try_lock`
+/// keeps the promise a caller that must not stall is relying on: an answer now, or `None`.
+pub fn cached_displays() -> Option<Arc<Displays>> {
+    snapshot_without_waiting(&DISPLAYS)
+}
+
+/// The two ways `try_lock` can fail mean different things here, and only one of them is "no
+/// snapshot". Over a parameter so the poisoned case can be tested on a lock of its own.
+fn snapshot_without_waiting(lock: &Mutex<Option<Arc<Displays>>>) -> Option<Arc<Displays>> {
+    match lock.try_lock() {
+        Ok(snapshot) => snapshot.clone(),
+        // Busy: an enumeration holds the lock, and the promise here is not to wait for it.
+        Err(std::sync::TryLockError::WouldBlock) => None,
+        // Poisoned: a thread panicked while holding the lock. The snapshot is an `Option<Arc>`
+        // replaced whole, never half-written, so the value inside is still consistent. Take it,
+        // rather than let one panic elsewhere read as "no snapshot" for the rest of the session.
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner().clone(),
+    }
+}
+
 pub fn get_displays() -> Arc<Displays> {
     let mut lock = DISPLAYS.lock().unwrap();
     match lock.as_ref() {
@@ -514,6 +537,33 @@ fn map_axis(v: i32, base_origin: i32, base_extent: i32, live_origin: i32, live_e
 
 #[cfg(test)]
 mod tests {
+    // Busy reads as "no snapshot"; poisoned does not. A thread panics while holding the lock,
+    // and the snapshot it was holding must still come back. Verified by mutation: with the
+    // Poisoned arm mapped to None this test FAILS.
+    #[test]
+    fn a_busy_lock_yields_nothing_and_a_poisoned_one_still_yields_the_snapshot() {
+        use std::sync::{Arc, Mutex};
+        let snapshot = Arc::new(super::Displays {
+            primary: 0,
+            displays: Vec::new(),
+        });
+        let lock = Mutex::new(Some(snapshot.clone()));
+        let held = lock.lock().unwrap();
+        assert!(super::snapshot_without_waiting(&lock).is_none(), "busy must not wait");
+        drop(held);
+        assert!(Arc::ptr_eq(&super::snapshot_without_waiting(&lock).unwrap(), &snapshot));
+        let lock = Arc::new(lock);
+        let poisoner = lock.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.lock().unwrap();
+            panic!("poison the snapshot lock on purpose");
+        })
+        .join();
+        assert!(lock.is_poisoned());
+        let got = super::snapshot_without_waiting(&lock).expect("a poisoned lock still holds it");
+        assert!(Arc::ptr_eq(&got, &snapshot));
+    }
+
     use super::*;
 
     #[test]
