@@ -27,6 +27,11 @@ const String kPlatformAdditionsAmyuniVirtualDisplays =
 const String kPlatformAdditionsHasFileClipboard = "has_file_clipboard";
 const String kPlatformAdditionsSupportedPrivacyModeImpl =
     "supported_privacy_mode_impl";
+const String kPlatformAdditionsSupportsHighResolutionScroll =
+    "supports_high_resolution_scroll";
+const String kPlatformAdditionsSupportsSmoothScroll = "supports_smooth_scroll";
+const int kHighResolutionScrollUnitsPerStep = 120;
+const int kSmoothScrollUnitsPerPoint = 120;
 
 const String kPrivacyModeImplMag = 'privacy_mode_impl_mag';
 const String kPrivacyModeImplExcludeFromCapture =

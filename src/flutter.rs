@@ -912,7 +912,14 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     fn set_displays(&self, displays: &Vec<DisplayInfo>) {
-        self.peer_info.write().unwrap().displays = displays.clone();
+        {
+            let mut peer_info = self.peer_info.write().unwrap();
+            // Capability-only updates must not reset the UI's viewport offsets.
+            if peer_info.displays == *displays {
+                return;
+            }
+            peer_info.displays = displays.clone();
+        }
         self.push_event(
             "sync_peer_info",
             &[("displays", &Self::make_displays_msg(displays))],

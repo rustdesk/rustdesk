@@ -91,6 +91,11 @@ extern crate serde;
 ///
 pub type ResultType = std::result::Result<(), Box<dyn std::error::Error>>;
 
+/// Number of high-resolution scroll units in one legacy wheel detent.
+pub const HIGH_RESOLUTION_SCROLL_UNITS_PER_STEP: i32 = 120;
+/// Number of fixed-point smooth-scroll units in one logical point.
+pub const SMOOTH_SCROLL_UNITS_PER_POINT: i32 = 120;
+
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// MouseButton represents a mouse button,
@@ -256,6 +261,28 @@ pub trait MouseControllable {
     /// enigo.mouse_scroll_y(2);
     /// ```
     fn mouse_scroll_y(&mut self, length: i32);
+
+    /// Returns whether this backend can inject high-resolution scroll events.
+    fn supports_high_resolution_scroll(&self) -> bool {
+        false
+    }
+
+    /// Scrolls both axes in high-resolution units.
+    /// Positive values scroll right and down; 120 units equal one legacy detent.
+    fn mouse_scroll_high_resolution(&mut self, _x: i32, _y: i32) -> ResultType {
+        Err("high-resolution scrolling is not supported".into())
+    }
+
+    /// Returns whether this backend can inject smooth finger scrolling.
+    fn supports_smooth_scroll(&self) -> bool {
+        false
+    }
+
+    /// Scrolls both axes in fixed-point logical points.
+    /// Passing zero for both axes ends the current finger sequence.
+    fn mouse_scroll_smooth(&mut self, _x: i32, _y: i32) -> ResultType {
+        Err("smooth scrolling is not supported".into())
+    }
 }
 
 /// A key on the keyboard.
@@ -529,6 +556,7 @@ impl fmt::Debug for Enigo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_get_key_state() {
         let mut enigo = Enigo::new();

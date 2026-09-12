@@ -1392,6 +1392,18 @@ class FfiModel with ChangeNotifier {
     }
 
     final connType = parent.target?.connType;
+    if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
+      // Apply the peer snapshot before any await so later sync events cannot be overwritten.
+      _pi.platformAdditions = {};
+      final platformAdditions = evt['platform_additions'];
+      if (platformAdditions != null && platformAdditions != '') {
+        try {
+          _pi.platformAdditions = json.decode(platformAdditions);
+        } catch (e) {
+          debugPrint('Failed to decode platformAdditions $e');
+        }
+      }
+    }
     if (isPeerAndroid) {
       _touchMode = true;
     } else {
@@ -1475,17 +1487,6 @@ class FfiModel with ChangeNotifier {
       setShowMyCursor(bind.sessionGetToggleOptionSync(
           sessionId: sessionId, arg: kOptionToggleShowMyCursor));
     }
-    if (connType == ConnType.defaultConn || connType == ConnType.viewCamera) {
-      final platformAdditions = evt['platform_additions'];
-      if (platformAdditions != null && platformAdditions != '') {
-        try {
-          _pi.platformAdditions = json.decode(platformAdditions);
-        } catch (e) {
-          debugPrint('Failed to decode platformAdditions $e');
-        }
-      }
-    }
-
     _pi.isSet.value = true;
     stateGlobal.resetLastResolutionGroupValues(peerId);
 
