@@ -1717,7 +1717,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.15.3"
-source = "git+https://github.com/fufesou/cpal?rev=2738d2077af5a7114be58fdf8c4106ba04a318ec#2738d2077af5a7114be58fdf8c4106ba04a318ec"
+source = "git+https://github.com/fufesou/cpal?rev=949c2877697d50a950054f9176bc5d709a06afc5#949c2877697d50a950054f9176bc5d709a06afc5"
 dependencies = [
  "alsa",
  "cidre",
