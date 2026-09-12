@@ -778,5 +778,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "La peto pri ekrandividado sur la fora aparato finiĝis sen kompletiĝi"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk ne povis akiri uzeblan ekranon de XDG Desktop Portal, la biblioteko PipeWire eble estas tro malnova"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ne povis ŝargi komponanton de GStreamer necesan por ekrankapto ({})"),
+        ("Relay fallback delay in seconds", "Prokrasto antaŭ retransmisio en sekundoj"),
+        ("relay-fallback-delay-tip", "Kiom longe jam establita retransmisia konekto atendas la rektan WebRTC-konekton antaŭ ol esti uzata anstataŭe. Pligrandigu ĝin por doni al malrapida rekta konekto pli da tempo; malpligrandigu ĝin por pli frue uzi la retransmision en retoj kie rekta konekto ne eblas. Lasu malplena por la defaŭlta valoro de 2.5 sekundoj."),
     ].iter().cloned().collect();
 }

@@ -573,7 +573,7 @@ impl Client {
             return race_transports_prefer_webrtc(
                 preferred_fut,
                 vec![fallback_fut],
-                Self::WEBRTC_PREFER_WINDOW_MS,
+                Self::relay_fallback_delay_ms(),
                 |result| result.0 .1,
             )
             .await;
@@ -614,11 +614,27 @@ impl Client {
     /// ones that traverse NAT.
     const MAX_PENDING_WEBRTC_ICE: usize = 64;
 
-    /// Prefer-P2P window: how long a WebRTC attempt outranks an already-established relay
-    /// result, and the floor for a punch-path WebRTC attempt whose race timeout is tuned for a
-    /// raw TCP SYN. Long enough for candidate trickle + ICE checks + DTLS on high-latency
-    /// links; short enough that UDP-blocked networks settle on relay without a noticeable wait.
-    const WEBRTC_PREFER_WINDOW_MS: u64 = 2500;
+    /// Default relay fallback delay: how long an already-established relay result is held back
+    /// while a WebRTC attempt is still in flight, and the floor for a punch-path WebRTC attempt
+    /// whose race timeout is tuned for a raw TCP SYN. Long enough for candidate trickle + ICE
+    /// checks + DTLS on high-latency links; short enough that UDP-blocked networks settle on
+    /// relay without a noticeable wait. The same role RFC 8305 calls a connection attempt delay.
+    const RELAY_FALLBACK_DELAY_MS: u64 = 2500;
+
+    /// The delay as the user configured it, falling back to `RELAY_FALLBACK_DELAY_MS`. The
+    /// settings field holds seconds, which is what a user reasons about; everything here is
+    /// milliseconds. Unparseable, zero or negative all mean "unset", so clearing the field
+    /// restores the default instead of collapsing the delay and handing every race to the
+    /// relay.
+    fn relay_fallback_delay_ms() -> u64 {
+        match LocalConfig::get_option(keys::OPTION_RELAY_FALLBACK_DELAY)
+            .trim()
+            .parse::<f64>()
+        {
+            Ok(secs) if secs.is_finite() && secs > 0.0 => (secs * 1000.0).round() as u64,
+            _ => Self::RELAY_FALLBACK_DELAY_MS,
+        }
+    }
 
     /// UDP-NAT-test wait when the TCP clock is implausible (see TCP_RTT_PLAUSIBLE_MIN). The
     /// normal bound is `rtt / 2`: the test has been running since before the TCP connect, so on
@@ -1118,7 +1134,7 @@ impl Client {
                                 race_transports_prefer_webrtc(
                                     webrtc_fut,
                                     connect_futures,
-                                    Self::WEBRTC_PREFER_WINDOW_MS,
+                                    Self::relay_fallback_delay_ms(),
                                     |result| result.3,
                                 )
                                 .await
@@ -1446,7 +1462,7 @@ impl Client {
                 // so a viable P2P path is not abandoned before it can complete; TCP/UDP keep the
                 // tighter timeout, so a working direct connection still wins immediately, and the
                 // relay fallback only waits the extra time when direct attempts all failed.
-                let webrtc_timeout = connect_timeout.max(Self::WEBRTC_PREFER_WINDOW_MS);
+                let webrtc_timeout = connect_timeout.max(Self::relay_fallback_delay_ms());
                 async move {
                     raced.wait_connected(webrtc_timeout).await?;
                     // Resolve the pair here: a TURN win is relayed, not direct, and must be held
@@ -1464,7 +1480,7 @@ impl Client {
                 race_transports_prefer_webrtc(
                     webrtc_fut,
                     direct_futures,
-                    Self::WEBRTC_PREFER_WINDOW_MS,
+                    Self::relay_fallback_delay_ms(),
                     |r| r.3,
                 )
                 .await
