@@ -90,7 +90,7 @@ reqwest = { version = "0.12", features = ["blocking", "socks", "json", "native-t
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 # https://github.com/rustdesk/rustdesk/discussions/10197, not use cpal on linux
-cpal = { git = "https://github.com/fufesou/cpal", rev = "949c2877697d50a950054f9176bc5d709a06afc5" }
+cpal = { git = "https://github.com/fufesou/cpal", rev = "b8ad2742675dcfb1ab00e035dd73cb96258a3d3c" }
 ringbuf = "0.3"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
