@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:trixie-slim
 
 WORKDIR /
 ARG DEBIAN_FRONTEND=noninteractive
