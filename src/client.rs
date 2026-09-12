@@ -2393,7 +2393,7 @@ impl AudioHandler {
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
                 #[cfg(target_os = "windows")]
-                self.cancel_pending_playback();
+                let playback_failed = self.cancel_pending_playback();
                 #[cfg(target_os = "linux")]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
@@ -2411,8 +2411,9 @@ impl AudioHandler {
                 self.channels = f.channels as _;
                 let result = start(self, f);
                 #[cfg(target_os = "windows")]
-                let keep_existing_stream =
-                    keep_existing_stream && !previous.playback_recovery.report_pending();
+                let keep_existing_stream = keep_existing_stream
+                    && !playback_failed
+                    && !previous.playback_recovery.report_pending();
                 #[cfg(not(target_os = "linux"))]
                 if result.is_err() && keep_existing_stream {
                     // The restarted capture has new Opus history even when output startup fails.

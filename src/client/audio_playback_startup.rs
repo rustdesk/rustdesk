@@ -2,12 +2,15 @@ use super::{AudioHandler, Instant, Ordering, ResultType};
 use hbb_common::log;
 
 impl AudioHandler {
-    pub(in crate::client) fn cancel_pending_playback(&mut self) {
+    pub(in crate::client) fn cancel_pending_playback(&mut self) -> bool {
+        // Format messages bypass recovery; retain a usable candidate before superseding it.
+        let failed = self.resolve_pending_playback().unwrap_or(false);
         if let Some(mut pending) = self.playback_recovery.pending_output.take() {
             pending.audio_stream = None;
             pending.playback_recovery.report_pending();
             pending.playback_status.report_errors();
         }
+        failed
     }
 
     pub(in crate::client) fn finish_playback_replacement(
