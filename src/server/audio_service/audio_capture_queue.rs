@@ -97,7 +97,8 @@ impl Drop for CaptureEncoderWorker {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         if let Some(handle) = self.handle.take() {
-            // Rust 1.75's Win7 unpark() can wait for the worker; this owner thread joins it anyway.
+            // This runs on the owner thread, which already waits for the worker via join().
+            // See CapturePcmSender::wake for the pre-Windows-8 unpark() limitation.
             handle.thread().unpark();
             if let Err(error) = handle.join() {
                 log::error!("Failed to join audio encoder thread: {error:?}");
@@ -210,8 +211,15 @@ impl CapturePcmSender {
 
     fn wake(&self) {
         if let Some(thread) = self.handoff.wake_thread.get() {
-            // Rust 1.75's Win7 keyed-event wake can wait for the worker to enter its wait.
-            // Capture callbacks therefore do not have a nonblocking guarantee on Win7.
+            // Rust 1.75 on Win7 can block unpark() in NtReleaseKeyedEvent after the worker
+            // publishes PARKED but before it enters NtWaitForKeyedEvent, not for encoding.
+            // park_timeout() does not bound this wait; delays can cause gaps or stall teardown.
+            // Normal submit releases the queue lock first: a scheduling dependency, not a lock cycle.
+            // CPAL's event-driven system loopback delivers no audio on Win7, so this risk
+            // affects microphone/input-device capture, including outgoing voice calls.
+            // Keep Win7 capture best-effort to avoid a separate legacy notifier; its latency
+            // has not been measured. See cpal_impl::get_device for the loopback limitation.
+            // https://github.com/rust-lang/rust/blob/1.75.0/library/std/src/sys/windows/thread_parking.rs
             thread.unpark();
         }
     }
