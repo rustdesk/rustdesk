@@ -524,7 +524,6 @@ pub(super) async fn check_init() -> ResultType<()> {
                 }
                 log::debug!("Attempting to fix logical size with try_fix_logical_size()");
                 try_fix_logical_size(&mut all);
-                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
                 let num = all.len();
                 let primary = super::display_service::get_primary_2(&all);
                 let mut displays = super::display_service::update_sync_displays(&all);
@@ -550,8 +549,23 @@ pub(super) async fn check_init() -> ResultType<()> {
                 for (idx, display) in all.into_iter().enumerate() {
                     // No `with_context` here: the peer is shown `format!("{}", err)`, which
                     // renders only the outermost layer, and the mapped reason is the inner one.
-                    let capturer = Box::into_raw(Box::new(Capturer::new(display)?));
-                    let capturer = CapturerPtr(capturer);
+                    let capturer = match Capturer::new(display) {
+                        Ok(c) => CapturerPtr(Box::into_raw(Box::new(c))),
+                        Err(e) => {
+                            for (_, addr) in lock.iter() {
+                                let cap_display_info: *mut CapDisplayInfo = *addr as _;
+                                unsafe {
+                                    let _box_capturer =
+                                        Box::from_raw((*cap_display_info).capturer.0);
+                                    let _box_cap_display_info = Box::from_raw(cap_display_info);
+                                }
+                            }
+                            lock.clear();
+                            *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+                            scrap::wayland::pipewire::close_session();
+                            return Err(e.into());
+                        }
+                    };
 
                     let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                         rects: rects.clone(),
@@ -564,6 +578,8 @@ pub(super) async fn check_init() -> ResultType<()> {
 
                     lock.insert(idx, cap_display_info as u64);
                 }
+
+                *PIPEWIRE_INITIALIZED.write().unwrap() = true;
             }
         }
     }
@@ -602,6 +618,8 @@ pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, 
             Ok((cap_display_info.displays.clone(), cap_display_info.primary))
         }
     } else {
+        drop(cap_map);
+        *PIPEWIRE_INITIALIZED.write().unwrap() = false;
         bail!("Failed to get capturer display info");
     }
 }
@@ -635,6 +653,7 @@ pub fn clear() {
 
     // Reset PipeWire initialization flag to allow recreation on next init
     *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    scrap::wayland::pipewire::close_session();
 }
 
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
