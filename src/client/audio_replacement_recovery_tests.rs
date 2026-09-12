@@ -6,6 +6,9 @@ use std::time::Duration;
 const AFTER_COOLDOWN: Duration = Duration::from_secs(2);
 const BEFORE_DEADLINE: Duration = Duration::from_millis(1);
 
+#[path = "audio_pending_replacement_tests.rs"]
+mod pending_tests;
+
 fn install_output(handler: &mut AudioHandler, dropped: Arc<AtomicBool>) {
     handler.sample_rate = (INPUT_RATE, OUTPUT_RATE);
     handler.device_channel = CHANNELS;

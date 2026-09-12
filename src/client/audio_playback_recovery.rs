@@ -15,6 +15,9 @@ const PRIORITY_WARNING_PREFIX: &str = "SetThreadPriority failed: ";
 #[path = "audio_playback_recovery_state_tests.rs"]
 mod state_tests;
 
+#[path = "audio_playback_startup.rs"]
+mod startup;
+
 #[derive(Default)]
 pub(super) struct PlaybackRecovery {
     pub(super) errors: Arc<SegQueue<StreamError>>,
@@ -22,6 +25,7 @@ pub(super) struct PlaybackRecovery {
     pub(super) retry_at: Option<Instant>,
     restart_not_before: Option<Instant>,
     awaiting_callback: bool,
+    pending_output: Option<Box<AudioHandler>>,
 }
 
 impl PlaybackRecovery {
@@ -101,7 +105,10 @@ impl AudioHandler {
         now: Instant,
         restart: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
     ) {
-        if self.playback_recovery.report_pending() {
+        let failed = self
+            .resolve_pending_playback()
+            .unwrap_or_else(|| self.playback_recovery.report_pending());
+        if failed {
             self.clear_playback_stream();
             self.playback_recovery.retry_at = Some(
                 self.playback_recovery

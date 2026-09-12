@@ -2392,6 +2392,8 @@ impl AudioHandler {
         }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
+                #[cfg(target_os = "windows")]
+                self.cancel_pending_playback();
                 #[cfg(target_os = "linux")]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
@@ -2420,7 +2422,7 @@ impl AudioHandler {
                     return;
                 }
                 #[cfg(target_os = "windows")]
-                self.finish_playback_start(result);
+                self.finish_playback_replacement(result, keep_existing_stream.then_some(previous));
                 #[cfg(not(target_os = "windows"))]
                 self.handle_audio_start_result(result, keep_existing_stream);
             }
