@@ -153,19 +153,13 @@ class MainService : Service() {
                         } else {
                             if (!switchOutVoiceCall()) {
                                 Log.e(logTag, "switchOutVoiceCall fail")
-                                MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
-                                    "type" to "custom-nook-nocancel-hasclose-error",
-                                    "title" to "Voice call",
-                                    "text" to "Failed to switch out voice call."))
+                                showVoiceCallError("Failed to switch out voice call.")
                             }
                         }
                     } else {
                         if (!switchToVoiceCall()) {
                             Log.e(logTag, "switchToVoiceCall fail")
-                            MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
-                                "type" to "custom-nook-nocancel-hasclose-error",
-                                "title" to "Voice call",
-                                "text" to "Failed to switch to voice call."))
+                            showVoiceCallError(audioRecordHandle.getVoiceCallStartError())
                         }
                     }
                 } catch (e: JSONException) {
@@ -504,6 +498,15 @@ class MainService : Service() {
         if (restartCapture) {
             captureRestartPending = false
             startCapture(restartInVoiceCall)
+        }
+    }
+
+    private fun showVoiceCallError(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            MainActivity.flutterMethodChannel?.invokeMethod("msgbox", mapOf(
+                "type" to "custom-nook-nocancel-hasclose-error",
+                "title" to "Voice call",
+                "text" to message))
         }
     }
 

@@ -1,4 +1,4 @@
-﻿lazy_static::lazy_static! {
+lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("Status", "حالت"),
@@ -473,7 +473,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Copy Fingerprint", "فنگر پرنٹ کاپی کریں"),
         ("no fingerprints", "کوئی فنگر پرنٹ نہیں"),
         ("Update", "اپڈیٹ کریں"),
-        ("Enable", "فعال کریں"),
         ("resolution_original_tip", "اصل ریزولوشن"),
         ("resolution_fit_local_tip", "مقامی ریزولوشن کے مطابق"),
         ("resolution_custom_tip", "حسبِ ضرورت ریزولوشن"),
@@ -660,6 +659,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("screenshot-merged-screen-not-supported-tip", "متعدد ڈسپلے کے اسکرین شاٹس کو ملانا فی الحال معاون نہیں ہے۔ براہِ کرم ایک ڈسپلے پر منتقل ہو کر دوبارہ کوشش کریں۔"),
         ("screenshot-action-tip", "اسکرین شاٹ ایکشن ٹپ"),
         ("Save as", "حفظ کے طور پر"),
+        ("Export", "برآمد کریں"),
+        ("Export Logs", "لاگز برآمد کریں"),
+        ("Import Folder", "فولڈر درآمد کریں"),
         ("Copy to clipboard", "کلپ بورڈ پر کاپی کریں"),
         ("Enable remote printer", "ریموٹ پرنٹر کو فعال کریں"),
         ("Downloading {}", "ڈاؤن لوڈ ہو رہا ہے {}"),
@@ -726,11 +728,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display Name", "display-name"),
         ("password-hidden-tip", "مستقل پاس ورڈ مقرر ہے (پوشیدہ)۔"),
         ("preset-password-in-use-tip", "پہلے سے مقرر پاس ورڈ اس وقت استعمال میں ہے۔"),
-        ("terminal-clipboard-write-tip", "ٹرمنل میں ایک ایپ اس ڈیوائس کے کلپ بورڈ پر متن کاپی کرنا چاہتی ہے۔ اجازت دینے پر یہ اجازت تمام کنکشن کی ٹرمنل ایپس پر لاگو رہے گی جب تک آپ اسے ترتیبات میں بند نہ کر دیں۔ دستی کاپی اور پیسٹ متاثر نہیں ہوں گے۔"),
-        ("Allow terminal apps to copy to clipboard", "ٹرمنل ایپس کو کلپ بورڈ پر کاپی کرنے کی اجازت دیں"),
-        ("Export", "برآمد کریں"),
-        ("Export Logs", "لاگز برآمد کریں"),
-        ("Import Folder", "فولڈر درآمد کریں"),
         ("Enable privacy mode", "پرائیویسی موڈ فعال کریں"),
         ("allow-remote-toolbar-docking-any-edge", "ریموٹ ٹول بار کو ونڈو کے کسی بھی کنارے پر لگانے کی اجازت دیں"),
         ("API Token", "API ٹوکن"),
@@ -766,6 +763,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "کینوس مقفل کریں"),
         ("Sync clipboard between sessions", "سیشنز کے درمیان کلپ بورڈ ہم آہنگ کریں"),
         ("sync-clipboard-between-sessions-tip", "ایک ریموٹ سیشن میں کاپی کیا گیا متن یا تصاویر آپ کے دیگر منسلک سیشنز کے کلپ بورڈ پر بھی بھیجی جاتی ہیں۔"),
+        ("terminal-clipboard-write-tip", "ٹرمنل میں ایک ایپ اس ڈیوائس کے کلپ بورڈ پر متن کاپی کرنا چاہتی ہے۔ اجازت دینے پر یہ اجازت تمام کنکشن کی ٹرمنل ایپس پر لاگو رہے گی جب تک آپ اسے ترتیبات میں بند نہ کر دیں۔ دستی کاپی اور پیسٹ متاثر نہیں ہوں گے۔"),
+        ("Allow terminal apps to copy to clipboard", "ٹرمنل ایپس کو کلپ بورڈ پر کاپی کرنے کی اجازت دیں"),
+        ("Enable", "فعال کریں"),
         ("Reuse one connection for port forwarding", "پورٹ فارورڈنگ کے لیے ایک ہی کنکشن دوبارہ استعمال کریں"),
         ("port-forward-mux-tip", "ایک پورٹ فارورڈنگ کے تمام کنکشن دوسرے کمپیوٹر کے ساتھ بنے ایک ہی کنکشن سے گزرتے ہیں، ہر ایک کے لیے دوبارہ منسلک ہو کر لاگ اِن کرنے کے بجائے۔"),
         ("Enable WebRTC P2P connection", "WebRTC P2P کنکشن کو فعال کریں"),
@@ -780,6 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk اسکرین ریکارڈنگ کے لیے درکار GStreamer جزو لوڈ نہیں کر سکا ({})"),
         ("Relay fallback delay in seconds", "ریلے پر واپس جانے میں تاخیر سیکنڈ میں"),
         ("relay-fallback-delay-tip", "پہلے سے قائم ریلے کنکشن براہ راست WebRTC کنکشن کا کتنی دیر انتظار کرتا ہے، اس کے بعد اس کی جگہ استعمال ہوتا ہے۔ سست براہ راست کنکشن کو مزید وقت دینے کے لیے بڑھائیں؛ ان نیٹ ورکس پر جہاں براہ راست کنکشن ممکن نہیں، جلد ریلے پر جانے کے لیے کم کریں۔ پہلے سے طے شدہ 2.5 سیکنڈ کے لیے خالی چھوڑ دیں۔"),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }
-

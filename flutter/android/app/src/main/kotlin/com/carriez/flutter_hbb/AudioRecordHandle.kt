@@ -193,6 +193,17 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         return audioRecorder?.audioSource == MediaRecorder.AudioSource.VOICE_COMMUNICATION
     }
 
+    fun getVoiceCallStartError(): String {
+        return if (ActivityCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) != PackageManager.PERMISSION_GRANTED) {
+            "To start a voice call, enable \"Audio capture\" on the \"Screen share\" page."
+        } else {
+            "Failed to start voice call."
+        }
+    }
+
     fun onVoiceCallStarted(mediaProjection: MediaProjection?): Boolean {
         if (!isSupportVoiceCall()) {
             return false
@@ -234,10 +245,8 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun switchOutVoiceCall(mediaProjection: MediaProjection?): Boolean {
-        audioRecorder?.let {
-            if (it.getAudioSource() != MediaRecorder.AudioSource.VOICE_COMMUNICATION) {
-                return true
-            }
+        if (!isVoiceCallActive()) {
+            return true
         }
         audioRecordStat = false
         audioThread?.join()
