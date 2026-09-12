@@ -763,7 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Bloquear tela"),
         ("Sync clipboard between sessions", "Sincronizar área de transferência entre sessões"),
         ("sync-clipboard-between-sessions-tip", "Texto ou imagens copiados em uma sessão remota também são enviados para a área de transferência das suas outras sessões conectadas."),
-        ("terminal-clipboard-write-tip", "Permitir que aplicativos do terminal copiem para a área de transferência"),
+        ("terminal-clipboard-write-tip", "Aplicativos do terminal podem copiar para a área de transferência"),
         ("Allow terminal apps to copy to clipboard", "Permitir que aplicativos do terminal copiem para a área de transferência"),
         ("Enable", "Habilitar"),
         ("Reuse one connection for port forwarding", "Reutilizar uma conexão para encaminhamento de portas"),
