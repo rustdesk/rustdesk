@@ -1,11 +1,11 @@
 [package]
-name = "teamdesk"
+name = "rustdesk"
 version = "1.5.0"
-authors = ["teamdesk <info@bellini-gr.ru>"]
+authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
-description = "TeamDesk Remote Desktop"
-default-run = "teamdesk"
+description = "RustDesk Remote Desktop"
+default-run = "rustdesk"
 rust-version = "1.75"
 
 [lib]
@@ -236,9 +236,9 @@ webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "db3b07a9d
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
-ProductName = "TeamDesk"
-FileDescription = "TeamDesk Remote Desktop"
-OriginalFilename = "teamdesk.exe"
+ProductName = "RustDesk"
+FileDescription = "RustDesk Remote Desktop"
+OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
@@ -255,8 +255,8 @@ docopt = "1.1"
 tokio = { version = "1.44", features = ["test-util"] }
 
 [package.metadata.bundle]
-name = "TeamDesk"
-identifier = "com.carriez.teamdesk"
+name = "RustDesk"
+identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
 

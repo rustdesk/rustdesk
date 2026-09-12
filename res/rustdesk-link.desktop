@@ -1,11 +1,11 @@
 [Desktop Entry]
-Name=TeamDesk
+Name=RustDesk
 NoDisplay=true
-MimeType=x-scheme-handler/teamdesk;x-scheme-handler/rustdesk;
-TryExec=teamdesk
-Exec=teamdesk %u
-Icon=teamdesk
+MimeType=x-scheme-handler/rustdesk;
+TryExec=rustdesk
+Exec=rustdesk %u
+Icon=rustdesk
 Terminal=false
 Type=Application
 StartupNotify=false
-StartupWMClass=teamdesk
+StartupWMClass=rustdesk

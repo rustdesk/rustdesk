@@ -209,7 +209,7 @@ jobs:
           # Unlock keychain
           security default-keychain -s rustdesk.keychain
           security unlock-keychain -p ${{ secrets.MACOS_P12_PASSWORD }} rustdesk.keychain
-          # start sign the rustdesk.app and dmg
+          # start sign the app and dmg
           rm -rf *.dmg || true
           APP_PATH="$(ls -d ./flutter/build/macos/Build/Products/Release/*.app | head -n 1)"
           APP_NAME="$(basename "$APP_PATH")"
