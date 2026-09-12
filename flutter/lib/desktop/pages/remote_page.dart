@@ -1101,6 +1101,9 @@ class _ImagePaintState extends State<ImagePaint> {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
+    // CanvasModel caches the DPR and only refreshes it when the view style
+    // changes, so read it live to follow the window across monitors.
+    final dpr = MediaQuery.devicePixelRatioOf(context);
 
     bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
@@ -1117,6 +1120,12 @@ class _ImagePaintState extends State<ImagePaint> {
             } else {
               if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = s;
+              } else {
+                // NSCursor and GdkCursor treat the bitmap size as logical
+                // pixels, so an unzoomed cursor must be shrunk by the DPR to
+                // keep 1 remote px == 1 physical px, the size Original view
+                // already renders it at.
+                cursorScale = 1.0 / dpr;
               }
             }
             return cursorScale;
@@ -1404,14 +1413,29 @@ class CursorPaint extends StatelessWidget {
       }
     }
 
-    double x = (m.x - hotx) * c.scale + cx;
-    double y = (m.y - hoty) * c.scale + cy;
+    double x = m.x * c.scale + cx - hotx;
+    double y = m.y * c.scale + cy - hoty;
     double scale = 1.0;
     final isViewOriginal = c.viewStyle.style == kRemoteViewStyleOriginal;
     if (zoomCursor.value || isViewOriginal) {
       x = m.x - hotx + cx / c.scale;
       y = m.y - hoty + cy / c.scale;
       scale = c.scale;
+    } else if (!isWindows) {
+      // Keep the painted cursor the same physical size as the native one
+      // built by getCursorScale() above, including its min-size clamp.
+      scale = 1.0 / MediaQuery.devicePixelRatioOf(context);
+      final image = m.image ?? preDefaultCursor.image;
+      if (scale != 1.0 &&
+          image != null &&
+          ((image.width * scale).toInt() < kMinCursorSize ||
+              (image.height * scale).toInt() < kMinCursorSize)) {
+        final sw = kMinCursorSize / image.width;
+        final sh = kMinCursorSize / image.height;
+        scale = sw < sh ? sh : sw;
+      }
+      x = (m.x * c.scale + cx) / scale - hotx;
+      y = (m.y * c.scale + cy) / scale - hoty;
     }
 
     return CustomPaint(

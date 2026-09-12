@@ -2884,7 +2884,7 @@ class CursorData {
     if (scale != 1.0) {
       // Update data if scale changed.
       final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
+      final tgtHeight = (height * scale).toInt();
       if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
         double sw = kMinCursorSize.toDouble() / width;
         double sh = kMinCursorSize.toDouble() / height;
