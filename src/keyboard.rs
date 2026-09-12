@@ -665,9 +665,12 @@ fn handle_keyboard_grab_shortcut(event: &Event) -> bool {
             return true;
         }
     }
-    if !IS_RDEV_ENABLED.load(Ordering::SeqCst) || flutter::get_cur_session().is_none() {
+    if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
         return false;
     }
+    let Some(session) = flutter::get_cur_session() else {
+        return false;
+    };
     // X11 stops delivering keys after ungrab, so this path can only release.
     #[cfg(target_os = "linux")]
     if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
@@ -689,12 +692,17 @@ fn handle_keyboard_grab_shortcut(event: &Event) -> bool {
         return false;
     }
     if matches!(event.event_type, EventType::KeyPress(_)) {
+        let enter = !KEYBOARD_HOOKED.load(Ordering::SeqCst);
+        if enter
+            && (!session.is_default()
+                || !*session.server_keyboard_enabled.read().unwrap()
+                || session.lc.read().unwrap().view_only.v)
+        {
+            return false;
+        }
         #[cfg(not(target_os = "linux"))]
         SHORTCUT_DOWN.store(true, Ordering::SeqCst);
-        crate::flutter_ffi::session_enter_or_leave(
-            flutter::get_cur_session_id(),
-            !KEYBOARD_HOOKED.load(Ordering::SeqCst),
-        );
+        crate::flutter_ffi::session_enter_or_leave(flutter::get_cur_session_id(), enter);
     }
     true
 }

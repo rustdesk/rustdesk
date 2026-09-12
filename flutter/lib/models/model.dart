@@ -264,6 +264,7 @@ class FfiModel with ChangeNotifier {
   void refreshKeyboardGrabStatus() => notifyListeners();
 
   clear() {
+    keyboardGrabbed = false;
     _pi = PeerInfo();
     lastUserDisplay = null;
     _cancelPendingMonitorRestore();
