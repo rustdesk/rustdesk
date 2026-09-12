@@ -499,7 +499,9 @@ jobs:
           # Since rustup 1.29.1, i686 toolchains on x64 Windows require --force-non-host
           # for both installation and default selection, even though WOW64 can run them.
           # See https://github.com/rust-lang/rustup/pull/4935.
-          # Adding an i686 target alone would still use a 64-bit compiler and build scripts.
+          # Alternatively, an x64 compiler could use cargo build --target i686-pc-windows-msvc.
+          # This requires 64-bit LLVM for host build scripts and updated packaging paths,
+          # and has not been manually verified for RustDesk.
           rustup toolchain install nightly-2023-10-13-${{ matrix.job.target }} \
             --target ${{ matrix.job.target }} --component rustfmt \
             --profile minimal --no-self-update --force-non-host
