@@ -6,6 +6,8 @@ use std::sync::{
 };
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
+pub(super) const AUDIO_PLAYBACK_LOG_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(5);
 const MILLISECONDS_PER_SECOND: usize = 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,7 +49,11 @@ impl AudioPlaybackStatus {
     pub(super) fn report_errors(&self) {
         let contentions = self.contentions.swap(0, Ordering::Relaxed);
         if contentions != 0 {
-            log::debug!("Audio playback PCM buffer contention: callbacks={contentions}");
+            hbb_common::throttled_log!(
+                AUDIO_PLAYBACK_LOG_INTERVAL,
+                debug,
+                "Audio playback PCM buffer contention: callbacks={contentions}"
+            );
         }
         if self.buffer_poisoned.swap(false, Ordering::Relaxed) {
             log::error!("Audio playback stopped reading a poisoned PCM buffer");
