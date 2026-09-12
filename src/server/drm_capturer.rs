@@ -191,26 +191,42 @@ fn transform_and_origin(
     (transform, origin)
 }
 
+/// What the calibration is told when the session's snapshot cannot say how the captured output
+/// is oriented. `note_cursor_plane` measures at 0 only, so this declines like any rotation would,
+/// instead of passing as "unrotated" the way a default of 0 did.
+const CAL_TRANSFORM_UNKNOWN: i32 = -1;
+
+/// Whether one wayland snapshot can be trusted to describe the DRM outputs at all: no wayland
+/// output, or one output where DRM drives several, is the partial enumeration the frame path
+/// already treats as "assume unrotated". The calibration cannot assume: an identity match found
+/// in a partial snapshot may be the wrong output, and says nothing about the ones left out. Both
+/// calibration lookups ask this first, so neither can resolve an output the other declined.
+fn cal_snapshot_complete(drm: &[DrmDisplayInfo], wl: &scrap::wayland::display::Displays) -> bool {
+    !(wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1))
+}
+
 /// The output's wl_output transform as reported, NOT folded. `transform_and_origin` folds 180 to
 /// 0 for the frame, because a hardware rotate-180 leaves the captured framebuffer upright and wl_output cannot
 /// tell hardware from software rotation. The hotspot calibration cannot afford that ambiguity:
 /// it subtracts a cursor-plane position (scanout space) from an injected point (oriented logical
 /// space), and for a software 180 those differ. So it declines on ANY reported rotation, and
 /// this is what it reads. Same identity match as the frame path, so both agree on which output.
+/// A snapshot that cannot answer (partial, or no match for this output) reads as
+/// `CAL_TRANSFORM_UNKNOWN`, which declines too.
 fn raw_output_transform(
     drm: &[DrmDisplayInfo],
     wire_idx: usize,
     wl: &scrap::wayland::display::Displays,
 ) -> i32 {
-    if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
-        return 0;
+    if !cal_snapshot_complete(drm, wl) {
+        return CAL_TRANSFORM_UNKNOWN;
     }
     identity_matches(drm, &wl.displays)
         .get(wire_idx)
         .copied()
         .flatten()
         .map(|j| wl.displays[j].transform)
-        .unwrap_or(0)
+        .unwrap_or(CAL_TRANSFORM_UNKNOWN)
 }
 
 // The kernel only exposes a cursor hotspot on DRIVER_CURSOR_HOTSPOT drivers (VMs), so on real
@@ -255,6 +271,9 @@ fn store_cursor_cal(wire_id: u64, h: (i32, i32)) {
         cache.clear();
     }
     cache.insert(wire_id, h);
+}
+fn forget_cursor_cal(wire_id: u64) {
+    CURSOR_CAL_CACHE.lock().unwrap().remove(&wire_id);
 }
 
 /// Domain-separated from the reader's FNV fold, so a corrected id cannot collide with a wire id
@@ -383,7 +402,7 @@ mod cursor_calibration_tests {
         );
     }
 
-    fn a_cal(plane: Option<(i32, i32)>) -> Option<CursorCal> {
+    pub(super) fn a_cal(plane: Option<(i32, i32)>) -> Option<CursorCal> {
         Some(CursorCal {
             id: 7,
             width: 64,
@@ -456,8 +475,15 @@ mod cursor_calibration_tests {
     // publishing anything. Then drift switches on. The attempt must decline: `pending` stays None.
     // Verified by mutation: with the drift check deleted this test FAILS, because the measurement
     // runs and sets `pending`.
+    // The peer-input and drift state these gate tests seed, measure against and clear is
+    // process-global, and libtest runs tests concurrently in one process. The WHOLE sequence sits
+    // under this lock: a clear from another test between a seed and its measurement ends the
+    // attempt at the input gate, and the assertion passes without reaching the gate under test.
+    pub(super) static INPUT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn drift_starting_mid_window_stops_further_attempts() {
+        let _serial = INPUT_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let mut cal = a_cal(Some((10, 20)));
         let c = cal.as_mut().unwrap();
         c.stable = CURSOR_CAL_STABLE_TICKS;
@@ -479,6 +505,7 @@ mod cursor_calibration_tests {
     // mutation: with the transform check deleted this test FAILS.
     #[test]
     fn a_rotated_output_and_a_missing_position_are_both_declined() {
+        let _serial = INPUT_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let mut cal = a_cal(None);
         note_cursor_plane(&mut cal, None, 0, 0, 0);
         assert_eq!(cal.as_ref().unwrap().plane, None);
@@ -497,41 +524,100 @@ mod cursor_calibration_tests {
         assert_eq!(c.window, 4);
     }
 
+    // Absolute input, then a relative move, then idle frames. With the absolute sample intact the
+    // idle frames measure (the control, plane (10,20) and tip (20,30) -> (10,10)); once a
+    // relative move has landed the same frames must measure nothing, because the point no longer
+    // says where the pointer is. `note_pointer_moved_without_absolute_sample` is what the
+    // relative arm of the input handler calls before injecting the delta. Verified by mutation:
+    // with its clear deleted this test FAILS at the second half.
+    #[test]
+    fn a_relative_move_forgets_the_absolute_sample_so_the_old_point_measures_nothing() {
+        let _serial = INPUT_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let settled = || {
+            let mut cal = a_cal(Some((10, 20)));
+            let c = cal.as_mut().unwrap();
+            c.stable = CURSOR_CAL_STABLE_TICKS;
+            c.window = 5;
+            c.rect = Some(Some(((0, 0, 1920, 1080), (1920, 1080))));
+            // Preset to the answer, so the measurement records a candidate without publishing.
+            c.applied = Some((10, 10));
+            cal
+        };
+        // The absolute arm writes a sample; fresh, so still inside the min-age gate.
+        crate::server::input_service::note_peer_absolute_move(20, 30);
+        let (pos, age) = crate::server::input_service::last_peer_input_pos_and_age_ms().unwrap();
+        assert_eq!(pos, (20, 30));
+        assert!(age < CURSOR_CAL_MIN_INPUT_AGE_MS);
+        // Control: the same sample, old enough, measures.
+        crate::server::input_service::test_seed_peer_abs_pos(20, 30, 500);
+        let mut cal = settled();
+        note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        assert_eq!(cal.as_ref().unwrap().pending, Some((10, 10)));
+        // The same sample, then a relative move lands: idle frames measure nothing.
+        crate::server::input_service::test_seed_peer_abs_pos(20, 30, 500);
+        crate::server::input_service::note_pointer_moved_without_absolute_sample();
+        assert_eq!(crate::server::input_service::last_peer_input_pos_and_age_ms(), None);
+        let mut cal = settled();
+        for _ in 0..3 {
+            note_cursor_plane(&mut cal, Some((10, 20)), 0, 0, 0);
+        }
+        assert_eq!(cal.as_ref().unwrap().pending, None, "a stale absolute point must not measure");
+        crate::server::input_service::test_clear_peer_abs_pos();
+    }
+
     // The two tests below both write CURSOR_CAL_CACHE, and one of them fills it past the cap,
     // which clears it. libtest runs them concurrently in one process, so they take this lock.
     static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    // The cache verdicts, on the code the receive loop runs. The wire hotspot (12,12) is the
+    // truth; the cache holds a stale (25,12) for this shape from an earlier bad window, and the
+    // receive path seeded `applied` from it. Two windows measure (12,12): the first publishes the
+    // recovery, the second confirms it, and the confirmation must REMOVE the stale entry, since
+    // the shape's next arrival is seeded from the cache alone and would publish (25,12) again.
+    // Verified by mutation: with the `forget_cursor_cal` call deleted this test FAILS at the
+    // eviction. Then, from a clean slate: an in-band measurement never enters the cache, and the
+    // out-of-band control still does.
     #[test]
-    fn a_measurement_that_matches_the_guess_is_not_cached_even_when_confirmed() {
+    fn a_confirmed_in_band_measurement_evicts_a_stale_correction_and_never_caches_one() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         const SHAPE: u64 = 4242;
-        CURSOR_CAL_CACHE.lock().unwrap().remove(&SHAPE);
-        let mut cal = a_cal(Some((10, 20)));
+        store_cursor_cal(SHAPE, (25, 12));
+        let arrival = || {
+            let mut cal = a_cal(Some((10, 20)));
+            let c = cal.as_mut().unwrap();
+            c.id = SHAPE;
+            c.wire_hot = (12, 12);
+            // What the receive path does on every arrival of the shape.
+            c.applied = cached_cursor_cal(SHAPE);
+            c.stable = CURSOR_CAL_STABLE_TICKS;
+            c.window = 1;
+            cal
+        };
+        let mut cal = arrival();
         let c = cal.as_mut().unwrap();
-        c.id = SHAPE;
-        c.wire_hot = (12, 12);
-        // A previous window already proposed the same in-band answer, so this one confirms it.
-        c.pending = Some((13, 12));
-        c.stable = CURSOR_CAL_STABLE_TICKS;
+        assert_eq!(c.applied, Some((25, 12)), "seeded from the stale entry");
+        // First window measures the truth: published, since it differs from what is applied;
+        // not yet confirmed, so the cache is untouched.
+        assert!(record_measurement(c, (12, 12)));
+        assert_eq!((c.applied, c.pending), (Some((12, 12)), Some((12, 12))));
+        assert_eq!(cached_cursor_cal(SHAPE), Some((25, 12)));
+        // Second window agrees: nothing new to publish, and the stale entry goes.
         c.window = 1;
-        // Drive the tail of note_cursor_plane directly: the measurement is 1 px off the guess.
-        let (confirms, _publish, candidate) = cal_outcome(c.applied, c.pending, (13, 12));
-        assert!(confirms);
-        let near_wire = (13 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
-            && (12 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
-        assert!(near_wire);
-        if confirms && !near_wire {
-            store_cursor_cal(c.id, (13, 12));
-        }
-        c.pending = candidate;
+        assert!(!record_measurement(c, (12, 12)));
+        assert_eq!(cached_cursor_cal(SHAPE), None, "the confirmed truth evicts the stale entry");
+        // The shape arrives again: seeded from nothing, so the wire hotspot is what goes out.
+        assert_eq!(arrival().as_ref().unwrap().applied, None);
+        // Clean slate, in band: confirmed, and still not cached, and not published either.
+        let mut cal = arrival();
+        let c = cal.as_mut().unwrap();
+        c.pending = Some((13, 12));
+        assert!(!record_measurement(c, (13, 12)));
         assert_eq!(cached_cursor_cal(SHAPE), None, "an in-band measurement must not be cached");
-        // Control: the same confirmation OUT of band does enter the cache.
-        let (confirms, _, _) = cal_outcome(None, Some((30, 4)), (30, 4));
-        assert!(confirms);
-        let far = (30 - c.wire_hot.0).abs() > CURSOR_CAL_TOLERANCE;
-        if confirms && far {
-            store_cursor_cal(SHAPE, (30, 4));
-        }
+        // Control: the same confirmation OUT of band enters the cache and is published.
+        let mut cal = arrival();
+        let c = cal.as_mut().unwrap();
+        c.pending = Some((30, 4));
+        assert!(record_measurement(c, (30, 4)));
         assert_eq!(cached_cursor_cal(SHAPE), Some((30, 4)));
         CURSOR_CAL_CACHE.lock().unwrap().remove(&SHAPE);
     }
@@ -669,13 +755,35 @@ struct CursorCal {
     rect: Option<Option<((i32, i32, i32, i32), (i32, i32))>>,
 }
 
-/// The logical rect the peer's coordinates live in, and this display's physical scanout size.
-/// Reads the cached wayland snapshot and never enumerates: see the note at the lookup.
+/// The logical rect the peer's coordinates live in, and this display's physical scanout size,
+/// from one DRM list and one wayland snapshot. Pure, so the topology cases are testable.
 ///
 /// The connector is matched to a wayland output through `identity_matches`, the same
 /// progressive-taken pass the transform and the advertised swap key off. Raw name equality is
 /// not the same thing: two cards can present the same bare connector name, and the normalized
-/// comparison is what the rest of this file trusts.
+/// comparison is what the rest of this file trusts. And the same completeness test as the
+/// transform: a partial snapshot can still hold an exact match for THIS connector, and that
+/// match would hand a rotated output's rect to a caller whose transform read as "unknown".
+fn cal_rect_from(
+    drm: &[DrmDisplayInfo],
+    idx: usize,
+    wl: &scrap::wayland::display::Displays,
+) -> Option<((i32, i32, i32, i32), (i32, i32))> {
+    if !cal_snapshot_complete(drm, wl) {
+        return None;
+    }
+    let info = drm.get(idx)?;
+    let j = identity_matches(drm, &wl.displays).get(idx).copied().flatten()?;
+    let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
+    let r = rects.get(j)?;
+    Some((
+        (r.x, r.y, r.w, r.h),
+        (info.width as i32, info.height as i32),
+    ))
+}
+
+/// `cal_rect_from` over the session's state. Reads the cached wayland snapshot and never
+/// enumerates: see the note at the lookup.
 fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))> {
     // The injected point has been remapped onto the LIVE layout while the rect below comes from
     // the cached baseline snapshot. While those differ the two halves of the subtraction are from
@@ -688,20 +796,13 @@ fn cal_rect_and_size(display: i32) -> Option<((i32, i32, i32, i32), (i32, i32))>
         ProbeState::Available(_, list) => list.clone(),
         _ => return None,
     };
-    let info = drm.get(idx)?.clone();
     // Never enumerate from here. `get_displays()` enumerates on a cache miss, and a miss forks a
     // probe with a 2 s deadline, on the thread that owes the frame ack against a 5 s stall. The
     // once-per-window memo bounds how OFTEN that could happen, not how long ONE call takes. The
     // calibration only ever needs what the session already looked up; if that is not there the
     // capturer was built blind and the right answer is to decline, not to go and look.
     let wl = scrap::wayland::display::cached_displays()?;
-    let j = identity_matches(&drm, &wl.displays).get(idx).copied().flatten()?;
-    let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
-    let r = rects.get(j)?;
-    Some((
-        (r.x, r.y, r.w, r.h),
-        (info.width as i32, info.height as i32),
-    ))
+    cal_rect_from(&drm, idx, &wl)
 }
 
 /// Whether a cursor shape is a candidate for measurement at all. Pure so the real gate can be
@@ -737,6 +838,38 @@ fn cal_outcome(
     let publish = !applied.is_some_and(near);
     let candidate = if confirms { pending } else { Some(h) };
     (confirms, publish, candidate)
+}
+
+/// What one settled measurement `h` does to the shape's state and to the cross-shape cache, and
+/// whether it is worth publishing. This is the code the receive loop runs; the cache tests drive
+/// it directly rather than a copy of it.
+fn record_measurement(c: &mut CursorCal, h: (i32, i32)) -> bool {
+    let (confirms, publish, candidate) = cal_outcome(c.applied, c.pending, h);
+    // A measurement that lands on the hotspot the wire already carries is not a correction: the
+    // reader's guess was right. It must not enter the cache, or the shape's NEXT arrival would
+    // be seeded from it and delivered under a fresh id with nothing to show for it, which is
+    // exactly the churn the tolerance exists to prevent.
+    let near_wire = (h.0 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
+        && (h.1 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
+    if confirms {
+        if near_wire {
+            // Two windows agree the wire was right all along. A correction cached earlier for
+            // this shape is therefore wrong, and `applied` alone does not carry that verdict:
+            // the shape's next arrival is seeded from the cache, not from this instance, and
+            // would publish the stale correction again. Take it out.
+            forget_cursor_cal(c.id);
+        } else {
+            store_cursor_cal(c.id, h);
+        }
+    }
+    c.pending = candidate;
+    // Measured either way: stay quiet until the plane moves and re-opens a window.
+    c.window = 0;
+    if !publish || (c.applied.is_none() && near_wire) {
+        return false;
+    }
+    c.applied = Some(h);
+    true
 }
 
 /// One frame reported where the cursor plane is. Advance the settle count and, inside an open
@@ -796,23 +929,9 @@ fn note_cursor_plane(
     else {
         return;
     };
-    let (confirms, publish, candidate) = cal_outcome(c.applied, c.pending, h);
-    // A measurement that lands on the hotspot the wire already carries is not a correction: the
-    // reader's guess was right. It must not enter the cache either, or the shape's NEXT arrival
-    // would be seeded from it and delivered under a fresh id with nothing to show for it, which is
-    // exactly the churn the tolerance exists to prevent.
-    let near_wire = (h.0 - c.wire_hot.0).abs() <= CURSOR_CAL_TOLERANCE
-        && (h.1 - c.wire_hot.1).abs() <= CURSOR_CAL_TOLERANCE;
-    if confirms && !near_wire {
-        store_cursor_cal(c.id, h);
-    }
-    c.pending = candidate;
-    // Measured either way: stay quiet until the plane moves and re-opens a window.
-    c.window = 0;
-    if !publish || (c.applied.is_none() && near_wire) {
+    if !record_measurement(c, h) {
         return;
     }
-    c.applied = Some(h);
     deliver_drm_cursor(
         display,
         cursor_epoch,
@@ -2878,6 +2997,59 @@ mod drm_capturer_tests {
         let wl = scrap::wayland::display::Displays { primary: 0, displays: vec![turned] };
         assert_eq!(transform_and_origin(&drm, 0, &wl).0, 90);
         assert_eq!(raw_output_transform(&drm, 0, &wl), 90);
+    }
+
+    // DRM lists two connectors, wayland one, and that one is an exact match for the captured
+    // connector, rotated 180 in software. The transform lookup used to read the partial snapshot
+    // as 0 before looking, and the rect lookup still found the match, so the pair measured a
+    // rotated output. Now both decline: the transform reads as unknown, the rect is None, and a
+    // full attempt through `note_cursor_plane` with the transform the session would store records
+    // nothing, while the same attempt at 0 measures. The one-connector control resolves both.
+    // Verified by mutation: with the completeness check deleted from `cal_rect_from` the rect
+    // assertion FAILS, and with it deleted from `raw_output_transform` the transform one FAILS.
+    #[test]
+    fn a_partial_snapshot_declines_on_both_calibration_lookups() {
+        let _serial = super::cursor_calibration_tests::INPUT_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let two = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        let mut flipped = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        flipped.transform = 180;
+        let partial = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![flipped],
+        };
+        let t = raw_output_transform(&two, 0, &partial);
+        assert_eq!(t, CAL_TRANSFORM_UNKNOWN);
+        assert_eq!(cal_rect_from(&two, 0, &partial), None);
+        // Control: the complete one-connector snapshot resolves both, rotation included.
+        let one = [drm_display("HDMI-A-1", 1920, 1080)];
+        assert_eq!(raw_output_transform(&one, 0, &partial), 180);
+        assert_eq!(
+            cal_rect_from(&one, 0, &partial),
+            Some(((0, 0, 1920, 1080), (1920, 1080)))
+        );
+        // The full attempt with fufesou's numbers: injected (964,544) over plane (943,523) would
+        // read (21,21) where the truth is (12,12). Geometry is pre-resolved as if the rect lookup
+        // had NOT declined, so the transform gate alone is under test: it stops the attempt, and
+        // the same attempt at 0 shows it was live.
+        let attempt = |transform: i32| {
+            let mut cal = super::cursor_calibration_tests::a_cal(Some((943, 523)));
+            let c = cal.as_mut().unwrap();
+            c.stable = CURSOR_CAL_STABLE_TICKS;
+            c.window = 5;
+            c.rect = Some(Some(((0, 0, 1920, 1080), (1920, 1080))));
+            c.applied = Some((21, 21));
+            crate::server::input_service::test_seed_peer_abs_pos(964, 544, 500);
+            note_cursor_plane(&mut cal, Some((943, 523)), 0, 0, transform);
+            crate::server::input_service::test_clear_peer_abs_pos();
+            cal.unwrap().pending
+        };
+        assert_eq!(attempt(0), Some((21, 21)));
+        assert_eq!(attempt(t), None, "an unknown transform must decline");
     }
 
     #[test]

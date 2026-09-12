@@ -992,6 +992,23 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 static LATEST_PEER_ABS_POS: std::sync::Mutex<Option<((i32, i32), i64)>> =
     std::sync::Mutex::new(None);
 
+/// The peer moved the pointer to an absolute, post-remap position: the one sample the
+/// calibration may subtract a cursor-plane position from.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn note_peer_absolute_move(x: i32, y: i32) {
+    *LATEST_PEER_ABS_POS.lock().unwrap() = Some(((x, y), get_time()));
+}
+
+/// The pointer moved by a path that has no post-remap absolute position to offer: a relative
+/// delta from the peer, or a move this process made on its own. The last absolute sample no
+/// longer says where the pointer is, and keeping it would let the calibration measure the plane
+/// against a point up to ten seconds stale (`CURSOR_CAL_MAX_INPUT_AGE_MS`) and cache the result.
+/// Forget it; the next absolute move restores it.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn note_pointer_moved_without_absolute_sample() {
+    *LATEST_PEER_ABS_POS.lock().unwrap() = None;
+}
+
 /// Test-only: seed the absolute-input state as if the peer moved `age_ms` ago. The gates in
 /// `note_cursor_plane` that sit AFTER the peer-input gate (transform, drift) are unreachable in a
 /// test process otherwise, and a test that never reaches its gate passes with the gate deleted.
@@ -1001,7 +1018,7 @@ pub(crate) fn test_seed_peer_abs_pos(x: i32, y: i32, age_ms: i64) {
 }
 #[cfg(all(test, target_os = "linux", feature = "drm"))]
 pub(crate) fn test_clear_peer_abs_pos() {
-    *LATEST_PEER_ABS_POS.lock().unwrap() = None;
+    note_pointer_moved_without_absolute_sample();
 }
 
 /// The last ABSOLUTE peer-injected pointer position (post-remap desktop px) and its age in ms.
@@ -1193,9 +1210,7 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             let (mx, my) = (evt.x, evt.y);
             en.mouse_move_to(mx, my);
             #[cfg(all(target_os = "linux", feature = "drm"))]
-            {
-                *LATEST_PEER_ABS_POS.lock().unwrap() = Some(((mx, my), get_time()));
-            }
+            note_peer_absolute_move(mx, my);
             *LATEST_PEER_INPUT_CURSOR.lock().unwrap() = Input {
                 conn,
                 time: get_time(),
@@ -1218,6 +1233,10 @@ pub fn handle_mouse_simulation_(evt: &MouseEvent, conn: i32) {
             let dy = evt
                 .y
                 .clamp(-MAX_RELATIVE_MOUSE_DELTA, MAX_RELATIVE_MOUSE_DELTA);
+            // The absolute sample stops describing the pointer the moment a delta lands. Drop it
+            // BEFORE the move, so no frame in between can measure the plane against it.
+            #[cfg(all(target_os = "linux", feature = "drm"))]
+            note_pointer_moved_without_absolute_sample();
             en.mouse_move_relative(dx, dy);
             // Get actual cursor position after relative movement for tracking
             if let Some((x, y)) = crate::get_cursor_pos() {
@@ -2435,6 +2454,9 @@ impl TemporaryMouseMoveHandle {
         let thread_handle = std::thread::spawn(move || {
             log::debug!("TemporaryMouseMoveHandle thread started");
             for (x, y) in rx {
+                // Not the peer's position: the calibration must not subtract from it.
+                #[cfg(feature = "drm")]
+                note_pointer_moved_without_absolute_sample();
                 ENIGO.lock().unwrap().mouse_move_to(x, y);
             }
             log::debug!("TemporaryMouseMoveHandle thread exiting");
