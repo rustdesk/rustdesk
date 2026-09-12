@@ -51,6 +51,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
     private var minBufferSize = 0
     private var audioRecordStat = false
     private var audioThread: Thread? = null
+    private var playbackCapturePending = false
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun createAudioRecorder(inVoiceCall: Boolean, mediaProjection: MediaProjection?): Boolean {
@@ -231,6 +232,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
             if (it.getAudioSource() == MediaRecorder.AudioSource.VOICE_COMMUNICATION) {
                 return true
             }
+            playbackCapturePending = true
         }
         audioRecordStat = false
         audioThread?.join()
@@ -245,9 +247,10 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
 
     @RequiresApi(Build.VERSION_CODES.M)
     fun switchOutVoiceCall(mediaProjection: MediaProjection?): Boolean {
-        if (!isVoiceCallActive()) {
+        if (!isVoiceCallActive() && !playbackCapturePending) {
             return true
         }
+        playbackCapturePending = true
         audioRecordStat = false
         audioThread?.join()
 
@@ -255,7 +258,11 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
             Log.e(logTag, "createAudioRecorder fail")
             return false
         }
-        return startAudioRecorder()
+        val started = startAudioRecorder()
+        if (started) {
+            playbackCapturePending = false
+        }
+        return started
     }
 
     fun tryReleaseAudio() {
@@ -265,6 +272,7 @@ class AudioRecordHandle(private var context: Context, private var isVideoStart: 
         audioRecordStat = false
         audioThread?.join()
         audioThread = null
+        playbackCapturePending = false
     }
 
     fun destroy() {
