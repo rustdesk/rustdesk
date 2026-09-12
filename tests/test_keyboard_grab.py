@@ -29,7 +29,7 @@ mod winapi { pub mod um { pub mod winuser {
 } } }
 mod rdev {
     #[derive(Clone, Copy, PartialEq)]
-    pub enum Key { Pause, Cancel, F15, ControlLeft, ControlRight, Alt, AltGr }
+    pub enum Key { Pause, Cancel, F15, NumLock, ControlLeft, ControlRight, Alt, AltGr }
     #[derive(Clone, Copy)]
     pub enum EventType { KeyPress(Key), KeyRelease(Key), Other }
     pub struct Event { pub event_type: EventType, pub platform_code: u32 }
@@ -78,6 +78,24 @@ mod flutter_ffi {
 
 CHECKS = r'''
 fn main() {
+    for (key, platform_code) in [
+        #[cfg(keyboard_test_windows)]
+        (Key::NumLock, 0x03),
+        #[cfg(not(keyboard_test_windows))]
+        (Key::Cancel, 0),
+        #[cfg(keyboard_test_macos)]
+        (Key::F15, 0),
+    ] {
+        for captured in [false, true] {
+            KEYBOARD_HOOKED.store(captured, Ordering::SeqCst);
+            let handled = captured || !cfg!(keyboard_test_linux);
+            let press = Event { event_type: EventType::KeyPress(key), platform_code };
+            let release = Event { event_type: EventType::KeyRelease(key), platform_code };
+            assert_eq!(handle_keyboard_grab_shortcut(&press), handled);
+            assert_eq!(KEYBOARD_HOOKED.load(Ordering::SeqCst), !captured && handled);
+            assert_eq!(handle_keyboard_grab_shortcut(&release), handled && !cfg!(keyboard_test_linux));
+        }
+    }
     let press = Event { event_type: EventType::KeyPress(Key::Pause), platform_code: 0x13 };
     let release = Event { event_type: EventType::KeyRelease(Key::Pause), platform_code: 0x13 };
     for (default_session, keyboard, view_only) in [
