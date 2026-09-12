@@ -1405,8 +1405,25 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         let video_queue = thread.video_queue.read().unwrap();
                         if video_queue.force_push(vf).is_some() {
+                            let queue_len = video_queue.len();
                             drop(video_queue);
-                            self.handler.refresh_video(display as _);
+                            let now = Instant::now();
+                            if thread
+                                .fps_control
+                                .last_queue_full_refresh
+                                .map_or(true, |last| {
+                                    now.duration_since(last) >= Duration::from_secs(10)
+                                })
+                            {
+                                thread.fps_control.last_queue_full_refresh = Some(now);
+                                log::warn!(
+                                    "Refresh display {display} because video queue is full: codec={:?}, queued={queue_len}, decode_fps={:?}, discard_queue={}",
+                                    self.video_format,
+                                    *thread.decode_fps.read().unwrap(),
+                                    *thread.discard_queue.read().unwrap(),
+                                );
+                                self.handler.refresh_video(display as _);
+                            }
                         } else {
                             thread.video_sender.send(MediaData::VideoQueue).ok();
                         }
@@ -2576,6 +2593,7 @@ impl RemoveJob {
 struct FpsControl {
     refresh_times: usize,
     last_refresh_instant: Option<Instant>,
+    last_queue_full_refresh: Option<Instant>,
     idle_counter: usize,
     inactive_counter: usize,
 }
