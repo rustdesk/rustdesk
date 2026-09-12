@@ -71,6 +71,9 @@ use std::{
     },
 };
 
+#[cfg(test)]
+mod refresh_tests;
+
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
     audio_sender: MediaSender,
@@ -1326,16 +1329,11 @@ impl<T: InvokeUiSession> Remote<T> {
             let ctl = &mut thread.fps_control;
             let video_queue = thread.video_queue.read().unwrap();
             let tolerable = std::cmp::min(min_decode_fps, video_queue.capacity() / 2);
-            if ctl.refresh_times < 20 // enough
-                    && (video_queue.len() > tolerable
-                            && (ctl.refresh_times == 0 || ctl.last_refresh_instant.map(|t|t.elapsed().as_secs() > 10).unwrap_or(false)))
-            {
+            if video_queue.len() > tolerable && ctl.try_refresh(Instant::now()) {
                 // Refresh causes client set_display, left frames cause flickering.
                 drop(video_queue);
                 self.handler.refresh_video(*display as _);
                 log::info!("Refresh display {} to reduce delay", display);
-                ctl.refresh_times += 1;
-                ctl.last_refresh_instant = Some(Instant::now());
             }
         }
     }
@@ -1405,8 +1403,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     } else {
                         let video_queue = thread.video_queue.read().unwrap();
                         if video_queue.force_push(vf).is_some() {
+                            let queue_len = video_queue.len();
                             drop(video_queue);
-                            self.handler.refresh_video(display as _);
+                            if thread.fps_control.try_refresh(Instant::now()) {
+                                log::warn!(
+                                    "Refresh display {display} because video queue is full: codec={:?}, queued={queue_len}, decode_fps={:?}, discard_queue={}",
+                                    self.video_format,
+                                    *thread.decode_fps.read().unwrap(),
+                                    *thread.discard_queue.read().unwrap(),
+                                );
+                                self.handler.refresh_video(display as _);
+                            }
                         } else {
                             thread.video_sender.send(MediaData::VideoQueue).ok();
                         }
@@ -2578,6 +2585,22 @@ struct FpsControl {
     last_refresh_instant: Option<Instant>,
     idle_counter: usize,
     inactive_counter: usize,
+}
+
+impl FpsControl {
+    // Queue overflow and FPS control must not restart the encoder independently.
+    fn try_refresh(&mut self, now: Instant) -> bool {
+        if self.refresh_times >= 20
+            || self.last_refresh_instant.map_or(false, |last| {
+                now.duration_since(last) < Duration::from_secs(10)
+            })
+        {
+            return false;
+        }
+        self.refresh_times += 1;
+        self.last_refresh_instant = Some(now);
+        true
+    }
 }
 
 struct VideoThread {
