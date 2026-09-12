@@ -761,6 +761,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Continue", "Continua"),
         ("Browser didn't open? Use the url below to sign in.", "Il browser non si è aperto? Usa l'URL qui sotto per accedere."),
         ("Lock canvas", "Blocca tela"),
+        ("Headless display", "Schermo senza monitor"),
+        ("headless_display_tip", "Quando non è collegato alcun monitor, forza l'accensione di un'uscita video scollegata così che ci sia uno schermo da catturare. Viene rilasciata appena si collega un monitor a un'altra uscita."),
         ("Sync clipboard between sessions", "Sincronizza appunti tra le sessioni"),
         ("sync-clipboard-between-sessions-tip", "Il testo o le immagini copiati in una sessione remota vengono inviati anche agli appunti delle altre sessioni connesse."),
         ("terminal-clipboard-write-tip", "Un'app nel terminale vuole copiare il testo negli appunti di questo dispositivo. Se concessa, questa autorizzazione si applica alle app terminali in tutte le connessioni finché non la disattivi in Impostazioni. Le operazioni di copia e incolla manuali non sono interessate."),
