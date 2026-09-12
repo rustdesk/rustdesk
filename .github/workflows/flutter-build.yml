@@ -374,6 +374,12 @@ jobs:
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+        with:
+          # Select the MSBuild process architecture; -p:Platform sets the MSI target.
+          # Native ARM64 tools give the compiler more address space for PCH files
+          # (C3859/C1076 were reported by HostX86\arm64\CL.exe).
+          # Keep the action's default x86 MSBuild for the existing x64 MSI job.
+          msbuild-architecture: ${{ matrix.job.arch == 'aarch64' && 'arm64' || 'x86' }}
 
       - name: Build msi
         # Builds the MSI for the matrix arch. res/msi (WiX v4 + native CustomActions) carries
