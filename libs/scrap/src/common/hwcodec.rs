@@ -354,8 +354,18 @@ impl HwRamDecoder {
         let ctx = DecodeContext {
             name: info.name.clone(),
             device_type: info.hwdevice.clone(),
-            thread_count: codec_thread_num(16) as _,
+            // Avoid software HEVC WPP slice-thread deadlocks reproduced on Linux and macOS.
+            // Keep this workaround on all platforms while affected FFmpeg builds are supported.
+            // Upstream fix: https://github.com/FFmpeg/FFmpeg/commit/79c47dfd25f101b6842bbec8c6ffef8d5077c3ae
+            thread_count: if format == CodecFormat::H265
+                && info.hwdevice == hwcodec::ffmpeg::AVHWDeviceType::AV_HWDEVICE_TYPE_NONE
+            {
+                1
+            } else {
+                codec_thread_num(16) as _
+            },
         };
+        log::info!("create ram decoder: {ctx:?}");
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwRamDecoder { decoder, info }),
             Err(_) => {
