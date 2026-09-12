@@ -494,7 +494,12 @@ jobs:
       - name: Install Rust toolchain
         shell: bash
         run: |
-          # Use a native 32-bit nightly for Sciter's abi_thiscall feature.
+          # Sciter's abi_thiscall feature requires nightly Rust.
+          # Use an i686 host toolchain so build scripts can load the 32-bit LLVM installed above.
+          # Since rustup 1.29.1, i686 toolchains on x64 Windows require --force-non-host
+          # for both installation and default selection, even though WOW64 can run them.
+          # See https://github.com/rust-lang/rustup/pull/4935.
+          # Adding an i686 target alone would still use a 64-bit compiler and build scripts.
           rustup toolchain install nightly-2023-10-13-${{ matrix.job.target }} \
             --target ${{ matrix.job.target }} --component rustfmt \
             --profile minimal --no-self-update --force-non-host
