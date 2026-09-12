@@ -162,6 +162,9 @@ jobs:
         targets: ${{ matrix.job.target }}
         components: ''
 
+    - name: Test keyboard capture shortcut
+      run: python3 -m unittest discover -s tests -p test_keyboard_grab.py -v
+
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
       run: |

@@ -154,6 +154,15 @@ pub mod client {
         *lock = true;
     }
 
+    #[cfg(feature = "flutter")]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn notify_keyboard_grab(session_id: u128, grabbed: bool) {
+        let session_id = crate::flutter_ffi::SessionID::from_u128(session_id);
+        if let Some(session) = flutter::sessions::get_session_by_session_id(&session_id) {
+            session.push_event_to("keyboard_grab", &[("grabbed", grabbed)], &[&session_id]);
+        }
+    }
+
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn change_grab_status(state: GrabState, keyboard_mode: &str, session_id: u128) {
         #[cfg(feature = "flutter")]
@@ -186,6 +195,8 @@ pub mod client {
                         "[grab] Run(0x{:x}): already owner, refresh debounce",
                         session_id
                     );
+                    #[cfg(feature = "flutter")]
+                    notify_keyboard_grab(session_id, true);
                     return;
                 }
 
@@ -202,11 +213,20 @@ pub mod client {
 
                 #[cfg(target_os = "linux")]
                 let had_owner = gs.owner.is_some();
+                #[cfg(feature = "flutter")]
+                let previous_owner = gs.owner;
                 gs.owner = Some(session_id);
                 gs.last_grab = Some(std::time::Instant::now());
                 // Invalidate any in-flight deferred release from the previous
                 // owner so it cannot suppress a fresh timer for the new owner.
                 gs.deferred_pending = false;
+                #[cfg(feature = "flutter")]
+                {
+                    if let Some(previous_owner) = previous_owner {
+                        notify_keyboard_grab(previous_owner, false);
+                    }
+                    notify_keyboard_grab(session_id, true);
+                }
                 #[cfg(target_os = "linux")]
                 {
                     run_grab_after_unlock = Some(had_owner);
@@ -260,6 +280,8 @@ pub mod client {
                                         KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
                                         gs.owner = None;
                                         gs.last_grab = None;
+                                        #[cfg(feature = "flutter")]
+                                        notify_keyboard_grab(session_id, false);
                                         Some(to_release)
                                     } else {
                                         log::debug!(
@@ -295,6 +317,8 @@ pub mod client {
                 gs.owner = None;
                 gs.last_grab = None;
                 gs.deferred_pending = false;
+                #[cfg(feature = "flutter")]
+                notify_keyboard_grab(session_id, false);
                 release_after_unlock = Some(take_remote_keys());
                 #[cfg(target_os = "linux")]
                 {
@@ -609,11 +633,90 @@ fn should_block_relative_mouse_shortcut(key: Key, is_press: bool) -> bool {
     false
 }
 
+#[cfg(feature = "flutter")]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn handle_keyboard_grab_shortcut(event: &Event) -> bool {
+    #[cfg(target_os = "windows")]
+    let is_pause = {
+        use winapi::um::winuser::{VK_CANCEL, VK_PAUSE};
+        // Ctrl+Pause may be VK_CANCEL and share NumLock's scan code.
+        matches!(event.platform_code as i32, VK_PAUSE | VK_CANCEL)
+    };
+    #[cfg(not(target_os = "windows"))]
+    let is_pause = match event.event_type {
+        EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            matches!(key, Key::Pause | Key::Cancel)
+                // rdev maps the macOS Pause position to F15.
+                || (cfg!(target_os = "macos") && key == Key::F15)
+        }
+        _ => false,
+    };
+    if !is_pause {
+        return false;
+    }
+    #[cfg(not(target_os = "linux"))]
+    static SHORTCUT_DOWN: AtomicBool = AtomicBool::new(false);
+    #[cfg(not(target_os = "linux"))]
+    {
+        if matches!(event.event_type, EventType::KeyRelease(_)) {
+            return SHORTCUT_DOWN.swap(false, Ordering::SeqCst);
+        }
+        if SHORTCUT_DOWN.load(Ordering::SeqCst) {
+            return true;
+        }
+    }
+    if !IS_RDEV_ENABLED.load(Ordering::SeqCst) {
+        return false;
+    }
+    let Some(session) = flutter::get_cur_session() else {
+        return false;
+    };
+    // X11 stops delivering keys after ungrab, so this path can only release.
+    #[cfg(target_os = "linux")]
+    if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
+        return false;
+    }
+    #[cfg(target_os = "windows")]
+    let (ctrl, alt) = (
+        rdev::get_modifier(Key::ControlLeft) || rdev::get_modifier(Key::ControlRight),
+        rdev::get_modifier(Key::Alt) || rdev::get_modifier(Key::AltGr),
+    );
+    #[cfg(target_os = "macos")]
+    let (ctrl, alt) = (
+        get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl),
+        get_key_state(enigo::Key::Alt) || get_key_state(enigo::Key::RightAlt),
+    );
+    #[cfg(target_os = "linux")]
+    let (alt, ctrl, _, _) = client::get_modifiers_state(false, false, false, false);
+    if !ctrl || !alt {
+        return false;
+    }
+    if matches!(event.event_type, EventType::KeyPress(_)) {
+        let enter = !KEYBOARD_HOOKED.load(Ordering::SeqCst);
+        if enter
+            && (!session.is_default()
+                || !*session.server_keyboard_enabled.read().unwrap()
+                || session.lc.read().unwrap().view_only.v)
+        {
+            return false;
+        }
+        #[cfg(not(target_os = "linux"))]
+        SHORTCUT_DOWN.store(true, Ordering::SeqCst);
+        crate::flutter_ffi::session_enter_or_leave(flutter::get_cur_session_id(), enter);
+    }
+    true
+}
+
 fn start_grab_loop() {
     std::env::set_var("KEYBOARD_ONLY", "y");
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     std::thread::spawn(move || {
         let try_handle_keyboard = move |event: Event, key: Key, is_press: bool| -> Option<Event> {
+            #[cfg(feature = "flutter")]
+            if handle_keyboard_grab_shortcut(&event) {
+                return None;
+            }
+
             // fix #2211：CAPS LOCK don't work
             if key == Key::CapsLock || key == Key::NumLock {
                 return Some(event);
@@ -686,6 +789,10 @@ fn start_grab_loop() {
     #[cfg(target_os = "linux")]
     if let Err(err) = rdev::start_grab_listen(move |event: Event| match event.event_type {
         EventType::KeyPress(key) | EventType::KeyRelease(key) => {
+            #[cfg(feature = "flutter")]
+            if handle_keyboard_grab_shortcut(&event) {
+                return None;
+            }
             let is_press = matches!(event.event_type, EventType::KeyPress(_));
             if let Key::Unknown(keycode) = key {
                 log::error!("rdev get unknown key, keycode is {:?}", keycode);

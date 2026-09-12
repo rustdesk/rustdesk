@@ -780,5 +780,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "O RustDesk não conseguiu carregar um componente do GStreamer necessário para capturar o ecrã ({})"),
         ("Relay fallback delay in seconds", "Atraso antes de recorrer ao retransmissor em segundos"),
         ("relay-fallback-delay-tip", "Quanto tempo uma ligação de retransmissão já estabelecida aguarda pela ligação direta WebRTC antes de ser usada em vez dela. Aumente para dar mais tempo a uma ligação direta lenta; diminua para recorrer mais cedo ao retransmissor em redes onde não é possível uma ligação direta. Deixe vazio para o valor predefinido de 2.5 segundos."),
+        ("Keyboard: local", ""),
+        ("Keyboard: remote", ""),
     ].iter().cloned().collect();
 }
