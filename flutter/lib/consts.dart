@@ -467,6 +467,10 @@ class AndroidChannel {
   static final kPickImportDirectory = "pick_import_directory";
   static final kImportDirectory = "import_directory";
   static final kExportFiles = "export_files";
+  // const (unlike the rest): used as a switch-case constant pattern in
+  // server_page.dart's androidChannelInit.
+  static const kSetTrackpadScrollEnabled = "set_trackpad_scroll_enabled";
+  static const kOnTrackpadScroll = "on_trackpad_scroll";
 }
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
