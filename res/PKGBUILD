@@ -2,9 +2,9 @@ pkgname=rustdesk
 pkgver=1.5.0
 pkgrel=0
 epoch=
-pkgdesc=""
+pkgdesc="RustDesk Remote Desktop"
 arch=('x86_64')
-url=""
+url="https://rustdesk.com"
 license=('AGPL-3.0')
 groups=()
 depends=('gtk3' 'xdotool' 'libxcb' 'libxfixes' 'alsa-lib' 'libva' 'libappindicator-gtk3' 'gst-plugins-base' 'gst-plugin-pipewire')
@@ -19,7 +19,7 @@ options=()
 install=pacman_install
 changelog=
 noextract=()
-md5sums=() #generate with 'makepkg -g'
+md5sums=('SKIP') #generate with 'makepkg -g'
 
 package() {
   if [[ ${FLUTTER} ]]; then

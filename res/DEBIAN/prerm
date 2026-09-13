@@ -11,15 +11,15 @@ case $1 in
 
 			systemctl stop rustdesk || true
 			systemctl disable rustdesk || true
-			rm /etc/systemd/system/rustdesk.service /usr/lib/systemd/system/rustdesk.service || true
+			rm -f /etc/systemd/system/rustdesk.service /usr/lib/systemd/system/rustdesk.service || true
 			
 			# workaround temp dev build between 1.1.9 and 1.2.0
-			serverUser=$(ps -ef | grep -E 'rustdesk +--server' | grep -v 'sudo ' | awk '{print $1}' | head -1)
+			serverUser=$( { pgrep -f 'rustdesk +--server' 2>/dev/null | xargs -r ps -o user= -p 2>/dev/null; } | grep -v '^root$' | head -1 || true)
 			if [ "$serverUser" != "" ] && [ "$serverUser" != "root" ]
 			then
 				systemctl --machine=${serverUser}@.host --user stop rustdesk >/dev/null 2>&1 || true
 			fi
-			rm /usr/lib/systemd/user/rustdesk.service >/dev/null 2>&1 || true
+			rm -f /usr/lib/systemd/user/rustdesk.service >/dev/null 2>&1 || true
 		fi
         ;;
 esac
