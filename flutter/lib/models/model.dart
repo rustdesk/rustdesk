@@ -2696,6 +2696,8 @@ class CanvasModel with ChangeNotifier {
 
     setScrollPercent(scrollPixelPercent.x, scrollPixelPercent.y);
     pushScrollPositionToUI(scrollPixel.x, scrollPixel.y);
+    // A no-op jump emits no notification to refresh the actual scroll fractions.
+    updateScrollPercent();
 
     notifyListeners();
   }

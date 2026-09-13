@@ -14,6 +14,7 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 
 const _viewport = Size(200, 160);
 const _hotspot = Offset(4, 9);
+const _scrollDeltas = [80.0, -20.0, 1000.0, 1000.0, -1000.0, -1000.0, 80.0, 0.0];
 
 class _Peer extends Fake implements FfiModel {
   _Peer(ui.Image frame)
@@ -138,7 +139,7 @@ Future<void> _check(
   addTearDown(tester.view.reset);
   final vertical = frame.height > _viewport.height;
   final pointer =
-      vertical ? const Offset(50.25, 130.75) : const Offset(130.25, 50.75);
+      vertical ? const Offset(50.25, 200.75) : const Offset(240.25, 50.75);
   final video = await createTestImage(
       width: frame.width.toInt(), height: frame.height.toInt());
   final cursor = await createTestImage(width: 48, height: 64);
@@ -155,10 +156,15 @@ Future<void> _check(
   });
   await _mount(tester, ffi, dpr);
   final videoWidget = texture ? find.byType(Texture) : _paintOf(video);
-  for (final distance in [80.0, -20.0]) {
+  final scrolling = vertical
+      ? ffi.canvasModel.scrollVertical
+      : ffi.canvasModel.scrollHorizontal;
+  for (final distance in _scrollDeltas) {
     // Drive the real scroll controllers; canvas pan offsets are not the video origin.
     ffi.canvasModel.performEdgeScroll(
         vertical ? Vector2(0, distance) : Vector2(distance, 0));
+    expect(vertical ? ffi.canvasModel.scrollY : ffi.canvasModel.scrollX,
+        closeTo(scrolling.offset / (vertical ? frame.height : frame.width), 1e-9));
     await tester.pump();
     final painter =
         tester.widget<CustomPaint>(_paintOf(cursor)).painter! as ImagePainter;
