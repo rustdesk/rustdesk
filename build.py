@@ -299,9 +299,8 @@ def linux_packaging_branch():
 
     MUST mirror the elif chain in main() (pacman / yum / zypper / else), and exists so `--drm` can
     refuse a branch that is not drm-aware instead of silently producing a stock-named package with
-    the capture backend compiled in. Only the final `deb` branch reaches `build_flutter_deb`, which
-    is what bundles libdrmtap, renames the package, adds Conflicts/Provides and asserts the staged
-    binary really is a drm build.
+    the capture backend compiled in. The deb and pacman paths bundle libdrmtap, rename the package,
+    add Conflicts/Provides and assert the staged binary really is a drm build.
     """
     if os.path.isfile('/usr/bin/pacman'):
         return 'pacman'
@@ -328,16 +327,12 @@ def get_features(args):
         # DRM build without being one.
         if windows or osx:
             raise Exception('--drm is Linux only')
-        # And only on the deb branch. The other three Linux paths (pacman/yum/zypper) package
-        # straight from `target/release` without bundling libdrmtap, without the rename, without
-        # Conflicts/Provides and without assert_staged_binary_is_drm() -- so they would emit a
-        # package NAMED `rustdesk` carrying the consent-bypass backend and the root-side uinput
-        # injection. The separate package name is the informed consent this feature rests on, so
-        # refuse rather than ship a stock-named build of it.
+        # Only packaging paths that bundle libdrmtap and use the distinct package name may build
+        # this variant. RPM packaging still lacks those guarantees.
         branch = linux_packaging_branch()
-        if branch != 'deb':
+        if branch not in ('deb', 'pacman'):
             raise Exception(
-                f'--drm is only supported on the deb packaging path; this host would package via '
+                f'--drm is only supported on the deb and pacman packaging paths; this host would package via '
                 f'{branch}, which cannot bundle libdrmtap or name the package distinctly')
         features.append('drm')
         # The display wake is its own compile gate on top of `drm`, and the unattended package is
@@ -346,6 +341,7 @@ def get_features(args):
         # this line builds the same capture backend with no wake code in the binary at all.
         # It is ALSO switchable at runtime; see OPTION_ENABLE_DRM_DISPLAY_WAKE.
         features.append('drm-wake')
+        features.append('unattended-wayland')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
@@ -808,6 +804,26 @@ def assert_staged_binary_is_drm():
             '--features ...,drm,drm-wake')
 
 
+def stage_libdrmtap_for_arch(so_path):
+    assert_so_satisfies_the_runtime_abi_gate(so_path)
+    stage = os.path.join(REPO_ROOT, 'target', 'release', 'drm')
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(stage, exist_ok=True)
+    shutil.copy2(so_path, os.path.join(stage, os.path.basename(so_path)))
+
+
+def assert_arch_binary_is_drm():
+    binary = os.path.join(REPO_ROOT, flutter_build_dir_2, 'lib', 'librustdesk.so')
+    if not os.path.isfile(binary) or not _carries_drmtap_marker(binary):
+        raise Exception(
+            f'--drm was requested but {binary} has no {DRMTAP_DLOPEN_MARKER.decode()} marker; '
+            'refusing to package a stock binary as the unattended-wayland variant')
+    if not _carries_drmtap_marker(binary, DRMTAP_WAKE_MARKER):
+        raise Exception(
+            f'--drm was requested but {binary} has no {DRMTAP_WAKE_MARKER.decode()} marker; '
+            'the Arch package would be unable to wake an idle display')
+
+
 def build_deb_from_folder(version, binary_folder, want_drm=False):
     os.chdir('flutter')
     system2('mkdir -p tmpdeb/usr/bin/')
@@ -922,8 +938,12 @@ def build_flutter_arch_manjaro(version, features):
     os.chdir('flutter')
     system2('flutter build linux --release')
     system2(f'strip {flutter_build_dir}/lib/librustdesk.so')
+    ships_drm = 'unattended-wayland' in features.split(',')
+    if ships_drm:
+        assert_arch_binary_is_drm()
+        stage_libdrmtap_for_arch(build_libdrmtap_so())
     os.chdir('../res')
-    system2('HBB=`pwd`/.. FLUTTER=1 makepkg -f')
+    system2(f'HBB=`pwd`/.. FLUTTER=1{" DRM=1" if ships_drm else ""} makepkg -f')
 
 
 def build_flutter_windows(version, features, skip_portable_pack):
@@ -1033,8 +1053,9 @@ def main():
             system2('strip target/release/rustdesk')
             system2('ln -s res/pacman_install && ln -s res/PKGBUILD')
             system2('HBB=`pwd` makepkg -f')
-        system2('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (
-            version, version))
+        pkgname = DRM_PACKAGE_NAME if args.drm else 'rustdesk'
+        system2('mv %s-%s-0-x86_64.pkg.tar.zst %s-%s-arch.pkg.tar.zst' % (
+            pkgname, version, pkgname, version))
         # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         system2('cargo build --locked --release --features ' + features)

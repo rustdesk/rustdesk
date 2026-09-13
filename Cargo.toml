@@ -37,6 +37,10 @@ drm = ["scrap/drm"]
 # kind of operation and deserves a switch that can remove it from the binary entirely, without
 # giving up DRM capture: `--features drm` builds the capture path with no wake code compiled in.
 drm-wake = ["drm"]
+# Deliberate headless-host variant: use DRM/KMS on Wayland and never open an XDG Desktop Portal
+# screen-cast session. Unlike the plain `drm` feature, a DRM failure is surfaced to the peer instead
+# of falling back to a consent dialog that an unattended machine cannot answer.
+unattended-wayland = ["drm-wake"]
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [
     "dep:x11-clipboard",

@@ -1,25 +1,34 @@
 use super::*;
-use hbb_common::{allow_err, anyhow};
 use base::platform::linux::DISTRO;
+#[cfg(not(feature = "unattended-wayland"))]
+use hbb_common::allow_err;
+use hbb_common::anyhow;
+use scrap::set_map_err;
+#[cfg(not(feature = "unattended-wayland"))]
 use scrap::{
-    is_cursor_embedded, set_map_err,
+    is_cursor_embedded,
     wayland::pipewire::{fill_displays, try_fix_logical_size},
     Capturer, Display, Frame, TraitCapturer,
 };
+#[cfg(not(feature = "unattended-wayland"))]
 use std::collections::HashMap;
 use std::io;
 
 use crate::{
     client::{
-        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED,
-        SCRAP_X11_REQUIRED, SCRAP_XDP_PORTAL_UNAVAILABLE,
+        SCRAP_OTHER_VERSION_OR_X11_REQUIRED, SCRAP_UBUNTU_HIGHER_REQUIRED, SCRAP_X11_REQUIRED,
+        SCRAP_XDP_PORTAL_UNAVAILABLE,
     },
     platform::linux::is_x11,
 };
 
+#[cfg(not(feature = "unattended-wayland"))]
 lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<HashMap<usize, u64>> = RwLock::new(HashMap::new());
     static ref PIPEWIRE_INITIALIZED: RwLock<bool> = RwLock::new(false);
+}
+
+lazy_static::lazy_static! {
     static ref LOG_SCRAP_COUNT: Mutex<u32> = Mutex::new(0);
     static ref LAST_STAGE_ERR: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
     static ref ACTIVE_DISPLAY_COUNT: RwLock<usize> = RwLock::new(0);
@@ -90,6 +99,7 @@ fn map_err_scrap(err: String) -> io::Error {
 /// `Display::all` and `Capturer::new` reach the peer through `map_err_scrap`, but
 /// `fill_displays` opens a portal session of its own and returns its error straight up, so a
 /// tag has to be resolved here or it lands in the login dialog verbatim.
+#[cfg(not(feature = "unattended-wayland"))]
 fn map_staged_err(err: anyhow::Error) -> anyhow::Error {
     let text = err.to_string();
     match text.strip_prefix(WAYLAND_STAGE_TAG) {
@@ -144,6 +154,18 @@ const WAYLAND_ENDED: &str =
 const WAYLAND_NO_USABLE_SCREEN: &str = "RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old";
 const WAYLAND_GST_UNAVAILABLE: &str =
     "RustDesk could not load a GStreamer component needed for screen capture ({})";
+
+#[cfg(feature = "unattended-wayland")]
+const WAYLAND_DRM_REQUIRED: &str = "Unattended Wayland capture requires the RustDesk system service and a working DRM/KMS capture path; the XDG Desktop Portal fallback is disabled in this build";
+
+#[cfg(feature = "unattended-wayland")]
+fn require_unattended_drm(available: bool) -> ResultType<()> {
+    if available {
+        Ok(())
+    } else {
+        bail!(WAYLAND_DRM_REQUIRED)
+    }
+}
 
 const WAYLAND_STAGE_TAG: &str = "wl-stage:";
 
@@ -290,22 +312,38 @@ mod tests {
         assert_eq!(m("start:ended:"), WAYLAND_ENDED);
         assert_eq!(m("start:no-response:"), WAYLAND_TIMED_OUT);
     }
+
+    #[cfg(feature = "unattended-wayland")]
+    #[test]
+    fn unattended_wayland_fails_closed_without_drm() {
+        let err = require_unattended_drm(false).expect_err("DRM failure must reject the session");
+        assert_eq!(err.to_string(), WAYLAND_DRM_REQUIRED);
+        assert!(
+            err.to_string().contains("Portal fallback is disabled"),
+            "the peer-facing error must not suggest waiting for a consent dialog"
+        );
+        assert!(require_unattended_drm(true).is_ok());
+    }
 }
 
+#[cfg(not(feature = "unattended-wayland"))]
 struct CapturerPtr(*mut Capturer);
 
+#[cfg(not(feature = "unattended-wayland"))]
 impl Clone for CapturerPtr {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
+#[cfg(not(feature = "unattended-wayland"))]
 impl TraitCapturer for CapturerPtr {
     fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>> {
         unsafe { (*self.0).frame(timeout) }
     }
 }
 
+#[cfg(not(feature = "unattended-wayland"))]
 struct CapDisplayInfo {
     rects: Vec<((i32, i32), usize, usize)>,
     displays: Vec<DisplayInfo>,
@@ -375,7 +413,10 @@ pub(super) async fn update_uinput_resolution() {
         scrap::wayland::display::clear_wayland_displays_cache();
         match scrap::wayland::display::get_desktop_rect_for_uinput() {
             // The lookup above just cached the displays, so the rects come from that snapshot.
-            Some(rect) => Some((rect, scrap::wayland::display::get_display_rects_for_uinput())),
+            Some(rect) => Some((
+                rect,
+                scrap::wayland::display::get_display_rects_for_uinput(),
+            )),
             // Raw DRM union: there is no compositor layout to baseline. Empty keeps the #15601
             // remap inactive, which is right when the origins are unknown anyway.
             None => drm_desktop_rect_for_uinput().map(|rect| (rect, Vec::new())),
@@ -426,10 +467,16 @@ pub(super) async fn update_uinput_resolution() {
 
 #[tokio::main(flavor = "current_thread")]
 pub(super) async fn ensure_inited() -> ResultType<()> {
+    #[cfg(feature = "unattended-wayland")]
+    if !is_x11() {
+        require_unattended_drm(super::drm_capturer::is_available())?;
+        update_uinput_resolution().await;
+        return Ok(());
+    }
     // DRM/KMS capture (opt-in): the root service owns the reader and the capturer self-inits over
     // IPC, so there is no PipeWire recorder to initialize here. But we still must set the uinput
     // desktop rect (check_init does this on the PipeWire path, and the DRM path skips check_init).
-    #[cfg(feature = "drm")]
+    #[cfg(all(feature = "drm", not(feature = "unattended-wayland")))]
     if super::drm_capturer::is_available_cached() {
         update_uinput_resolution().await;
         return Ok(());
@@ -441,28 +488,56 @@ pub(super) fn is_inited() -> Option<Message> {
     if is_x11() {
         None
     } else {
-        #[cfg(feature = "drm")]
-        if super::drm_capturer::is_available_cached() {
-            return None;
-        }
-        if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
-            let mut msg_out = Message::new();
-            let res = MessageBox {
-                msgtype: "nook-nocancel-hasclose".to_owned(),
-                title: "Wayland".to_owned(),
-                text: "Please Select the screen to be shared(Operate on the peer side).".to_owned(),
-                link: "".to_owned(),
-                ..Default::default()
-            };
-            msg_out.set_message_box(res);
-            Some(msg_out)
-        } else {
-            None
-        }
+        wayland_init_message()
+    }
+}
+
+#[cfg(feature = "unattended-wayland")]
+fn wayland_init_message() -> Option<Message> {
+    if super::drm_capturer::is_available_cached() {
+        return None;
+    }
+    let mut msg_out = Message::new();
+    msg_out.set_message_box(MessageBox {
+        msgtype: "nook-nocancel-hasclose".to_owned(),
+        title: "Wayland DRM/KMS".to_owned(),
+        text: WAYLAND_DRM_REQUIRED.to_owned(),
+        link: "".to_owned(),
+        ..Default::default()
+    });
+    Some(msg_out)
+}
+
+#[cfg(not(feature = "unattended-wayland"))]
+fn wayland_init_message() -> Option<Message> {
+    #[cfg(feature = "drm")]
+    if super::drm_capturer::is_available_cached() {
+        return None;
+    }
+    if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
+        let mut msg_out = Message::new();
+        let res = MessageBox {
+            msgtype: "nook-nocancel-hasclose".to_owned(),
+            title: "Wayland".to_owned(),
+            text: "Please Select the screen to be shared(Operate on the peer side).".to_owned(),
+            link: "".to_owned(),
+            ..Default::default()
+        };
+        msg_out.set_message_box(res);
+        Some(msg_out)
+    } else {
+        None
     }
 }
 
 pub(super) async fn check_init() -> ResultType<()> {
+    #[cfg(feature = "unattended-wayland")]
+    if !is_x11() {
+        require_unattended_drm(super::drm_capturer::is_available())?;
+        update_uinput_resolution().await;
+        return Ok(());
+    }
+    #[cfg(not(feature = "unattended-wayland"))]
     if !is_x11() {
         if CAP_DISPLAY_INFO.read().unwrap().is_empty() {
             if crate::input_service::wayland_use_uinput() {
@@ -571,6 +646,22 @@ pub(super) async fn check_init() -> ResultType<()> {
 }
 
 pub(super) async fn get_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
+    get_wayland_displays_and_primary().await
+}
+
+#[cfg(feature = "unattended-wayland")]
+async fn get_wayland_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
+    require_unattended_drm(super::drm_capturer::is_available())?;
+    super::drm_capturer::refresh_displays_for_login().await;
+    let snapshot =
+        hbb_common::tokio::task::spawn_blocking(super::drm_capturer::get_display_infos_and_primary)
+            .await
+            .map_err(|err| anyhow::anyhow!("Wayland DRM display probe task failed: {err}"))?;
+    snapshot.ok_or_else(|| anyhow::anyhow!(WAYLAND_DRM_REQUIRED))
+}
+
+#[cfg(not(feature = "unattended-wayland"))]
+async fn get_wayland_displays_and_primary() -> ResultType<(Vec<DisplayInfo>, usize)> {
     #[cfg(feature = "drm")]
     if super::drm_capturer::is_available_cached() {
         // This function runs once per login (update_get_sync_displays_on_login is its only
@@ -623,18 +714,21 @@ pub fn clear() {
     // teardown (which happens on each video-service restart), and re-probing `_drm` from the async
     // enumeration path blocks the executor long enough to trip "deadline has elapsed" and spiral
     // into a restart loop. DRM availability is fixed at service start, so the cache stays valid.
-    let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
-    for (_, addr) in write_lock.iter() {
-        let cap_display_info: *mut CapDisplayInfo = *addr as _;
-        unsafe {
-            let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
-            let _box_cap_display_info = Box::from_raw(cap_display_info);
+    #[cfg(not(feature = "unattended-wayland"))]
+    {
+        let mut write_lock = CAP_DISPLAY_INFO.write().unwrap();
+        for (_, addr) in write_lock.iter() {
+            let cap_display_info: *mut CapDisplayInfo = *addr as _;
+            unsafe {
+                let _box_capturer = Box::from_raw((*cap_display_info).capturer.0);
+                let _box_cap_display_info = Box::from_raw(cap_display_info);
+            }
         }
-    }
-    write_lock.clear();
+        write_lock.clear();
 
-    // Reset PipeWire initialization flag to allow recreation on next init
-    *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+        // Reset PipeWire initialization flag to allow recreation on next init.
+        *PIPEWIRE_INITIALIZED.write().unwrap() = false;
+    }
 }
 
 /// Initialize the PipeWire/portal capture path from the plain (sync) video thread, so a DRM display
@@ -644,7 +738,7 @@ pub fn clear() {
 /// because `is_available()` is a GLOBAL verdict — it stays true for the still-working DRM outputs — so
 /// without a per-display fallback a single failed/demoted DRM display would restart-loop the video
 /// service instead of degrading to PipeWire only for itself.
-#[cfg(feature = "drm")]
+#[cfg(all(feature = "drm", not(feature = "unattended-wayland")))]
 #[tokio::main(flavor = "current_thread")]
 async fn ensure_pipewire_inited() -> ResultType<()> {
     check_init().await
@@ -656,6 +750,25 @@ pub(super) fn get_capturer_for_display(
     if is_x11() {
         bail!("Do not call this function if not wayland");
     }
+    get_wayland_capturer_for_display(display_idx)
+}
+
+#[cfg(feature = "unattended-wayland")]
+fn get_wayland_capturer_for_display(
+    display_idx: usize,
+) -> ResultType<super::video_service::CapturerInfo> {
+    require_unattended_drm(super::drm_capturer::is_available())?;
+    super::drm_capturer::get_capturer_info(display_idx).map_err(|err| {
+        anyhow::anyhow!(
+            "{WAYLAND_DRM_REQUIRED}: display {display_idx} could not be captured: {err:#}"
+        )
+    })
+}
+
+#[cfg(not(feature = "unattended-wayland"))]
+fn get_wayland_capturer_for_display(
+    display_idx: usize,
+) -> ResultType<super::video_service::CapturerInfo> {
     // DRM/KMS capture path: build the capturer straight from the service `_drm` stream, bypassing
     // the PipeWire CAP_DISPLAY_INFO machinery entirely. `is_available()` is a GLOBAL verdict, so a
     // per-display DRM failure (an ungrabbable/demoted CRTC, or — after the phase-2 split — a
@@ -667,7 +780,7 @@ pub(super) fn get_capturer_for_display(
     // seconds here. It is also what makes a cold cache recoverable at all -- warm_availability
     // gives up after its attempts, so if EVERY gate were cache-only a --server that started
     // before the root service would never see DRM again for the rest of its life.
-    #[cfg(feature = "drm")]
+    #[cfg(all(feature = "drm", not(feature = "unattended-wayland")))]
     if super::drm_capturer::is_available() {
         match super::drm_capturer::get_capturer_info(display_idx) {
             Ok(info) => return Ok(info),
@@ -687,7 +800,7 @@ pub(super) fn get_capturer_for_display(
     // display is demoted or flapping, i.e. precisely when this path runs. Holding the read guard
     // across that roundtrip would stall every concurrent teardown for its duration, and the value
     // does not depend on anything inside the guard.
-    #[cfg(feature = "drm")]
+    #[cfg(all(feature = "drm", not(feature = "unattended-wayland")))]
     let drm_advertised = if super::drm_capturer::is_available_cached() {
         match super::drm_capturer::get_display_infos() {
             Some(list) => Some((list.get(display_idx).cloned(), list.len() == 1)),
@@ -720,7 +833,7 @@ pub(super) fn get_capturer_for_display(
             // re-enumerates against a consistent list. A single-display host matches (whole-desktop ==
             // that display) and is served normally. On a pure-PipeWire host is_available() is false and
             // this guard is skipped, preserving upstream behavior exactly.
-            #[cfg(feature = "drm")]
+            #[cfg(all(feature = "drm", not(feature = "unattended-wayland")))]
             if let Some((advertised, single_display)) = drm_advertised {
                 if let Some(advertised) = advertised {
                     // BOTH SIDES ARE PHYSICAL, so compare them raw. Traced rather than assumed,
@@ -753,10 +866,10 @@ pub(super) fn get_capturer_for_display(
                     // and no wayland path ever reconciles the two, so every frame would be
                     // rejected client-side. Falling into the bail instead advertises the display
                     // offline, which the client recovers from by re-enumerating.
-                    let size_matches = advertised.width as usize == rect.1
-                        && advertised.height as usize == rect.2;
-                    let transposed = advertised.width as usize == rect.2
-                        && advertised.height as usize == rect.1;
+                    let size_matches =
+                        advertised.width as usize == rect.1 && advertised.height as usize == rect.2;
+                    let transposed =
+                        advertised.width as usize == rect.2 && advertised.height as usize == rect.1;
                     // The single-display carve-out forgives a size DIFFERENCE (a Full Workspace
                     // stream may report the workspace, not the mode), but never a transposed
                     // pair: that is the same served-vs-advertised orientation split as above,

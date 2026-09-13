@@ -1082,8 +1082,8 @@ pub fn start_os_service() {
     // Builder, like every other thread this feature starts: `thread::spawn` PANICS if the thread
     // cannot be created (EAGAIN under a thread-count or memory limit), and here that panic would
     // unwind out of `start_os_service` -- taking down the root service itself, for a feature whose
-    // failure should only cost DRM capture. Losing the producer leaves the consumer to fall back to
-    // PipeWire/X11, which is the same path a host without the feature takes.
+    // failure should only cost DRM capture. A normal `drm` build may fall back to PipeWire/X11;
+    // the unattended Wayland build deliberately fails closed instead of opening a Portal prompt.
     #[cfg(feature = "drm")]
     if let Err(err) = std::thread::Builder::new()
         .name("drm-producer".into())
@@ -1091,6 +1091,12 @@ pub fn start_os_service() {
             crate::ipc::start_drm();
         })
     {
+        #[cfg(feature = "unattended-wayland")]
+        log::error!(
+            "failed to spawn the drm capture producer thread: {err}; unattended Wayland capture \
+             is unavailable for this boot and Portal/PipeWire fallback remains disabled"
+        );
+        #[cfg(not(feature = "unattended-wayland"))]
         log::warn!(
             "failed to spawn the drm capture producer thread: {err}; DRM capture is off for \
              this boot and the consumer falls back to PipeWire/X11"
