@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "flutter")]
 mod cursor_metadata;
 
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
@@ -958,26 +957,8 @@ fn fold_cursor_id(id: u64, t: i32) -> u64 {
     }
 }
 
-fn with_drm_cursor<T>(f: impl Fn(&DrmCursorData) -> T) -> Option<T> {
-    let map = DRM_CURSOR.lock().unwrap();
-    map.values()
-        .map(|(_, c)| c)
-        .find(|c| c.id != scrap::drm_reader::HIDDEN_CURSOR_ID)
-        .or_else(|| map.values().map(|(_, c)| c).next())
-        .map(f)
-}
-
-pub fn drm_cursor_id() -> Option<u64> {
-    with_drm_cursor(|c| c.id)
-}
-
-/// Snapshot of the DRM hardware cursor, or None. The pixels are premultiplied ARGB and are passed
-/// through as-is, like the XFixes path, so the client sees one cursor format from either backend.
-pub fn drm_cursor() -> Option<DrmCursorData> {
-    with_drm_cursor(|c| c.clone())
-}
-
-#[cfg(feature = "flutter")]
+/// Snapshot of the DRM hardware cursor and optional display metadata. Pixels retain the
+/// premultiplied format used by the XFixes path.
 pub fn drm_cursor_snapshot<T>(
     f: impl Fn(&DrmCursorData) -> T,
 ) -> Option<(T, Option<base::platform::linux::WaylandDisplayInfo>)> {
@@ -1019,7 +1000,6 @@ pub fn drm_cursor_snapshot<T>(
     Some((value, monitor))
 }
 
-#[cfg(feature = "flutter")]
 fn cursor_monitor(
     display: usize,
     state: &ProbeState,
@@ -2332,7 +2312,6 @@ mod drm_capturer_tests {
         assert!(m2[0].is_none() && m2[1].is_none());
     }
 
-    #[cfg(feature = "flutter")]
     #[test]
     fn cursor_monitor_reserves_other_displays_before_guessing_density() {
         let state = ProbeState::Available(

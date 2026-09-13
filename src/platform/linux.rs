@@ -35,11 +35,7 @@ use std::{
 use terminfo::{capability as cap, Database};
 use wallpaper;
 
-// Scope density lookup to Flutter host builds to preserve legacy capture
-// behavior. These builds include density in cursor IDs to refresh on DPI
-// changes; non-Flutter builds retain original IDs and unknown density.
-// This gate describes the host binary, not the connected controller's UI.
-#[cfg(feature = "flutter")]
+// Cursor density is capture metadata, independent of either endpoint's UI.
 mod cursor;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
@@ -577,11 +573,8 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     // polled there is a live session, which is the case the latch reads correctly.
     #[cfg(feature = "drm")]
     if !is_x11() {
-        #[cfg(feature = "flutter")]
         let cursor = cursor::drm_snapshot(|c| c.id)?
             .map(|(id, scale)| cursor::cache_id(id, scale));
-        #[cfg(not(feature = "flutter"))]
-        let cursor = crate::server::drm_capturer::drm_cursor_id();
         if let Some(id) = cursor {
             // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
             // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
@@ -610,7 +603,6 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
             }
         }
     });
-    #[cfg(feature = "flutter")]
     let res = res.map(cursor::x11_cursor_id);
     Ok(res)
 }
@@ -624,13 +616,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
     if !is_x11() {
-        #[cfg(feature = "flutter")]
         let cursor = cursor::drm_snapshot(Clone::clone)?;
-        #[cfg(not(feature = "flutter"))]
-        let cursor = crate::server::drm_capturer::drm_cursor();
-        if let Some(c) = cursor {
-            #[cfg(feature = "flutter")]
-            let (c, scale) = c;
+        if let Some((c, scale)) = cursor {
             // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
             // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
             // by the normal path instead of being hidden everywhere.
@@ -638,27 +625,19 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 || !crate::server::display_service::has_non_drm_backed_display()
             {
                 let mut cd: CursorData = Default::default();
-                cd.id = c.id;
+                cd.id = cursor::cache_id(c.id, scale);
+                cd.scale = scale;
                 cd.width = c.width;
                 cd.height = c.height;
                 cd.hotx = c.hotx;
                 cd.hoty = c.hoty;
                 cd.colors = c.colors.into();
-                #[cfg(feature = "flutter")]
-                {
-                    cd.id = cursor::cache_id(cd.id, scale);
-                    cd.scale = scale;
-                }
                 return Ok(cd);
             }
         }
     }
-    #[cfg(feature = "flutter")]
     let scale = cursor::x11_cursor_scale();
-    #[cfg(feature = "flutter")]
     let matches = |id| cursor::cache_id(id, scale) == hcursor;
-    #[cfg(not(feature = "flutter"))]
-    let matches = |id| id == hcursor;
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(ref mut d) = conn.try_borrow_mut() {
@@ -673,10 +652,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                         cd.height = (*img).height as _;
                         // to-do: how about if it is 0
                         cd.id = hcursor;
-                        #[cfg(feature = "flutter")]
-                        {
-                            cd.scale = scale;
-                        }
+                        cd.scale = scale;
                         let pixels =
                             std::slice::from_raw_parts((*img).pixels, (cd.width * cd.height) as _);
                         // cd.colors.resize(pixels.len() * 4, 0);
