@@ -160,6 +160,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _iosKeyboardWorkaroundTimer = null;
     _orientationTimer?.cancel();
     _orientationTimer = null;
+    // Stop keyboard events too: `onSoftKeyboardChanged` would otherwise start
+    // new timers while the async teardown below is still in progress.
+    unawaited(keyboardSubscription.cancel());
     _waylandKeyboardGateWorker?.dispose();
     _waylandKeyboardGateWorker = null;
     _mobileFocusNode.dispose();
@@ -178,7 +181,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     WakelockManager.disable(_uniqueKey);
-    await keyboardSubscription.cancel();
     removeSharedStates(widget.id);
     // `on_voice_call_closed` should be called when the connection is ended.
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.

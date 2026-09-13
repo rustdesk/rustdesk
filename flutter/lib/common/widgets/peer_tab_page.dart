@@ -969,6 +969,21 @@ class RefreshWidgetState extends State<RefreshWidget> {
   @override
   void initState() {
     super.initState();
+    _subscribeSpinning();
+  }
+
+  @override
+  void didUpdateWidget(covariant RefreshWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The keyless state may be reused with a different `RxBool` (e.g. when
+    // switching tabs in portrait mode); follow the current one.
+    if (!identical(oldWidget.spinning, widget.spinning)) {
+      _subscribeSpinning();
+    }
+  }
+
+  void _subscribeSpinning() {
+    _spinningSubscription?.cancel();
     _spinningSubscription = widget.spinning?.listen((v) {
       if (v && mounted) {
         setState(() {
