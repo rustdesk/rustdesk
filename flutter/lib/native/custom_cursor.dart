@@ -58,6 +58,9 @@ MouseCursor buildCursorOfCache(
       }));
       cursor.addKey(key);
     }
-    return FlutterCustomMemoryImageCursor(key: key);
+    return FlutterCustomMemoryImageCursor(
+        key: key,
+        registrationToken: custom_cursor_manager.CursorManager.instance
+            .registrationTokenFor(key));
   }
 }
