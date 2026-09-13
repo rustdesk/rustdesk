@@ -49,7 +49,11 @@ impl PrivacyMode for PrivacyModeImpl {
         Ok(true)
     }
 
-    fn turn_off_privacy(&mut self, conn_id: i32, _state: Option<PrivacyModeState>) -> ResultType<()> {
+    fn turn_off_privacy(
+        &mut self,
+        conn_id: i32,
+        _state: Option<PrivacyModeState>,
+    ) -> ResultType<()> {
         // Note: The `_state` parameter is intentionally ignored on macOS.
         // On Windows, it's used to notify the connection manager about privacy mode state changes
         // (see win_topmost_window.rs). macOS currently has a simpler single-mode implementation

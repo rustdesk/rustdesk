@@ -715,24 +715,23 @@ impl Decoder {
         rgb: &mut ImageRgb,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
-        let mut last_frame = vpxcodec::Image::new();
+        // Decoded images point into decoder-owned buffers that may be reused or
+        // released by the next decode()/flush() call, so a frame must be consumed
+        // before the decoder is called again instead of being kept as "last frame".
+        let mut got_frame = false;
         for vpx in vpxs.frames.iter() {
             for frame in decoder.decode(&vpx.data)? {
-                drop(last_frame);
-                last_frame = frame;
+                *chroma = Some(frame.chroma());
+                frame.to(rgb);
+                got_frame = true;
             }
         }
         for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
+            *chroma = Some(frame.chroma());
+            frame.to(rgb);
+            got_frame = true;
         }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            *chroma = Some(last_frame.chroma());
-            last_frame.to(rgb);
-            Ok(true)
-        }
+        Ok(got_frame)
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb
@@ -742,24 +741,23 @@ impl Decoder {
         rgb: &mut ImageRgb,
         chroma: &mut Option<Chroma>,
     ) -> ResultType<bool> {
-        let mut last_frame = aom::Image::new();
+        // Decoded images point into decoder-owned buffers that may be reused or
+        // released by the next decode()/flush() call, so a frame must be consumed
+        // before the decoder is called again instead of being kept as "last frame".
+        let mut got_frame = false;
         for av1 in av1s.frames.iter() {
             for frame in decoder.decode(&av1.data)? {
-                drop(last_frame);
-                last_frame = frame;
+                *chroma = Some(frame.chroma());
+                frame.to(rgb);
+                got_frame = true;
             }
         }
         for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
+            *chroma = Some(frame.chroma());
+            frame.to(rgb);
+            got_frame = true;
         }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            *chroma = Some(last_frame.chroma());
-            last_frame.to(rgb);
-            Ok(true)
-        }
+        Ok(got_frame)
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb

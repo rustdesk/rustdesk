@@ -38,6 +38,11 @@ use crate::{
 };
 #[cfg(feature = "unix-file-copy-paste")]
 use crate::{clipboard::check_clipboard_files, clipboard_file::unix_file_clip};
+use base::{
+    config::keys,
+    fs::JobType,
+    message_proto::{option_message::BoolOption, *},
+};
 pub use file_trait::FileManager;
 #[cfg(not(feature = "flutter"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -70,11 +75,6 @@ use hbb_common::{
     },
     webrtc::WebRTCStream,
     AddrMangle, ResultType, Stream,
-};
-use base::{
-    config::keys,
-    fs::JobType,
-    message_proto::{option_message::BoolOption, *},
 };
 pub use helper::*;
 use scrap::{
@@ -1658,16 +1658,18 @@ impl Client {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
-                        if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk) {
+                        if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk)
+                        {
                             if id == peer_id {
                                 // WebRTC only: bind the DTLS channel to the verified peer identity.
                                 // webrtc-rs already bound the certificate to the remote SDP, so
                                 // requiring the peer to have SIGNED that fingerprint defeats a
                                 // rendezvous/relay MITM that swaps SDPs. Fail closed.
                                 if is_webrtc {
-                                    let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
-                                        || anyhow!("WebRTC DTLS fingerprint unavailable"),
-                                    )?;
+                                    let actual_fp =
+                                        conn.dtls_fingerprint(false).await.ok_or_else(|| {
+                                            anyhow!("WebRTC DTLS fingerprint unavailable")
+                                        })?;
                                     if signed_fp.is_empty() || signed_fp != actual_fp {
                                         bail!("WebRTC DTLS fingerprint not bound to peer identity (possible MITM)");
                                     }
@@ -2177,18 +2179,17 @@ impl AudioBuffer {
         }
         self.2[i] += 1;
 
-        #[allow(non_upper_case_globals)]
-        static mut tms: i64 = 0;
+        use std::sync::atomic::{AtomicI64, Ordering};
+        static TMS: AtomicI64 = AtomicI64::new(0);
         let dt = Local::now().timestamp_millis();
-        unsafe {
-            if tms == 0 {
-                tms = dt;
-                return;
-            } else if dt < tms + 12000 {
-                return;
-            }
-            tms = dt;
+        let tms = TMS.load(Ordering::Relaxed);
+        if tms == 0 {
+            TMS.store(dt, Ordering::Relaxed);
+            return;
+        } else if dt < tms + 12000 {
+            return;
         }
+        TMS.store(dt, Ordering::Relaxed);
 
         // the safer water mark to drop
         let mut zero = 0;
@@ -3708,16 +3709,15 @@ impl LoginConfigHandler {
         };
         let mut avatar = get_builtin_option(keys::OPTION_AVATAR);
         if avatar.is_empty() {
-            avatar = serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option(
-                "user_info",
-            ))
-            .ok()
-            .and_then(|x| {
-                x.get("avatar")
-                    .and_then(|x| x.as_str())
-                    .map(|x| x.trim().to_owned())
-            })
-            .unwrap_or_default();
+            avatar =
+                serde_json::from_str::<serde_json::Value>(&LocalConfig::get_option("user_info"))
+                    .ok()
+                    .and_then(|x| {
+                        x.get("avatar")
+                            .and_then(|x| x.as_str())
+                            .map(|x| x.trim().to_owned())
+                    })
+                    .unwrap_or_default();
         }
         avatar = resolve_avatar_url(avatar);
         let mut display_name = get_builtin_option(keys::OPTION_DISPLAY_NAME);
@@ -4461,12 +4461,7 @@ async fn is_switch_sides_back(conn_type: ConnType, interface: &impl Interface) -
         };
         (lc.id.clone(), uuid)
     };
-    if !request_local_switch_sides_uuid(
-        &id,
-        &uuid,
-        crate::ipc::SwitchSidesUuidAction::Check,
-    )
-    .await
+    if !request_local_switch_sides_uuid(&id, &uuid, crate::ipc::SwitchSidesUuidAction::Check).await
     {
         return false;
     }
@@ -4513,9 +4508,7 @@ async fn request_local_switch_sides_uuid(
             returned_id,
             returned_action,
             Some(true),
-        ))) => {
-            returned_uuid == uuid && returned_id == id && returned_action == action
-        }
+        ))) => returned_uuid == uuid && returned_id == id && returned_action == action,
         _ => false,
     }
 }
@@ -4568,9 +4561,7 @@ pub async fn handle_hash(
         if config::is_incoming_only() {
             interface.msgbox("error", "Connection Error", "Incoming only mode", "");
             let mut misc = Misc::new();
-            misc.set_close_reason(
-                "Connection not allowed in incoming-only mode".to_owned(),
-            );
+            misc.set_close_reason("Connection not allowed in incoming-only mode".to_owned());
             let mut msg = Message::new();
             msg.set_misc(misc);
             allow_err!(peer.send(&msg).await);
@@ -4839,7 +4830,12 @@ pub trait Interface: Send + Clone + 'static + Sized {
             log::info!("Restart remote device, suppress connection error: {err}");
             // Flutter treats this as a reconnect control event. The text is kept
             // for legacy UI and existing translation reuse.
-            self.msgbox("restarting", "Restarting remote device", "Connection in progress. Please wait.", "");
+            self.msgbox(
+                "restarting",
+                "Restarting remote device",
+                "Connection in progress. Please wait.",
+                "",
+            );
             return;
         }
 
@@ -5277,7 +5273,9 @@ pub mod peer_online {
                         for i in 0..ids.len() {
                             // bytes index from left to right
                             let bit_value = 0x01 << (7 - i % 8);
-                            if (states[i / 8] & bit_value) == bit_value {
+                            // A short/malformed response means no state for this id: treat as offline.
+                            let byte = states.get(i / 8).copied().unwrap_or(0);
+                            if (byte & bit_value) == bit_value {
                                 onlines.push(ids[i].clone());
                             } else {
                                 offlines.push(ids[i].clone());

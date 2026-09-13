@@ -213,7 +213,8 @@ impl ClipFiles {
                         ),
                     });
                 }
-                let read_size = if offset + length > file.size {
+                let length = length.min(MAX_FILE_CONTENTS_REQUEST);
+                let read_size = if offset.saturating_add(length) > file.size {
                     file.size - offset
                 } else {
                     length
@@ -246,6 +247,9 @@ impl ClipFiles {
     }
 }
 
+/// Upper bound for a single FILECONTENTS_RANGE request (peer-controlled allocation size).
+const MAX_FILE_CONTENTS_REQUEST: u64 = 16 * 1024 * 1024;
+
 #[inline]
 pub fn clear_files() {
     CLIP_FILES.lock().clear();
@@ -266,7 +270,15 @@ pub fn read_file_contents(
             file_idx: list_index as usize,
         }
     } else if dw_flags == 0x2 {
-        let offset = (n_position_high as u64) << 32 | n_position_low as u64;
+        if n_position_high < 0 || cb_requested < 0 {
+            return vec![Err(CliprdrError::InvalidRequest {
+                description: format!(
+                    "got invalid FileContentsRequest, n_position_high: {n_position_high}, cb_requested: {cb_requested}"
+                ),
+            })];
+        }
+        // `n_position_low` is the low 32 bits: reinterpret as unsigned, no sign extension.
+        let offset = ((n_position_high as u64) << 32) | (n_position_low as u32 as u64);
         let length = cb_requested as u64;
 
         FileContentsRequest::Range {

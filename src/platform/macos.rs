@@ -32,7 +32,10 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Mutex,
+    },
 };
 
 // macOS boolean_t is defined as `int` in <mach/boolean.h>
@@ -40,7 +43,7 @@ type BooleanT = hbb_common::libc::c_int;
 
 static PRIVILEGES_SCRIPTS_DIR: Dir =
     include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
-static mut LATEST_SEED: i32 = 0;
+static LATEST_SEED: AtomicI32 = AtomicI32::new(0);
 
 #[inline]
 fn get_update_temp_dir() -> PathBuf {
@@ -560,21 +563,17 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
 }
 
 fn unsafe_get_cursor() -> ResultType<Option<u64>> {
-    unsafe {
-        let seed = CGSCurrentCursorSeed();
-        if seed == LATEST_SEED {
-            return Ok(None);
-        }
-        LATEST_SEED = seed;
+    let seed = unsafe { CGSCurrentCursorSeed() };
+    if seed == LATEST_SEED.load(Ordering::SeqCst) {
+        return Ok(None);
     }
+    LATEST_SEED.store(seed, Ordering::SeqCst);
     let c = get_cursor_id()?;
     Ok(Some(c.1))
 }
 
 pub fn reset_input_cache() {
-    unsafe {
-        LATEST_SEED = 0;
-    }
+    LATEST_SEED.store(0, Ordering::SeqCst);
 }
 
 fn get_cursor_id() -> ResultType<(id, u64)> {

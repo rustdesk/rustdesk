@@ -685,9 +685,23 @@ impl CapturerMag {
             // log warning?
             return FALSE;
         }
-        let mut lock = MAG_BUFFER.lock().unwrap();
+        // Validate the header before touching `srcdata`: this is an extern "C"
+        // callback, so it must not panic (no indexing into an empty buffer, no
+        // over-read of the source buffer).
+        let expected = (srcheader.width as usize)
+            .checked_mul(srcheader.height as usize)
+            .and_then(|v| v.checked_mul(4));
+        if srcdata.is_null()
+            || srcheader.cbSize == 0
+            || expected.map_or(true, |v| v == 0 || srcheader.cbSize < v)
+        {
+            return FALSE;
+        }
+        let Ok(mut lock) = MAG_BUFFER.lock() else {
+            return FALSE;
+        };
         lock.1.resize(srcheader.cbSize, 0);
-        std::ptr::copy_nonoverlapping(srcdata as _, &mut lock.1[0], srcheader.cbSize);
+        std::ptr::copy_nonoverlapping(srcdata as *const u8, lock.1.as_mut_ptr(), srcheader.cbSize);
         lock.0 = true;
         TRUE
     }

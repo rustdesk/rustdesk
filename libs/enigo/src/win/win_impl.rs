@@ -95,23 +95,24 @@ fn get_error() -> String {
             errno,
             0,
             buff.as_mut_ptr(),
-            (buff_size + 1) as u32,
+            buff_size as u32,
             std::ptr::null_mut(),
         );
         if chars_copied == 0 {
             return "".to_owned();
         }
-        let mut curr_char: usize = chars_copied as usize;
+        // `chars_copied` excludes the terminating NUL; never trust it beyond the buffer.
+        let mut curr_char: usize = (chars_copied as usize).min(buff_size);
+        // Strip trailing control characters (e.g. "\r\n").
         while curr_char > 0 {
-            let ch = buff[curr_char];
+            let ch = buff[curr_char - 1];
 
             if ch >= ' ' as u16 {
                 break;
             }
             curr_char -= 1;
         }
-        let sl = std::slice::from_raw_parts(buff.as_ptr(), curr_char);
-        let err_msg = String::from_utf16(sl);
+        let err_msg = String::from_utf16(&buff[..curr_char]);
         return err_msg.unwrap_or("".to_owned());
     }
 }
@@ -126,13 +127,27 @@ impl MouseControllable for Enigo {
     }
 
     fn mouse_move_to(&mut self, x: i32, y: i32) {
+        let (vx, vy, vw, vh) = unsafe {
+            (
+                GetSystemMetrics(SM_XVIRTUALSCREEN),
+                GetSystemMetrics(SM_YVIRTUALSCREEN),
+                GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            )
+        };
+        // GetSystemMetrics returns 0 on failure; avoid division by zero.
+        if vw <= 0 || vh <= 0 {
+            return;
+        }
+        let to_abs = |v: i32, origin: i32, size: i32| -> i32 {
+            ((v as i64 - origin as i64) * 65535 / size as i64)
+                .clamp(i32::MIN as i64, i32::MAX as i64) as i32
+        };
         mouse_event(
             MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
             0,
-            (x - unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },
-            (y - unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }) * 65535
-                / unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) },
+            to_abs(x, vx, vw),
+            to_abs(y, vy, vh),
         );
     }
 

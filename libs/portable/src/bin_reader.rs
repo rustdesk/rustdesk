@@ -200,16 +200,36 @@ fn read_resource(name: &str) -> Option<&'static [u8]> {
     }
 }
 
+// Rejects absolute paths, drive/UNC prefixes and any `..` component, so that an
+// embedded entry can never escape `prefix`.
+fn is_safe_relative_path(path: &str) -> bool {
+    use std::path::Component;
+    let normalized = path.replace('\\', "/");
+    if normalized.is_empty() || normalized.starts_with('/') {
+        return false;
+    }
+    if normalized.split('/').any(|c| c == "..") {
+        return false;
+    }
+    Path::new(&normalized).components().all(|c| match c {
+        Component::Normal(_) | Component::CurDir => true,
+        Component::ParentDir | Component::RootDir | Component::Prefix(_) => false,
+    })
+}
+
 impl BinaryData {
-    fn decompress(&self) -> Vec<u8> {
+    fn decompress(&self) -> std::io::Result<Vec<u8>> {
         let cursor = Cursor::new(self.raw);
         let mut decoder = brotli::Decompressor::new(cursor, BUF_SIZE);
         let mut buf = Vec::new();
-        decoder.read_to_end(&mut buf).ok();
-        buf
+        decoder.read_to_end(&mut buf)?;
+        Ok(buf)
     }
 
-    pub fn write_to_file(&self, prefix: &Path) {
+    pub fn write_to_file(&self, prefix: &Path) -> Result<(), String> {
+        if !is_safe_relative_path(&self.path) {
+            return Err(format!("refusing to write unsafe path {:?}", self.path));
+        }
         let p = prefix.join(&self.path);
         if let Some(parent) = p.parent() {
             if !parent.exists() {
@@ -224,13 +244,18 @@ impl BinaryData {
             if digest == md5_record {
                 // same, skip this file
                 println!("skip {}", &self.path);
-                return;
+                return Ok(());
             } else {
                 println!("writing {}", p.display());
                 println!("{} -> {}", md5_record, digest)
             }
         }
-        let _ = fs::write(p, self.decompress());
+        // Decompress fully before touching the destination, so a corrupt payload
+        // never leaves a truncated file behind.
+        let data = self
+            .decompress()
+            .map_err(|e| format!("failed to decompress {}: {}", self.path, e))?;
+        fs::write(&p, data).map_err(|e| format!("failed to write {}: {}", p.display(), e))
     }
 }
 

@@ -237,14 +237,22 @@ async fn start_whiteboard_() -> ResultType<()> {
                 }
             },
             _ = timer.tick() => {
-                let mut conns = CONNS.write().unwrap();
-                for (k, conn) in conns.iter_mut() {
-                    if conn.last_cursor_evt.tm.elapsed().as_millis() > 300 {
-                        if let Some(evt) = conn.last_cursor_evt.evt.take() {
-                            allow_err!(stream.send(&Data::Whiteboard((k.clone(), evt))).await);
-                            conn.last_cursor_evt.c = 0;
+                // Collect pending events first so the std RwLock guard is not held across `.await`.
+                let pending: Vec<(String, CustomEvent)> = {
+                    let mut conns = CONNS.write().unwrap();
+                    let mut pending = Vec::new();
+                    for (k, conn) in conns.iter_mut() {
+                        if conn.last_cursor_evt.tm.elapsed().as_millis() > 300 {
+                            if let Some(evt) = conn.last_cursor_evt.evt.take() {
+                                conn.last_cursor_evt.c = 0;
+                                pending.push((k.clone(), evt));
+                            }
                         }
                     }
+                    pending
+                };
+                for (k, evt) in pending {
+                    allow_err!(stream.send(&Data::Whiteboard((k, evt))).await);
                 }
             }
         }

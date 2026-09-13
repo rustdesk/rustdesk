@@ -231,7 +231,12 @@ impl EncoderApi for VpxEncoder {
 }
 
 impl VpxEncoder {
-    pub fn encode<'a>(&'a mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames<'a>> {
+    pub fn encode<'a>(
+        &'a mut self,
+        pts: i64,
+        data: &[u8],
+        stride_align: usize,
+    ) -> Result<EncodeFrames<'a>> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
@@ -370,7 +375,7 @@ impl Drop for VpxEncoder {
         unsafe {
             let result = vpx_codec_destroy(&mut self.ctx);
             if result != VPX_CODEC_OK {
-                panic!("failed to destroy vpx codec");
+                log::error!("failed to destroy vpx codec: {:?}", result);
             }
         }
     }
@@ -509,7 +514,7 @@ impl Drop for VpxDecoder {
         unsafe {
             let result = vpx_codec_destroy(&mut self.ctx);
             if result != VPX_CODEC_OK {
-                panic!("failed to destroy vpx codec");
+                log::error!("failed to destroy vpx codec: {:?}", result);
             }
         }
     }

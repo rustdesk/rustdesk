@@ -158,6 +158,10 @@ pub extern "system" fn Java_ffi_FFI_onClipboardUpdate(
     if let Ok(data) = env.get_direct_buffer_address(&buffer) {
         if let Ok(len) = env.get_direct_buffer_capacity(&buffer) {
             let data = unsafe { std::slice::from_raw_parts(data, len) };
+            // The first byte is the client/host flag; an empty buffer has no flag.
+            if data.is_empty() {
+                return;
+            }
             if let Ok(clips) = MultiClipboards::parse_from_bytes(&data[1..]) {
                 let is_client = data[0] == 1;
                 if is_client {

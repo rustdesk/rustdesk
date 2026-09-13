@@ -78,6 +78,11 @@ const FAILURE_IDX_ID_WHITELIST: usize = 2;
 // How long a rejection counts, so also how long a blocked address stays blocked. Longer
 // throttles enumeration harder; shorter limits collateral on whitelisted neighbours.
 const ID_WHITELIST_FAILURE_DECAY_MINUTES: i32 = 10;
+// Entries of `LOGIN_FAILURES` older than this (minutes since the last failure) are dropped,
+// so the cumulative "too many wrong attempts" block is lifted after the same period.
+const LOGIN_FAILURE_TTL_MINUTES: i32 = 30;
+// Hard cap on the number of tracked addresses/prefixes per bucket, to bound memory.
+const LOGIN_FAILURES_MAX_ENTRIES: usize = 10_000;
 
 lazy_static::lazy_static! {
     // [0] password, [1] 2FA, [2] ID whitelist.
@@ -4261,6 +4266,7 @@ impl Connection {
         // Bump the prefixes, fetching existing values
         if let Some((p64, p56, p48)) = self.get_ipv6_prefixes() {
             let mut m = map_mutex.lock().unwrap();
+            prune_login_failures(&mut m, time);
             for key in [p64, p56, p48] {
                 let cur = m.get(&key).copied().unwrap_or((0, 0, 0));
                 m.insert(key, Self::bump_failure_entry(cur, time));
@@ -4270,6 +4276,7 @@ impl Connection {
         } else {
             // Re-read the full IP bucket in case another failed attempt updated it.
             let mut m = map_mutex.lock().unwrap();
+            prune_login_failures(&mut m, time);
             let current_ip = m.get(&self.ip).copied().unwrap_or((0, 0, 0));
             m.insert(self.ip.clone(), Self::bump_failure_entry(current_ip, time));
         }
@@ -4354,6 +4361,10 @@ impl Connection {
             };
             return (((0, 0, 0), time), res);
         }
+
+        // Expire stale entries first so both the per-minute and the cumulative
+        // (`.2 > 30`) blocks are lifted after `LOGIN_FAILURE_TTL_MINUTES`.
+        prune_login_failures(&mut LOGIN_FAILURES[i].lock().unwrap(), time);
 
         // IPv6 addresses are cheap to make so we check prefix/netblock as well
         if let Some((p64, p56, p48)) = self.get_ipv6_prefixes() {
@@ -6950,6 +6961,29 @@ fn decay_stale_failures(
         {
             failures.remove(key);
         }
+    }
+}
+
+// Drop every entry whose last failure is older than `LOGIN_FAILURE_TTL_MINUTES`, and bound
+// the map size. `now` is in minutes, like the first tuple field.
+fn prune_login_failures(failures: &mut HashMap<String, (i32, i32, i32)>, now: i32) {
+    failures.retain(|_, v| now.saturating_sub(v.0) < LOGIN_FAILURE_TTL_MINUTES);
+    let excess = failures.len().saturating_sub(LOGIN_FAILURES_MAX_ENTRIES);
+    if excess == 0 {
+        return;
+    }
+    // Still too many live entries (e.g. a distributed attempt). Evict exactly `excess`
+    // entries, deterministically: oldest first, then the ones with the fewest cumulative
+    // failures, then by key. Entries with many failures (the ones that are actually
+    // throttled) are therefore evicted last, and a burst of entries sharing the same
+    // minute can never empty the bucket.
+    let mut victims: Vec<(i32, i32, String)> = failures
+        .iter()
+        .map(|(k, v)| (v.0, v.2, k.clone()))
+        .collect();
+    victims.sort_unstable();
+    for (_, _, key) in victims.into_iter().take(excess) {
+        failures.remove(&key);
     }
 }
 

@@ -21,7 +21,7 @@ use std::{
 };
 
 #[cfg(windows)]
-static mut IS_ALT_GR: bool = false;
+static IS_ALT_GR: AtomicBool = AtomicBool::new(false);
 
 #[allow(dead_code)]
 const OS_LOWER_WINDOWS: &str = "windows";
@@ -462,10 +462,10 @@ pub fn update_grab_get_key_name(keyboard_mode: &str) {
 }
 
 #[cfg(target_os = "windows")]
-static mut IS_0X021D_DOWN: bool = false;
+static IS_0X021D_DOWN: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "macos")]
-static mut IS_LEFT_OPTION_DOWN: bool = false;
+static IS_LEFT_OPTION_DOWN: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn get_keyboard_mode() -> String {
@@ -653,17 +653,17 @@ fn start_grab_loop() {
             }
 
             #[cfg(target_os = "windows")]
-            unsafe {
+            {
                 // AltGr
                 if _scan_code == 0x021D {
-                    IS_0X021D_DOWN = is_press;
+                    IS_0X021D_DOWN.store(is_press, Ordering::SeqCst);
                 }
             }
 
             #[cfg(target_os = "macos")]
-            unsafe {
+            {
                 if _code == rdev::kVK_Option {
-                    IS_LEFT_OPTION_DOWN = is_press;
+                    IS_LEFT_OPTION_DOWN.store(is_press, Ordering::SeqCst);
                 }
             }
 
@@ -1036,15 +1036,13 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
     #[cfg(windows)]
     let ctrl = {
         let mut tmp = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
-        unsafe {
-            if IS_ALT_GR {
-                if alt || key == Key::AltGr {
-                    if tmp {
-                        tmp = false;
-                    }
-                } else {
-                    IS_ALT_GR = false;
+        if IS_ALT_GR.load(Ordering::SeqCst) {
+            if alt || key == Key::AltGr {
+                if tmp {
+                    tmp = false;
                 }
+            } else {
+                IS_ALT_GR.store(false, Ordering::SeqCst);
             }
         }
         tmp
@@ -1065,9 +1063,7 @@ pub fn legacy_keyboard_mode(event: &Event, mut key_event: KeyEvent) -> Vec<KeyEv
             // scancode with bit 9 set is sent, let's ignore this.
             #[cfg(windows)]
             if (event.position_code >> 8) == 0xE0 {
-                unsafe {
-                    IS_ALT_GR = true;
-                }
+                IS_ALT_GR.store(true, Ordering::SeqCst);
                 return events;
             }
             Some(ControlKey::Control)
@@ -1374,7 +1370,7 @@ fn try_fill_unicode(_peer: &str, event: &Event, key_event: &KeyEvent, events: &m
         {
             #[cfg(target_os = "windows")]
             if _peer == OS_LOWER_LINUX {
-                if is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
+                if is_hot_key_modifiers_down() && !IS_0X021D_DOWN.load(Ordering::SeqCst) {
                     if let Some(chr) = get_char_from_vk(event.platform_code as u32) {
                         let mut evt = key_event.clone();
                         evt.set_seq(chr.to_string());
@@ -1394,7 +1390,10 @@ fn try_fill_win2win_hotkey(
     key_event: &KeyEvent,
     events: &mut Vec<KeyEvent>,
 ) {
-    if peer == OS_LOWER_WINDOWS && is_hot_key_modifiers_down() && unsafe { !IS_0X021D_DOWN } {
+    if peer == OS_LOWER_WINDOWS
+        && is_hot_key_modifiers_down()
+        && !IS_0X021D_DOWN.load(Ordering::SeqCst)
+    {
         let mut down = false;
         let win2win_hotkey = match event.event_type {
             EventType::KeyPress(..) => {
@@ -1442,7 +1441,7 @@ fn is_altgr(event: &Event) -> bool {
     }
 
     #[cfg(target_os = "windows")]
-    if unsafe { IS_0X021D_DOWN } && event.position_code == 0xE038 {
+    if IS_0X021D_DOWN.load(Ordering::SeqCst) && event.position_code == 0xE038 {
         true
     } else {
         false
@@ -1467,7 +1466,7 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
     if let Some(unicode_info) = &event.unicode {
         if unicode_info.is_dead {
             #[cfg(target_os = "macos")]
-            if peer != OS_LOWER_MACOS && unsafe { IS_LEFT_OPTION_DOWN } {
+            if peer != OS_LOWER_MACOS && IS_LEFT_OPTION_DOWN.load(Ordering::SeqCst) {
                 // try clear dead key state
                 // rdev::clear_dead_key_state();
             } else {
@@ -1510,14 +1509,12 @@ pub fn translate_keyboard_mode(peer: &str, event: &Event, key_event: KeyEvent) -
 
     // If AltGr is down, no need to send events other than unicode.
     #[cfg(target_os = "windows")]
-    unsafe {
-        if IS_0X021D_DOWN {
-            return events;
-        }
+    if IS_0X021D_DOWN.load(Ordering::SeqCst) {
+        return events;
     }
 
     #[cfg(target_os = "macos")]
-    if !unsafe { IS_LEFT_OPTION_DOWN } {
+    if !IS_LEFT_OPTION_DOWN.load(Ordering::SeqCst) {
         try_fill_unicode(peer, event, &key_event, &mut events);
     }
 

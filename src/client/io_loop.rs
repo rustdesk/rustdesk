@@ -1173,8 +1173,13 @@ impl<T: InvokeUiSession> Remote<T> {
         if !self.peer_info.is_support_virtual_display() {
             return;
         }
-        let lc = self.handler.lc.read().unwrap();
-        let displays = lc.get_option("virtual-display");
+        // Do not hold the std RwLock guard across `.await`.
+        let displays = self
+            .handler
+            .lc
+            .read()
+            .unwrap()
+            .get_option("virtual-display");
         for d in displays.split(',') {
             if let Ok(index) = d.parse::<i32>() {
                 let mut misc = Misc::new();
@@ -1194,11 +1199,18 @@ impl<T: InvokeUiSession> Remote<T> {
         if self.handler.is_view_camera() {
             return;
         }
-        let lc = self.handler.lc.read().unwrap();
-        if lc.version >= hbb_common::get_version_number("1.2.4")
-            && lc.get_toggle_option("privacy-mode")
-        {
-            let impl_key = lc.get_option("privacy-mode-impl-key");
+        // Do not hold the std RwLock guard across `.await`: copy what is needed and drop it.
+        let impl_key = {
+            let lc = self.handler.lc.read().unwrap();
+            if lc.version >= hbb_common::get_version_number("1.2.4")
+                && lc.get_toggle_option("privacy-mode")
+            {
+                Some(lc.get_option("privacy-mode-impl-key"))
+            } else {
+                None
+            }
+        };
+        if let Some(impl_key) = impl_key {
             if impl_key == crate::privacy_mode::PRIVACY_MODE_IMPL_WIN_VIRTUAL_DISPLAY
                 && !self.peer_info.is_support_virtual_display()
             {
@@ -1784,8 +1796,10 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                         Some(file_response::Union::Block(block)) => {
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block).await {
-                                    // to-do: add "skip" for writing job
+                                if let Err(err) = job.write(block).await {
+                                    // The job records the error itself; `job_error()` reports
+                                    // it when the peer's `Done` arrives.
+                                    log::warn!("write job {} failed: {}", job.id(), err);
                                 }
                                 if job.r#type == fs::JobType::Generic {
                                     self.update_jobs_status();

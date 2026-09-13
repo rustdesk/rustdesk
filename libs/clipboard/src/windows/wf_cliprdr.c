@@ -53,6 +53,8 @@
 #define WF_CLIPRDR_MAX_FORMAT_NAME_UTF8_BYTES (WF_CLIPRDR_MAX_FORMAT_NAME_WCHARS * 4u)
 /* File clipboard redirection always advertises the descriptor and contents formats. */
 #define WF_CLIPRDR_FILE_FORMAT_COUNT 2u
+/* Upper bound for a single FILECONTENTS_RANGE request (peer-controlled allocation size). */
+#define WF_CLIPRDR_MAX_FILE_CONTENTS_REQUEST (16u * 1024u * 1024u)
 #define WF_CLIPRDR_COM_LPT_PREFIX_LENGTH 3u
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
@@ -3401,9 +3403,27 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		goto exit;
 	}
 
-	cbRequested = fileContentsRequest->cbRequested;
 	if (fileContentsRequest->dwFlags == FILECONTENTS_SIZE)
+	{
 		cbRequested = sizeof(UINT64);
+	}
+	else if (fileContentsRequest->dwFlags == FILECONTENTS_RANGE)
+	{
+		cbRequested = fileContentsRequest->cbRequested;
+		/* The requested size is peer-controlled; bound the allocation. */
+		if (cbRequested > WF_CLIPRDR_MAX_FILE_CONTENTS_REQUEST)
+			cbRequested = WF_CLIPRDR_MAX_FILE_CONTENTS_REQUEST;
+		if (cbRequested == 0)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			goto exit;
+		}
+	}
+	else
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	pData = (BYTE *)calloc(1, cbRequested);
 

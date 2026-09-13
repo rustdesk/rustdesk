@@ -37,13 +37,17 @@ fn get_custom_server_from_config_string(s: &str) -> ResultType<CustomServer> {
 }
 
 pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
-    let s = if s.to_lowercase().ends_with(".exe.exe") {
+    // `to_ascii_lowercase` keeps byte offsets identical to `s`, unlike `to_lowercase`,
+    // so indices found in it are valid for slicing `s`.
+    let s_lower = s.to_ascii_lowercase();
+    let s = if s_lower.ends_with(".exe.exe") {
         &s[0..s.len() - 8]
-    } else if s.to_lowercase().ends_with(".exe") {
+    } else if s_lower.ends_with(".exe") {
         &s[0..s.len() - 4]
     } else {
         s
     };
+    let s_lower = &s_lower[0..s.len()];
     /*
      * The following code tokenizes the file name based on commas and
      * extracts relevant parts sequentially.
@@ -56,8 +60,8 @@ pub fn get_custom_server_from_string(s: &str) -> ResultType<CustomServer> {
      *
      * This allows using a ',' (comma) symbol as a final delimiter.
      */
-    if s.to_lowercase().contains("host=") {
-        let stripped = &s[s.to_lowercase().find("host=").unwrap_or(0)..s.len()];
+    if let Some(pos) = s_lower.find("host=") {
+        let stripped = s.get(pos..).unwrap_or(s);
         let strs: Vec<&str> = stripped.split(",").collect();
         let mut host = String::default();
         let mut key = String::default();

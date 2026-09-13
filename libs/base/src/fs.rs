@@ -27,6 +27,40 @@ use hbb_common::{
 
 static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
 
+/// Open `path` for writing without following a symlink or reparse point in the final
+/// component. On Windows, truncation happens only after rejecting reparse points.
+async fn open_for_write(path: &str, create: bool, truncate: bool) -> std::io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(create);
+    #[cfg(unix)]
+    {
+        opts.truncate(truncate);
+        opts.custom_flags(libc::O_NOFOLLOW);
+        opts.open(path).await
+    }
+    #[cfg(windows)]
+    {
+        opts.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
+        let file = opts.open(path).await?;
+        // FILE_ATTRIBUTE_REPARSE_POINT
+        if file.metadata().await?.file_attributes() & 0x400 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "refusing to write through a reparse point",
+            ));
+        }
+        if truncate {
+            file.set_len(0).await?;
+        }
+        Ok(file)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        opts.truncate(truncate);
+        opts.open(path).await
+    }
+}
+
 pub fn get_next_job_id() -> i32 {
     NEXT_JOB_ID.fetch_add(1, Ordering::SeqCst)
 }
@@ -417,6 +451,15 @@ pub struct TransferJob {
     default_overwrite_strategy: Option<bool>,
     #[serde(skip_serializing)]
     digest: FileDigest,
+    /// Set when a resume (`confirm` with an offset) could not position the stream: the
+    /// peer already agreed on that offset, so blocks for this file must be refused
+    /// instead of being silently read from / written at position zero.
+    #[serde(skip_serializing)]
+    resume_error: Option<(usize, String)>,
+    /// First unrecoverable write error of this job. Once set, further blocks are refused
+    /// and `job_error()` reports the failure instead of a successful completion.
+    #[serde(skip_serializing)]
+    write_error: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -761,6 +804,24 @@ impl TransferJob {
     }
 
     pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
+        if let Some(err) = self.write_error.as_ref() {
+            bail!("Job already failed: {}", err);
+        }
+        // A failed resume is not fatal for the job: it only lasts until the next
+        // `confirm` (skip, or restart from offset 0) for that file.
+        if let Some((n, err)) = self.resume_error.as_ref() {
+            if *n == block.file_num as usize {
+                bail!("Failed to resume file: {}", err);
+            }
+        }
+        let res = self.write_block(block).await;
+        if let Err(err) = res.as_ref() {
+            self.write_error = Some(err.to_string());
+        }
+        res
+    }
+
+    async fn write_block(&mut self, block: FileTransferBlock) -> ResultType<()> {
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -799,7 +860,9 @@ impl TransferJob {
                             std::fs::remove_file(dp)?;
                         }
                     }
-                    self.data_stream = Some(DataStream::FileStream(File::create(&path).await?));
+                    self.data_stream = Some(DataStream::FileStream(
+                        open_for_write(&path, true, true).await?,
+                    ));
                     if let Some(dp) = digest_path.as_ref() {
                         std::fs::write(dp, json!(self.digest).to_string()).ok();
                     }
@@ -937,6 +1000,11 @@ impl TransferJob {
         }
 
         let file_num = self.file_num as usize;
+        if let Some((n, err)) = self.resume_error.as_ref() {
+            if *n == file_num {
+                bail!("Failed to resume file: {}", err);
+            }
+        }
         let name = match &self.data_source {
             DataSource::FilePath(p) => {
                 if file_num >= self.files.len() {
@@ -1089,6 +1157,9 @@ impl TransferJob {
 
     /// Get job error message, useful for getting status when job had finished
     pub fn job_error(&self) -> Option<String> {
+        if let Some(err) = self.write_error.as_ref() {
+            return Some(err.clone());
+        }
         if self.job_skipped() {
             return Some("skipped".to_string());
         }
@@ -1105,58 +1176,62 @@ impl TransferJob {
         true
     }
 
-    async fn set_stream_offset(&mut self, file_num: usize, offset: u64) {
+    async fn set_stream_offset(&mut self, file_num: usize, offset: u64) -> ResultType<()> {
         if file_num >= self.files.len() {
-            return;
+            bail!("Wrong file number");
         }
-        if let DataSource::FilePath(p) = &self.data_source {
-            let entry = &self.files[file_num];
-            let Some(path) = self.resolve_entry_path(p, &entry.name) else {
-                return;
-            };
-            let file_path = get_string(&path);
-            let download_path = format!("{}.download", &file_path);
-            let digest_path = format!("{}.digest", &file_path);
+        let DataSource::FilePath(p) = &self.data_source else {
+            return Ok(());
+        };
+        let entry = &self.files[file_num];
+        let Some(path) = self.resolve_entry_path(p, &entry.name) else {
+            bail!("Invalid path");
+        };
+        let file_path = get_string(&path);
+        let download_path = format!("{}.download", &file_path);
+        let digest_path = format!("{}.digest", &file_path);
 
-            let mut f = if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
-                // If both download and digest files exist, seek (writer) to the offset
-                // NOTE: same as write path: best-effort symlink validation happened earlier,
-                // but this reopen remains TOCTOU-prone by design for now.
-                match OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .open(&download_path)
-                    .await
-                {
-                    Ok(f) => f,
-                    Err(e) => {
-                        log::warn!("Failed to open file {}: {}", download_path, e);
-                        return;
-                    }
-                }
-            } else if Path::new(&file_path).exists() {
-                // If `file_path` exists, seek (reader) to the offset
-                match File::open(&file_path).await {
-                    Ok(f) => f,
-                    Err(e) => {
-                        log::warn!("Failed to open file {}: {}", file_path, e);
-                        return;
-                    }
-                }
-            } else {
-                log::warn!(
-                    "File {} not found, cannot seek to offset {}",
-                    file_path,
-                    offset
-                );
-                return;
-            };
-            if f.seek(std::io::SeekFrom::Start(offset)).await.is_ok() {
-                self.data_stream = Some(DataStream::FileStream(f));
-                self.transferred += offset;
-                self.finished_size += offset;
-            }
+        let mut f = if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
+            // Both download and digest files exist: seek (writer) to the offset.
+            // `create(false)`: if `.download` vanished after the check above, fail instead
+            // of creating an empty file and resuming after a hole of zero bytes.
+            // NOTE: same as write path: best-effort symlink validation happened earlier,
+            // but this reopen remains TOCTOU-prone by design for now.
+            open_for_write(&download_path, false, false)
+                .await
+                .map_err(|e| anyhow!("Failed to open file {}: {}", download_path, e))?
+        } else if Path::new(&file_path).exists() {
+            // `file_path` exists: seek (reader) to the offset.
+            File::open(&file_path)
+                .await
+                .map_err(|e| anyhow!("Failed to open file {}: {}", file_path, e))?
+        } else {
+            bail!(
+                "File {} not found, cannot seek to offset {}",
+                file_path,
+                offset
+            );
+        };
+        let file_len = f
+            .metadata()
+            .await
+            .map_err(|e| anyhow!("Failed to stat {}: {}", file_path, e))?
+            .len();
+        if offset > file_len {
+            bail!(
+                "Resume offset {} is beyond the end of {} ({} bytes)",
+                offset,
+                file_path,
+                file_len
+            );
         }
+        f.seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|e| anyhow!("Failed to seek {} to {}: {}", file_path, offset, e))?;
+        self.data_stream = Some(DataStream::FileStream(f));
+        self.transferred += offset;
+        self.finished_size += offset;
+        Ok(())
     }
 
     pub async fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
@@ -1168,6 +1243,9 @@ impl TransferJob {
             // It is ok. Because `confirm()` in `ui_cm_interface.rs` is only used for resuming.
             log::info!("file num truncated, ignoring");
         } else {
+            // Every new decision for this file supersedes a previous failed resume:
+            // skipping it, or restarting it from offset 0, must not stay blocked.
+            self.resume_error = None;
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::Skip(s)) => {
                     if s {
@@ -1180,8 +1258,14 @@ impl TransferJob {
                     self.set_file_confirmed(true);
                     // If offset is greater than 0, we need to seek to the offset
                     if offset > 0 {
-                        self.set_stream_offset(r.file_num as usize, offset as u64)
-                            .await;
+                        let file_num = r.file_num as usize;
+                        if let Err(e) = self.set_stream_offset(file_num, offset as u64).await {
+                            log::error!("id: {}, file {}: {}", self.id, file_num, e);
+                            // The peer will send blocks starting at `offset`; refuse them
+                            // until a new confirm (skip or restart from 0) arrives.
+                            self.resume_error = Some((file_num, e.to_string()));
+                            return false;
+                        }
                     }
                 }
                 _ => {}
@@ -1388,15 +1472,18 @@ pub async fn handle_read_jobs(
 }
 
 pub fn remove_all_empty_dir(path: &Path) -> ResultType<()> {
+    // Do not follow a symlinked `path` itself: only real directories are handled.
+    if !std::fs::symlink_metadata(path)?.file_type().is_dir() {
+        return Ok(());
+    }
     let fd = read_dir(path, true)?;
     for entry in fd.entries.iter() {
         match entry.entry_type.enum_value() {
             Ok(FileType::Dir) => {
                 remove_all_empty_dir(&path.join(&entry.name)).ok();
             }
-            Ok(FileType::DirLink) | Ok(FileType::FileLink) => {
-                std::fs::remove_file(path.join(&entry.name)).ok();
-            }
+            // Symlinks (to files or directories) and regular files are left
+            // untouched: only real, empty directories are removed.
             _ => {}
         }
     }

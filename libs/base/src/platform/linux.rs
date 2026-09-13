@@ -255,13 +255,13 @@ pub fn run_cmds(cmds: &str) -> ResultType<String> {
 
 fn run_loginctl(args: Option<Vec<&str>>) -> std::io::Result<std::process::Output> {
     if std::env::var("FLATPAK_ID").is_ok() {
-        let mut l_args = CMD_LOGINCTL.to_string();
+        // Pass every argument as a separate argv entry, never as one joined string.
+        let mut cmd = std::process::Command::new("flatpak-spawn");
+        cmd.arg("--host").arg(CMD_LOGINCTL.as_str());
         if let Some(a) = args.as_ref() {
-            l_args = format!("{} {}", l_args, a.join(" "));
+            cmd.args(a);
         }
-        let res = std::process::Command::new("flatpak-spawn")
-            .args(vec![String::from("--host"), l_args])
-            .output();
+        let res = cmd.output();
         if res.is_ok() {
             return res;
         }

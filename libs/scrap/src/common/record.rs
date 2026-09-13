@@ -82,6 +82,15 @@ impl RecorderContext2 {
     }
 }
 
+// SAFETY: `Recorder` is only ever used behind `Arc<Mutex<Option<Recorder>>>`, so
+// all access to the inner recorder is serialized by the mutex and no two threads
+// ever touch it concurrently. The concrete `RecorderApi` implementations
+// (`WebmRecorder` wrapping `webm::mux` FFI handles and `HwRecorder` wrapping the
+// hwcodec `Muxer`) are not auto-`Send`/`Sync` only because they hold raw pointers
+// to muxer state that is exclusively owned by this struct and is never shared
+// with, or freed by, another thread. Moving the whole `Recorder` (and therefore
+// the owned muxer) to another thread is fine as long as it is not used from two
+// threads at once, which the mutex guarantees.
 unsafe impl Send for Recorder {}
 unsafe impl Sync for Recorder {}
 

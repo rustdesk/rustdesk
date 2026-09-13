@@ -36,7 +36,8 @@ use terminfo::{capability as cap, Database};
 use wallpaper;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
-static mut UNMODIFIED: bool = true;
+// Never written at runtime; a plain immutable static needs no synchronization.
+static UNMODIFIED: bool = true;
 
 #[derive(Clone, Debug)]
 struct ActiveUserLookupCache {
@@ -1285,7 +1286,7 @@ pub fn is_login_wayland() -> bool {
 
 #[inline]
 pub fn current_is_wayland() -> bool {
-    return is_desktop_wayland() && unsafe { UNMODIFIED };
+    return is_desktop_wayland() && UNMODIFIED;
 }
 
 // to-do: test the other display manager
@@ -1357,7 +1358,7 @@ pub fn is_prelogin() -> bool {
         return false;
     }
     let name = get_active_username();
-    if let Ok(res) = run_cmds(&format!("getent passwd {}", name)) {
+    if let Ok(res) = run_cmds(&format!("getent passwd {}", shell_quote(&name))) {
         return res.contains("/bin/false") || res.contains("/usr/sbin/nologin");
     }
     false
@@ -1879,11 +1880,31 @@ fn get_xrandr_conn_pat(name: &str) -> String {
     )
 }
 
+// Compiled once per display name: `resolutions()` is called frequently and the
+// pattern only depends on `name`.
+fn get_xrandr_resolutions_re(name: &str) -> Option<Regex> {
+    lazy_static::lazy_static! {
+        static ref XRANDR_RESOLUTIONS_RE: std::sync::Mutex<std::collections::HashMap<String, Regex>> = Default::default();
+    }
+    const RESOLUTIONS_PAT: &str = r"(?P<resolutions>(\s*\d+x\d+\s+\d+.*\n)+)";
+    let mut cache = XRANDR_RESOLUTIONS_RE.lock().unwrap();
+    if let Some(re) = cache.get(name) {
+        return Some(re.clone());
+    }
+    let re = Regex::new(&format!("{}{}", get_xrandr_conn_pat(name), RESOLUTIONS_PAT)).ok()?;
+    cache.insert(name.to_owned(), re.clone());
+    Some(re)
+}
+
 pub fn resolutions(name: &str) -> Vec<Resolution> {
-    let resolutions_pat = r"(?P<resolutions>(\s*\d+x\d+\s+\d+.*\n)+)";
-    let connected_pat = get_xrandr_conn_pat(name);
+    lazy_static::lazy_static! {
+        static ref RESOLUTION_RE: Option<Regex> = Regex::new(
+            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n"
+        )
+        .ok();
+    }
     let mut v = vec![];
-    if let Ok(re) = Regex::new(&format!("{}{}", connected_pat, resolutions_pat)) {
+    if let Some(re) = get_xrandr_resolutions_re(name) {
         match run_cmds("xrandr --query | tr -s ' '") {
             Ok(xrandr_output) => {
                 // There'are different kinds of xrandr output.
@@ -1911,9 +1932,7 @@ pub fn resolutions(name: &str) -> Vec<Resolution> {
                     */
                 if let Some(caps) = re.captures(&xrandr_output) {
                     if let Some(resolutions) = caps.name("resolutions") {
-                        let resolution_pat =
-                            r"\s*(?P<width>\d+)x(?P<height>\d+)\s+(?P<rates>(\d+\.\d+\D*)+)\s*\n";
-                        let Ok(resolution_re) = Regex::new(&format!(r"{}", resolution_pat)) else {
+                        let Some(resolution_re) = RESOLUTION_RE.as_ref() else {
                             log::error!("Regex new failed");
                             return vec![];
                         };
@@ -2224,8 +2243,8 @@ mod desktop {
             self.home = "".to_string();
 
             let cmd = format!(
-                "getent passwd '{}' | awk -F':' '{{print $6}}'",
-                &self.username
+                "getent passwd {} | awk -F':' '{{print $6}}'",
+                shell_quote(&self.username)
             );
             self.home = run_cmds_trim_newline(&cmd).unwrap_or(format!("/home/{}", &self.username));
         }
@@ -2233,7 +2252,7 @@ mod desktop {
         fn get_xauth_from_xorg(&mut self) {
             if let Ok(output) = run_cmds(&format!(
                 "ps -u {} -f | grep 'Xorg' | grep -v 'grep'",
-                &self.uid
+                shell_quote(&self.uid)
             )) {
                 for line in output.lines() {
                     let mut auth_found = false;

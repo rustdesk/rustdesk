@@ -311,8 +311,20 @@ impl SharedMemory {
     }
 
     pub fn write(&self, addr: usize, data: &[u8]) {
+        // Real bounds check (not only in debug builds): writing past the mapping is UB.
+        let in_bounds = addr
+            .checked_add(data.len())
+            .map_or(false, |end| end <= self.inner.len());
+        if !in_bounds {
+            log::error!(
+                "SharedMemory::write out of bounds: addr={}, len={}, capacity={}",
+                addr,
+                data.len(),
+                self.inner.len()
+            );
+            return;
+        }
         unsafe {
-            debug_assert!(addr + data.len() <= self.inner.len());
             let ptr = self.inner.as_ptr().add(addr);
             let shared_mem_slice = slice::from_raw_parts_mut(ptr, data.len());
             shared_mem_slice.copy_from_slice(data);

@@ -528,12 +528,17 @@ pub trait GoogleImage {
         unsafe {
             let stride = self.stride();
             let planes = self.planes();
-            let h = (self.height() as usize + 1) & !1;
+            let h = self.height();
+            // Chroma planes: full height for I444, (h + 1) / 2 rows for I420
+            // (odd heights round up, without over-reading the luma plane).
+            let chroma_h = match self.chroma() {
+                Chroma::I444 => h,
+                Chroma::I420 => (h + 1) >> 1,
+            };
             let n = stride[0] as usize * h;
             let y = slice::from_raw_parts(planes[0], n);
-            let n = stride[1] as usize * (h >> 1);
-            let u = slice::from_raw_parts(planes[1], n);
-            let v = slice::from_raw_parts(planes[2], n);
+            let u = slice::from_raw_parts(planes[1], stride[1] as usize * chroma_h);
+            let v = slice::from_raw_parts(planes[2], stride[2] as usize * chroma_h);
             (y, u, v)
         }
     }

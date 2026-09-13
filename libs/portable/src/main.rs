@@ -183,7 +183,12 @@ fn setup(
     let mut metadata_paths = reader.package_paths.clone();
     metadata_paths.extend(remove_dropped_package_files(&dir, &reader.package_paths));
     for file in reader.files.iter() {
-        file.write_to_file(&dir);
+        if let Err(e) = file.write_to_file(&dir) {
+            // Do not record this package as installed: a missing or truncated
+            // executable must not be launched, and the next run has to re-extract.
+            eprintln!("{}", e);
+            return None;
+        }
     }
     write_meta(&dir, ts, &metadata_paths);
     #[cfg(windows)]

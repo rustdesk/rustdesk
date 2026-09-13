@@ -306,7 +306,12 @@ impl EncoderApi for AomEncoder {
 }
 
 impl AomEncoder {
-    pub fn encode<'a>(&'a mut self, ms: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames<'a>> {
+    pub fn encode<'a>(
+        &'a mut self,
+        ms: i64,
+        data: &[u8],
+        stride_align: usize,
+    ) -> Result<EncodeFrames<'a>> {
         let bpp = if self.i444 { 24 } else { 12 };
         if data.len() < self.width * self.height * bpp / 8 {
             return Err(Error::FailedCall("len not enough".to_string()));
@@ -422,7 +427,7 @@ impl Drop for AomEncoder {
         unsafe {
             let result = aom_codec_destroy(&mut self.ctx);
             if result != aom_codec_err_t::AOM_CODEC_OK {
-                panic!("failed to destroy aom codec");
+                log::error!("failed to destroy aom codec: {:?}", result);
             }
         }
     }
@@ -514,7 +519,7 @@ impl Drop for AomDecoder {
         unsafe {
             let result = aom_codec_destroy(&mut self.ctx);
             if result != aom_codec_err_t::AOM_CODEC_OK {
-                panic!("failed to destroy aom codec");
+                log::error!("failed to destroy aom codec: {:?}", result);
             }
         }
     }
