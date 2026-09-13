@@ -2590,7 +2590,9 @@ connect(BuildContext context, String id,
         final fieldTextEditingController = Get.find<TextEditingController>();
         fieldTextEditingController.text = formatID(id);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Failed to update ID text controller: $e');
+    }
   }
   id = id.replaceAll(' ', '');
   final oldId = id;
@@ -2871,10 +2873,21 @@ Future<void> onActiveWindowChanged() async {
 }
 
 Timer periodic_immediate(Duration duration, Future<void> Function() callback) {
-  Future.delayed(Duration.zero, callback);
-  return Timer.periodic(duration, (timer) async {
-    await callback();
-  });
+  // Skip a tick while the previous async callback is still running, so that
+  // slow callbacks do not overlap and pile up.
+  var running = false;
+  Future<void> run() async {
+    if (running) return;
+    running = true;
+    try {
+      await callback();
+    } finally {
+      running = false;
+    }
+  }
+
+  Future.delayed(Duration.zero, run);
+  return Timer.periodic(duration, (timer) => run());
 }
 
 /// return a human readable windows version
@@ -4266,7 +4279,9 @@ Widget? buildAvatarWidget({
     if (comma > 0) {
       try {
         imageProvider = MemoryImage(base64Decode(trimmed.substring(comma + 1)));
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Failed to decode avatar image: $e');
+      }
     }
   } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     imageProvider = NetworkImage(trimmed);

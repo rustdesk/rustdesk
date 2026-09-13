@@ -1722,7 +1722,9 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         if (_customPercent.value != v) {
           _customPercent.value = v;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Failed to get custom scale percent: $e');
+      }
     });
   }
 

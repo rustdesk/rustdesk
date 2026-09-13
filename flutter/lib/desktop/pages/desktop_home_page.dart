@@ -870,6 +870,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();
+    _leftPaneScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

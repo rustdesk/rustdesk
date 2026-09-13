@@ -654,9 +654,12 @@ class _RemotePageState extends State<RemotePage>
     // MouseRegion.onExit never fired (e.g., tab closed while cursor inside).
     if (!isWeb) bind.hostStopSystemKeyPropagate(stopped: true);
 
+    _timer?.cancel();
+    _timer = null;
     _pointerLockCenterDebounceTimer?.cancel();
     _pointerLockCenterDebounceTimer = null;
     _waylandKeyboardModeWorker?.dispose();
+    _waylandKeyboardModeWorker = null;
     // Clear callback reference to prevent memory leaks and stale references
     _ffi.inputModel.onRelativeMouseModeDisabled = null;
     // Relative mouse mode cleanup is centralized in FFI.close(closeSession: ...).
@@ -675,7 +678,6 @@ class _RemotePageState extends State<RemotePage>
       clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
     }
     await _ffi.close(closeSession: closeSession);
-    _timer?.cancel();
     _ffi.dialogManager.dismissAll();
     if (closeSession) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,

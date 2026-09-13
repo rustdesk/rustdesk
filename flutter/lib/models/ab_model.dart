@@ -134,9 +134,12 @@ class AbModel {
     try {
       await _pullAb(force: force, quiet: quiet);
       _refreshTab();
-    } catch (_) {}
-    _pulling = false;
-    _pulledOnce = true;
+    } catch (e) {
+      debugPrint('pullAb failed: $e');
+    } finally {
+      _pulling = false;
+      _pulledOnce = true;
+    }
   }
 
   Future<void> _pullAb(
@@ -1028,8 +1031,9 @@ class LegacyAb extends BaseAb {
         } else if (json.containsKey('data')) {
           try {
             licensedDevices = json['licensed_devices'];
-            // ignore: empty_catches
-          } catch (e) {}
+          } catch (e) {
+            debugPrint('Failed to parse licensed_devices: $e');
+          }
           final data = jsonDecode(json['data']);
           if (data != null) {
             _deserialize(data);
@@ -2006,7 +2010,9 @@ String _jsonDecodeActionResp(http.Response resp) {
   } else {
     try {
       errMsg = jsonDecode(resp.body)['error'].toString();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Failed to parse error response: $e');
+    }
     if (errMsg.isEmpty) {
       if (resp.statusCode != 200) {
         errMsg = 'HTTP ${resp.statusCode}';

@@ -66,6 +66,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   Orientation? _currentOrientation;
   final _uniqueKey = UniqueKey();
   Timer? _iosKeyboardWorkaroundTimer;
+  Timer? _orientationTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -151,6 +152,18 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // "Connecting...". Dispatching it here makes teardown happen synchronously on
     // pop; the `sessionClose` in `gFFI.close()` becomes a no-op once removed.
     unawaited(bind.sessionClose(sessionId: sessionId));
+    // Cancel timers/workers synchronously, before any await, so that their
+    // callbacks can not fire (and call setState) on a disposed state.
+    _timer?.cancel();
+    _timer = null;
+    _iosKeyboardWorkaroundTimer?.cancel();
+    _iosKeyboardWorkaroundTimer = null;
+    _orientationTimer?.cancel();
+    _orientationTimer = null;
+    _waylandKeyboardGateWorker?.dispose();
+    _waylandKeyboardGateWorker = null;
+    _mobileFocusNode.dispose();
+    _physicalFocusNode.dispose();
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -158,14 +171,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
     await gFFI.invokeMethod("enable_soft_keyboard", true);
-    _mobileFocusNode.dispose();
-    _physicalFocusNode.dispose();
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
-    _waylandKeyboardGateWorker?.dispose();
     inputModel.keyboardInputAllowed = true;
     await gFFI.close();
-    _timer?.cancel();
-    _iosKeyboardWorkaroundTimer?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -175,7 +183,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     // `on_voice_call_closed` should be called when the connection is ended.
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
-    gFFI.chatModel.onVoiceCallClosed("End connetion");
+    gFFI.chatModel.onVoiceCallClosed("End connection");
   }
 
   @override
@@ -266,12 +274,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       _iosKeyboardWorkaroundTimer = null;
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+        if (!mounted) return;
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
         _mobileFocusNode.requestFocus();
       });
     }
     // update for Scaffold
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -421,11 +431,13 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(kMobileDelaySoftKeyboard, () {
+      if (!mounted) return;
       // show now, and sleep a while to requestFocus to
       // make sure edit ready, so that keyboard won't show/hide/show/hide happen
       setState(() => _showEdit = true);
       _timer?.cancel();
       _timer = Timer(kMobileDelaySoftKeyboardFocus, () {
+        if (!mounted) return;
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
         _mobileFocusNode.requestFocus();
@@ -508,7 +520,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                             child:
                                 OrientationBuilder(builder: (ctx, orientation) {
                               if (_currentOrientation != orientation) {
-                                Timer(const Duration(milliseconds: 200), () {
+                                _orientationTimer?.cancel();
+                                _orientationTimer =
+                                    Timer(const Duration(milliseconds: 200), () {
+                                  if (!mounted) return;
                                   gFFI.dialogManager
                                       .resetMobileActionsOverlay(ffi: gFFI);
                                   _currentOrientation = orientation;

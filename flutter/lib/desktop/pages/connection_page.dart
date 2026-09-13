@@ -183,7 +183,9 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
     _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
     try {
       stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Failed to parse video_conn_count: $e');
+    }
   }
 }
 

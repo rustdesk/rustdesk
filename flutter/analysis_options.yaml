@@ -4,3 +4,7 @@ linter:
   rules:
     non_constant_identifier_names: false
     sort_child_properties_last: false
+    empty_catches: true
+    cancel_subscriptions: true
+    close_sinks: true
+    use_build_context_synchronously: true

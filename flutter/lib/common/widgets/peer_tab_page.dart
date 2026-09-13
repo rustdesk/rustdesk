@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
@@ -665,6 +666,27 @@ class PeerSearchBar extends StatefulWidget {
 
 class _PeerSearchBarState extends State<PeerSearchBar> {
   var drawer = false;
+  final RxBool _focused = false.obs;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    _focused.value = _focusNode.hasFocus;
+    peerSearchTextController.selection = TextSelection(
+        baseOffset: 0, extentOffset: peerSearchTextController.value.text.length);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -686,14 +708,6 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
   }
 
   Widget _buildSearchBar() {
-    RxBool focused = false.obs;
-    FocusNode focusNode = FocusNode();
-    focusNode.addListener(() {
-      focused.value = focusNode.hasFocus;
-      peerSearchTextController.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: peerSearchTextController.value.text.length);
-    });
     return Obx(() => Container(
           width: stateGlobal.isPortrait.isTrue ? 120 : 140,
           decoration: BoxDecoration(
@@ -716,7 +730,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                         onChanged: (searchText) {
                           peerSearchText.value = searchText;
                         },
-                        focusNode: focusNode,
+                        focusNode: _focusNode,
                         textAlign: TextAlign.start,
                         maxLines: 1,
                         cursorColor: Theme.of(context)
@@ -731,7 +745,7 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
                           contentPadding:
                               const EdgeInsets.symmetric(vertical: 6),
                           hintText:
-                              focused.value ? null : translate("Search ID"),
+                              _focused.value ? null : translate("Search ID"),
                           hintStyle: TextStyle(
                               fontSize: 14, color: Theme.of(context).hintColor),
                           border: InputBorder.none,
@@ -950,17 +964,25 @@ class RefreshWidget extends StatefulWidget {
 class RefreshWidgetState extends State<RefreshWidget> {
   double turns = 0.0;
   bool hover = false;
+  StreamSubscription<bool>? _spinningSubscription;
 
   @override
   void initState() {
     super.initState();
-    widget.spinning?.listen((v) {
+    _spinningSubscription = widget.spinning?.listen((v) {
       if (v && mounted) {
         setState(() {
           turns += 1;
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _spinningSubscription?.cancel();
+    _spinningSubscription = null;
+    super.dispose();
   }
 
   @override

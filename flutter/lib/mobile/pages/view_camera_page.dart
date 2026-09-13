@@ -63,6 +63,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   double _viewInsetsBottom = 0;
   final _uniqueKey = UniqueKey();
   Timer? _timerDidChangeMetrics;
+  Timer? _orientationTimer;
 
   final _blockableOverlayState = BlockableOverlayState();
 
@@ -121,6 +122,16 @@ class _ViewCameraPageState extends State<ViewCameraPage>
   @override
   Future<void> dispose() async {
     WidgetsBinding.instance.removeObserver(this);
+    // Cancel timers synchronously, before any await, so that their callbacks
+    // can not fire (and call setState) on a disposed state.
+    _timer?.cancel();
+    _timer = null;
+    _timerDidChangeMetrics?.cancel();
+    _timerDidChangeMetrics = null;
+    _orientationTimer?.cancel();
+    _orientationTimer = null;
+    _mobileFocusNode.dispose();
+    _physicalFocusNode.dispose();
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -128,11 +139,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     gFFI.imageModel.disposeImage();
     gFFI.cursorModel.disposeImages();
     await gFFI.invokeMethod("enable_soft_keyboard", true);
-    _mobileFocusNode.dispose();
-    _physicalFocusNode.dispose();
     await gFFI.close();
-    _timer?.cancel();
-    _timerDidChangeMetrics?.cancel();
     gFFI.dialogManager.dismissAll();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
@@ -141,7 +148,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     // `on_voice_call_closed` should be called when the connection is ended.
     // The inner logic of `on_voice_call_closed` will check if the voice call is active.
     // Only one client is considered here for now.
-    gFFI.chatModel.onVoiceCallClosed("End connetion");
+    gFFI.chatModel.onVoiceCallClosed("End connection");
   }
 
   @override
@@ -159,6 +166,7 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     final newBottom = MediaQueryData.fromView(ui.window).viewInsets.bottom;
     _timerDidChangeMetrics?.cancel();
     _timerDidChangeMetrics = Timer(Duration(milliseconds: 100), () async {
+      if (!mounted) return;
       // We need this comparation because poping up the floating action will also trigger `didChangeMetrics()`.
       if (newBottom != _viewInsetsBottom) {
         gFFI.canvasModel.mobileFocusCanvasCursor();
@@ -250,7 +258,10 @@ class _ViewCameraPageState extends State<ViewCameraPage>
                     child: SafeArea(
                       child: OrientationBuilder(builder: (ctx, orientation) {
                         if (_currentOrientation != orientation) {
-                          Timer(const Duration(milliseconds: 200), () {
+                          _orientationTimer?.cancel();
+                          _orientationTimer =
+                              Timer(const Duration(milliseconds: 200), () {
+                            if (!mounted) return;
                             gFFI.dialogManager
                                 .resetMobileActionsOverlay(ffi: gFFI);
                             _currentOrientation = orientation;

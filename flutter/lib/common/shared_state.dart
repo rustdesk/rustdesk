@@ -20,8 +20,6 @@ class PrivacyModeState {
     final key = tag(id);
     if (Get.isRegistered<RxString>(tag: key)) {
       Get.delete<RxString>(tag: key);
-    } else {
-      Get.find<RxString>(tag: key).value = '';
     }
   }
 

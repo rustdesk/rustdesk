@@ -1108,12 +1108,9 @@ class JobController {
       jobResultListener.complete(evt);
       // return;
     }
-    int id = -1;
     int? fileNum = 0;
     double? speed = 0;
-    try {
-      id = int.parse(evt['id']);
-    } catch (_) {}
+    final id = int.tryParse(evt['id']?.toString() ?? '') ?? -1;
     final jobIndex = getJob(id);
     if (jobIndex == -1) {
       unregisterTransferConflictJob(id);
@@ -1124,9 +1121,7 @@ class JobController {
     if (job.type == JobType.deleteFile) {
       job.state = JobState.done;
     } else if (job.type == JobType.deleteDir) {
-      try {
-        fileNum = int.tryParse(evt['file_num']);
-      } catch (_) {}
+      fileNum = int.tryParse(evt['file_num']?.toString() ?? '');
       if (fileNum != null) {
         if (fileNum < job.fileNum) return true; // file_num can be 0 at last
         job.fileNum = fileNum;
@@ -1135,10 +1130,8 @@ class JobController {
         }
       }
     } else {
-      try {
-        fileNum = int.tryParse(evt['file_num']);
-        speed = double.tryParse(evt['speed']);
-      } catch (_) {}
+      fileNum = int.tryParse(evt['file_num']?.toString() ?? '');
+      speed = double.tryParse(evt['speed']?.toString() ?? '');
       if (fileNum != null) job.fileNum = fileNum;
       if (speed != null) job.speed = speed;
       job.state = JobState.done;

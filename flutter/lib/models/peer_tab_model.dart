@@ -228,7 +228,9 @@ class PeerTabModel with ChangeNotifier {
         try {
           bind.setLocalFlutterOption(
               k: kOptionPeerTabVisible, v: jsonEncode(_isVisible));
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('Failed to save peer tab visibility: $e');
+        }
         notifyListeners();
       }
     }

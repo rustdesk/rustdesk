@@ -3725,6 +3725,9 @@ class FFI {
   var version = '';
   var connType = ConnType.defaultConn;
   var closed = false;
+  StreamSubscription<EventToUI>? _eventSubscription;
+  // Events are handled sequentially by chaining them on this future.
+  Future<void> _eventQueue = Future.value();
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -3928,7 +3931,8 @@ class FFI {
     final hasGpuTextureRender = bind.mainHasGpuTextureRender();
     final SimpleWrapper<bool> isToNewWindowNotified = SimpleWrapper(false);
     // Preserved for the rgba data.
-    stream.listen((message) {
+    _eventSubscription?.cancel();
+    _eventSubscription = stream.listen((message) {
       if (closed) return;
       if (tabWindowId != null && !isToNewWindowNotified.value) {
         // Session is read to be moved to a new window.
@@ -3955,7 +3959,8 @@ class FFI {
         });
         isToNewWindowNotified.value = true;
       }
-      () async {
+      _eventQueue = _eventQueue.then((_) async {
+        if (closed) return;
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
             closed = true;
@@ -3999,7 +4004,9 @@ class FFI {
           textureModel.setTextureType(display: display, gpuTexture: gpuTexture);
           onEvent2UIRgba();
         }
-      }();
+      }).catchError((e) {
+        debugPrint('Failed to handle session event: $e');
+      });
     });
     // every instance will bind a stream
     this.id = id;
@@ -4061,6 +4068,8 @@ class FFI {
   /// Close the remote session.
   Future<void> close({bool closeSession = true}) async {
     closed = true;
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
     if (isWeb) {
       platformFFI.clearVideoFrameCallback();
     }
