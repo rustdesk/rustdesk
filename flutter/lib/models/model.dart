@@ -343,7 +343,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'set_multiple_windows_session') {
         handleMultipleWindowsSession(evt, sessionId, peerId);
       } else if (name == 'peer_info') {
-        handlePeerInfo(evt, peerId, false);
+        // Events are processed sequentially; finish applying the peer info
+        // before the next queued event is handled.
+        await handlePeerInfo(evt, peerId, false);
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
@@ -3726,6 +3728,10 @@ class FFI {
   var connType = ConnType.defaultConn;
   var closed = false;
   StreamSubscription<EventToUI>? _eventSubscription;
+  // Incremented on every `start()`/`close()`. Events (and queued callbacks)
+  // captured with an older generation belong to a previous session of this
+  // FFI instance and must be ignored after a restart.
+  int _startGeneration = 0;
   // Events are handled sequentially by chaining them on this future.
   Future<void> _eventQueue = Future.value();
 
@@ -3932,12 +3938,17 @@ class FFI {
     final SimpleWrapper<bool> isToNewWindowNotified = SimpleWrapper(false);
     // Preserved for the rgba data.
     _eventSubscription?.cancel();
+    final generation = ++_startGeneration;
+    // Drop whatever a previous session left in the queue.
+    _eventQueue = Future.value();
+    bool isStale() => closed || generation != _startGeneration;
     _eventSubscription = stream.listen((message) {
-      if (closed) return;
+      if (isStale()) return;
       if (tabWindowId != null && !isToNewWindowNotified.value) {
         // Session is read to be moved to a new window.
         // Get the cached data and handle the cached data.
         Future.delayed(Duration.zero, () async {
+          if (isStale()) return;
           final args = jsonEncode({'id': id, 'close': display == null});
           final cachedData = await DesktopMultiWindow.invokeMethod(
               tabWindowId, kWindowEventGetCachedSessionData, args);
@@ -3960,7 +3971,7 @@ class FFI {
         isToNewWindowNotified.value = true;
       }
       _eventQueue = _eventQueue.then((_) async {
-        if (closed) return;
+        if (isStale()) return;
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
             closed = true;
@@ -4068,6 +4079,7 @@ class FFI {
   /// Close the remote session.
   Future<void> close({bool closeSession = true}) async {
     closed = true;
+    _startGeneration++;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     if (isWeb) {
