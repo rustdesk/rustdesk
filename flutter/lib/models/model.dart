@@ -2860,6 +2860,16 @@ class CanvasModel with ChangeNotifier {
   }
 }
 
+// Bound integer cache keys and raster allocation: 4096 squared RGBA is 64 MiB.
+const _maxCursorRasterSize = 4096;
+
+bool _validCursorRasterSize(double width, double height,
+        {double rasterScale = 1}) =>
+    width.isFinite && height.isFinite && rasterScale.isFinite &&
+    width > 0 && height > 0 && rasterScale > 0 &&
+    width.ceilToDouble() * rasterScale <= _maxCursorRasterSize &&
+    height.ceilToDouble() * rasterScale <= _maxCursorRasterSize;
+
 // Scale the host's bitmap and hotspot together. Incorrect source geometry
 // must be fixed in host capture, independently of the client's sizing policy.
 class CursorData {
@@ -2899,16 +2909,19 @@ class CursorData {
 
   // Keep the minimum-size policy here. Native callers let the plugin rasterize
   // the original ui.Image; Web keeps the encoded-image resizing path.
-  double _checkUpdateScale(double scale,
-      {bool resizeImage = true, bool useLegacyMinimum = true}) {
-    double oldScale = this.scale;
+  double? _validatedScale(double scale,
+      {required bool useLegacyMinimum, required double rasterScale}) {
+    if (!scale.isFinite || scale <= 0) {
+      debugPrint('Rejected cursor $id: invalid scale $scale');
+      return null;
+    }
     if (!useLegacyMinimum) {
       scale = max(scale, kMinCursorSize / max(width, height));
     }
     if (useLegacyMinimum && scale != 1.0) {
       // Update data if scale changed.
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (height * scale).toInt();
+      final tgtWidth = width * scale;
+      final tgtHeight = height * scale;
       if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
         double sw = kMinCursorSize.toDouble() / width;
         double sh = kMinCursorSize.toDouble() / height;
@@ -2916,6 +2929,17 @@ class CursorData {
       }
     }
 
+    if (!_validCursorRasterSize(width * scale, height * scale,
+        rasterScale: rasterScale)) {
+      debugPrint('Rejected cursor $id: raster ${width * scale}x${height * scale} '
+          'at pixel ratio $rasterScale exceeds $_maxCursorRasterSize');
+      return null;
+    }
+    return scale;
+  }
+
+  double _checkUpdateScale(double scale, {required bool resizeImage}) {
+    double oldScale = this.scale;
     // Web's long-edge minimum can round a thin axis below one raster pixel.
     final webWidth = max(1, (width * scale).round());
     final webHeight = max(1, (height * scale).round());
@@ -2954,11 +2978,14 @@ class CursorData {
     return scale;
   }
 
-  String updateGetKey(double scale,
-      {bool resizeImage = true, bool useLegacyMinimum = true}) {
-    scale = _checkUpdateScale(scale,
-        resizeImage: resizeImage, useLegacyMinimum: useLegacyMinimum);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+  String? updateGetKey(double scale,
+      {bool resizeImage = true, bool useLegacyMinimum = true,
+      double rasterScale = 1}) {
+    final effectiveScale = _validatedScale(scale,
+        useLegacyMinimum: useLegacyMinimum, rasterScale: rasterScale);
+    if (effectiveScale == null) return null;
+    _checkUpdateScale(effectiveScale, resizeImage: resizeImage);
+    return '${peerId}_${id}_${_doubleToInt(width * effectiveScale)}_${_doubleToInt(height * effectiveScale)}';
   }
 }
 
@@ -3467,9 +3494,12 @@ class CursorModel with ChangeNotifier {
     final hoty = double.parse(evt['hoty']);
     final width = int.parse(evt['width']);
     final height = int.parse(evt['height']);
-    final pixelRatio = double.parse(evt['scale'] ?? '0');
-    if (!pixelRatio.isFinite || pixelRatio < 0) {
-      throw FormatException('Invalid cursor pixel ratio: $pixelRatio');
+    final pixelRatio = double.tryParse(evt['scale'] ?? '0');
+    if (pixelRatio == null || !pixelRatio.isFinite || pixelRatio < 0 ||
+        (pixelRatio > 0 &&
+            !_validCursorRasterSize(width / pixelRatio, height / pixelRatio))) {
+      debugPrint('Rejected cursor $id: invalid pixel ratio ${evt['scale']}');
+      return;
     }
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());

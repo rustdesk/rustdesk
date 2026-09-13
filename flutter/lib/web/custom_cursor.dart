@@ -109,6 +109,7 @@ MouseCursor buildCursorOfCache(
     // A short-edge minimum can enlarge thin artwork beyond CSS cursor limits.
     // Keep unzoomed images unchanged and use the long edge when resizing.
     final key = cache.updateGetKey(scale, useLegacyMinimum: scale == 1.0);
+    if (key == null) return MouseCursor.defer;
     if (!cursor.cachedKeys.contains(key)) {
       // data should be checked here, because it may be changed after `updateGetKey()`
       final data = cache.data;

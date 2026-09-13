@@ -34,7 +34,11 @@ MouseCursor buildCursorOfCache(
     final effectiveScale = !legacyMinimum && isWindows
         ? math.max(scale, kMinCursorSize * dpr / math.max(cache.width, cache.height))
         : scale;
-    final key = '${cache.updateGetKey(effectiveScale, resizeImage: false, useLegacyMinimum: legacyMinimum)}_$dpr';
+    final cacheKey = cache.updateGetKey(effectiveScale, resizeImage: false,
+        useLegacyMinimum: legacyMinimum,
+        rasterScale: isWindows ? 1 : (isLinux ? dpr.ceilToDouble() : dpr));
+    if (cacheKey == null) return MouseCursor.defer;
+    final key = '${cacheKey}_$dpr';
     if (!cursor.cachedKeys.contains(key)) {
       debugPrint(
           "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
