@@ -991,6 +991,12 @@ class RefreshWidgetState extends State<RefreshWidget> {
         });
       }
     });
+    // `listen` does not replay the current value: if the (new) `RxBool` is
+    // already true, start rotating now. Called from initState/didUpdateWidget,
+    // so a build follows anyway and no setState is needed here.
+    if (widget.spinning?.value == true) {
+      turns += 1;
+    }
   }
 
   @override
