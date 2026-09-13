@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:js' as js;
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -52,8 +53,9 @@ class CursorManager {
         'cursor',
         jsonEncode({
           'url': cursorData.url,
-          'hotx': cursorData.hotX.round(),
-          'hoty': cursorData.hotY.round(),
+          // Rounding must keep the hotspot inside even a one-pixel raster.
+          'hotx': cursorData.hotX.round().clamp(0, cursorData.width - 1),
+          'hoty': cursorData.hotY.round().clamp(0, cursorData.height - 1),
         })
       ]);
     }
@@ -104,7 +106,9 @@ MouseCursor buildCursorOfCache(
   if (cache == null) {
     return MouseCursor.defer;
   } else {
-    final key = cache.updateGetKey(scale);
+    // A short-edge minimum can enlarge thin artwork beyond CSS cursor limits.
+    // Keep unzoomed images unchanged and use the long edge when resizing.
+    final key = cache.updateGetKey(scale, useLegacyMinimum: scale == 1.0);
     if (!cursor.cachedKeys.contains(key)) {
       // data should be checked here, because it may be changed after `updateGetKey()`
       final data = cache.data;
@@ -116,8 +120,8 @@ MouseCursor buildCursorOfCache(
       CursorManager.instance.registerCursor(CursorData(
           key: key,
           url: 'data:image/rgba;base64,${base64Encode(data)}',
-          width: (cache.width * cache.scale).round(),
-          height: (cache.height * cache.scale).round(),
+          width: max(1, (cache.width * cache.scale).round()),
+          height: max(1, (cache.height * cache.scale).round()),
           hotX: cache.hotx,
           hotY: cache.hoty));
       cursor.addKey(key);

@@ -2906,6 +2906,9 @@ class CursorData {
       }
     }
 
+    // Web's long-edge minimum can round a thin axis below one raster pixel.
+    final webWidth = max(1, (width * scale).round());
+    final webHeight = max(1, (height * scale).round());
     if (resizeImage && _doubleToInt(oldScale) != _doubleToInt(scale)) {
       if (isWindows) {
         data = img2
@@ -2921,8 +2924,8 @@ class CursorData {
           img2.encodePng(
             img2.copyResize(
               image,
-              width: isWeb ? (width * scale).round() : (width * scale).toInt(),
-              height: isWeb ? (height * scale).round() : (height * scale).toInt(),
+              width: isWeb ? webWidth : (width * scale).toInt(),
+              height: isWeb ? webHeight : (height * scale).toInt(),
               interpolation: img2.Interpolation.average,
             ),
           ),
@@ -2935,8 +2938,8 @@ class CursorData {
     hoty = hotyOrigin * scale;
     if (isWeb) {
       // CSS hotspots must follow the actual rounded PNG dimensions.
-      hotx = hotxOrigin * (width * scale).round() / width;
-      hoty = hotyOrigin * (height * scale).round() / height;
+      hotx = hotxOrigin * webWidth / width;
+      hoty = hotyOrigin * webHeight / height;
     }
     return scale;
   }

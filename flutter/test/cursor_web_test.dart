@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   _alphaTests();
+  _thinCursorTests();
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final dpr in [1.0, 2.0]) {
       testWidgets('ImagePaint Web $style zoom off DPR $dpr keeps source size',
@@ -51,6 +52,42 @@ void main() {
       expect((bitmap.width, bitmap.height), (side, side));
       expect((registered['hotx'], registered['hoty']), expected);
       session.dispose();
+    }
+  });
+}
+
+void _thinCursorTests() {
+  for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
+    for (final zoom in [false, true]) {
+      testWidgets('ImagePaint Web $style thin cursor zoom=$zoom', (tester) =>
+          tester.runAsync(() => _checkPolicy(tester, style, 1,
+              zoom: zoom, source: (64, 4), hotspot: (32, 2),
+              expectedSize: zoom ? (32, 2) : (64, 4),
+              expectedHotspot: zoom ? (16, 1) : (32, 2))));
+    }
+  }
+  test('Web thin cursors keep a raster pixel and an in-bounds hotspot', () async {
+    final registered = _captureCursor();
+    final canvas = _Canvas(kRemoteViewStyleAdaptive);
+    addTearDown(canvas.dispose);
+    final ffi = _FFI(canvas);
+    for (final (source, hotspot, scale, size, expected) in [
+      ((4, 64), (2.0, 32.0), 0.5, (2, 32), (1, 16)),
+      ((2, 128), (1.0, 64.0), 0.01, (1, 12), (0, 6)),
+      ((128, 2), (64.0, 1.0), 0.01, (12, 1), (6, 0)),
+    ]) {
+      final cursor = await _loadCursor(ffi, '$source',
+          source: source, hotspot: hotspot);
+      for (final factor in [1.0, scale, 1.0]) {
+        final session =
+            buildCursorOfCache(cursor, factor, cursor.cache).createSession(1);
+        await session.activate();
+        session.dispose();
+        final png = img.decodePng(Uri.parse(registered['url']).data!.contentAsBytes())!;
+        expect((png.width, png.height), factor == 1 ? source : size);
+        expect((registered['hotx'], registered['hoty']),
+            factor == 1 ? (hotspot.$1, hotspot.$2) : expected);
+      }
     }
   });
 }
@@ -114,17 +151,18 @@ class _FFI extends Fake implements model.FFI {
 
 Future<model.CursorModel> _loadCursor(model.FFI ffi, String id,
     {List<int> pixel = const [255, 255, 255, 255],
+    (int, int) source = (48, 48),
     (double, double) hotspot = (7, 9),
     double? pixelRatio = 1}) async {
   final cursor = model.CursorModel(WeakReference(ffi))..id = id;
   await cursor.updateCursorData({
     'id': id,
-    'width': '48',
-    'height': '48',
+    'width': '${source.$1}',
+    'height': '${source.$2}',
     'hotx': '${hotspot.$1}',
     'hoty': '${hotspot.$2}',
     if (pixelRatio != null) 'scale': '$pixelRatio',
-    'colors': jsonEncode([for (var i = 0; i < 48 * 48; i++) ...pixel]),
+    'colors': jsonEncode([for (var i = 0; i < source.$1 * source.$2; i++) ...pixel]),
   });
   addTearDown(() async {
     // Keep the session owner alive across asynchronous image decoding.
@@ -161,12 +199,16 @@ Map<String, dynamic> _captureCursor() {
   return registered;
 }
 
-Future<void> _checkPolicy(WidgetTester tester, String style, double dpr) async {
+Future<void> _checkPolicy(WidgetTester tester, String style, double dpr,
+    {bool zoom = false, (int, int) source = (48, 48),
+    (double, double) hotspot = (7, 9), (int, int) expectedSize = (48, 48),
+    (int, int) expectedHotspot = (7, 9)}) async {
   final registered = _captureCursor();
   final canvas = _Canvas(style);
   addTearDown(canvas.dispose);
   final ffi = _FFI(canvas);
-  final cursor = await _loadCursor(ffi, '$style-$dpr');
+  final cursor = await _loadCursor(ffi, '$style-$dpr-$zoom-$source',
+      source: source, hotspot: hotspot);
   await tester.pumpWidget(MediaQuery(
     data: MediaQueryData(devicePixelRatio: dpr),
     child: MultiProvider(
@@ -178,7 +220,7 @@ Future<void> _checkPolicy(WidgetTester tester, String style, double dpr) async {
         child: ImagePaint(
             ffi: ffi,
             id: 'web-cursor-test',
-            zoomCursor: false.obs,
+            zoomCursor: zoom.obs,
             cursorOverImage: true.obs,
             keyboardEnabled: true.obs,
             remoteCursorMoved: false.obs)),
@@ -192,8 +234,8 @@ Future<void> _checkPolicy(WidgetTester tester, String style, double dpr) async {
   await tester.pumpWidget(const SizedBox.shrink());
   final png =
       img.decodePng(Uri.parse(registered['url']).data!.contentAsBytes())!;
-  expect((png.width, png.height), (48, 48));
-  expect((registered['hotx'], registered['hoty']), (7, 9));
+  expect((png.width, png.height), expectedSize);
+  expect((registered['hotx'], registered['hoty']), expectedHotspot);
 }
 
 void _alphaTests() {
