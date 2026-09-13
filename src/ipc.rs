@@ -1417,18 +1417,13 @@ fn user_main_ipc_server_uid() -> ResultType<u32> {
 }
 
 // Windows-only: pick the session-isolated pipe path for every channel except
-// the channels that are deliberately machine-/cross-session-wide:
-// - `_service`: the privileged, single-instance-per-machine channel.
-// - `_portable_service`: the SYSTEM helper started via `create_process_with_logon`
-//   connects to this channel, but that API does not guarantee landing in the
-//   same Windows session as the interactive process hosting the listener, so
-//   this channel has to stay on the shared path too, exactly like `_service`.
-// See the comment on `Config::ipc_path_for_session` in hbb_common for the
-// full rationale (RDS/Citrix hosts running multiple concurrent user sessions
-// of the same RustDesk binary).
+// the deliberately machine-wide, privileged `_service` channel. See the
+// comment on `Config::ipc_path_for_session` in hbb_common for the full
+// rationale (RDS/Citrix hosts running multiple concurrent user sessions of
+// the same RustDesk binary).
 #[cfg(windows)]
 fn ipc_path_for_current_context(postfix: &str) -> ResultType<String> {
-    if postfix == crate::POSTFIX_SERVICE || postfix == "_portable_service" {
+    if postfix == crate::POSTFIX_SERVICE {
         Ok(Config::ipc_path(postfix))
     } else {
         match crate::platform::windows::get_current_process_session_id() {
