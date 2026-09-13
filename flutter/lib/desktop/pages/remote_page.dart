@@ -1469,7 +1469,10 @@ class CursorPaint extends StatelessWidget {
     final ffi = canvas.parent.target!;
     final peer = ffi.ffiModel;
     if (ffi.imageModel.useTextureRender || peer.pi.forceTextureRender) {
-      return null;
+      // Match Linux's texture origin without rounding the cursor or hotspot.
+      return isLinux
+          ? Offset(canvas.x.toInt().toDouble(), canvas.y.toInt().toDouble())
+          : null;
     }
     var scale = canvas.scale;
     final displays = peer.pi.getCurDisplays();

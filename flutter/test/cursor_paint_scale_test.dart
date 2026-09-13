@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/image.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +13,7 @@ import 'package:provider/provider.dart';
 
 const _hotspot = Offset(4, 9);
 const _remotePosition = Offset(100.25, 80.75);
-const _canvasOffset = Offset(15.125, 10.25);
+const _canvasOffset = Offset(15.125, -10.25);
 const _viewport = Size(200, 160);
 
 class _CursorModel extends ChangeNotifier implements CursorModel {
@@ -44,11 +45,18 @@ class _Density extends Fake implements CursorData {
   final double pixelRatio;
 }
 
-class _ImageModel extends Fake implements ImageModel {
+class _ImageModel extends ChangeNotifier implements ImageModel {
   _ImageModel(this.useTextureRender);
 
   @override
   final bool useTextureRender;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _TextureModel extends Fake implements TextureModel {
+  @override
+  RxInt getTextureId(int display) => 0.obs;
 }
 
 class _Display extends Display {
@@ -64,7 +72,10 @@ class _Display extends Display {
 
 class _Peer extends Fake implements FfiModel {
   @override
-  final pi = PeerInfo();
+  final pi = PeerInfo()
+    ..displays.add(Display()
+      ..width = _viewport.width.toInt()
+      ..height = _viewport.height.toInt());
   @override
   bool isPeerLinux = false;
   @override
@@ -78,6 +89,8 @@ class _FFI extends Fake implements FFI {
   final ImageModel imageModel;
   @override
   final _Peer ffiModel = _Peer();
+  @override
+  final textureModel = _TextureModel();
   @override
   late CanvasModel canvasModel;
 }
@@ -151,16 +164,29 @@ Future<ImagePainter> _paintCursor(WidgetTester tester, CanvasModel canvas,
   final image = (await tester
       .runAsync(() => createTestImage(width: source.$1, height: source.$2)))!;
   addTearDown(image.dispose);
-  await tester.pumpWidget(MediaQuery(
+  tester.view.devicePixelRatio = dpr;
+  tester.view.physicalSize = _viewport * dpr;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr,
+    child: MediaQuery(
     data: MediaQueryData(devicePixelRatio: dpr),
     child: MultiProvider(
       providers: [
+        ChangeNotifierProvider<ImageModel>.value(value: canvas.parent.target!.imageModel),
         ChangeNotifierProvider<CursorModel>(create: (_) => _CursorModel(image, position, density)),
         ChangeNotifierProvider<CanvasModel>(create: (_) => canvas),
       ],
-      child: CursorPaint(id: 'cursor-test', zoomCursor: zoom.obs),
+      child: Stack(fit: StackFit.expand, children: [
+        // Measure the video's origin instead of copying its rounding policy.
+        if (canvas.parent.target!.imageModel.useTextureRender &&
+            canvas.scrollStyle == ScrollStyle.scrollauto)
+          ImagePaint(ffi: canvas.parent.target!, id: 'cursor-test',
+              zoomCursor: zoom.obs, cursorOverImage: false.obs,
+              keyboardEnabled: true.obs, remoteCursorMoved: false.obs),
+        CursorPaint(id: 'cursor-test', zoomCursor: zoom.obs),
+      ]),
     ),
-  ));
+  )));
   final painter = tester.widget<CustomPaint>(find.byType(CustomPaint)).painter!
       as ImagePainter;
   expect(painter.image, same(image));
@@ -191,7 +217,7 @@ void _linuxDisplayTests() {
               : _remotePosition);
       final pixelScale = 2 / displayScale;
       expect(painter.scale, pixelScale);
-      final origin = texture ? _canvasOffset
+      final origin = texture ? tester.getTopLeft(find.byType(Texture).first)
           : Offset((_canvasOffset.dx / pixelScale).toInt() * pixelScale,
               (_canvasOffset.dy / pixelScale).toInt() * pixelScale);
       final position = allDisplays
@@ -228,7 +254,8 @@ void main() {
           tester, _CanvasModel(style, canvasScale, texture),
           dpr: dpr, zoom: zoom, source: source, density: density);
       expect(painter.scale, scale);
-      var imageOrigin = _canvasOffset;
+      var imageOrigin = texture
+          ? tester.getTopLeft(find.byType(Texture).first) : _canvasOffset;
       if (!texture) {
         final background = _Canvas();
         ImagePainter(
