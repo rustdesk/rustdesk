@@ -19,7 +19,7 @@ options=()
 install=pacman_install
 changelog=
 noextract=()
-md5sums=('SKIP') #generate with 'makepkg -g'
+md5sums=() # no source=() entries: files are taken from $HBB, so nothing to checksum
 
 package() {
   if [[ ${FLUTTER} ]]; then
