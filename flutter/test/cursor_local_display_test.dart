@@ -173,14 +173,19 @@ Future<void> _settle(WidgetTester tester, _FFI ffi) async {
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final registrations = <Map<dynamic, dynamic>>[];
+  final activations = <String>[];
   final channel = Platform.isWindows
       ? SystemChannels.mouseCursor
       : const MethodChannel('flutter_custom_cursor');
   setUp(() {
     registrations.clear();
+    activations.clear();
     RemoteCursorMovedState.init(_id);
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
         (call) async {
+      if (call.method.startsWith('setCustomCursor')) {
+        activations.add(call.arguments['name'] as String);
+      }
       if (!call.method.startsWith('createCustomCursor')) return null;
       final args = call.arguments as Map<dynamic, dynamic>;
       registrations.add(args);
@@ -199,7 +204,7 @@ void main() {
       testWidgets(
           'mixed displays: $style DPR=$dpr $mode',
           (tester) => tester.runAsync(
-              () => _checkMovement(tester, (style, dpr, mode), registrations)));
+              () => _checkMovement(tester, (style, dpr, mode), (registrations, activations))));
     }
   }
 }
@@ -207,8 +212,9 @@ void main() {
 Future<void> _checkMovement(
     WidgetTester tester,
     (String, double, String) testCase,
-    List<Map<dynamic, dynamic>> registrations) async {
+    (List<Map<dynamic, dynamic>>, List<String>) calls) async {
   final (style, dpr, mode) = testCase;
+  final (registrations, activations) = calls;
   tester.view.devicePixelRatio = dpr;
   tester.view.physicalSize = _viewport * dpr;
   addTearDown(tester.view.reset);
@@ -220,18 +226,27 @@ Future<void> _checkMovement(
   await tester.pumpWidget(_widget(ffi, dpr));
   await _settle(tester, ffi);
   expect(registrations.last['width'], 16 * dpr);
-  await _moveToB(tester, ffi, mode);
+  await _moveToB(tester, ffi, (mode, activations));
   final args = registrations.last;
   expect((args['width'], args['height']), (32 * dpr, 32 * dpr));
   expect((args['hotX'], args['hotY']), (4 * dpr, 6 * dpr));
 }
 
-Future<void> _moveToB(WidgetTester tester, _FFI ffi, String mode) async {
+Future<void> _moveToB(WidgetTester tester, _FFI ffi, (String, List<String>) testCase) async {
+  final (mode, activations) = testCase;
   final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
   await mouse.addPointer(location: const Offset(50, 50));
+  await _settle(tester, ffi);
+  final before = activations.length;
+  for (final x in [60.0, 70.0, 80.0]) {
+    await mouse.moveTo(Offset(x, 50));
+    await _settle(tester, ffi);
+    expect(activations.length, before);
+  }
   await mouse.moveTo(
       Offset(1100 + CanvasModel.leftToEdge, 50 + CanvasModel.topToEdge));
   await _settle(tester, ffi);
+  expect(activations.length, before + 1);
   expect(ffi.mappedPosition, const Offset(2200, 100));
   expect(ffi.cursorModel.offset, const Offset(100, 100));
   if (mode == 'shape refresh') {
@@ -241,6 +256,13 @@ Future<void> _moveToB(WidgetTester tester, _FFI ffi, String mode) async {
     ffi.canvasModel.updateLocalCursor(1100, 50);
   }
   await _settle(tester, ffi);
+  final after = activations.length;
+  expect(after, before + (mode == 'shape refresh' ? 2 : 1));
+  for (final x in [1110.0, 1120.0, 1130.0]) {
+    await mouse.moveTo(Offset(x, 50));
+    await _settle(tester, ffi);
+    expect(activations.length, after);
+  }
   final displayB = tester.widgetList<Positioned>(find.byType(Positioned)).last;
   expect(displayB.width! / 1920, 0.5);
   await mouse.removePointer();
