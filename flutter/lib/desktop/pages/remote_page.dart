@@ -1411,14 +1411,14 @@ class CursorPaint extends StatelessWidget {
     final imageOffset = _softwareImageOffset(c);
     double cx = imageOffset?.dx ?? c.x;
     double cy = imageOffset?.dy ?? c.y;
-    if (c.imageOverflow.isTrue && c.scrollStyle == ScrollStyle.scrollbar) {
+    if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
       final rect = c.parent.target!.ffiModel.rect;
       if (rect == null) {
         // unreachable!
         debugPrint('unreachable! The displays rect is null.');
         return Container();
       }
-      // Pan offsets can be stale after leaving the image; scrollbars do not use them.
+      // Scrollbar and edge scrolling share a layout that ignores canvas pan offsets.
       final imageWidth = rect.width * c.scale;
       final imageHeight = rect.height * c.scale;
       // Match the integer centering in _buildCrossScrollbarFromLayout.
