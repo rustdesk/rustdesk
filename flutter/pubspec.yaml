@@ -63,7 +63,7 @@ dependencies:
   flutter_custom_cursor:
     git:
       url: https://github.com/fufesou/flutter_custom_cursor
-      ref: afa5ed638d1aa20ecba149282c21f97fdeb0e946
+      ref: b9716b9aa45c1e9790c217331a9e2ae630a33525
   window_size:
     git:
       url: https://github.com/21pages/flutter-desktop-embedding.git
