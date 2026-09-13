@@ -25,8 +25,15 @@ void main() {
   _thinCursorTests();
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final dpr in [1.0, 2.0]) {
-      testWidgets('ImagePaint Web $style zoom off DPR $dpr keeps source size',
-          (tester) => tester.runAsync(() => _checkPolicy(tester, style, dpr)));
+      for (final (platform, density) in [
+        (kPeerPlatformMacOS, null), (kPeerPlatformMacOS, 0.0),
+        (kPeerPlatformMacOS, 1.0), (kPeerPlatformMacOS, 2.0),
+        (kPeerPlatformLinux, 2.0), (kPeerPlatformWindows, 2.0),
+      ]) {
+        testWidgets('Web $style zoom off DPR $dpr $platform density=$density',
+            (tester) => tester.runAsync(() => _checkPolicy(tester, style, dpr,
+                pixelRatio: density, platform: platform)));
+      }
     }
   }
   test('Web cursor aligns CSS hotspots with rounded PNG dimensions', () async {
@@ -202,13 +209,18 @@ Map<String, dynamic> _captureCursor() {
 Future<void> _checkPolicy(WidgetTester tester, String style, double dpr,
     {bool zoom = false, (int, int) source = (48, 48),
     (double, double) hotspot = (7, 9), (int, int) expectedSize = (48, 48),
-    (int, int) expectedHotspot = (7, 9)}) async {
+    (int, int) expectedHotspot = (7, 9), double? pixelRatio = 1,
+    String platform = kPeerPlatformMacOS}) async {
   final registered = _captureCursor();
   final canvas = _Canvas(style);
   addTearDown(canvas.dispose);
   final ffi = _FFI(canvas);
-  final cursor = await _loadCursor(ffi, '$style-$dpr-$zoom-$source',
-      source: source, hotspot: hotspot);
+  ffi.ffiModel.pi.platform = platform;
+  // Retina export changes the bitmap too; varying metadata alone misses this boundary.
+  final density = platform == kPeerPlatformMacOS && pixelRatio == 2 ? 2 : 1;
+  final cursor = await _loadCursor(ffi, '$style-$dpr-$zoom-$source-$platform-$pixelRatio',
+      source: (source.$1 * density, source.$2 * density), pixelRatio: pixelRatio,
+      hotspot: (hotspot.$1 * density, hotspot.$2 * density));
   await tester.pumpWidget(MediaQuery(
     data: MediaQueryData(devicePixelRatio: dpr),
     child: MultiProvider(

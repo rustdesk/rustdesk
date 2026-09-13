@@ -1118,7 +1118,10 @@ class _ImagePaintState extends State<ImagePaint> {
                 ? cursor.cache ?? preDefaultCursor.cache
                 : preForbiddenCursor.cache;
             final peerDpr = cache?.pixelRatio ?? 0;
-            if (!isWeb && isViewScaled() && zoomCursor.isFalse && peerDpr > 0) {
+            if (isViewScaled() && zoomCursor.isFalse && peerDpr > 0 &&
+                (!isWeb || widget.ffi.ffiModel.pi.platform == kPeerPlatformMacOS)) {
+              // Retina export is physical-sized; Web must undo that change too.
+              // Other Web host bitmaps retain their existing sizing policy.
               // Adaptive/Custom scales the video, but Zoom cursor is off: preserve the
               // cursor's logical size instead of multiplying it by the canvas scale.
               // Divide by the source bitmap density to obtain logical cursor pixels.

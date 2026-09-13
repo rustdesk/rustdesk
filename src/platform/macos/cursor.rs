@@ -81,6 +81,16 @@ unsafe fn render(image: id, bitmap: id, size: NSSize) -> ResultType<()> {
 }
 
 pub(super) unsafe fn data(cursor: id, id: u64, scale: f64) -> ResultType<CursorData> {
+    // Older receivers ignore density. Keep their image logical-sized while
+    // retaining the complete physical artwork for density-aware controllers.
+    let mut legacy = physical_data(cursor, id, 1.0)?;
+    if scale > 1.0 {
+        legacy.high_resolution = Some(physical_data(cursor, id, scale)?).into();
+    }
+    Ok(legacy)
+}
+
+unsafe fn physical_data(cursor: id, id: u64, scale: f64) -> ResultType<CursorData> {
     let image: id = msg_send![cursor, image];
     let logical: NSSize = msg_send![image, size];
     let size = NSSize::new(
@@ -143,6 +153,9 @@ fn straight_rgba(pixels: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
+mod compat_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use objc::rc::autoreleasepool;
@@ -184,7 +197,7 @@ mod tests {
             let cursor = StrongPtr::new(
                 msg_send![cursor, initWithImage: *image hotSpot: NSPoint::new(4.0, 9.0)],
             );
-            let result = data(*cursor, 1, 2.0).unwrap();
+            let result = physical_data(*cursor, 1, 2.0).unwrap();
             assert_eq!(
                 (result.width, result.height, result.hotx, result.hoty),
                 (18, 36, 8, 18)
@@ -206,7 +219,7 @@ mod tests {
                 initWithImage: image hotSpot: NSPoint::new(point.0, point.1)]);
             let actual: NSPoint = msg_send![*c, hotSpot];
             assert_eq!((actual.x, actual.y), point);
-            let result = data(*c, 1, 2.0).unwrap();
+            let result = physical_data(*c, 1, 2.0).unwrap();
             assert_eq!((result.hotx, result.hoty), pixels);
             assert_eq!(result.colors.as_ref(), expected);
         }
@@ -244,7 +257,7 @@ mod tests {
             let cursor = StrongPtr::new(
                 msg_send![cursor, initWithImage: *image hotSpot: NSPoint::new(1.0, 1.0)],
             );
-            let result = data(*cursor, 1, SCALE).unwrap();
+            let result = physical_data(*cursor, 1, SCALE).unwrap();
             // Older Sciter receivers encode the received bytes directly as PNG.
             let mut png = Vec::new();
             repng::encode(
