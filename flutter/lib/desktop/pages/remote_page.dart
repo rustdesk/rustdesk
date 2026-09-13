@@ -1129,8 +1129,9 @@ class _ImagePaintState extends State<ImagePaint> {
               // buildCursorOfCache() converts it back to logical scale for the plugin.
               return (isWindows ? dpr : 1.0) / peerDpr;
             }
-            // Density metadata is optional. Keep the legacy path for hosts that
-            // omit it so capture-backend upgrades are not a client prerequisite.
+            // Without density, keep the legacy unzoomed scale of 1. Dividing by
+            // controller DPR would also trigger the legacy short-edge minimum,
+            // enlarging thin artwork that previously needed no resizing.
             final imageScale = isViewScaled() && zoomCursor.isTrue
                 ? _cursorImageScale(widget.ffi, cursor, useLocalPointer: true)
                 : s;
@@ -1143,12 +1144,6 @@ class _ImagePaintState extends State<ImagePaint> {
             } else {
               if (zoomCursor.value || isViewOriginal()) {
                 cursorScale = imageScale;
-              } else if (!isWeb) {
-                // NSCursor and GdkCursor treat the bitmap size as logical
-                // pixels, so an unzoomed cursor must be shrunk by the DPR to
-                // keep 1 remote px == 1 physical px, the size Original view
-                // already renders it at.
-                cursorScale = 1.0 / dpr;
               }
             }
             return cursorScale;

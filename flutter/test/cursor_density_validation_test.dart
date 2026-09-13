@@ -101,12 +101,35 @@ void main() {
   });
   tearDown(() =>
       binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+  _legacySizingTests(registrations);
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final density in ['0', '1', '2', '1e-300', '0.001']) {
       testWidgets(
           'density boundary $style density=$density',
           (tester) => tester.runAsync(
               () => checkDensity(tester, (style, density), registrations)));
+    }
+  }
+}
+
+void _legacySizingTests(List<Map<dynamic, dynamic>> registrations) {
+  for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
+    for (final density in [null, '0']) {
+      for (final (width, height, dpr) in [
+        (4, 32, 1.0),
+        (4, 32, 2.0),
+        (9, 18, 1.0),
+        (9, 18, 2.0),
+        (32, 32, 1.0),
+        (32, 32, 2.0),
+      ]) {
+        testWidgets(
+            'legacy $style density=$density ${width}x$height DPR=$dpr',
+            (tester) => tester.runAsync(() => checkDensity(
+                tester, (style, density), registrations,
+                sourceSize: Size(width.toDouble(), height.toDouble()),
+                dpr: dpr)));
+      }
     }
   }
 }
@@ -146,13 +169,14 @@ void _rasterBoundsTests() {
   }
 }
 
-Future<void> checkDensity(WidgetTester tester, (String, String) input,
-    List<Map<dynamic, dynamic>> registrations) async {
+Future<void> checkDensity(WidgetTester tester, (String, String?) input,
+    List<Map<dynamic, dynamic>> registrations,
+    {Size sourceSize = const Size(32, 32), double dpr = 1}) async {
   final (style, density) = input;
   final id = '$style-$density';
-  tester.view.devicePixelRatio = 1;
+  tester.view.devicePixelRatio = dpr;
   addTearDown(tester.view.resetDevicePixelRatio);
-  final canvas = _Canvas(1, style: style, scale: 0.5);
+  final canvas = _Canvas(dpr, style: style, scale: 0.5);
   final ffi = _FFI(canvas)..ffiModel.pi.platform = kPeerPlatformMacOS;
   final cursor = CursorModel(WeakReference(ffi))..id = id;
   addTearDown(() async {
@@ -164,20 +188,35 @@ Future<void> checkDensity(WidgetTester tester, (String, String) input,
     cursor.dispose();
     canvas.dispose();
   });
-  await cursor.updateCursorData(_cursorEvent(id, density));
+  await cursor.updateCursorData(_cursorEvent(id, density, size: sourceSize));
   final rejected = density == '1e-300' || density == '0.001';
   if (rejected) {
     expect(cursor.cache, isNull,
         reason: 'Reject density before publishing a cursor');
     await cursor.updateCursorData(_cursorEvent(id, '2'));
   }
-  expect(cursor.cache!.pixelRatio, rejected ? 2 : double.parse(density));
+  expect(cursor.cache!.pixelRatio, rejected ? 2 : double.parse(density ?? '0'));
+  await _paintCursor(tester, ffi, cursor);
+  expect(tester.takeException(), isNull);
+  for (final key in cursor.cachedKeys) {
+    await CursorManager.instance.ensureCursorRegistered(key);
+  }
+  expect(registrations, hasLength(1));
+  await tester.pumpWidget(const SizedBox.shrink());
+  if (density == null || density == '0') {
+    expect(cursor.cache!.scale, 1.0);
+    _expectLegacyRaster(registrations.single, sourceSize, dpr);
+  }
+}
+
+Future<void> _paintCursor(
+    WidgetTester tester, _FFI ffi, CursorModel cursor) async {
   await tester.pumpWidget(MediaQuery(
-    data: const MediaQueryData(devicePixelRatio: 1),
+    data: MediaQueryData(devicePixelRatio: ffi.canvasModel.devicePixelRatio),
     child: MultiProvider(
         providers: [
           ChangeNotifierProvider<ImageModel>(create: (_) => _Image()),
-          ChangeNotifierProvider<CanvasModel>.value(value: canvas),
+          ChangeNotifierProvider<CanvasModel>.value(value: ffi.canvasModel),
           ChangeNotifierProvider<CursorModel>.value(value: cursor),
         ],
         child: ImagePaint(
@@ -188,20 +227,41 @@ Future<void> checkDensity(WidgetTester tester, (String, String) input,
             keyboardEnabled: true.obs,
             remoteCursorMoved: false.obs)),
   ));
-  expect(tester.takeException(), isNull);
-  for (final key in cursor.cachedKeys) {
-    await CursorManager.instance.ensureCursorRegistered(key);
-  }
-  expect(registrations, hasLength(1));
-  await tester.pumpWidget(const SizedBox.shrink());
 }
 
-Map<String, String> _cursorEvent(String id, String density) => {
+void _expectLegacyRaster(Map<dynamic, dynamic> args, Size size, double dpr) {
+  // Base unzoomed sizing is logical on macOS/GTK, physical on Windows.
+  final rasterScale = common.isWindows ? 1.0 : dpr;
+  final width = (size.width * rasterScale).toInt();
+  final height = (size.height * rasterScale).toInt();
+  final bufferWidth = common.isLinux ? size.longestSide * rasterScale : width;
+  expect((args['width'], args['height']), (bufferWidth, height));
+  expect((args['hotX'], args['hotY']),
+      ((size.width ~/ 2) * rasterScale, (size.height ~/ 2) * rasterScale));
+  expect(args['imagePixelRatio'], dpr);
+  final bytes = args['buffer'] as Uint8List;
+  final decoded = common.isWindows
+      ? img.Image.fromBytes(
+          width: width,
+          height: height,
+          bytes: bytes.buffer,
+          bytesOffset: bytes.offsetInBytes,
+          order: img.ChannelOrder.bgra)
+      : img.decodePng(bytes)!;
+  expect((decoded.width, decoded.height), (bufferWidth, height));
+  expect(decoded.getPixel(width - 1, height - 1).a, 255);
+  if (bufferWidth > width) expect(decoded.getPixel(width, 0).a, 0);
+}
+
+Map<String, String> _cursorEvent(String id, String? density,
+        {Size size = const Size(32, 32)}) =>
+    {
       'id': id,
-      'width': '32',
-      'height': '32',
-      'hotx': '8',
-      'hoty': '12',
-      'scale': density,
-      'colors': jsonEncode(List<int>.filled(32 * 32 * 4, 255)),
+      'width': '${size.width.toInt()}',
+      'height': '${size.height.toInt()}',
+      'hotx': '${size.width ~/ 2}',
+      'hoty': '${size.height ~/ 2}',
+      if (density != null) 'scale': density,
+      'colors': jsonEncode(
+          List<int>.filled((size.width * size.height * 4).toInt(), 255)),
     };

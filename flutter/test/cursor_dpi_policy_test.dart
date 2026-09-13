@@ -151,8 +151,8 @@ void main() {
     });
   }
   for (final testCase in [
-    (kRemoteViewStyleAdaptive, false, 0, 0.25, windows ? 1.0 : 4 / 3),
-    (kRemoteViewStyleCustom, false, 0, 0.25, windows ? 1.0 : 4 / 3),
+    (kRemoteViewStyleAdaptive, false, 0, 0.25, 1.0),
+    (kRemoteViewStyleCustom, false, 0, 0.25, 1.0),
     (kRemoteViewStyleAdaptive, false, 1, 0.25, windows ? 2.0 : 1.0),
     (kRemoteViewStyleAdaptive, false, 2, 0.25, windows ? 1.0 : 0.5),
     (kRemoteViewStyleCustom, false, 2, 0.25, windows ? 1.0 : 0.5),
@@ -231,7 +231,8 @@ Future<void> _checkPolicy(
   if (revoke) {
     final args = registrations.last;
     expect(args['name'], contains('_${kPreForbiddenCursorId}_'));
-    expect((args['width'], args['height']), (32, 32));
+    final rasterSize = 32 * (Platform.isWindows ? 1 : dpr);
+    expect((args['width'], args['height']), (rasterSize, rasterSize));
     expect((args['hotX'], args['hotY']), (0.0, 0.0));
   }
   if (style == kRemoteViewStyleAdaptive && !zoom && density > 0) {
