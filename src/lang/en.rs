@@ -278,5 +278,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("sync-clipboard-between-sessions-tip", "Text or images copied in one remote session are also sent to the clipboard of your other connected sessions."),
         ("terminal-clipboard-write-tip", "An app in the terminal wants to copy text to this device's clipboard. If granted, this permission applies to terminal apps in all connections until you turn it off in Settings. Manual copy and paste are unaffected."),
         ("port-forward-mux-tip", "Carry every connection of a port-forward mapping over a single connection to the peer, instead of connecting and logging in again for each one."),
+        ("relay-fallback-delay-tip", "How long a relay connection that is already up waits for the direct WebRTC connection before it is used instead. Raise it to give a slow direct connection more time to win; lower it to settle on the relay sooner on networks where a direct connection cannot be made. Leave empty for the default of 2.5 seconds."),
     ].iter().cloned().collect();
 }

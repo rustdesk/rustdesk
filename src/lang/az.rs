@@ -770,5 +770,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Port yönləndirmə xəritələnməsinin hər əlaqəsini qarşı tərəfə açılan tək əlaqə üzərindən daşıyır, hər biri üçün yenidən qoşulub giriş etmək əvəzinə."),
         ("Enable WebRTC P2P connection", "WebRTC P2P əlaqəsini aktivləşdir"),
         ("Enable TCP hole punching", "TCP deşik açmanı aktivləşdir"),
+        ("Relay fallback delay in seconds", "Ötürücüyə keçid gecikməsi, saniyə"),
+        ("relay-fallback-delay-tip", "Artıq qurulmuş ötürücü bağlantı birbaşa WebRTC bağlantısını nə qədər gözləyir, sonra onun əvəzinə istifadə olunur. Yavaş birbaşa bağlantıya daha çox vaxt vermək üçün artırın; birbaşa bağlantının mümkün olmadığı şəbəkələrdə ötürücüyə daha tez keçmək üçün azaldın. Standart 2.5 saniyə üçün boş buraxın."),
     ].iter().cloned().collect();
 }

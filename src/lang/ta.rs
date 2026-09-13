@@ -778,5 +778,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "தொலைநிலை சாதனத்தில் திரை பகிர்வு கோரிக்கை நிறைவடையாமல் முடிந்தது"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "XDG Desktop Portal-லிருந்து பயன்படுத்தக்கூடிய திரையை RustDesk பெற முடியவில்லை, PipeWire நூலகம் மிகவும் பழையதாக இருக்கலாம்"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "திரைப் பதிவுக்குத் தேவையான GStreamer கூறை RustDesk ஏற்ற முடியவில்லை ({})"),
+        ("Relay fallback delay in seconds", "ரிலேக்கு மாறுவதற்கான தாமதம் வினாடிகளில்"),
+        ("relay-fallback-delay-tip", "ஏற்கனவே நிறுவப்பட்ட ரிலே இணைப்பு நேரடி WebRTC இணைப்புக்காக எவ்வளவு நேரம் காத்திருக்கிறது, அதன் பிறகு அதற்குப் பதிலாகப் பயன்படுத்தப்படுகிறது. மெதுவான நேரடி இணைப்புக்கு அதிக நேரம் வழங்க அதிகரிக்கவும்; நேரடி இணைப்பு சாத்தியமில்லாத பிணையங்களில் விரைவாக ரிலேக்கு மாற குறைக்கவும். இயல்புநிலை 2.5 வினாடிகளுக்கு காலியாக விடவும்."),
     ].iter().cloned().collect();
 }
