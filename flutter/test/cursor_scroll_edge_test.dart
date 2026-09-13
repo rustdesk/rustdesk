@@ -47,7 +47,7 @@ class _Texture extends Fake implements TextureModel {
 }
 
 class _ScrollCanvas extends CanvasModel {
-  _ScrollCanvas(FFI ffi, String style)
+  _ScrollCanvas(FFI ffi, String style, this.scrollStyle)
       : viewStyle = ViewStyle(
             style: style,
             width: _viewport.width,
@@ -69,7 +69,7 @@ class _ScrollCanvas extends CanvasModel {
   @override
   double get y => (size.height - getDisplayHeight() * scale) / 2;
   @override
-  ScrollStyle get scrollStyle => ScrollStyle.scrolledge;
+  final ScrollStyle scrollStyle;
   @override
   final ViewStyle viewStyle;
 
@@ -100,10 +100,10 @@ class _Cursor extends CursorModel {
 
 class _FFI extends Fake implements FFI {
   _FFI(ui.Image frame, ui.Image cursor,
-      {required bool texture, required String style, required Offset position})
+      {required bool texture, required (String, ScrollStyle) style, required Offset position})
       : ffiModel = _Peer(frame) {
     imageModel = _Image(this, frame, texture);
-    canvasModel = _ScrollCanvas(this, style);
+    canvasModel = _ScrollCanvas(this, style.$1, style.$2);
     cursorModel = _Cursor(this, cursor, position);
   }
   @override
@@ -131,7 +131,9 @@ class _Draw extends Fake implements Canvas {
 }
 
 void main() {
-  for (final style in [kRemoteViewStyleOriginal, kRemoteViewStyleCustom]) {
+  for (final style in [(kRemoteViewStyleOriginal, ScrollStyle.scrolledge),
+    (kRemoteViewStyleCustom, ScrollStyle.scrolledge),
+    (kRemoteViewStyleCustom, ScrollStyle.scrollbar)]) {
     for (final texture in [false, true]) {
       for (final (frame, dpr) in [
         (const Size(199, 320), 1.0),
@@ -140,13 +142,13 @@ void main() {
         (const Size(400, 158), 1.0),
       ]) {
         testWidgets(
-            'ScrollEdge $style texture=$texture frame=$frame DPR=$dpr',
+            'Scroll $style texture=$texture frame=$frame DPR=$dpr',
             (tester) => tester
                 .runAsync(() => _check(tester, (style, texture, frame, dpr))));
       }
       for (final refreshBeforeLayout in [true, false]) {
         testWidgets(
-            'ScrollEdge relayout $style texture=$texture early=$refreshBeforeLayout',
+            'Scroll relayout $style texture=$texture early=$refreshBeforeLayout',
             (tester) => tester.runAsync(() =>
                 _checkRelayout(tester, (style, texture, refreshBeforeLayout))));
       }
@@ -155,7 +157,7 @@ void main() {
 }
 
 Future<void> _check(
-    WidgetTester tester, (String, bool, Size, double) testCase) async {
+    WidgetTester tester, ((String, ScrollStyle), bool, Size, double) testCase) async {
   final (style, texture, frame, dpr) = testCase;
   tester.view.devicePixelRatio = dpr;
   tester.view.physicalSize = _viewport * dpr;
@@ -195,7 +197,7 @@ Future<void> _check(
 }
 
 Future<void> _checkRelayout(
-    WidgetTester tester, (String, bool, bool) testCase) async {
+    WidgetTester tester, ((String, ScrollStyle), bool, bool) testCase) async {
   final (style, texture, refreshBeforeLayout) = testCase;
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = _viewport;

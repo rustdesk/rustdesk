@@ -2702,7 +2702,7 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateEdgeScrollAfterLayout((double, double) renderedScroll) {
+  void updateScrollAfterLayout((double, double) renderedScroll) {
     updateScrollPercent();
     // A delayed refresh may already have changed the model without repainting.
     if (renderedScroll != (_scrollX, _scrollY)) {

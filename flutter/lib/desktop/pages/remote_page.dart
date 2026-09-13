@@ -1173,7 +1173,7 @@ class _ImagePaintState extends State<ImagePaint> {
               child: child);
         });
     if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
-      _syncEdgeScrollAfterLayout(c);
+      _syncScrollAfterLayout(c);
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
@@ -1218,13 +1218,15 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
-  void _syncEdgeScrollAfterLayout(CanvasModel canvas) {
-    if (canvas.scrollStyle != ScrollStyle.scrolledge) return;
+  void _syncScrollAfterLayout(CanvasModel canvas) {
+    // Custom scrollbars also paint from scroll fractions; preserve Original's path.
+    if (canvas.scrollStyle != ScrollStyle.scrolledge &&
+        canvas.viewStyle.style != kRemoteViewStyleCustom) return;
     final renderedScroll = (canvas.scrollX, canvas.scrollY);
     // Relayout can clamp or detach scroll positions without a scroll event.
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      canvas.updateEdgeScrollAfterLayout(renderedScroll);
+      canvas.updateScrollAfterLayout(renderedScroll);
     });
   }
 
