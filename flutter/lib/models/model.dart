@@ -333,7 +333,12 @@ class FfiModel with ChangeNotifier {
   }
 
   // todo: why called by two position
-  StreamEventHandler startEventListener(SessionID sessionId, String peerId) {
+  /// [isStale] reports whether the session this listener was created for has
+  /// been closed or restarted; asynchronous handlers re-check it after every
+  /// `await` so that a handler resumed for an old session does not touch the
+  /// state of a new one.
+  StreamEventHandler startEventListener(SessionID sessionId, String peerId,
+      {bool Function()? isStale}) {
     return (evt) async {
       var name = evt['name'];
       if (name == 'msgbox') {
@@ -345,7 +350,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'peer_info') {
         // Events are processed sequentially; finish applying the peer info
         // before the next queued event is handled.
-        await handlePeerInfo(evt, peerId, false);
+        await handlePeerInfo(evt, peerId, false, isStale: isStale);
       } else if (name == 'sync_peer_info') {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
@@ -1343,7 +1348,8 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Handle the peer info event based on [evt].
-  handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache) async {
+  handlePeerInfo(Map<String, dynamic> evt, String peerId, bool isCache,
+      {bool Function()? isStale}) async {
     parent.target?.chatModel.voiceCallStatus.value = VoiceCallStatus.notStarted;
 
     _queryAuditGuid(peerId);
@@ -1409,6 +1415,8 @@ class FfiModel with ChangeNotifier {
       } else {
         final optSession = await bind.sessionGetOption(
             sessionId: sessionId, arg: kOptionTouchMode);
+        // The session may have been closed or restarted while awaiting.
+        if (isStale?.call() ?? false) return;
         _touchMode = optSession != '';
       }
     }
@@ -3931,17 +3939,19 @@ class FFI {
       return;
     }
 
-    final cb = ffiModel.startEventListener(sessionId, id);
+    final generation = ++_startGeneration;
+    bool isStale() => closed || generation != _startGeneration;
+    final cb = ffiModel.startEventListener(sessionId, id, isStale: isStale);
 
     imageModel.updateUserTextureRender();
     final hasGpuTextureRender = bind.mainHasGpuTextureRender();
     final SimpleWrapper<bool> isToNewWindowNotified = SimpleWrapper(false);
     // Preserved for the rgba data.
     _eventSubscription?.cancel();
-    final generation = ++_startGeneration;
-    // Drop whatever a previous session left in the queue.
+    // Drop whatever a previous session left in the queue. Callbacks that are
+    // already running keep going, but every one of them re-checks `isStale()`
+    // after each await and stops touching the models once it is true.
     _eventQueue = Future.value();
-    bool isStale() => closed || generation != _startGeneration;
     _eventSubscription = stream.listen((message) {
       if (isStale()) return;
       if (tabWindowId != null && !isToNewWindowNotified.value) {
@@ -3952,6 +3962,7 @@ class FFI {
           final args = jsonEncode({'id': id, 'close': display == null});
           final cachedData = await DesktopMultiWindow.invokeMethod(
               tabWindowId, kWindowEventGetCachedSessionData, args);
+          if (isStale()) return;
           if (cachedData == null) {
             // unreachable
             debugPrint('Unreachable, the cached data is empty.');
@@ -3964,7 +3975,9 @@ class FFI {
           }
           ffiModel.setPermissions(data.permissions);
           await ffiModel.handleCachedPeerData(data, id);
+          if (isStale()) return;
           await sessionRefreshVideo(sessionId, ffiModel.pi);
+          if (isStale()) return;
           await bind.sessionRequestNewDisplayInitMsgs(
               sessionId: sessionId, display: ffiModel.pi.currentDisplay);
         });
@@ -3999,6 +4012,7 @@ class FFI {
           final rgba = platformFFI.getRgba(sessionId, display, sz);
           if (rgba != null) {
             onEvent2UIRgba();
+            if (isStale()) return;
             await imageModel.onRgba(display, rgba);
           } else {
             platformFFI.nextRgba(sessionId, display);
