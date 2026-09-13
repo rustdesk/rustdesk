@@ -95,6 +95,10 @@ pub use super::lang::*;
 
 #[cfg(not(target_os = "linux"))]
 mod audio_playback;
+#[cfg(target_os = "windows")]
+mod audio_playback_recovery;
+#[cfg(all(test, target_os = "windows"))]
+mod audio_playback_recovery_tests;
 #[cfg(all(test, not(target_os = "linux")))]
 mod audio_state_tests;
 pub mod file_trait;
@@ -2083,6 +2087,8 @@ pub struct AudioHandler {
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
     playback_status: Arc<audio_playback::AudioPlaybackStatus>,
+    #[cfg(target_os = "windows")]
+    playback_recovery: audio_playback_recovery::PlaybackRecovery,
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2388,22 +2394,53 @@ impl AudioHandler {
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
+        self.handle_format_with_start(f, Self::start_audio);
+    }
+
+    fn handle_format_with_start(
+        &mut self,
+        f: AudioFormat,
+        start: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
+    ) {
         if !is_supported_audio_channel_count(f.channels) {
             log::error!("Unsupported audio channel count: {}", f.channels);
             return;
         }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
+                #[cfg(target_os = "windows")]
+                let playback_failed = self.cancel_pending_playback();
                 #[cfg(target_os = "linux")]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
                 #[cfg(not(target_os = "linux"))]
-                let keep_existing_stream = false;
+                let keep_existing_stream = self.audio_stream.is_some()
+                    && self.sample_rate.0 == f.sample_rate
+                    && u32::from(self.channels) == f.channels;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
+                #[cfg(not(target_os = "linux"))]
+                let mut previous = std::mem::take(self);
+                #[cfg(target_os = "windows")]
+                self.prepare_playback(&f);
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
-                let result = self.start_audio(f);
+                let result = start(self, f);
+                #[cfg(target_os = "windows")]
+                let keep_existing_stream = keep_existing_stream
+                    && !playback_failed
+                    && !previous.playback_recovery.report_pending();
+                #[cfg(not(target_os = "linux"))]
+                if result.is_err() && keep_existing_stream {
+                    // The restarted capture has new Opus history even when output startup fails.
+                    previous.audio_decoder = self.audio_decoder.take();
+                    *self = previous;
+                    self.handle_audio_start_result(result, true);
+                    return;
+                }
+                #[cfg(target_os = "windows")]
+                self.finish_playback_replacement(result, keep_existing_stream.then_some(previous));
+                #[cfg(not(target_os = "windows"))]
                 self.handle_audio_start_result(result, keep_existing_stream);
             }
             Err(err) => {
@@ -2491,6 +2528,9 @@ impl AudioHandler {
         device: &Device,
     ) -> ResultType<()> {
         self.device_channel = config.channels;
+        #[cfg(target_os = "windows")]
+        let err_fn = self.playback_recovery.new_error_callback();
+        #[cfg(not(target_os = "windows"))]
         let err_fn = move |err| {
             // too many errors, will improve later
             log::trace!("an error occurred on stream: {}", err);
@@ -4063,7 +4103,11 @@ pub fn start_audio_thread() -> MediaSender {
     std::thread::spawn(move || {
         let mut audio_handler = AudioHandler::default();
         loop {
-            if let Ok(data) = audio_receiver.recv() {
+            #[cfg(target_os = "windows")]
+            let received = audio_handler.receive_audio(&audio_receiver);
+            #[cfg(not(target_os = "windows"))]
+            let received = audio_receiver.recv();
+            if let Ok(data) = received {
                 match data {
                     MediaData::AudioFrame(af) => {
                         audio_handler.handle_frame(*af);

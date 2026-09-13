@@ -387,6 +387,15 @@ mod cpal_impl {
         if !audio_input.is_empty() {
             return get_audio_input(&audio_input);
         }
+        // The pinned CPAL uses event-driven WASAPI loopback here. Windows versions
+        // before Windows 10 1703 do not signal capture events, so system audio does
+        // not work on Win7. #16095 kept the same CPAL revision and loopback path;
+        // this limitation predates that PR.
+        // Ordinary microphone input is supported on Win7 and uses the branch above.
+        // #16095 added its callback-to-encoder wake dependency; see CapturePcmSender::wake
+        // for the new scheduling risk, whose audible impact on Win7 is unmeasured.
+        // https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording
+        // https://learn.microsoft.com/en-us/windows/win32/coreaudio/capturesharedeventdriven
         let device = HOST
             .default_output_device()
             .with_context(|| "Failed to get default output device for loopback")?;
