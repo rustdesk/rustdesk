@@ -248,15 +248,21 @@ pub fn wayland_failure_stamped() -> bool {
     LAST_FAILED_LOOKUP.lock().unwrap().is_some()
 }
 
-/// Cursor polls must neither start discovery nor wait for an in-progress display refresh.
 #[cfg(feature = "drm")]
-pub fn get_cached_displays() -> Option<Arc<Displays>> {
+pub enum CachedDisplays {
+    Busy,
+    Ready(Option<Arc<Displays>>),
+}
+
+/// Cursor polls must neither wait for discovery nor mistake contention for missing metadata.
+#[cfg(feature = "drm")]
+pub fn get_cached_displays() -> CachedDisplays {
     match DISPLAYS.try_lock() {
-        Ok(cache) => cache.clone(),
-        Err(std::sync::TryLockError::WouldBlock) => None,
+        Ok(cache) => CachedDisplays::Ready(cache.clone()),
+        Err(std::sync::TryLockError::WouldBlock) => CachedDisplays::Busy,
         Err(err) => {
             warn!("Failed to read cached Wayland displays: {}", err);
-            None
+            CachedDisplays::Ready(None)
         }
     }
 }
@@ -535,7 +541,8 @@ mod tests {
         let cache = DISPLAYS.lock().unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let reader = std::thread::spawn(move || {
-            tx.send(get_cached_displays().is_none()).unwrap();
+            tx.send(matches!(get_cached_displays(), CachedDisplays::Busy))
+                .unwrap();
         });
         // Discovery owns this lock until it completes or times out.
         let result = rx.recv_timeout(Duration::from_secs(1));
@@ -545,7 +552,7 @@ mod tests {
 
         clear_wayland_displays_cache();
         for _ in 0..100 {
-            assert!(get_cached_displays().is_none());
+            assert!(matches!(get_cached_displays(), CachedDisplays::Ready(None)));
         }
     }
 

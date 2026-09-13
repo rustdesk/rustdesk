@@ -14,6 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "flutter")]
+mod cursor_metadata;
+
 const HANDSHAKE_TIMEOUT_MS: u64 = 3000;
 const DRM_CONNECT_TIMEOUT_MS: u64 = 1000;
 /// The service may hold the list back while it wakes sleeping displays: ~3.6s (DRM_WAKE_*).
@@ -978,30 +981,40 @@ pub fn drm_cursor() -> Option<DrmCursorData> {
 pub fn drm_cursor_snapshot<T>(
     f: impl Fn(&DrmCursorData) -> T,
 ) -> Option<(T, Option<base::platform::linux::WaylandDisplayInfo>)> {
+    use scrap::wayland::display::{get_cached_displays, wayland_snapshot_generation};
+
     // Keep cursor identity and output together, then release the map before DRM_STATE.
-    let (value, display, hidden) = {
+    let (value, display, epoch, hidden) = {
         let map = DRM_CURSOR.lock().unwrap();
-        let (display, (_, cursor)) = map
+        let (display, (epoch, cursor)) = map
             .iter()
             .find(|(_, (_, cursor))| cursor.id != scrap::drm_reader::HIDDEN_CURSOR_ID)
             .or_else(|| map.iter().next())?;
         (
             f(cursor),
             *display,
+            *epoch,
             cursor.id == scrap::drm_reader::HIDDEN_CURSOR_ID,
         )
     };
     let monitor = if hidden {
         None
     } else {
-        // Display discovery runs outside the cursor service; missing metadata means unknown DPI.
-        scrap::wayland::display::get_cached_displays().and_then(|wayland| {
-            cursor_monitor(
-                display.max(0) as usize,
-                &DRM_STATE.lock().unwrap(),
-                &wayland.displays,
-            )
-        })
+        cursor_metadata::monitor(
+            cursor_metadata::Context {
+                display,
+                epoch,
+                layout_generation: wayland_snapshot_generation(),
+            },
+            get_cached_displays(),
+            |wayland| {
+                cursor_monitor(
+                    display.max(0) as usize,
+                    &DRM_STATE.lock().unwrap(),
+                    &wayland.displays,
+                )
+            },
+        )
     };
     Some((value, monitor))
 }
