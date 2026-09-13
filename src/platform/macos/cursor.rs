@@ -110,8 +110,13 @@ pub(super) unsafe fn data(cursor: id, id: u64, scale: f64) -> ResultType<CursorD
     Ok(CursorData {
         id,
         colors: straight_rgba(slice::from_raw_parts(pixels, length)).into(),
-        hotx: (hotspot.x * size.width / logical.width).round() as _,
-        hoty: (hotspot.y * size.height / logical.height).round() as _,
+        // A valid fractional hotspot near an edge can round past the last pixel.
+        hotx: (hotspot.x * size.width / logical.width)
+            .round()
+            .min(size.width - 1.0) as _,
+        hoty: (hotspot.y * size.height / logical.height)
+            .round()
+            .min(size.height - 1.0) as _,
         width: size.width as _,
         height: size.height as _,
         scale,
@@ -185,7 +190,26 @@ mod tests {
                 (18, 36, 8, 18)
             );
             assert_eq!(result.colors.as_ref(), expected.as_slice());
+            assert_retina_hotspots(*image, &expected);
         });
+    }
+
+    unsafe fn assert_retina_hotspots(image: id, expected: &[u8]) {
+        for (point, pixels) in [
+            ((8.8, 17.8), (17, 35)),
+            ((8.8, 9.0), (17, 18)),
+            ((4.0, 17.8), (8, 35)),
+            ((0.0, 0.0), (0, 0)),
+        ] {
+            let c: id = msg_send![class!(NSCursor), alloc];
+            let c = StrongPtr::new(msg_send![c,
+                initWithImage: image hotSpot: NSPoint::new(point.0, point.1)]);
+            let actual: NSPoint = msg_send![*c, hotSpot];
+            assert_eq!((actual.x, actual.y), point);
+            let result = data(*c, 1, 2.0).unwrap();
+            assert_eq!((result.hotx, result.hoty), pixels);
+            assert_eq!(result.colors.as_ref(), expected);
+        }
     }
 
     #[test]
