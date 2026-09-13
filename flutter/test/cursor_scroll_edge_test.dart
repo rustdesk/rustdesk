@@ -58,12 +58,29 @@ class _ScrollCanvas extends CanvasModel {
     resetOffset();
     imageOverflow.value = true;
   }
+  Size viewport = _viewport;
+  double imageScale = 1;
   @override
-  Size get size => _viewport;
+  Size get size => viewport;
+  @override
+  double get scale => imageScale;
+  @override
+  double get x => (size.width - getDisplayWidth() * scale) / 2;
+  @override
+  double get y => (size.height - getDisplayHeight() * scale) / 2;
   @override
   ScrollStyle get scrollStyle => ScrollStyle.scrolledge;
   @override
   final ViewStyle viewStyle;
+
+  void relayout(Size viewport, double dpr) {
+    this.viewport = viewport;
+    imageScale = 1 / dpr;
+    imageOverflow.value = viewport.width < getDisplayWidth() * scale ||
+        viewport.height < getDisplayHeight() * scale;
+    setScrollPercent(0, 0);
+    notifyListeners();
+  }
 }
 
 class _Cursor extends CursorModel {
@@ -127,6 +144,12 @@ void main() {
             (tester) => tester
                 .runAsync(() => _check(tester, (style, texture, frame, dpr))));
       }
+      for (final refreshBeforeLayout in [true, false]) {
+        testWidgets(
+            'ScrollEdge relayout $style texture=$texture early=$refreshBeforeLayout',
+            (tester) => tester.runAsync(() =>
+                _checkRelayout(tester, (style, texture, refreshBeforeLayout))));
+      }
     }
   }
 }
@@ -166,18 +189,81 @@ Future<void> _check(
     expect(vertical ? ffi.canvasModel.scrollY : ffi.canvasModel.scrollX,
         closeTo(scrolling.offset / (vertical ? frame.height : frame.width), 1e-9));
     await tester.pump();
-    final painter =
-        tester.widget<CustomPaint>(_paintOf(cursor)).painter! as ImagePainter;
-    final output = _Draw();
-    painter.paint(output, _viewport);
-    final hotspot = tester.getTopLeft(_paintOf(cursor)) +
-        output.position! +
-        _hotspot * output.factor;
-    final target = tester.getTopLeft(videoWidget) + pointer;
-    expect(hotspot.dx, closeTo(target.dx, 1e-9));
-    expect(hotspot.dy, closeTo(target.dy, 1e-9));
+    _expectAlignment(tester, ffi, videoWidget);
   }
   await tester.pumpWidget(const SizedBox.shrink());
+}
+
+Future<void> _checkRelayout(
+    WidgetTester tester, (String, bool, bool) testCase) async {
+  final (style, texture, refreshBeforeLayout) = testCase;
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = _viewport;
+  addTearDown(tester.view.reset);
+  final video = await createTestImage(width: 400, height: 320);
+  final cursor = await createTestImage(width: 48, height: 64);
+  final ffi = _FFI(video, cursor,
+      texture: texture, style: style, position: const Offset(150.25, 120.75));
+  final canvas = ffi.canvasModel as _ScrollCanvas;
+  addTearDown(() {
+    canvas.scrollHorizontal.dispose();
+    canvas.scrollVertical.dispose();
+    canvas.dispose();
+    ffi.imageModel.dispose();
+    ffi.cursorModel.dispose();
+    video.dispose();
+    cursor.dispose();
+  });
+  await _mount(tester, ffi, 1);
+  canvas.performEdgeScroll(Vector2(20, 20));
+  await tester.pump();
+  final videoWidget = texture ? find.byType(Texture) : _paintOf(video);
+  _expectAlignment(tester, ffi, videoWidget);
+  for (final (viewport, dpr) in [
+    (const Size(160, 120), 2.0),
+    (const Size(195, 155), 2.0), // Clamp both existing scroll positions.
+    (const Size(240, 155), 2.0), // Detach the horizontal scroll controller.
+    (const Size(240, 200), 2.0), // No scrolling remains.
+    (_viewport, 1.0),
+  ]) {
+    tester.view.devicePixelRatio = dpr;
+    tester.view.physicalSize = viewport * dpr;
+    canvas.relayout(viewport, dpr);
+    // A settings refresh may run before layout or after the first cursor build.
+    if (refreshBeforeLayout) {
+      canvas.updateScrollPercent();
+    } else {
+      tester.binding.addPostFrameCallback((_) => canvas.updateScrollPercent());
+    }
+    await _mount(tester, ffi, dpr);
+    await tester.pumpAndSettle(const Duration(milliseconds: 16),
+        EnginePhase.sendSemanticsUpdate, const Duration(seconds: 1));
+    _expectAlignment(tester, ffi, videoWidget);
+  }
+  await tester.pumpWidget(const SizedBox.shrink());
+}
+
+void _expectAlignment(WidgetTester tester, FFI ffi, Finder videoWidget) {
+  final cursor = ffi.cursorModel;
+  final cursorWidget = _paintOf(cursor.image!);
+  final painter =
+      tester.widget<CustomPaint>(cursorWidget).painter! as ImagePainter;
+  final output = _Draw();
+  painter.paint(output, ffi.canvasModel.size);
+  final hotspot = tester.getTopLeft(cursorWidget) +
+      output.position! +
+      _hotspot * output.factor;
+  var videoOrigin = tester.getTopLeft(videoWidget);
+  final video = tester.widget(videoWidget);
+  if (video is CustomPaint) {
+    final drawnVideo = _Draw();
+    video.painter!.paint(drawnVideo, ffi.canvasModel.size);
+    videoOrigin += drawnVideo.position!;
+  }
+  final target =
+      videoOrigin + Offset(cursor.x, cursor.y) * ffi.canvasModel.scale;
+  expect(hotspot.dx, closeTo(target.dx, 1e-9));
+  expect(hotspot.dy, closeTo(target.dy, 1e-9));
 }
 
 Finder _paintOf(ui.Image image) => find.byWidgetPredicate((widget) =>

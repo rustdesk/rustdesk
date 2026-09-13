@@ -1173,6 +1173,7 @@ class _ImagePaintState extends State<ImagePaint> {
               child: child);
         });
     if (c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto) {
+      _syncEdgeScrollAfterLayout(c);
       final paintWidth = c.getDisplayWidth() * s;
       final paintHeight = c.getDisplayHeight() * s;
       final paintSize = Size(paintWidth, paintHeight);
@@ -1215,6 +1216,16 @@ class _ImagePaintState extends State<ImagePaint> {
         return Container();
       }
     }
+  }
+
+  void _syncEdgeScrollAfterLayout(CanvasModel canvas) {
+    if (canvas.scrollStyle != ScrollStyle.scrolledge) return;
+    final renderedScroll = (canvas.scrollX, canvas.scrollY);
+    // Relayout can clamp or detach scroll positions without a scroll event.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      canvas.updateEdgeScrollAfterLayout(renderedScroll);
+    });
   }
 
   Widget _buildScrollbarNonTextureRender(
