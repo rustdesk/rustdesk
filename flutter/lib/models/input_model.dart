@@ -449,7 +449,10 @@ class InputModel {
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
-  // Host position echoes may be absent; keep locally mapped input separately.
+  // Latest local pointer position mapped to absolute remote desktop coordinates.
+  // Used to select the native cursor's display scale in Linux All Displays mode,
+  // without waiting for a host position update. Keep it separate from the
+  // host-reported position used to paint the remote cursor.
   final remotePointerPosition = Rxn<Offset>();
   int _lastWheelTsUs = 0;
 
