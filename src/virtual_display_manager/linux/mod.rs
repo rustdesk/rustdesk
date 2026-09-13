@@ -500,10 +500,15 @@ fn entry_is_ours(entry: &str) -> bool {
 
 /// Does an entry we did not write already govern this connector? An entry with no `<connector>:`
 /// prefix applies to every connector, so it governs any of them.
+///
+/// The prefix is matched the way the kernel matches it, not by equality: `drm_edid_load` compares
+/// the part before the colon against the START of the connector name, so `DP:operator.bin` governs
+/// `DP-1` and stays ahead of anything we append. Comparing for equality let us force a connector
+/// somebody else had already claimed, which is exactly what this check exists to prevent.
 fn foreign_entry_covers(entry: &str, connector: &str) -> bool {
     !entry_is_ours(entry)
         && match entry.split_once(':') {
-            Some((target, _)) => target == connector,
+            Some((target, _)) => connector.starts_with(target),
             None => true,
         }
 }
@@ -631,6 +636,12 @@ fn wait_for(sysfs: &str, connected: bool) -> bool {
 /// A name duplicated across cards is REFUSED outright, not deprioritized: `edid_firmware` matches
 /// the bare name, so forcing one twin puts our EDID on the other card's connector at its next
 /// probe, and a monitor plugged there would classify as ours and never trigger the release.
+///
+/// A name that is a PREFIX of another enumerated connector is refused for the same reason: the
+/// kernel matches our `DP-1:` entry against the start of a name, so it would also hand our EDID to
+/// `DP-10`, which we never picked and would then classify as ours. This is decided against the
+/// snapshot in hand: a `DP-10` that only appears LATER still loads the entry, and what catches that
+/// one is `probe_held_connectors`, which releases a held connector once a real display answers on it.
 fn pick_connector(all: &[Connector]) -> Option<&Connector> {
     const PREFERENCE: &[&str] = &["HDMI", "DP-", "DVI", "VGA"];
     let mut per_name: HashMap<&str, usize> = HashMap::new();
@@ -641,6 +652,9 @@ fn pick_connector(all: &[Connector]) -> Option<&Connector> {
         !c.connected
             && c.drivable
             && per_name.get(c.name.as_str()).copied().unwrap_or(1) == 1
+            && !all
+                .iter()
+                .any(|o| o.name != c.name && o.name.starts_with(c.name.as_str()))
             && PREFERENCE.iter().any(|k| c.name.starts_with(k))
     };
     for kind in PREFERENCE {
@@ -789,10 +803,18 @@ fn disable(state: &mut State) -> ResultType<()> {
     let all = connectors();
     let mut targets: Vec<Target> = Vec::new();
     for c in all.iter().filter(|c| c.ours) {
-        add_target(&mut targets, &all, &c.sysfs);
+        add_target(&mut targets, c);
     }
     for h in std::mem::take(&mut state.forced) {
-        add_target(&mut targets, &all, &h.sysfs);
+        match hold_target(&h, &all) {
+            Some(c) => add_target(&mut targets, c),
+            None => log::info!(
+                "headless display: dropping stale hold on {} ({}); it is no longer the connector \
+                 this process forced",
+                h.sysfs,
+                h.name
+            ),
+        }
     }
     // Read the parameter while it still exists. A force whose EDID never loaded leaves no other
     // trace, and the entries below are about to go - which would leave the connector forced for the
@@ -804,7 +826,7 @@ fn disable(state: &mut State) -> ResultType<()> {
             .iter()
             .filter(|c| c.name == name && marker.claims(c.device.as_deref(), c.id.as_deref()))
         {
-            add_target(&mut targets, &all, &c.sysfs);
+            add_target(&mut targets, c);
         }
     }
     let mut last_err = None;
@@ -828,8 +850,8 @@ fn disable(state: &mut State) -> ResultType<()> {
                     });
                 }
                 None => log::warn!(
-                    "headless display: {} could not be released and is gone from sysfs, so there \
-                     is nothing left to record the hold against",
+                    "headless display: {} could not be released and cannot state its identity, so \
+                     there is nothing left to record the hold against",
                     t.sysfs
                 ),
             }
@@ -858,34 +880,40 @@ fn disable(state: &mut State) -> ResultType<()> {
 }
 
 /// One connector a release has to act on, carried with the facts needed to put its marker back.
-/// `marker` is `None` for a connector that is gone from sysfs: there is nothing left to identify.
+/// `marker` is `None` for a connector that cannot state its own identity - no device link or no
+/// `connector_id` - because a marker written against a shared identity would follow the name onto a
+/// stranger. Every target comes from the live snapshot, so a path absent from it is never one.
 struct Target {
     sysfs: String,
     name: String,
     marker: Option<Marker>,
 }
 
-fn add_target(targets: &mut Vec<Target>, all: &[Connector], sysfs: &str) {
-    if targets.iter().any(|t| t.sysfs == sysfs) {
+/// The connector a remembered hold may still be released through, or `None` when the hold is stale.
+///
+/// Both halves of a sysfs name are recycled, so the path alone proves nothing: if another connector
+/// occupies it now, writing `detect` there would clear a force that is not ours and can take that
+/// output down. A path that is gone has nothing to release either - the KMS object went with it, and
+/// a recreated connector starts unforced. Either way the hold is dropped rather than acted on. This
+/// only governs the hold list: a connector still carrying our EDID is released by the `ours` pass in
+/// `disable()` whatever this says.
+fn hold_target<'a>(h: &Held, all: &'a [Connector]) -> Option<&'a Connector> {
+    all.iter()
+        .find(|c| c.sysfs == h.sysfs)
+        .filter(|c| h.marker.claims(c.device.as_deref(), c.id.as_deref()))
+}
+
+/// Every caller takes its connector from the one live snapshot `disable()` read, so a target is
+/// always a connector that exists: there is no arm here for a path that is not in it.
+fn add_target(targets: &mut Vec<Target>, c: &Connector) {
+    if targets.iter().any(|t| t.sysfs == c.sysfs) {
         return;
     }
-    match all.iter().find(|c| c.sysfs == sysfs) {
-        Some(c) => targets.push(Target {
-            sysfs: c.sysfs.clone(),
-            name: c.name.clone(),
-            marker: marker_of(c),
-        }),
-        // Gone from sysfs since the record was made. Still worth the write - the connector may be
-        // forced on with nothing else able to name it - but no marker can be written for it.
-        None => targets.push(Target {
-            sysfs: sysfs.to_owned(),
-            name: sysfs
-                .split_once('-')
-                .map(|(_, name)| name.to_owned())
-                .unwrap_or_default(),
-            marker: None,
-        }),
-    }
+    targets.push(Target {
+        sysfs: c.sysfs.clone(),
+        name: c.name.clone(),
+        marker: marker_of(c),
+    });
 }
 
 /// Is there anything of ours left to give back, including an override orphaned by a failed attempt?
@@ -1676,6 +1704,98 @@ mod tests {
             unrenderable("card1-Writeback-1", "Writeback-1", false),
             unrenderable("card1-Writeback-2", "Writeback-2", false),
         ]
+    }
+
+    // fufesou's P3: `disable()` used to pass only the remembered path to `add_target()`, so a
+    // replacement connector occupying that path was released through the stale hold - a `detect`
+    // that clears a force somebody else owns. The hold now has to claim the live identity.
+    //
+    // This drives `hold_target` directly, which is what carries that decision; `disable()` itself
+    // reads sysfs through `connectors()` with no injection point, so no test reaches its call site.
+    // Verified by mutation ON THE HELPER: make `hold_target` match on the path alone and the
+    // `replaced` case below fails.
+    #[test]
+    fn a_hold_is_only_released_while_it_still_names_the_connector_we_forced() {
+        let h = held("card0-HDMI-A-1", "HDMI-A-1");
+        // Same path, same identity: ours, release it.
+        let same = vec![c("card0-HDMI-A-1", "HDMI-A-1", false, true)];
+        assert!(hold_target(&h, &same).is_some());
+
+        // Same path, different connector instance behind it (the id is what `c` derives from the
+        // sysfs name, so a rebind that renamed the object shows up here).
+        let mut replaced = c("card0-HDMI-A-1", "HDMI-A-1", true, false);
+        replaced.id = Some("card0-HDMI-A-1-rebound".to_owned());
+        assert!(
+            hold_target(&h, &[replaced]).is_none(),
+            "a different connector on the same path must not be released through our hold"
+        );
+
+        // Same path, same id, different card: the device half of the identity has to count too.
+        let mut other_card = c("card0-HDMI-A-1", "HDMI-A-1", true, false);
+        other_card.device = Some("card9".to_owned());
+        assert!(hold_target(&h, &[other_card]).is_none());
+
+        // Gone from sysfs: the KMS object went with it, so there is nothing to release.
+        assert!(hold_target(&h, &[]).is_none());
+
+        // A connector that cannot state its identity is claimed by nothing.
+        let mut nameless = c("card0-HDMI-A-1", "HDMI-A-1", true, false);
+        nameless.id = None;
+        assert!(hold_target(&h, &[nameless]).is_none());
+
+        // A legacy hold predates the identity scheme and still claims its path.
+        let legacy = Held {
+            marker: Marker::Legacy,
+            ..held("card0-HDMI-A-1", "HDMI-A-1")
+        };
+        assert!(hold_target(&legacy, &same).is_some());
+    }
+
+    // fufesou's P3: the kernel matches an `edid_firmware` entry by the prefix before the colon, so
+    // comparing for equality let `DP:operator.bin` pass as "not covering" DP-1 and we would force a
+    // connector the operator had already claimed. Verified by mutation: restore `target == connector`
+    // and the first assertion fails.
+    #[test]
+    fn a_foreign_entry_covers_by_prefix_the_way_the_kernel_matches() {
+        assert!(
+            foreign_entry_covers("DP:edid/operator.bin", "DP-1"),
+            "the kernel applies a DP: entry to DP-1, so it governs it"
+        );
+        assert!(foreign_entry_covers("DP-1:edid/operator.bin", "DP-1"));
+        // A longer entry name is NOT a prefix of the shorter connector, so it does not govern it.
+        assert!(!foreign_entry_covers("DP-10:edid/operator.bin", "DP-1"));
+        assert!(!foreign_entry_covers("HDMI-A-1:edid/operator.bin", "DP-1"));
+        // No prefix at all applies everywhere.
+        assert!(foreign_entry_covers("edid/operator.bin", "DP-1"));
+        // Our own entries are never foreign, whatever they cover.
+        let ours = format!("DP:{EDID_DIR_REF}{EDID_NAME_PREFIX}.bin");
+        assert!(entry_is_ours(&ours), "fixture must be one of ours");
+        assert!(!foreign_entry_covers(&ours, "DP-1"));
+    }
+
+    // fufesou's P3, the other half: our own entry is matched by the same prefix rule, so forcing
+    // DP-1 would also hand our EDID to DP-10. Verified by mutation: drop the prefix clause from
+    // `usable` and this returns DP-1.
+    #[test]
+    fn a_candidate_whose_name_prefixes_another_connector_is_not_picked() {
+        let all = vec![
+            c("card0-DP-1", "DP-1", false, false),
+            c("card0-DP-10", "DP-10", false, false),
+        ];
+        assert_eq!(
+            pick_connector(&all).map(|c| c.name.as_str()),
+            Some("DP-10"),
+            "DP-1 would put our EDID on DP-10 as well, so it is refused"
+        );
+        // With no such overlap the shorter name is picked as before.
+        let plain = vec![
+            c("card0-DP-1", "DP-1", false, false),
+            c("card0-DP-2", "DP-2", false, false),
+        ];
+        assert_eq!(
+            pick_connector(&plain).map(|c| c.name.as_str()),
+            Some("DP-1")
+        );
     }
 
     #[test]
