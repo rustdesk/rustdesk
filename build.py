@@ -340,12 +340,6 @@ def get_features(args):
                 f'--drm is only supported on the deb packaging path; this host would package via '
                 f'{branch}, which cannot bundle libdrmtap or name the package distinctly')
         features.append('drm')
-        # The display wake is its own compile gate on top of `drm`, and the unattended package is
-        # exactly where it belongs: that variant exists to reach a machine nobody is sitting at,
-        # and a machine whose screen went dark is the case it is for. Dropping `drm-wake` from
-        # this line builds the same capture backend with no wake code in the binary at all.
-        # It is ALSO switchable at runtime; see OPTION_ENABLE_DRM_DISPLAY_WAKE.
-        features.append('drm-wake')
     if osx:
         if args.screencapturekit:
             features.append('screencapturekit')
@@ -754,12 +748,10 @@ def build_flutter_deb(version, features):
 
 
 DRMTAP_DLOPEN_MARKER = b'/usr/lib/rustdesk/libdrmtap.so.0'
-# Present only when `drm-wake` is compiled in: the runtime option constant is itself
-# #[cfg(feature = "drm-wake")] (src/ipc/drm.rs). The dlopen marker above cannot stand in for it -
-# `--features drm` alone produces a binary that carries the dlopen path and NO wake code, and that
-# is exactly the deb this assertion is here to refuse.
+# No longer proof of a separate Cargo feature: unconditional in every current drm build
+# (src/ipc/drm.rs OPTION_ENABLE_DRM_DISPLAY_WAKE), so its absence means a stale bundle from the
+# drm-wake-gated era, which --skip-cargo can happily stage.
 DRMTAP_WAKE_MARKER = b'enable-drm-display-wake'
-
 
 def _carries_drmtap_marker(path, marker=DRMTAP_DLOPEN_MARKER):
     # Chunked, with an overlap of len(marker)-1 so the marker cannot be missed at a chunk boundary:
@@ -794,18 +786,11 @@ def assert_staged_binary_is_drm():
             f'{DRMTAP_DLOPEN_MARKER.decode()} dlopen path in {binaries or "any staged binary"}); '
             'refusing to package it as the unattended-wayland variant, which conflicts with and '
             'replaces the stock package but could never capture')
-    # And the WAKE half. `--drm` enables `drm-wake` too (see get_features), and the deb is named and
-    # documented as the variant that can reach a machine whose screen has gone dark. The dlopen
-    # marker above does not distinguish them: `--features drm` alone carries it and has no wake code
-    # at all. Asserting only the first half is how a deb can be named for a feature it does not have.
     if not any(_carries_drmtap_marker(p, DRMTAP_WAKE_MARKER) for p in binaries):
         raise Exception(
-            f'--drm was requested but the staged binary has no {DRMTAP_WAKE_MARKER.decode()} '
-            f'marker in {binaries or "any staged binary"}, so it was built without `drm-wake`; '
-            'refusing to package it as the unattended-wayland variant, which is named and '
-            'documented as the build that can wake an idle-disabled display. If this fired under '
-            '--skip-cargo, the cargo line that produced the bundle is missing the feature: '
-            '--features ...,drm,drm-wake')
+            'the staged drm binary predates the wake unification (built with --features drm '
+            'while drm-wake was still a separate feature) and cannot wake an idle-disabled '
+            'display; rebuild from a current tree before packaging, especially under --skip-cargo')
 
 
 def build_deb_from_folder(version, binary_folder, want_drm=False):
