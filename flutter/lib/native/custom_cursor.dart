@@ -33,8 +33,8 @@ MouseCursor buildCursorOfCache(
           .registerCursor(custom_cursor_manager.CursorData()
             ..name = key
             ..buffer = data
-            ..width = (cache.width * cache.scale).toInt()
-            ..height = (cache.height * cache.scale).toInt()
+            ..width = (cache.width * cache.scale).ceil()
+            ..height = (cache.height * cache.scale).ceil()
             ..hotX = cache.hotx
             ..hotY = cache.hoty);
       cursor.addKey(key);
