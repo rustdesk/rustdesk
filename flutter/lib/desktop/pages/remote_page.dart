@@ -1120,13 +1120,9 @@ class _ImagePaintState extends State<ImagePaint> {
             final peerDpr = cache?.pixelRatio ?? 0;
             if (isViewScaled() && zoomCursor.isFalse && peerDpr > 0 &&
                 (!isWeb || widget.ffi.ffiModel.pi.platform == kPeerPlatformMacOS)) {
-              // Retina export is physical-sized; Web must undo that change too.
-              // Other Web host bitmaps retain their existing sizing policy.
-              // Adaptive/Custom scales the video, but Zoom cursor is off: preserve the
-              // cursor's logical size instead of multiplying it by the canvas scale.
-              // Divide by the source bitmap density to obtain logical cursor pixels.
-              // Windows expects a physical-pixel scale at this call boundary, hence dpr;
-              // buildCursorOfCache() converts it back to logical scale for the plugin.
+              // Normalize to logical size; Windows takes physical pixels here.
+              // Web normalizes only macOS's optional Retina image, preserving
+              // the existing unzoomed sizing policy for other hosts.
               return (isWindows ? dpr : 1.0) / peerDpr;
             }
             // Without density, keep the legacy unzoomed scale of 1. Dividing by
@@ -1221,14 +1217,8 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
-  /// Schedules a refresh after layout to keep the painted cursor aligned with video.
-  ///
-  /// Viewport, view scale or DPR changes can clamp or detach scroll positions
-  /// without a ScrollNotification, so read the resulting metrics after layout.
-  /// Save this build's fractions: a delayed refresh may update the model without
-  /// notifying, leaving the cursor painted from older values. CanvasModel compares
-  /// the refreshed fractions with this snapshot and notifies only if they differ,
-  /// repairing the cursor position without creating a rebuild loop.
+  // Layout can change scroll metrics without notification. Compare against this
+  // build's fractions: a delayed refresh may already have changed the model.
   void _syncScrollAfterLayout(CanvasModel canvas) {
     // Custom scrollbars also paint from scroll fractions; preserve Original's path.
     if (canvas.scrollStyle != ScrollStyle.scrolledge &&
@@ -1468,11 +1458,8 @@ class CursorPaint extends StatelessWidget {
           : (sx < sy ? sx : sy);
       if (scale < minimumScale) scale = minimumScale;
     }
-    // Drawing origin = (remote cursor position * canvas scale + video origin)
-    //                  / cursor image scale - source hotspot.
-    // ImagePainter scales both the drawing origin and the artwork, so this
-    // keeps the hotspot at the displayed remote position even if the cursor
-    // scale differs from the canvas scale, e.g. because of the minimum size.
+    // Anchor the hotspot to the video position even when the minimum size
+    // makes the artwork scale differ from the video scale.
     final x = (m.x * c.scale + cx) / scale - hotx;
     final y = (m.y * c.scale + cy) / scale - hoty;
 
@@ -1487,20 +1474,9 @@ class CursorPaint extends StatelessWidget {
     );
   }
 
-  /// Returns the renderer-adjusted video origin in local logical pixels,
-  /// keeping the painted cursor aligned with the video.
-  ///
-  /// Software rendering truncates the origin in image coordinates before
-  /// scaling it back. Linux texture rendering truncates it directly in logical
-  /// pixels. Match that rounding without rounding the cursor or its hotspot.
-  ///
-  /// Returns null for overflowing scrollbar/edge-scroll layouts, whose origin
-  /// the caller computes separately, and for other texture renderers, which
-  /// use canvas.x/y unchanged.
-  ///
-  /// Example: canvas.x = 10.75 and video scale = 0.5 produce a software-rendered
-  /// origin of (10.75 / 0.5).toInt() * 0.5 = 10.5. Using that same origin for
-  /// the cursor avoids a 0.25-logical-pixel alignment error.
+  /// Match video-origin rounding: source pixels for software, logical pixels
+  /// for Linux textures. The caller handles scrolling and unrounded origins.
+  /// Keep cursor positions and hotspots fractional.
   Offset? _softwareImageOffset(CanvasModel canvas) {
     if (canvas.imageOverflow.isTrue &&
         canvas.scrollStyle != ScrollStyle.scrollauto) {
@@ -1524,43 +1500,10 @@ class CursorPaint extends StatelessWidget {
 
 }
 
-/// Returns the base cursor artwork scale needed to match the remote video.
-///
-/// The result is Flutter logical pixels per source cursor bitmap pixel.
-/// Callers handle minimum-size clamping, native-platform DPR conversion,
-/// rasterization, and hotspot positioning separately. This function does not
-/// draw the cursor or transform its remote position.
-///
-/// Callers decide whether the cursor should follow the video:
-/// - [CursorPaint] uses this scale regardless of the Zoom cursor setting.
-/// - The MouseRegion cursor uses it in Adaptive/Custom view only when Zoom
-///   cursor is enabled. With Zoom cursor disabled, a separate sizing policy
-///   keeps the native cursor independent of video zoom.
-/// Selecting Adaptive/Custom view alone does not imply cursor zoom.
-///
-/// For Linux hosts, desktop coordinates and captured bitmap pixels can use
-/// different scales. The video renderer normally converts bitmap pixels to
-/// view coordinates using `canvas.scale / display.scale`; cursor artwork
-/// must use the same conversion. The non-texture scrollbar/edge-scroll
-/// renderer is an exception: it paints directly at `canvas.scale`.
-/// Non-Linux hosts also use `canvas.scale` directly.
-///
-/// With multiple viewed Linux displays, [useLocalPointer] selects which
-/// position determines the relevant display. When true, prefer the remote
-/// coordinates mapped from local mouse input, so native cursor sizing updates
-/// on display crossings without waiting for a host-position echo. When false,
-/// use [cursor]'s host-reported position, as required for the painted overlay.
-/// Before the first mapped local position, both paths use [cursor].
-/// If no display can be selected, fall back to `canvas.scale`.
-///
-/// Do not substitute cursor-bitmap density (`CursorData.pixelRatio`) for
-/// `display.scale`: this helper follows video geometry, not unzoomed cursor
-/// DPI normalization. A high-DPI capture path can still use physical desktop
-/// coordinates, so cursor density alone does not determine the video scale.
-///
-/// For example, with Linux `display.scale == 2` and `canvas.scale == 0.5`,
-/// the usual rendering path returns 0.25: a 64-pixel cursor is drawn 16 logical
-/// pixels wide, before any minimum-size adjustment.
+/// Logical pixels per cursor bitmap pixel, matching the video renderer.
+/// Linux display geometry, not cursor density, determines this ratio.
+/// Native mixed-display cursors use mapped local input; overlays use the host
+/// position. Callers apply minimum size, controller DPR and hotspot offsets.
 double _cursorImageScale(FFI ffi, CursorModel cursor,
     {bool useLocalPointer = false}) {
   final canvas = ffi.canvasModel;
