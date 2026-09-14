@@ -3494,21 +3494,22 @@ class CursorModel with ChangeNotifier {
     final hoty = double.parse(evt['hoty']);
     final width = int.parse(evt['width']);
     final height = int.parse(evt['height']);
-    // Bound physical allocation before density normalization or image decoding.
-    if (!_validCursorRasterSize(width.toDouble(), height.toDouble())) {
+    // Rust validates native packets; Web receives them directly from JavaScript.
+    if (isWeb && !_validCursorRasterSize(width.toDouble(), height.toDouble())) {
       debugPrint('Rejected cursor $id: invalid source size ${width}x$height');
       return;
     }
     final pixelRatio = double.tryParse(evt['scale'] ?? '0');
-    if (pixelRatio == null || !pixelRatio.isFinite || pixelRatio < 0 ||
-        (pixelRatio > 0 &&
-            !_validCursorRasterSize(width / pixelRatio, height / pixelRatio))) {
+    if (pixelRatio == null ||
+        (isWeb && (!pixelRatio.isFinite || pixelRatio < 0 ||
+            (pixelRatio > 0 &&
+                !_validCursorRasterSize(width / pixelRatio, height / pixelRatio))))) {
       debugPrint('Rejected cursor $id: invalid pixel ratio ${evt['scale']}');
       return;
     }
     List<dynamic> colors = json.decode(evt['colors']);
     const bytesPerPixel = 4;
-    if (colors.length != width * height * bytesPerPixel) {
+    if (isWeb && colors.length != width * height * bytesPerPixel) {
       debugPrint('Rejected cursor $id: invalid RGBA length ${colors.length}');
       return;
     }

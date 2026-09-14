@@ -2562,6 +2562,22 @@ fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
     if !(1..=MAX_CURSOR_SIZE).contains(&cd.width) || !(1..=MAX_CURSOR_SIZE).contains(&cd.height) {
         bail!("invalid source size {}x{}", cd.width, cd.height);
     }
+    if !(0..cd.width).contains(&cd.hotx) || !(0..cd.height).contains(&cd.hoty) {
+        bail!(
+            "hotspot ({},{}) is outside the cursor image",
+            cd.hotx,
+            cd.hoty
+        );
+    }
+    // Zero preserves legacy sizing; positive density must bound the logical image too.
+    if !cd.scale.is_finite()
+        || cd.scale < 0.0
+        || (cd.scale > 0.0
+            && (f64::from(cd.width) / cd.scale > f64::from(MAX_CURSOR_SIZE)
+                || f64::from(cd.height) / cd.scale > f64::from(MAX_CURSOR_SIZE)))
+    {
+        bail!("invalid cursor density {}", cd.scale);
+    }
     let expected = (cd.width as usize)
         .checked_mul(cd.height as usize)
         .and_then(|pixels| pixels.checked_mul(RGBA_CHANNELS))
