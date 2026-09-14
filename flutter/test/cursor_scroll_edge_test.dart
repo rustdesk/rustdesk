@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/image.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +10,8 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:vector_math/vector_math.dart' show Vector2;
+
+import 'cursor_test_utils.dart';
 
 const _viewport = Size(200, 160);
 const _hotspot = Offset(4, 9);
@@ -39,11 +40,6 @@ class _Image extends ImageModel {
   final ui.Image image;
   @override
   final bool useTextureRender;
-}
-
-class _Texture extends Fake implements TextureModel {
-  @override
-  RxInt getTextureId(int display) => 0.obs;
 }
 
 class _ScrollCanvas extends CanvasModel {
@@ -117,17 +113,7 @@ class _FFI extends Fake implements FFI {
   @override
   late final CursorModel cursorModel;
   @override
-  final textureModel = _Texture();
-}
-
-class _Draw extends Fake implements Canvas {
-  double factor = 1;
-  Offset? position;
-  @override
-  void scale(double sx, [double? sy]) => factor *= sx;
-  @override
-  void drawImage(ui.Image image, Offset offset, Paint paint) =>
-      position = offset * factor;
+  final textureModel = CursorTestTexture();
 }
 
 void main() {
@@ -250,7 +236,7 @@ void _expectAlignment(WidgetTester tester, FFI ffi, Finder videoWidget) {
   final cursorWidget = _paintOf(cursor.image!);
   final painter =
       tester.widget<CustomPaint>(cursorWidget).painter! as ImagePainter;
-  final output = _Draw();
+  final output = CursorTestDraw();
   painter.paint(output, ffi.canvasModel.size);
   final hotspot = tester.getTopLeft(cursorWidget) +
       output.position! +
@@ -258,7 +244,7 @@ void _expectAlignment(WidgetTester tester, FFI ffi, Finder videoWidget) {
   var videoOrigin = tester.getTopLeft(videoWidget);
   final video = tester.widget(videoWidget);
   if (video is CustomPaint) {
-    final drawnVideo = _Draw();
+    final drawnVideo = CursorTestDraw();
     video.painter!.paint(drawnVideo, ffi.canvasModel.size);
     videoOrigin += drawnVideo.position!;
   }

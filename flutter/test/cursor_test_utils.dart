@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/common.dart' as common;
+import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,4 +109,19 @@ img.Image decodeNativeCursorRaster(Map<dynamic, dynamic> args) {
           bytesOffset: bytes.offsetInBytes,
           order: img.ChannelOrder.bgra)
       : img.decodePng(bytes)!;
+}
+
+class CursorTestTexture extends Fake implements TextureModel {
+  @override
+  RxInt getTextureId(int display) => 0.obs;
+}
+
+class CursorTestDraw extends Fake implements Canvas {
+  double factor = 1;
+  Offset? position;
+  @override
+  void scale(double sx, [double? sy]) => factor *= sx;
+  @override
+  void drawImage(ui.Image image, Offset offset, Paint paint) =>
+      position = offset * factor;
 }

@@ -4,12 +4,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/image.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+
+import 'cursor_test_utils.dart';
 
 const _hotspot = Offset(4, 9);
 const _remotePosition = Offset(100.25, 80.75);
@@ -54,11 +55,6 @@ class _ImageModel extends ChangeNotifier implements ImageModel {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _TextureModel extends Fake implements TextureModel {
-  @override
-  RxInt getTextureId(int display) => 0.obs;
-}
-
 class _Display extends Display {
   _Display(this.scale, double left) {
     x = left;
@@ -90,7 +86,7 @@ class _FFI extends Fake implements FFI {
   @override
   final _Peer ffiModel = _Peer();
   @override
-  final textureModel = _TextureModel();
+  final textureModel = CursorTestTexture();
   @override
   late CanvasModel canvasModel;
 }
@@ -143,19 +139,6 @@ class _ScrollbarCanvasModel extends _CanvasModel {
   double get scrollX => _ffi.ffiModel.rect.width * scale > size.width ? 0.1 : 0;
   @override
   double get scrollY => _ffi.ffiModel.rect.height * scale > size.height ? 0.2 : 0;
-}
-
-class _Canvas extends Fake implements Canvas {
-  double factor = 1;
-  Offset? position;
-
-  @override
-  void scale(double sx, [double? sy]) => factor *= sx;
-
-  @override
-  void drawImage(ui.Image image, Offset offset, Paint paint) {
-    position = offset * factor;
-  }
 }
 
 Future<ImagePainter> _paintCursor(WidgetTester tester, CanvasModel canvas,
@@ -257,7 +240,7 @@ void main() {
       var imageOrigin = texture
           ? tester.getTopLeft(find.byType(Texture).first) : _canvasOffset;
       if (!texture) {
-        final background = _Canvas();
+        final background = CursorTestDraw();
         ImagePainter(
           image: painter.image,
           x: _canvasOffset.dx / canvasScale,
@@ -270,7 +253,7 @@ void main() {
       final hotspot = (Offset(painter.x, painter.y) + _hotspot) * scale;
       expect(hotspot.dx, closeTo(target.dx, 1e-9));
       expect(hotspot.dy, closeTo(target.dy, 1e-9));
-      final canvas = _Canvas();
+      final canvas = CursorTestDraw();
       painter.paint(canvas, _viewport);
       final position = canvas.position! + _hotspot * canvas.factor;
       expect(position.dx, closeTo(target.dx, 1e-9));
