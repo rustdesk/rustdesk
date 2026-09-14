@@ -71,10 +71,7 @@ gstreamer-video = { version = "0.16", optional = true }
 zbus = { version = "3.15", optional = true }
 
 [dependencies.hwcodec]
-# Temporary fork for FFmpeg VRAM re-encoding, pinned by Cargo.lock.
-# Switch back to rustdesk-org/hwcodec after the upstream changes merge.
-git = "https://github.com/21pages/hwcodec"
-branch = "re-encode"
+git = "https://github.com/rustdesk-org/hwcodec"
 optional = true
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
