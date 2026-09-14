@@ -61,6 +61,8 @@ class _Peer extends Fake implements FfiModel {
   final pi = PeerInfo();
   @override
   bool get isPeerLinux => false;
+  @override
+  bool get isPeerWindows => pi.platform == kPeerPlatformWindows;
 }
 
 class _FFI extends Fake implements FFI {
@@ -110,8 +112,13 @@ void main() {
   }
   test('native raster boundaries rebuild buffers and distinguish cache keys',
       () => _checkRasterTransitions(registrations));
-  test('Windows peer cursor alpha survives resizing',
-      () => _checkWindowsPeerAlpha(registrations));
+  for (final pattern in [
+    ([128, 0, 0, 128], 128),
+    ([255, 0, 0, 255, 0, 0, 0, 0], 127),
+  ]) {
+    test('Windows peer cursor alpha survives resizing $pattern',
+        () => _checkWindowsPeerAlpha(pattern, registrations));
+  }
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final zoom in [false, true]) {
       testWidgets('$style zoom=$zoom follows the live DPR',
@@ -147,10 +154,10 @@ Future<void> _dispose(CursorModel cursor) async {
 }
 
 Future<void> _checkWindowsPeerAlpha(
-    List<Map<dynamic, dynamic>> registrations) async {
+    (List<int>, int) pattern, List<Map<dynamic, dynamic>> registrations) async {
   const sourceSize = 64;
   const dpr = 2.0;
-  const premultipliedRed = [128, 0, 0, 128];
+  const channels = 4;
   final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
   ffi.ffiModel.pi.platform = kPeerPlatformWindows;
   final cursor = CursorModel(WeakReference<FFI>(ffi))..id = 'alpha';
@@ -163,9 +170,8 @@ Future<void> _checkWindowsPeerAlpha(
     'hoty': '0',
     'width': '$sourceSize',
     'height': '$sourceSize',
-    'colors': jsonEncode(List.generate(
-        sourceSize * sourceSize * premultipliedRed.length,
-        (i) => premultipliedRed[i % premultipliedRed.length])),
+    'colors': jsonEncode(List.generate(sourceSize * sourceSize * channels,
+        (i) => pattern.$1[i % pattern.$1.length])),
   });
   buildCursorOfCache(cursor, 1.0 / dpr, cursor.cache);
   await Future<void>.delayed(Duration.zero);
@@ -174,10 +180,10 @@ Future<void> _checkWindowsPeerAlpha(
   _expectSize(args, (targetSize, targetSize));
   final bytes = args['buffer'] as Uint8List;
   if (Platform.isWindows) {
-    expect(bytes.sublist(0, premultipliedRed.length), [0, 0, 128, 128]);
+    expect(bytes.sublist(0, channels), [0, 0, pattern.$2, pattern.$2]);
   } else {
     final pixel = img.decodePng(bytes)!.getPixel(0, 0);
-    expect([pixel.r, pixel.g, pixel.b, pixel.a], [255, 0, 0, 128]);
+    expect([pixel.r, pixel.g, pixel.b, pixel.a], [255, 0, 0, pattern.$2]);
   }
 }
 

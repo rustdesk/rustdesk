@@ -1205,6 +1205,13 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
+  /// Matches cursor zoom to the active video renderer in Windows Custom view.
+  ///
+  /// Canvas scale is logical, while Windows cursor pixels are physical, so
+  /// multiply by the live controller DPR. Linux texture and software auto-scroll
+  /// rendering divide by the selected display scale; software scrollbar rendering
+  /// with overflow does not. The cursor must follow the same branch to keep its
+  /// zoom consistent with the image.
   double _getWindowsCustomCursorScale(CanvasModel c, ImageModel m, double dpr) {
     var scale = c.scale;
     final peer = widget.ffi.ffiModel;

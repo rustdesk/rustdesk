@@ -166,6 +166,7 @@ class FfiModel with ChangeNotifier {
   bool get isPeerMobile => isPeerAndroid;
 
   bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
+  bool get isPeerWindows => _pi.platform == kPeerPlatformWindows;
 
   bool get viewOnly => _viewOnly;
   bool get showMyCursor => _showMyCursor;
@@ -2904,6 +2905,9 @@ class CursorData {
               interpolation: img2.Interpolation.average,
             )
             .getBytes(order: img2.ChannelOrder.bgra);
+      } else if (isDesktop && scale < 1.0 && !image.hasPalette) {
+        data = Uint8List.fromList(
+            img2.encodePng(_resizeWithAlpha(targetWidth, targetHeight)));
       } else {
         data = Uint8List.fromList(
           img2.encodePng(
@@ -2924,6 +2928,39 @@ class CursorData {
     hotx = hotxOrigin * scale;
     hoty = hotyOrigin * scale;
     return scale;
+  }
+
+  img2.Image _resizeWithAlpha(int targetWidth, int targetHeight) {
+    final resized =
+        img2.Image.fromResized(image, width: targetWidth, height: targetHeight);
+    final dx = image.width / targetWidth;
+    final dy = image.height / targetHeight;
+    // Use the average filter's sample area, but weight RGB by alpha so
+    // transparent pixels do not darken visible edges in the straight-alpha PNG.
+    for (final pixel in resized) {
+      final x = (pixel.x * dx).toInt();
+      final y = (pixel.y * dy).toInt();
+      final sampleWidth = ((pixel.x + 1) * dx).toInt() - x;
+      final sampleHeight = ((pixel.y + 1) * dy).toInt() - y;
+      final samples = image.getRange(x, y, sampleWidth, sampleHeight);
+      num r = 0;
+      num g = 0;
+      num b = 0;
+      num a = 0;
+      while (samples.moveNext()) {
+        final sample = samples.current;
+        r += sample.r * sample.a;
+        g += sample.g * sample.a;
+        b += sample.b * sample.a;
+        a += sample.a;
+      }
+      if (a == 0) {
+        pixel.setRgba(0, 0, 0, 0);
+        continue;
+      }
+      pixel.setRgba(r / a, g / a, b / a, a / (sampleWidth * sampleHeight));
+    }
+    return resized;
   }
 
   String updateGetKey(double scale) {
@@ -3472,7 +3509,7 @@ class CursorModel with ChangeNotifier {
       data = imgBytes.buffer.asUint8List();
       if (isDesktop &&
           (parent.target?.ffiModel.isPeerLinux == true ||
-              parent.target?.ffiModel.pi.platform == kPeerPlatformWindows)) {
+              parent.target?.ffiModel.isPeerWindows == true)) {
         // PNG decoding supplies straight alpha for Linux/Windows cursor resizing.
         final decoded = img2.decodePng(data);
         if (decoded == null) {
