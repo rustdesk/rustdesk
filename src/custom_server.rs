@@ -1,6 +1,9 @@
 use hbb_common::{
     bail,
-    base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _},
+    base64::{
+        engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+        Engine as _,
+    },
     sodiumoxide::crypto::sign,
     ResultType,
 };
@@ -25,7 +28,9 @@ fn get_custom_server_from_config_string(s: &str) -> ResultType<CustomServer> {
         12, 46, 129, 83, 17, 84, 193, 119, 197, 130, 103,
     ];
     let pk = sign::PublicKey(*PK);
-    let data = URL_SAFE_NO_PAD.decode(tmp)?;
+    let data = URL_SAFE_NO_PAD
+        .decode(&tmp)
+        .or_else(|_| URL_SAFE.decode(&tmp))?;
     if let Ok(lic) = serde_json::from_slice::<CustomServer>(&data) {
         return Ok(lic);
     }
@@ -214,6 +219,17 @@ mod test {
                 .unwrap(), lic);
         assert_eq!(
             get_custom_server_from_string("rustdesk-licensed--0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye--.exe")
+                .unwrap(), lic);
+        // padded base64 (one '=' after reversal) is accepted, wrong padding is not
+        assert_eq!(
+            get_custom_server_from_string("rustdesk-licensed-=0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
+                .unwrap(), lic);
+        assert!(
+            get_custom_server_from_string("rustdesk-licensed-==0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
+                .is_err());
+        // bare string as passed to `--config`
+        assert_eq!(
+            get_custom_server_from_string("=0nI900VsFHZVBVdIlncwpHS4V0bOZ0dtVldrpVO4JHdCp0YV5WdzUGZzdnYRVjI6ISeltmIsISMuEjLx4SMiojI0N3boJye.exe")
                 .unwrap(), lic);
     }
 }
