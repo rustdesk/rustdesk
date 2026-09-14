@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_custom_cursor/cursor_manager.dart' as cursor_manager;
 import 'package:flutter_hbb/common/shared_state.dart';
@@ -16,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+
+import 'cursor_test_utils.dart';
 
 const _viewport = Size(1920, 540);
 const _id = 'local-display-review';
@@ -52,15 +52,6 @@ class _Peer extends Fake implements FfiModel {
   bool get viewOnly => false;
   @override
   Rect get rect => const Rect.fromLTWH(0, 0, 3840, 1080);
-}
-
-class _Image extends ChangeNotifier implements ImageModel {
-  @override
-  bool get useTextureRender => true;
-  @override
-  ui.Image? get image => null;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Texture extends Fake implements TextureModel {
@@ -104,7 +95,7 @@ class _FFI extends Fake implements FFI {
   @override
   final ffiModel = _Peer();
   @override
-  final imageModel = _Image();
+  final imageModel = CursorTestImage(useTextureRender: true);
   @override
   final textureModel = _Texture();
   @override
@@ -171,31 +162,11 @@ Future<void> _settle(WidgetTester tester, _FFI ffi) async {
 }
 
 void main() {
-  final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final registrations = <Map<dynamic, dynamic>>[];
   final activations = <String>[];
-  final channel = Platform.isWindows
-      ? SystemChannels.mouseCursor
-      : const MethodChannel('flutter_custom_cursor');
-  setUp(() {
-    registrations.clear();
-    activations.clear();
-    RemoteCursorMovedState.init(_id);
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
-        (call) async {
-      if (call.method.startsWith('setCustomCursor')) {
-        activations.add(call.arguments['name'] as String);
-      }
-      if (!call.method.startsWith('createCustomCursor')) return null;
-      final args = call.arguments as Map<dynamic, dynamic>;
-      registrations.add(args);
-      return args['name'];
-    });
-  });
-  tearDown(() {
-    RemoteCursorMovedState.delete(_id);
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-  });
+  captureNativeCursors(registrations, activations: activations);
+  setUp(() => RemoteCursorMovedState.init(_id));
+  tearDown(() => RemoteCursorMovedState.delete(_id));
   for (final (style, dpr) in [
     (kRemoteViewStyleAdaptive, 1.0),
     (kRemoteViewStyleCustom, 2.0),
