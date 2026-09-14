@@ -1220,9 +1220,10 @@ class _ImagePaintState extends State<ImagePaint> {
   // Layout can change scroll metrics without notification. Compare against this
   // build's fractions: a delayed refresh may already have changed the model.
   void _syncScrollAfterLayout(CanvasModel canvas) {
-    // Custom scrollbars also paint from scroll fractions; preserve Original's path.
+    // Both supported scrollbar view styles also paint from scroll fractions.
     if (canvas.scrollStyle != ScrollStyle.scrolledge &&
-        canvas.viewStyle.style != kRemoteViewStyleCustom) return;
+        canvas.viewStyle.style != kRemoteViewStyleCustom &&
+        canvas.viewStyle.style != kRemoteViewStyleOriginal) return;
     final renderedScroll = (canvas.scrollX, canvas.scrollY);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -1434,11 +1435,14 @@ class CursorPaint extends StatelessWidget {
       // Scrollbar and edge scrolling share a layout that ignores canvas pan offsets.
       final imageWidth = rect.width * c.scale;
       final imageHeight = rect.height * c.scale;
-      // Match the integer centering in _buildCrossScrollbarFromLayout.
-      cx = (c.size.width > imageWidth ? (c.size.width - imageWidth) ~/ 2 : 0) -
-          imageWidth * c.scrollX;
-      cy = (c.size.height > imageHeight ? (c.size.height - imageHeight) ~/ 2 : 0) -
-          imageHeight * c.scrollY;
+      // Match the video's integer centering on each fitting axis, even if a
+      // detached scroll controller left a stale fraction before layout sync.
+      cx = c.size.width < imageWidth
+          ? -imageWidth * c.scrollX
+          : ((c.size.width - imageWidth) ~/ 2).toDouble();
+      cy = c.size.height < imageHeight
+          ? -imageHeight * c.scrollY
+          : ((c.size.height - imageHeight) ~/ 2).toDouble();
     }
 
     final image = m.image ?? preDefaultCursor.image;

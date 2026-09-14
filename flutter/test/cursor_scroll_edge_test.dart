@@ -16,6 +16,12 @@ import 'cursor_test_utils.dart';
 const _viewport = Size(200, 160);
 const _hotspot = Offset(4, 9);
 const _scrollDeltas = [80.0, -20.0, 1000.0, 1000.0, -1000.0, -1000.0, 80.0, 0.0];
+const _fittingViewports = [
+  Size(500, 160), // Fit horizontally while vertical scrolling remains.
+  Size(200, 400), // Fit vertically while horizontal scrolling remains.
+  Size(400, 160), // Exact fit also detaches the controller.
+  Size(200, 320),
+];
 
 class _Peer extends Fake implements FfiModel {
   _Peer(ui.Image frame)
@@ -118,6 +124,7 @@ class _FFI extends Fake implements FFI {
 
 void main() {
   for (final style in [(kRemoteViewStyleOriginal, ScrollStyle.scrolledge),
+    (kRemoteViewStyleOriginal, ScrollStyle.scrollbar),
     (kRemoteViewStyleCustom, ScrollStyle.scrolledge),
     (kRemoteViewStyleCustom, ScrollStyle.scrollbar)]) {
     for (final texture in [false, true]) {
@@ -203,17 +210,19 @@ Future<void> _checkRelayout(
     cursor.dispose();
   });
   await _mount(tester, ffi, 1);
-  canvas.performEdgeScroll(Vector2(20, 20));
-  await tester.pump();
   final videoWidget = texture ? find.byType(Texture) : _paintOf(video);
-  _expectAlignment(tester, ffi, videoWidget);
   for (final (viewport, dpr) in [
+    for (final viewport in _fittingViewports)
+      ...[(viewport, 1.0), (_viewport, 1.0)],
     (const Size(160, 120), 2.0),
     (const Size(195, 155), 2.0), // Clamp both existing scroll positions.
     (const Size(240, 155), 2.0), // Detach the horizontal scroll controller.
     (const Size(240, 200), 2.0), // No scrolling remains.
     (_viewport, 1.0),
   ]) {
+    canvas.performEdgeScroll(Vector2(20, 20));
+    await tester.pump();
+    _expectAlignment(tester, ffi, videoWidget);
     tester.view.devicePixelRatio = dpr;
     tester.view.physicalSize = viewport * dpr;
     canvas.relayout(viewport, dpr);
