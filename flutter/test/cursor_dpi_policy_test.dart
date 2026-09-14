@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_custom_cursor/cursor_manager.dart' show CursorManager;
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/native/custom_cursor.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,49 +13,7 @@ import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
-const _viewport = Size(200, 160);
-
-class _Image extends ChangeNotifier implements ImageModel {
-  @override
-  bool get useTextureRender => false;
-  @override
-  ui.Image? get image => null;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Canvas extends ChangeNotifier implements CanvasModel {
-  _Canvas(this.devicePixelRatio, {required this.style, required this.scale});
-
-  final String style;
-
-  @override
-  final double devicePixelRatio;
-  @override
-  final imageOverflow = false.obs;
-  @override
-  late final viewStyle = ViewStyle(
-    style: style,
-    width: _viewport.width,
-    height: _viewport.height,
-    displayWidth: 400,
-    displayHeight: 320,
-  );
-  @override
-  bool get cursorEmbedded => false;
-  @override
-  ScrollStyle get scrollStyle => ScrollStyle.scrollauto;
-  @override
-  Size get size => _viewport;
-  @override
-  final double scale;
-  @override
-  double get x => 0;
-  @override
-  double get y => 0;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
+import 'cursor_test_utils.dart';
 
 class _Cursor extends CursorModel {
   _Cursor(this.cache, this._ffi) : super(WeakReference(_ffi));
@@ -74,32 +30,9 @@ class _Cursor extends CursorModel {
   double get hoty => cache.hotyOrigin;
 }
 
-class _Input extends Fake implements InputModel {
-  @override
-  final relativeMouseMode = false.obs;
-}
-
-class _Peer extends Fake implements FfiModel {
-  @override
-  final pi = PeerInfo();
-  @override
-  bool isPeerLinux = false;
-}
-
 class _LinuxDisplay extends Display {
   @override
   double get scale => 2;
-}
-
-class _FFI extends Fake implements FFI {
-  _FFI(this.canvasModel);
-
-  @override
-  final CanvasModel canvasModel;
-  @override
-  final inputModel = _Input();
-  @override
-  final _Peer ffiModel = _Peer();
 }
 
 Future<CursorData> _data(int density, String id) async {
@@ -124,25 +57,10 @@ Future<CursorData> _data(int density, String id) async {
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final view = binding.platformDispatcher.views.single;
-  final channel = Platform.isWindows
-      ? SystemChannels.mouseCursor
-      : const MethodChannel('flutter_custom_cursor');
   final windows = Platform.isWindows;
   final registrations = <Map<dynamic, dynamic>>[];
-  setUp(() {
-    registrations.clear();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
-        (call) async {
-      if (!call.method.startsWith('createCustomCursor')) return null;
-      final args = call.arguments as Map<dynamic, dynamic>;
-      registrations.add(args);
-      return args['name'];
-    });
-  });
-  tearDown(() {
-    view.resetDevicePixelRatio();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-  });
+  captureNativeCursors(registrations);
+  tearDown(view.resetDevicePixelRatio);
   for (final forbidden in [false, true]) {
     test('predefined cursor forbidden=$forbidden preserves native RGBA', () {
       view.devicePixelRatio = 1;
@@ -187,8 +105,8 @@ Future<void> _checkPolicy(
   final data = await _data(density, '$style-$zoom-$density');
   final originalBytes = data.data;
   // A stale cached DPR must not affect the cursor when the window moves.
-  final canvas = _Canvas(1, style: style, scale: viewScale);
-  final ffi = _FFI(canvas);
+  final canvas = CursorTestCanvas(1, style: style, scale: viewScale);
+  final ffi = CursorTestFFI(canvas);
   ffi.ffiModel.isPeerLinux = linux;
   if (linux) ffi.ffiModel.pi.displays.add(_LinuxDisplay());
   final cursor = _Cursor(data, ffi);
@@ -197,7 +115,7 @@ Future<void> _checkPolicy(
     data: MediaQueryData(devicePixelRatio: dpr),
     child: MultiProvider(
         providers: [
-          ChangeNotifierProvider<ImageModel>(create: (_) => _Image()),
+          ChangeNotifierProvider<ImageModel>(create: (_) => CursorTestImage()),
           ChangeNotifierProvider<CanvasModel>.value(value: canvas),
           ChangeNotifierProvider<CursorModel>.value(value: cursor),
         ],
@@ -247,8 +165,8 @@ Future<void> _checkDprChange(
     TestFlutterView view, List<Map<dynamic, dynamic>> registrations) async {
   // Keep the scale above the minimum so only DPR invalidates the cache.
   final data = await _data(2, 'dpr-cache');
-  final canvas = _Canvas(1, style: kRemoteViewStyleAdaptive, scale: 1);
-  final cursor = _Cursor(data, _FFI(canvas));
+  final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 1);
+  final cursor = _Cursor(data, CursorTestFFI(canvas));
   for (final dpr in [2.0, 1.0]) {
     view.devicePixelRatio = dpr;
     buildCursorOfCache(cursor, 1, data);
@@ -271,23 +189,15 @@ Future<void> _checkPredefinedCursor(PredefinedCursor predefined,
   final original = img
       .decodePng(base64Decode(predefined.png))!
       .convert(format: img.Format.uint8, numChannels: 4);
-  final canvas = _Canvas(1, style: kRemoteViewStyleAdaptive, scale: 1);
-  final cursor = _Cursor(cache, _FFI(canvas));
+  final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 1);
+  final cursor = _Cursor(cache, CursorTestFFI(canvas));
   buildCursorOfCache(cursor, 1, cache);
   await deleteCustomCursor(cursor.cachedKeys.single);
   cursor.dispose();
   canvas.dispose();
 
   final args = registrations.single;
-  final bytes = args['buffer'] as Uint8List;
-  final decoded = Platform.isWindows
-      ? img.Image.fromBytes(
-          width: args['width'] as int,
-          height: args['height'] as int,
-          bytes: bytes.buffer,
-          bytesOffset: bytes.offsetInBytes,
-          order: img.ChannelOrder.bgra)
-      : img.decodePng(bytes)!;
+  final decoded = decodeNativeCursorRaster(args);
   expect((decoded.width, decoded.height), (original.width, original.height));
   expect(args['imagePixelRatio'], 1.0);
   expect((args['hotX'], args['hotY']), (cache.hotxOrigin, cache.hotyOrigin));

@@ -1,13 +1,10 @@
 import 'dart:convert';
-import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_custom_cursor/cursor_manager.dart' show CursorManager;
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/common.dart' as common;
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/native/custom_cursor.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,92 +12,12 @@ import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
-const _viewport = Size(200, 160);
-
-class _Image extends ChangeNotifier implements ImageModel {
-  @override
-  bool get useTextureRender => false;
-  @override
-  ui.Image? get image => null;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Canvas extends ChangeNotifier implements CanvasModel {
-  _Canvas(this.devicePixelRatio, {required this.style, required this.scale});
-
-  final String style;
-
-  @override
-  final double devicePixelRatio;
-  @override
-  final imageOverflow = false.obs;
-  @override
-  late final viewStyle = ViewStyle(
-    style: style,
-    width: _viewport.width,
-    height: _viewport.height,
-    displayWidth: 400,
-    displayHeight: 320,
-  );
-  @override
-  bool get cursorEmbedded => false;
-  @override
-  ScrollStyle get scrollStyle => ScrollStyle.scrollauto;
-  @override
-  Size get size => _viewport;
-  @override
-  final double scale;
-  @override
-  double get x => 0;
-  @override
-  double get y => 0;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Input extends Fake implements InputModel {
-  @override
-  final relativeMouseMode = false.obs;
-}
-
-class _Peer extends Fake implements FfiModel {
-  @override
-  final pi = PeerInfo();
-  @override
-  bool isPeerLinux = false;
-}
-
-class _FFI extends Fake implements FFI {
-  _FFI(this.canvasModel);
-
-  @override
-  final CanvasModel canvasModel;
-  @override
-  final inputModel = _Input();
-  @override
-  final _Peer ffiModel = _Peer();
-}
+import 'cursor_test_utils.dart';
 
 void main() {
-  final binding = TestWidgetsFlutterBinding.ensureInitialized();
   _rasterBoundsTests();
-  final channel = common.isWindows
-      ? SystemChannels.mouseCursor
-      : const MethodChannel('flutter_custom_cursor');
   final registrations = <Map<dynamic, dynamic>>[];
-  setUp(() {
-    registrations.clear();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
-        (call) async {
-      if (!call.method.startsWith('createCustomCursor')) return null;
-      final args = call.arguments as Map<dynamic, dynamic>;
-      registrations.add(args);
-      return args['name'];
-    });
-  });
-  tearDown(() =>
-      binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+  captureNativeCursors(registrations);
   _legacySizingTests(registrations);
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final density in ['0', '1', '2', '1e-300', '0.001']) {
@@ -176,8 +93,8 @@ Future<void> checkDensity(WidgetTester tester, (String, String?) input,
   final id = '$style-$density';
   tester.view.devicePixelRatio = dpr;
   addTearDown(tester.view.resetDevicePixelRatio);
-  final canvas = _Canvas(dpr, style: style, scale: 0.5);
-  final ffi = _FFI(canvas)..ffiModel.pi.platform = kPeerPlatformMacOS;
+  final canvas = CursorTestCanvas(dpr, style: style, scale: 0.5);
+  final ffi = CursorTestFFI(canvas)..ffiModel.pi.platform = kPeerPlatformMacOS;
   final cursor = CursorModel(WeakReference(ffi))..id = id;
   addTearDown(() async {
     expect(cursor.parent.target, same(ffi));
@@ -210,12 +127,12 @@ Future<void> checkDensity(WidgetTester tester, (String, String?) input,
 }
 
 Future<void> _paintCursor(
-    WidgetTester tester, _FFI ffi, CursorModel cursor) async {
+    WidgetTester tester, CursorTestFFI ffi, CursorModel cursor) async {
   await tester.pumpWidget(MediaQuery(
     data: MediaQueryData(devicePixelRatio: ffi.canvasModel.devicePixelRatio),
     child: MultiProvider(
         providers: [
-          ChangeNotifierProvider<ImageModel>(create: (_) => _Image()),
+          ChangeNotifierProvider<ImageModel>(create: (_) => CursorTestImage()),
           ChangeNotifierProvider<CanvasModel>.value(value: ffi.canvasModel),
           ChangeNotifierProvider<CursorModel>.value(value: cursor),
         ],
@@ -239,15 +156,7 @@ void _expectLegacyRaster(Map<dynamic, dynamic> args, Size size, double dpr) {
   expect((args['hotX'], args['hotY']),
       ((size.width ~/ 2) * rasterScale, (size.height ~/ 2) * rasterScale));
   expect(args['imagePixelRatio'], dpr);
-  final bytes = args['buffer'] as Uint8List;
-  final decoded = common.isWindows
-      ? img.Image.fromBytes(
-          width: width,
-          height: height,
-          bytes: bytes.buffer,
-          bytesOffset: bytes.offsetInBytes,
-          order: img.ChannelOrder.bgra)
-      : img.decodePng(bytes)!;
+  final decoded = decodeNativeCursorRaster(args);
   expect((decoded.width, decoded.height), (bufferWidth, height));
   expect(decoded.getPixel(width - 1, height - 1).a, 255);
   if (bufferWidth > width) expect(decoded.getPixel(width, 0).a, 0);
