@@ -625,7 +625,7 @@ impl VideoQoS {
             .clamp(MIN_AUTO_FPS.min(user_cap), user_cap)
             .min(current);
         user.delay.fps = Some(fps);
-        log::debug!(
+        log::trace!(
             "qos_trace t={} id={id} timeout={elapsed} fps={fps}",
             hbb_common::get_time()
         );
