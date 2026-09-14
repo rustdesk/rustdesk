@@ -1106,6 +1106,7 @@ class _ImagePaintState extends State<ImagePaint> {
     final dpr = MediaQuery.devicePixelRatioOf(context);
 
     bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
+    bool isViewCustom() => c.viewStyle.style == kRemoteViewStyleCustom;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
@@ -1114,10 +1115,7 @@ class _ImagePaintState extends State<ImagePaint> {
             var cursorScale = 1.0;
             if (isWindows) {
               // debug win10
-              if (zoomCursor.value && isViewAdaptive()) {
-                cursorScale = s * dpr;
-              } else if (zoomCursor.value &&
-                  c.viewStyle.style == kRemoteViewStyleCustom) {
+              if (zoomCursor.value && (isViewAdaptive() || isViewCustom())) {
                 cursorScale = _getWindowsCustomCursorScale(c, m, dpr);
               }
             } else {
@@ -1223,9 +1221,18 @@ class _ImagePaintState extends State<ImagePaint> {
     final useTexture = m.useTextureRender || peer.pi.forceTextureRender;
     final useScrollbar =
         c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto;
+    // In fact, Multiple display + Scale custom + Scrollbar || ScrollEdge + Non texture render
+    // the positions are wrong, we should fix it.
     if (!useTexture && useScrollbar) return scale * dpr;
     final displays = peer.pi.getCurDisplays();
     if (displays.isNotEmpty) {
+      // Match texture and software auto-scroll rendering when a Wayland host
+      // with multiple outputs reports a display scale > 1.
+      // A single-output host keeps scale at 1.0 to preserve physical uinput
+      // coordinates, even with OS scaling enabled. This counts host outputs,
+      // not the selected displays.length.
+      // See src/server/display_service.rs:650 (update_sync_displays) and
+      // src/server/drm_capturer.rs:1523 (DRM's matching convention).
       scale /= displays.first.scale;
     }
     return scale * dpr;
