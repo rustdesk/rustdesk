@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Aktivizimi i \"Regjistrimi i ekranit\" do të nisë automatikisht shërbimin, duke lejuar pajisjet e tjera të kërkojnë një lidhje me pajisjen tuaj."),
         ("android_stop_service_tip", "Mbyllja e shërbimit do të mbyllë automatikisht të gjitha lidhjet e vendosura."),
         ("android_version_audio_tip", "Versioni aktual i Android nuk mbështet regjistrimin e audios, ju lutemi përmirësoni në Android 10 ose më të lartë."),
-        ("android_start_service_tip", "Trokitni te [Nis shërbimin] ose aktivizoni lejen [Kapja e ekranit] për të nisur shërbimin e ndarjes së ekranit."),
+        ("android_start_service_tip", "Trokitni te [Nis Shërbimin] ose aktivizoni lejen [Kapja e ekranit] për të nisur shërbimin e ndarjes së ekranit."),
         ("android_permission_may_not_change_tip", "Lejet për lidhjet e themeluara mund të mos ndryshohen menjëherë derisa të rilidheni."),
         ("Account", "Llogaria"),
         ("Overwrite", "Përshkruaj"),

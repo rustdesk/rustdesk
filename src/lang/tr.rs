@@ -441,7 +441,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Voice call", "Sesli görüşme"),
         ("Text chat", "Metin sohbeti"),
         ("Stop voice call", "Sesli görüşmeyi durdur"),
-        ("relay_hint_tip", "Doğrudan bağlanmak mümkün olmayabilir; aktarmalı bağlanmayı deneyebilirsiniz. Ayrıca, ilk denemenizde aktarma sunucusu kullanmak istiyorsanız ID'nin sonuna \"/r\" ekleyebilir veya son oturum kartındaki \"Her Zaman Aktarmalı Üzerinden Bağlan\" seçeneğini seçebilirsiniz."),
+        ("relay_hint_tip", "Doğrudan bağlanmak mümkün olmayabilir; aktarmalı bağlanmayı deneyebilirsiniz. Ayrıca, ilk denemenizde aktarma sunucusu kullanmak istiyorsanız ID'nin sonuna \"/r\" ekleyebilir veya son oturum kartındaki \"Her zaman aktarmalı üzerinden bağlan\" seçeneğini seçebilirsiniz."),
         ("Reconnect", "Yeniden Bağlan"),
         ("Codec", "Kodlayıcı"),
         ("Resolution", "Çözünürlük"),

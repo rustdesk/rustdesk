@@ -187,7 +187,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enter your password", "Sisesta oma parool"),
         ("Logging in...", "Sisselogimine..."),
         ("Enable RDP session sharing", "Luba RDP-seansi jagamine"),
-        ("Auto Login", "Logi automaatselt sisse (Kehtib vaid valiku \"lukusta pärast seansi lõppu\" lubamisel)"),
+        ("Auto Login", "Logi automaatselt sisse (Kehtib vaid valiku \"Lukusta pärast seansi lõppu\" lubamisel)"),
         ("Enable direct IP access", "Luba otsene IP-juurdepääs"),
         ("Rename", "Nimeta ümber"),
         ("Space", "Ruum"),

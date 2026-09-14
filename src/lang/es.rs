@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Habilitar la captura de pantalla iniciará automáticamente el servicio, lo que permitirá que otros dispositivos soliciten una conexión desde este dispositivo."),
         ("android_stop_service_tip", "Cerrar el servicio cerrará automáticamente todas las conexiones establecidas."),
         ("android_version_audio_tip", "La versión actual de Android no admite la captura de audio, actualice a Android 10 o posterior."),
-        ("android_start_service_tip", "Toque [Iniciar servicio] o conceda el permiso [Captura de pantalla] para iniciar el servicio de pantalla compartida."),
+        ("android_start_service_tip", "Toque [Iniciar Servicio] o conceda el permiso [Captura de pantalla] para iniciar el servicio de pantalla compartida."),
         ("android_permission_may_not_change_tip", "Es posible que los permisos de las conexiones ya establecidas no cambien de inmediato hasta que se vuelva a conectar."),
         ("Account", "Cuenta"),
         ("Overwrite", "Sobrescribir"),

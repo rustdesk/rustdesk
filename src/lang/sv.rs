@@ -279,7 +279,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_input_permission_tip1", "Android rättigheter saknas"),
         ("android_input_permission_tip2", "Gå till systeminställningarna, hitta [Installed Services], sätt på [RustDesk Input] tjänsten."),
         ("android_new_connection_tip", "Ny kontrollförfrågan mottagen, denna vill kontrollera din enhet."),
-        ("android_service_will_start_tip", "Sätter du på \"skärminspelning\" kommer tjänsten automatiskt att starta. Detta tillåter andra enheter att kontrollera din enhet."),
+        ("android_service_will_start_tip", "Sätter du på \"Skärminspelning\" kommer tjänsten automatiskt att starta. Detta tillåter andra enheter att kontrollera din enhet."),
         ("android_stop_service_tip", "Genom att stänga av tjänsten kommer alla enheter att kopplas ifrån."),
         ("android_version_audio_tip", "Din version av Android stödjer inte ljudinspelning, Android 10 eller nyare krävs"),
         ("android_start_service_tip", "android_start_service_tips"),
