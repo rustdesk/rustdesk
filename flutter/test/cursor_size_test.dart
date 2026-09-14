@@ -9,6 +9,7 @@ import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/native/custom_cursor.dart';
+import 'package:flutter_hbb/utils/image.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
@@ -27,7 +28,7 @@ class _Canvas extends ChangeNotifier implements CanvasModel {
   @override
   final devicePixelRatio = 1.0;
   @override
-  final scale = 0.25;
+  double scale = 0.25;
   @override
   final imageOverflow = false.obs;
   @override
@@ -56,11 +57,16 @@ class _Input extends Fake implements InputModel {
   final relativeMouseMode = false.obs;
 }
 
+class _Display extends Display {
+  @override
+  double scale = 1.0;
+}
+
 class _Peer extends Fake implements FfiModel {
   @override
   final pi = PeerInfo();
   @override
-  bool get isPeerLinux => false;
+  bool get isPeerLinux => pi.platform == kPeerPlatformLinux;
   @override
   bool get isPeerWindows => pi.platform == kPeerPlatformWindows;
 }
@@ -119,9 +125,13 @@ void main() {
     test('Windows peer cursor alpha survives resizing $pattern',
         () => _checkWindowsPeerAlpha(pattern, registrations));
   }
-  for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
+  for (final style in [
+    kRemoteViewStyleOriginal,
+    kRemoteViewStyleAdaptive,
+    kRemoteViewStyleCustom
+  ]) {
     for (final zoom in [false, true]) {
-      testWidgets('$style zoom=$zoom follows the live DPR',
+      testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
           (tester) => _checkView(tester, (style, zoom), registrations));
     }
   }
@@ -233,16 +243,32 @@ Future<void> _checkRasterTransitions(
   expect(registrations.length, 4);
 }
 
+const _viewCases = [
+  (1.0, kPeerPlatformMacOS, 1.0),
+  (1.25, kPeerPlatformLinux, 2.0),
+  (2.0, kPeerPlatformMacOS, 2.0),
+];
+
 Future<void> _checkView(WidgetTester tester, (String, bool) mode,
     List<Map<dynamic, dynamic>> registrations) async {
-  const sourceSize = 64;
+  const sourceSize = 64, customScale = 4.0;
   final canvas = _Canvas(mode.$1);
   final ffi = _FFI(canvas);
+  final display = _Display();
+  ffi.ffiModel.pi.displays.addAll([Display(), display]);
+  ffi.ffiModel.pi.currentDisplay = 1;
   final cursor = _Cursor(_data((sourceSize, sourceSize)), ffi);
   addTearDown(() => _dispose(cursor));
   addTearDown(canvas.dispose);
   addTearDown(tester.view.resetDevicePixelRatio);
-  for (final dpr in [1.0, 1.25, 2.0]) {
+  for (final (dpr, peer, peerScale) in _viewCases) {
+    ffi.ffiModel.pi.platform = peer;
+    display.scale = peerScale;
+    canvas.scale = mode.$1 == kRemoteViewStyleCustom
+        ? customScale / dpr
+        : mode.$1 == kRemoteViewStyleOriginal
+            ? 1.0 / dpr
+            : canvas.viewStyle.scale;
     tester.view.devicePixelRatio = dpr;
     await tester.pumpWidget(MediaQuery(
       data: MediaQueryData(devicePixelRatio: dpr),
@@ -262,11 +288,13 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
         ),
       ),
     ));
-    final scale = mode.$2
-        ? (Platform.isWindows ? canvas.scale * dpr : canvas.scale)
-        : (Platform.isWindows ? 1.0 : 1.0 / dpr);
-    final expected = (sourceSize * scale).ceil();
-    _expectSize(registrations.last, (expected, expected));
+    final video = tester.widget<CustomPaint>(find.byType(CustomPaint)).painter
+        as ImagePainter;
+    final scale = video.scale * (mode.$2 ? 1.0 : 1.0 / (canvas.scale * dpr));
+    final size = sourceSize * (peer == kPeerPlatformMacOS ? peerScale : 1.0);
+    final w = (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
+    final key = cursor.cache.updateGetKey(cursor.cache.scale);
+    _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
   }
   await tester.pumpWidget(const SizedBox.shrink());
 }

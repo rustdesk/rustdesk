@@ -1105,31 +1105,16 @@ class _ImagePaintState extends State<ImagePaint> {
     // changes, so read it live to follow the window across monitors.
     final dpr = MediaQuery.devicePixelRatioOf(context);
 
-    bool isViewAdaptive() => c.viewStyle.style == kRemoteViewStyleAdaptive;
-    bool isViewCustom() => c.viewStyle.style == kRemoteViewStyleCustom;
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;
 
     mouseRegion({child}) => Obx(() {
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
-            var cursorScale = 1.0;
-            if (isWindows) {
-              // debug win10
-              if (zoomCursor.value && (isViewAdaptive() || isViewCustom())) {
-                cursorScale = _getWindowsCustomCursorScale(c, m, dpr);
-              }
-            } else {
-              if (zoomCursor.value || isViewOriginal()) {
-                cursorScale = s;
-              } else if (!isWeb) {
-                // NSCursor and GdkCursor treat the bitmap size as logical
-                // pixels, so an unzoomed cursor must be shrunk by the DPR to
-                // keep 1 remote px == 1 physical px, the size Original view
-                // already renders it at.
-                cursorScale = 1.0 / dpr;
-              }
+            if (isDesktop) {
+              return _getDesktopCursorScale(c, m, dpr);
             }
-            return cursorScale;
+            if (zoomCursor.value || isViewOriginal()) return s;
+            return isWeb ? 1.0 : 1.0 / dpr;
           }
 
           return MouseRegion(
@@ -1203,39 +1188,53 @@ class _ImagePaintState extends State<ImagePaint> {
     }
   }
 
-  /// Matches cursor zoom to the active video renderer in Windows Custom view.
+  /// Matches desktop cursors to the rendered image and native pixel units.
   ///
-  /// Canvas scale is logical, while Windows cursor pixels are physical, so
-  /// multiply by the live controller DPR. Linux texture and software auto-scroll
-  /// rendering divide by the selected display scale; software scrollbar rendering
-  /// with overflow does not. The cursor must follow the same branch to keep its
-  /// zoom consistent with the image.
-  double _getWindowsCustomCursorScale(CanvasModel c, ImageModel m, double dpr) {
-    var scale = c.scale;
+  /// Windows cursor pixels are physical; NSCursor/GdkCursor use logical pixels.
+  /// With zoom disabled, keep Original's size using the live controller DPR.
+  double _getDesktopCursorScale(CanvasModel c, ImageModel m, double dpr) {
     final peer = widget.ffi.ffiModel;
-    if (!peer.isPeerLinux) return scale * dpr;
-    if (peer.pi.currentDisplay == kAllDisplayValue) {
-      // Keep legacy sizing until the cursor's display is tracked in all-display view.
+    if (isWindows &&
+        peer.isPeerLinux &&
+        peer.pi.currentDisplay == kAllDisplayValue) {
+      // Preserve Windows' legacy fixed physical size for Linux All Displays;
+      // macOS/Linux retain their zoom and Original sizing below.
       return 1.0;
     }
+    if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
+      final scale = _getCursorScaleForDisplay(c, m, 1.0);
+      return isWindows ? scale : scale / dpr;
+    }
+    final scale = _getCursorScaleForDisplay(c, m, c.scale);
+    return isWindows ? scale * dpr : scale;
+  }
+
+  double _getCursorScaleForDisplay(CanvasModel c, ImageModel m, double scale) {
+    final peer = widget.ffi.ffiModel;
+    // All Displays can mix densities; no single display scale applies.
+    if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
+    final displays = peer.pi.getCurDisplays();
+    if (displays.isEmpty) return scale;
+    if (peer.pi.platform == kPeerPlatformMacOS) {
+      // macOS sends NSImage.size in points (src/platform/macos.rs:640,682),
+      // while HiDPI screen frames use backing pixels (libs/scrap/src/quartz/display.rs:37).
+      return scale * displays.first.scale;
+    }
+    if (!peer.isPeerLinux) return scale;
     final useTexture = m.useTextureRender || peer.pi.forceTextureRender;
     final useScrollbar =
         c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto;
     // In fact, Multiple display + Scale custom + Scrollbar || ScrollEdge + Non texture render
     // the positions are wrong, we should fix it.
-    if (!useTexture && useScrollbar) return scale * dpr;
-    final displays = peer.pi.getCurDisplays();
-    if (displays.isNotEmpty) {
-      // Match texture and software auto-scroll rendering when a Wayland host
-      // with multiple outputs reports a display scale > 1.
-      // A single-output host keeps scale at 1.0 to preserve physical uinput
-      // coordinates, even with OS scaling enabled. This counts host outputs,
-      // not the selected displays.length.
-      // See src/server/display_service.rs:650 (update_sync_displays) and
-      // src/server/drm_capturer.rs:1523 (DRM's matching convention).
-      scale /= displays.first.scale;
-    }
-    return scale * dpr;
+    if (!useTexture && useScrollbar) return scale;
+    // Match texture and software auto-scroll rendering when a Wayland host
+    // with multiple outputs reports a display scale > 1.
+    // A single-output host keeps scale at 1.0 to preserve physical uinput
+    // coordinates, even with OS scaling enabled. This counts host outputs,
+    // not the selected displays.length.
+    // See src/server/display_service.rs:650 (update_sync_displays) and
+    // src/server/drm_capturer.rs:1523 (DRM's matching convention).
+    return scale / displays.first.scale;
   }
 
   Widget _buildScrollbarNonTextureRender(
