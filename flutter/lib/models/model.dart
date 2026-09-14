@@ -3460,6 +3460,15 @@ class CursorModel with ChangeNotifier {
         return false;
       }
       data = imgBytes.buffer.asUint8List();
+      if (isDesktop && parent.target?.ffiModel.isPeerLinux == true) {
+        // Linux sends premultiplied colors; PNG decoding supplies straight alpha.
+        final decoded = img2.decodePng(data);
+        if (decoded == null) {
+          debugPrint('Unable to decode cursor $id PNG for resizing');
+          return false;
+        }
+        imgOrigin = decoded;
+      }
     }
     final cache = CursorData(
       peerId: peerId,

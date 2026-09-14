@@ -1114,10 +1114,11 @@ class _ImagePaintState extends State<ImagePaint> {
             var cursorScale = 1.0;
             if (isWindows) {
               // debug win10
-              if (zoomCursor.value &&
-                  (isViewAdaptive() ||
-                      c.viewStyle.style == kRemoteViewStyleCustom)) {
+              if (zoomCursor.value && isViewAdaptive()) {
                 cursorScale = s * dpr;
+              } else if (zoomCursor.value &&
+                  c.viewStyle.style == kRemoteViewStyleCustom) {
+                cursorScale = _getWindowsCustomCursorScale(c, m, dpr);
               }
             } else {
               if (zoomCursor.value || isViewOriginal()) {
@@ -1202,6 +1203,25 @@ class _ImagePaintState extends State<ImagePaint> {
         return Container();
       }
     }
+  }
+
+  double _getWindowsCustomCursorScale(CanvasModel c, ImageModel m, double dpr) {
+    var scale = c.scale;
+    final peer = widget.ffi.ffiModel;
+    if (!peer.isPeerLinux) return scale * dpr;
+    if (peer.pi.currentDisplay == kAllDisplayValue) {
+      // Keep legacy sizing until the cursor's display is tracked in all-display view.
+      return 1.0;
+    }
+    final useTexture = m.useTextureRender || peer.pi.forceTextureRender;
+    final useScrollbar =
+        c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto;
+    if (!useTexture && useScrollbar) return scale * dpr;
+    final displays = peer.pi.getCurDisplays();
+    if (displays.isNotEmpty) {
+      scale /= displays.first.scale;
+    }
+    return scale * dpr;
   }
 
   Widget _buildScrollbarNonTextureRender(
