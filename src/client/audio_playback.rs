@@ -1,4 +1,4 @@
-use hbb_common::{log, thiserror};
+use hbb_common::{log, log_throttle::LogThrottle, thiserror};
 use ringbuf::{ring_buffer::RbBase, Rb};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -38,22 +38,31 @@ pub(super) struct AudioPlaybackRecovery {
     output_frame: Vec<f32>,
 }
 
-#[derive(Default)]
 pub(super) struct AudioPlaybackStatus {
     pub(super) ready: AtomicBool,
     contentions: AtomicUsize,
+    contention_log_throttle: LogThrottle,
     buffer_poisoned: AtomicBool,
+}
+
+impl Default for AudioPlaybackStatus {
+    fn default() -> Self {
+        Self {
+            ready: AtomicBool::new(false),
+            contentions: AtomicUsize::new(0),
+            contention_log_throttle: LogThrottle::new(AUDIO_PLAYBACK_LOG_INTERVAL),
+            buffer_poisoned: AtomicBool::new(false),
+        }
+    }
 }
 
 impl AudioPlaybackStatus {
     pub(super) fn report_errors(&self) {
-        let contentions = self.contentions.swap(0, Ordering::Relaxed);
-        if contentions != 0 {
-            hbb_common::throttled_log!(
-                AUDIO_PLAYBACK_LOG_INTERVAL,
-                debug,
-                "Audio playback PCM buffer contention: callbacks={contentions}"
-            );
+        if self.contentions.load(Ordering::Relaxed) != 0
+            && self.contention_log_throttle.due().is_some()
+        {
+            let contentions = self.contentions.swap(0, Ordering::Relaxed);
+            log::debug!("Audio playback PCM buffer contention: callbacks={contentions}");
         }
         if self.buffer_poisoned.swap(false, Ordering::Relaxed) {
             log::error!("Audio playback stopped reading a poisoned PCM buffer");
