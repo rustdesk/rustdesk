@@ -3470,8 +3470,10 @@ class CursorModel with ChangeNotifier {
         return false;
       }
       data = imgBytes.buffer.asUint8List();
-      if (isDesktop && parent.target?.ffiModel.isPeerLinux == true) {
-        // Linux sends premultiplied colors; PNG decoding supplies straight alpha.
+      if (isDesktop &&
+          (parent.target?.ffiModel.isPeerLinux == true ||
+              parent.target?.ffiModel.pi.platform == kPeerPlatformWindows)) {
+        // PNG decoding supplies straight alpha for Linux/Windows cursor resizing.
         final decoded = img2.decodePng(data);
         if (decoded == null) {
           debugPrint('Unable to decode cursor $id PNG for resizing');

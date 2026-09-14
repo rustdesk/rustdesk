@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -109,6 +110,8 @@ void main() {
   }
   test('native raster boundaries rebuild buffers and distinguish cache keys',
       () => _checkRasterTransitions(registrations));
+  test('Windows peer cursor alpha survives resizing',
+      () => _checkWindowsPeerAlpha(registrations));
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final zoom in [false, true]) {
       testWidgets('$style zoom=$zoom follows the live DPR',
@@ -136,11 +139,46 @@ CursorData _data((int, int) size) {
       height: size.$2);
 }
 
-Future<void> _dispose(_Cursor cursor) async {
+Future<void> _dispose(CursorModel cursor) async {
   for (final key in cursor.cachedKeys) {
     await deleteCustomCursor(key);
   }
   cursor.dispose();
+}
+
+Future<void> _checkWindowsPeerAlpha(
+    List<Map<dynamic, dynamic>> registrations) async {
+  const sourceSize = 64;
+  const dpr = 2.0;
+  const premultipliedRed = [128, 0, 0, 128];
+  final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
+  ffi.ffiModel.pi.platform = kPeerPlatformWindows;
+  final cursor = CursorModel(WeakReference<FFI>(ffi))..id = 'alpha';
+  addTearDown(() => _dispose(cursor));
+  addTearDown(cursor.disposeImages);
+  addTearDown(ffi.canvasModel.dispose);
+  await cursor.updateCursorData({
+    'id': 'alpha',
+    'hotx': '0',
+    'hoty': '0',
+    'width': '$sourceSize',
+    'height': '$sourceSize',
+    'colors': jsonEncode(List.generate(
+        sourceSize * sourceSize * premultipliedRed.length,
+        (i) => premultipliedRed[i % premultipliedRed.length])),
+  });
+  buildCursorOfCache(cursor, 1.0 / dpr, cursor.cache);
+  await Future<void>.delayed(Duration.zero);
+  final args = registrations.single;
+  final targetSize = (sourceSize / dpr).ceil();
+  _expectSize(args, (targetSize, targetSize));
+  final bytes = args['buffer'] as Uint8List;
+  if (Platform.isWindows) {
+    expect(bytes.sublist(0, premultipliedRed.length), [0, 0, 128, 128]);
+  } else {
+    final pixel = img.decodePng(bytes)!.getPixel(0, 0);
+    expect([pixel.r, pixel.g, pixel.b, pixel.a], [255, 0, 0, 128]);
+  }
 }
 
 Future<void> _checkSize(((int, int), double, (int, int)) scenario,
