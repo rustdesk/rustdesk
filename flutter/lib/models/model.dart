@@ -2881,18 +2881,9 @@ class CursorData {
 
   double _checkUpdateScale(double scale) {
     double oldScale = this.scale;
-    if (scale != 1.0 && !isWeb) {
+    if (scale != 1.0) {
       // A thin cursor must not grow just to make its short edge reach the minimum.
       scale = max(scale, kMinCursorSize / max(width, height));
-    } else if (scale != 1.0) {
-      // Update data if scale changed.
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (height * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
-      }
     }
 
     if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
@@ -2910,9 +2901,8 @@ class CursorData {
           img2.encodePng(
             img2.copyResize(
               image,
-              width: isWeb ? (width * scale).toInt() : (width * scale).ceil(),
-              height:
-                  isWeb ? (height * scale).toInt() : (height * scale).ceil(),
+              width: (width * scale).ceil(),
+              height: (height * scale).ceil(),
               interpolation: img2.Interpolation.average,
             ),
           ),
