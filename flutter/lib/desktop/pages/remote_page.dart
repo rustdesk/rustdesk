@@ -1125,9 +1125,8 @@ class _ImagePaintState extends State<ImagePaint> {
               // the existing unzoomed sizing policy for other hosts.
               return (isWindows ? dpr : 1.0) / peerDpr;
             }
-            // Without density, keep the legacy unzoomed scale of 1. Dividing by
-            // controller DPR would also trigger the legacy short-edge minimum,
-            // enlarging thin artwork that previously needed no resizing.
+            // Without density, preserve the legacy unzoomed size. Controller
+            // DPR alone cannot determine the remote bitmap's logical size.
             final imageScale = isViewScaled() && zoomCursor.isTrue
                 ? _cursorImageScale(widget.ffi, cursor, useLocalPointer: true)
                 : s;
@@ -1456,10 +1455,8 @@ class CursorPaint extends StatelessWidget {
     if (image != null && (logicalMinimum || scale * nativePixels != 1.0)) {
       final sx = kMinCursorSize / (image.width * nativePixels);
       final sy = kMinCursorSize / (image.height * nativePixels);
-      // Preserve Original's short-edge minimum; scaled views use the long edge.
-      final minimumScale = c.viewStyle.style == kRemoteViewStyleOriginal
-          ? (sx > sy ? sx : sy)
-          : (sx < sy ? sx : sy);
+      // Match native resizing: a thin axis must not enlarge the whole cursor.
+      final minimumScale = sx < sy ? sx : sy;
       if (scale < minimumScale) scale = minimumScale;
     }
     // Anchor the hotspot to the video position even when the minimum size

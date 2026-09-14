@@ -38,7 +38,6 @@ void _rasterBoundsTests() {
   for (final (width, height, scale, legacy, rasterScale) in [
     (32, 32, 1e300, false, 1.0),
     (32, 32, 100.0, false, 2.0),
-    (512, 1, 0.1, true, 1.0),
   ]) {
     test('rejects raster ${width}x$height scale=$scale before key creation',
         () async {

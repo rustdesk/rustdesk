@@ -2915,18 +2915,10 @@ class CursorData {
       debugPrint('Rejected cursor $id: invalid scale $scale');
       return null;
     }
-    if (!useLegacyMinimum) {
+    // Preserve unscaled legacy artwork, but never enlarge a thin cursor just
+    // to make its short edge reach the visibility minimum.
+    if (!useLegacyMinimum || scale != 1.0) {
       scale = max(scale, kMinCursorSize / max(width, height));
-    }
-    if (useLegacyMinimum && scale != 1.0) {
-      // Update data if scale changed.
-      final tgtWidth = width * scale;
-      final tgtHeight = height * scale;
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
-      }
     }
 
     if (!_validCursorRasterSize(width * scale, height * scale,

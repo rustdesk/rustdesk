@@ -35,10 +35,11 @@ class _LinuxDisplay extends Display {
   double get scale => 2;
 }
 
-Future<CursorData> _data(int density, String id) async {
+Future<CursorData> _data(int density, String id,
+    {(int, int) source = (9, 18)}) async {
   final bitmapDensity = density == 0 ? 1 : density;
   final image = await createTestImage(
-      width: 9 * bitmapDensity, height: 18 * bitmapDensity);
+      width: source.$1 * bitmapDensity, height: source.$2 * bitmapDensity);
   return CursorData(
     peerId: 'dpi-policy',
     id: id,
@@ -46,8 +47,8 @@ Future<CursorData> _data(int density, String id) async {
     nativeImage: image,
     scale: 1,
     data: Uint8List.fromList([1, 2]),
-    hotxOrigin: 4.0 * bitmapDensity,
-    hotyOrigin: 9.0 * bitmapDensity,
+    hotxOrigin: (source.$1 ~/ 2) * bitmapDensity.toDouble(),
+    hotyOrigin: (source.$2 ~/ 2) * bitmapDensity.toDouble(),
     width: image.width,
     height: image.height,
     pixelRatio: density.toDouble(),
@@ -76,7 +77,8 @@ void main() {
     (kRemoteViewStyleCustom, false, 2, 0.25, windows ? 1.0 : 0.5),
     (kRemoteViewStyleAdaptive, true, 2, 0.25, windows ? 2 / 3 : 1 / 3),
     (kRemoteViewStyleCustom, true, 2, 0.25, windows ? 2 / 3 : 1 / 3),
-    (kRemoteViewStyleOriginal, false, 2, 0.5, windows ? 1.0 : 2 / 3),
+    (kRemoteViewStyleOriginal, false, 1, 0.5, windows ? 1.0 : 2 / 3),
+    (kRemoteViewStyleOriginal, false, 2, 0.5, windows ? 1.0 : 0.5),
   ]) {
     testWidgets(
         '${testCase.$1} zoom=${testCase.$2} peerDPR=${testCase.$3}',
@@ -86,6 +88,12 @@ void main() {
   test('live DPR changes invalidate a cached native cursor',
       () => _checkDprChange(view, registrations));
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
+    final dpr = style == kRemoteViewStyleAdaptive ? 1.0 : 2.0;
+    final source = style == kRemoteViewStyleAdaptive ? (64, 4) : (4, 64);
+    testWidgets('$style unknown-density thin cursor preserves zoom', (tester) =>
+        tester.runAsync(() => _checkPolicy(tester,
+            (style, true, 0, 0.5, windows ? 0.5 * dpr : 0.5), registrations,
+            dpr: dpr, source: source)));
     testWidgets('$style forbidden cursor ignores remote DPR', (tester) =>
         tester.runAsync(() => _checkPolicy(tester,
             (style, false, 2, 0.25, 0.5), registrations, dpr: 1)));
@@ -99,10 +107,10 @@ Future<void> _checkPolicy(
     WidgetTester tester,
     (String, bool, int, double, double) testCase,
     List<Map<dynamic, dynamic>> registrations,
-    {bool linux = false, double dpr = 2}) async {
+    {bool linux = false, double dpr = 2, (int, int) source = (9, 18)}) async {
   final (style, zoom, density, viewScale, expectedScale) = testCase;
   tester.view.devicePixelRatio = dpr;
-  final data = await _data(density, '$style-$zoom-$density');
+  final data = await _data(density, '$style-$zoom-$density', source: source);
   final originalBytes = data.data;
   // A stale cached DPR must not affect the cursor when the window moves.
   final canvas = CursorTestCanvas(1, style: style, scale: viewScale);
@@ -146,6 +154,16 @@ Future<void> _checkPolicy(
   expect(data.hotx, closeTo(data.hotxOrigin * expectedScale, 1e-9));
   expect(data.hoty, closeTo(data.hotyOrigin * expectedScale, 1e-9));
   expect(data.data, same(originalBytes));
+  if (zoom && density == 0) {
+    final args = registrations.single;
+    final rasterScale = expectedScale * (Platform.isWindows ? 1 : dpr);
+    final width = source.$1 * rasterScale;
+    final height = source.$2 * rasterScale;
+    expect((args['width'], args['height']),
+        (Platform.isLinux && height > width ? height : width, height));
+    expect((args['hotX'], args['hotY']),
+        ((source.$1 ~/ 2) * rasterScale, (source.$2 ~/ 2) * rasterScale));
+  }
   if (revoke) {
     final args = registrations.last;
     expect(args['name'], contains('_${kPreForbiddenCursorId}_'));

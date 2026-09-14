@@ -18,19 +18,20 @@ const _canvasOffset = Offset(15.125, -10.25);
 const _viewport = Size(200, 160);
 
 class _CursorModel extends ChangeNotifier implements CursorModel {
-  _CursorModel(this.image, this.position, this.density);
+  _CursorModel(this.image, this.position, this.density, {this.hotspot = _hotspot});
 
   final Offset position;
   final double density;
+  final Offset hotspot;
   @override
   CursorData get cache => _Density(density);
 
   @override
   final ui.Image image;
   @override
-  double get hotx => _hotspot.dx;
+  double get hotx => hotspot.dx;
   @override
-  double get hoty => _hotspot.dy;
+  double get hoty => hotspot.dy;
   @override
   double get x => position.dx;
   @override
@@ -143,7 +144,8 @@ class _ScrollbarCanvasModel extends _CanvasModel {
 
 Future<ImagePainter> _paintCursor(WidgetTester tester, CanvasModel canvas,
     {double dpr = 2, bool zoom = true, (int, int) source = (48, 64),
-    Offset position = _remotePosition, double density = 0}) async {
+    Offset position = _remotePosition, double density = 0,
+    Offset hotspot = _hotspot}) async {
   final image = (await tester
       .runAsync(() => createTestImage(width: source.$1, height: source.$2)))!;
   addTearDown(image.dispose);
@@ -156,7 +158,7 @@ Future<ImagePainter> _paintCursor(WidgetTester tester, CanvasModel canvas,
     child: MultiProvider(
       providers: [
         ChangeNotifierProvider<ImageModel>.value(value: canvas.parent.target!.imageModel),
-        ChangeNotifierProvider<CursorModel>(create: (_) => _CursorModel(image, position, density)),
+        ChangeNotifierProvider<CursorModel>(create: (_) => _CursorModel(image, position, density, hotspot: hotspot)),
         ChangeNotifierProvider<CanvasModel>(create: (_) => canvas),
       ],
       child: Stack(fit: StackFit.expand, children: [
@@ -221,21 +223,26 @@ void main() {
     (kRemoteViewStyleCustom, true, 2.0, (48, 64), 2.0, 2.0, false, 0.0),
     (kRemoteViewStyleAdaptive, false, 2.25, (48, 48), 0.375, 0.375, false, 0.0),
     (kRemoteViewStyleAdaptive, true, 2.0, (9, 18), 0.1, minimumScale, true, 0.0),
+    (kRemoteViewStyleAdaptive, true, 1.0, (64, 4), 0.5, 0.5, true, 0.0),
+    (kRemoteViewStyleCustom, true, 2.0, (4, 64), 0.5, 0.5, true, 0.0),
     (kRemoteViewStyleAdaptive, true, 1.0, (48, 64), 0.05, 0.1875, true, 2.0),
     (kRemoteViewStyleAdaptive, true, 2.0, (48, 64), 0.05, 0.1875, true, 2.0),
     (kRemoteViewStyleCustom, true, 1.0, (48, 64), 0.05, 0.1875, true, 2.0),
     (kRemoteViewStyleCustom, true, 2.0, (48, 64), 0.05, 0.1875, true, 2.0),
     (kRemoteViewStyleCustom, true, 2.0, (8, 10), 1.0, 1.2, true, 2.0),
-    (kRemoteViewStyleOriginal, true, 1.0, (48, 64), 0.05, 0.25, true, 2.0),
+    (kRemoteViewStyleOriginal, true, 1.0, (48, 64), 0.05, 0.1875, true, 2.0),
     (kRemoteViewStyleOriginal, true, 2.0, (48, 64), 0.05,
-        Platform.isWindows ? 0.125 : 0.25, true, 2.0),
+        Platform.isWindows ? 0.09375 : 0.1875, true, 2.0),
   ]) {
     testWidgets(
         '$style zoom=$zoom dpr=$dpr source=$source texture=$texture density=$density keeps remote geometry',
         (tester) async {
+      final sourceHotspot = source.$1 <= _hotspot.dx || source.$2 <= _hotspot.dy
+          ? Offset(source.$1 / 2, source.$2 / 2) : _hotspot;
       final painter = await _paintCursor(
           tester, _CanvasModel(style, canvasScale, texture),
-          dpr: dpr, zoom: zoom, source: source, density: density);
+          dpr: dpr, zoom: zoom, source: source, density: density,
+          hotspot: sourceHotspot);
       expect(painter.scale, scale);
       var imageOrigin = texture
           ? tester.getTopLeft(find.byType(Texture).first) : _canvasOffset;
@@ -250,12 +257,12 @@ void main() {
         imageOrigin = background.position!;
       }
       final target = _remotePosition * canvasScale + imageOrigin;
-      final hotspot = (Offset(painter.x, painter.y) + _hotspot) * scale;
+      final hotspot = (Offset(painter.x, painter.y) + sourceHotspot) * scale;
       expect(hotspot.dx, closeTo(target.dx, 1e-9));
       expect(hotspot.dy, closeTo(target.dy, 1e-9));
       final canvas = CursorTestDraw();
       painter.paint(canvas, _viewport);
-      final position = canvas.position! + _hotspot * canvas.factor;
+      final position = canvas.position! + sourceHotspot * canvas.factor;
       expect(position.dx, closeTo(target.dx, 1e-9));
       expect(position.dy, closeTo(target.dy, 1e-9));
     });

@@ -26,8 +26,8 @@ MouseCursor buildCursorOfCache(
     // bitmap even when the remote view scale has not changed.
     final dpr = WidgetsBinding
         .instance.platformDispatcher.views.single.devicePixelRatio;
-    // Keep Original and older peers unchanged. A long-edge minimum preserves
-    // the proportions of thin remote cursors when normalizing their DPI.
+    // Keep Original and older peers' pixel units and scale-1 behavior.
+    // Resizing uses a long-edge minimum regardless of source density.
     final legacyMinimum = cache.pixelRatio == 0 ||
         cursor.parent.target?.canvasModel.viewStyle.style == kRemoteViewStyleOriginal;
     // The minimum is logical, while Windows callers pass a physical scale.
