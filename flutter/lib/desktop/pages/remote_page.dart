@@ -1112,9 +1112,9 @@ class _ImagePaintState extends State<ImagePaint> {
             var c = Provider.of<CanvasModel>(context);
             if (isDesktop) {
               return _getDesktopCursorScale(c, m, dpr);
+            } else {
+              return zoomCursor.value || isViewOriginal() ? s : 1.0;
             }
-            if (zoomCursor.value || isViewOriginal()) return s;
-            return isWeb ? 1.0 : 1.0 / dpr;
           }
 
           return MouseRegion(
