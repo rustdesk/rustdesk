@@ -24,6 +24,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   _alphaTests();
   _thinCursorTests();
+  _sourceValidationTests();
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
     for (final dpr in [1.0, 2.0]) {
       for (final (platform, density) in [
@@ -62,6 +63,47 @@ void main() {
       session.dispose();
     }
   });
+}
+
+void _sourceValidationTests() {
+  const side = 48;
+  const sourceLimit = 4096;
+  const bytes = side * side * 4;
+  for (final density in [null, 4.0]) {
+    test('Web rejects invalid cursor sources and recovers, density=$density', () async {
+      final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 1);
+      addTearDown(canvas.dispose);
+      final cursor = await _loadCursor(CursorTestFFI(canvas), 'source-$density',
+          source: (side, side), pixelRatio: density);
+      final cache = cursor.cache;
+      final image = cursor.image;
+      final event = {
+        'id': 'source-$density', 'width': '$side', 'height': '$side',
+        'hotx': '7', 'hoty': '9',
+        if (density != null) 'scale': '$density',
+        'colors': jsonEncode(List<int>.filled(bytes, 255)),
+      };
+      // Invalid JSON proves geometry is checked before decoding or allocation.
+      const invalidPixels = 'must not decode an invalid source size';
+      for (final invalid in [
+        {'colors': '[1,2,3,4]'},
+        {'colors': jsonEncode(List<int>.filled(bytes + 1, 255))},
+        {'width': '0', 'colors': invalidPixels},
+        {'height': '-1', 'colors': invalidPixels},
+        {'width': '${sourceLimit * 4}', 'height': '${sourceLimit * 4}',
+          'colors': invalidPixels},
+        {'scale': '1e-300'},
+        {'scale': '0.001'},
+      ]) {
+        await cursor.updateCursorData({...event, ...invalid});
+        expect(cursor.cache, same(cache));
+        expect(cursor.image, same(image));
+        expect((cursor.hotx, cursor.hoty), (7, 9));
+      }
+      await cursor.updateCursorData(event);
+      expect(cursor.cache, isNot(same(cache)));
+    });
+  }
 }
 
 void _thinCursorTests() {
