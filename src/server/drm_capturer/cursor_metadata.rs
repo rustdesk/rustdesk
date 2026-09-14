@@ -60,6 +60,7 @@ mod tests {
                 width: 1280,
                 height: 800,
                 logical_size: Some((logical_width, logical_width * 800 / 1280)),
+                scale_factor: 1,
                 refresh_rate: 60000,
                 transform: 0,
             }],

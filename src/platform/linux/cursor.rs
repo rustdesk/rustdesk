@@ -128,7 +128,14 @@ fn wayland_scale(display: &base::platform::linux::WaylandDisplayInfo) -> ResultT
     } else {
         display.width
     };
-    Ok(f64::from(width) / f64::from(logical_width))
+    let scale = f64::from(width) / f64::from(logical_width);
+    // Mutter can report physical desktop coordinates even at 2x/3x output scale.
+    // Keep geometry-derived fractional densities for logically scaled desktops.
+    Ok(if scale == 1.0 && display.scale_factor > 1 {
+        f64::from(display.scale_factor)
+    } else {
+        scale
+    })
 }
 
 #[cfg(test)]
@@ -155,11 +162,35 @@ mod tests {
             width: 1280,
             height: 800,
             logical_size: Some((600, 960)),
+            scale_factor: 2,
             refresh_rate: 60000,
             transform: 90,
         };
         assert_eq!(wayland_scale(&display).unwrap(), 4.0 / 3.0);
         assert_ne!(cache_id(1, 1.0), cache_id(1, 2.0));
         assert_eq!(cache_id(1, 0.0), 1);
+    }
+
+    #[cfg(feature = "drm")]
+    #[test]
+    fn cursor_density_distinguishes_output_scale_from_desktop_coordinates() {
+        for (scale_factor, logical_size, expected) in [
+            (3, (2560, 1600), 3.0),  // GNOME can use physical desktop coordinates.
+            (2, (2048, 1280), 1.25), // Keep fractional scaling from logical geometry.
+            (0, (2560, 1600), 1.0),  // Older probe snapshots omit wl_output.scale.
+        ] {
+            let display = base::platform::linux::WaylandDisplayInfo {
+                name: "eDP-1".into(),
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1600,
+                logical_size: Some(logical_size),
+                scale_factor,
+                refresh_rate: 120000,
+                transform: 0,
+            };
+            assert_eq!(wayland_scale(&display).unwrap(), expected);
+        }
     }
 }
