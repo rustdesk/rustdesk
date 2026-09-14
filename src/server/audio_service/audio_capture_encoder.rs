@@ -87,7 +87,7 @@ impl CaptureStatsReporter {
             return;
         }
         let stats = std::mem::take(&mut self.pending);
-        log::debug!(
+        log::trace!(
             "Audio capture PCM handoff stats: observed_max_queued_packets={}, approx_queued_audio_ms={}, capacity_packets={}",
             stats.max_queued_packets,
             stats.max_queued_packets.saturating_mul(CAPTURE_PACKET_MS),

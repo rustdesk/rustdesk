@@ -2250,7 +2250,9 @@ impl AudioBuffer {
         let occupied = lock.occupied_len();
         drop(lock);
         if let Some((discarded, generation)) = discard {
-            log::debug!(
+            hbb_common::throttled_log!(
+                audio_playback::AUDIO_PLAYBACK_LOG_INTERVAL,
+                debug,
                 "Audio buffer capacity discard: samples={discarded}, generation={generation}"
             );
         }
@@ -2441,7 +2443,7 @@ impl AudioHandler {
         }
         #[cfg(target_os = "linux")]
         if self.simple.is_none() {
-            log::debug!("PulseAudio simple binding does not exists");
+            log::trace!("PulseAudio simple binding does not exists");
             return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
