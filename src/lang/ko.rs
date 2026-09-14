@@ -765,7 +765,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("sync-clipboard-between-sessions-tip", "원격 세션 하나에서 복사한 텍스트나 이미지는 다른 연결된 세션의 클립보드로도 전송됩니다."),
         ("terminal-clipboard-write-tip", "터미널의 앱이 이 장치의 클립보드에 텍스트를 복사하려고 합니다. 이 권한이 부여된 경우, 설정에서 이를 끌 때까지 모든 연결의 터미널 앱에 적용됩니다. 수동 복사 및 붙여넣기는 영향을 받지 않습니다."),
         ("Allow terminal apps to copy to clipboard", "터미널 앱이 클립보드로 복사하도록 허용"),
-        ("Enable", "사용함"),
+        ("Enable", "활성화"),
         ("Reuse one connection for port forwarding", "포트 포워딩을 위해 하나의 연결을 재사용"),
         ("port-forward-mux-tip", "각 연결마다 다시 연결하고 로그인할 필요 없이, 포트 포워딩 매핑의 모든 연결을 피어에 대한 단일 연결로 전달합니다."),
         ("Enable WebRTC P2P connection", "WebRTC P2P 연결 사용함"),
