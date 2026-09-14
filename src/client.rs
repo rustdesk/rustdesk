@@ -30,7 +30,8 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, get_rs_pk, is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, dtls_fingerprint_bound, get_rs_pk,
+    is_keyboard_mode_supported,
     kcp_stream::KcpStream,
     secure_tcp, secure_tcp_required,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
@@ -1703,7 +1704,7 @@ impl Client {
                                     let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
                                         || anyhow!("WebRTC DTLS fingerprint unavailable"),
                                     )?;
-                                    if signed_fp.is_empty() || signed_fp != actual_fp {
+                                    if !dtls_fingerprint_bound(&signed_fp, &actual_fp) {
                                         bail!("WebRTC DTLS fingerprint not bound to peer identity (possible MITM)");
                                     }
                                 }
