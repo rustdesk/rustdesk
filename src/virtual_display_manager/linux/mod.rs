@@ -1798,6 +1798,54 @@ mod tests {
         );
     }
 
+    // The picker's prefix refusal, run through the REAL enumeration instead of a hand-built list.
+    //
+    // `connectors()` reads DRM_CLASS, a hard-coded path, so this needs `/sys/class/drm` to be a
+    // fabricated tree carrying a prefix pair - no machine has one, since it takes ten connectors of
+    // one family to get `X-1` and `X-10`. Run it deliberately, inside a private mount namespace:
+    //
+    //     sudo unshare -m bash -c 'mount --make-rprivate /; mount --bind /tmp/fakedrm /sys/class/drm; \
+    //       <test-binary> --ignored --nocapture the_picker_on_a_real_enumeration'
+    //
+    // It is #[ignore]d because it asserts about the machine it runs on; on a real box the first
+    // assertion is what tells you the tree is not mounted rather than leaving a silent pass.
+    #[test]
+    #[ignore]
+    fn the_picker_on_a_real_enumeration_refuses_a_shadowed_name() {
+        let all = connectors();
+        println!("enumerated {} connectors from {DRM_CLASS}:", all.len());
+        for c in &all {
+            println!(
+                "  {:<16} name={:<12} connected={} drivable={} id={:?}",
+                c.sysfs, c.name, c.connected, c.drivable, c.id
+            );
+        }
+        let shadowed: Vec<&Connector> = all
+            .iter()
+            .filter(|c| all.iter().any(|o| o.name != c.name && o.name.starts_with(c.name.as_str())))
+            .collect();
+        assert!(
+            !shadowed.is_empty(),
+            "this enumeration has no name that another name starts with, so it cannot exercise the \
+             refusal: mount the fabricated tree over {DRM_CLASS} first"
+        );
+        for c in &shadowed {
+            println!("  shadowed by a longer name: {}", c.name);
+        }
+        let picked = pick_connector(&all);
+        println!("picked: {:?}", picked.map(|c| c.name.as_str()));
+        assert!(
+            picked.is_some(),
+            "the tree must offer a pickable alternative, or this proves nothing about the refusal"
+        );
+        let picked = picked.unwrap();
+        assert!(
+            !shadowed.iter().any(|c| c.name == picked.name),
+            "picked {}, which another connector's name starts with",
+            picked.name
+        );
+    }
+
     #[test]
     fn a_split_soc_counts_its_display_card() {
         // With a monitor attached the machine has real output and must be left alone.
