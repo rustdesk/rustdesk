@@ -11,13 +11,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/input_model.dart';
 import 'package:flutter_hbb/models/model.dart' as model;
 import 'package:flutter_hbb/web/custom_cursor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
+
+import 'cursor_test_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -38,9 +39,9 @@ void main() {
   }
   test('Web cursor aligns CSS hotspots with rounded PNG dimensions', () async {
     final registered = _captureCursor();
-    final canvas = _Canvas(kRemoteViewStyleAdaptive);
+    final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 0.5);
     addTearDown(canvas.dispose);
-    final ffi = _FFI(canvas);
+    final ffi = CursorTestFFI(canvas);
     for (final (hotspot, scale, side, expected) in [
       ((7.0, 7.0), 633 / 1600, 19, (3, 3)),
       ((21.0, 23.0), 633 / 1600, 19, (8, 9)),
@@ -75,9 +76,9 @@ void _thinCursorTests() {
   }
   test('Web thin cursors keep a raster pixel and an in-bounds hotspot', () async {
     final registered = _captureCursor();
-    final canvas = _Canvas(kRemoteViewStyleAdaptive);
+    final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 0.5);
     addTearDown(canvas.dispose);
-    final ffi = _FFI(canvas);
+    final ffi = CursorTestFFI(canvas);
     for (final (source, hotspot, scale, size, expected) in [
       ((4, 64), (2.0, 32.0), 0.5, (2, 32), (1, 16)),
       ((2, 128), (1.0, 64.0), 0.01, (1, 12), (0, 6)),
@@ -97,63 +98,6 @@ void _thinCursorTests() {
       }
     }
   });
-}
-
-class _Image extends ChangeNotifier implements model.ImageModel {
-  @override
-  bool get useTextureRender => false;
-  @override
-  ui.Image? get image => null;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Canvas extends ChangeNotifier implements model.CanvasModel {
-  _Canvas(String style)
-      : viewStyle = model.ViewStyle(
-            style: style,
-            width: 200,
-            height: 160,
-            displayWidth: 400,
-            displayHeight: 320);
-  @override
-  final model.ViewStyle viewStyle;
-  @override
-  final imageOverflow = false.obs;
-  @override
-  bool get cursorEmbedded => false;
-  @override
-  Size get size => const Size(200, 160);
-  @override
-  double get scale => 0.5;
-  @override
-  double get x => 0;
-  @override
-  double get y => 0;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _Input extends Fake implements InputModel {
-  @override
-  final relativeMouseMode = false.obs;
-}
-
-class _Peer extends Fake implements model.FfiModel {
-  @override
-  final pi = model.PeerInfo();
-  @override
-  bool get isPeerLinux => false;
-}
-
-class _FFI extends Fake implements model.FFI {
-  _FFI(this.canvasModel);
-  @override
-  final model.CanvasModel canvasModel;
-  @override
-  final inputModel = _Input();
-  @override
-  final ffiModel = _Peer();
 }
 
 Future<model.CursorModel> _loadCursor(model.FFI ffi, String id,
@@ -212,9 +156,9 @@ Future<void> _checkPolicy(WidgetTester tester, String style, double dpr,
     (int, int) expectedHotspot = (7, 9), double? pixelRatio = 1,
     String platform = kPeerPlatformMacOS}) async {
   final registered = _captureCursor();
-  final canvas = _Canvas(style);
+  final canvas = CursorTestCanvas(1, style: style, scale: 0.5);
   addTearDown(canvas.dispose);
-  final ffi = _FFI(canvas);
+  final ffi = CursorTestFFI(canvas);
   ffi.ffiModel.pi.platform = platform;
   // Retina export changes the bitmap too; varying metadata alone misses this boundary.
   final density = platform == kPeerPlatformMacOS && pixelRatio == 2 ? 2 : 1;
@@ -225,7 +169,7 @@ Future<void> _checkPolicy(WidgetTester tester, String style, double dpr,
     data: MediaQueryData(devicePixelRatio: dpr),
     child: MultiProvider(
         providers: [
-          ChangeNotifierProvider<model.ImageModel>(create: (_) => _Image()),
+          ChangeNotifierProvider<model.ImageModel>(create: (_) => CursorTestImage()),
           ChangeNotifierProvider<model.CanvasModel>.value(value: canvas),
           ChangeNotifierProvider<model.CursorModel>.value(value: cursor),
         ],
@@ -268,9 +212,9 @@ void _alphaTests() {
 
 Future<void> _checkAlpha(double? density, List<int> pixel) async {
   final registered = _captureCursor();
-  final canvas = _Canvas(kRemoteViewStyleAdaptive);
+  final canvas = CursorTestCanvas(1, style: kRemoteViewStyleAdaptive, scale: 0.5);
   addTearDown(canvas.dispose);
-  final ffi = _FFI(canvas)..ffiModel.pi.platform = kPeerPlatformMacOS;
+  final ffi = CursorTestFFI(canvas)..ffiModel.pi.platform = kPeerPlatformMacOS;
   final cursor = await _loadCursor(ffi, 'alpha-$density-$pixel',
       pixel: pixel, pixelRatio: density);
   // Cover both the painted remote cursor and the initial CSS cursor PNG.

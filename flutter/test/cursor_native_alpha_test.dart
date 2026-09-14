@@ -9,6 +9,8 @@ import 'package:flutter_hbb/native/custom_cursor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import 'cursor_test_utils.dart';
+
 const _side = 32;
 const _hotspot = Offset(7, 9);
 const _colors = [
@@ -29,41 +31,12 @@ class _Canvas extends Fake implements CanvasModel {
       displayHeight: 160);
 }
 
-class _Peer extends Fake implements FfiModel {
-  _Peer(String platform) : pi = (PeerInfo()..platform = platform);
-  @override
-  final PeerInfo pi;
-}
-
-class _FFI extends Fake implements FFI {
-  _FFI(String platform) : ffiModel = _Peer(platform);
-  @override
-  final canvasModel = _Canvas();
-  @override
-  final _Peer ffiModel;
-}
-
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   final view = binding.platformDispatcher.views.single;
-  final channel = Platform.isWindows
-      ? SystemChannels.mouseCursor
-      : const MethodChannel('flutter_custom_cursor');
   final registrations = <Map<dynamic, dynamic>>[];
-  setUp(() {
-    registrations.clear();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
-        (call) async {
-      if (!call.method.startsWith('createCustomCursor')) return null;
-      final args = call.arguments as Map<dynamic, dynamic>;
-      registrations.add(args);
-      return args['name'];
-    });
-  });
-  tearDown(() {
-    view.resetDevicePixelRatio();
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
-  });
+  captureNativeCursors(registrations);
+  tearDown(view.resetDevicePixelRatio);
   for (final testCase in <(String, String?, List<int>)>[
     (kPeerPlatformMacOS, null, [64, 32, 16, 128]),
     (kPeerPlatformMacOS, '0', [64, 32, 16, 128]),
@@ -87,7 +60,7 @@ void main() {
 Future<void> _checkCursor((String, String?, List<int>) testCase, double dpr,
     List<Map<dynamic, dynamic>> registrations) async {
   final (platform, density, color) = testCase;
-  final ffi = _FFI(platform);
+  final ffi = CursorTestFFI(_Canvas())..ffiModel.pi.platform = platform;
   final cursor = CursorModel(WeakReference(ffi))..id = '$testCase-$dpr';
   addTearDown(() {
     cursor.disposeImages();
@@ -126,15 +99,7 @@ Future<void> _checkCursor((String, String?, List<int>) testCase, double dpr,
 }
 
 void _checkRegistration(Map<dynamic, dynamic> args, double dpr) {
-  final bytes = args['buffer'] as Uint8List;
-  final decoded = Platform.isWindows
-      ? img.Image.fromBytes(
-          width: args['width'] as int,
-          height: args['height'] as int,
-          bytes: bytes.buffer,
-          bytesOffset: bytes.offsetInBytes,
-          order: img.ChannelOrder.bgra)
-      : img.decodePng(bytes)!;
+  final decoded = decodeNativeCursorRaster(args);
   expect((decoded.width, decoded.height), (_side * dpr, _side * dpr));
   expect((args['hotX'], args['hotY']), (_hotspot.dx * dpr, _hotspot.dy * dpr));
   _checkColors(decoded);
