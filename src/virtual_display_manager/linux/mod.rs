@@ -1846,6 +1846,89 @@ mod tests {
         );
     }
 
+    // The foreign-entry refusal, run through the REAL enable() path instead of the pure helper.
+    // Needs the fabricated tree of drm-probes/fakedrm-prefix-bench.sh in `foreign` mode, which also
+    // masks the edid_firmware parameter with one carrying `DP:edid/operator.bin` - an entry whose
+    // connector part is only a PREFIX of the connector enable() would pick.
+    // Measured: with the prefix match in place enable() refuses and leaves the parameter untouched;
+    // with `foreign_entry_covers` reverted to equality it does not refuse.
+    #[test]
+    #[ignore]
+    fn a_foreign_entry_that_only_prefixes_our_target_blocks_the_force() {
+        let before = read_edid_param();
+        assert!(
+            before.contains("DP:"),
+            "fixture: the masked parameter must carry a foreign `DP:` entry, it reads [{before}]"
+        );
+        let mut state = State::default();
+        let r = enable(&mut state);
+        println!("enable() -> {r:?}");
+        let err = match r {
+            Err(e) => format!("{e}"),
+            Ok(s) => panic!("enable forced {s} while a foreign entry covers it"),
+        };
+        assert!(err.contains("already covers"), "refused for the wrong reason: {err}");
+        assert_eq!(
+            read_edid_param(),
+            before,
+            "a refusal must leave somebody else's parameter exactly as it was"
+        );
+        assert!(state.forced.is_empty(), "nothing was forced, so nothing may be remembered");
+    }
+
+    // The stale-hold refusal, run through the REAL disable() - the one path no test could reach,
+    // because it reads and writes sysfs through hard-coded paths. Inside the fabricated tree those
+    // writes land in files this test can read back. Needs the tree in `hold` mode.
+    // Measured: a hold whose marker no longer names the connector at its path writes nothing, while
+    // the matching hold writes `detect`; with `hold_target` reverted to a path-only match the stale
+    // one writes `detect` too and the first assertion fails.
+    #[test]
+    #[ignore]
+    fn a_stale_hold_is_not_released_through_the_path_it_remembers() {
+        let all = connectors();
+        let c = all
+            .iter()
+            .find(|c| c.name == "DP-1")
+            .expect("fixture: the tree must carry card0-DP-1")
+            .clone();
+        let live = marker_of(&c).expect("fixture: DP-1 must state its identity");
+        let status = Path::new(DRM_CLASS).join(&c.sysfs).join("status");
+        let before = std::fs::read_to_string(&status).expect("fixture: a readable status file");
+
+        // A hold remembering the same PATH but a different connector instance behind it.
+        let mut state = State::default();
+        state.forced = vec![Held {
+            sysfs: c.sysfs.clone(),
+            name: c.name.clone(),
+            marker: Marker::Instance {
+                device: "someothercard".to_owned(),
+                id: "999999".to_owned(),
+            },
+        }];
+        let _ = disable(&mut state);
+        let after = std::fs::read_to_string(&status).expect("status still readable");
+        println!("stale hold: status was [{}] now [{}]", before.trim(), after.trim());
+        assert_eq!(
+            after, before,
+            "a stale hold must not write to the connector it no longer names"
+        );
+
+        // Control: the hold that still names it does release it.
+        let mut state = State::default();
+        state.forced = vec![Held {
+            sysfs: c.sysfs.clone(),
+            name: c.name.clone(),
+            marker: live,
+        }];
+        let _ = disable(&mut state);
+        let after = std::fs::read_to_string(&status).expect("status still readable");
+        println!("matching hold: status now [{}]", after.trim());
+        assert!(
+            after.contains("detect"),
+            "a hold that still names the connector must release it, status reads [{after}]"
+        );
+    }
+
     #[test]
     fn a_split_soc_counts_its_display_card() {
         // With a monitor attached the machine has real output and must be left alone.
