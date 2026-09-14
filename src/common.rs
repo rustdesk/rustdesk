@@ -1135,12 +1135,12 @@ fn get_api_server_(api: String, custom: String) -> String {
     if !s0.is_empty() {
         let s = crate::increase_port(&s0, -2);
         if s == s0 {
-            return "http://teamdesk.bellini-gr.ru:23187".to_owned();
+            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
         } else {
             return format!("http://{}", s);
         }
     }
-    "http://teamdesk.bellini-gr.ru:23187".to_owned()
+    "https://admin.rustdesk.com".to_owned()
 }
 
 #[inline]
