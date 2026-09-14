@@ -779,6 +779,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk가 XDG Desktop Portal에서 사용 가능한 화면을 가져오지 못했습니다. PipeWire 라이브러리가 너무 오래되었을 수 있습니다"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk가 화면 캡처에 필요한 GStreamer 구성 요소를 불러오지 못했습니다 ({})"),
         ("Relay fallback delay in seconds", "릴레이 대체 작동 지연 시간 (초)"),
-        ("relay-fallback-delay-tip", "이미 설정된 중계 연결이 직접 WebRTC 연결로 전환되기까지 기다리는 시간입니다. 이 값을 높이면 속도가 느린 직접 연결이 우선적으로 선택될 가능성이 높아지고, 낮추면 직접 연결이 불가능한 네트워크 환경에서 더 빨리 중계 연결로 전환됩니다. 빈 값으로 두면 기본값인 2.5초가 적용됩니다."),
+        ("relay-fallback-delay-tip", "이미 연결된 중계 연결이 직접 WebRTC 연결을 얼마나 기다린 후 대신 사용되는지입니다. 값을 늘리면 느린 직접 연결에 더 많은 시간을 주고, 줄이면 직접 연결이 불가능한 네트워크에서 더 빨리 중계로 전환합니다. 비워 두면 기본값 2.5초가 사용됩니다."),
     ].iter().cloned().collect();
 }
