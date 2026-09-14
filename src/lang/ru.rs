@@ -780,5 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk не удалось загрузить компонент GStreamer, необходимый для захвата экрана ({})"),
         ("Relay fallback delay in seconds", "Задержка перед переходом на ретранслятор в секундах"),
         ("relay-fallback-delay-tip", "Сколько времени уже установленное соединение через ретранслятор ждёт прямое соединение WebRTC, прежде чем будет использовано вместо него. Увеличьте, чтобы дать медленному прямому соединению больше времени; уменьшите, чтобы быстрее переходить на ретранслятор в сетях, где прямое соединение невозможно. Оставьте пустым для значения по умолчанию 2.5 секунды."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

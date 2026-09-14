@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Habilitar la captura de pantalla iniciará automáticamente el servicio, lo que permitirá que otros dispositivos soliciten una conexión desde este dispositivo."),
         ("android_stop_service_tip", "Cerrar el servicio cerrará automáticamente todas las conexiones establecidas."),
         ("android_version_audio_tip", "La versión actual de Android no admite la captura de audio, actualice a Android 10 o posterior."),
-        ("android_start_service_tip", "Toque [Iniciar servicio] o conceda el permiso [Captura de pantalla] para iniciar el servicio de pantalla compartida."),
+        ("android_start_service_tip", "Toque [Iniciar Servicio] o conceda el permiso [Captura de pantalla] para iniciar el servicio de pantalla compartida."),
         ("android_permission_may_not_change_tip", "Es posible que los permisos de las conexiones ya establecidas no cambien de inmediato hasta que se vuelva a conectar."),
         ("Account", "Cuenta"),
         ("Overwrite", "Sobrescribir"),
@@ -780,5 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk no ha podido cargar un componente de GStreamer necesario para capturar la pantalla ({})"),
         ("Relay fallback delay in seconds", "Retardo antes de usar el relé en segundos"),
         ("relay-fallback-delay-tip", "Cuánto tiempo espera una conexión de relé ya establecida a la conexión directa WebRTC antes de usarse en su lugar. Auméntelo para dar más tiempo a una conexión directa lenta; redúzcalo para recurrir antes al relé en redes donde no es posible una conexión directa. Déjelo vacío para el valor predeterminado de 2.5 segundos."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

@@ -716,11 +716,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("note-at-conn-end-tip", "Minta catatan di akhir koneksi"),
         ("Show terminal extra keys", "Tampilkan tombol tambahan terminal"),
         ("Relative mouse mode", "Mode mouse relatif"),
-        ("rel-mouse-not-supported-peer-tip", "Mode Mouse Relatif tidak didukung oleh peer yang terhubung."),
-        ("rel-mouse-not-ready-tip", "Mode Mouse Relatif belum siap. Silakan coba lagi."),
-        ("rel-mouse-lock-failed-tip", "Gagal mengunci kursor. Mode Mouse Relatif telah dinonaktifkan."),
+        ("rel-mouse-not-supported-peer-tip", "Mode mouse relatif tidak didukung oleh peer yang terhubung."),
+        ("rel-mouse-not-ready-tip", "Mode mouse relatif belum siap. Silakan coba lagi."),
+        ("rel-mouse-lock-failed-tip", "Gagal mengunci kursor. Mode mouse relatif telah dinonaktifkan."),
         ("rel-mouse-exit-{}-tip", "Tekan {} untuk keluar."),
-        ("rel-mouse-permission-lost-tip", "Izin keyboard dicabut. Mode Mouse Relatif telah dinonaktifkan."),
+        ("rel-mouse-permission-lost-tip", "Izin keyboard dicabut. Mode mouse relatif telah dinonaktifkan."),
         ("Changelog", "Catatan perubahan"),
         ("keep-awake-during-outgoing-sessions-label", "Jaga layar tetap menyala selama sesi keluar"),
         ("keep-awake-during-incoming-sessions-label", "Jaga layar tetap menyala selama sesi masuk"),
@@ -780,5 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk tidak dapat memuat komponen GStreamer yang diperlukan untuk merekam layar ({})"),
         ("Relay fallback delay in seconds", "Jeda sebelum beralih ke relai dalam detik"),
         ("relay-fallback-delay-tip", "Berapa lama koneksi relai yang sudah terbentuk menunggu koneksi langsung WebRTC sebelum digunakan sebagai gantinya. Perbesar untuk memberi koneksi langsung yang lambat lebih banyak waktu; perkecil agar lebih cepat beralih ke relai pada jaringan yang tidak memungkinkan koneksi langsung. Biarkan kosong untuk nilai bawaan 2.5 detik."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

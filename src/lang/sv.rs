@@ -279,7 +279,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_input_permission_tip1", "Android rättigheter saknas"),
         ("android_input_permission_tip2", "Gå till systeminställningarna, hitta [Installed Services], sätt på [RustDesk Input] tjänsten."),
         ("android_new_connection_tip", "Ny kontrollförfrågan mottagen, denna vill kontrollera din enhet."),
-        ("android_service_will_start_tip", "Sätter du på \"skärminspelning\" kommer tjänsten automatiskt att starta. Detta tillåter andra enheter att kontrollera din enhet."),
+        ("android_service_will_start_tip", "Sätter du på \"Skärminspelning\" kommer tjänsten automatiskt att starta. Detta tillåter andra enheter att kontrollera din enhet."),
         ("android_stop_service_tip", "Genom att stänga av tjänsten kommer alla enheter att kopplas ifrån."),
         ("android_version_audio_tip", "Din version av Android stödjer inte ljudinspelning, Android 10 eller nyare krävs"),
         ("android_start_service_tip", "android_start_service_tips"),
@@ -780,5 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk kunde inte läsa in en GStreamer-komponent som krävs för skärminspelning ({})"),
         ("Relay fallback delay in seconds", "Fördröjning innan relä används i sekunder"),
         ("relay-fallback-delay-tip", "Hur länge en redan upprättad reläanslutning väntar på den direkta WebRTC-anslutningen innan den används i stället. Öka värdet för att ge en långsam direktanslutning mer tid; sänk det för att snabbare falla tillbaka på reläet i nätverk där direktanslutning inte är möjlig. Lämna tomt för standardvärdet 2.5 sekunder."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

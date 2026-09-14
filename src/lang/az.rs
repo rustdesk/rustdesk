@@ -770,7 +770,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("port-forward-mux-tip", "Port yönləndirmə xəritələnməsinin hər əlaqəsini qarşı tərəfə açılan tək əlaqə üzərindən daşıyır, hər biri üçün yenidən qoşulub giriş etmək əvəzinə."),
         ("Enable WebRTC P2P connection", "WebRTC P2P əlaqəsini aktivləşdir"),
         ("Enable TCP hole punching", "TCP deşik açmanı aktivləşdir"),
+        ("The screen sharing request was declined on the remote device", ""),
+        ("The screen sharing request timed out on the remote device", ""),
+        ("RustDesk cannot reach the desktop session on the remote device, check that a desktop session is running and that RustDesk can use it", ""),
+        ("The desktop portal on the remote device is missing a capability needed for screen sharing or remote control, its backend may not be installed", ""),
+        ("Screen sharing was approved on the remote device, but the PipeWire connection could not be opened", ""),
+        ("The screen sharing request ended without completing on the remote device", ""),
+        ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", ""),
+        ("RustDesk could not load a GStreamer component needed for screen capture ({})", ""),
         ("Relay fallback delay in seconds", "Ötürücüyə keçid gecikməsi, saniyə"),
         ("relay-fallback-delay-tip", "Artıq qurulmuş ötürücü bağlantı birbaşa WebRTC bağlantısını nə qədər gözləyir, sonra onun əvəzinə istifadə olunur. Yavaş birbaşa bağlantıya daha çox vaxt vermək üçün artırın; birbaşa bağlantının mümkün olmadığı şəbəkələrdə ötürücüyə daha tez keçmək üçün azaldın. Standart 2.5 saniyə üçün boş buraxın."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }
