@@ -3494,6 +3494,11 @@ class CursorModel with ChangeNotifier {
     final hoty = double.parse(evt['hoty']);
     final width = int.parse(evt['width']);
     final height = int.parse(evt['height']);
+    // Bound physical allocation before density normalization or image decoding.
+    if (!_validCursorRasterSize(width.toDouble(), height.toDouble())) {
+      debugPrint('Rejected cursor $id: invalid source size ${width}x$height');
+      return;
+    }
     final pixelRatio = double.tryParse(evt['scale'] ?? '0');
     if (pixelRatio == null || !pixelRatio.isFinite || pixelRatio < 0 ||
         (pixelRatio > 0 &&
@@ -3502,6 +3507,11 @@ class CursorModel with ChangeNotifier {
       return;
     }
     List<dynamic> colors = json.decode(evt['colors']);
+    const bytesPerPixel = 4;
+    if (colors.length != width * height * bytesPerPixel) {
+      debugPrint('Rejected cursor $id: invalid RGBA length ${colors.length}');
+      return;
+    }
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     final ui.Image? image;
     final platform = parent.target?.ffiModel.pi.platform;
