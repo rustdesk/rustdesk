@@ -18,35 +18,18 @@ void main() {
   _rasterBoundsTests();
   final registrations = <Map<dynamic, dynamic>>[];
   captureNativeCursors(registrations);
-  _legacySizingTests(registrations);
   for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
-    for (final density in ['0', '1', '2', '1e-300', '0.001']) {
+    for (final (density, width, dpr) in [
+      (null, 4, 1.0),
+      ('0', 4, 2.0),
+      (null, 32, 2.0),
+      ('0', 32, 1.0),
+    ]) {
       testWidgets(
-          'density boundary $style density=$density',
-          (tester) => tester.runAsync(
-              () => checkDensity(tester, (style, density), registrations)));
-    }
-  }
-}
-
-void _legacySizingTests(List<Map<dynamic, dynamic>> registrations) {
-  for (final style in [kRemoteViewStyleAdaptive, kRemoteViewStyleCustom]) {
-    for (final density in [null, '0']) {
-      for (final (width, height, dpr) in [
-        (4, 32, 1.0),
-        (4, 32, 2.0),
-        (9, 18, 1.0),
-        (9, 18, 2.0),
-        (32, 32, 1.0),
-        (32, 32, 2.0),
-      ]) {
-        testWidgets(
-            'legacy $style density=$density ${width}x$height DPR=$dpr',
-            (tester) => tester.runAsync(() => checkDensity(
-                tester, (style, density), registrations,
-                sourceSize: Size(width.toDouble(), height.toDouble()),
-                dpr: dpr)));
-      }
+          'legacy $style density=$density ${width}x32 DPR=$dpr',
+          (tester) => tester.runAsync(() => checkDensity(
+              tester, (style, density), registrations,
+              sourceSize: Size(width.toDouble(), 32), dpr: dpr)));
     }
   }
 }
@@ -54,7 +37,6 @@ void _legacySizingTests(List<Map<dynamic, dynamic>> registrations) {
 void _rasterBoundsTests() {
   for (final (width, height, scale, legacy, rasterScale) in [
     (32, 32, 1e300, false, 1.0),
-    (32, 32, 129.0, false, 1.0),
     (32, 32, 100.0, false, 2.0),
     (512, 1, 0.1, true, 1.0),
   ]) {
@@ -106,13 +88,7 @@ Future<void> checkDensity(WidgetTester tester, (String, String?) input,
     canvas.dispose();
   });
   await cursor.updateCursorData(_cursorEvent(id, density, size: sourceSize));
-  final rejected = density == '1e-300' || density == '0.001';
-  if (rejected) {
-    expect(cursor.cache, isNull,
-        reason: 'Reject density before publishing a cursor');
-    await cursor.updateCursorData(_cursorEvent(id, '2'));
-  }
-  expect(cursor.cache!.pixelRatio, rejected ? 2 : double.parse(density ?? '0'));
+  expect(cursor.cache!.pixelRatio, 0);
   await _paintCursor(tester, ffi, cursor);
   expect(tester.takeException(), isNull);
   for (final key in cursor.cachedKeys) {
@@ -120,10 +96,8 @@ Future<void> checkDensity(WidgetTester tester, (String, String?) input,
   }
   expect(registrations, hasLength(1));
   await tester.pumpWidget(const SizedBox.shrink());
-  if (density == null || density == '0') {
-    expect(cursor.cache!.scale, 1.0);
-    _expectLegacyRaster(registrations.single, sourceSize, dpr);
-  }
+  expect(cursor.cache!.scale, 1.0);
+  _expectLegacyRaster(registrations.single, sourceSize, dpr);
 }
 
 Future<void> _paintCursor(

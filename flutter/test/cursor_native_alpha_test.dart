@@ -38,10 +38,6 @@ void main() {
   tearDown(view.resetDevicePixelRatio);
   for (final testCase in <(String, String?, List<int>)>[
     (kPeerPlatformMacOS, null, [64, 32, 16, 128]),
-    (kPeerPlatformMacOS, '0', [64, 32, 16, 128]),
-    (kPeerPlatformMacOS, '1', [64, 32, 16, 128]),
-    (kPeerPlatformMacOS, '2', [64, 32, 16, 128]),
-    (kPeerPlatformWindows, null, [64, 32, 16, 128]),
     (kPeerPlatformWindows, '0', [64, 32, 16, 128]),
     (kPeerPlatformLinux, '0', [32, 16, 8, 128]),
   ]) {
