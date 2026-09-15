@@ -1497,7 +1497,13 @@ pub async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Ok(_) = s.read(&mut buf) {
+                                    // A dead pulse handle fails every read at once, so ignoring the
+                                    // error left nothing pacing this loop and it burned a core.
+                                    if let Err(err) = s.read(&mut buf) {
+                                        log::error!("Failed to read audio data:{}", err);
+                                        break;
+                                    }
+                                    {
                                         let out =
                                             if buf.iter().filter(|x| **x != 0).next().is_none() {
                                                 vec![]

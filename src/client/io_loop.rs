@@ -598,6 +598,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             } else {
                                 log::debug!("Failed to record local audio channel: {}", err);
                             }
+                            // Both arms fall through with nothing else in this loop blocking, so
+                            // without a pause the thread spun a core for the whole voice call.
+                            std::thread::sleep(std::time::Duration::from_millis(1));
                         }
                     }
                 }

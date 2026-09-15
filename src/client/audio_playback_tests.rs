@@ -1,4 +1,7 @@
-use super::{AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackWriter};
+use super::{
+    AudioPlaybackConfig, AudioPlaybackError, AudioPlaybackRecovery, AudioPlaybackStatus,
+    AudioPlaybackWriter,
+};
 use ringbuf::{ring_buffer::RbBase, Rb};
 use std::{
     sync::{atomic::Ordering, mpsc, Arc, Mutex},
@@ -215,4 +218,45 @@ fn poisoned_playback_buffer_reports_once_without_panicking_in_the_callback() {
     assert!(!writer.status.buffer_poisoned.load(Ordering::Relaxed));
     assert_eq!(writer.status.contentions.load(Ordering::Relaxed), 0);
     assert!(!writer.status.ready.load(Ordering::Acquire));
+}
+
+#[test]
+fn contention_counts_accumulate_until_the_next_report() {
+    let status = AudioPlaybackStatus::default();
+    status.report_errors();
+    status.contentions.fetch_add(1, Ordering::Relaxed);
+    status.report_errors();
+    assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
+
+    let mut total = 0;
+    for callbacks in [3, 7, 2] {
+        total += callbacks;
+        status.contentions.fetch_add(callbacks, Ordering::Relaxed);
+        status.report_errors();
+        assert_eq!(status.contentions.load(Ordering::Relaxed), total);
+    }
+    status.buffer_poisoned.store(true, Ordering::Relaxed);
+    status.report_errors();
+    assert!(!status.buffer_poisoned.load(Ordering::Relaxed));
+    assert_eq!(status.contentions.load(Ordering::Relaxed), total);
+
+    std::thread::sleep(super::AUDIO_PLAYBACK_LOG_INTERVAL);
+    status.report_errors();
+    assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn contention_reporting_is_independent_between_playbacks() {
+    let first = AudioPlaybackStatus::default();
+    let second = AudioPlaybackStatus::default();
+    for status in [&first, &second] {
+        status.contentions.fetch_add(1, Ordering::Relaxed);
+        status.report_errors();
+        assert_eq!(status.contentions.load(Ordering::Relaxed), 0);
+    }
+    for status in [&first, &second] {
+        status.contentions.fetch_add(1, Ordering::Relaxed);
+        status.report_errors();
+        assert_eq!(status.contentions.load(Ordering::Relaxed), 1);
+    }
 }

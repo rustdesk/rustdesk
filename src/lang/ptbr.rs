@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Habilitar a Captura de Tela irá automaticamente inicalizar o serviço, permitindo que outros dispositivos solicitem uma conexão deste dispositivo."),
         ("android_stop_service_tip", "Fechar o serviço irá automaticamente fechar todas as conexões estabelecidas."),
         ("android_version_audio_tip", "A versão atual do Android não suporta captura de áudio, por favor atualize para o Android 10 ou superior."),
-        ("android_start_service_tip", "Toque em [Iniciar serviço] ou habilite a permissão [Captura de tela] para iniciar o serviço de compartilhamento de tela."),
+        ("android_start_service_tip", "Toque em [Iniciar Serviço] ou habilite a permissão [Captura de Tela] para iniciar o serviço de compartilhamento de tela."),
         ("android_permission_may_not_change_tip", "As permissões para conexões estabelecidas podem não ser alteradas instantaneamente até que seja reconectado."),
         ("Account", "Conta"),
         ("Overwrite", "Substituir"),
@@ -763,8 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Bloquear tela"),
         ("Sync clipboard between sessions", "Sincronizar área de transferência entre sessões"),
         ("sync-clipboard-between-sessions-tip", "Texto ou imagens copiados em uma sessão remota também são enviados para a área de transferência das suas outras sessões conectadas."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Aplicativos do terminal podem copiar para a área de transferência"),
+        ("Allow terminal apps to copy to clipboard", "Permitir que aplicativos do terminal copiem para a área de transferência"),
         ("Enable", "Habilitar"),
         ("Reuse one connection for port forwarding", "Reutilizar uma conexão para encaminhamento de portas"),
         ("port-forward-mux-tip", "Levar todas as conexões de um encaminhamento de portas por uma única conexão com o outro computador, em vez de estabelecer uma nova conexão e fazer login novamente para cada uma."),
@@ -778,5 +778,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "A solicitação de compartilhamento de tela no dispositivo remoto foi encerrada sem ser concluída."),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "O RustDesk não conseguiu obter uma tela utilizável do XDG Desktop Portal. A biblioteca do PipeWire pode estar desatualizada."),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "O RustDesk não conseguiu carregar um componente do GStreamer necessário para a captura de tela ({})."),
+        ("Relay fallback delay in seconds", "Atraso antes de recorrer ao retransmissor em segundos"),
+        ("relay-fallback-delay-tip", "Quanto tempo uma conexão de retransmissão já estabelecida espera pela conexão direta WebRTC antes de ser usada no lugar dela. Aumente para dar mais tempo a uma conexão direta lenta; diminua para recorrer mais cedo ao retransmissor em redes onde não é possível uma conexão direta. Deixe vazio para o valor padrão de 2.5 segundos."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }
