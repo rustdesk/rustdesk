@@ -1196,11 +1196,16 @@ class _ImagePaintState extends State<ImagePaint> {
   double _getDesktopCursorScale(CanvasModel c, ImageModel m, double dpr) {
     final peer = widget.ffi.ffiModel;
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
+      if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
+        // Remove the host output's density without applying canvas zoom.
+        final scale = 1.0 / _cursorDisplayScale.value;
+        return isWindows ? scale : scale / dpr;
+      }
       if (zoomCursor.value && c.viewStyle.style == kRemoteViewStyleAdaptive) {
         final scale = c.scale / _cursorDisplayScale.value;
         return isWindows ? scale * dpr : scale;
       }
-      // Other Windows modes retain their legacy fixed physical size.
+      // Windows Custom zoom retains its legacy fixed physical size.
       if (isWindows) return 1.0;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
