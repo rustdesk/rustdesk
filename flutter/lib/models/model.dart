@@ -1734,15 +1734,28 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // Display updates replace virtual-display state but omit other capabilities.
+    final virtualDisplayKeys = [
+      kMacOSVirtualDisplayModes,
+      if (_pi.platform == kPeerPlatformMacOS) ...[
+        'macos_virtual_display_supported',
+        'macos_virtual_displays',
+        'virtual_display_native_scale',
+      ],
+    ];
     if (updateData.isEmpty) {
-      _pi.platformAdditions.remove(kMacOSVirtualDisplayModes);
+      for (final key in virtualDisplayKeys) {
+        _pi.platformAdditions.remove(key);
+      }
       _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
       _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
-        if (!updateJson.containsKey(kMacOSVirtualDisplayModes)) {
-          _pi.platformAdditions.remove(kMacOSVirtualDisplayModes);
+        for (final key in virtualDisplayKeys) {
+          if (!updateJson.containsKey(key)) {
+            _pi.platformAdditions.remove(key);
+          }
         }
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
