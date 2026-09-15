@@ -282,6 +282,7 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                     id: Config::get_id(),
                     pk: Bytes::from(our_pk_b.0.to_vec()),
                     dtls_fingerprint,
+                    kx_version: tcp::KX_VERSION_LATEST,
                     ..Default::default()
                 }
                 .write_to_bytes()
@@ -298,11 +299,33 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
-                            stream.set_key(tcp::Encrypt::decode(
+                            let key = tcp::Encrypt::decode(
                                 &pk.symmetric_value,
                                 &pk.asymmetric_value,
                                 &our_sk_b,
-                            )?);
+                            )?;
+                            // The controller picks from what we offered; anything above that
+                            // is a bug or tampering, never a legitimate peer.
+                            if pk.kx_version > tcp::KX_VERSION_LATEST {
+                                bail!(
+                                    "Handshake failed: key exchange version {} not offered",
+                                    pk.kx_version
+                                );
+                            }
+                            if pk.kx_version >= 1 {
+                                stream.set_key_split(
+                                    key,
+                                    false,
+                                    &tcp::KxTranscript {
+                                        initiator_pk: &pk.asymmetric_value,
+                                        responder_pk: &our_pk_b.0,
+                                        advertised: tcp::KX_VERSION_LATEST,
+                                        picked: pk.kx_version,
+                                    },
+                                )?;
+                            } else {
+                                stream.set_key(key);
+                            }
                         } else if pk.asymmetric_value.is_empty() {
                             Config::set_key_confirmed(false);
                             log::info!("Force to update pk");

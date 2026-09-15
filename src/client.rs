@@ -1694,7 +1694,9 @@ impl Client {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
-                        if let Ok((id, their_pk_b, signed_fp)) = decode_id_pk_dtls(&si.id, &sign_pk) {
+                        if let Ok((id, their_pk_b, signed_fp, kx_version)) =
+                            decode_id_pk_dtls(&si.id, &sign_pk)
+                        {
                             if id == peer_id {
                                 // WebRTC only: bind the DTLS channel to the verified peer identity.
                                 // webrtc-rs already bound the certificate to the remote SDP, so
@@ -1710,14 +1712,29 @@ impl Client {
                                 }
                                 let (asymmetric_value, symmetric_value, key) =
                                     create_symmetric_key_msg(their_pk_b);
+                                let picked = hbb_common::tcp::kx_version_for(kx_version);
                                 let mut msg_out = Message::new();
                                 msg_out.set_public_key(PublicKey {
-                                    asymmetric_value,
+                                    asymmetric_value: asymmetric_value.clone(),
                                     symmetric_value,
+                                    kx_version: picked,
                                     ..Default::default()
                                 });
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                                conn.set_key(key);
+                                if picked >= 1 {
+                                    conn.set_key_split(
+                                        key,
+                                        true,
+                                        &hbb_common::tcp::KxTranscript {
+                                            initiator_pk: &asymmetric_value,
+                                            responder_pk: &their_pk_b,
+                                            advertised: kx_version,
+                                            picked,
+                                        },
+                                    )?;
+                                } else {
+                                    conn.set_key(key);
+                                }
                             } else {
                                 if is_webrtc {
                                     bail!("WebRTC handshake id mismatch (possible MITM)");

@@ -705,6 +705,9 @@ message TestDelay {
 message PublicKey {
   bytes asymmetric_value = 1;
   bytes symmetric_value = 2;
+  // The key exchange version the controller picked, the highest both sides speak; absent,
+  // i.e. 0, is the original scheme.
+  uint32 kx_version = 3;
 }
 
 message SignedId { bytes id = 1; }

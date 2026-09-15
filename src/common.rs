@@ -2100,17 +2100,33 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                         }
                         let their_pk_b = sign::verify(&ex.keys[0], &rs_pk)
                             .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
-                        let (asymmetric_value, symmetric_value, key) = create_symmetric_key_msg(
-                            get_pk(&their_pk_b)
-                                .context("Wrong their public length in key exchange")?,
-                        );
+                        let their_pk_b = get_pk(&their_pk_b)
+                            .context("Wrong their public length in key exchange")?;
+                        let (asymmetric_value, symmetric_value, key) =
+                            create_symmetric_key_msg(their_pk_b);
+                        let version = hbb_common::tcp::kx_version_for(ex.version);
                         let mut msg_out = RendezvousMessage::new();
                         msg_out.set_key_exchange(KeyExchange {
-                            keys: vec![asymmetric_value, symmetric_value],
+                            keys: vec![asymmetric_value.clone(), symmetric_value],
+                            version,
                             ..Default::default()
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        conn.set_key(key);
+                        if version >= 1 {
+                            conn.set_key_split(
+                                key,
+                                true,
+                                &hbb_common::tcp::KxTranscript {
+                                    initiator_pk: &asymmetric_value,
+                                    responder_pk: &their_pk_b,
+                                    advertised: ex.version,
+                                    picked: version,
+                                },
+                            )?;
+                        } else {
+                            conn.set_key(key);
+                        }
+                        conn.check_kx_advertised(ex.version);
                         if log_on_success {
                             log::info!("Connection secured");
                         }
@@ -2170,21 +2186,23 @@ pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
-    let (id, pk, _) = decode_id_pk_dtls(signed, key)?;
+    let (id, pk, _, _) = decode_id_pk_dtls(signed, key)?;
     Ok((id, pk))
 }
 
 /// Like [`decode_id_pk`] but also returns the signed DTLS certificate fingerprint (empty string
-/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity.
+/// for non-WebRTC peers), used to bind a WebRTC DTLS channel to the verified peer identity, and
+/// the newest key exchange version the peer speaks (0, the original scheme, for a peer from
+/// before versions).
 pub fn decode_id_pk_dtls(
     signed: &[u8],
     key: &sign::PublicKey,
-) -> ResultType<(String, [u8; 32], String)> {
+) -> ResultType<(String, [u8; 32], String, u32)> {
     let res = IdPk::parse_from_bytes(
         &sign::verify(signed, key).map_err(|_| anyhow!("Signature mismatch"))?,
     )?;
     if let Some(pk) = get_pk(&res.pk) {
-        Ok((res.id, pk, res.dtls_fingerprint))
+        Ok((res.id, pk, res.dtls_fingerprint, res.kx_version))
     } else {
         bail!("Wrong their public length");
     }
@@ -3395,7 +3413,7 @@ mod tests {
             &sk,
         );
 
-        let (id, their_pk, signed_fp) = decode_id_pk_dtls(&signed, &pk).unwrap();
+        let (id, their_pk, signed_fp, _) = decode_id_pk_dtls(&signed, &pk).unwrap();
         assert_eq!(id, "123456789");
         assert_eq!(their_pk, [7u8; 32]);
         assert_eq!(signed_fp, fp);
