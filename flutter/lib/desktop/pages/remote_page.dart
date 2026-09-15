@@ -1005,8 +1005,8 @@ class _RemotePageState extends State<RemotePage>
   bool get wantKeepAlive => true;
 }
 
-/// A widget that tracks the view size and updates CanvasModel.updateViewStyle()
-/// and InputModel.updateImageWidgetSize() only when size actually changes.
+/// Tracks view size and DPR to update CanvasModel.updateViewStyle()
+/// and InputModel.updateImageWidgetSize() only when either changes.
 /// This avoids scheduling post-frame callbacks on every LayoutBuilder rebuild.
 class _ViewStyleUpdater extends StatefulWidget {
   final CanvasModel canvasModel;
@@ -1026,10 +1026,12 @@ class _ViewStyleUpdater extends StatefulWidget {
 
 class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
   Size? _lastSize;
+  double? _lastDevicePixelRatio;
   bool _callbackScheduled = false;
 
   @override
   Widget build(BuildContext context) {
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
@@ -1039,8 +1041,9 @@ class _ViewStyleUpdaterState extends State<_ViewStyleUpdater> {
           return widget.child;
         }
         final newSize = Size(maxWidth, maxHeight);
-        if (_lastSize != newSize) {
+        if (_lastSize != newSize || _lastDevicePixelRatio != devicePixelRatio) {
           _lastSize = newSize;
+          _lastDevicePixelRatio = devicePixelRatio;
           // Schedule the update for after the current frame to avoid setState during build.
           // Use _callbackScheduled flag to prevent accumulating multiple callbacks
           // when size changes rapidly before any callback executes.
@@ -1102,8 +1105,7 @@ class _ImagePaintState extends State<ImagePaint> {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
-    // CanvasModel caches the DPR and only refreshes it when the view style
-    // changes, so read it live to follow the window across monitors.
+    // Read the live DPR while the canvas's post-frame update is pending.
     final dpr = MediaQuery.devicePixelRatioOf(context);
 
     bool isViewOriginal() => c.viewStyle.style == kRemoteViewStyleOriginal;

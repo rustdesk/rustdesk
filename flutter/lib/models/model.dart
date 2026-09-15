@@ -2402,7 +2402,9 @@ class CanvasModel with ChangeNotifier {
     // ViewStyle fields and is not captured by the equality check. Therefore, we must
     // allow updates to proceed when style == kRemoteViewStyleCustom, even if the
     // rest of the ViewStyle fields are unchanged.
-    if (_lastViewStyle == viewStyle && style != kRemoteViewStyleCustom) {
+    if (_lastViewStyle == viewStyle &&
+        _devicePixelRatio == ui.window.devicePixelRatio &&
+        style != kRemoteViewStyleCustom) {
       return;
     }
     if (_lastViewStyle.style != viewStyle.style) {
