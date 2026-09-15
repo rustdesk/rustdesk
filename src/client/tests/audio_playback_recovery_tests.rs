@@ -1,5 +1,7 @@
 use super::*;
-use crate::client::audio_playback::AudioPlaybackStatus;
+use crate::client::{
+    audio_playback::AudioPlaybackStatus, audio_playback_recovery::STARTUP_CONFIRMATION_TIMEOUT,
+};
 use cpal::StreamError;
 use crossbeam_queue::SegQueue;
 use hbb_common::tokio::time::Instant;
@@ -47,6 +49,37 @@ fn begin_pending(handler: &mut AudioHandler) -> PendingOutput {
     });
     let (status, errors) = state.unwrap();
     (dropped, status, errors)
+}
+
+#[test]
+fn unconfirmed_start_retries_without_callback_or_error() {
+    let dropped = Arc::new(AtomicBool::new(false));
+    let mut handler = AudioHandler::default();
+    handler.handle_format_with_start(format(INPUT_RATE, CHANNELS), |candidate, _| {
+        install_output(candidate, dropped.clone());
+        candidate
+            .playback_status
+            .ready
+            .store(false, Ordering::Release);
+        Ok(())
+    });
+    handler.recover_playback_with(Instant::now(), |_, _| {
+        panic!("Startup confirmation deadline has not elapsed")
+    });
+    assert!(!dropped.load(Ordering::SeqCst));
+    let expired = Instant::now() + STARTUP_CONFIRMATION_TIMEOUT;
+    let mut attempts = 0;
+    handler.recover_playback_with(expired, |candidate, requested| {
+        attempts += 1;
+        assert!(dropped.load(Ordering::SeqCst));
+        assert_eq!(requested, format(INPUT_RATE, CHANNELS));
+        install_output(candidate, Arc::new(AtomicBool::new(false)));
+        Ok(())
+    });
+    assert_eq!(attempts, 1);
+    handler.recover_playback_with(expired + STARTUP_CONFIRMATION_TIMEOUT, |_, _| {
+        panic!("Confirmed output must not be reopened")
+    });
 }
 
 #[test]

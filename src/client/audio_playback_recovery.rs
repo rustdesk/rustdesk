@@ -8,6 +8,7 @@ use std::{
 };
 
 const RECOVERY_INTERVAL: Duration = Duration::from_secs(1);
+pub(super) const STARTUP_CONFIRMATION_TIMEOUT: Duration = Duration::from_secs(5);
 // The pinned WASAPI backend reports this warning but keeps its worker running.
 const PRIORITY_WARNING_PREFIX: &str = "SetThreadPriority failed: ";
 
@@ -21,6 +22,7 @@ pub(super) struct PlaybackRecovery {
     pub(super) retry_at: Option<Instant>,
     restart_not_before: Option<Instant>,
     awaiting_callback: bool,
+    startup_deadline: Option<Instant>,
     pending_output: Option<Box<AudioHandler>>,
 }
 
@@ -67,12 +69,14 @@ impl AudioHandler {
     }
 
     pub(super) fn finish_playback_start(&mut self, result: ResultType<()>) {
-        let retry_at = Instant::now() + RECOVERY_INTERVAL;
+        let now = Instant::now();
+        let retry_at = now + RECOVERY_INTERVAL;
         self.playback_recovery.restart_not_before = Some(retry_at);
         match result {
             Ok(()) => {
                 self.playback_recovery.retry_at = None;
                 self.playback_recovery.awaiting_callback = true;
+                self.playback_recovery.startup_deadline = Some(now + STARTUP_CONFIRMATION_TIMEOUT);
                 log::info!("Audio playback stream opened; waiting for output callback");
             }
             Err(error) => {
@@ -83,6 +87,22 @@ impl AudioHandler {
                 );
             }
         }
+    }
+
+    fn playback_start_timed_out(&mut self, now: Instant) -> bool {
+        if !self.playback_recovery.awaiting_callback
+            || self.playback_status.ready.load(Ordering::Acquire)
+            || !self
+                .playback_recovery
+                .startup_deadline
+                .is_some_and(|due| now >= due)
+        {
+            return false;
+        }
+        self.playback_recovery.awaiting_callback = false;
+        self.playback_recovery.startup_deadline = None;
+        log::error!("Audio playback start timed out waiting for output callback");
+        true
     }
 
     fn restart_playback(&mut self, format: AudioFormat) -> ResultType<()> {
@@ -101,9 +121,9 @@ impl AudioHandler {
         now: Instant,
         restart: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
     ) {
-        let failed = self
-            .resolve_pending_playback()
-            .unwrap_or_else(|| self.playback_recovery.report_pending());
+        let failed = self.resolve_pending_playback(now).unwrap_or_else(|| {
+            self.playback_recovery.report_pending() || self.playback_start_timed_out(now)
+        });
         if failed {
             self.clear_playback_stream();
             self.playback_recovery.retry_at = Some(
@@ -116,6 +136,7 @@ impl AudioHandler {
             && self.playback_status.ready.load(Ordering::Acquire)
         {
             self.playback_recovery.awaiting_callback = false;
+            self.playback_recovery.startup_deadline = None;
             log::info!("Audio playback output callback started");
         }
         if !self

@@ -4,7 +4,9 @@ use hbb_common::log;
 impl AudioHandler {
     pub(in crate::client) fn cancel_pending_playback(&mut self) -> bool {
         // Format messages bypass recovery; retain a usable candidate before superseding it.
-        let failed = self.resolve_pending_playback().unwrap_or(false);
+        let failed = self
+            .resolve_pending_playback(Instant::now())
+            .unwrap_or(false);
         if let Some(mut pending) = self.playback_recovery.pending_output.take() {
             pending.audio_stream = None;
             pending.playback_recovery.report_pending();
@@ -29,10 +31,12 @@ impl AudioHandler {
         self.recover_playback_with(Instant::now(), Self::restart_playback);
     }
 
-    pub(super) fn resolve_pending_playback(&mut self) -> Option<bool> {
+    pub(super) fn resolve_pending_playback(&mut self, now: Instant) -> Option<bool> {
         let mut candidate = self.playback_recovery.pending_output.take()?;
-        let candidate_failed = candidate.playback_recovery.report_pending();
-        let previous_failed = self.playback_recovery.report_pending();
+        let candidate_failed =
+            candidate.playback_recovery.report_pending() || candidate.playback_start_timed_out(now);
+        let previous_failed =
+            self.playback_recovery.report_pending() || self.playback_start_timed_out(now);
         if candidate_failed {
             self.playback_recovery.restart_not_before =
                 candidate.playback_recovery.restart_not_before;
