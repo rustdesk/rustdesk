@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "디스플레이 배율 응답이 유효하지 않습니다"),
         ("Invalid display scaling levels", "디스플레이 배율 단계가 유효하지 않습니다"),
         ("Invalid display scaling range", "디스플레이 배율 범위가 유효하지 않습니다"),
+        ("Interface size", "인터페이스 크기"),
+        ("Current interface size", "현재 인터페이스 크기"),
     ].iter().cloned().collect();
 }

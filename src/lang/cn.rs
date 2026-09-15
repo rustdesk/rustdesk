@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "显示缩放响应无效"),
         ("Invalid display scaling levels", "显示缩放等级无效"),
         ("Invalid display scaling range", "显示缩放范围无效"),
+        ("Interface size", "界面大小"),
+        ("Current interface size", "当前界面大小"),
     ].iter().cloned().collect();
 }

@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "ეკრანის მასშტაბირების პასუხი არასწორია"),
         ("Invalid display scaling levels", "ეკრანის მასშტაბირების დონეები არასწორია"),
         ("Invalid display scaling range", "ეკრანის მასშტაბირების დიაპაზონი არასწორია"),
+        ("Interface size", "ინტერფეისის ზომა"),
+        ("Current interface size", "ინტერფეისის მიმდინარე ზომა"),
     ].iter().cloned().collect();
 }

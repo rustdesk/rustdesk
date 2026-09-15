@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "پاسخ مقیاس‌بندی نمایشگر نامعتبر است"),
         ("Invalid display scaling levels", "سطوح مقیاس‌بندی نمایشگر نامعتبر هستند"),
         ("Invalid display scaling range", "محدوده مقیاس‌بندی نمایشگر نامعتبر است"),
+        ("Interface size", "اندازهٔ رابط کاربری"),
+        ("Current interface size", "اندازهٔ فعلی رابط کاربری"),
     ].iter().cloned().collect();
 }

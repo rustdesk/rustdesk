@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "Дисплейді масштабтау жауабы жарамсыз"),
         ("Invalid display scaling levels", "Дисплейді масштабтау деңгейлері жарамсыз"),
         ("Invalid display scaling range", "Дисплейді масштабтау ауқымы жарамсыз"),
+        ("Interface size", "Интерфейс өлшемі"),
+        ("Current interface size", "Ағымдағы интерфейс өлшемі"),
     ].iter().cloned().collect();
 }

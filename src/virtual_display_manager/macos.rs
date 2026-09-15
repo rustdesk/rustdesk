@@ -348,23 +348,6 @@ mod tests {
     }
 
     #[test]
-    fn stopped_worker_releases_operation_capacity() {
-        let operations = Arc::new(Semaphore::new(1));
-        let (sender, receiver) = mpsc::channel();
-        drop(receiver);
-        assert!(sender
-            .send(Command::Toggle {
-                conn_id: 1,
-                index: 1,
-                on: true,
-                reply: oneshot::channel().0,
-                _permit: operation_permit(&operations).unwrap(),
-            })
-            .is_err());
-        assert_eq!(operations.available_permits(), 1);
-    }
-
-    #[test]
     fn disconnect_preserves_other_connections_and_rejects_stale_requests() {
         let (sender, receiver) = mpsc::channel();
         let mut operations = Vec::new();

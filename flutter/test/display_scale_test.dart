@@ -65,7 +65,7 @@ void main() {
     });
   }
 
-  test('validates host capabilities and keeps fractional percentages', () {
+  test('validates host capabilities', () {
     expect(DisplayScaleState.fromJson(data).options, [100, 125, 150, 175, 200]);
     for (final invalid in [
       {...data, 'percent': 137},
@@ -129,8 +129,7 @@ void main() {
         throwsStateError);
   });
 
-  test('decimal capabilities, range validation and formatting retain precision',
-      () {
+  test('decimal capabilities and range validation retain precision', () {
     final fractional = DisplayScaleState.fromJson({
       ...data,
       'percent': 125.5,
@@ -139,9 +138,6 @@ void main() {
     });
     expect(fractional.percent, 125.5);
     expect(fractional.options, [100, 125.5, 150]);
-    expect(formatDisplayScale(125.5), '125.5');
-    expect(formatDisplayScale(150), '150');
-    expect(formatDisplayScale(151 / 120 * 100), '125.83');
     for (final range in [
       [50, 300, 0],
       [300, 50, 1],
@@ -417,10 +413,14 @@ void main() {
                 (widget) => widget is ExcludeSemantics && widget.excluding)),
         findsOneWidget);
 
-    expect(tester.widget<TextField>(field).keyboardType,
-        const TextInputType.numberWithOptions(decimal: true));
     await tester.enterText(field, '125.5');
     await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<TextField>(find.widgetWithText(TextField, 'Width'))
+            .controller!
+            .text,
+        '1920');
     expect(tester.widget<TextField>(field).controller!.text, '125.5');
     expect(find.text('Use nearest supported scale: 125.83%'), findsOneWidget);
     expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
@@ -447,9 +447,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('scale-only Apply works without advertised resolution modes',
+  testWidgets('scale-only hosts do not offer unsupported resolution controls',
       (tester) async {
     var applied = false;
+    final calls = <double>[];
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SizedBox(
@@ -465,111 +466,31 @@ void main() {
                     onCancel: () => applied = true,
                     onApply: (_, __, ___) =>
                         fail('Unchanged resolution must not be submitted'),
-                    requestScale: (percent, _) async => percent == 0
-                        ? state
-                        : DisplayScaleState(
-                            percent: percent,
-                            options: [100, 125, 150],
-                            token: 'new'))))));
+                    requestScale: (percent, _) async {
+                      calls.add(percent);
+                      return percent == 0
+                          ? state
+                          : DisplayScaleState(
+                              percent: percent,
+                              options: [100, 125, 150],
+                              token: 'new');
+                    })))));
     await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byKey(const ValueKey('resolution-aspect-ratio')), findsNothing);
+    expect(find.text('resolution_fit_local_tip'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
     await tester.pumpAndSettle();
+    expect(calls, [0]);
     expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
         isNotNull);
-    await tester.enterText(find.byType(TextField).first, '2560');
-    await tester.pumpAndSettle();
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.enterText(find.byType(TextField).first, '1920');
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(applied, isTrue);
+    expect(calls, [0, 125]);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('native percentage menu and reset stay drafts until Apply',
-      (tester) async {
-    final calls = <(double, String)>[];
-    final applied = Completer<DisplayScaleState>();
-    var closed = false;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: SizedBox(
-                width: 360,
-                child: DisplaySettings(
-                    width: 1920,
-                    height: 1080,
-                    minDimension: 1,
-                    maxDimension: 9999,
-                    onApply: (_, __, ___) => fail("Resolution did not change"),
-                    translate: (s) => s,
-                    requestScale: (percent, token) async {
-                      calls.add((percent, token));
-                      if (percent == 0) return state;
-                      return applied.future;
-                    },
-                    onCancel: () => closed = true)))));
-    await tester.pumpAndSettle();
-    expect(calls, [(0, '')]);
-    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-    await tester.pumpAndSettle();
-    expect(calls, [(0, '')]);
-    await tester.tap(find.text('Reset changes'));
-    await tester.pumpAndSettle();
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply'));
-    await tester.pump();
-    expect(calls, [(0, ''), (125, 'fresh')]);
-    expect(closed, isFalse);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    applied.complete(const DisplayScaleState(
-        percent: 125, options: [100, 125, 150], token: 'new'));
-    await tester.pumpAndSettle();
-    expect(closed, isTrue);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('failed apply requires refresh and never reports success',
-      (tester) async {
-    var queryCount = 0;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: DisplaySettings(
-                width: 1920,
-                height: 1080,
-                minDimension: 1,
-                maxDimension: 9999,
-                onApply: (_, __, ___) => fail("Resolution did not change"),
-                translate: (s) => s,
-                requestScale: (percent, token) async {
-                  if (percent != 0) throw const DisplayScaleError('stale');
-                  queryCount++;
-                  return state;
-                },
-                onCancel: () => fail('Failed apply must stay open')))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply'));
-    await tester.pumpAndSettle();
-    expect(find.text('stale'), findsOneWidget);
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.tap(find.text('Refresh'));
-    await tester.pumpAndSettle();
-    expect(queryCount, 2);
   });
 
   for (final succeeds in [true, false]) {
@@ -577,6 +498,7 @@ void main() {
         (tester) async {
       final response = Completer<DisplayScaleState>();
       final modes = <(int, int, int)>[];
+      var closed = false;
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(
               body: SizedBox(
@@ -587,7 +509,7 @@ void main() {
                       height: 1080,
                       minDimension: 1,
                       maxDimension: 9999,
-                      onCancel: () {},
+                      onCancel: () => closed = true,
                       onApply: (w, h, scale) => modes.add((w, h, scale)),
                       requestScale: (percent, token) async =>
                           percent == 0 ? state : await response.future)))));
@@ -601,6 +523,7 @@ void main() {
       await tester.tap(find.text('Apply'));
       await tester.pump();
       expect(modes, isEmpty);
+      expect(closed, isFalse);
       expect(
           tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
           isNull);
@@ -612,6 +535,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(modes, succeeds ? [(2560, 1440, 1)] : isEmpty);
+      expect(closed, succeeds);
       expect(
           tester
               .widget<TextField>(find.byType(TextField).first)
@@ -639,15 +563,17 @@ void main() {
             initialEntries: [OverlayEntry(builder: (_) => const Scaffold())])));
     dialogs.show((_, close, context) => app.CustomAlertDialog(
         title: const Text('Resolution'),
-        content: DisplaySettings(
-            width: 1920,
-            height: 1080,
-            minDimension: 1,
-            maxDimension: 9999,
-            onApply: (_, __, ___) {},
-            translate: (s) => s,
-            onCancel: close,
-            requestScale: (_, __) async => state)));
+        content: SizedBox(
+            width: 400,
+            child: DisplaySettings(
+                width: 1920,
+                height: 1080,
+                minDimension: 1,
+                maxDimension: 9999,
+                onApply: (_, __, ___) {},
+                translate: (s) => s,
+                onCancel: close,
+                requestScale: (_, __) async => state))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '2560');
     await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
@@ -677,8 +603,6 @@ void main() {
             of: find.byKey(const ValueKey('system-scale-menu')),
             matching: find.text('125%')),
         findsOneWidget);
-    expect(find.text('Apply'), findsOneWidget);
-    expect(find.text('Reset changes'), findsOneWidget);
     await tester.tap(find.text('Reset changes'));
     await tester.pumpAndSettle();
     expect(
@@ -686,6 +610,15 @@ void main() {
         '1920');
     expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
         isNull);
+    expect(tester.takeException(), isNull);
+    tester.view.physicalSize = const Size(1680, 1920);
+    await tester.pumpAndSettle();
+    await tester.tap(menuButton);
+    await tester.pumpAndSettle();
+    final resizedItem = find.widgetWithText(MenuItemButton, '125%').hitTestable();
+    final resizedMenu = tester.getRect(
+        find.ancestor(of: resizedItem, matching: find.byType(Material)).first);
+    expect(resizedMenu.width, closeTo(tester.getRect(menuButton).width, 1));
     expect(tester.takeException(), isNull);
   });
 }

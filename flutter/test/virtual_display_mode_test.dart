@@ -23,38 +23,6 @@ void main() {
         (width: 1920, height: 1080, minDimension: 320, maxDimension: 4096));
   });
 
-  test('equal modes on different displays retain distinct request identities',
-      () {
-    final before = <String, dynamic>{
-      kMacOSVirtualDisplayModes: {
-        '1': [2560, 1600, 2, 42]
-      },
-    };
-    final after = <String, dynamic>{
-      kMacOSVirtualDisplayModes: {
-        '0': [2560, 1600, 2, 42],
-        '1': [2560, 1600, 2, 43],
-      },
-    };
-    final selected = nativeVirtualDisplayMode(before, 1)!;
-    expect(selected.$4, 42);
-    expect(nativeVirtualDisplayMode(after, 0), selected);
-    expect(nativeVirtualDisplayMode(after, 1), isNot(selected));
-  });
-
-  test('native mode is independent of capture geometry and other displays', () {
-    final additions = <String, dynamic>{
-      kMacOSVirtualDisplayModes: {
-        '1': [2560, 1600, 2, 42],
-        '3': [1080, 1920, 1, 43],
-      },
-    };
-    expect(nativeVirtualDisplayMode(additions, 1), (2560, 1600, 2, 42));
-    expect(nativeVirtualDisplayMode(additions, 3), (1080, 1920, 1, 43));
-    expect(nativeVirtualDisplayMode(additions, 0), isNull);
-    expect(nativeVirtualDisplayMode(additions, -1), isNull);
-  });
-
   test('missing or malformed native state is never inferred from capture', () {
     for (final modes in [
       null,

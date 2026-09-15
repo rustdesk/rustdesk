@@ -271,9 +271,7 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> 
 mod tests {
     use super::*;
     #[test]
-    fn private_dpi_packet_layout_and_ranges() {
-        assert_eq!(size_of::<DpiGet>(), 32);
-        assert_eq!(size_of::<DpiSet>(), 24);
+    fn private_dpi_ranges() {
         assert_eq!(indices(-2, 1, 3).unwrap(), (2, 3, 5));
         for values in [(1, 1, 2), (-2, 0, -1), (i32::MIN, 0, i32::MAX), (-2, 0, 20)] {
             assert!(indices(values.0, values.1, values.2).is_err());

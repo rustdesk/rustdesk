@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "Netinkamas ekrano mastelio atsakymas"),
         ("Invalid display scaling levels", "Netinkami ekrano mastelio lygiai"),
         ("Invalid display scaling range", "Netinkamas ekrano mastelio intervalas"),
+        ("Interface size", "Sąsajos dydis"),
+        ("Current interface size", "Dabartinis sąsajos dydis"),
     ].iter().cloned().collect();
 }

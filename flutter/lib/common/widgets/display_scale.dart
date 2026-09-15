@@ -21,6 +21,7 @@ class _DisplayScaleState extends State<DisplayScale> {
   final _menuFocus = FocusNode();
   final _firstItemFocus = FocusNode();
   bool _editing = false;
+  double? _menuWidth;
 
   @override
   void initState() {
@@ -63,12 +64,12 @@ class _DisplayScaleState extends State<DisplayScale> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(translate('System scaling'),
+        Text(translate('Interface size'),
             style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         if (widget.controller.busy) const LinearProgressIndicator(),
         if (current != null)
-          LayoutBuilder(builder: (context, constraints) {
+          Builder(builder: (context) {
             return MenuAnchor(
               childFocusNode: _menuFocus,
               onClose: _menuFocus.requestFocus,
@@ -76,9 +77,9 @@ class _DisplayScaleState extends State<DisplayScale> {
               crossAxisUnconstrained: false,
               style: MenuStyle(
                 minimumSize:
-                    WidgetStatePropertyAll(Size(constraints.maxWidth, 0)),
-                maximumSize:
-                    WidgetStatePropertyAll(Size(constraints.maxWidth, 240)),
+                    WidgetStatePropertyAll(Size(_menuWidth ?? 0, 0)),
+                maximumSize: WidgetStatePropertyAll(
+                    Size(_menuWidth ?? double.infinity, 240)),
               ),
               menuChildren: [
                 if (hasCustom)
@@ -114,6 +115,11 @@ class _DisplayScaleState extends State<DisplayScale> {
                         if (menu.isOpen) {
                           menu.close();
                         } else {
+                          // Read the laid-out anchor without participating in the
+                          // dialog's intrinsic-size calculation.
+                          final width = context.size?.width;
+                          if (width == null || !width.isFinite) return;
+                          setState(() => _menuWidth = width);
                           menu.open();
                           _firstItemFocus.requestFocus();
                         }

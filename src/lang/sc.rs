@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "Risposta de iscala de s’ischermu non vàlida"),
         ("Invalid display scaling levels", "Livellos de iscala de s’ischermu non vàlidos"),
         ("Invalid display scaling range", "Intervallu de iscala de s’ischermu non vàlidu"),
+        ("Interface size", "Mannària de s’interfache"),
+        ("Current interface size", "Mannària atuale de s’interfache"),
     ].iter().cloned().collect();
 }

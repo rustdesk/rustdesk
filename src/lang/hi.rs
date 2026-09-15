@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "डिस्प्ले स्केलिंग का उत्तर अमान्य है"),
         ("Invalid display scaling levels", "डिस्प्ले स्केलिंग के स्तर अमान्य हैं"),
         ("Invalid display scaling range", "डिस्प्ले स्केलिंग की सीमा अमान्य है"),
+        ("Interface size", "इंटरफ़ेस का आकार"),
+        ("Current interface size", "इंटरफ़ेस का वर्तमान आकार"),
     ].iter().cloned().collect();
 }

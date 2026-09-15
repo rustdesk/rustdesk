@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "Përgjigje e pavlefshme për shkallëzimin e ekranit"),
         ("Invalid display scaling levels", "Nivele të pavlefshme të shkallëzimit të ekranit"),
         ("Invalid display scaling range", "Interval i pavlefshëm i shkallëzimit të ekranit"),
+        ("Interface size", "Madhësia e ndërfaqes"),
+        ("Current interface size", "Madhësia aktuale e ndërfaqes"),
     ].iter().cloned().collect();
 }

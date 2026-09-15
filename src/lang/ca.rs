@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid display scaling response", "La resposta d’escala de pantalla no és vàlida"),
         ("Invalid display scaling levels", "Els nivells d’escala de pantalla no són vàlids"),
         ("Invalid display scaling range", "L’interval d’escala de pantalla no és vàlid"),
+        ("Interface size", "Mida de la interfície"),
+        ("Current interface size", "Mida actual de la interfície"),
     ].iter().cloned().collect();
 }

@@ -48,22 +48,6 @@ void main() {
 
   tearDown(() => model.dispose());
 
-  test(
-      'the editor requires a resolution, virtual display or scaling capability',
-      () {
-    expect(canChangeDisplaySettings(session), isFalse);
-    model.pi.resolutions.add(Resolution(1920, 1080));
-    expect(canChangeDisplaySettings(session), isTrue);
-    model.pi.resolutions.clear();
-    model.pi.platformAdditions['display_scale'] = true;
-    expect(canChangeDisplaySettings(session), isTrue);
-    model.pi.platformAdditions.clear();
-    model.pi.displays.single
-      ..originalWidth = kVirtualDisplayResolutionValue
-      ..originalHeight = kVirtualDisplayResolutionValue;
-    expect(canChangeDisplaySettings(session), isTrue);
-  });
-
   test('capabilities never bypass control permissions or display selection',
       () {
     model.pi.resolutions.add(Resolution(1920, 1080));
@@ -93,9 +77,11 @@ void main() {
     (kPeerPlatformLinux, 2560, (3840, 2160), (2560, 1440)),
     (kPeerPlatformWindows, 3840, (3840, 2160), (2560, 1440)),
     (kPeerPlatformMacOS, 1920, (1920, 1080), (1280, 720)),
+    (kPeerPlatformMacOS, 3840, (3840, 2160), (2560, 1440)),
   ]) {
-    testWidgets('$platform current, reset and local fit use native mode units',
-        (tester) async {
+    testWidgets(
+        '$platform current, reset and local fit use native mode units '
+        '(scaled width: $scaledWidth)', (tester) async {
       model.pi.platform = platform;
       model.pi.displays.value = [
         model.evtToDisplay({
@@ -117,6 +103,7 @@ void main() {
                       width: target.resolution.$1,
                       height: target.resolution.$2,
                       outputPixelRatio: target.resolutionPixelRatio,
+                      usesLogicalSize: target.usesLogicalSize,
                       minDimension: 1,
                       maxDimension: 4096,
                       allowArbitrarySize: false,

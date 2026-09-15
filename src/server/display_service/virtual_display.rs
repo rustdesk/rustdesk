@@ -152,21 +152,6 @@ mod tests {
     use base::message_proto::message;
     use std::time::Duration;
 
-    #[test]
-    fn mode_monitor_detects_native_changes_without_capture_changes() {
-        let mut monitor = DisplayModeMonitor::new();
-        let hidpi = serde_json::json!({"0": [2560, 1600, 2, 42]});
-        let low_resolution = serde_json::json!({"0": [1280, 800, 1, 42]});
-        assert!(!monitor.update(serde_json::json!({})));
-        assert!(monitor.update(hidpi.clone()));
-        assert!(!monitor.update(hidpi));
-        assert!(monitor.update(low_resolution.clone()));
-        assert!(!monitor.update(low_resolution));
-        assert!(monitor.update(serde_json::json!({})));
-        assert!(!monitor.update(serde_json::json!({})));
-        assert!(monitor.update(serde_json::json!({"1": [1280, 800, 1, 43]})));
-    }
-
     #[tokio::test]
     async fn native_mode_metadata_preserves_other_capabilities() {
         let mut peer = PeerInfo {

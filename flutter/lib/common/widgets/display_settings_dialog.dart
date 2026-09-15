@@ -52,8 +52,10 @@ class DisplaySettingsTarget {
 
   // macOS mode requests use logical pixels. Linux capture scaling is for input
   // coordinates; its resolution requests, like Windows, use output pixels.
+  bool get usesLogicalSize => _peer.platform == kPeerPlatformMacOS;
+
   double get resolutionPixelRatio =>
-      _peer.platform == kPeerPlatformMacOS ? _display.scale : 1;
+      usesLogicalSize ? _display.scale : 1;
 
   (int, int) get resolution => (
         (_display.width / resolutionPixelRatio).round(),
@@ -182,6 +184,7 @@ Future<void> showDisplaySettingsDialog(
                           : 2147483647),
                   width: width,
                   height: height,
+                  usesLogicalSize: target.usesLogicalSize,
                   allowArbitrarySize: isVirtual,
                   // Preserve the existing Linux Mint text-field freeze workaround.
                   excludeInputSemantics: isLinux,
@@ -246,6 +249,7 @@ class DisplaySettings extends StatefulWidget {
   final int width;
   final int height;
   final FutureOr<void> Function(int, int, int) onApply;
+  final bool usesLogicalSize;
   final bool allowArbitrarySize;
   final bool excludeInputSemantics;
   final (int, int, int)? defaultResolution;
@@ -254,7 +258,7 @@ class DisplaySettings extends StatefulWidget {
   final (int, int)? localResolution;
   final double? localPixelRatio;
   final double outputPixelRatio;
-  // Supported modes use logical dimensions; mode inputs and callbacks use request units.
+  // Advertised modes use input dimensions, before applying the render scale.
   final List<(int, int)> supportedResolutions;
   final List<int> scales;
   final int initialScale;
@@ -270,6 +274,7 @@ class DisplaySettings extends StatefulWidget {
     required this.width,
     required this.height,
     required this.onApply,
+    this.usesLogicalSize = false,
     this.allowArbitrarySize = true,
     this.excludeInputSemantics = false,
     this.defaultResolution,
@@ -663,6 +668,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final sectionStyle = theme.textTheme.titleSmall;
     final busy = _applying || _systemScale?.busy == true;
     final scaleChanged = _systemScale?.changed == true;
+    final canEditResolution =
+        widget.allowArbitrarySize || widget.supportedResolutions.isNotEmpty;
     final canApply = !busy &&
         (_valid || (!_hasChanges && scaleChanged)) &&
         (_systemScale?.canApply ?? true) &&
@@ -674,81 +681,87 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_hasChanges) ...[
-              Text(
-                  '${widget.translate('Current resolution')}: '
-                  '${_modeLabel(_currentMode)}',
-                  style: theme.textTheme.bodySmall),
-              const SizedBox(height: 16),
-            ],
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              children: [
-                Text(
-                    widget.translate(
-                        widget.scales.length > 1 ? 'Looks like' : 'Resolution'),
-                    style: sectionStyle),
-                _ratioSelector(),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(children: [
-              _dimension(_width, 'Width'),
-              IconButton(
-                tooltip: widget.translate('Swap width and height'),
-                icon: const Icon(Icons.swap_horiz),
-                onPressed: !_validSize(_editedMode.$2, _editedMode.$1, _scale)
-                    ? null
-                    : () => setState(() {
-                          final width = _width.text;
-                          _width.text = _height.text;
-                          _height.text = width;
-                          final ratio = _ratio;
-                          if (ratio != null) _ratio = (ratio.$2, ratio.$1);
-                        }),
-              ),
-              _dimension(_height, 'Height'),
-            ]),
-            if (!_valid && (_hasChanges || _systemScale == null))
-              Text(
-                '${widget.translate(widget.allowArbitrarySize ? 'Enter dimensions within the range' : 'Select a resolution supported by the display')}'
-                '${widget.allowArbitrarySize ? ' ($_minDimension–$_maxDimension px)' : ''}',
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            if (widget.scales.length > 1) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(widget.translate('Rendering quality'),
-                      style: sectionStyle),
-                  Wrap(spacing: 8, children: [
-                    for (final scale in widget.scales)
-                      ChoiceChip(
-                        label: Text(_qualityLabel(scale)),
-                        selected: _scale == scale,
-                        onSelected: (_) => setState(() => _scale = scale),
-                      ),
-                  ]),
-                ],
-              ),
-              if (_valid && _scale > 1)
-                Text(
-                    '${widget.translate('Output resolution')}: '
-                    '${_dimensionLabel(_editedMode.$1, _editedMode.$2)} px',
-                    style: theme.textTheme.bodySmall),
-            ],
-            const SizedBox(height: 16),
-            _quickSettings(context),
             if (_systemScale != null) ...[
-              const Divider(height: 24),
               DisplayScale(
                   excludeInputSemantics: widget.excludeInputSemantics,
                   translate: widget.translate,
                   controller: _systemScale!),
+              if (canEditResolution) const Divider(height: 24),
+            ],
+            if (canEditResolution) ...[
+              if (widget.usesLogicalSize)
+                Text(widget.translate('Interface size'), style: sectionStyle),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  Text(
+                      widget.translate(
+                          widget.usesLogicalSize ? 'Looks like' : 'Resolution'),
+                      style: widget.usesLogicalSize
+                          ? theme.textTheme.bodyMedium
+                          : sectionStyle),
+                  _ratioSelector(),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                _dimension(_width, 'Width'),
+                IconButton(
+                  tooltip: widget.translate('Swap width and height'),
+                  icon: const Icon(Icons.swap_horiz),
+                  onPressed: !_validSize(_editedMode.$2, _editedMode.$1, _scale)
+                      ? null
+                      : () => setState(() {
+                            final width = _width.text;
+                            _width.text = _height.text;
+                            _height.text = width;
+                            final ratio = _ratio;
+                            if (ratio != null) _ratio = (ratio.$2, ratio.$1);
+                          }),
+                ),
+                _dimension(_height, 'Height'),
+              ]),
+              if (!_valid && (_hasChanges || _systemScale == null))
+                Text(
+                  '${widget.translate(widget.allowArbitrarySize ? 'Enter dimensions within the range' : 'Select a resolution supported by the display')}'
+                  '${widget.allowArbitrarySize ? ' ($_minDimension–$_maxDimension px)' : ''}',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              if (_hasChanges) ...[
+                const SizedBox(height: 8),
+                Text(
+                    '${widget.translate(widget.usesLogicalSize ? 'Current interface size' : 'Current resolution')}: '
+                    '${_modeLabel(_currentMode)}',
+                    style: theme.textTheme.bodySmall),
+              ],
+              const SizedBox(height: 16),
+              _quickSettings(context),
+              if (widget.scales.length > 1) ...[
+                const Divider(height: 24),
+                Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(widget.translate('Rendering quality'),
+                        style: sectionStyle),
+                    Wrap(spacing: 8, children: [
+                      for (final scale in widget.scales)
+                        ChoiceChip(
+                          label: Text(_qualityLabel(scale)),
+                          selected: _scale == scale,
+                          onSelected: (_) => setState(() => _scale = scale),
+                        ),
+                    ]),
+                  ],
+                ),
+                if (_valid)
+                  Text(
+                      '${widget.translate('Output resolution')}: '
+                      '${_dimensionLabel(_editedMode.$1, _editedMode.$2)} px',
+                      style: theme.textTheme.bodySmall),
+              ],
             ],
             if (_applying && _systemScale?.busy != true)
               const LinearProgressIndicator(),
