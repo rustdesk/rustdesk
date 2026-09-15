@@ -1762,8 +1762,7 @@ class FfiModel with ChangeNotifier {
 
     cachedPeerData.peerInfo['platform_additions'] =
         json.encode(_pi.platformAdditions);
-    if (_pi.platform == kPeerPlatformMacOS &&
-        _pi.platformAdditions['macos_virtual_display_supported'] == true) {
+    if (_pi.platform == kPeerPlatformMacOS) {
       notifyListeners();
     }
   }
