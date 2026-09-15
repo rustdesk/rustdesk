@@ -32,7 +32,7 @@ use crate::{
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
     create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
-    secure_tcp,
+    secure_tcp, secure_tcp_required,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
@@ -809,7 +809,7 @@ impl Client {
         }
         log::info!("rendezvous server: {}", rendezvous_server);
         let mut socket = socket?;
-        let my_addr = socket.local_addr();
+        let mut my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
         let mut peer_addr = Config::get_any_listen_addr(true);
@@ -825,10 +825,41 @@ impl Client {
         };
 
         let switch_code = interface.get_switch_code();
-        if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
+        let legacy_secure = !key.is_empty() && (!token.is_empty() || !switch_code.is_empty());
+        let carries_offer = webrtc_offerer
+            .as_ref()
+            .and_then(|g| g.stream())
+            .is_some();
+        let mut exchanged = false;
+        if carries_offer {
+            // An offer puts both sides' ICE candidates, every interface address of both
+            // machines, on this socket, so it goes out only once the server's key exchange has
+            // encrypted it. When the server does not complete one, an hbbs from before the
+            // exchange, the offer is dropped and this becomes a punch without WebRTC, on a fresh
+            // socket since the failed exchange may have consumed a message on this one. Degrade
+            // to no WebRTC, never to WebRTC signalling in the clear.
+            match secure_tcp_required(&mut socket, &key).await {
+                Ok(()) => exchanged = true,
+                Err(err) => {
+                    log::warn!(
+                        "WebRTC signalling to {} cannot be encrypted, punching without WebRTC: {}",
+                        rendezvous_server,
+                        err
+                    );
+                    webrtc_offerer = None;
+                    socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await?;
+                    my_addr = socket.local_addr();
+                }
+            }
+        }
+        if !exchanged && legacy_secure {
             secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
+            exchanged = true;
+        }
+        if exchanged {
+            // The exchange is a server round trip, the same time the wait below would have spent.
         } else if let Some(udp) = udp.1.as_ref() {
             let tm = Instant::now();
             // rtt is the TCP connect time. When it is too short to be a real WAN round trip it
