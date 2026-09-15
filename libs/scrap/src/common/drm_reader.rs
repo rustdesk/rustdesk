@@ -30,6 +30,33 @@ pub struct CursorSnapshot {
     pub hotx: i32,
     pub hoty: i32,
     pub colors: Vec<u8>,
+    /// Cursor plane position (CRTC_X/CRTC_Y), in this reader's scanout pixels.
+    pub x: i32,
+    pub y: i32,
+    /// True when hotx/hoty came from the HOTSPOT_X/Y plane property, which only
+    /// DRIVER_CURSOR_HOTSPOT drivers (virtio-gpu, vmwgfx, qxl) create. On real hardware the
+    /// kernel has no hotspot to give and hotx/hoty are `guess_hotspot`'s estimate. Inferred
+    /// from the VALUES being non-zero, because libdrmtap zero-fills an absent property, so a
+    /// virtualized shape whose true hotspot IS (0,0) reads as a guess. That is harmless: a
+    /// measurement of it lands on (0,0) anyway.
+    pub hot_from_property: bool,
+}
+
+/// Best-effort hotspot from the opaque-pixel bounding box, for when the kernel gives none: a
+/// tall glyph (an I-beam) grabs at its centre, anything else at its opaque top-left. A WIDE
+/// centre-hotspot glyph, such as a horizontal resize arrow, is wrong here by half its width.
+/// It only has to be a first frame's seed: the consumer measures the real value against the
+/// position the peer injected and overrides it.
+pub(crate) fn guess_hotspot(minx: i32, miny: i32, maxx: i32, maxy: i32) -> (i32, i32) {
+    if maxx < minx || maxy < miny {
+        return (0, 0);
+    }
+    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
+    if bh > bw * 2 {
+        ((minx + maxx) / 2, (miny + maxy) / 2)
+    } else {
+        (minx, miny)
+    }
 }
 
 /// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
@@ -364,6 +391,9 @@ impl DrmReader {
                     hotx: 0,
                     hoty: 0,
                     colors: vec![0, 0, 0, 0],
+                    x: 0,
+                    y: 0,
+                    hot_from_property: false,
                 })
             } else if !c.pixels.is_null()
                 && c.width > 0
@@ -397,17 +427,11 @@ impl DrmReader {
                         if y > maxy { maxy = y; }
                     }
                 }
-                let (hotx, hoty) = if c.hot_x != 0 || c.hot_y != 0 {
+                let hot_from_property = c.hot_x != 0 || c.hot_y != 0;
+                let (hotx, hoty) = if hot_from_property {
                     (c.hot_x, c.hot_y)
-                } else if maxx >= minx && maxy >= miny {
-                    let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
-                    if bh > bw * 2 {
-                        ((minx + maxx) / 2, (miny + maxy) / 2)
-                    } else {
-                        (minx, miny)
-                    }
                 } else {
-                    (0, 0)
+                    guess_hotspot(minx, miny, maxx, maxy)
                 };
                 // Fold geometry + hotspot into the id: identical pixels with a changed size or
                 // hotspot must count as a new shape, otherwise drm_capture_worker suppresses the
@@ -424,6 +448,9 @@ impl DrmReader {
                     hotx,
                     hoty,
                     colors,
+                    x: c.x,
+                    y: c.y,
+                    hot_from_property,
                 })
             } else {
                 None
