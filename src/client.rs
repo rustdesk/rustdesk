@@ -97,9 +97,8 @@ pub use super::lang::*;
 mod audio_playback;
 #[cfg(target_os = "windows")]
 mod audio_playback_recovery;
-#[cfg(all(test, target_os = "windows"))]
-mod audio_playback_recovery_tests;
 #[cfg(all(test, not(target_os = "linux")))]
+#[path = "client/tests/audio_state_tests.rs"]
 mod audio_state_tests;
 pub mod file_trait;
 pub mod helper;

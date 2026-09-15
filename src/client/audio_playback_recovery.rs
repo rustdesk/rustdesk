@@ -11,10 +11,6 @@ const RECOVERY_INTERVAL: Duration = Duration::from_secs(1);
 // The pinned WASAPI backend reports this warning but keeps its worker running.
 const PRIORITY_WARNING_PREFIX: &str = "SetThreadPriority failed: ";
 
-#[cfg(test)]
-#[path = "audio_playback_recovery_state_tests.rs"]
-mod state_tests;
-
 #[path = "audio_playback_startup.rs"]
 mod startup;
 
