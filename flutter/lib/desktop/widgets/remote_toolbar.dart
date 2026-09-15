@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
+import 'package:flutter_hbb/common/widgets/display_settings_dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -1738,7 +1739,6 @@ class _DisplayMenuState extends State<_DisplayMenu> {
         codec(),
         if (ffi.connType == ConnType.defaultConn)
           _ResolutionsMenu(
-            id: widget.id,
             ffi: widget.ffi,
             screenAdjustor: _screenAdjustor,
           ),
@@ -2188,13 +2188,11 @@ class _RectValueThumbShape extends SliderComponentShape {
 }
 
 class _ResolutionsMenu extends StatefulWidget {
-  final String id;
   final FFI ffi;
   final ScreenAdjustor screenAdjustor;
 
   _ResolutionsMenu({
     Key? key,
-    required this.id,
     required this.ffi,
     required this.screenAdjustor,
   }) : super(key: key);
@@ -2203,173 +2201,51 @@ class _ResolutionsMenu extends StatefulWidget {
   State<_ResolutionsMenu> createState() => _ResolutionsMenuState();
 }
 
-const double _kCustomResolutionEditingWidth = 42;
-const _kCustomResolutionValue = 'custom';
-
 class _ResolutionsMenuState extends State<_ResolutionsMenu> {
-  String _groupValue = '';
-  Resolution? _localResolution;
-
-  late final TextEditingController _customWidth =
-      TextEditingController(text: rect?.width.toInt().toString() ?? '');
-  late final TextEditingController _customHeight =
-      TextEditingController(text: rect?.height.toInt().toString() ?? '');
-
   FFI get ffi => widget.ffi;
-  PeerInfo get pi => widget.ffi.ffiModel.pi;
   FfiModel get ffiModel => widget.ffi.ffiModel;
-  Rect? get rect => scaledRect();
-  List<Resolution> get resolutions => pi.resolutions;
-  bool get isWayland => bind.mainCurrentIsWayland();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getLocalResolutionWayland();
-    });
-  }
-
-  Rect? scaledRect() {
-    final scale = pi.scaleOfDisplay(pi.currentDisplay);
-    final rect = ffiModel.rect;
-    if (rect == null) {
-      return null;
-    }
-    return Rect.fromLTWH(
-      rect.left,
-      rect.top,
-      rect.width / scale,
-      rect.height / scale,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    final isVirtualDisplay = ffiModel.isVirtualDisplayResolution;
-    final visible = ffiModel.keyboard &&
-        (isVirtualDisplay || resolutions.length > 1) &&
-        pi.currentDisplay != kAllDisplayValue;
-    if (!visible) return Offstage();
-    final showOriginalBtn =
-        ffiModel.isOriginalResolutionSet && !ffiModel.isOriginalResolution;
-    final showFitLocalBtn = !_isRemoteResolutionFitLocal();
-    _setGroupValue();
-    return _SubmenuButton(
-      ffi: widget.ffi,
-      menuChildren: <Widget>[
-            _OriginalResolutionMenuButton(context, showOriginalBtn),
-            _FitLocalResolutionMenuButton(context, showFitLocalBtn),
-            _customResolutionMenuButton(context, isVirtualDisplay),
-            _menuDivider(showOriginalBtn, showFitLocalBtn, isVirtualDisplay),
-          ] +
-          _supportedResolutionMenuButtons(),
-      child: Text(translate("Resolution")),
+    if (!canChangeDisplaySettings(ffi)) return Offstage();
+    // MenuItemButton dismisses the menu before invoking its callback.
+    final display = View.of(context).display;
+    return MenuButton(
+      ffi: ffi,
+      onPressed: () =>
+          _showResolutionEditor(display.size, display.devicePixelRatio),
+      child: Text(translate('Resolution')),
     );
   }
 
-  _setGroupValue() {
-    if (pi.currentDisplay == kAllDisplayValue) {
-      return;
-    }
-    final lastGroupValue =
-        stateGlobal.getLastResolutionGroupValue(widget.id, pi.currentDisplay);
-    if (lastGroupValue == _kCustomResolutionValue) {
-      _groupValue = _kCustomResolutionValue;
-    } else {
-      _groupValue =
-          '${(rect?.width ?? 0).toInt()}x${(rect?.height ?? 0).toInt()}';
-    }
-  }
-
-  _menuDivider(
-      bool showOriginalBtn, bool showFitLocalBtn, bool isVirtualDisplay) {
-    return Offstage(
-      offstage: !(showOriginalBtn || showFitLocalBtn || isVirtualDisplay),
-      child: Divider(),
-    );
-  }
-
-  Future<void> _getLocalResolutionWayland() async {
-    if (!isWayland) return _getLocalResolution();
-    try {
-      final window = await window_size.getWindowInfo();
-      final screen = window.screen;
-      if (screen != null) {
-        setState(() {
-          _localResolution = Resolution(
-            screen.frame.width.toInt(),
-            screen.frame.height.toInt(),
-          );
-        });
-      }
-    } catch (e) {
-      debugPrint('Failed to get local resolution on Wayland: $e');
-    }
-  }
-
-  _getLocalResolution() {
-    _localResolution = null;
-    final String mainDisplay = bind.mainGetMainDisplay();
-    if (mainDisplay.isNotEmpty) {
+  Future<void> _showResolutionEditor(Size displaySize, double pixelRatio) async {
+    var localSize = (displaySize.width.round(), displaySize.height.round());
+    if (!isWeb) {
       try {
-        final display = json.decode(mainDisplay);
-        if (display['w'] != null && display['h'] != null) {
-          _localResolution = Resolution(display['w'], display['h']);
-          if (isWeb) {
-            if (display['scaleFactor'] != null) {
-              _localResolution = Resolution(
-                (display['w'] / display['scaleFactor']).toInt(),
-                (display['h'] / display['scaleFactor']).toInt(),
-              );
-            }
-          }
+        final screen = (await window_size.getWindowInfo()).screen;
+        if (screen != null &&
+            screen.scaleFactor > 0 &&
+            screen.frame.width > 0 &&
+            screen.frame.height > 0) {
+          pixelRatio = screen.scaleFactor;
+          // window_size reports Windows screen coordinates in physical pixels.
+          final coordinateScale = isWindows ? 1.0 : pixelRatio;
+          localSize = (
+            (screen.frame.width * coordinateScale).round(),
+            (screen.frame.height * coordinateScale).round()
+          );
         }
       } catch (e) {
-        debugPrint('Failed to decode $mainDisplay, $e');
+        debugPrint('Failed to get the current display resolution: $e');
       }
     }
+    await showDisplaySettingsDialog(ffi,
+        localResolution: localSize,
+        localPixelRatio: pixelRatio,
+        onApplied: _onResolutionApplied);
   }
 
-  // This widget has been unmounted, so the State no longer has a context
-  _onChanged(String? value) async {
-    if (pi.currentDisplay == kAllDisplayValue) {
-      return;
-    }
-    stateGlobal.setLastResolutionGroupValue(
-        widget.id, pi.currentDisplay, value);
-    if (value == null) return;
-
-    int? w;
-    int? h;
-    if (value == _kCustomResolutionValue) {
-      w = int.tryParse(_customWidth.text);
-      h = int.tryParse(_customHeight.text);
-    } else {
-      final list = value.split('x');
-      if (list.length == 2) {
-        w = int.tryParse(list[0]);
-        h = int.tryParse(list[1]);
-      }
-    }
-
-    if (w != null && h != null) {
-      if (w != rect?.width.toInt() || h != rect?.height.toInt()) {
-        await _changeResolution(w, h);
-      }
-    }
-  }
-
-  _changeResolution(int w, int h) async {
-    if (pi.currentDisplay == kAllDisplayValue) {
-      return;
-    }
-    await bind.sessionChangeResolution(
-      sessionId: ffi.sessionId,
-      display: pi.currentDisplay,
-      width: w,
-      height: h,
-    );
+  void _onResolutionApplied(int w, int h) {
     Future.delayed(Duration(seconds: 3), () async {
       final rect = ffiModel.rect;
       if (rect == null) {
@@ -2389,130 +2265,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         }
       }
     });
-  }
-
-  Widget _OriginalResolutionMenuButton(
-      BuildContext context, bool showOriginalBtn) {
-    final display = pi.tryGetDisplayIfNotAllDisplay();
-    if (display == null) {
-      return Offstage();
-    }
-    if (!resolutions.any((e) =>
-        e.width == display.originalWidth &&
-        e.height == display.originalHeight)) {
-      return Offstage();
-    }
-    return Offstage(
-      offstage: !showOriginalBtn,
-      child: MenuButton(
-        onPressed: () =>
-            _changeResolution(display.originalWidth, display.originalHeight),
-        ffi: widget.ffi,
-        child: Text(
-            '${translate('resolution_original_tip')} ${display.originalWidth}x${display.originalHeight}'),
-      ),
-    );
-  }
-
-  Widget _FitLocalResolutionMenuButton(
-      BuildContext context, bool showFitLocalBtn) {
-    return Offstage(
-      offstage: !showFitLocalBtn,
-      child: MenuButton(
-        onPressed: () {
-          final resolution = _getBestFitResolution();
-          if (resolution != null) {
-            _changeResolution(resolution.width, resolution.height);
-          }
-        },
-        ffi: widget.ffi,
-        child: Text(
-            '${translate('resolution_fit_local_tip')} ${_localResolution?.width ?? 0}x${_localResolution?.height ?? 0}'),
-      ),
-    );
-  }
-
-  Widget _customResolutionMenuButton(BuildContext context, isVirtualDisplay) {
-    return Offstage(
-      offstage: !isVirtualDisplay,
-      child: RdoMenuButton(
-        value: _kCustomResolutionValue,
-        groupValue: _groupValue,
-        onChanged: (String? value) => _onChanged(value),
-        ffi: widget.ffi,
-        child: Row(
-          children: [
-            Text('${translate('resolution_custom_tip')} '),
-            SizedBox(
-              width: _kCustomResolutionEditingWidth,
-              child: _resolutionInput(_customWidth),
-            ),
-            Text(' x '),
-            SizedBox(
-              width: _kCustomResolutionEditingWidth,
-              child: _resolutionInput(_customHeight),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _resolutionInput(TextEditingController controller) {
-    return TextField(
-      decoration: InputDecoration(
-        border: InputBorder.none,
-        isDense: true,
-        contentPadding: EdgeInsets.fromLTRB(3, 3, 3, 3),
-      ),
-      keyboardType: TextInputType.number,
-      inputFormatters: <TextInputFormatter>[
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(4),
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9]')),
-      ],
-      controller: controller,
-    ).workaroundFreezeLinuxMint();
-  }
-
-  List<Widget> _supportedResolutionMenuButtons() => resolutions
-      .map((e) => RdoMenuButton(
-          value: '${e.width}x${e.height}',
-          groupValue: _groupValue,
-          onChanged: (String? value) => _onChanged(value),
-          ffi: widget.ffi,
-          child: Text('${e.width}x${e.height}')))
-      .toList();
-
-  Resolution? _getBestFitResolution() {
-    if (_localResolution == null) {
-      return null;
-    }
-
-    if (ffiModel.isVirtualDisplayResolution) {
-      return _localResolution!;
-    }
-
-    for (final r in resolutions) {
-      if (r.width == _localResolution!.width &&
-          r.height == _localResolution!.height) {
-        return r;
-      }
-    }
-
-    return null;
-  }
-
-  bool _isRemoteResolutionFitLocal() {
-    if (_localResolution == null) {
-      return true;
-    }
-    final bestFitResolution = _getBestFitResolution();
-    if (bestFitResolution == null) {
-      return true;
-    }
-    return bestFitResolution.width == rect?.width.toInt() &&
-        bestFitResolution.height == rect?.height.toInt();
   }
 }
 

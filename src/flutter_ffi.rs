@@ -915,6 +915,18 @@ pub fn session_switch_sides(session_id: SessionID) {
     }
 }
 
+pub fn session_configure_virtual_display(session_id: SessionID, display_id: u32, width: i32, height: i32, scale: u32) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.configure_virtual_display(display_id, width, height, scale);
+    }
+}
+
+pub fn session_request_display_scale(session_id: SessionID, request_id: String, display: i32, percent: f64, token: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.request_display_scale(request_id, display, percent, token);
+    }
+}
+
 pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32, height: i32) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.change_resolution(display, width, height);

@@ -1238,6 +1238,11 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
 }
 
 bool showVirtualDisplayMenu(FFI ffi) {
+  if (ffi.ffiModel.pi.platform == kPeerPlatformMacOS) {
+    return ffi
+            .ffiModel.pi.platformAdditions['macos_virtual_display_supported'] ==
+        true;
+  }
   if (ffi.ffiModel.pi.platform != kPeerPlatformWindows) {
     return false;
   }
@@ -1257,6 +1262,42 @@ List<Widget> getVirtualDisplayMenuChildren(
   }
   final pi = ffi.ffiModel.pi;
   final privacyModeState = PrivacyModeState.find(id);
+  if (pi.platform == kPeerPlatformMacOS) {
+    final enabled = !ffi.ffiModel.viewOnly && ffi.ffiModel.keyboard;
+    final advertised = pi.platformAdditions['macos_virtual_displays'];
+    final displays =
+        advertised is List ? advertised.whereType<int>().toSet() : <int>{};
+    return [
+      for (var index = 1; index <= kMaxVirtualDisplayCount; index++)
+        CkbMenuButton(
+          value: displays.contains(index),
+          onChanged: !enabled
+              ? null
+              : (bool? value) {
+                  if (value == null) return;
+                  bind.sessionToggleVirtualDisplay(
+                      sessionId: ffi.sessionId, index: index, on: value);
+                  clickCallBack?.call();
+                },
+          child: Text('${translate('Virtual display')} $index'),
+          ffi: ffi,
+        ),
+      Divider(),
+      MenuButton(
+        onPressed: !enabled
+            ? null
+            : () {
+                bind.sessionToggleVirtualDisplay(
+                    sessionId: ffi.sessionId,
+                    index: kAllVirtualDisplay,
+                    on: false);
+                clickCallBack?.call();
+              },
+        child: Text(translate('Plug out all')),
+        ffi: ffi,
+      ),
+    ];
+  }
   if (pi.isRustDeskIdd) {
     final virtualDisplays = ffi.ffiModel.pi.RustDeskVirtualDisplays;
     final children = <Widget>[];
