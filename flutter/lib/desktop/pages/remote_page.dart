@@ -1211,8 +1211,9 @@ class _ImagePaintState extends State<ImagePaint> {
       if (isWindows) return 1.0;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
-      // Keep the reference size independent of scrollbar overflow.
-      final scale = _getCursorScaleForDisplay(c, m, 1.0, matchRenderer: false);
+      // Keep the unzoomed reference size independent of scrollbar overflow.
+      final scale =
+          _getCursorScaleForDisplay(c, m, 1.0, matchRenderer: zoomCursor.value);
       return isWindows ? scale : scale / dpr;
     }
     final scale = _getCursorScaleForDisplay(c, m, c.scale);
