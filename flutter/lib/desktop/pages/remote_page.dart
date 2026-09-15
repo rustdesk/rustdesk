@@ -1114,7 +1114,7 @@ class _ImagePaintState extends State<ImagePaint> {
           double getCursorScale() {
             var c = Provider.of<CanvasModel>(context);
             if (isDesktop) {
-              return _getDesktopCursorScale(c, m, dpr);
+              return _getDesktopCursorScale(c, dpr);
             } else {
               return zoomCursor.value || isViewOriginal() ? s : 1.0;
             }
@@ -1195,7 +1195,7 @@ class _ImagePaintState extends State<ImagePaint> {
   ///
   /// Windows cursor pixels are physical; NSCursor/GdkCursor use logical pixels.
   /// With zoom disabled, keep Original's size using the live controller DPR.
-  double _getDesktopCursorScale(CanvasModel c, ImageModel m, double dpr) {
+  double _getDesktopCursorScale(CanvasModel c, double dpr) {
     final peer = widget.ffi.ffiModel;
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
       if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
@@ -1211,17 +1211,15 @@ class _ImagePaintState extends State<ImagePaint> {
       if (isWindows) return 1.0;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
-      // Keep the unzoomed reference size independent of scrollbar overflow.
-      final scale =
-          _getCursorScaleForDisplay(c, m, 1.0, matchRenderer: zoomCursor.value);
+      // Original and unzoomed views do not apply canvas zoom.
+      final scale = _getCursorScaleForDisplay(1.0);
       return isWindows ? scale : scale / dpr;
     }
-    final scale = _getCursorScaleForDisplay(c, m, c.scale);
+    final scale = _getCursorScaleForDisplay(c.scale);
     return isWindows ? scale * dpr : scale;
   }
 
-  double _getCursorScaleForDisplay(CanvasModel c, ImageModel m, double scale,
-      {bool matchRenderer = true}) {
+  double _getCursorScaleForDisplay(double scale) {
     final peer = widget.ffi.ffiModel;
     // All Displays can mix densities; no single display scale applies.
     if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
@@ -1233,13 +1231,7 @@ class _ImagePaintState extends State<ImagePaint> {
       return scale * displays.first.scale;
     }
     if (!peer.isPeerLinux) return scale;
-    final useTexture = m.useTextureRender || peer.pi.forceTextureRender;
-    final useScrollbar =
-        c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto;
-    // In fact, Multiple display + Scale custom + Scrollbar || ScrollEdge + Non texture render
-    // the positions are wrong, we should fix it.
-    if (matchRenderer && !useTexture && useScrollbar) return scale;
-    // Match texture and software auto-scroll rendering when a Wayland host
+    // Match rendering when a Wayland host
     // with multiple outputs reports a display scale > 1.
     // A single-output host keeps scale at 1.0 to preserve physical uinput
     // coordinates, even with OS scaling enabled. This counts host outputs,
@@ -1251,9 +1243,16 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    double sizeScale = s;
+    if (widget.ffi.ffiModel.isPeerLinux) {
+      final displays = widget.ffi.ffiModel.pi.getCurDisplays();
+      if (displays.isNotEmpty) {
+        sizeScale = s / displays[0].scale;
+      }
+    }
     return CustomPaint(
       size: imageSize,
-      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+      painter: ImagePainter(image: m.image, x: 0, y: 0, scale: sizeScale),
     );
   }
 
