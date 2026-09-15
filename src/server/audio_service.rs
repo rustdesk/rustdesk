@@ -124,7 +124,11 @@ mod pa_impl {
             })?;
 
             #[cfg(target_os = "linux")]
-            if let Ok(data) = stream.next_raw().await {
+            {
+                // The `_pa` peer closing surfaces as `Err` here. Dropping it left the loop polling
+                // a dead socket -- one 0-byte read per poll, ready at once and never `Pending` --
+                // which burned a full core for the rest of the process lifetime.
+                let data = stream.next_raw().await?;
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);
                     continue;
