@@ -1196,6 +1196,9 @@ pub fn get_local_option(key: &str) -> String {
             }
         }
     }
+    if key == "lang" && (v == "pt" || v == "br") {
+        return "pt-br".to_owned();
+    }
     v
 }
 
