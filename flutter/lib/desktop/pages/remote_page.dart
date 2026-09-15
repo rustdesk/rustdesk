@@ -1203,12 +1203,8 @@ class _ImagePaintState extends State<ImagePaint> {
         final scale = 1.0 / _cursorDisplayScale.value;
         return isWindows ? scale : scale / dpr;
       }
-      if (zoomCursor.value && c.viewStyle.style == kRemoteViewStyleAdaptive) {
-        final scale = c.scale / _cursorDisplayScale.value;
-        return isWindows ? scale * dpr : scale;
-      }
-      // Windows Custom zoom retains its legacy fixed physical size.
-      if (isWindows) return 1.0;
+      final scale = c.scale / _cursorDisplayScale.value;
+      return isWindows ? scale * dpr : scale;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
       // Original and unzoomed views do not apply canvas zoom.

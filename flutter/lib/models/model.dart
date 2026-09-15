@@ -2464,6 +2464,8 @@ class CanvasModel with ChangeNotifier {
     _resetScroll();
 
     Future.delayed(duration, () async {
+      // Layout updates scroll extents and detaches scrollbars no longer needed.
+      await SchedulerBinding.instance.endOfFrame;
       updateScrollPercent();
     });
   }
