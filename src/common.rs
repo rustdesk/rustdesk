@@ -2166,6 +2166,13 @@ pub fn decode_id_pk_dtls(
     }
 }
 
+/// Whether the DTLS fingerprint a WebRTC peer signed into its identity is the one of the channel
+/// actually negotiated. An empty signed value binds nothing: on a WebRTC channel it is either a
+/// peer that could not sign one or a rendezvous/relay that stripped it, and both fail closed.
+pub fn dtls_fingerprint_bound(signed_fp: &str, actual_fp: &str) -> bool {
+    !signed_fp.is_empty() && signed_fp == actual_fp
+}
+
 pub fn create_symmetric_key_msg(their_pk_b: [u8; 32]) -> (Bytes, Bytes, secretbox::Key) {
     let their_pk_b = box_::PublicKey(their_pk_b);
     let (our_pk_b, out_sk_b) = box_::gen_keypair();
@@ -3262,5 +3269,43 @@ mod tests {
         let combined_mask = MOUSE_TYPE_DOWN | ((MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT) << 3);
         assert_eq!(combined_mask & MOUSE_TYPE_MASK, MOUSE_TYPE_DOWN);
         assert_eq!(combined_mask >> 3, MOUSE_BUTTON_LEFT | MOUSE_BUTTON_RIGHT);
+    }
+
+    #[test]
+    fn test_dtls_fingerprint_travels_signed_and_binds() {
+        let (pk, sk) = sign::gen_keypair();
+        let fp = "sha-256 0A:1B:2C";
+        let signed = sign::sign(
+            &IdPk {
+                id: "123456789".to_owned(),
+                pk: Bytes::from(vec![7u8; 32]),
+                dtls_fingerprint: fp.to_owned(),
+                ..Default::default()
+            }
+            .write_to_bytes()
+            .unwrap(),
+            &sk,
+        );
+
+        let (id, their_pk, signed_fp) = decode_id_pk_dtls(&signed, &pk).unwrap();
+        assert_eq!(id, "123456789");
+        assert_eq!(their_pk, [7u8; 32]);
+        assert_eq!(signed_fp, fp);
+        assert!(dtls_fingerprint_bound(&signed_fp, fp));
+        assert!(!dtls_fingerprint_bound(&signed_fp, "sha-256 0A:1B:2D"));
+        assert!(!dtls_fingerprint_bound("", ""));
+
+        // The fingerprint is under the signature: a blob verified with another key yields
+        // nothing, and one whose payload was edited in transit fails verification.
+        let (other_pk, _) = sign::gen_keypair();
+        assert!(decode_id_pk_dtls(&signed, &other_pk).is_err());
+        let mut tampered = signed.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        assert!(decode_id_pk_dtls(&tampered, &pk).is_err());
+
+        // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
+        // non-WebRTC handshakes.
+        assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
     }
 }

@@ -3,7 +3,7 @@ use std::{
     hash::BuildHasher,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -63,6 +63,36 @@ const MAX_PENDING_REMOTE_ICE: usize = 64;
 /// Queued candidates remembered so the controller's re-send is skipped instead of taking a slot
 /// of its own. Far more than an honest peer gathers, at eight bytes each.
 const ICE_DEDUP_WINDOW: usize = 256;
+/// Answerers between an offer and an open data channel. An offer arrives before any password or
+/// accept prompt, and each one builds a peer connection that binds a socket per interface and
+/// runs ICE for up to `CONNECT_TIMEOUT`, where a forged TCP punch costs one connect. Past this
+/// many the offer is declined, and the controller carries on over punch and relay as it does
+/// for a peer without WebRTC. A guard against pathological concurrency, sized so a burst of
+/// legitimate controllers, slow ICE paths or a reconnect storm never meet it; once the channel
+/// is open the connection is one like any other, and how many unauthenticated connections a
+/// machine allows is a question for the connection layer, where every transport shares it.
+const MAX_WEBRTC_ANSWERERS: usize = 64;
+static WEBRTC_ANSWERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// One of the `MAX_WEBRTC_ANSWERERS` slots, given back on drop.
+struct AnswererSlot;
+
+impl AnswererSlot {
+    fn take() -> Option<Self> {
+        WEBRTC_ANSWERERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_WEBRTC_ANSWERERS).then(|| n + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for AnswererSlot {
+    fn drop(&mut self) {
+        WEBRTC_ANSWERERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 // The rendezvous ICE route is reachable without a prior punch and the peer decides how many
 // candidates it sends, so these sites would let someone else set how much this machine writes to
 // its log file. One line a minute each, carrying the suppressed count.
@@ -749,6 +779,15 @@ impl RendezvousMediator {
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
+        let Some(slot) = AnswererSlot::take() else {
+            hbb_common::throttled_log!(
+                ICE_LOG_INTERVAL,
+                warn,
+                "declined a WebRTC offer: {} answerers already in flight",
+                MAX_WEBRTC_ANSWERERS
+            );
+            return Ok(String::new());
+        };
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
         let answer = stream.local_endpoint().to_owned();
@@ -849,6 +888,11 @@ impl RendezvousMediator {
         let session_key_for_cleanup = session_key.clone();
         tokio::spawn(async move {
             let result = stream.wait_connected(CONNECT_TIMEOUT).await;
+            // The slot covers the setup an unauthenticated offer makes this machine pay for, ICE,
+            // DTLS and SCTP, and that wait is bounded by CONNECT_TIMEOUT. Release it here, before
+            // the cleanup and the close below, so their duration is never added to a slot's life;
+            // with the channel open the session is a connection like any other.
+            drop(slot);
             // Only evict our own route. The key is the offer's DTLS fingerprint, identical across
             // the controller's punch retries, so a retry that built a fresh answerer has already
             // replaced this entry — removing it blindly would delete the live session's sender and
@@ -1488,7 +1532,10 @@ impl Drop for CheckIfResendPk {
 
 #[cfg(test)]
 mod tests {
-    use super::{mpsc, socket_client, tokio, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
+    use super::{
+        mpsc, socket_client, tokio, AnswererSlot, IceRoute, ICE_DEDUP_WINDOW,
+        MAX_PENDING_REMOTE_ICE, MAX_WEBRTC_ANSWERERS,
+    };
     use hbb_common::tcp::new_listener;
     use std::net::SocketAddr;
 
@@ -1735,5 +1782,15 @@ mod tests {
             until + Duration::from_millis(PUNCH_GRACE),
             "must return when the grace runs out, not a backoff later"
         );
+    }
+
+    #[test]
+    fn test_answerer_slots_cap_and_release() {
+        let held: Vec<_> = (0..MAX_WEBRTC_ANSWERERS)
+            .map(|_| AnswererSlot::take().unwrap())
+            .collect();
+        assert!(AnswererSlot::take().is_none());
+        drop(held);
+        assert!(AnswererSlot::take().is_some());
     }
 }
