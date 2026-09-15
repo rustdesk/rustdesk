@@ -8,6 +8,29 @@ import 'package:flutter_hbb/common/widgets/display_settings_dialog.dart';
 import 'package:flutter_hbb/models/display_scale_model.dart';
 import 'package:flutter_hbb/common.dart' as app;
 
+Widget _displaySettings({
+  required FutureOr<void> Function(int, int, int) onApply,
+  required VoidCallback onCancel,
+  required Future<DisplayScaleState> Function(double, String)? requestScale,
+  bool allowArbitrarySize = true,
+  bool excludeInputSemantics = false,
+}) =>
+    MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                width: 400,
+                child: DisplaySettings(
+                    translate: (s) => s,
+                    width: 1920,
+                    height: 1080,
+                    minDimension: 1,
+                    maxDimension: 9999,
+                    allowArbitrarySize: allowArbitrarySize,
+                    excludeInputSemantics: excludeInputSemantics,
+                    onApply: onApply,
+                    onCancel: onCancel,
+                    requestScale: requestScale))));
+
 void main() {
   const state = DisplayScaleState(
       percent: 150,
@@ -285,31 +308,22 @@ void main() {
       var scaleRequests = 0;
       var attempts = 0;
       final pending = Completer<void>();
-      await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-              body: SizedBox(
-                  width: 400,
-                  child: DisplaySettings(
-                      translate: (s) => s,
-                      width: 1920,
-                      height: 1080,
-                      minDimension: 1,
-                      maxDimension: 9999,
-                      onCancel: () => closes++,
-                      onApply: (_, __, ___) async {
-                        attempts++;
-                        if (attempts == 1) await pending.future;
-                      },
-                      requestScale: !withScale
-                          ? null
-                          : (percent, _) async {
-                              if (percent == 0) return state;
-                              scaleRequests++;
-                              return DisplayScaleState(
-                                  percent: percent,
-                                  options: [100, 125, 150],
-                                  token: 'after');
-                            })))));
+      await tester.pumpWidget(_displaySettings(
+          onCancel: () => closes++,
+          onApply: (_, __, ___) async {
+            attempts++;
+            if (attempts == 1) await pending.future;
+          },
+          requestScale: !withScale
+              ? null
+              : (percent, _) async {
+                  if (percent == 0) return state;
+                  scaleRequests++;
+                  return DisplayScaleState(
+                      percent: percent,
+                      options: [100, 125, 150],
+                      token: 'after');
+                }));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '2560');
       await tester.pumpAndSettle();
@@ -377,28 +391,17 @@ void main() {
         options: [100, 125, 150],
         custom: (50, 300, 100 / 120),
         token: 'native');
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: SizedBox(
-                width: 400,
-                child: DisplaySettings(
-                    translate: (s) => s,
-                    width: 1920,
-                    height: 1080,
-                    excludeInputSemantics: true,
-                    minDimension: 1,
-                    maxDimension: 9999,
-                    onCancel: () {},
-                    onApply: (_, __, ___) {},
-                    requestScale: (value, token) async {
-                      calls.add(value);
-                      return value == 0
-                          ? native
-                          : DisplayScaleState(
-                              percent: value,
-                              options: [value, 150],
-                              token: 'after');
-                    })))));
+    await tester.pumpWidget(_displaySettings(
+        excludeInputSemantics: true,
+        onCancel: () {},
+        onApply: (_, __, ___) {},
+        requestScale: (value, token) async {
+          calls.add(value);
+          return value == 0
+              ? native
+              : DisplayScaleState(
+                  percent: value, options: [value, 150], token: 'after');
+        }));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
     await tester.pumpAndSettle();
@@ -451,30 +454,18 @@ void main() {
       (tester) async {
     var applied = false;
     final calls = <double>[];
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: SizedBox(
-                width: 400,
-                child: DisplaySettings(
-                    translate: (s) => s,
-                    width: 1920,
-                    height: 1080,
-                    minDimension: 1,
-                    maxDimension: 9999,
-                    allowArbitrarySize: false,
-                    supportedResolutions: const [],
-                    onCancel: () => applied = true,
-                    onApply: (_, __, ___) =>
-                        fail('Unchanged resolution must not be submitted'),
-                    requestScale: (percent, _) async {
-                      calls.add(percent);
-                      return percent == 0
-                          ? state
-                          : DisplayScaleState(
-                              percent: percent,
-                              options: [100, 125, 150],
-                              token: 'new');
-                    })))));
+    await tester.pumpWidget(_displaySettings(
+        allowArbitrarySize: false,
+        onCancel: () => applied = true,
+        onApply: (_, __, ___) =>
+            fail('Unchanged resolution must not be submitted'),
+        requestScale: (percent, _) async {
+          calls.add(percent);
+          return percent == 0
+              ? state
+              : DisplayScaleState(
+                  percent: percent, options: [100, 125, 150], token: 'new');
+        }));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
     expect(find.byKey(const ValueKey('resolution-aspect-ratio')), findsNothing);
@@ -499,20 +490,11 @@ void main() {
       final response = Completer<DisplayScaleState>();
       final modes = <(int, int, int)>[];
       var closed = false;
-      await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-              body: SizedBox(
-                  width: 400,
-                  child: DisplaySettings(
-                      translate: (s) => s,
-                      width: 1920,
-                      height: 1080,
-                      minDimension: 1,
-                      maxDimension: 9999,
-                      onCancel: () => closed = true,
-                      onApply: (w, h, scale) => modes.add((w, h, scale)),
-                      requestScale: (percent, token) async =>
-                          percent == 0 ? state : await response.future)))));
+      await tester.pumpWidget(_displaySettings(
+          onCancel: () => closed = true,
+          onApply: (w, h, scale) => modes.add((w, h, scale)),
+          requestScale: (percent, token) async =>
+              percent == 0 ? state : await response.future));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '2560');
       await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
