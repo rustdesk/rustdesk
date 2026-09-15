@@ -1088,6 +1088,7 @@ class ImagePaint extends StatefulWidget {
 
 class _ImagePaintState extends State<ImagePaint> {
   bool _lastRemoteCursorMoved = false;
+  final _cursorDisplayScale = 1.0.obs;
 
   String get id => widget.id;
   RxBool get zoomCursor => widget.zoomCursor;
@@ -1197,19 +1198,22 @@ class _ImagePaintState extends State<ImagePaint> {
     if (isWindows &&
         peer.isPeerLinux &&
         peer.pi.currentDisplay == kAllDisplayValue) {
-      // Preserve Windows' legacy fixed physical size for Linux All Displays;
-      // macOS/Linux retain their zoom and Original sizing below.
-      return 1.0;
+      // Adaptive zoom follows each display; other cases retain scale 1.
+      return zoomCursor.value && c.viewStyle.style == kRemoteViewStyleAdaptive
+          ? c.scale / _cursorDisplayScale.value * dpr
+          : 1.0;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
-      final scale = _getCursorScaleForDisplay(c, m, 1.0);
+      // Keep the reference size independent of scrollbar overflow.
+      final scale = _getCursorScaleForDisplay(c, m, 1.0, matchRenderer: false);
       return isWindows ? scale : scale / dpr;
     }
     final scale = _getCursorScaleForDisplay(c, m, c.scale);
     return isWindows ? scale * dpr : scale;
   }
 
-  double _getCursorScaleForDisplay(CanvasModel c, ImageModel m, double scale) {
+  double _getCursorScaleForDisplay(CanvasModel c, ImageModel m, double scale,
+      {bool matchRenderer = true}) {
     final peer = widget.ffi.ffiModel;
     // All Displays can mix densities; no single display scale applies.
     if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
@@ -1226,7 +1230,7 @@ class _ImagePaintState extends State<ImagePaint> {
         c.imageOverflow.isTrue && c.scrollStyle != ScrollStyle.scrollauto;
     // In fact, Multiple display + Scale custom + Scrollbar || ScrollEdge + Non texture render
     // the positions are wrong, we should fix it.
-    if (!useTexture && useScrollbar) return scale;
+    if (matchRenderer && !useTexture && useScrollbar) return scale;
     // Match texture and software auto-scroll rendering when a Wayland host
     // with multiple outputs reports a display scale > 1.
     // A single-output host keeps scale at 1.0 to preserve physical uinput
@@ -1286,11 +1290,14 @@ class _ImagePaintState extends State<ImagePaint> {
           top: (displays[i].y - rect.top) * s + offset.dy,
           width: displays[i].width * sizeScale,
           height: displays[i].height * sizeScale,
-          child: Obx(() => Texture(
-                textureId: textureId.value,
-                filterQuality:
-                    isViewOriginal ? FilterQuality.none : FilterQuality.low,
-              )),
+          child: _trackCursorDisplay(
+            Obx(() => Texture(
+                  textureId: textureId.value,
+                  filterQuality:
+                      isViewOriginal ? FilterQuality.none : FilterQuality.low,
+                )),
+            displays[i],
+          ),
         ));
       }
     }
@@ -1298,6 +1305,20 @@ class _ImagePaintState extends State<ImagePaint> {
       width: size.width,
       height: size.height,
       child: Stack(children: children),
+    );
+  }
+
+  Widget _trackCursorDisplay(Widget child, Display display) {
+    final peer = widget.ffi.ffiModel;
+    if (!isWindows ||
+        !peer.isPeerLinux ||
+        peer.pi.currentDisplay != kAllDisplayValue) {
+      return child;
+    }
+    return MouseRegion(
+      onEnter: (_) => _cursorDisplayScale.value = display.scale,
+      onHover: (_) => _cursorDisplayScale.value = display.scale,
+      child: child,
     );
   }
 
