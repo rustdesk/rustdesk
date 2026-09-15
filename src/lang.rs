@@ -360,4 +360,22 @@ mod test {
         assert_eq!(f("", "zh_TW", false), "zh-tw");
         assert_eq!(f("", "ja-JP", false), "ja");
     }
+
+    #[test]
+    fn test_resolve_lang_detects_pt_pt_and_pt_br_from_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("", "pt-PT", false), "pt-pt");
+        assert_eq!(f("", "pt_PT", false), "pt-pt");
+        assert_eq!(f("", "pt-BR", false), "pt-br");
+        assert_eq!(f("", "pt_BR", false), "pt-br");
+    }
+
+    #[test]
+    fn test_resolve_lang_saved_lang_takes_precedence_over_locale() {
+        use super::resolve_lang as f;
+
+        assert_eq!(f("pt-br", "pt-PT", false), "pt-br");
+        assert_eq!(f("pt-pt", "pt-BR", false), "pt-pt");
+    }
 }
