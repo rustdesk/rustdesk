@@ -1194,9 +1194,15 @@ class _ImagePaintState extends State<ImagePaint> {
   /// Matches desktop cursors to the rendered image and native pixel units.
   ///
   /// Windows cursor pixels are physical; NSCursor/GdkCursor use logical pixels.
-  /// With zoom disabled, keep Original's size using the live controller DPR.
+  /// Unzoomed Adaptive/Custom views preserve macOS cursors' point dimensions.
   double _getDesktopCursorScale(CanvasModel c, double dpr) {
     final peer = widget.ffi.ffiModel;
+    if (!zoomCursor.value &&
+        peer.pi.platform == kPeerPlatformMacOS &&
+        (c.viewStyle.style == kRemoteViewStyleAdaptive ||
+            c.viewStyle.style == kRemoteViewStyleCustom)) {
+      return isWindows ? dpr : 1.0;
+    }
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
       if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
         // Remove the host output's density without applying canvas zoom.

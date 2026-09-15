@@ -257,9 +257,9 @@ Future<void> _checkRasterTransitions(
 }
 
 const _viewCases = [
-  (1.0, kPeerPlatformMacOS, 1.0),
+  (1.0, kPeerPlatformMacOS, 2.0),
   (1.25, kPeerPlatformLinux, 2.0),
-  (2.0, kPeerPlatformMacOS, 2.0),
+  (2.0, kPeerPlatformMacOS, 1.0),
 ];
 
 Future<void> _checkView(WidgetTester tester, (String, bool) mode,
@@ -305,7 +305,11 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
         as ImagePainter;
     final scale = video.scale * (mode.$2 ? 1.0 : 1.0 / (canvas.scale * dpr));
     final size = sourceSize * (peer == kPeerPlatformMacOS ? peerScale : 1.0);
-    final w = (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
+    final w = peer == kPeerPlatformMacOS &&
+            !mode.$2 &&
+            mode.$1 != kRemoteViewStyleOriginal
+        ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
+        : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
     final key = cursor.cache.updateGetKey(cursor.cache.scale);
     _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
   }
