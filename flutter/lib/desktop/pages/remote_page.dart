@@ -1195,13 +1195,13 @@ class _ImagePaintState extends State<ImagePaint> {
   /// With zoom disabled, keep Original's size using the live controller DPR.
   double _getDesktopCursorScale(CanvasModel c, ImageModel m, double dpr) {
     final peer = widget.ffi.ffiModel;
-    if (isWindows &&
-        peer.isPeerLinux &&
-        peer.pi.currentDisplay == kAllDisplayValue) {
-      // Adaptive zoom follows each display; other cases retain scale 1.
-      return zoomCursor.value && c.viewStyle.style == kRemoteViewStyleAdaptive
-          ? c.scale / _cursorDisplayScale.value * dpr
-          : 1.0;
+    if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
+      if (zoomCursor.value && c.viewStyle.style == kRemoteViewStyleAdaptive) {
+        final scale = c.scale / _cursorDisplayScale.value;
+        return isWindows ? scale * dpr : scale;
+      }
+      // Other Windows modes retain their legacy fixed physical size.
+      if (isWindows) return 1.0;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
       // Keep the reference size independent of scrollbar overflow.
@@ -1310,7 +1310,7 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _trackCursorDisplay(Widget child, Display display) {
     final peer = widget.ffi.ffiModel;
-    if (!isWindows ||
+    if (!isDesktop ||
         !peer.isPeerLinux ||
         peer.pi.currentDisplay != kAllDisplayValue) {
       return child;
