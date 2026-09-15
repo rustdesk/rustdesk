@@ -2475,7 +2475,8 @@ class CanvasModel with ChangeNotifier {
         style != null ? ScrollStyle.fromString(style) : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
-      _resetScroll();
+      // Scrollbar and Scroll Edge share controllers and retain their positions.
+      updateScrollPercent();
     }
 
     notifyListeners();
