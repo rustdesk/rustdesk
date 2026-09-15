@@ -37,6 +37,11 @@ drm = ["scrap/drm"]
 # kind of operation and deserves a switch that can remove it from the binary entirely, without
 # giving up DRM capture: `--features drm` builds the capture path with no wake code compiled in.
 drm-wake = ["drm"]
+# The headless display, on the same reasoning as `drm-wake` and for the same reason: it WRITES, and
+# what it writes is a global kernel module parameter plus a file under /lib/firmware. It also depends
+# on `drm` rather than standing alone, because the caches that have to be invalidated when a
+# connector appears or disappears mid-session are only wired up in the drm capture path.
+headless-display = ["drm"]
 linux-pkg-config = ["magnum-opus/linux-pkg-config", "scrap/linux-pkg-config"]
 unix-file-copy-paste = [
     "dep:x11-clipboard",
