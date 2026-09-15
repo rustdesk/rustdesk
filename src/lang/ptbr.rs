@@ -149,7 +149,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Click to upgrade", "Iniciar atualização"),
         ("Configure", "Configurar"),
         ("config_acc", "Para controlar seu computador remotamente, você precisa conceder ao RustDesk permissões de \"Acessibilidade\"."),
-        ("config_screen", "Para acessar seu computador remotamente, você precisa conceder ao RustDesk permissões de \"Gravar a Tela\"/"),
+        ("config_screen", "Para acessar seu computador remotamente, você precisa conceder ao RustDesk permissões de \"Gravar a Tela\""),
         ("Installing ...", "Instalando ..."),
         ("Install", "Instalar"),
         ("Installation", "Instalação"),
@@ -764,7 +764,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Sync clipboard between sessions", "Sincronizar área de transferência entre sessões"),
         ("sync-clipboard-between-sessions-tip", "Texto ou imagens copiados em uma sessão remota também são enviados para a área de transferência das suas outras sessões conectadas."),
         ("terminal-clipboard-write-tip", "Aplicativos do terminal podem copiar para a área de transferência"),
-        ("Allow terminal apps to copy to clipboard", "Permitir que aplicativos do terminal copiem para a área de transferência"),
+        ("Allow terminal apps to copy to clipboard", "Permitir cópia do terminal para a área de transferência"),
         ("Enable", "Habilitar"),
         ("Reuse one connection for port forwarding", "Reutilizar uma conexão para encaminhamento de portas"),
         ("port-forward-mux-tip", "Levar todas as conexões de um encaminhamento de portas por uma única conexão com o outro computador, em vez de estabelecer uma nova conexão e fazer login novamente para cada uma."),
@@ -779,7 +779,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "O RustDesk não conseguiu obter uma tela utilizável do XDG Desktop Portal. A biblioteca do PipeWire pode estar desatualizada."),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "O RustDesk não conseguiu carregar um componente do GStreamer necessário para a captura de tela ({})."),
         ("Relay fallback delay in seconds", "Atraso antes de recorrer ao retransmissor em segundos"),
-        ("relay-fallback-delay-tip", "Quanto tempo uma conexão de retransmissão já estabelecida espera pela conexão direta WebRTC antes de ser usada no lugar dela. Aumente para dar mais tempo a uma conexão direta lenta; diminua para recorrer mais cedo ao retransmissor em redes onde não é possível uma conexão direta. Deixe vazio para o valor padrão de 2.5 segundos."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
+        ("relay-fallback-delay-tip", "Tempo que a conexão de retransmissão aguarda pela conexão direta WebRTC. Aumente para dar mais tempo a conexões lentas; diminua para usar o retransmissor mais cedo. Deixe vazio para usar o padrão de 2,5 segundos."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "Para iniciar uma chamada de voz, ative \"Captura de áudio\" na página \"Compartilhamento de tela\".")
     ].iter().cloned().collect();
 }
