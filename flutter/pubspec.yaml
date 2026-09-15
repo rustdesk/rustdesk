@@ -62,8 +62,8 @@ dependencies:
   freezed_annotation: ^2.0.3
   flutter_custom_cursor:
     git:
-      url: https://github.com/rustdesk-org/flutter_custom_cursor
-      ref: db63b785c38153603e9fb84b50d3ec46f0d7e05e
+      url: https://github.com/fufesou/flutter_custom_cursor
+      ref: ad940aaac3aada70958df2de761adda1a71aa2c4
   window_size:
     git:
       url: https://github.com/21pages/flutter-desktop-embedding.git

@@ -422,6 +422,9 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 #[cfg(not(all(target_os = "linux", feature = "drm")))]
                 let cache_key = hcursor;
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
+                if let Some(physical) = data.high_resolution.as_mut() {
+                    physical.colors = hbb_common::compress::compress(&physical.colors).into();
+                }
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);

@@ -449,6 +449,11 @@ class InputModel {
   final isPhysicalMouse = false.obs;
   int _lastButtons = 0;
   Offset lastMousePos = Offset.zero;
+  // Latest local pointer position mapped to absolute remote desktop coordinates.
+  // Used to select the native cursor's display scale in Linux All Displays mode,
+  // without waiting for a host position update. Keep it separate from the
+  // host-reported position used to paint the remote cursor.
+  final remotePointerPosition = Rxn<Offset>();
   int _lastWheelTsUs = 0;
 
   // Wheel acceleration thresholds.
@@ -1954,7 +1959,7 @@ class InputModel {
       canvasModel.updateLocalCursor(x, y);
     }
 
-    return _handlePointerDevicePos(
+    final point = _handlePointerDevicePos(
       kind,
       x,
       y,
@@ -1965,6 +1970,20 @@ class InputModel {
       onExit: onExit,
       buttons: buttons,
     );
+    _rememberRemotePointer(point, isMove);
+    return point;
+  }
+
+  void _rememberRemotePointer(Point? point, bool isMove) {
+    final peer = parent.target!.ffiModel;
+    if (point == null ||
+        !isMove ||
+        !(isDesktop || isWebDesktop) ||
+        peer.pi.currentDisplay != kAllDisplayValue ||
+        !peer.isPeerLinux) {
+      return;
+    }
+    remotePointerPosition.value = Offset(point.x.toDouble(), point.y.toDouble());
   }
 
   bool _isInCurrentWindow(double x, double y) {

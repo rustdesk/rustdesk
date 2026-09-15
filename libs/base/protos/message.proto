@@ -310,12 +310,16 @@ message KeyEvent {
 }
 
 message CursorData {
-  uint64 id = 1;
+  uint64 id = 1 [jstype = JS_STRING];
   sint32 hotx = 2;
   sint32 hoty = 3;
   int32 width = 4;
   int32 height = 5;
   bytes colors = 6;
+  // Physical bitmap pixels per remote logical pixel; 0 means unknown density.
+  double scale = 7;
+  // Optional physical image. Legacy receivers keep using the logical-sized fields above.
+  CursorData high_resolution = 8;
 }
 
 message CursorPosition {
@@ -999,7 +1003,7 @@ message Message {
     AudioFrame audio_frame = 11;
     CursorData cursor_data = 12;
     CursorPosition cursor_position = 13;
-    uint64 cursor_id = 14;
+    uint64 cursor_id = 14 [jstype = JS_STRING];
     KeyEvent key_event = 15;
     Clipboard clipboard = 16;
     FileAction file_action = 17;

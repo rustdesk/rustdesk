@@ -248,6 +248,25 @@ pub fn wayland_failure_stamped() -> bool {
     LAST_FAILED_LOOKUP.lock().unwrap().is_some()
 }
 
+#[cfg(feature = "drm")]
+pub enum CachedDisplays {
+    Busy,
+    Ready(Option<Arc<Displays>>),
+}
+
+/// Cursor polls must neither wait for discovery nor mistake contention for missing metadata.
+#[cfg(feature = "drm")]
+pub fn get_cached_displays() -> CachedDisplays {
+    match DISPLAYS.try_lock() {
+        Ok(cache) => CachedDisplays::Ready(cache.clone()),
+        Err(std::sync::TryLockError::WouldBlock) => CachedDisplays::Busy,
+        Err(err) => {
+            warn!("Failed to read cached Wayland displays: {}", err);
+            CachedDisplays::Ready(None)
+        }
+    }
+}
+
 pub fn get_displays() -> Arc<Displays> {
     let mut lock = DISPLAYS.lock().unwrap();
     match lock.as_ref() {
@@ -337,6 +356,17 @@ pub fn get_layout_for_uinput_live() -> Option<((i32, i32, i32, i32), Vec<Display
     }
     match enumerate_displays() {
         Ok(displays) => {
+            #[cfg(feature = "drm")]
+            {
+                // Output density can change without moving any desktop-coordinate rectangle.
+                let mut cache = DISPLAYS.lock().unwrap();
+                if let Some(updated) = cache
+                    .as_deref()
+                    .and_then(|cached| updated_cursor_scales(cached, &displays))
+                {
+                    *cache = Some(Arc::new(updated));
+                }
+            }
             desktop_rect_of(&displays).map(|rect| (rect, logical_rects_of(&displays)))
         }
         Err(_err) => {
@@ -345,6 +375,30 @@ pub fn get_layout_for_uinput_live() -> Option<((i32, i32, i32, i32), Vec<Display
             None
         }
     }
+}
+
+#[cfg(feature = "drm")]
+fn updated_cursor_scales(cached: &Displays, live: &[WaylandDisplayInfo]) -> Option<Displays> {
+    let mut displays = cached.displays.clone();
+    let mut changed = false;
+    for output in &mut displays {
+        // Geometry changes retain the existing layout invalidation/rebuild path.
+        let Some(current) = live.iter().find(|d| {
+            d.name == output.name
+                && (d.x, d.y) == (output.x, output.y)
+                && (d.width, d.height) == (output.width, output.height)
+                && d.transform == output.transform
+                && d.logical_size == output.logical_size
+        }) else {
+            continue;
+        };
+        changed |= output.scale_factor != current.scale_factor;
+        output.scale_factor = current.scale_factor;
+    }
+    changed.then_some(Displays {
+        primary: cached.primary,
+        displays,
+    })
 }
 
 fn desktop_rect_of(displays: &[WaylandDisplayInfo]) -> Option<(i32, i32, i32, i32)> {
@@ -516,6 +570,27 @@ fn map_axis(v: i32, base_origin: i32, base_extent: i32, live_origin: i32, live_e
 mod tests {
     use super::*;
 
+    #[cfg(feature = "drm")]
+    #[test]
+    fn cursor_metadata_does_not_wait_for_display_discovery() {
+        let cache = DISPLAYS.lock().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            tx.send(matches!(get_cached_displays(), CachedDisplays::Busy))
+                .unwrap();
+        });
+        // Discovery owns this lock until it completes or times out.
+        let result = rx.recv_timeout(Duration::from_secs(1));
+        drop(cache);
+        reader.join().unwrap();
+        assert!(result.unwrap());
+
+        clear_wayland_displays_cache();
+        for _ in 0..100 {
+            assert!(matches!(get_cached_displays(), CachedDisplays::Ready(None)));
+        }
+    }
+
     #[test]
     fn test_lookup_backoff_boundaries() {
         // Future `now`s sidestep Instant subtraction, which can panic near boot.
@@ -564,6 +639,7 @@ mod tests {
             width,
             height,
             logical_size,
+            scale_factor: 1,
             refresh_rate: 60,
             transform: 0,
         }
@@ -572,6 +648,33 @@ mod tests {
     #[test]
     fn test_desktop_rect_empty() {
         assert_eq!(desktop_rect_of(&[]), None);
+    }
+
+    #[cfg(feature = "drm")]
+    #[test]
+    fn output_scale_refresh_preserves_layout_and_existing_snapshots() {
+        let mut output = display(0, 0, 2560, 1600, Some((2560, 1600)));
+        output.name = "eDP-1".into();
+        output.scale_factor = 3;
+        let cached = Displays {
+            primary: 0,
+            displays: vec![output.clone()],
+        };
+        output.scale_factor = 2;
+        let updated = updated_cursor_scales(&cached, &[output.clone()]).unwrap();
+        assert_eq!(updated.displays[0].scale_factor, 2);
+        assert_eq!(cached.displays[0].scale_factor, 3);
+        assert_eq!(updated.primary, cached.primary);
+        assert_eq!(
+            logical_rects_of(&updated.displays),
+            logical_rects_of(&cached.displays)
+        );
+        assert!(updated_cursor_scales(&updated, &[output.clone()]).is_none());
+        output.name = "HDMI-1".into();
+        assert!(updated_cursor_scales(&cached, &[output.clone()]).is_none());
+        output.name = "eDP-1".into();
+        output.logical_size = Some((1280, 800));
+        assert!(updated_cursor_scales(&cached, &[output]).is_none());
     }
 
     #[test]
