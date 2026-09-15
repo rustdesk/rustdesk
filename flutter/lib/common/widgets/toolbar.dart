@@ -1267,17 +1267,27 @@ List<Widget> getVirtualDisplayMenuChildren(
     final advertised = pi.platformAdditions['macos_virtual_displays'];
     final displays =
         advertised is List ? advertised.whereType<int>().toSet() : <int>{};
+    Future<void> toggle(int index, bool on) async {
+      try {
+        await bind.sessionToggleVirtualDisplay(
+            sessionId: ffi.sessionId, index: index, on: on);
+      } catch (e) {
+        debugPrint('Failed to toggle macOS virtual display: $e');
+        showToast(translate('Failed to toggle macOS virtual display'));
+        return;
+      }
+      clickCallBack?.call();
+    }
+
     return [
       for (var index = 1; index <= kMaxVirtualDisplayCount; index++)
         CkbMenuButton(
           value: displays.contains(index),
           onChanged: !enabled
               ? null
-              : (bool? value) {
+              : (bool? value) async {
                   if (value == null) return;
-                  bind.sessionToggleVirtualDisplay(
-                      sessionId: ffi.sessionId, index: index, on: value);
-                  clickCallBack?.call();
+                  await toggle(index, value);
                 },
           child: Text('${translate('Virtual display')} $index'),
           ffi: ffi,
@@ -1286,13 +1296,7 @@ List<Widget> getVirtualDisplayMenuChildren(
       MenuButton(
         onPressed: !enabled
             ? null
-            : () {
-                bind.sessionToggleVirtualDisplay(
-                    sessionId: ffi.sessionId,
-                    index: kAllVirtualDisplay,
-                    on: false);
-                clickCallBack?.call();
-              },
+            : () => toggle(kAllVirtualDisplay, false),
         child: Text(translate('Plug out all')),
         ffi: ffi,
       ),
