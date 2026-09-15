@@ -142,6 +142,7 @@ CursorData _data((int, int) size) {
   for (final pixel in image) {
     pixel.setRgba(64, 32, 16, 255);
   }
+  image.getPixel(0, 0).setRgba(255, 0, 0, 128);
   return CursorData(
       peerId: 'size',
       id: '$size',
@@ -205,7 +206,19 @@ Future<void> _checkSize(((int, int), double, (int, int)) scenario,
   addTearDown(ffi.canvasModel.dispose);
   buildCursorOfCache(cursor, scenario.$2, cursor.cache);
   await Future<void>.delayed(Duration.zero);
-  _expectSize(registrations.single, scenario.$3);
+  final (width, height) = scenario.$3;
+  expect(
+      (cursor.cache.rasterWidth, cursor.cache.rasterHeight), (width, height));
+  final args = registrations.single;
+  final padded = Platform.isLinux && width < height;
+  _expectSize(args, (padded ? height : width, height));
+  if (padded) {
+    final bitmap = img.decodePng(args['buffer'] as Uint8List)!;
+    final artwork =
+        img.copyCrop(bitmap, x: 0, y: 0, width: width, height: height);
+    expect(artwork.getBytes(), img.decodePng(cursor.cache.data!)!.getBytes());
+    expect(bitmap.where((p) => p.x >= width).map((p) => p.a), everyElement(0));
+  }
 }
 
 void _expectSize(Map<dynamic, dynamic> args, (int, int) expected) {
