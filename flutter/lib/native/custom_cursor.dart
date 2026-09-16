@@ -25,10 +25,11 @@ MouseCursor buildCursorOfCache(
       if (data == null) {
         return MouseCursor.defer;
       }
-      // Keep tall cursors intact on Linux hardware cursor planes.
+      // Square canvases avoid clipping or stray edge pixels on Linux.
       final width = isLinux && cache.rasterWidth < cache.rasterHeight
           ? cache.rasterHeight
           : cache.rasterWidth;
+      final height = isLinux ? width : cache.rasterHeight;
       debugPrint(
           "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
       // [Safety]
@@ -39,9 +40,11 @@ MouseCursor buildCursorOfCache(
           .registerCursor(custom_cursor_manager.CursorData()
             ..name = key
             ..buffer =
-                width == cache.rasterWidth ? data : _padCursorWidth(data, width)
+                width == cache.rasterWidth && height == cache.rasterHeight
+                    ? data
+                    : _padCursor(data, width)
             ..width = width
-            ..height = cache.rasterHeight
+            ..height = height
             ..hotX = cache.hotx
             ..hotY = cache.hoty);
       cursor.addKey(key);
@@ -50,15 +53,15 @@ MouseCursor buildCursorOfCache(
   }
 }
 
-Uint8List _padCursorWidth(Uint8List data, int width) {
+Uint8List _padCursor(Uint8List data, int size) {
   final bitmap = img.decodePng(data);
   if (bitmap == null) {
     throw const FormatException('Invalid native cursor PNG');
   }
   final padded = img.copyExpandCanvas(bitmap,
-      newWidth: width,
-      newHeight: bitmap.height,
+      newWidth: size,
+      newHeight: size,
       position: img.ExpandCanvasPosition.topLeft,
-      toImage: img.Image(width: width, height: bitmap.height, numChannels: 4));
+      toImage: img.Image(width: size, height: size, numChannels: 4));
   return Uint8List.fromList(img.encodePng(padded));
 }

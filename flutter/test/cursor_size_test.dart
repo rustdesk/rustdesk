@@ -210,14 +210,16 @@ Future<void> _checkSize(((int, int), double, (int, int)) scenario,
   expect(
       (cursor.cache.rasterWidth, cursor.cache.rasterHeight), (width, height));
   final args = registrations.single;
-  final padded = Platform.isLinux && width < height;
-  _expectSize(args, (padded ? height : width, height));
+  final padded = Platform.isLinux && width != height;
+  final side = width > height ? width : height;
+  _expectSize(args, (padded ? side : width, padded ? side : height));
   if (padded) {
     final bitmap = img.decodePng(args['buffer'] as Uint8List)!;
     final artwork =
         img.copyCrop(bitmap, x: 0, y: 0, width: width, height: height);
     expect(artwork.getBytes(), img.decodePng(cursor.cache.data!)!.getBytes());
-    expect(bitmap.where((p) => p.x >= width).map((p) => p.a), everyElement(0));
+    expect(bitmap.where((p) => p.x >= width || p.y >= height).map((p) => p.a),
+        everyElement(0));
   }
 }
 
