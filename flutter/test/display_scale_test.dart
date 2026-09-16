@@ -33,6 +33,8 @@ Widget _displaySettings({
 
 void main() {
   const state = DisplayScaleState(
+      identity: 'display',
+      resolution: (1920, 1080),
       percent: 150,
       recommended: 150,
       options: [100, 125, 150, 175, 200],
@@ -41,7 +43,9 @@ void main() {
     'percent': 150,
     'recommended': 150,
     'options': [100, 125, 150, 175, 200],
-    'token': 'fresh'
+    'token': 'fresh',
+    'identity': 'display',
+    'resolution': [1920, 1080]
   };
 
   for (final openWithMouse in [false, true]) {
@@ -98,6 +102,12 @@ void main() {
         'options': [100, '125']
       },
       {...data, 'token': ''},
+      {...data, 'identity': ''},
+      {...data, 'resolution': null},
+      {
+        ...data,
+        'resolution': [0, 1080]
+      },
       {
         ...data,
         'options': [0, 150]
@@ -176,6 +186,8 @@ void main() {
       'native step bounds and invalid custom input never silently change the draft',
       () async {
     const state = DisplayScaleState(
+        identity: 'display',
+        resolution: (1920, 1080),
         percent: 150,
         options: [100, 125, 150],
         custom: (50, 300, 100 / 120),
@@ -217,6 +229,8 @@ void main() {
         if (failApply) throw const DisplayScaleError('stale');
       }
       return DisplayScaleState(
+          identity: 'display',
+          resolution: (1920, 1080),
           percent: percent == 0 ? 150 : percent,
           options: [100, 125, 150],
           custom: (50, 300, 100 / 120),
@@ -234,6 +248,14 @@ void main() {
     expect(controller.percent, precise);
     expect(await controller.apply(), isFalse);
     expect(appliedTokens, ['old']);
+    controller.reset();
+    expect(controller.changed, isFalse);
+    expect(controller.canApply, isFalse);
+    controller.useCustom();
+    controller.edit('125.5');
+    controller.acceptSuggestion();
+    expect(controller.percent, precise);
+    expect(controller.canApply, isFalse);
     token = 'new';
     await controller.refresh();
     expect(controller.percent, precise);
@@ -250,6 +272,8 @@ void main() {
       () async {
     var custom = true;
     final controller = DisplayScaleModel((_, __) async => DisplayScaleState(
+        identity: 'display',
+        resolution: (1920, 1080),
         percent: 150,
         options: [100, 150],
         token: 'current',
@@ -275,12 +299,18 @@ void main() {
 
   test('refresh adapts preset and custom drafts to new capabilities', () async {
     var native = const DisplayScaleState(
-        percent: 150, options: [100, 125, 150], token: 'first');
+        identity: 'display',
+        resolution: (1920, 1080),
+        percent: 150,
+        options: [100, 125, 150],
+        token: 'first');
     final controller = DisplayScaleModel((_, __) async => native);
     addTearDown(controller.dispose);
     await controller.refresh();
     controller.select(125);
     native = const DisplayScaleState(
+        identity: 'display',
+        resolution: (1920, 1080),
         percent: 150,
         options: [100, 150],
         custom: (50, 300, 1),
@@ -292,7 +322,11 @@ void main() {
     controller.edit('125.5');
     expect(controller.valid, isFalse);
     native = const DisplayScaleState(
-        percent: 150, options: [100, 125.5, 150], token: 'third');
+        identity: 'display',
+        resolution: (1920, 1080),
+        percent: 150,
+        options: [100, 125.5, 150],
+        token: 'third');
     await controller.refresh();
     expect(controller.percent, 125.5);
     expect(controller.customMode, isFalse);
@@ -307,20 +341,23 @@ void main() {
       var closes = 0;
       var scaleRequests = 0;
       var attempts = 0;
+      var resolution = (1920, 1080);
       final pending = Completer<void>();
       await tester.pumpWidget(_displaySettings(
           onCancel: () => closes++,
-          onApply: (_, __, ___) async {
+          onApply: (width, height, _) async {
             attempts++;
             if (attempts == 1) await pending.future;
+            resolution = (width, height);
           },
           requestScale: !withScale
               ? null
               : (percent, _) async {
-                  if (percent == 0) return state;
-                  scaleRequests++;
+                  if (percent != 0) scaleRequests++;
                   return DisplayScaleState(
-                      percent: percent,
+                      identity: 'display',
+                      resolution: resolution,
+                      percent: percent == 0 ? 150 : percent,
                       options: [100, 125, 150],
                       token: 'after');
                 }));
@@ -337,6 +374,7 @@ void main() {
       await tester.tap(find.text('Apply'));
       await tester.pump();
       expect(closes, 0);
+      expect(scaleRequests, 0);
       expect(
           tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
           isNull);
@@ -355,9 +393,7 @@ void main() {
       expect(widthInput.focusNode.hasFocus, isTrue);
       expect(closes, 0);
       expect(find.text('send failed'), findsOneWidget);
-      expect(
-          find.text('Scaling was applied, but the resolution request failed.'),
-          withScale ? findsOneWidget : findsNothing);
+      expect(scaleRequests, 0);
       expect(
           tester
               .widget<TextField>(find.byType(TextField).first)
@@ -382,11 +418,34 @@ void main() {
     expect(controller.error, contains('did not apply'));
   });
 
+  test('Reset cancels a scale draft matching the refreshed effective value',
+      () async {
+    var effective = 150.0;
+    final controller = DisplayScaleModel((_, __) async => DisplayScaleState(
+        identity: 'display',
+        resolution: (1920, 1080),
+        percent: effective,
+        options: [100, 125, 150],
+        token: 'current'));
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    controller.select(125);
+    effective = 125;
+    await controller.refresh();
+    expect(controller.percent, controller.current!.percent);
+    expect(controller.changed, isTrue);
+    controller.reset();
+    expect(controller.changed, isFalse);
+    expect(await controller.apply(), isFalse);
+  });
+
   testWidgets(
       'custom input needs explicit native suggestion and stepping retains precision',
       (tester) async {
     final calls = <double>[];
     const native = DisplayScaleState(
+        identity: 'display',
+        resolution: (1920, 1080),
         percent: 150,
         options: [100, 125, 150],
         custom: (50, 300, 100 / 120),
@@ -400,7 +459,11 @@ void main() {
           return value == 0
               ? native
               : DisplayScaleState(
-                  percent: value, options: [value, 150], token: 'after');
+                  identity: 'display',
+                  resolution: (1920, 1080),
+                  percent: value,
+                  options: [value, 150],
+                  token: 'after');
         }));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
@@ -464,7 +527,11 @@ void main() {
           return percent == 0
               ? state
               : DisplayScaleState(
-                  percent: percent, options: [100, 125, 150], token: 'new');
+                  identity: 'display',
+                  resolution: (1920, 1080),
+                  percent: percent,
+                  options: [100, 125, 150],
+                  token: 'new');
         }));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
@@ -484,49 +551,191 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final succeeds in [true, false]) {
-    testWidgets('combined Apply waits for scaling (success: $succeeds)',
-        (tester) async {
-      final response = Completer<DisplayScaleState>();
-      final modes = <(int, int, int)>[];
-      var closed = false;
-      await tester.pumpWidget(_displaySettings(
-          onCancel: () => closed = true,
-          onApply: (w, h, scale) => modes.add((w, h, scale)),
-          requestScale: (percent, token) async =>
-              percent == 0 ? state : await response.future));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).first, '2560');
-      await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-      await tester.pumpAndSettle();
-      await tester
-          .tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply'));
-      await tester.pump();
-      expect(modes, isEmpty);
-      expect(closed, isFalse);
-      expect(
-          tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-          isNull);
-      if (succeeds) {
-        response.complete(const DisplayScaleState(
-            percent: 125, options: [125, 150], token: 'new'));
-      } else {
-        response.completeError(const DisplayScaleError('stale'));
-      }
-      await tester.pumpAndSettle();
-      expect(modes, succeeds ? [(2560, 1440, 1)] : isEmpty);
-      expect(closed, succeeds);
-      expect(
-          tester
-              .widget<TextField>(find.byType(TextField).first)
-              .controller!
-              .text,
-          '2560');
-      expect(tester.takeException(), isNull);
-    });
-  }
+  testWidgets(
+      'combined Apply confirms resolution and retries capped scaling without resending the mode',
+      (tester) async {
+    final confirmation = Completer<void>();
+    final response = Completer<void>();
+    final modes = <(int, int, int)>[];
+    final calls = <(double, String)>[];
+    var resolution = (1920, 1080);
+    var rawRequested = 200.0;
+    var scaleRequests = 0;
+    var closed = false;
+    DisplayScaleState readback() => DisplayScaleState(
+        identity: 'display',
+        resolution: resolution,
+        percent: rawRequested
+            .clamp(100, resolution == (1920, 1080) ? 150 : 125)
+            .toDouble(),
+        options: resolution == (1920, 1080) ? [100, 125, 150] : [100, 125],
+        token: resolution == (1920, 1080) ? 'fresh' : 'resized');
+    await tester.pumpWidget(_displaySettings(
+        onCancel: () => closed = true,
+        onApply: (w, h, scale) async {
+          modes.add((w, h, scale));
+          await confirmation.future;
+          resolution = (w, h);
+        },
+        requestScale: (percent, token) async {
+          calls.add((percent, token));
+          if (percent == 0) return readback();
+          if (++scaleRequests == 1) await response.future;
+          rawRequested = percent;
+          return readback();
+        }));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '1280');
+    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pump();
+    expect(modes, [(1280, 720, 1)]);
+    expect(calls, [(0, '')]);
+    expect(closed, isFalse);
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    confirmation.complete();
+    await tester.pump();
+    expect(calls, [(0, ''), (0, ''), (125, 'resized')]);
+    expect(closed, isFalse);
+    response.completeError(const DisplayScaleError('stale'));
+    await tester.pumpAndSettle();
+    expect(closed, isFalse);
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '1280');
+    expect(rawRequested, 200);
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(closed, isTrue);
+    expect(scaleRequests, 2);
+    expect(rawRequested, 125);
+    expect(calls.where((call) => call.$1 != 0),
+        [(125, 'resized'), (125, 'resized')]);
+    expect(modes, [(1280, 720, 1)]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'failed refresh after resolution confirmation retries only scaling',
+      (tester) async {
+    final modes = <(int, int, int)>[];
+    final calls = <double>[];
+    var closed = false;
+    await tester.pumpWidget(_displaySettings(
+        onCancel: () => closed = true,
+        onApply: (width, height, scale) => modes.add((width, height, scale)),
+        requestScale: (percent, _) async {
+          calls.add(percent);
+          if (calls.length == 2) {
+            throw const DisplayScaleError('refresh failed');
+          }
+          return DisplayScaleState(
+              identity: 'display',
+              resolution: modes.isEmpty ? (1920, 1080) : (2560, 1440),
+              percent: percent == 0 ? 150 : percent,
+              options: [100, 125, 150],
+              token: 'current');
+        }));
+    await tester.pumpAndSettle();
+    final width = find.byType(TextField).first;
+    final menu = find.byKey(const ValueKey('system-scale-menu'));
+    await tester.enterText(width, '2560');
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(closed, isFalse);
+    expect(calls, [0, 0]);
+    expect(find.text('refresh failed'), findsOneWidget);
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    await tester.tap(find.text('Reset changes'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(width).controller!.text, '2560');
+    await tester.enterText(width, '1280');
+    await tester.pumpAndSettle();
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    await tester.enterText(width, '2560');
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.widgetWithText(MenuItemButton, 'Custom').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refresh'));
+    await tester.pumpAndSettle();
+    expect(find.text('refresh failed'), findsNothing);
+    await tester.enterText(width, '1280');
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '1440');
+    await tester.enterText(width, '2560');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(closed, isTrue);
+    expect(modes, [(2560, 1440, 1)]);
+    expect(calls, [0, 0, 0, 125]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'changed resolution rejects a scale no longer supported by the host',
+      (tester) async {
+    var resolution = (1920, 1080);
+    var resolutionsApplied = 0;
+    var closed = false;
+    final calls = <double>[];
+    await tester.pumpWidget(_displaySettings(
+        onCancel: () => closed = true,
+        onApply: (width, height, _) {
+          resolutionsApplied++;
+          resolution = (width, height);
+        },
+        requestScale: (percent, _) async {
+          calls.add(percent);
+          return resolutionsApplied == 0
+              ? state
+              : DisplayScaleState(
+                  identity: 'display',
+                  resolution: resolution,
+                  percent: 150,
+                  options: [100, 150],
+                  token: 'reduced');
+        }));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '1280');
+    await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(closed, isFalse);
+    expect(resolutionsApplied, 1);
+    expect(calls, everyElement(0));
+    await tester.tap(find.text('Reset changes'));
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '1280');
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
       'scaling menu stays above narrow session dialog and keeps other drafts',

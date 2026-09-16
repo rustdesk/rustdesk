@@ -70,8 +70,15 @@ void main() {
     expect(canChangeDisplaySettings(session), isFalse);
   });
 
-  DisplayScaleState scaleState(double value, String token) => DisplayScaleState(
-      percent: value, options: const [100, 125, 150], token: token);
+  DisplayScaleState scaleState(double value, String token,
+          {(int, int) resolution = (1920, 1080),
+          String identity = 'display'}) =>
+      DisplayScaleState(
+          percent: value,
+          options: const [100, 125, 150],
+          token: token,
+          identity: identity,
+          resolution: resolution);
 
   for (final (platform, scaledWidth, current, fitted) in [
     (kPeerPlatformLinux, 2560, (3840, 2160), (2560, 1440)),
@@ -155,6 +162,31 @@ void main() {
         target.applyResolution(() {}), throwsA(isA<DisplayScaleError>()));
   });
 
+  test(
+      'a capture replacement during the initial read cannot establish identity',
+      () async {
+    model.pi.platformAdditions['display_scale'] = true;
+    final entered = Completer<void>();
+    final reply = Completer<DisplayScaleState>();
+    var reads = 0;
+    final target = DisplaySettingsTarget(session, (_, __, ___) async {
+      reads++;
+      entered.complete();
+      return await reply.future;
+    });
+    final initial = target.requestScale(0, '');
+    final rejected = expectLater(initial, throwsA(isA<DisplayScaleError>()));
+    await entered.future;
+    model.pi.displays.value = [Display()];
+    reply.complete(scaleState(100, 'replacement', identity: 'replacement'));
+    await rejected;
+    await expectLater(
+        target.requestScale(0, ''), throwsA(isA<DisplayScaleError>()));
+    await expectLater(target.requestScale(125, 'replacement'),
+        throwsA(isA<DisplayScaleError>()));
+    expect(reads, 1);
+  });
+
   for (final refreshBeforeReply in [true, false]) {
     test(
         'own scaling accepts a verified capture refresh (before reply: '
@@ -179,19 +211,98 @@ void main() {
     });
   }
 
-  test('a mismatched native token still rejects a replaced display', () async {
-    model.pi.platformAdditions['display_scale'] = true;
-    final requests = <double>[];
-    final target = DisplaySettingsTarget(session, (_, percent, __) async {
-      requests.add(percent);
-      return scaleState(125, percent == 0 ? 'another-output' : 'after');
+  for (final changed in ['token', 'identity']) {
+    test('a mismatched native $changed still rejects writes', () async {
+      model.pi.platformAdditions['display_scale'] = true;
+      final requests = <double>[];
+      final target = DisplaySettingsTarget(session, (_, percent, __) async {
+        requests.add(percent);
+        if (percent != 0) return scaleState(125, 'after');
+        return scaleState(125, changed == 'token' ? 'another-output' : 'after',
+            identity: changed == 'identity' ? 'replacement' : 'display');
+      });
+      await target.requestScale(125, 'before');
+      model.pi.displays.value = [Display()];
+      await expectLater(
+          target.requestScale(150, 'after'), throwsA(isA<DisplayScaleError>()));
+      expect(requests, [125, 0]);
     });
-    await target.requestScale(125, 'before');
-    model.pi.displays.value = [Display()];
-    await expectLater(
-        target.requestScale(150, 'after'), throwsA(isA<DisplayScaleError>()));
-    expect(requests, [125, 0]);
+  }
+
+  test('Refresh recovers a lost scaling reply after changing resolution',
+      () async {
+    model.pi.platformAdditions['display_scale'] = true;
+    var resolution = (1920, 1080);
+    var percent = 100.0;
+    var token = 'before';
+    var scaleWrites = 0;
+    var resolutionWrites = 0;
+    final target =
+        DisplaySettingsTarget(session, (_, requested, expected) async {
+      if (requested != 0) {
+        expect(expected, token);
+        scaleWrites++;
+        percent = requested;
+        token = 'scale-$scaleWrites';
+        model.pi.displays.value = [Display()];
+        if (scaleWrites == 1) {
+          throw const DisplayScaleError(
+              'Display settings timed out. Refresh and try again.');
+        }
+      }
+      return scaleState(percent, token, resolution: resolution);
+    });
+    final controller = DisplayScaleModel(target.requestScale);
+    addTearDown(controller.dispose);
+    expect(await controller.refresh(), isTrue);
+    await target.applyResolution(() {
+      resolutionWrites++;
+      resolution = (2560, 1440);
+      token = 'new-mode';
+      model.pi.displays.value = [Display()];
+    }, resolution: (2560, 1440));
+    expect(await controller.refresh(), isTrue);
+    controller.select(125);
+    expect(await controller.apply(), isFalse);
+    expect(controller.needsRefresh, isTrue);
+    await expectLater(target.requestScale(150, controller.current!.token),
+        throwsA(isA<DisplayScaleError>()));
+    expect(scaleWrites, 1);
+    expect(await controller.refresh(), isTrue);
+    expect(controller.current!.percent, 125);
+    expect(controller.current!.resolution, resolution);
+    expect(controller.needsRefresh, isFalse);
+    expect(controller.canApply, isTrue);
+    expect(scaleWrites, 1);
+    controller.select(150);
+    expect(await controller.apply(), isTrue);
+    expect(scaleWrites, 2);
+    expect(resolutionWrites, 1);
   });
+
+  for (final changed in ['identity', 'resolution', 'permission', 'capture']) {
+    test('Refresh rejects $changed changes during native verification',
+        () async {
+      model.pi.platformAdditions['display_scale'] = true;
+      final reply = Completer<DisplayScaleState>();
+      var reads = 0;
+      final target = DisplaySettingsTarget(session, (_, percent, __) async {
+        expect(percent, 0);
+        return ++reads == 1 ? scaleState(100, 'before') : await reply.future;
+      });
+      await target.requestScale(0, '');
+      model.pi.displays.value = [Display()];
+      final refresh = target.requestScale(0, '');
+      final rejected = expectLater(refresh, throwsA(isA<DisplayScaleError>()));
+      if (changed == 'permission') model.controlAllowed = false;
+      if (changed == 'capture') model.pi.displays.value = [Display()];
+      reply.complete(scaleState(125, 'after',
+          identity: changed == 'identity' ? 'replacement' : 'display',
+          resolution: changed == 'resolution' ? (2560, 1440) : (1920, 1080)));
+      await rejected;
+      expect(reads, 2);
+    });
+  }
 
   test('selection and permissions are checked again after native verification',
       () async {
@@ -265,22 +376,81 @@ void main() {
     await rejected;
   });
 
+  test(
+      'an unconfirmed mode change blocks writes until the requested mode arrives',
+      () async {
+    model.pi.platformAdditions['display_scale'] = true;
+    var resolution = (1920, 1080);
+    var sends = 0;
+    final target = DisplaySettingsTarget(
+        session,
+        (_, percent, __) async => scaleState(
+            percent == 0 ? 100 : percent, 'current',
+            resolution: resolution));
+    await target.requestScale(0, '');
+    final operation =
+        target.applyResolution(() => sends++, resolution: (2560, 1440));
+    await Future<void>.delayed(Duration.zero);
+    await expectLater(
+        target.requestScale(0, ''), throwsA(isA<DisplayScaleError>()));
+    await expectLater(
+        target.requestScale(125, 'current'), throwsA(isA<DisplayScaleError>()));
+    await expectLater(
+        target.applyResolution(() => sends++, resolution: (2560, 1440)),
+        throwsA(isA<DisplayScaleError>()));
+    expect(sends, 1);
+    resolution = (2560, 1440);
+    await operation;
+    expect((await target.requestScale(0, '')).resolution, resolution);
+    expect((await target.requestScale(125, 'current')).percent, 125);
+  });
+
+  test('mode confirmation rejects a replaced display', () async {
+    model.pi.platformAdditions['display_scale'] = true;
+    final reply = Completer<DisplayScaleState>();
+    var queries = 0;
+    final target = DisplaySettingsTarget(session, (_, percent, __) async {
+      expect(percent, 0);
+      return ++queries == 1 ? scaleState(100, 'before') : await reply.future;
+    });
+    await target.requestScale(0, '');
+    var sends = 0;
+    final operation =
+        target.applyResolution(() => sends++, resolution: (2560, 1440));
+    final rejected = expectLater(operation, throwsA(isA<DisplayScaleError>()));
+    await Future<void>.delayed(Duration.zero);
+    reply.complete(scaleState(100, 'new-mode',
+        resolution: (2560, 1440), identity: 'replacement'));
+    await rejected;
+    expect(sends, 1);
+    expect(queries, 2);
+  });
+
   testWidgets(
-      'combined Apply survives the capture refresh from its scale change',
+      'combined Apply confirms the native mode across capture refreshes',
       (tester) async {
     model.pi.resolutions
         .addAll([Resolution(1920, 1080), Resolution(2560, 1440)]);
     final requests = <double>[];
     var currentScale = 100.0;
     var token = 'before';
+    var resolution = (1920, 1080);
+    var reads = 0;
     final target = DisplaySettingsTarget(session, (_, percent, __) async {
       requests.add(percent);
+      if (percent == 0 && ++reads == 3) {
+        resolution = (2560, 1440);
+        token = 'new-mode';
+        model.pi.displays.value = [Display()];
+      }
       if (percent != 0) {
+        expect(resolution, (2560, 1440));
+        expect(token, 'new-mode');
         currentScale = percent;
         token = 'after';
         model.pi.displays.value = [Display()];
       }
-      return scaleState(currentScale, token);
+      return scaleState(currentScale, token, resolution: resolution);
     });
     final modes = <(int, int, int)>[];
     var closed = false;
@@ -297,7 +467,8 @@ void main() {
                     requestScale: target.requestScale,
                     onApply: (width, height, scale) async {
                       await target.applyResolution(
-                          () => modes.add((width, height, scale)));
+                          () => modes.add((width, height, scale)),
+                          resolution: (width, height));
                     },
                     onCancel: () => closed = true)))));
     await tester.pumpAndSettle();
@@ -308,7 +479,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
-    expect(requests, [0, 125, 0]);
+    expect(requests.where((percent) => percent != 0), [125]);
     expect(modes, [(2560, 1440, 1)]);
     expect(closed, isTrue);
     expect(tester.takeException(), isNull);

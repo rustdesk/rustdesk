@@ -68,6 +68,14 @@ fn state(current: &Current, display: &Display) -> ResultType<(State, usize)> {
         bail!(UNSUPPORTED);
     };
     let mode = mode(monitor)?;
+    if mode.1 <= 0 || mode.2 <= 0 {
+        bail!(UNSUPPORTED);
+    }
+    let resolution = if logical.3 % 2 == 1 {
+        (mode.2 as u32, mode.1 as u32)
+    } else {
+        (mode.1 as u32, mode.2 as u32)
+    };
     let Some(value) = percent(logical.2) else {
         bail!(UNSUPPORTED);
     };
@@ -79,6 +87,8 @@ fn state(current: &Current, display: &Display) -> ResultType<(State, usize)> {
     }
     Ok((
         State {
+            identity: super::token(("gnome", &monitor.0)),
+            resolution,
             percent: value,
             custom: None,
             recommended: percent(mode.4).filter(|p| options.contains(p)),
@@ -199,12 +209,12 @@ pub fn apply(
     display: &Display,
     value: f64,
     expected: &str,
-) -> ResultType<()> {
+) -> ResultType<State> {
     let current = current(connection)?;
     let (state, index) = state(&current, display)?;
     super::validate(&state, value, expected)?;
     if state.percent == value {
-        return Ok(());
+        return Ok(state);
     }
     let target = &current.2[index];
     let Some(monitor) = current.1.iter().find(|m| m.0 == target.5[0]) else {
@@ -230,7 +240,7 @@ pub fn apply(
         "ApplyMonitorsConfig",
         (current.0, 1u32, logicals, props),
     )?;
-    Ok(())
+    Ok(state)
 }
 
 #[cfg(test)]
@@ -373,5 +383,27 @@ mod tests {
         current.3.clear();
         current.2[0].5.push(current.1[1].0.clone());
         assert!(state(&current, &display).is_err());
+    }
+
+    #[test]
+    fn native_identity_survives_mode_changes_but_not_monitor_replacement() {
+        let mut current = fixture();
+        let display = Display {
+            name: "eDP-1".into(),
+            origin: (0, 0),
+            size: (3840, 2160),
+        };
+        let before = state(&current, &display).unwrap().0;
+        assert_eq!(before.resolution, (3840, 2160));
+        current.1[0].1[0].1 = 2560;
+        current.1[0].1[0].2 = 1440;
+        current.2[0].2 = 1.5;
+        current.2[0].3 = 1;
+        let after = state(&current, &display).unwrap().0;
+        assert_eq!(after.identity, before.identity);
+        assert_eq!(after.resolution, (1440, 2560));
+        current.1[0].0.3 = "replacement".into();
+        current.2[0].5[0] = current.1[0].0.clone();
+        assert_ne!(state(&current, &display).unwrap().0.identity, after.identity);
     }
 }

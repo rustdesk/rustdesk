@@ -177,6 +177,9 @@ fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
         bail!(UNSUPPORTED);
     };
     let mode = unsafe { mode.u.sourceMode() };
+    if mode.width == 0 || mode.height == 0 {
+        bail!(UNSUPPORTED);
+    }
     let monitor = unsafe {
         MonitorFromPoint(
             POINT {
@@ -202,6 +205,14 @@ fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
         check(DisplayConfigGetDeviceInfo(&mut target.header))?;
     }
     let state = State {
+        identity: token((
+            "windows",
+            path.targetInfo.adapterId.HighPart,
+            path.targetInfo.adapterId.LowPart,
+            path.targetInfo.id,
+            &target.monitorDevicePath[..],
+        )),
+        resolution: (mode.width, mode.height),
         percent: LEVELS[current] as f64,
         custom: None,
         recommended: Some(LEVELS[recommended] as f64),
@@ -244,7 +255,7 @@ pub fn read(display: &Display) -> ResultType<State> {
     Ok(snapshot(&display.name)?.0)
 }
 
-pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> {
+pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
     let (state, dpi) = snapshot(&display.name)?;
     validate(&state, percent, expected)?;
     let Some(index) = LEVELS.iter().position(|v| *v as f64 == percent) else {
@@ -254,7 +265,7 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> 
     // A lower-resolution mode can cap the effective DPI while retaining a
     // higher requested level. An explicit selection must replace that level.
     if dpi.current == relative {
-        return Ok(());
+        return Ok(state);
     }
     let packet = DpiSet {
         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -264,7 +275,10 @@ pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> 
         },
         relative,
     };
-    unsafe { check(DisplayConfigSetDeviceInfo(&packet.header)) }
+    unsafe {
+        check(DisplayConfigSetDeviceInfo(&packet.header))?;
+    }
+    Ok(state)
 }
 
 #[cfg(test)]

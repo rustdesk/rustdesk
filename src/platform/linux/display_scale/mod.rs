@@ -46,7 +46,7 @@ pub fn read(display: &Display) -> ResultType<State> {
     }
 }
 
-pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> {
+pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
     let connection = connection()?;
     let captured = resolve_capture(display)?;
     let display = captured.as_ref().unwrap_or(display);

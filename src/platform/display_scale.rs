@@ -13,6 +13,8 @@ pub const STALE: &str = "Display settings changed. Reopen the resolution menu an
 
 #[derive(Debug, Serialize)]
 pub struct State {
+    pub identity: String,
+    pub resolution: (u32, u32),
     pub percent: f64,
     pub recommended: Option<f64>,
     pub options: Vec<f64>,
@@ -40,15 +42,17 @@ pub fn configure(display: &Display, percent: f64, expected: &str) -> ResultType<
     if percent == 0.0 {
         return backend::read(display);
     }
-    backend::apply(display, percent, expected)?;
+    let before = backend::apply(display, percent, expected)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
         let after = backend::read(display);
-        if after
-            .as_ref()
-            .is_ok_and(|state| (state.percent - percent).abs() < 0.000001)
-        {
-            return after;
+        if let Ok(state) = &after {
+            if state.identity != before.identity || state.resolution != before.resolution {
+                bail!(STALE);
+            }
+            if (state.percent - percent).abs() < 0.000001 {
+                return after;
+            }
         }
         if std::time::Instant::now() >= deadline {
             after?;
@@ -103,6 +107,8 @@ mod tests {
     #[test]
     fn decimal_levels_and_native_steps_are_not_rounded_to_integers() {
         let mut state = State {
+            identity: "display-1".into(),
+            resolution: (3840, 2160),
             percent: 125.5,
             recommended: None,
             options: vec![100.0, 125.5],
@@ -121,6 +127,8 @@ mod tests {
     #[test]
     fn rejects_stale_and_unadvertised_changes() {
         let state = State {
+            identity: "display-1".into(),
+            resolution: (3840, 2160),
             percent: 150.0,
             recommended: Some(150.0),
             options: vec![100.0, 125.0, 150.0],

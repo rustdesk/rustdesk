@@ -38,7 +38,9 @@ class DisplaySettingsTarget {
   final int _index;
   final Future<DisplayScaleState> Function(int, double, String) _requestScale;
   Display _display;
-  String? _appliedScaleToken;
+  String? _confirmedToken;
+  DisplayScaleState? _nativeState;
+  (int, int)? _pendingResolution;
   bool _closed = false;
 
   static const _stale = DisplayScaleError(
@@ -75,31 +77,108 @@ class DisplaySettingsTarget {
   Future<void> _check() async {
     final selected = _selected();
     if (identical(selected, _display)) return;
-    final token = _appliedScaleToken;
+    final token = _confirmedToken;
     if (token == null) throw _stale;
-    // Our scale change may replace the capture snapshot. Re-query the selected
-    // output and require the host's confirmed token before accepting that update.
+    // Capture updates must match the last confirmed native snapshot before
+    // allowing another write.
     final current = await _requestScale(_index, 0, '');
+    _validateState(current);
     if (current.token != token || !identical(selected, _selected())) {
       throw _stale;
     }
     _display = selected;
   }
 
+  void _validateState(DisplayScaleState state,
+      {bool allowResolutionChange = false}) {
+    _selected();
+    final previous = _nativeState;
+    if (previous != null &&
+        (state.identity != previous.identity ||
+            (!allowResolutionChange &&
+                state.resolution != previous.resolution))) {
+      throw _stale;
+    }
+  }
+
   Future<DisplayScaleState> requestScale(double percent, String token) async {
+    if (_pendingResolution != null || (percent == 0 && _nativeState != null)) {
+      if (percent != 0) throw _stale;
+      final selected = _selected();
+      final state = await _requestScale(_index, 0, '');
+      _validateState(state,
+          allowResolutionChange: _pendingResolution != null);
+      if (!identical(selected, _selected())) throw _stale;
+      if (_pendingResolution != null &&
+          state.resolution != _pendingResolution) {
+        throw const DisplayScaleError(
+            'Display settings timed out. Refresh and try again.');
+      }
+      _display = selected;
+      _nativeState = state;
+      _confirmedToken = state.token;
+      _pendingResolution = null;
+      return state;
+    }
     await _check();
-    if (!identical(_display, _selected())) throw _stale;
+    final selected = _selected();
+    if (!identical(_display, selected)) throw _stale;
     final state = await _requestScale(_index, percent, token);
+    if (percent == 0 && !identical(selected, _selected())) throw _stale;
+    _validateState(state);
+    _nativeState = state;
     if (percent != 0 && (state.percent - percent).abs() < 0.000001) {
-      _appliedScaleToken = state.token;
+      _confirmedToken = state.token;
     }
     return state;
   }
 
-  Future<void> applyResolution(FutureOr<void> Function() apply) async {
+  Future<void> applyResolution(FutureOr<void> Function() apply,
+      {(int, int)? resolution}) async {
     await _check();
-    if (!identical(_display, _selected())) throw _stale;
+    if (_pendingResolution != null || !identical(_display, _selected())) {
+      throw _stale;
+    }
+    final confirm = resolution != null && _nativeState != null;
     await apply();
+    if (!confirm) return;
+    _pendingResolution = resolution;
+    // The legacy resolution command only acknowledges local dispatch. Read the
+    // native mode before allowing scaling to use the new mode's capabilities.
+    final elapsed = Stopwatch()..start();
+    const timeout = Duration(seconds: 10);
+    while (true) {
+      final selected = _selected();
+      DisplayScaleState? state;
+      try {
+        state = await _requestScale(_index, 0, '')
+            .timeout(timeout - elapsed.elapsed);
+      } on TimeoutException {
+        throw const DisplayScaleError(
+            'Display settings timed out. Refresh and try again.');
+      } catch (_) {
+        // Capture geometry may lag the mode switch, especially on Wayland.
+        // Retry reads only; never send the resolution command again here.
+        if (elapsed.elapsed >= timeout) rethrow;
+      }
+      _selected();
+      if (state != null) {
+        _validateState(state, allowResolutionChange: true);
+        if (state.resolution == resolution &&
+            identical(selected, _selected())) {
+          _display = selected;
+          _nativeState = state;
+          _confirmedToken = state.token;
+          _pendingResolution = null;
+          return;
+        }
+      }
+      if (elapsed.elapsed >= timeout) {
+        throw const DisplayScaleError(
+            'Display settings timed out. Refresh and try again.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 
   void close() => _closed = true;
@@ -198,42 +277,43 @@ Future<void> showDisplaySettingsDialog(
                   scales: nativeScale ? const [1, 2] : const [1],
                   initialScale: nativeScale ? nativeMode!.$3 : 1,
                   onCancel: close,
-                  onApply: (width, height, scale) =>
-                      target.applyResolution(() async {
-                    if (hasNativeMode &&
-                        nativeVirtualDisplayMode(
-                                pi.platformAdditions, displayIndex) !=
-                            nativeMode) {
-                      throw const DisplayScaleError(
-                          'Display settings changed. Reopen the resolution menu and try again.');
-                    }
-                    if (!isVirtual &&
-                        !pi.resolutions.any(
-                            (r) => r.width == width && r.height == height)) {
-                      throw const DisplayScaleError(
-                          'Select a resolution supported by the display');
-                    }
-                    if (nativeScale) {
-                      await bind.sessionConfigureVirtualDisplay(
-                          sessionId: ffi.sessionId,
-                          displayId: nativeMode!.$4,
-                          width: width,
-                          height: height,
-                          scale: scale);
-                    } else {
-                      await bind.sessionChangeResolution(
-                          sessionId: ffi.sessionId,
-                          display: displayIndex,
-                          width: width,
-                          height: height);
-                    }
+                  onApply: (width, height, scale) async {
+                    await target.applyResolution(() async {
+                      if (hasNativeMode &&
+                          nativeVirtualDisplayMode(
+                                  pi.platformAdditions, displayIndex) !=
+                              nativeMode) {
+                        throw const DisplayScaleError(
+                            'Display settings changed. Reopen the resolution menu and try again.');
+                      }
+                      if (!isVirtual &&
+                          !pi.resolutions.any(
+                              (r) => r.width == width && r.height == height)) {
+                        throw const DisplayScaleError(
+                            'Select a resolution supported by the display');
+                      }
+                      if (nativeScale) {
+                        await bind.sessionConfigureVirtualDisplay(
+                            sessionId: ffi.sessionId,
+                            displayId: nativeMode!.$4,
+                            width: width,
+                            height: height,
+                            scale: scale);
+                      } else {
+                        await bind.sessionChangeResolution(
+                            sessionId: ffi.sessionId,
+                            display: displayIndex,
+                            width: width,
+                            height: height);
+                      }
+                    }, resolution: (width, height));
                     onApplied?.call(width, height);
-                  }),
+                  },
                 ),
               ),
             ),
-        clickMaskDismiss: true,
-        backDismiss: true);
+        clickMaskDismiss: false,
+        backDismiss: false);
   } finally {
     target.close();
     if (isAndroid) {
@@ -309,8 +389,10 @@ class _DisplaySettingsState extends State<DisplaySettings> {
 
   DisplayScaleModel? _systemScale;
   bool _applying = false;
-  bool _scaleApplied = false;
   String? _applyError;
+  DisplayScaleState? _scaleSnapshot;
+  late (int, int, int) _currentMode =
+      (widget.width, widget.height, widget.initialScale);
 
   @override
   void initState() {
@@ -325,7 +407,24 @@ class _DisplaySettingsState extends State<DisplaySettings> {
   }
 
   void _scaleChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final state = _systemScale?.current;
+    if (state != null &&
+        !_systemScale!.busy &&
+        !_systemScale!.needsRefresh &&
+        (!identical(state, _scaleSnapshot) ||
+            (state.resolution.$1, state.resolution.$2, 1) != _currentMode)) {
+      final preserveDraft = _applying || _hasEdits;
+      _scaleSnapshot = state;
+      _currentMode = (state.resolution.$1, state.resolution.$2, 1);
+      if (!_hasChanges && _systemScale!.canApply) _applyError = null;
+      if (!preserveDraft) {
+        _width.text = '${_currentMode.$1}';
+        _height.text = '${_currentMode.$2}';
+        _ratio = _ratioForSize(_currentMode.$1, _currentMode.$2);
+      }
+    }
+    setState(() {});
   }
 
   Future<void> _apply() async {
@@ -336,17 +435,33 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       _applying = true;
       _applyError = null;
     });
+    final systemScale = _systemScale;
+    final confirmResolution = systemScale?.current != null;
     try {
-      if (_systemScale?.changed == true) {
-        if (!await _systemScale!.apply() || !mounted) return;
-        _scaleApplied = true;
-      }
       if (resolutionChanged) {
         await widget.onApply(mode.$1, mode.$2, mode.$3);
+        if (!mounted) return;
+        if (confirmResolution) {
+          _currentMode = mode;
+          if (!await systemScale!.refresh() || !mounted) return;
+          if (systemScale.current!.resolution != (mode.$1, mode.$2)) {
+            throw const DisplayScaleError(
+                'Display settings changed. Reopen the resolution menu and try again.');
+          }
+          if (!systemScale.canApply) return;
+        }
+      }
+      if (systemScale?.changed == true) {
+        if (!await systemScale!.apply() || !mounted) return;
       }
       if (mounted) widget.onCancel();
     } catch (error) {
-      if (mounted) setState(() => _applyError = error.toString());
+      if (mounted) {
+        setState(() => _applyError = error.toString());
+        // A failed confirmation can follow a successful native mode switch.
+        // Read back the baseline without resubmitting or rolling back the change.
+        if (confirmResolution) await systemScale!.refresh();
+      }
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -381,9 +496,6 @@ class _DisplaySettingsState extends State<DisplaySettings> {
   int get _minDimension => (widget.minDimension / _scale).ceil();
   int get _maxDimension => widget.maxDimension ~/ _scale;
 
-  (int, int, int) get _currentMode =>
-      (widget.width, widget.height, widget.initialScale);
-
   (int, int, int) get _editedMode => (
         (int.tryParse(_width.text) ?? 0) * _scale,
         (int.tryParse(_height.text) ?? 0) * _scale,
@@ -391,7 +503,11 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       );
 
   bool get _hasChanges => _editedMode != _currentMode;
-  bool get _hasEdits => _hasChanges || _ratio != _initialRatio;
+  bool get _hasEdits =>
+      _hasChanges ||
+      _ratio !=
+          _ratioForSize(_currentMode.$1 ~/ _currentMode.$3,
+              _currentMode.$2 ~/ _currentMode.$3);
 
   String _qualityLabel(int scale) =>
       scale == 1 ? widget.translate('Standard') : 'HiDPI';
@@ -767,11 +883,6 @@ class _DisplaySettingsState extends State<DisplaySettings> {
               const LinearProgressIndicator(),
             if (_applyError != null) ...[
               const SizedBox(height: 12),
-              if (_scaleApplied)
-                Text(
-                    widget.translate(
-                        'Scaling was applied, but the resolution request failed.'),
-                    style: theme.textTheme.bodySmall),
               Text(widget.translate(_applyError!),
                   style: TextStyle(color: theme.colorScheme.error)),
             ],

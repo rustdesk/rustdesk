@@ -108,7 +108,7 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
             mode["size"]["width"].as_u64(),
             mode["size"]["height"].as_u64(),
         );
-        let size = if matches!(output["rotation"].as_u64(), Some(2 | 8)) {
+        let size = if matches!(output["rotation"].as_u64(), Some(2 | 8 | 32 | 128)) {
             (size.1, size.0)
         } else {
             size
@@ -121,16 +121,25 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
                 && output["pos"]["y"].as_i64() == Some(display.origin.1 as i64)
                 && size == (Some(display.size.0 as u64), Some(display.size.1 as u64)))
         {
-            matches.push(output);
+            matches.push((output, size));
         }
     }
     if matches.len() != 1 {
         bail!(UNSUPPORTED);
     }
-    let output = matches[0];
+    let (output, size) = matches[0];
     let Some(id) = output["id"].as_i64().filter(|id| *id > 0) else {
         bail!(UNSUPPORTED);
     };
+    let Some(name) = output["name"].as_str().filter(|name| !name.is_empty()) else {
+        bail!(UNSUPPORTED);
+    };
+    let (Some(width), Some(height)) = size else {
+        bail!(UNSUPPORTED);
+    };
+    if width == 0 || height == 0 || width > u32::MAX as u64 || height > u32::MAX as u64 {
+        bail!(UNSUPPORTED);
+    }
     if output["replicationSource"].as_i64().unwrap_or(0) != 0
         || outputs
             .iter()
@@ -141,16 +150,19 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
     let Some(value) = output["scale"].as_f64().and_then(percent) else {
         bail!(UNSUPPORTED);
     };
-    // Match Plasma's native scale slider. X11's global font DPI is not per-output scaling.
-    let mut options: Vec<_> = (50..=300).step_by(25).map(f64::from).collect();
+    // Capture and input coordinates do not support scales below 100%. Keep an
+    // existing lower value readable so it can be raised to a supported scale.
+    let mut options: Vec<_> = (100..=300).step_by(25).map(f64::from).collect();
     options.push(value);
     options.sort_by(f64::total_cmp);
     options.dedup();
     topology.sort_unstable();
     Ok((
         State {
+            identity: super::token(("kde", id, name)),
+            resolution: (width as u32, height as u32),
             percent: value,
-            custom: Some([50.0, 300.0, 100.0 / 120.0]),
+            custom: Some([100.0, 300.0, 100.0 / 120.0]),
             recommended: None,
             options,
             token: super::token((id, topology)),
@@ -181,7 +193,7 @@ fn arguments(data: &Value, id: i64, percent: f64) -> ResultType<Vec<String>> {
     ) else {
         bail!(UNSUPPORTED);
     };
-    let (w, h) = if matches!(target["rotation"].as_u64(), Some(2 | 8)) {
+    let (w, h) = if matches!(target["rotation"].as_u64(), Some(2 | 8 | 32 | 128)) {
         (h, w)
     } else {
         (w, h)
@@ -220,18 +232,18 @@ pub fn read(display: &Display) -> ResultType<State> {
     Ok(snapshot(&serde_json::from_slice(&doctor(&["--json"])?)?, display)?.0)
 }
 
-pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<()> {
+pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
     let data = serde_json::from_slice(&doctor(&["--json"])?)?;
     let (state, id) = snapshot(&data, display)?;
     super::validate(&state, percent, expected)?;
     if state.percent == percent {
-        return Ok(());
+        return Ok(state);
     }
     let args = arguments(&data, id, percent)?;
     doctor(&args.iter().map(String::as_str).collect::<Vec<_>>())?;
     // Some kscreen-doctor versions return exit code 0 when applying fails.
     // The caller reads the compositor state again before reporting success.
-    Ok(())
+    Ok(state)
 }
 
 #[cfg(test)]
@@ -243,6 +255,29 @@ mod tests {
         json!({"id": id, "name": format!("DP-{id}"), "connected": true, "enabled": true,
             "pos": {"x": x, "y": 0}, "scale": 1.5, "rotation": 1, "replicationSource": 0,
             "currentModeId": "mode", "modes": [{"id": "mode", "size": {"width": 3840, "height": 2160}}]})
+    }
+
+    #[test]
+    fn lower_current_scales_can_recover_without_allowing_new_sub_one_scales() {
+        let display = Display {
+            name: "DP-1".into(),
+            origin: (0, 0),
+            size: (3840, 2160),
+        };
+        let mut data = json!({"outputs": [output(1, 0)]});
+        data["outputs"][0]["scale"] = json!(0.75);
+        let (before, _) = snapshot(&data, &display).unwrap();
+        assert_eq!(before.percent, 75.0);
+        assert!(before.options.contains(&75.0));
+        assert!(before.options.iter().all(|p| *p >= 100.0 || *p == 75.0));
+        assert!(super::super::validate(&before, 99.16666666666667, &before.token).is_err());
+        assert!(super::super::validate(&before, 100.0, &before.token).is_ok());
+        assert!(super::super::validate(&before, 151.0 / 120.0 * 100.0, &before.token).is_ok());
+
+        data["outputs"][0]["scale"] = json!(1.0);
+        let (after, _) = snapshot(&data, &display).unwrap();
+        assert!(after.options.iter().all(|p| *p >= 100.0));
+        assert!(super::super::validate(&after, 75.0, &after.token).is_err());
     }
 
     #[test]
@@ -361,5 +396,49 @@ mod tests {
         )
         .unwrap();
         assert_eq!(args, ["output.2.scale.2"]);
+    }
+
+    #[test]
+    fn native_identity_survives_mode_changes_but_not_output_replacement() {
+        let display = Display {
+            name: "DP-1".into(),
+            origin: (0, 0),
+            size: (3840, 2160),
+        };
+        let mut output = output(1, 0);
+        let before = snapshot(&json!({"outputs": [output.clone()]}), &display)
+            .unwrap()
+            .0;
+        assert_eq!(before.resolution, (3840, 2160));
+        output["modes"][0]["size"] = json!({"width": 2560, "height": 1440});
+        output["scale"] = json!(2.0);
+        for rotation in [2, 32, 128] {
+            output["rotation"] = json!(rotation);
+            let after = snapshot(&json!({"outputs": [output.clone()]}), &display)
+                .unwrap()
+                .0;
+            assert_eq!(after.identity, before.identity);
+            assert_eq!(after.resolution, (1440, 2560));
+            for (x, y) in [(1440, 0), (0, 2560)] {
+                let mut adjacent = output.clone();
+                adjacent["id"] = json!(2);
+                adjacent["name"] = json!("DP-2");
+                adjacent["pos"] = json!({"x": x / 2, "y": y / 2});
+                let args =
+                    arguments(&json!({"outputs": [output.clone(), adjacent]}), 1, 100.0).unwrap();
+                assert_eq!(
+                    args,
+                    ["output.1.scale.1", &format!("output.2.position.{x},{y}")]
+                );
+            }
+        }
+        output["id"] = json!(42);
+        assert_ne!(
+            snapshot(&json!({"outputs": [output.clone()]}), &display)
+                .unwrap()
+                .0
+                .identity,
+            before.identity
+        );
     }
 }

@@ -12,13 +12,17 @@ class DisplayScaleState {
   final List<double> options;
   final (double, double, double)? custom;
   final String token;
+  final String identity;
+  final (int, int) resolution;
 
   const DisplayScaleState(
       {required this.percent,
       this.recommended,
       this.custom,
       required this.options,
-      required this.token});
+      required this.token,
+      required this.identity,
+      required this.resolution});
 
   double? nearest(double value) {
     final range = custom;
@@ -61,7 +65,14 @@ class DisplayScaleState {
         data['options'] is! List ||
         data['token'] is! String ||
         (data['token'] as String).isEmpty ||
-        (data['token'] as String).length > 64) {
+        (data['token'] as String).length > 64 ||
+        data['identity'] is! String ||
+        (data['identity'] as String).isEmpty ||
+        (data['identity'] as String).length > 64 ||
+        data['resolution'] is! List ||
+        (data['resolution'] as List).length != 2 ||
+        (data['resolution'] as List)
+            .any((v) => v is! int || v <= 0 || v > 2147483647)) {
       throw const FormatException('Invalid display scaling response');
     }
     final options = data['options'] as List;
@@ -99,7 +110,9 @@ class DisplayScaleState {
         custom: custom,
         options: options.map((p) => (p as num).toDouble()).toSet().toList()
           ..sort(),
-        token: data['token']);
+        token: data['token'],
+        identity: data['identity'],
+        resolution: (data['resolution'][0], data['resolution'][1]));
   }
 }
 
@@ -170,12 +183,14 @@ class DisplayScaleModel extends ChangeNotifier {
   double? suggestion;
   String? error;
   bool _disposed = false;
+  bool _pendingChange = false;
 
   DisplayScaleModel(this.request);
 
-  bool get canApply => valid && (!changed || !needsRefresh);
+  bool get canApply => valid && !needsRefresh;
 
-  bool get changed => current != null && percent != current!.percent;
+  bool get changed =>
+      current != null && (_pendingChange || percent != current!.percent);
 
   void select(double value) {
     if (busy || current?.options.contains(value) != true) return;
@@ -229,7 +244,9 @@ class DisplayScaleModel extends ChangeNotifier {
   }
 
   void reset() {
-    if (current != null) select(current!.percent);
+    if (busy || current == null) return;
+    _pendingChange = false;
+    select(current!.percent);
   }
 
   Future<bool> refresh() => _request(false);
@@ -239,6 +256,9 @@ class DisplayScaleModel extends ChangeNotifier {
     if (busy || (apply && (!canApply || !changed))) return false;
     final preserveDraft =
         !apply && current != null && (changed || customMode || !valid);
+    // A mode can cap the native scale to the draft without applying the user's
+    // choice. Only an acknowledged apply or Reset clears that pending choice.
+    if (!apply) _pendingChange = changed;
     busy = true;
     error = null;
     notifyListeners();
@@ -250,6 +270,7 @@ class DisplayScaleModel extends ChangeNotifier {
             'The system did not apply the requested scale. Refresh and try again.');
       }
       if (_disposed) return false;
+      if (apply) _pendingChange = false;
       needsRefresh = false;
       current = state;
       if (preserveDraft) {
