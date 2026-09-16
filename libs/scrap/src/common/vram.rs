@@ -24,7 +24,8 @@ use hwcodec::{
     },
 };
 
-mod repeat;
+#[cfg(test)]
+mod repeat_tests;
 
 // https://www.reddit.com/r/buildapc/comments/d2m4ny/two_graphics_cards_two_monitors/
 // https://www.reddit.com/r/techsupport/comments/t2v9u6/dual_monitor_setup_with_dual_gpu/
@@ -298,6 +299,13 @@ impl VRamEncoder {
                 Ok(data)
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
+        }
+    }
+
+    fn encode_repeat(&mut self, ms: i64) -> ResultType<Vec<EncodeFrame>> {
+        match self.encoder.encode_repeat(ms) {
+            Ok(frames) => Ok(std::mem::take(frames)),
+            Err(code) => Err(anyhow!("VRAM repeat encode failed: {}", code)),
         }
     }
 
