@@ -1407,10 +1407,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             .ok();
                     } else {
                         let video_queue = thread.video_queue.read().unwrap();
+                        let was_empty = video_queue.is_empty();
                         if video_queue.force_push(vf).is_some() {
                             drop(video_queue);
                             self.handler.refresh_video(display as _);
-                        } else {
+                        } else if was_empty {
+                            drop(video_queue);
                             thread.video_sender.send(MediaData::VideoQueue).ok();
                         }
                     }

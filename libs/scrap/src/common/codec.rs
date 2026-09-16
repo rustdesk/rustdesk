@@ -738,10 +738,7 @@ impl Decoder {
                 last_frame = frame;
             }
         }
-        for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
+        // Live stream: do not EOS-flush after every packet (Steam-style low delay).
         if last_frame.is_null() {
             Ok(false)
         } else {
@@ -768,10 +765,7 @@ impl Decoder {
                 last_frame = frame;
             }
         }
-        for frame in decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
+        // Live stream: do not EOS-flush after every packet (Steam-style low delay).
         if last_frame.is_null() {
             Ok(false)
         } else {
