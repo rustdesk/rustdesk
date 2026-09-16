@@ -2,7 +2,8 @@ use crate::{
     common::{get_supported_keyboard_modes, is_keyboard_mode_supported},
     input::{
         MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_MASK,
-        MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL,
+        MOUSE_TYPE_TRACKPAD, MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION, MOUSE_TYPE_TRACKPAD_SMOOTH,
+        MOUSE_TYPE_UP, MOUSE_TYPE_WHEEL,
     },
     ui_interface::use_texture_render,
 };
@@ -52,6 +53,16 @@ use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
+
+fn is_scroll_event_type(event_type: i32) -> bool {
+    matches!(
+        event_type,
+        MOUSE_TYPE_WHEEL
+            | MOUSE_TYPE_TRACKPAD
+            | MOUSE_TYPE_TRACKPAD_HIGH_RESOLUTION
+            | MOUSE_TYPE_TRACKPAD_SMOOTH
+    )
+}
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
@@ -1229,7 +1240,7 @@ impl<T: InvokeUiSession> Session<T> {
 
         // Compute event type once using MOUSE_TYPE_MASK for reuse
         let event_type = mask & MOUSE_TYPE_MASK;
-        let (x, y) = if event_type == MOUSE_TYPE_WHEEL || event_type == MOUSE_TYPE_TRACKPAD {
+        let (x, y) = if is_scroll_event_type(event_type) {
             self.get_scroll_xy((x, y))
         } else {
             (x, y)
@@ -2074,3 +2085,4 @@ async fn send_note(url: String, id: String, sid: u64, note: String) {
     let body = serde_json::json!({ "id": id, "session_id": sid, "note": note });
     allow_err!(crate::post_request(url, body.to_string(), "").await);
 }
+
