@@ -22,6 +22,7 @@ sciter.dll
 src/bridge_generated.rs
 src/bridge_generated.io.rs
 *deb
+!Dockerfile.flutter-deb
 rustdesk
 *.cache
 # appimage

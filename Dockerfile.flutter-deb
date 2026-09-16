@@ -1,0 +1,105 @@
+# Flutter Linux .deb builder. The root Dockerfile is Sciter + cargo build only.
+#   docker build -t rustdesk-flutter-deb -f Dockerfile.flutter-deb .
+#   docker run --rm -it \
+#     -v "$PWD:/home/user/rustdesk" \
+#     -v rustdesk-cargo-registry:/usr/local/cargo/registry \
+#     -v rustdesk-cargo-git:/usr/local/cargo/git \
+#     -e PUID="$(id -u)" -e PGID="$(id -g)" \
+#     rustdesk-flutter-deb
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG FLUTTER_VERSION=3.24.5
+ARG VCPKG_COMMIT=9e593bb18ea69cc5095e012465dcd675a822ed0d
+ARG CMAKE_VERSION=4.3.0
+
+ENV VCPKG_FORCE_SYSTEM_BINARIES=1 \
+    VCPKG_ROOT=/opt/vcpkg \
+    CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH="/opt/flutter/bin:/usr/local/cargo/bin:/usr/local/bin:${PATH}"
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+        build-essential \
+        clang \
+        cmake \
+        curl \
+        ca-certificates \
+        git \
+        g++ \
+        gcc \
+        libayatana-appindicator3-dev \
+        libasound2-dev \
+        libclang-dev \
+        libgstreamer1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgtk-3-dev \
+        libpulse-dev \
+        libva-dev \
+        libxcb-randr0-dev \
+        libxcb-shape0-dev \
+        libxcb-xfixes0-dev \
+        libxdo-dev \
+        libxfixes-dev \
+        llvm-dev \
+        nasm \
+        ninja-build \
+        pkg-config \
+        python3 \
+        python3-pip \
+        unzip \
+        wget \
+        xz-utils \
+        zip \
+        libssl-dev \
+        yasm \
+        file \
+        binutils \
+        autoconf \
+        automake \
+        libtool \
+        autotools-dev \
+        dpkg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# vcpkg 2026.07 SPDX scripts need CMake 4.3+ (JSON STRING_ENCODE).
+RUN python3 -m pip install --break-system-packages "cmake==${CMAKE_VERSION}" \
+    && cmake --version
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable \
+    && . /usr/local/cargo/env \
+    && rustc --version
+
+RUN wget -q -O /tmp/flutter.tar.xz \
+        "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+    && tar -C /opt -xf /tmp/flutter.tar.xz \
+    && rm -f /tmp/flutter.tar.xz \
+    && git config --global --add safe.directory /opt/flutter \
+    && flutter config --no-analytics --enable-linux-desktop \
+    && flutter precache --linux \
+    && flutter --version
+
+RUN git clone https://github.com/microsoft/vcpkg "${VCPKG_ROOT}" \
+    && git -C "${VCPKG_ROOT}" checkout "${VCPKG_COMMIT}" \
+    && "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
+
+WORKDIR /opt/rd-vcpkg-manifest
+COPY vcpkg.json ./
+COPY res/vcpkg ./res/vcpkg
+COPY res/vcpkg-triplets ./res/vcpkg-triplets
+RUN "${VCPKG_ROOT}/vcpkg" install --triplet x64-linux --x-install-root="${VCPKG_ROOT}/installed"
+
+# Same versions as .github/workflows/bridge.yml
+RUN rustup component add rustfmt \
+    && cargo install cargo-expand --version 1.0.95 --locked \
+    && cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
+
+RUN groupadd -r user && useradd -r -g user user --home /home/user \
+    && mkdir -p /home/user/rustdesk \
+    && chown -R user: /home/user
+
+WORKDIR /home/user/rustdesk
+COPY entrypoint-flutter-deb.sh /entrypoint-flutter-deb.sh
+RUN chmod +x /entrypoint-flutter-deb.sh
+ENTRYPOINT ["/entrypoint-flutter-deb.sh"]
