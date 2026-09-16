@@ -2569,6 +2569,13 @@ fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
         .checked_mul(cd.height as usize)
         .and_then(|pixels| pixels.checked_mul(RGBA_CHANNELS))
         .ok_or_else(|| anyhow!("cursor RGBA size overflow"))?;
+    let max_compressed_size = zstd::zstd_safe::compress_bound(expected);
+    if cd.colors.len() > max_compressed_size {
+        bail!(
+            "compressed cursor data too large: {} bytes (limit {max_compressed_size})",
+            cd.colors.len()
+        );
+    }
     let colors = zstd::bulk::decompress(&cd.colors, expected)?;
     if colors.len() != expected {
         bail!(
