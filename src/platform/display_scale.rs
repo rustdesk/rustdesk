@@ -55,17 +55,14 @@ pub fn configure(display: &Display, percent: f64, expected: &str) -> ResultType<
     let before = backend::apply(display, percent, expected)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
-        let after = backend::read(display);
-        if let Ok(state) = &after {
-            if state.identity != before.identity || state.resolution != before.resolution {
-                bail!(STALE);
-            }
-            if (state.percent - percent).abs() < 0.000001 {
-                return after;
-            }
+        let after = backend::read(display)?;
+        if after.identity != before.identity || after.resolution != before.resolution {
+            bail!(STALE);
+        }
+        if (after.percent - percent).abs() < 0.000001 {
+            return Ok(after);
         }
         if std::time::Instant::now() >= deadline {
-            after?;
             bail!("The system did not apply the requested scale. Refresh and try again.");
         }
         // Runs only on the display-settings blocking worker. Native scale notifications

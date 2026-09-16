@@ -150,29 +150,23 @@ class DisplaySettingsTarget {
     const timeout = Duration(seconds: 10);
     while (true) {
       final selected = _selected();
-      DisplayScaleState? state;
+      final DisplayScaleState state;
       try {
         state = await _requestScale(_index, 0, '')
             .timeout(timeout - elapsed.elapsed);
       } on TimeoutException {
         throw const DisplayScaleError(
             'Display settings timed out. Refresh and try again.');
-      } catch (_) {
-        // Capture geometry may lag the mode switch, especially on Wayland.
-        // Retry reads only; never send the resolution command again here.
-        if (elapsed.elapsed >= timeout) rethrow;
       }
       _selected();
-      if (state != null) {
-        _validateState(state, allowResolutionChange: true);
-        if (state.resolution == resolution &&
-            identical(selected, _selected())) {
-          _display = selected;
-          _nativeState = state;
-          _confirmedToken = state.token;
-          _pendingResolution = null;
-          return state;
-        }
+      _validateState(state, allowResolutionChange: true);
+      if (state.resolution == resolution &&
+          identical(selected, _selected())) {
+        _display = selected;
+        _nativeState = state;
+        _confirmedToken = state.token;
+        _pendingResolution = null;
+        return state;
       }
       if (elapsed.elapsed >= timeout) {
         throw const DisplayScaleError(

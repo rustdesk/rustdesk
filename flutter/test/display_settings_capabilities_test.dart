@@ -408,6 +408,37 @@ void main() {
     expect((await target.requestScale(125, 'current')).percent, 125);
   });
 
+  test('mode confirmation propagates read errors without retrying', () async {
+    model.pi.platformAdditions['display_scale'] = true;
+    for (final error in [
+      const DisplayScaleError('unsupported', code: 'unsupported'),
+      const DisplayScaleError('No permission to change display settings.'),
+      const DisplayScaleError(
+          'Display settings changed. Reopen the resolution menu and try again.'),
+      const FormatException('invalid response'),
+    ]) {
+      var queries = 0;
+      var sends = 0;
+      final target = DisplaySettingsTarget(session, (_, __, ___) async {
+        queries++;
+        if (queries == 2) throw error;
+        return scaleState(100, 'current',
+            resolution: queries == 1 ? (1920, 1080) : (2560, 1440));
+      });
+      await target.requestScale(0, '');
+      await expectLater(
+          target.applyResolution(() => sends++, resolution: (2560, 1440)),
+          throwsA(same(error)));
+      expect(queries, 2);
+      await expectLater(target.requestScale(125, 'current'),
+          throwsA(isA<DisplayScaleError>()));
+      expect(queries, 2);
+      expect((await target.requestScale(0, '')).resolution, (2560, 1440));
+      expect(sends, 1);
+      target.close();
+    }
+  });
+
   test('mode confirmation rejects a replaced display', () async {
     model.pi.platformAdditions['display_scale'] = true;
     final reply = Completer<DisplayScaleState>();
