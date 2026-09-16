@@ -153,6 +153,7 @@ shared_memory = "0.12"
 tauri-winrt-notification = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+virtual_display = { path = "libs/virtual_display" }
 objc = "0.2"
 cocoa = "0.24"
 dispatch = "0.2"

@@ -694,6 +694,20 @@ class RustdeskImpl {
     throw UnimplementedError("sessionSwitchSides");
   }
 
+  Future<void> sessionConfigureVirtualDisplay({
+    required UuidValue sessionId,
+    required int displayId,
+    required int width,
+    required int height,
+    required int scale,
+    dynamic hint,
+  }) => Future.error(UnsupportedError('Native virtual display scaling is unavailable in the web client'));
+
+  Future<void> sessionRequestDisplayScale({required UuidValue sessionId,
+    required String requestId, required int display, required double percent,
+    required String token, dynamic hint}) =>
+    Future.error(UnsupportedError('System scaling is unavailable in the web client'));
+
   Future<void> sessionChangeResolution(
       {required UuidValue sessionId,
       required int display,

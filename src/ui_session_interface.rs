@@ -1553,6 +1553,24 @@ impl<T: InvokeUiSession> Session<T> {
         self.set_custom_resolution(display);
     }
 
+    pub fn configure_virtual_display(&self, display_id: u32, width: i32, height: i32, scale: u32) {
+        let mut misc = Misc::new();
+        misc.set_virtual_display_mode(VirtualDisplayMode {
+            display_id, width, height, scale, ..Default::default()
+        });
+        let mut message = Message::new();
+        message.set_misc(misc);
+        self.send(Data::Message(message));
+    }
+
+    pub fn request_display_scale(&self, request_id: String, display: i32, percent: f64, token: String) {
+        let mut misc = Misc::new();
+        misc.set_display_scale_request(DisplayScaleRequest { request_id, display, percent, token, ..Default::default() });
+        let mut message = Message::new();
+        message.set_misc(misc);
+        self.send(Data::Message(message));
+    }
+
     #[inline]
     pub fn change_resolution(&self, display: i32, width: i32, height: i32) {
         *self.last_change_display.lock().unwrap() =
@@ -1685,6 +1703,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn set_displays(&self, displays: &Vec<DisplayInfo>);
     fn set_platform_additions(&self, data: &str);
+    fn handle_display_scale(&self, _data: &str) {}
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
