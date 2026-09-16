@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart' as app;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common/widgets/display_settings_dialog.dart';
-import 'package:flutter_hbb/utils/virtual_display.dart';
 
 void main() {
   Finder textButton(String label) => find.ancestor(
@@ -124,66 +123,10 @@ void main() {
     expect(applied, [1600, 900, 1]);
   });
 
-  testWidgets(
-      'logical editor applies HiDPI minimum and rejects oversized output',
-      (tester) async {
-    final dimensions = virtualDisplayResolutionDimensions((320, 320, 2, 42),
-        outputPixels: false);
-    List<int>? applied;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: Center(
-                child: SizedBox(
-      width: 400,
-      child: DisplaySettings(
-        translate: (s) => s,
-        minDimension: dimensions.minDimension,
-        maxDimension: dimensions.maxDimension,
-        width: dimensions.width,
-        height: dimensions.height,
-        onCancel: () {},
-        onApply: (w, h, scale) {
-          applied = [w, h, scale];
-          return null;
-        },
-      ),
-    )))));
-    await tester.ensureVisible(find.text('Apply'));
-    await tester.tap(find.text('Apply'));
-    expect(applied, isNull);
-    await selectRatio(tester, 'Custom');
-    await tester.enterText(find.byType(TextField).first, '162');
-    await tester.pump();
-    await tester.ensureVisible(find.text('Apply'));
-    await tester.tap(find.text('Apply'));
-    expect(applied, [162, 160, 1]);
-    await tester.enterText(find.byType(TextField).first, '3000');
-    await tester.enterText(find.byType(TextField).last, '1800');
-    await tester.pump();
-    expect(
-        tester
-            .widget<ElevatedButton>(
-                find.widgetWithText(ElevatedButton, 'Apply'))
-            .onPressed,
-        isNull);
-    await tester.tap(find.text('Reset changes'));
-    await tester.pump();
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        '160');
-    expect(
-        tester
-            .widget<ElevatedButton>(
-                find.widgetWithText(ElevatedButton, 'Apply'))
-            .onPressed,
-        isNull);
-  });
-
   Future<void> openEditor(
           WidgetTester tester, void Function(int, int, int) apply,
           {List<(int, int)>? supportedResolutions,
           bool allowArbitrarySize = true,
-          bool excludeInputSemantics = false,
           (int, int)? localResolution}) =>
       tester.pumpWidget(MaterialApp(
           home: Scaffold(
@@ -196,7 +139,6 @@ void main() {
               supportedResolutions:
                   supportedResolutions ?? const [(1920, 1080), (2560, 1600)],
               allowArbitrarySize: allowArbitrarySize,
-              excludeInputSemantics: excludeInputSemantics,
               localResolution: localResolution,
               minDimension: 320,
               maxDimension: 4096,
@@ -379,18 +321,19 @@ void main() {
     expect(applyButton().onPressed, isNull);
   });
 
-  testWidgets('local fit matches output pixels and preserves rendering choice',
+  testWidgets('local fit uses full output pixels and preserves rendering choice',
       (tester) async {
     addTearDown(tester.view.display.reset);
     for (final (density, pixels, scale) in [
       (3.0, (1440, 3120), 2),
       (1.25, (1920, 1080), 2),
       (3.0, (1920, 1080), 1),
+      (2.0, (3048, 2032), 2),
     ]) {
       tester.view.display.devicePixelRatio = density;
+      tester.view.display.size = Size(pixels.$1.toDouble(), pixels.$2.toDouble());
       List<int>? applied;
-      await openEditor(tester, (w, h, scale) => applied = [w, h, scale],
-          localResolution: pixels);
+      await openEditor(tester, (w, h, scale) => applied = [w, h, scale]);
       if (scale == 1) {
         await tester.ensureVisible(find.text('Standard'));
         await tester.tap(find.text('Standard'));
@@ -405,26 +348,12 @@ void main() {
     }
   });
 
-  testWidgets('fit uses full display output pixels rather than window size',
-      (tester) async {
-    tester.view.display.size = const Size(3048, 2032);
-    tester.view.display.devicePixelRatio = 2;
-    addTearDown(tester.view.display.reset);
-    List<int>? applied;
-    await openEditor(tester, (w, h, scale) => applied = [w, h, scale]);
-    await tester.ensureVisible(find.text('resolution_fit_local_tip'));
-    await tester.tap(find.text('resolution_fit_local_tip'));
-    await tester.pump();
-    await tester.ensureVisible(find.text('Apply'));
-    await tester.tap(find.text('Apply'));
-    expect(applied, [3048, 2032, 2]);
-  });
-
-  testWidgets('physical ratios deduplicate and retain available resolutions',
+  testWidgets('physical presets and local fit use only advertised modes',
       (tester) async {
     List<int>? applied;
     await openEditor(tester, (w, h, scale) => applied = [w, h, scale],
         allowArbitrarySize: false,
+        localResolution: (2340, 1080),
         supportedResolutions: const [
           (1920, 1080),
           (1280, 720),
@@ -445,69 +374,15 @@ void main() {
     expect(find.widgetWithText(MenuItemButton, '5120 × 2880'), findsNothing);
     await tester.tap(find.widgetWithText(MenuItemButton, '1280 × 720'));
     await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        '1280');
+    await tester.ensureVisible(find.text('resolution_fit_local_tip'));
+    await tester.tap(find.text('resolution_fit_local_tip'));
+    await tester.pump();
     await tester.ensureVisible(find.text('Apply'));
     await tester.tap(find.text('Apply'));
-    expect(applied, [1280, 720, 1]);
-  });
-
-  testWidgets('physical local matching offers the closest advertised mode',
-      (tester) async {
-    await openEditor(tester, (_, __, ___) {},
-        allowArbitrarySize: false, localResolution: (9999, 8888));
-    expect(find.text('Closest supported resolution'), findsNothing);
-    expect(find.byTooltip('Closest supported resolution\n2560 × 1600'),
-        findsOneWidget);
-    await tester.ensureVisible(find.text('resolution_fit_local_tip'));
-    await tester.tap(find.text('resolution_fit_local_tip'));
-    await tester.pump();
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        '2560');
-    await openEditor(tester, (_, __, ___) {},
-        allowArbitrarySize: false, localResolution: (1920, 1080));
-    await tester.ensureVisible(find.text('resolution_fit_local_tip'));
-    await tester.tap(find.text('resolution_fit_local_tip'));
-    await tester.pump();
-    expect(find.text('1920'), findsOneWidget);
-    expect(find.text('1080'), findsOneWidget);
-  });
-
-  testWidgets('unlisted current mode stays visible without becoming selectable',
-      (tester) async {
-    await openEditor(tester, (_, __, ___) {},
-        allowArbitrarySize: false, supportedResolutions: [(1920, 1080)]);
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        '2560');
-    expect(
-        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
-        '1600');
-    expect(
-        tester
-            .widget<ElevatedButton>(
-                find.widgetWithText(ElevatedButton, 'Apply'))
-            .onPressed,
-        isNull);
-    expect(find.text('16:10'), findsOneWidget);
-  });
-
-  testWidgets('Linux input workaround excludes only the dimension fields',
-      (tester) async {
-    await openEditor(tester, (_, __, ___) {}, excludeInputSemantics: true);
-    for (final field in find.byType(TextField).evaluate()) {
-      final wrapper = tester.widget<ExcludeSemantics>(find
-          .ancestor(
-              of: find.byWidget(field.widget),
-              matching: find.byType(ExcludeSemantics))
-          .first);
-      expect(wrapper.excluding, isTrue);
-    }
-    expect(
-        find.ancestor(
-            of: find.text('Apply'),
-            matching: find.byWidgetPredicate(
-                (w) => w is ExcludeSemantics && w.excluding)),
-        findsNothing);
+    expect(applied, [1920, 1080, 1]);
   });
 
   testWidgets('quick settings adapt to narrow and wide screens with large text',

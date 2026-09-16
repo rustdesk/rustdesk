@@ -808,7 +808,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display settings are busy. Try again.", "正在處理顯示設定。請稍後再試。"),
         ("Display settings timed out. Refresh and try again.", "顯示設定要求逾時。請重新整理後再試。"),
         ("Use nearest supported scale", "使用最接近的支援縮放值"),
-        ("Scaling was applied, but the resolution request failed.", "已套用縮放，但解析度要求失敗。"),
         ("Failed to change display settings", "無法變更顯示設定"),
         ("Remote connection has closed", "遠端連線已關閉"),
         ("Failed to resize macOS virtual display", "無法調整 macOS 虛擬螢幕的大小"),

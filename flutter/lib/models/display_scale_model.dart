@@ -124,6 +124,16 @@ class DisplayScaleError implements Exception {
   String toString() => message;
 }
 
+class DisplaySettingsReopenRequired extends DisplayScaleError {
+  final Object cause;
+
+  const DisplaySettingsReopenRequired(this.cause)
+      : super(
+            'Display settings changed. Reopen the resolution menu and try again.');
+}
+
+enum _DisplayScaleRecovery { none, refresh, reopen }
+
 // Responses are scoped to both the local UI session and a unique request.
 class DisplayScaleRequests {
   static final _pending = <(String, String), Completer<DisplayScaleState>>{};
@@ -179,7 +189,6 @@ class DisplayScaleModel extends ChangeNotifier {
   bool busy = false;
   bool valid = true;
   bool customMode = false;
-  bool needsRefresh = false;
   bool unavailable = false;
   String draftText = '';
 
@@ -187,16 +196,19 @@ class DisplayScaleModel extends ChangeNotifier {
   String? error;
   bool _disposed = false;
   bool _pendingChange = false;
+  _DisplayScaleRecovery _recovery = _DisplayScaleRecovery.none;
 
   DisplayScaleModel(this.request);
 
-  bool get canApply => valid && !needsRefresh;
+  bool get needsRefresh => _recovery == _DisplayScaleRecovery.refresh;
+  bool get needsReopen => _recovery == _DisplayScaleRecovery.reopen;
+  bool get canApply => valid && _recovery == _DisplayScaleRecovery.none;
 
   bool get changed =>
       current != null && (_pendingChange || percent != current!.percent);
 
   void select(double value) {
-    if (busy || current?.options.contains(value) != true) return;
+    if (busy || needsReopen || current?.options.contains(value) != true) return;
     customMode = false;
     valid = true;
     suggestion = null;
@@ -206,13 +218,13 @@ class DisplayScaleModel extends ChangeNotifier {
   }
 
   void useCustom() {
-    if (busy || current?.custom == null) return;
+    if (busy || needsReopen || current?.custom == null) return;
     customMode = true;
     notifyListeners();
   }
 
   void edit(String text) {
-    if (busy || current == null || !customMode) return;
+    if (busy || needsReopen || current == null || !customMode) return;
     draftText = text;
     final input = text.trim().replaceAll(',', '.');
     final value = RegExp(r'^\d+(?:\.\d+)?$').hasMatch(input)
@@ -228,7 +240,7 @@ class DisplayScaleModel extends ChangeNotifier {
 
   void acceptSuggestion() {
     final value = suggestion;
-    if (busy || value == null) return;
+    if (busy || needsReopen || value == null) return;
     percent = value;
     valid = true;
     suggestion = null;
@@ -237,7 +249,7 @@ class DisplayScaleModel extends ChangeNotifier {
   }
 
   void step(int direction) {
-    if (busy || !valid || percent == null) return;
+    if (busy || needsReopen || !valid || percent == null) return;
     final value = current?.adjacent(percent!, direction);
     if (value == null) return;
     percent = value;
@@ -247,7 +259,7 @@ class DisplayScaleModel extends ChangeNotifier {
   }
 
   void reset() {
-    if (busy || current == null) return;
+    if (busy || needsReopen || current == null) return;
     _pendingChange = false;
     select(current!.percent);
   }
@@ -255,8 +267,29 @@ class DisplayScaleModel extends ChangeNotifier {
   Future<bool> refresh() => _request(false);
   Future<bool> apply() => _request(true);
 
+  void invalidate(Object failure) {
+    if (_disposed || needsReopen) return;
+    if (failure is DisplaySettingsReopenRequired) {
+      debugPrint('Display resolution confirmation failed: ${failure.cause}');
+    }
+    unavailable = current == null &&
+        failure is DisplayScaleError &&
+        failure.code == 'unsupported';
+    error = unavailable
+        ? null
+        : failure is FormatException
+            ? failure.message
+            : failure.toString();
+    _recovery = failure is DisplaySettingsReopenRequired
+        ? _DisplayScaleRecovery.reopen
+        : current != null
+            ? _DisplayScaleRecovery.refresh
+            : _DisplayScaleRecovery.none;
+    notifyListeners();
+  }
+
   void acceptConfirmedResolution(DisplayScaleState state) {
-    if (_disposed || busy) return;
+    if (_disposed || busy || needsReopen) return;
     _acceptState(state, applied: false);
     notifyListeners();
   }
@@ -265,7 +298,7 @@ class DisplayScaleModel extends ChangeNotifier {
     final preserveDraft =
         !applied && current != null && (changed || customMode || !valid);
     _pendingChange = !applied && changed;
-    needsRefresh = false;
+    _recovery = _DisplayScaleRecovery.none;
     unavailable = false;
     error = null;
     current = state;
@@ -297,7 +330,12 @@ class DisplayScaleModel extends ChangeNotifier {
   }
 
   Future<bool> _request(bool apply) async {
-    if (busy || (apply && (!canApply || !changed))) return false;
+    if (_disposed ||
+        busy ||
+        needsReopen ||
+        (apply && (!canApply || !changed))) {
+      return false;
+    }
     // A mode can cap the native scale to the draft without applying the user's
     // choice. Only an acknowledged apply or Reset clears that pending choice.
     if (!apply) _pendingChange = changed;
@@ -311,21 +349,11 @@ class DisplayScaleModel extends ChangeNotifier {
         throw const DisplayScaleError(
             'The system did not apply the requested scale. Refresh and try again.');
       }
-      if (_disposed) return false;
+      if (_disposed || needsReopen) return false;
       _acceptState(state, applied: apply);
       return true;
     } catch (failure) {
-      if (!_disposed) {
-        unavailable = current == null &&
-            failure is DisplayScaleError &&
-            failure.code == 'unsupported';
-        error = unavailable
-            ? null
-            : failure is FormatException
-                ? failure.message
-                : failure.toString();
-        needsRefresh = current != null;
-      }
+      invalidate(failure);
       return false;
     } finally {
       if (!_disposed) {

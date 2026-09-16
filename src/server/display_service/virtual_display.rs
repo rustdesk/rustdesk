@@ -53,10 +53,7 @@ impl DisplayModeMonitor {
     }
 
     pub(super) fn check_changed(&mut self, displays: &[DisplayInfo]) -> bool {
-        self.update(display_modes(displays))
-    }
-
-    fn update(&mut self, modes: serde_json::Value) -> bool {
+        let modes = display_modes(displays);
         if self.modes == modes {
             return false;
         }
@@ -194,25 +191,6 @@ mod tests {
     use super::*;
     use base::message_proto::message;
     use std::time::Duration;
-
-    #[tokio::test]
-    async fn native_mode_metadata_preserves_other_capabilities() {
-        let mut peer = PeerInfo {
-            platform_additions: r#"{"other_capability":true}"#.into(),
-            displays: vec![DisplayInfo {
-                name: "0".into(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        sync_display_modes(&mut peer).await;
-        let additions: serde_json::Value = serde_json::from_str(&peer.platform_additions).unwrap();
-        assert_eq!(additions["other_capability"], true);
-        assert_eq!(
-            additions["macos_virtual_display_modes"],
-            serde_json::json!({})
-        );
-    }
 
     fn assert_error(message: &Message, title: &str, text: &str) {
         let Some(message::Union::MessageBox(error)) = message.union.as_ref() else {

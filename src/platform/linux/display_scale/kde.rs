@@ -117,13 +117,43 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
     state_for(outputs, matches[0])
 }
 
+// Numeric IDs belong to a backend instance. A new doctor process must use an
+// unambiguous literal name, without its numeric, UUID or active-output aliases.
+fn command_name(outputs: &[Value], id: i64) -> ResultType<&str> {
+    let mut matches = outputs
+        .iter()
+        .filter(|output| output["id"].as_i64() == Some(id));
+    let Some(output) = matches.next() else {
+        bail!(UNSUPPORTED);
+    };
+    if matches.next().is_some() {
+        bail!(UNSUPPORTED);
+    }
+    let Some(name) = output["name"].as_str().filter(|name| !name.is_empty()) else {
+        bail!(UNSUPPORTED);
+    };
+    if name.contains('.')
+        || name.chars().any(char::is_control)
+        || name == "activeOutput"
+        || name.trim().parse::<i32>().is_ok()
+        || outputs
+            .iter()
+            .filter(|output| {
+                output["name"].as_str() == Some(name) || output["uuid"].as_str() == Some(name)
+            })
+            .count()
+            != 1
+    {
+        bail!(UNSUPPORTED);
+    }
+    Ok(name)
+}
+
 fn state_for(outputs: &[Value], output: &Value) -> ResultType<(State, i64)> {
     let Some(id) = output["id"].as_i64().filter(|id| *id > 0) else {
         bail!(UNSUPPORTED);
     };
-    let Some(name) = output["name"].as_str().filter(|name| !name.is_empty()) else {
-        bail!(UNSUPPORTED);
-    };
+    let name = command_name(outputs, id)?;
     let Some((Some(width), Some(height))) = output_size(output) else {
         bail!(UNSUPPORTED);
     };
@@ -284,11 +314,13 @@ fn arguments(data: &Value, id: i64, percent: f64) -> ResultType<Vec<String>> {
     // Match KWin's scale quantization before rounding logical dimensions.
     let scale = (percent / 100.0 * 120.0).round() / 120.0;
     let next = layout::resize(&rects, index, logical_size(target, scale)?)?;
-    let mut args = vec![format!("output.{id}.scale.{scale}")];
+    let name = command_name(outputs, id)?;
+    let mut args = vec![format!("output.{name}.scale.{scale}")];
     for ((group, before), after) in ids.iter().zip(&rects).zip(next) {
         if (before.x, before.y) != (after.x, after.y) {
             for other in group {
-                args.push(format!("output.{other}.position.{},{}", after.x, after.y));
+                let name = command_name(outputs, *other)?;
+                args.push(format!("output.{name}.position.{},{}", after.x, after.y));
             }
         }
     }
@@ -319,9 +351,6 @@ fn confirmed(data: &Value, display: Option<&Display>, identity: &str) -> ResultT
     }
     // Confirm capability on this snapshot before classifying capture mapping lag.
     let (state, _) = state_for(outputs, target)?;
-    if state.identity != identity {
-        bail!(STALE);
-    }
     let Some(display) = display else {
         bail!(SnapshotChanged);
     };
@@ -395,27 +424,6 @@ mod tests {
         let (after, _) = snapshot(&data, &display).unwrap();
         assert!(after.options.iter().all(|p| *p >= 100.0));
         assert!(super::super::validate(&after, 75.0, &after.token).is_err());
-    }
-
-    #[test]
-    fn reused_mode_ids_do_not_hide_geometry_or_refresh_changes() {
-        let display = Display {
-            name: "DP-1".into(),
-            origin: (0, 0),
-            size: (3840, 2160),
-        };
-        let mut output = output(1, 0);
-        let before = snapshot(&json!({"outputs": [output.clone()]}), &display)
-            .unwrap()
-            .0;
-        output["modes"][0]["size"]["width"] = json!(2560);
-        let resized = snapshot(&json!({"outputs": [output.clone()]}), &display)
-            .unwrap()
-            .0;
-        assert_ne!(before.token, resized.token);
-        output["modes"][0]["refreshRate"] = json!(120);
-        let refreshed = snapshot(&json!({"outputs": [output]}), &display).unwrap().0;
-        assert_ne!(resized.token, refreshed.token);
     }
 
     #[test]
@@ -522,7 +530,7 @@ mod tests {
         assert_eq!(state.percent, 150.0);
         assert_eq!(
             arguments(&current, id, 200.0).unwrap(),
-            ["output.2.scale.2"]
+            ["output.DP-2.scale.2"]
         );
     }
 
@@ -534,14 +542,39 @@ mod tests {
             200.0,
         )
         .unwrap();
-        assert_eq!(args, ["output.1.scale.2", "output.2.position.1920,0"]);
+        assert_eq!(args, ["output.DP-1.scale.2", "output.DP-2.position.1920,0"]);
+        let mut renumbered = json!({"outputs": [output(1, 0), output(2, 2560)]});
+        renumbered["outputs"][0]["id"] = json!(41);
+        renumbered["outputs"][1]["id"] = json!(7);
+        assert_eq!(arguments(&renumbered, 41, 200.0).unwrap(), args);
+
+        for name in [
+            "", "DP.1", "1", "+1", "001", " 1 ", "activeOutput", "DP-\0", "DP-\n",
+        ] {
+            for index in [0, 1] {
+                let mut data = json!({"outputs": [output(1, 0), output(2, 2560)]});
+                data["outputs"][index]["name"] = json!(name);
+                assert!(arguments(&data, 1, 200.0).is_err());
+            }
+        }
+        for field in ["id", "name", "uuid"] {
+            let mut data = json!({"outputs": [output(1, 0), output(2, 2560), output(3, 5120)]});
+            data["outputs"][2]["enabled"] = json!(false);
+            data["outputs"][2][field] = if field == "id" {
+                json!(1)
+            } else {
+                json!("DP-1")
+            };
+            assert!(arguments(&data, 1, 200.0).is_err());
+            assert!(state_for(data["outputs"].as_array().unwrap(), &data["outputs"][0]).is_err());
+        }
         let args = arguments(
             &json!({"outputs": [output(1, 0), output(2, 2560)]}),
             2,
             200.0,
         )
         .unwrap();
-        assert_eq!(args, ["output.2.scale.2"]);
+        assert_eq!(args, ["output.DP-2.scale.2"]);
 
         let mut below = output(3, 0);
         below["pos"]["y"] = json!(1440);
@@ -552,7 +585,7 @@ mod tests {
         let mut data = json!({"outputs": [output(1, 0), output(2, 2560), below, replica]});
         assert_eq!(
             arguments(&data, 1, 200.0).unwrap(),
-            ["output.1.scale.2", "output.2.position.1920,0"]
+            ["output.DP-1.scale.2", "output.DP-2.position.1920,0"]
         );
         data["outputs"][1]["currentModeId"] = json!("missing");
         assert!(arguments(&data, 1, 200.0).is_err());
@@ -561,16 +594,16 @@ mod tests {
         assert_eq!(
             arguments(&data, 1, 200.0).unwrap(),
             [
-                "output.1.scale.2",
-                "output.2.position.1920,0",
-                "output.3.position.1920,0"
+                "output.DP-1.scale.2",
+                "output.DP-2.position.1920,0",
+                "output.DP-3.position.1920,0"
             ]
         );
         assert!(arguments(&data, 2, 200.0).is_err());
         data["outputs"][0]["pos"]["x"] = json!(2560);
         data["outputs"][1]["pos"]["x"] = json!(0);
         data["outputs"][2]["pos"]["x"] = json!(0);
-        assert_eq!(arguments(&data, 1, 200.0).unwrap(), ["output.1.scale.2"]);
+        assert_eq!(arguments(&data, 1, 200.0).unwrap(), ["output.DP-1.scale.2"]);
         data["outputs"][2]["pos"]["x"] = json!(1);
         assert!(arguments(&data, 1, 200.0).is_err());
 
@@ -585,8 +618,8 @@ mod tests {
             )
             .unwrap(),
             [
-                "output.1.scale.1.3333333333333333",
-                "output.2.position.1442,0"
+                "output.DP-1.scale.1.3333333333333333",
+                "output.DP-2.position.1442,0"
             ]
         );
     }
@@ -604,6 +637,15 @@ mod tests {
             .0;
         assert_eq!(before.resolution, (3840, 2160));
         output["modes"][0]["size"] = json!({"width": 2560, "height": 1440});
+        let resized = snapshot(&json!({"outputs": [output.clone()]}), &display)
+            .unwrap()
+            .0;
+        assert_ne!(before.token, resized.token);
+        output["modes"][0]["refreshRate"] = json!(120);
+        let refreshed = snapshot(&json!({"outputs": [output.clone()]}), &display)
+            .unwrap()
+            .0;
+        assert_ne!(resized.token, refreshed.token);
         output["scale"] = json!(2.0);
         for rotation in [2, 32, 128] {
             output["rotation"] = json!(rotation);
@@ -621,7 +663,7 @@ mod tests {
                     arguments(&json!({"outputs": [output.clone(), adjacent]}), 1, 100.0).unwrap();
                 assert_eq!(
                     args,
-                    ["output.1.scale.1", &format!("output.2.position.{x},{y}")]
+                    ["output.DP-1.scale.1", &format!("output.DP-2.position.{x},{y}")]
                 );
             }
         }

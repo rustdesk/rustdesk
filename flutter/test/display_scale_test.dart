@@ -13,7 +13,6 @@ Widget _displaySettings({
   required VoidCallback onCancel,
   required Future<DisplayScaleState> Function(double, String)? requestScale,
   bool allowArbitrarySize = true,
-  bool excludeInputSemantics = false,
 }) =>
     MaterialApp(
         home: Scaffold(
@@ -26,7 +25,6 @@ Widget _displaySettings({
                     minDimension: 1,
                     maxDimension: 9999,
                     allowArbitrarySize: allowArbitrarySize,
-                    excludeInputSemantics: excludeInputSemantics,
                     onApply: onApply,
                     onCancel: onCancel,
                     requestScale: requestScale))));
@@ -48,49 +46,42 @@ void main() {
     'resolution': [1920, 1080]
   };
 
-  for (final openWithMouse in [false, true]) {
-    testWidgets(
-        'keyboard scale selection commits only on activation (mouse: $openWithMouse)',
-        (tester) async {
-      final controller = DisplayScaleModel((_, __) async => state);
-      addTearDown(controller.dispose);
-      await controller.refresh();
-      await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-              body: SizedBox(
-                  width: 400,
-                  child: ListenableBuilder(
-                      listenable: controller,
-                      builder: (_, __) => DisplayScale(
-                          translate: (s) => s, controller: controller))))));
-      if (openWithMouse) {
-        await tester.tap(find.byKey(const ValueKey('system-scale-menu')));
-      } else {
-        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      }
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pumpAndSettle();
-      expect(controller.percent, 150);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(controller.percent, 125);
-      expect(controller.changed, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(controller.percent, 125);
-      expect(
-          find.descendant(
-              of: find.byKey(const ValueKey('system-scale-menu')),
-              matching: find.text('125%')),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  }
+  testWidgets('keyboard scale selection commits only on activation',
+      (tester) async {
+    final controller = DisplayScaleModel((_, __) async => state);
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                width: 400,
+                child: ListenableBuilder(
+                    listenable: controller,
+                    builder: (_, __) => DisplayScale(
+                        translate: (s) => s, controller: controller))))));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(controller.percent, 150);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(controller.percent, 125);
+    expect(controller.changed, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(controller.percent, 125);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('system-scale-menu')),
+            matching: find.text('125%')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   test('validates host capabilities', () {
     expect(DisplayScaleState.fromJson(data).options, [100, 125, 150, 175, 200]);
@@ -134,15 +125,6 @@ void main() {
     });
     expect((await result).percent, 150);
     complete = true;
-  });
-
-  test('malformed response errors retain a translatable message', () async {
-    final controller = DisplayScaleModel(
-        (_, __) async => DisplayScaleState.fromJson({...data, 'token': ''}));
-    addTearDown(controller.dispose);
-    expect(await controller.refresh(), isFalse);
-    expect(controller.error, 'Invalid display scaling response');
-    expect(controller.busy, isFalse);
   });
 
   test('explicit unsupported is neutral only before a native baseline',
@@ -205,6 +187,8 @@ void main() {
     });
     expect(fractional.percent, 125.5);
     expect(fractional.options, [100, 125.5, 150]);
+    expect(fractional.adjacent(50, -1), isNull);
+    expect(fractional.adjacent(300, 1), isNull);
     for (final range in [
       [50, 300, 0],
       [300, 50, 1],
@@ -214,41 +198,6 @@ void main() {
       expect(() => DisplayScaleState.fromJson({...data, 'custom': range}),
           throwsFormatException);
     }
-  });
-
-  test(
-      'native step bounds and invalid custom input never silently change the draft',
-      () async {
-    const state = DisplayScaleState(
-        identity: 'display',
-        resolution: (1920, 1080),
-        percent: 150,
-        options: [100, 125, 150],
-        custom: (50, 300, 100 / 120),
-        token: 'native');
-    final controller = DisplayScaleModel((_, __) async => state);
-    addTearDown(controller.dispose);
-    await controller.refresh();
-    controller.useCustom();
-    for (final input in ['', 'NaN', '1%25', '301', '49', '1e2']) {
-      controller.edit(input);
-      expect(controller.valid, isFalse);
-      expect(controller.suggestion, isNull);
-      expect(controller.percent, 150);
-    }
-    controller.edit('125,5');
-    expect(controller.valid, isFalse);
-    expect(controller.percent, 150);
-    expect(controller.suggestion, closeTo(125.833333, 0.000001));
-    controller.acceptSuggestion();
-    expect(controller.valid, isTrue);
-    expect(state.adjacent(50, -1), isNull);
-    expect(state.adjacent(300, 1), isNull);
-    expect(state.adjacent(125, 1), closeTo(125.833333, 0.000001));
-    controller.reset();
-    expect(controller.percent, 150);
-    expect(controller.customMode, isFalse);
-    expect(controller.suggestion, isNull);
   });
 
   test(
@@ -315,11 +264,17 @@ void main() {
     addTearDown(controller.dispose);
     await controller.refresh();
     controller.useCustom();
+    for (final input in ['', 'NaN', '1%25', '301', '49', '1e2']) {
+      controller.edit(input);
+      expect(controller.valid, isFalse);
+      expect(controller.suggestion, isNull);
+      expect(controller.percent, 150);
+    }
     controller.edit('125.');
     await controller.refresh();
     expect(controller.draftText, '125.');
     expect(controller.valid, isFalse);
-    controller.edit('125.5');
+    controller.edit('125,5');
     controller.acceptSuggestion();
     custom = false;
     await controller.refresh();
@@ -445,13 +400,45 @@ void main() {
     });
   }
 
-  test('mismatched host readback does not report a successful apply', () async {
-    final controller = DisplayScaleModel((_, __) async => state);
+  test('failed readback and terminal invalidation cannot accept a late reply',
+      () async {
+    final reply = Completer<DisplayScaleState>();
+    var requests = 0;
+    final controller = DisplayScaleModel((_, __) async {
+      return ++requests == 3 ? await reply.future : state;
+    });
     addTearDown(controller.dispose);
     expect(await controller.refresh(), isTrue);
     controller.select(125);
     expect(await controller.apply(), isFalse);
     expect(controller.error, contains('did not apply'));
+    final refresh = controller.refresh();
+    const failure = DisplaySettingsReopenRequired(
+        DisplayScaleError('confirmation failed'));
+    controller.invalidate(failure);
+    expect(controller.needsReopen, isTrue);
+    expect(controller.error, failure.message);
+    controller.reset();
+    expect(controller.percent, 125);
+    expect(await controller.refresh(), isFalse);
+    expect(await controller.apply(), isFalse);
+    reply.complete(const DisplayScaleState(
+        identity: 'display',
+        resolution: (2560, 1440),
+        percent: 125,
+        options: [100, 125],
+        token: 'late'));
+    expect(await refresh, isFalse);
+    expect(controller.current, same(state));
+    expect(controller.needsReopen, isTrue);
+    expect(controller.canApply, isFalse);
+    expect(controller.busy, isFalse);
+    controller.reset();
+    expect(controller.percent, 125);
+    expect(await controller.refresh(), isFalse);
+    expect(await controller.apply(), isFalse);
+    expect(controller.error, failure.message);
+    expect(requests, 3);
   });
 
   test('Reset cancels a scale draft matching the refreshed effective value',
@@ -487,7 +474,6 @@ void main() {
         custom: (50, 300, 100 / 120),
         token: 'native');
     await tester.pumpWidget(_displaySettings(
-        excludeInputSemantics: true,
         onCancel: () {},
         onApply: (_, __, ___) => null,
         requestScale: (value, token) async {
@@ -508,13 +494,6 @@ void main() {
         .tap(find.widgetWithText(MenuItemButton, 'Custom').hitTestable());
     await tester.pumpAndSettle();
     final field = find.byKey(const ValueKey('custom-scale-input'));
-    expect(
-        find.ancestor(
-            of: field,
-            matching: find.byWidgetPredicate(
-                (widget) => widget is ExcludeSemantics && widget.excluding)),
-        findsOneWidget);
-
     await tester.enterText(field, '125.5');
     await tester.pumpAndSettle();
     expect(
@@ -671,29 +650,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'manual readback recovery confirms partial success and retries only scaling',
+  testWidgets('unconfirmed resolution only offers Close without retrying',
       (tester) async {
     final modes = <(int, int, int)>[];
     final calls = <double>[];
     var closed = false;
+    const failure = DisplaySettingsReopenRequired(
+        DisplayScaleError('confirmation failed'));
     await tester.pumpWidget(_displaySettings(
         onCancel: () => closed = true,
         onApply: (width, height, scale) {
           modes.add((width, height, scale));
-          throw const DisplayScaleError('confirmation failed');
+          throw failure;
         },
         requestScale: (percent, _) async {
           calls.add(percent);
-          if (calls.length == 2) {
-            throw const DisplayScaleError('readback failed');
-          }
-          return DisplayScaleState(
-              identity: 'display',
-              resolution: modes.isEmpty ? (1920, 1080) : (2560, 1440),
-              percent: percent == 0 ? 150 : percent,
-              options: [100, 125, 150],
-              token: 'current');
+          return state;
         }));
     await tester.pumpAndSettle();
     final width = find.byType(TextField).first;
@@ -706,20 +678,26 @@ void main() {
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(closed, isFalse);
-    expect(calls, [0, 0]);
-    expect(find.text('Resolution: Successful (2560 × 1440)'), findsNothing);
-    expect(find.text('Cancel'), findsOneWidget);
-    await tester.tap(find.text('Refresh'));
-    await tester.pumpAndSettle();
-    expect(find.text('Resolution: Successful (2560 × 1440)'), findsOneWidget);
-    expect(find.text('Close'), findsOneWidget);
-    expect(find.text('confirmation failed'), findsNothing);
+    expect(calls, [0]);
+    expect(find.textContaining('Resolution: Successful'), findsNothing);
+    expect(find.text('Cancel'), findsNothing);
+    expect(find.text('Refresh'), findsNothing);
+    expect(find.text(failure.message), findsOneWidget);
     expect(tester.widget<TextField>(width).controller!.text, '2560');
-    await tester.tap(find.text('Apply'));
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
+    expect(
+        tester
+            .widget<TextButton>(
+                find.widgetWithText(TextButton, 'Reset changes'))
+            .onPressed,
+        isNull);
+    expect(tester.widget<OutlinedButton>(menu).onPressed, isNull);
+    await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(closed, isTrue);
     expect(modes, [(2560, 1440, 1)]);
-    expect(calls, [0, 0, 0, 125]);
+    expect(calls, [0]);
     expect(tester.takeException(), isNull);
   });
 

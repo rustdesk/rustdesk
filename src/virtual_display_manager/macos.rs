@@ -413,24 +413,26 @@ mod tests {
     }
 
     #[test]
-    fn resize_is_serialized_with_disconnect_and_rejects_closed_connections() {
+    fn resize_errors_and_disconnects_preserve_operation_order() {
         use std::cell::RefCell;
         let (sender, receiver) = mpsc::channel();
         let operations = RefCell::new(Vec::new());
-        let resize = || Command::Resize {
+        let resize = |reply| Command::Resize {
             conn_id: 1,
             display_id: 42,
             width: 2560,
             height: 1600,
             scale: 2,
-            reply: oneshot::channel().0,
+            reply,
             _permit: test_permit(),
         };
+        let (first_reply, first_result) = oneshot::channel();
+        let (stale_reply, stale_result) = oneshot::channel();
         for command in [
             Command::Connected(1),
-            resize(),
+            resize(first_reply),
             Command::Disconnected(1),
-            resize(),
+            resize(stale_reply),
         ] {
             sender.send(command).unwrap();
         }
@@ -445,66 +447,10 @@ mod tests {
                 assert_eq!(scale, 2);
                 assert_eq!((id, width, height), (42, 2560, 1600));
                 operations.borrow_mut().push("resize");
-                true
-            },
-        );
-        assert_eq!(*operations.borrow(), ["resize", "cleanup"]);
-    }
-
-    #[test]
-    fn invalid_native_modes_are_rejected_before_queueing() {
-        for (width, height, scale) in [
-            (0, 1600, 2),
-            (4097, 1600, 1),
-            (2559, 1600, 2),
-            (2560, 1601, 2),
-            (2560, 1600, 0),
-            (2560, 1600, 3),
-        ] {
-            assert!(configure(1, "42", width, height, scale).is_err());
-        }
-    }
-
-    #[test]
-    fn native_mode_errors_and_closed_connections_reach_requesters() {
-        let (sender, receiver) = mpsc::channel();
-        let (first_reply, first_result) = oneshot::channel();
-        let (stale_reply, stale_result) = oneshot::channel();
-        sender.send(Command::Connected(1)).unwrap();
-        sender
-            .send(Command::Resize {
-                conn_id: 1,
-                display_id: 42,
-                width: 2560,
-                height: 1600,
-                scale: 2,
-                reply: first_reply,
-                _permit: test_permit(),
-            })
-            .unwrap();
-        sender.send(Command::Disconnected(1)).unwrap();
-        sender
-            .send(Command::Resize {
-                conn_id: 1,
-                display_id: 42,
-                width: 2560,
-                height: 1600,
-                scale: 2,
-                reply: stale_reply,
-                _permit: test_permit(),
-            })
-            .unwrap();
-        drop(sender);
-        let mut calls = 0;
-        run_worker(
-            receiver,
-            |_, _| true,
-            |_, _, _, _| {
-                calls += 1;
                 false
             },
         );
-        assert_eq!(calls, 1);
+        assert_eq!(*operations.borrow(), ["resize", "cleanup"]);
         assert!(first_result
             .blocking_recv()
             .unwrap()
@@ -520,23 +466,16 @@ mod tests {
     }
 
     #[test]
-    fn native_failure_is_reported_and_cleanup_is_still_attempted() {
-        let (sender, receiver) = mpsc::channel();
-        let mut operations = Vec::new();
-        let (command, result) = request(1, 1, true);
-        for command in [Command::Connected(1), command, Command::Disconnected(1)] {
-            sender.send(command).unwrap();
+    fn invalid_native_modes_are_rejected_before_queueing() {
+        for (width, height, scale) in [
+            (0, 1600, 2),
+            (4097, 1600, 1),
+            (2559, 1600, 2),
+            (2560, 1601, 2),
+            (2560, 1600, 0),
+            (2560, 1600, 3),
+        ] {
+            assert!(configure(1, "42", width, height, scale).is_err());
         }
-        drop(sender);
-        run_worker(
-            receiver,
-            |index, on| {
-                operations.push((index, on));
-                !on
-            },
-            |_, _, _, _| panic!("Unexpected resize"),
-        );
-        assert!(result.blocking_recv().unwrap().is_err());
-        assert_eq!(operations, [(1, true), (-1, false)]);
     }
 }

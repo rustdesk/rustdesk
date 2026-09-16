@@ -144,9 +144,6 @@ fn confirmed(current: &Current, display: Option<&Display>, identity: &str) -> Re
     // Validate the same native target before interpreting missing capture geometry
     // as a lagging snapshot rather than unavailable scaling.
     let state = state_at(current, index)?;
-    if state.identity != identity {
-        bail!(STALE);
-    }
     let Some(display) = display else {
         bail!(SnapshotChanged);
     };

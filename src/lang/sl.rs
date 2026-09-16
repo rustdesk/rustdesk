@@ -808,7 +808,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display settings are busy. Try again.", "Nastavitve zaslona so zasedene. Poskusite znova."),
         ("Display settings timed out. Refresh and try again.", "Čas za nastavitve zaslona je potekel. Osvežite in poskusite znova."),
         ("Use nearest supported scale", "Uporabi najbližjo podprto povečavo"),
-        ("Scaling was applied, but the resolution request failed.", "Povečava je bila uveljavljena, vendar zahteva za ločljivost ni uspela."),
         ("Failed to change display settings", "Nastavitev zaslona ni bilo mogoče spremeniti"),
         ("Remote connection has closed", "Oddaljena povezava je zaprta"),
         ("Failed to resize macOS virtual display", "Velikosti navideznega zaslona macOS ni bilo mogoče spremeniti"),

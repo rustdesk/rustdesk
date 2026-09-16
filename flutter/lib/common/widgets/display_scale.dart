@@ -59,6 +59,7 @@ class _DisplayScaleState extends State<DisplayScale> {
   Widget build(BuildContext context) {
     final current = widget.controller.current;
     final translate = widget.translate;
+    final enabled = !widget.controller.busy && !widget.controller.needsReopen;
     if (widget.controller.unavailable) {
       return Text(translate(
           'System scaling is unavailable for this display or desktop environment.'));
@@ -89,17 +90,16 @@ class _DisplayScaleState extends State<DisplayScale> {
                 if (hasCustom)
                   MenuItemButton(
                       focusNode: _firstItemFocus,
-                      onPressed:
-                          !widget.controller.busy && current.custom != null
-                              ? widget.controller.useCustom
-                              : null,
+                      onPressed: enabled && current.custom != null
+                          ? widget.controller.useCustom
+                          : null,
                       child: Text(translate('Custom'))),
                 for (final percent in current.options)
                   MenuItemButton(
                       focusNode: !hasCustom && percent == current.options.first
                           ? _firstItemFocus
                           : null,
-                      onPressed: widget.controller.busy
+                      onPressed: !enabled
                           ? null
                           : () => widget.controller.select(percent),
                       child: Text(
@@ -113,7 +113,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(4))),
-                onPressed: widget.controller.busy
+                onPressed: !enabled
                     ? null
                     : () {
                         if (menu.isOpen) {
@@ -148,7 +148,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                 key: const ValueKey('scale-decrease'),
                 tooltip: translate('Decrease'),
                 icon: const Icon(Icons.remove),
-                onPressed: !widget.controller.busy &&
+                onPressed: enabled &&
                         widget.controller.valid &&
                         current.adjacent(widget.controller.percent!, -1) != null
                     ? () => widget.controller.step(-1)
@@ -160,8 +160,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                         key: const ValueKey('custom-scale-input'),
                         controller: _text,
                         onChanged: _edit,
-                        enabled:
-                            !widget.controller.busy && current.custom != null,
+                        enabled: enabled && current.custom != null,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         decoration: InputDecoration(
@@ -178,7 +177,7 @@ class _DisplayScaleState extends State<DisplayScale> {
                 key: const ValueKey('scale-increase'),
                 tooltip: translate('Increase'),
                 icon: const Icon(Icons.add),
-                onPressed: !widget.controller.busy &&
+                onPressed: enabled &&
                         widget.controller.valid &&
                         current.adjacent(widget.controller.percent!, 1) != null
                     ? () => widget.controller.step(1)
@@ -189,22 +188,23 @@ class _DisplayScaleState extends State<DisplayScale> {
                 alignment: Alignment.centerLeft,
                 child: TextButton(
                     key: const ValueKey('accept-scale-suggestion'),
-                    onPressed: widget.controller.busy
-                        ? null
-                        : widget.controller.acceptSuggestion,
+                    onPressed:
+                        !enabled ? null : widget.controller.acceptSuggestion,
                     child: Text(
                         '${translate('Use nearest supported scale')}: ${formatDisplayScale(widget.controller.suggestion!)}%'))),
         ],
         if (widget.controller.error != null) ...[
           Text(translate(widget.controller.error!),
               style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                  onPressed:
-                      widget.controller.busy ? null : widget.controller.refresh,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: Text(translate('Refresh')))),
+          if (!widget.controller.needsReopen)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                    onPressed: widget.controller.busy
+                        ? null
+                        : widget.controller.refresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: Text(translate('Refresh')))),
         ],
       ],
     );

@@ -808,7 +808,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display settings are busy. Try again.", "A kijelző beállításai foglaltak. Próbálja újra."),
         ("Display settings timed out. Refresh and try again.", "A kijelző beállításainak időkorlátja lejárt. Frissítsen, és próbálja újra."),
         ("Use nearest supported scale", "Legközelebbi támogatott méretezés használata"),
-        ("Scaling was applied, but the resolution request failed.", "A méretezés alkalmazva lett, de a felbontásra vonatkozó kérés sikertelen."),
         ("Failed to change display settings", "Nem sikerült módosítani a kijelző beállításait"),
         ("Remote connection has closed", "A távoli kapcsolat lezárult"),
         ("Failed to resize macOS virtual display", "Nem sikerült átméretezni a macOS virtuális kijelzőjét"),

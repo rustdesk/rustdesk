@@ -33,6 +33,13 @@ bool canChangeDisplaySettings(FFI ffi) {
           (!isWeb && model.pi.platformAdditions['display_scale'] == true));
 }
 
+enum _DisplaySettingsTargetState {
+  ready,
+  confirmingResolution,
+  needsReopen,
+  closed
+}
+
 class DisplaySettingsTarget {
   final FFI _ffi;
   final PeerInfo _peer;
@@ -42,8 +49,8 @@ class DisplaySettingsTarget {
   Display _display;
   String? _confirmedToken;
   DisplayScaleState? _nativeState;
-  (int, int)? _pendingResolution;
-  bool _closed = false;
+  _DisplaySettingsTargetState _state = _DisplaySettingsTargetState.ready;
+  DisplaySettingsReopenRequired? _failure;
 
   static const _stale = DisplayScaleError(
       'Display settings changed. Reopen the resolution menu and try again.');
@@ -67,7 +74,7 @@ class DisplaySettingsTarget {
       );
 
   Display _selected() {
-    if (_closed ||
+    if (_state == _DisplaySettingsTargetState.closed ||
         !canChangeDisplaySettings(_ffi) ||
         !identical(_ffi.ffiModel.pi, _peer) ||
         _peer.currentDisplay != _index) {
@@ -77,6 +84,7 @@ class DisplaySettingsTarget {
   }
 
   Future<void> _check() async {
+    _requireReady();
     final selected = _selected();
     if (identical(selected, _display)) return;
     final token = _confirmedToken;
@@ -84,11 +92,18 @@ class DisplaySettingsTarget {
     // Capture updates must match the last confirmed native snapshot before
     // allowing another write.
     final current = await _requestScale(_index, 0, '', '');
+    _requireReady();
     _validateState(current);
     if (current.token != token || !identical(selected, _selected())) {
       throw _stale;
     }
     _display = selected;
+  }
+
+  void _requireReady() {
+    if (_state != _DisplaySettingsTargetState.ready) {
+      throw _failure ?? _stale;
+    }
   }
 
   void _validateState(DisplayScaleState state,
@@ -104,29 +119,24 @@ class DisplaySettingsTarget {
   }
 
   Future<DisplayScaleState> requestScale(double percent, String token) async {
-    if (_pendingResolution != null || (percent == 0 && _nativeState != null)) {
-      if (percent != 0) throw _stale;
+    _requireReady();
+    if (percent == 0 && _nativeState != null) {
       final selected = _selected();
-      final state = await _requestScale(_index, 0, '',
-          _pendingResolution == null ? '' : _nativeState!.identity);
-      _validateState(state,
-          allowResolutionChange: _pendingResolution != null);
+      final state = await _requestScale(_index, 0, '', '');
+      _requireReady();
+      _validateState(state);
       if (!identical(selected, _selected())) throw _stale;
-      if (_pendingResolution != null &&
-          state.resolution != _pendingResolution) {
-        throw const DisplayScaleError(
-            'Display settings timed out. Refresh and try again.');
-      }
       _display = selected;
       _nativeState = state;
       _confirmedToken = state.token;
-      _pendingResolution = null;
       return state;
     }
     await _check();
+    _requireReady();
     final selected = _selected();
     if (!identical(_display, selected)) throw _stale;
     final state = await _requestScale(_index, percent, token, '');
+    _requireReady();
     if (percent == 0 && !identical(selected, _selected())) throw _stale;
     _validateState(state);
     _nativeState = state;
@@ -139,13 +149,34 @@ class DisplaySettingsTarget {
   Future<DisplayScaleState?> applyResolution(FutureOr<void> Function() apply,
       {(int, int)? resolution}) async {
     await _check();
-    if (_pendingResolution != null || !identical(_display, _selected())) {
+    _requireReady();
+    if (!identical(_display, _selected())) {
       throw _stale;
     }
-    final confirm = resolution != null && _nativeState != null;
-    await apply();
-    if (!confirm) return null;
-    _pendingResolution = resolution;
+    final before = _nativeState;
+    if (resolution == null || before == null) {
+      await apply();
+      return null;
+    }
+    _state = _DisplaySettingsTargetState.confirmingResolution;
+    try {
+      await apply();
+      final state = await _confirmResolution(resolution, before.identity);
+      _selected();
+      _state = _DisplaySettingsTargetState.ready;
+      return state;
+    } catch (error, stack) {
+      final failure = DisplaySettingsReopenRequired(error);
+      if (_state != _DisplaySettingsTargetState.closed) {
+        _state = _DisplaySettingsTargetState.needsReopen;
+        _failure = failure;
+      }
+      Error.throwWithStackTrace(failure, stack);
+    }
+  }
+
+  Future<DisplayScaleState> _confirmResolution(
+      (int, int) resolution, String identity) async {
     // The legacy resolution command only acknowledges local dispatch. Read the
     // native mode before allowing scaling to use the new mode's capabilities.
     final elapsed = Stopwatch()..start();
@@ -153,17 +184,12 @@ class DisplaySettingsTarget {
     while (true) {
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) {
-        throw const DisplayScaleError(
-            'Display settings timed out. Refresh and try again.');
+        throw TimeoutException('Resolution change was not confirmed', timeout);
       }
       final selected = _selected();
       DisplayScaleState? state;
       try {
-        state = await _requestScale(_index, 0, '', _nativeState!.identity)
-            .timeout(remaining);
-      } on TimeoutException {
-        throw const DisplayScaleError(
-            'Display settings timed out. Refresh and try again.');
+        state = await _requestScale(_index, 0, '', identity).timeout(remaining);
       } on DisplayScaleError catch (error) {
         if (error.code != 'snapshot_changed') rethrow;
       }
@@ -175,7 +201,6 @@ class DisplaySettingsTarget {
           _display = selected;
           _nativeState = state;
           _confirmedToken = state.token;
-          _pendingResolution = null;
           return state;
         }
       }
@@ -183,7 +208,7 @@ class DisplaySettingsTarget {
     }
   }
 
-  void close() => _closed = true;
+  void close() => _state = _DisplaySettingsTargetState.closed;
 }
 
 Future<void> showDisplaySettingsDialog(
@@ -469,10 +494,12 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       if (mounted) widget.onCancel();
     } catch (error) {
       if (mounted) {
-        setState(() => _applyError = error.toString());
-        // A failed confirmation can follow a successful native mode switch.
-        // Read back the baseline without resubmitting or rolling back the change.
-        if (confirmResolution) await systemScale!.refresh();
+        if (error is DisplaySettingsReopenRequired && systemScale != null) {
+          systemScale.invalidate(error);
+        } else {
+          setState(() => _applyError = error.toString());
+          if (confirmResolution) await systemScale!.refresh();
+        }
       }
     } finally {
       if (mounted) setState(() => _applying = false);
@@ -515,6 +542,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       );
 
   bool get _hasChanges => _editedMode != _currentMode;
+  bool get _needsReopen => _systemScale?.needsReopen == true;
   bool get _hasEdits =>
       _hasChanges ||
       _ratio !=
@@ -630,12 +658,14 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           leadingIcon: SizedBox(
               width: 18,
               child: _ratio == null ? const Icon(Icons.check, size: 18) : null),
-          onPressed: () {
-            setState(() => _ratio = null);
-            _widthFocus.requestFocus();
-            _width.selection =
-                TextSelection(baseOffset: 0, extentOffset: _width.text.length);
-          },
+          onPressed: _needsReopen
+              ? null
+              : () {
+                  setState(() => _ratio = null);
+                  _widthFocus.requestFocus();
+                  _width.selection = TextSelection(
+                      baseOffset: 0, extentOffset: _width.text.length);
+                },
           child: Text(widget.translate('Custom')),
         ),
         for (final ratio in ratios)
@@ -644,7 +674,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                 width: 18,
                 child:
                     _ratio == ratio ? const Icon(Icons.check, size: 18) : null),
-            onPressed: () => _selectRatio(ratio),
+            onPressed: _needsReopen ? null : () => _selectRatio(ratio),
             child: Text('${ratio.$1}:${ratio.$2}'),
           ),
         if (!widget.allowArbitrarySize && _supportedModes.isNotEmpty)
@@ -652,8 +682,10 @@ class _DisplaySettingsState extends State<DisplaySettings> {
             menuChildren: [
               for (final size in _supportedModes)
                 MenuItemButton(
-                  onPressed: () =>
-                      _setMode((size.$1 * _scale, size.$2 * _scale, _scale)),
+                  onPressed: _needsReopen
+                      ? null
+                      : () => _setMode(
+                          (size.$1 * _scale, size.$2 * _scale, _scale)),
                   child: Text(_dimensionLabel(size.$1, size.$2)),
                 ),
             ],
@@ -663,14 +695,16 @@ class _DisplaySettingsState extends State<DisplaySettings> {
       builder: (context, controller, _) => TextButton.icon(
         key: const ValueKey('resolution-aspect-ratio'),
         focusNode: _ratioFocus,
-        onPressed: () {
-          if (controller.isOpen) {
-            controller.close();
-          } else {
-            controller.open();
-            _customFocus.requestFocus();
-          }
-        },
+        onPressed: _needsReopen
+            ? null
+            : () {
+                if (controller.isOpen) {
+                  controller.close();
+                } else {
+                  controller.open();
+                  _customFocus.requestFocus();
+                }
+              },
         icon: const Icon(Icons.arrow_drop_down),
         label: Text(
             _ratio == null
@@ -687,6 +721,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           excluding: widget.excludeInputSemantics,
           child: TextField(
             controller: controller,
+            enabled: !_needsReopen,
             focusNode: controller == _width ? _widthFocus : null,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -735,7 +770,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     required (int, int, int)? mode,
     String? hint,
   }) {
-    final enabled = mode != null && _validSize(mode.$1, mode.$2, mode.$3);
+    final enabled =
+        !_needsReopen && mode != null && _validSize(mode.$1, mode.$2, mode.$3);
     return Tooltip(
       message: [
         if (hint != null) widget.translate(hint),
@@ -831,7 +867,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                 IconButton(
                   tooltip: widget.translate('Swap width and height'),
                   icon: const Icon(Icons.swap_horiz),
-                  onPressed: !_validSize(_editedMode.$2, _editedMode.$1, _scale)
+                  onPressed: _needsReopen ||
+                          !_validSize(_editedMode.$2, _editedMode.$1, _scale)
                       ? null
                       : () => setState(() {
                             final width = _width.text;
@@ -871,7 +908,9 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                         ChoiceChip(
                           label: Text(_qualityLabel(scale)),
                           selected: _scale == scale,
-                          onSelected: (_) => setState(() => _scale = scale),
+                          onSelected: _needsReopen
+                              ? null
+                              : (_) => setState(() => _scale = scale),
                         ),
                     ]),
                   ],
@@ -903,6 +942,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                 children: [
                   TextButton(
                     onPressed: !busy &&
+                            !_needsReopen &&
                             (_hasEdits ||
                                 scaleChanged ||
                                 _systemScale?.customMode == true ||
@@ -919,7 +959,9 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                     TextButton(
                       onPressed: busy ? null : widget.onCancel,
                       child: Text(widget.translate(
-                          _resolutionApplied ? 'Close' : 'Cancel')),
+                          _needsReopen || _resolutionApplied
+                              ? 'Close'
+                              : 'Cancel')),
                     ),
                     ElevatedButton(
                       onPressed: canApply ? _apply : null,

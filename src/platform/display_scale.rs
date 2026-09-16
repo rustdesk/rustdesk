@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn decimal_levels_and_native_steps_are_not_rounded_to_integers() {
+    fn requires_current_token_and_supported_scaling_levels() {
         let mut state = State {
             identity: "display-1".into(),
             resolution: (3840, 2160),
@@ -147,29 +147,14 @@ mod tests {
             custom: None,
         };
         assert!(validate(&state, 125.5, "fractional").is_ok());
+        assert!(validate(&state, 125.5, "").is_err());
+        assert!(validate(&state, 125.5, "previous").is_err());
         assert!(validate(&state, 126.0, "fractional").is_err());
+        assert!(validate(&state, 0.0, "fractional").is_err());
         state.custom = Some([50.0, 300.0, 100.0 / 120.0]);
         assert!(validate(&state, 151.0 / 120.0 * 100.0, "fractional").is_ok());
         for value in [125.6, 49.0, 301.0, f64::NAN, f64::INFINITY] {
             assert!(validate(&state, value, "fractional").is_err());
         }
-    }
-
-    #[test]
-    fn rejects_stale_and_unadvertised_changes() {
-        let state = State {
-            identity: "display-1".into(),
-            resolution: (3840, 2160),
-            percent: 150.0,
-            recommended: Some(150.0),
-            options: vec![100.0, 125.0, 150.0],
-            token: "current".into(),
-            custom: None,
-        };
-        assert!(validate(&state, 125.0, "current").is_ok());
-        assert!(validate(&state, 125.0, "").is_err());
-        assert!(validate(&state, 125.0, "previous").is_err());
-        assert!(validate(&state, 137.0, "current").is_err());
-        assert!(validate(&state, 0.0, "current").is_err());
     }
 }

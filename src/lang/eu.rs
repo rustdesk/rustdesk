@@ -808,7 +808,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display settings are busy. Try again.", "Pantailaren ezarpenak lanpetuta daude. Saiatu berriro."),
         ("Display settings timed out. Refresh and try again.", "Pantailaren ezarpenen itxarote-denbora agortu da. Freskatu eta saiatu berriro."),
         ("Use nearest supported scale", "Erabili onartutako eskalarik hurbilena"),
-        ("Scaling was applied, but the resolution request failed.", "Eskala aplikatu da, baina bereizmen-eskaerak huts egin du."),
         ("Failed to change display settings", "Ezin izan dira pantailaren ezarpenak aldatu"),
         ("Remote connection has closed", "Urruneko konexioa itxi da"),
         ("Failed to resize macOS virtual display", "Ezin izan da macOS pantaila birtualaren tamaina aldatu"),

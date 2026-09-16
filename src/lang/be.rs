@@ -808,7 +808,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Display settings are busy. Try again.", "Налады дысплэя занятыя. Паўтарыце спробу."),
         ("Display settings timed out. Refresh and try again.", "Час чакання налад дысплэя скончыўся. Абнавіце даныя і паўтарыце спробу."),
         ("Use nearest supported scale", "Выкарыстаць найбліжэйшы маштаб, які падтрымліваецца"),
-        ("Scaling was applied, but the resolution request failed.", "Маштаб ужыты, але запыт змянення раздзяляльнасці завяршыўся памылкай."),
         ("Failed to change display settings", "Не ўдалося змяніць налады дысплэя"),
         ("Remote connection has closed", "Аддаленае злучэнне закрыта"),
         ("Failed to resize macOS virtual display", "Не ўдалося змяніць памер віртуальнага дысплэя macOS"),
