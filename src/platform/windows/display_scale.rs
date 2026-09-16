@@ -1,4 +1,6 @@
-use crate::platform::display_scale::{token, validate, Display, State, STALE, UNSUPPORTED};
+use crate::platform::display_scale::{
+    token, validate, Display, SnapshotChanged, State, STALE, UNSUPPORTED,
+};
 use hbb_common::{bail, ResultType};
 use std::{
     mem::{size_of, zeroed},
@@ -95,7 +97,7 @@ fn paths() -> ResultType<(Vec<DISPLAYCONFIG_PATH_INFO>, Vec<DISPLAYCONFIG_MODE_I
         modes.truncate(nm as usize);
         return Ok((paths, modes));
     }
-    bail!(STALE)
+    bail!(SnapshotChanged)
 }
 
 fn effective_dpi(monitor: HMONITOR) -> ResultType<(u32, u32)> {
@@ -125,35 +127,56 @@ fn effective_dpi(monitor: HMONITOR) -> ResultType<(u32, u32)> {
     Ok((dx, dy))
 }
 
-fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
-    let (paths, modes) = paths()?;
-    let mut matches = Vec::new();
-    for path in &paths {
-        let source = &path.sourceInfo;
-        let mut packet: DISPLAYCONFIG_SOURCE_DEVICE_NAME = unsafe { zeroed() };
-        packet.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
-            _type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
-            size: size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as _,
-            adapterId: source.adapterId,
-            id: source.id,
-        };
-        unsafe {
-            check(DisplayConfigGetDeviceInfo(&mut packet.header))?;
-        }
-        let end = packet
-            .viewGdiDeviceName
-            .iter()
-            .position(|v| *v == 0)
-            .unwrap_or(packet.viewGdiDeviceName.len());
-        if String::from_utf16_lossy(&packet.viewGdiDeviceName[..end]) == name {
-            matches.push(path);
-        }
+fn source_name(path: &DISPLAYCONFIG_PATH_INFO) -> ResultType<String> {
+    let source = &path.sourceInfo;
+    let mut packet: DISPLAYCONFIG_SOURCE_DEVICE_NAME = unsafe { zeroed() };
+    packet.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
+        _type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+        size: size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as _,
+        adapterId: source.adapterId,
+        id: source.id,
+    };
+    unsafe {
+        check(DisplayConfigGetDeviceInfo(&mut packet.header))?;
     }
-    // Clone targets share one DPI source; do not silently change another display.
-    if matches.len() != 1 {
-        bail!(UNSUPPORTED);
+    let end = packet
+        .viewGdiDeviceName
+        .iter()
+        .position(|v| *v == 0)
+        .unwrap_or(packet.viewGdiDeviceName.len());
+    Ok(String::from_utf16_lossy(&packet.viewGdiDeviceName[..end]))
+}
+
+fn target_name(path: &DISPLAYCONFIG_PATH_INFO) -> ResultType<DISPLAYCONFIG_TARGET_DEVICE_NAME> {
+    let mut target: DISPLAYCONFIG_TARGET_DEVICE_NAME = unsafe { zeroed() };
+    target.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
+        _type: DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
+        size: size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as _,
+        adapterId: path.targetInfo.adapterId,
+        id: path.targetInfo.id,
+    };
+    unsafe {
+        check(DisplayConfigGetDeviceInfo(&mut target.header))?;
     }
-    let path = matches[0];
+    Ok(target)
+}
+
+fn identity(path: &DISPLAYCONFIG_PATH_INFO, target: &DISPLAYCONFIG_TARGET_DEVICE_NAME) -> String {
+    token((
+        "windows",
+        path.targetInfo.adapterId.HighPart,
+        path.targetInfo.adapterId.LowPart,
+        path.targetInfo.id,
+        &target.monitorDevicePath[..],
+    ))
+}
+
+fn snapshot_for_path(
+    path: &DISPLAYCONFIG_PATH_INFO,
+    modes: &[DISPLAYCONFIG_MODE_INFO],
+    name: &str,
+    target: &DISPLAYCONFIG_TARGET_DEVICE_NAME,
+) -> ResultType<(State, DpiGet)> {
     let source = &path.sourceInfo;
     let mut dpi = DpiGet {
         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -194,24 +217,8 @@ fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
         // Custom global DPI and an unaware process do not use these per-source levels.
         bail!(UNSUPPORTED);
     }
-    let mut target: DISPLAYCONFIG_TARGET_DEVICE_NAME = unsafe { zeroed() };
-    target.header = DISPLAYCONFIG_DEVICE_INFO_HEADER {
-        _type: DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME,
-        size: size_of::<DISPLAYCONFIG_TARGET_DEVICE_NAME>() as _,
-        adapterId: path.targetInfo.adapterId,
-        id: path.targetInfo.id,
-    };
-    unsafe {
-        check(DisplayConfigGetDeviceInfo(&mut target.header))?;
-    }
     let state = State {
-        identity: token((
-            "windows",
-            path.targetInfo.adapterId.HighPart,
-            path.targetInfo.adapterId.LowPart,
-            path.targetInfo.id,
-            &target.monitorDevicePath[..],
-        )),
+        identity: identity(path, target),
         resolution: (mode.width, mode.height),
         percent: LEVELS[current] as f64,
         custom: None,
@@ -235,6 +242,22 @@ fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
     Ok((state, dpi))
 }
 
+fn snapshot(name: &str) -> ResultType<(State, DpiGet)> {
+    let (paths, modes) = paths()?;
+    let mut matches = Vec::new();
+    for path in &paths {
+        if source_name(path)? == name {
+            matches.push(path);
+        }
+    }
+    // Clone targets share one DPI source; do not silently change another display.
+    if matches.len() != 1 {
+        bail!(UNSUPPORTED);
+    }
+    let path = matches[0];
+    snapshot_for_path(path, &modes, name, &target_name(path)?)
+}
+
 fn indices(min: i32, current: i32, max: i32) -> ResultType<(usize, usize, usize)> {
     let recommended = -i64::from(min);
     let current = recommended + i64::from(current);
@@ -253,6 +276,45 @@ fn indices(min: i32, current: i32, max: i32) -> ResultType<(usize, usize, usize)
 
 pub fn read(display: &Display) -> ResultType<State> {
     Ok(snapshot(&display.name)?.0)
+}
+
+pub fn read_confirmed(display: Option<&Display>, expected_identity: &str) -> ResultType<State> {
+    let (paths, modes) = paths()?;
+    let mut selected = None;
+    for path in &paths {
+        let target = target_name(path)?;
+        if identity(path, &target) == expected_identity {
+            if selected.is_some() {
+                bail!(UNSUPPORTED);
+            }
+            selected = Some((path, target));
+        }
+    }
+    let Some((path, target)) = selected else {
+        bail!(STALE);
+    };
+    let source = &path.sourceInfo;
+    if paths
+        .iter()
+        .filter(|path| {
+            path.sourceInfo.adapterId.HighPart == source.adapterId.HighPart
+                && path.sourceInfo.adapterId.LowPart == source.adapterId.LowPart
+                && path.sourceInfo.id == source.id
+        })
+        .count()
+        != 1
+    {
+        bail!(UNSUPPORTED);
+    }
+    let name = source_name(path)?;
+    let state = snapshot_for_path(path, &modes, &name, &target)?.0;
+    let Some(display) = display else {
+        bail!(SnapshotChanged);
+    };
+    if display.name != name {
+        bail!(STALE);
+    }
+    Ok(state)
 }
 
 pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<State> {

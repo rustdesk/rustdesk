@@ -921,9 +921,9 @@ pub fn session_configure_virtual_display(session_id: SessionID, request_id: Stri
     }
 }
 
-pub fn session_request_display_scale(session_id: SessionID, request_id: String, display: i32, percent: f64, token: String) {
+pub fn session_request_display_scale(session_id: SessionID, request_id: String, display: i32, percent: f64, token: String, expected_identity: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
-        session.request_display_scale(request_id, display, percent, token);
+        session.request_display_scale(request_id, display, percent, token, expected_identity);
     }
 }
 

@@ -1,4 +1,6 @@
-use crate::platform::display_scale::{token, validate, Display, State, UNSUPPORTED};
+use crate::platform::display_scale::{
+    token, validate, Display, SnapshotChanged, State, STALE, UNSUPPORTED,
+};
 use dbus::blocking::Connection;
 use hbb_common::{bail, libc, ResultType};
 use std::time::Duration;
@@ -42,6 +44,19 @@ pub fn read(display: &Display) -> ResultType<State> {
         gnome::read(&connection, display)
     } else if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
         kde::read(display)
+    } else {
+        bail!(UNSUPPORTED)
+    }
+}
+
+pub fn read_confirmed(display: Option<&Display>, identity: &str) -> ResultType<State> {
+    let connection = connection()?;
+    let captured = display.map(resolve_capture).transpose()?.flatten();
+    let display = captured.as_ref().or(display);
+    if has_owner(&connection, "org.gnome.Mutter.DisplayConfig")? {
+        gnome::read_confirmed(&connection, display, identity)
+    } else if has_owner(&connection, "org.kde.KWin")? && crate::platform::current_is_wayland() {
+        kde::read_confirmed(display, identity)
     } else {
         bail!(UNSUPPORTED)
     }

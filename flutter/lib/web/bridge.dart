@@ -706,7 +706,7 @@ class RustdeskImpl {
 
   Future<void> sessionRequestDisplayScale({required UuidValue sessionId,
     required String requestId, required int display, required double percent,
-    required String token, dynamic hint}) =>
+    required String token, required String expectedIdentity, dynamic hint}) =>
     Future.error(UnsupportedError('System scaling is unavailable in the web client'));
 
   Future<void> sessionChangeResolution(

@@ -1,4 +1,4 @@
-use super::{layout, percent, Display, State, UNSUPPORTED};
+use super::{layout, percent, Display, SnapshotChanged, State, STALE, UNSUPPORTED};
 use hbb_common::{allow_err, bail, log, ResultType};
 use serde_json::Value;
 use std::{
@@ -69,72 +69,62 @@ fn doctor(args: &[&str]) -> ResultType<Vec<u8>> {
     }
 }
 
+fn output_size(output: &Value) -> Option<(Option<u64>, Option<u64>)> {
+    if output["connected"] != true || output["enabled"] == false {
+        return None;
+    }
+    let mode = output["modes"]
+        .as_array()?
+        .iter()
+        .find(|mode| mode["id"] == output["currentModeId"])?;
+    let size = (
+        mode["size"]["width"].as_u64(),
+        mode["size"]["height"].as_u64(),
+    );
+    Some(
+        if matches!(output["rotation"].as_u64(), Some(2 | 8 | 32 | 128)) {
+            (size.1, size.0)
+        } else {
+            size
+        },
+    )
+}
+
+fn matches_capture(output: &Value, display: &Display) -> bool {
+    let Some(size) = output_size(output) else {
+        return false;
+    };
+    output["name"]
+        .as_str()
+        .is_some_and(|name| super::same_connector(&display.name, name))
+        || (display.name.is_empty()
+            && output["pos"]["x"].as_i64() == Some(display.origin.0 as i64)
+            && output["pos"]["y"].as_i64() == Some(display.origin.1 as i64)
+            && size == (Some(display.size.0 as u64), Some(display.size.1 as u64)))
+}
+
 fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
     let Some(outputs) = data["outputs"].as_array() else {
         bail!(UNSUPPORTED);
     };
-    let mut matches = Vec::new();
-    let mut topology = Vec::new();
-    for output in outputs {
-        topology.push(
-            serde_json::json!([
-                output["id"],
-                output["name"],
-                output["connected"],
-                output["enabled"],
-                output["pos"],
-                output["currentModeId"],
-                output["scale"],
-                output["rotation"],
-                output["replicationSource"],
-                output["size"],
-                output["sizeMM"],
-                output["modes"].as_array().and_then(|modes| modes
-                    .iter()
-                    .find(|mode| mode["id"] == output["currentModeId"]))
-            ])
-            .to_string(),
-        );
-        if output["connected"] != true || output["enabled"] == false {
-            continue;
-        }
-        let Some(modes) = output["modes"].as_array() else {
-            continue;
-        };
-        let Some(mode) = modes.iter().find(|m| m["id"] == output["currentModeId"]) else {
-            continue;
-        };
-        let size = (
-            mode["size"]["width"].as_u64(),
-            mode["size"]["height"].as_u64(),
-        );
-        let size = if matches!(output["rotation"].as_u64(), Some(2 | 8 | 32 | 128)) {
-            (size.1, size.0)
-        } else {
-            size
-        };
-        if output["name"]
-            .as_str()
-            .is_some_and(|name| super::same_connector(&display.name, name))
-            || (display.name.is_empty()
-                && output["pos"]["x"].as_i64() == Some(display.origin.0 as i64)
-                && output["pos"]["y"].as_i64() == Some(display.origin.1 as i64)
-                && size == (Some(display.size.0 as u64), Some(display.size.1 as u64)))
-        {
-            matches.push((output, size));
-        }
-    }
+    let matches: Vec<_> = outputs
+        .iter()
+        .filter(|output| matches_capture(output, display))
+        .collect();
     if matches.len() != 1 {
         bail!(UNSUPPORTED);
     }
-    let (output, size) = matches[0];
+    state_for(outputs, matches[0])
+}
+
+fn state_for(outputs: &[Value], output: &Value) -> ResultType<(State, i64)> {
     let Some(id) = output["id"].as_i64().filter(|id| *id > 0) else {
         bail!(UNSUPPORTED);
     };
     let Some(name) = output["name"].as_str().filter(|name| !name.is_empty()) else {
         bail!(UNSUPPORTED);
     };
-    let (Some(width), Some(height)) = size else {
+    let Some((Some(width), Some(height))) = output_size(output) else {
         bail!(UNSUPPORTED);
     };
     if width == 0 || height == 0 || width > u32::MAX as u64 || height > u32::MAX as u64 {
@@ -160,6 +150,28 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
     options.push(value);
     options.sort_by(f64::total_cmp);
     options.dedup();
+    let mut topology = Vec::new();
+    for output in outputs {
+        topology.push(
+            serde_json::json!([
+                output["id"],
+                output["name"],
+                output["connected"],
+                output["enabled"],
+                output["pos"],
+                output["currentModeId"],
+                output["scale"],
+                output["rotation"],
+                output["replicationSource"],
+                output["size"],
+                output["sizeMM"],
+                output["modes"].as_array().and_then(|modes| modes
+                    .iter()
+                    .find(|mode| mode["id"] == output["currentModeId"]))
+            ])
+            .to_string(),
+        );
+    }
     topology.sort_unstable();
     Ok((
         State {
@@ -287,6 +299,56 @@ pub fn read(display: &Display) -> ResultType<State> {
     Ok(snapshot(&serde_json::from_slice(&doctor(&["--json"])?)?, display)?.0)
 }
 
+fn confirmed(data: &Value, display: Option<&Display>, identity: &str) -> ResultType<State> {
+    let Some(outputs) = data["outputs"].as_array() else {
+        bail!(UNSUPPORTED);
+    };
+    let mut targets = outputs.iter().filter(|output| {
+        output["connected"] == true
+            && output["enabled"] != false
+            && output["id"]
+                .as_i64()
+                .zip(output["name"].as_str())
+                .is_some_and(|(id, name)| super::token(("kde", id, name)) == identity)
+    });
+    let Some(target) = targets.next() else {
+        bail!(STALE);
+    };
+    if targets.next().is_some() {
+        bail!(UNSUPPORTED);
+    }
+    // Confirm capability on this snapshot before classifying capture mapping lag.
+    let (state, _) = state_for(outputs, target)?;
+    if state.identity != identity {
+        bail!(STALE);
+    }
+    let Some(display) = display else {
+        bail!(SnapshotChanged);
+    };
+    let mut captured = outputs
+        .iter()
+        .filter(|output| matches_capture(output, display));
+    let selected = captured.next();
+    if captured.next().is_some() {
+        bail!(UNSUPPORTED);
+    }
+    match selected {
+        Some(output) if output["id"] == target["id"] && output["name"] == target["name"] => {
+            Ok(state)
+        }
+        None if display.name.is_empty() => bail!(SnapshotChanged),
+        _ => bail!(STALE),
+    }
+}
+
+pub fn read_confirmed(display: Option<&Display>, identity: &str) -> ResultType<State> {
+    confirmed(
+        &serde_json::from_slice(&doctor(&["--json"])?)?,
+        display,
+        identity,
+    )
+}
+
 pub fn apply(display: &Display, percent: f64, expected: &str) -> ResultType<State> {
     let data = serde_json::from_slice(&doctor(&["--json"])?)?;
     let (state, id) = snapshot(&data, display)?;
@@ -396,10 +458,26 @@ mod tests {
             origin: (0, 0),
             size: (3840, 2160),
         };
+        let identity = snapshot(&json!({"outputs": [output(1, 0)]}), &display)
+            .unwrap()
+            .0
+            .identity;
         assert!(snapshot(&json!({"outputs": [output(1, 0), output(2, 0)]}), &display).is_err());
         let mut mirror = output(2, 2560);
         mirror["replicationSource"] = json!(1);
         assert!(snapshot(&json!({"outputs": [output(1, 0), mirror]}), &display).is_err());
+        display.origin = (-1, 0);
+        for data in [
+            json!({"outputs": [output(1, 0), output(2, 0)]}),
+            json!({"outputs": [output(1, 0), mirror]}),
+        ] {
+            for capture in [Some(&display), None] {
+                assert!(confirmed(&data, capture, &identity)
+                    .unwrap_err()
+                    .is::<crate::platform::display_scale::Unsupported>());
+            }
+        }
+        display.origin = (0, 0);
 
         let mut data = json!({"outputs": [output(1, 0), output(2, 0), output(3, 2560)]});
         display.name = "DP-1".into();
@@ -547,6 +625,45 @@ mod tests {
                 );
             }
         }
+        let mut capture = Display {
+            name: String::new(),
+            origin: display.origin,
+            size: display.size,
+        };
+        let mut other = output.clone();
+        other["id"] = json!(2);
+        other["name"] = json!("DP-2");
+        other["pos"]["x"] = json!(1920);
+        let mut data = json!({"outputs": [output.clone(), other]});
+        for capture in [Some(&capture), None] {
+            assert!(confirmed(&data, capture, &before.identity)
+                .unwrap_err()
+                .is::<SnapshotChanged>());
+        }
+        capture.size = (1440, 2560);
+        assert!(confirmed(&data, Some(&capture), &before.identity).is_ok());
+        for name in ["", "missing"] {
+            capture.name = name.into();
+            capture.origin = (1920, 0);
+            assert_eq!(
+                confirmed(&data, Some(&capture), &before.identity)
+                    .unwrap_err()
+                    .to_string(),
+                STALE
+            );
+        }
+        for key in ["connected", "enabled"] {
+            data["outputs"][0][key] = json!(false);
+            for capture in [Some(&display), None] {
+                assert_eq!(
+                    confirmed(&data, capture, &before.identity)
+                        .unwrap_err()
+                        .to_string(),
+                    STALE
+                );
+            }
+            data["outputs"][0][key] = json!(true);
+        }
         output["id"] = json!(42);
         assert_ne!(
             snapshot(&json!({"outputs": [output.clone()]}), &display)
@@ -555,5 +672,13 @@ mod tests {
                 .identity,
             before.identity
         );
+        for capture in [Some(&display), None] {
+            assert_eq!(
+                confirmed(&json!({"outputs": [output]}), capture, &before.identity)
+                    .unwrap_err()
+                    .to_string(),
+                STALE
+            );
+        }
     }
 }

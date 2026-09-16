@@ -37,7 +37,8 @@ class DisplaySettingsTarget {
   final FFI _ffi;
   final PeerInfo _peer;
   final int _index;
-  final Future<DisplayScaleState> Function(int, double, String) _requestScale;
+  final Future<DisplayScaleState> Function(int, double, String, String)
+      _requestScale;
   Display _display;
   String? _confirmedToken;
   DisplayScaleState? _nativeState;
@@ -82,7 +83,7 @@ class DisplaySettingsTarget {
     if (token == null) throw _stale;
     // Capture updates must match the last confirmed native snapshot before
     // allowing another write.
-    final current = await _requestScale(_index, 0, '');
+    final current = await _requestScale(_index, 0, '', '');
     _validateState(current);
     if (current.token != token || !identical(selected, _selected())) {
       throw _stale;
@@ -106,7 +107,8 @@ class DisplaySettingsTarget {
     if (_pendingResolution != null || (percent == 0 && _nativeState != null)) {
       if (percent != 0) throw _stale;
       final selected = _selected();
-      final state = await _requestScale(_index, 0, '');
+      final state = await _requestScale(_index, 0, '',
+          _pendingResolution == null ? '' : _nativeState!.identity);
       _validateState(state,
           allowResolutionChange: _pendingResolution != null);
       if (!identical(selected, _selected())) throw _stale;
@@ -124,7 +126,7 @@ class DisplaySettingsTarget {
     await _check();
     final selected = _selected();
     if (!identical(_display, selected)) throw _stale;
-    final state = await _requestScale(_index, percent, token);
+    final state = await _requestScale(_index, percent, token, '');
     if (percent == 0 && !identical(selected, _selected())) throw _stale;
     _validateState(state);
     _nativeState = state;
@@ -149,28 +151,33 @@ class DisplaySettingsTarget {
     final elapsed = Stopwatch()..start();
     const timeout = Duration(seconds: 10);
     while (true) {
+      final remaining = timeout - elapsed.elapsed;
+      if (remaining <= Duration.zero) {
+        throw const DisplayScaleError(
+            'Display settings timed out. Refresh and try again.');
+      }
       final selected = _selected();
-      final DisplayScaleState state;
+      DisplayScaleState? state;
       try {
-        state = await _requestScale(_index, 0, '')
-            .timeout(timeout - elapsed.elapsed);
+        state = await _requestScale(_index, 0, '', _nativeState!.identity)
+            .timeout(remaining);
       } on TimeoutException {
         throw const DisplayScaleError(
             'Display settings timed out. Refresh and try again.');
+      } on DisplayScaleError catch (error) {
+        if (error.code != 'snapshot_changed') rethrow;
       }
       _selected();
-      _validateState(state, allowResolutionChange: true);
-      if (state.resolution == resolution &&
-          identical(selected, _selected())) {
-        _display = selected;
-        _nativeState = state;
-        _confirmedToken = state.token;
-        _pendingResolution = null;
-        return state;
-      }
-      if (elapsed.elapsed >= timeout) {
-        throw const DisplayScaleError(
-            'Display settings timed out. Refresh and try again.');
+      if (state != null) {
+        _validateState(state, allowResolutionChange: true);
+        if (state.resolution == resolution &&
+            identical(selected, _selected())) {
+          _display = selected;
+          _nativeState = state;
+          _confirmedToken = state.token;
+          _pendingResolution = null;
+          return state;
+        }
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
@@ -190,14 +197,16 @@ Future<void> showDisplaySettingsDialog(
   final displayIndex = pi.currentDisplay;
   final target = DisplaySettingsTarget(
       ffi,
-      (display, percent, token) => DisplayScaleRequests.request(
-          ffi.sessionId.toString(),
-          (requestId) => bind.sessionRequestDisplayScale(
-              sessionId: ffi.sessionId,
-              requestId: requestId,
-              display: display,
-              percent: percent,
-              token: token)));
+      (display, percent, token, expectedIdentity) =>
+          DisplayScaleRequests.request(
+              ffi.sessionId.toString(),
+              (requestId) => bind.sessionRequestDisplayScale(
+                  sessionId: ffi.sessionId,
+                  requestId: requestId,
+                  display: display,
+                  percent: percent,
+                  token: token,
+                  expectedIdentity: expectedIdentity)));
   void showError(String message) => msgBox(
       ffi.sessionId,
       'custom-nook-nocancel-hasclose',

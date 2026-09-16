@@ -610,6 +610,8 @@ message DisplayScaleRequest {
   // Zero queries capabilities. A change requires the token from a fresh query.
   double percent = 3;
   string token = 4;
+  // Bind post-change readback to the previously confirmed display.
+  string expected_identity = 5;
 }
 
 message SwitchDisplay {

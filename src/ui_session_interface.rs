@@ -1563,9 +1563,9 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(message));
     }
 
-    pub fn request_display_scale(&self, request_id: String, display: i32, percent: f64, token: String) {
+    pub fn request_display_scale(&self, request_id: String, display: i32, percent: f64, token: String, expected_identity: String) {
         let mut misc = Misc::new();
-        misc.set_display_scale_request(DisplayScaleRequest { request_id, display, percent, token, ..Default::default() });
+        misc.set_display_scale_request(DisplayScaleRequest { request_id, display, percent, token, expected_identity, ..Default::default() });
         let mut message = Message::new();
         message.set_misc(misc);
         self.send(Data::Message(message));

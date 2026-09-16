@@ -1,4 +1,4 @@
-use super::{layout, percent, Display, State, TIMEOUT, UNSUPPORTED};
+use super::{layout, percent, Display, SnapshotChanged, State, STALE, TIMEOUT, UNSUPPORTED};
 use dbus::{
     arg::{PropMap, Variant},
     blocking::{stdintf::org_freedesktop_dbus::Properties, Connection},
@@ -26,7 +26,7 @@ fn mode(monitor: &Monitor) -> ResultType<&Mode> {
         .ok_or_else(|| hbb_common::anyhow::anyhow!(UNSUPPORTED))
 }
 
-fn selected(current: &Current, display: &Display) -> ResultType<usize> {
+fn matching(current: &Current, display: &Display) -> ResultType<Vec<usize>> {
     let mut matches = Vec::new();
     for (i, logical) in current.2.iter().enumerate() {
         if logical.5.len() != 1 {
@@ -49,6 +49,11 @@ fn selected(current: &Current, display: &Display) -> ResultType<usize> {
             matches.push(i);
         }
     }
+    Ok(matches)
+}
+
+fn selected(current: &Current, display: &Display) -> ResultType<usize> {
+    let matches = matching(current, display)?;
     if matches.len() != 1 {
         bail!(UNSUPPORTED);
     }
@@ -57,6 +62,10 @@ fn selected(current: &Current, display: &Display) -> ResultType<usize> {
 
 fn state(current: &Current, display: &Display) -> ResultType<(State, usize)> {
     let index = selected(current, display)?;
+    Ok((state_at(current, index)?, index))
+}
+
+fn state_at(current: &Current, index: usize) -> ResultType<State> {
     if flag(&current.3, "global-scale-required") && current.2.len() > 1 {
         bail!(UNSUPPORTED);
     }
@@ -85,18 +94,15 @@ fn state(current: &Current, display: &Display) -> ResultType<(State, usize)> {
     if !options.contains(&value) {
         bail!(UNSUPPORTED);
     }
-    Ok((
-        State {
-            identity: super::token(("gnome", &monitor.0)),
-            resolution,
-            percent: value,
-            custom: None,
-            recommended: percent(mode.4).filter(|p| options.contains(p)),
-            options,
-            token: super::token((current.0, &monitor.0, &mode.0, logical.2.to_bits())),
-        },
-        index,
-    ))
+    Ok(State {
+        identity: super::token(("gnome", &monitor.0)),
+        resolution,
+        percent: value,
+        custom: None,
+        recommended: percent(mode.4).filter(|p| options.contains(p)),
+        options,
+        token: super::token((current.0, &monitor.0, &mode.0, logical.2.to_bits())),
+    })
 }
 
 fn current(connection: &Connection) -> ResultType<Current> {
@@ -120,6 +126,44 @@ fn current(connection: &Connection) -> ResultType<Current> {
 
 pub fn read(connection: &Connection, display: &Display) -> ResultType<State> {
     Ok(state(&current(connection)?, display)?.0)
+}
+
+fn confirmed(current: &Current, display: Option<&Display>, identity: &str) -> ResultType<State> {
+    let mut targets = current.2.iter().enumerate().filter(|(_, logical)| {
+        logical
+            .5
+            .iter()
+            .any(|spec| super::token(("gnome", spec)) == identity)
+    });
+    let Some((index, logical)) = targets.next() else {
+        bail!(STALE);
+    };
+    if targets.next().is_some() || logical.5.len() != 1 {
+        bail!(UNSUPPORTED);
+    }
+    // Validate the same native target before interpreting missing capture geometry
+    // as a lagging snapshot rather than unavailable scaling.
+    let state = state_at(current, index)?;
+    if state.identity != identity {
+        bail!(STALE);
+    }
+    let Some(display) = display else {
+        bail!(SnapshotChanged);
+    };
+    match matching(current, display)?.as_slice() {
+        [selected] if *selected == index => Ok(state),
+        [] if display.name.is_empty() => bail!(SnapshotChanged),
+        [] | [_] => bail!(STALE),
+        _ => bail!(UNSUPPORTED),
+    }
+}
+
+pub fn read_confirmed(
+    connection: &Connection,
+    display: Option<&Display>,
+    identity: &str,
+) -> ResultType<State> {
+    confirmed(&current(connection)?, display, identity)
 }
 
 fn logical_size(current: &Current, logical: &Logical, scale: f64) -> ResultType<(i32, i32)> {
@@ -348,6 +392,9 @@ mod tests {
         assert_ne!(before.token, state(&current, &display).unwrap().0.token);
         current.2[0].0 = 1920;
         assert!(state(&current, &display).is_err());
+        assert!(confirmed(&current, Some(&display), &before.identity)
+            .unwrap_err()
+            .is::<crate::platform::display_scale::Unsupported>());
     }
 
     #[test]
@@ -423,13 +470,29 @@ mod tests {
             origin: (0, 0),
             size: (3840, 2160),
         };
+        let identity = state(&current, &display).unwrap().0.identity;
+        let capture = Display {
+            name: String::new(),
+            origin: (-1, 0),
+            size: display.size,
+        };
         current
             .3
             .insert("global-scale-required".into(), Variant(Box::new(true)));
         assert!(state(&current, &display).is_err());
+        for capture in [Some(&capture), None] {
+            assert!(confirmed(&current, capture, &identity)
+                .unwrap_err()
+                .is::<crate::platform::display_scale::Unsupported>());
+        }
         current.3.clear();
         current.2[0].5.push(current.1[1].0.clone());
         assert!(state(&current, &display).is_err());
+        for capture in [Some(&capture), None] {
+            assert!(confirmed(&current, capture, &identity)
+                .unwrap_err()
+                .is::<crate::platform::display_scale::Unsupported>());
+        }
     }
 
     #[test]
@@ -449,8 +512,55 @@ mod tests {
         let after = state(&current, &display).unwrap().0;
         assert_eq!(after.identity, before.identity);
         assert_eq!(after.resolution, (1440, 2560));
+        assert_eq!(
+            confirmed(&current, Some(&display), &before.identity)
+                .unwrap()
+                .resolution,
+            after.resolution
+        );
+        let mut capture = Display {
+            name: String::new(),
+            origin: display.origin,
+            size: display.size,
+        };
+        for capture in [Some(&capture), None] {
+            assert!(confirmed(&current, capture, &before.identity)
+                .unwrap_err()
+                .is::<SnapshotChanged>());
+        }
+        capture.size = (1440, 2560);
+        assert!(confirmed(&current, Some(&capture), &before.identity).is_ok());
+        capture.origin = (1920, 0);
+        capture.size = (3840, 2160);
+        for name in ["", "missing"] {
+            capture.name = name.into();
+            assert_eq!(
+                confirmed(&current, Some(&capture), &before.identity)
+                    .unwrap_err()
+                    .to_string(),
+                STALE
+            );
+        }
+        let removed = current.2.remove(0);
+        for capture in [Some(&display), None] {
+            assert_eq!(
+                confirmed(&current, capture, &before.identity)
+                    .unwrap_err()
+                    .to_string(),
+                STALE
+            );
+        }
+        current.2.insert(0, removed);
         current.1[0].0.3 = "replacement".into();
         current.2[0].5[0] = current.1[0].0.clone();
         assert_ne!(state(&current, &display).unwrap().0.identity, after.identity);
+        for capture in [Some(&display), None] {
+            assert_eq!(
+                confirmed(&current, capture, &before.identity)
+                    .unwrap_err()
+                    .to_string(),
+                STALE
+            );
+        }
     }
 }
