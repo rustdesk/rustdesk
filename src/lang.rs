@@ -146,17 +146,20 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
         }
     }
     if lang.is_empty() {
-        // pt_PT on Linux, pt-PT on mac, pt_PT on Android
+        // pt_PT on Linux, pt-PT on mac, pt_PT on Android.
+        // Per CLDR locale inheritance, every Portuguese-speaking locale
+        // besides bare "pt" and Brazil's own variants (pt-BR/pt_BR) has
+        // pt-PT as its parent (Angola, Mozambique, Cape Verde, etc.),
+        // so it should resolve to European Portuguese.
         if locale.starts_with("pt") {
-            lang = (if locale.starts_with("pt-pt") || locale.starts_with("pt_pt") {
-                "pt-pt"
-            } else {
+            lang = (if locale == "pt" || locale.starts_with("pt-br") || locale.starts_with("pt_br") {
                 "pt-br"
+            } else {
+                "pt-pt"
             })
             .to_owned();
         }
     }
-
     if lang.is_empty() {
         lang = locale
             .split("-")
@@ -369,6 +372,8 @@ mod test {
         assert_eq!(f("", "pt_PT", false), "pt-pt");
         assert_eq!(f("", "pt-BR", false), "pt-br");
         assert_eq!(f("", "pt_BR", false), "pt-br");
+        assert_eq!(f("", "pt-AO", false), "pt-pt");
+        assert_eq!(f("", "pt-MZ", false), "pt-pt");
     }
 
     #[test]
