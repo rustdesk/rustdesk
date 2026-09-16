@@ -46,7 +46,10 @@ void main() {
                   initialScale: 2,
                   supportedResolutions: const [(1920, 1080), (2560, 1600)],
                   onCancel: close,
-                  onApply: (w, h, scale) => applied = [w, h, scale]),
+                  onApply: (w, h, scale) {
+                    applied = [w, h, scale];
+                    return null;
+                  }),
             ),
         clickMaskDismiss: true,
         backDismiss: true);
@@ -108,7 +111,10 @@ void main() {
           outputPixelRatio: 2,
           localResolution: (3200, 1800),
           onCancel: () {},
-          onApply: (w, h, scale) => applied = [w, h, scale]),
+          onApply: (w, h, scale) {
+            applied = [w, h, scale];
+            return null;
+          }),
     ))));
     await tester.ensureVisible(find.text('resolution_fit_local_tip'));
     await tester.tap(find.text('resolution_fit_local_tip'));
@@ -136,7 +142,10 @@ void main() {
         width: dimensions.width,
         height: dimensions.height,
         onCancel: () {},
-        onApply: (w, h, scale) => applied = [w, h, scale],
+        onApply: (w, h, scale) {
+          applied = [w, h, scale];
+          return null;
+        },
       ),
     )))));
     await tester.ensureVisible(find.text('Apply'));
@@ -175,8 +184,7 @@ void main() {
           {List<(int, int)>? supportedResolutions,
           bool allowArbitrarySize = true,
           bool excludeInputSemantics = false,
-          (int, int)? localResolution,
-          double localPixelRatio = 2}) =>
+          (int, int)? localResolution}) =>
       tester.pumpWidget(MaterialApp(
           home: Scaffold(
               body: AlertDialog(
@@ -190,7 +198,6 @@ void main() {
               allowArbitrarySize: allowArbitrarySize,
               excludeInputSemantics: excludeInputSemantics,
               localResolution: localResolution,
-              localPixelRatio: localPixelRatio,
               minDimension: 320,
               maxDimension: 4096,
               width: 2560,
@@ -198,7 +205,10 @@ void main() {
               usesLogicalSize: allowArbitrarySize,
               scales: allowArbitrarySize ? const [1, 2] : const [1],
               initialScale: allowArbitrarySize ? 2 : 1,
-              onApply: apply,
+              onApply: (w, h, scale) {
+                apply(w, h, scale);
+                return null;
+              },
               onCancel: () {},
             )),
       ))));
@@ -361,7 +371,7 @@ void main() {
                 usesLogicalSize: true,
                 scales: const [1, 2],
                 onCancel: () {},
-                onApply: (_, __, ___) {}))));
+                onApply: (_, __, ___) => null))));
     expect(tester.widget<TextField>(width).controller!.text, '1441');
     expect(tester.widget<TextField>(height).controller!.text, '901');
     expect(tester.widget<TextButton>(textButton('Reset changes')).onPressed,
@@ -369,27 +379,33 @@ void main() {
     expect(applyButton().onPressed, isNull);
   });
 
-  testWidgets('local fit matches desktop size on high and fractional densities',
+  testWidgets('local fit matches output pixels and preserves rendering choice',
       (tester) async {
-    for (final (density, pixels, expected) in [
-      (3.0, (1440, 3120), [960, 2080, 2]),
-      (1.25, (1920, 1080), [1536, 864, 1]),
-      (double.nan, (1920, 1080), [1920, 1080, 1]),
+    addTearDown(tester.view.display.reset);
+    for (final (density, pixels, scale) in [
+      (3.0, (1440, 3120), 2),
+      (1.25, (1920, 1080), 2),
+      (3.0, (1920, 1080), 1),
     ]) {
+      tester.view.display.devicePixelRatio = density;
       List<int>? applied;
       await openEditor(tester, (w, h, scale) => applied = [w, h, scale],
-          localResolution: pixels, localPixelRatio: density);
+          localResolution: pixels);
+      if (scale == 1) {
+        await tester.ensureVisible(find.text('Standard'));
+        await tester.tap(find.text('Standard'));
+        await tester.pump();
+      }
       await tester.ensureVisible(find.text('resolution_fit_local_tip'));
       await tester.tap(find.text('resolution_fit_local_tip'));
       await tester.pump();
       await tester.ensureVisible(find.text('Apply'));
       await tester.tap(find.text('Apply'));
-      expect(applied, expected);
+      expect(applied, [pixels.$1, pixels.$2, scale]);
     }
   });
 
-  testWidgets(
-      'fit uses full display pixels and density rather than window size',
+  testWidgets('fit uses full display output pixels rather than window size',
       (tester) async {
     tester.view.display.size = const Size(3048, 2032);
     tester.view.display.devicePixelRatio = 2;
@@ -528,9 +544,11 @@ void main() {
                     initialScale: 2,
                     defaultResolution: (1920, 1080, 1),
                     localResolution: (1440, 3120),
-                    localPixelRatio: 2,
                     onCancel: () {},
-                    onApply: (w, h, scale) => applied = [w, h, scale])),
+                    onApply: (w, h, scale) {
+                      applied = [w, h, scale];
+                      return null;
+                    })),
           ))));
       expect(tester.takeException(), isNull);
       final local = textButton('Fit local resolution');

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/virtual_display_model.dart';
 import 'package:flutter_hbb/utils/virtual_display.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
@@ -35,6 +36,57 @@ class _DisplayModel extends FfiModel {
 }
 
 void main() {
+  const mode = {'display_id': 42, 'width': 2560, 'height': 1600, 'scale': 2};
+  Future<void> resize(Future<void> Function(String) send,
+          {Duration timeout = const Duration(seconds: 1)}) =>
+      VirtualDisplayRequests.request('session', send,
+          displayId: 42, width: 2560, height: 1600, scale: 2, timeout: timeout);
+  String reply(String requestId) =>
+      jsonEncode({'request_id': requestId, ...mode});
+
+  test('resize waits for its native ack and ignores expired or foreign replies',
+      () async {
+    late String expiredId;
+    await expectLater(
+        resize((id) async {
+          expiredId = id;
+        }, timeout: Duration.zero),
+        throwsA(isA<VirtualDisplayError>().having(
+            (error) => error.message,
+            'message',
+            'Display settings timed out. Refresh and try again.')));
+    late String requestId;
+    var completed = false;
+    final request = resize((id) async {
+      requestId = id;
+    }).then((_) => completed = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+    VirtualDisplayRequests.handle('session', reply(expiredId));
+    VirtualDisplayRequests.handle('other-session', reply(requestId));
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+    VirtualDisplayRequests.handle('session', reply(requestId));
+    await request;
+    expect(completed, isTrue);
+    VirtualDisplayRequests.handle('session', reply(requestId));
+  });
+
+  test('host errors and mismatched native modes cannot acknowledge a resize',
+      () async {
+    for (final (response, message) in [
+      ({'error': 'host refused'}, 'host refused'),
+      ({...mode, 'width': 1920}, 'Failed to resize macOS virtual display'),
+    ]) {
+      final request = resize((id) async => VirtualDisplayRequests.handle(
+          'session', jsonEncode({'request_id': id, ...response})));
+      await expectLater(
+          request,
+          throwsA(isA<VirtualDisplayError>()
+              .having((error) => error.message, 'message', message)));
+    }
+  });
+
   test(
       'logical requests convert current dimensions and bounds using native scale',
       () {

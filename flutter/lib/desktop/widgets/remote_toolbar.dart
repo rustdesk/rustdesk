@@ -2241,7 +2241,6 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
     }
     await showDisplaySettingsDialog(ffi,
         localResolution: localSize,
-        localPixelRatio: pixelRatio,
         onApplied: _onResolutionApplied);
   }
 

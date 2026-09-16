@@ -7,8 +7,18 @@ use super::linux::display_scale as backend;
 #[cfg(windows)]
 use super::windows::display_scale as backend;
 
-pub const UNSUPPORTED: &str =
-    "System scaling is unavailable for this display or desktop environment.";
+#[derive(Debug)]
+pub struct Unsupported;
+
+impl std::fmt::Display for Unsupported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("System scaling is unavailable for this display or desktop environment.")
+    }
+}
+
+impl std::error::Error for Unsupported {}
+
+pub const UNSUPPORTED: Unsupported = Unsupported;
 pub const STALE: &str = "Display settings changed. Reopen the resolution menu and try again.";
 
 #[derive(Debug, Serialize)]

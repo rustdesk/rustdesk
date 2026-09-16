@@ -3827,11 +3827,8 @@ impl Connection {
                     }
                     #[cfg(target_os = "macos")]
                     Some(misc::Union::VirtualDisplayMode(mode)) => {
-                        if !self.view_camera && self.peer_keyboard_enabled() {
-                            display_service::virtual_display::resize(self.inner.clone(), &mode.display_id.to_string(), &Resolution {
-                                width: mode.width, height: mode.height, ..Default::default()
-                            }, Some(mode.scale));
-                        }
+                        let allowed = !self.view_camera && self.peer_keyboard_enabled();
+                        display_service::virtual_display::configure(self.inner.clone(), mode, allowed);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::ChangeResolution(r)) => {
@@ -4646,7 +4643,7 @@ impl Connection {
                     #[cfg(target_os = "macos")]
                     if crate::virtual_display_manager::owns_display(&name) {
                         if self.peer_keyboard_enabled() {
-                            display_service::virtual_display::resize(self.inner.clone(), &name, r, None);
+                            display_service::virtual_display::resize(self.inner.clone(), &name, r);
                         }
                         return;
                     }
@@ -6009,6 +6006,7 @@ impl Connection {
             Some(misc::Union::VirtualDisplayMode(_)) => "misc.virtual_display_mode",
             Some(misc::Union::DisplayScaleRequest(_)) => "misc.display_scale_request",
             Some(misc::Union::DisplayScaleResponse(_)) => "misc.display_scale_response",
+            Some(misc::Union::VirtualDisplayModeResponse(_)) => "misc.virtual_display_mode_response",
             Some(misc::Union::MessageQuery(_)) => "misc.message_query",
             Some(misc::Union::FollowCurrentDisplay(_)) => "misc.follow_current_display",
             Some(misc::Union::SwitchSidesRequest(_)) => "misc.switch_sides_request",

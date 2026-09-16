@@ -932,6 +932,10 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event("display_scale", &[("data", data)], &[]);
     }
 
+    fn handle_virtual_display_mode(&self, data: &str) {
+        self.push_event("virtual_display_mode", &[("data", data)], &[]);
+    }
+
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
         let mut msg_vec = Vec::new();
         let mut sessions = sessions;

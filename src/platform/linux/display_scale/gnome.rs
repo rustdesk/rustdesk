@@ -1,4 +1,4 @@
-use super::{percent, Display, State, TIMEOUT, UNSUPPORTED};
+use super::{layout, percent, Display, State, TIMEOUT, UNSUPPORTED};
 use dbus::{
     arg::{PropMap, Variant},
     blocking::{stdintf::org_freedesktop_dbus::Properties, Connection},
@@ -122,6 +122,42 @@ pub fn read(connection: &Connection, display: &Display) -> ResultType<State> {
     Ok(state(&current(connection)?, display)?.0)
 }
 
+fn logical_size(current: &Current, logical: &Logical, scale: f64) -> ResultType<(i32, i32)> {
+    if !scale.is_finite() || scale <= 0.0 || logical.3 > 7 {
+        bail!(UNSUPPORTED);
+    }
+    let mut size = None;
+    for spec in &logical.5 {
+        let Some(monitor) = current.1.iter().find(|m| &m.0 == spec) else {
+            bail!(UNSUPPORTED);
+        };
+        let mode = mode(monitor)?;
+        let dimensions = (mode.1, mode.2);
+        if dimensions.0 <= 0 || dimensions.1 <= 0 || size.is_some_and(|size| size != dimensions) {
+            bail!(UNSUPPORTED);
+        }
+        size = Some(dimensions);
+    }
+    let Some((width, height)) = size else {
+        bail!(UNSUPPORTED);
+    };
+    let (width, height) = if logical.3 % 2 == 1 {
+        (height, width)
+    } else {
+        (width, height)
+    };
+    let width = (f64::from(width) / scale).round();
+    let height = (f64::from(height) / scale).round();
+    if !width.is_finite()
+        || !height.is_finite()
+        || !(1.0..=f64::from(i32::MAX)).contains(&width)
+        || !(1.0..=f64::from(i32::MAX)).contains(&height)
+    {
+        bail!(UNSUPPORTED);
+    }
+    Ok((width as i32, height as i32))
+}
+
 fn configuration(
     current: &Current,
     index: usize,
@@ -166,35 +202,26 @@ fn configuration(
         bail!(UNSUPPORTED);
     }
     if layout == 1 {
-        let Some(monitor) = current.1.iter().find(|m| m.0 == target.5[0]) else {
-            bail!(UNSUPPORTED);
-        };
-        let mode = mode(monitor)?;
-        let size = if target.3 % 2 == 1 {
-            (mode.2, mode.1)
-        } else {
-            (mode.1, mode.2)
-        };
-        let old = (
-            (size.0 as f64 / target.2).round() as i32,
-            (size.1 as f64 / target.2).round() as i32,
-        );
-        let new = (
-            (size.0 as f64 / scale).round() as i32,
-            (size.1 as f64 / scale).round() as i32,
-        );
-        // Keep adjacent rows/columns attached when the target's logical size changes.
-        // Mutter verifies the full layout before any settings are changed.
-        for (i, logical) in logicals.iter_mut().enumerate() {
-            if i == index {
-                continue;
-            }
-            if logical.0 >= target.0 + old.0 {
-                logical.0 += new.0 - old.0;
-            }
-            if logical.1 >= target.1 + old.1 {
-                logical.1 += new.1 - old.1;
-            }
+        let rectangles = current
+            .2
+            .iter()
+            .map(|logical| {
+                let (width, height) = logical_size(current, logical, logical.2)?;
+                Ok(layout::Rect {
+                    x: logical.0,
+                    y: logical.1,
+                    width,
+                    height,
+                })
+            })
+            .collect::<ResultType<Vec<_>>>()?;
+        let size = logical_size(current, target, scale)?;
+        for (logical, rect) in logicals
+            .iter_mut()
+            .zip(layout::resize(&rectangles, index, size)?)
+        {
+            logical.0 = rect.x;
+            logical.1 = rect.y;
         }
     }
     let mut props = PropMap::new();
@@ -357,7 +384,7 @@ mod tests {
 
     #[test]
     fn resizing_preserves_modes_color_rotation_and_adjacent_layout() {
-        let current = fixture();
+        let mut current = fixture();
         let (config, _) = configuration(&current, 0, 1.5).unwrap();
         assert_eq!(config[0].2, 1.5);
         assert_eq!((config[1].0, config[1].1, config[1].2), (2560, 0, 2.0));
@@ -366,6 +393,26 @@ mod tests {
         assert!(flag(&config[0].5[0].2, "underscanning"));
         assert_eq!(config[0].5[0].2["color-mode"].0.as_u64(), Some(1));
         assert_eq!(current.2[1].0, 1920);
+
+        let mut extra = fixture();
+        let mut monitor = extra.1.remove(0);
+        monitor.0 .0 = "HDMI-1".into();
+        monitor.0 .3 = "third".into();
+        current.2.push((
+            0,
+            1080,
+            2.0,
+            0,
+            false,
+            vec![monitor.0.clone()],
+            PropMap::new(),
+        ));
+        current.1.push(monitor);
+        current.1[1].1[0].2 = 4320;
+        current.1[0].1[0].5.push(3.0);
+        let (config, _) = configuration(&current, 0, 3.0).unwrap();
+        assert_eq!((config[1].0, config[1].1), (1920, 0));
+        assert_eq!((config[2].0, config[2].1), (0, 720));
     }
 
     #[test]

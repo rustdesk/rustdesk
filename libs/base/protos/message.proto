@@ -599,6 +599,7 @@ message VirtualDisplayMode {
   int32 width = 2;
   int32 height = 3;
   uint32 scale = 4;
+  string request_id = 5;
 }
 
 message SupportedResolutions { repeated Resolution resolutions = 1; }
@@ -875,6 +876,7 @@ message Misc {
     VirtualDisplayMode virtual_display_mode = 39;
     DisplayScaleRequest display_scale_request = 40;
     string display_scale_response = 41;
+    string virtual_display_mode_response = 42;
   }
 }
 

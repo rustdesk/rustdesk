@@ -59,6 +59,10 @@ class _DisplayScaleState extends State<DisplayScale> {
   Widget build(BuildContext context) {
     final current = widget.controller.current;
     final translate = widget.translate;
+    if (widget.controller.unavailable) {
+      return Text(translate(
+          'System scaling is unavailable for this display or desktop environment.'));
+    }
     final hasCustom = current?.custom != null || widget.controller.customMode;
     return Column(
       mainAxisSize: MainAxisSize.min,

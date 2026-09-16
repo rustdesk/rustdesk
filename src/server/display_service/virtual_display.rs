@@ -3,9 +3,10 @@ use crate::{
     virtual_display_manager,
 };
 use base::message_proto::{
-    DisplayInfo, Message, MessageBox, PeerInfo, Resolution, ToggleVirtualDisplay,
+    DisplayInfo, Message, MessageBox, Misc, PeerInfo, Resolution, ToggleVirtualDisplay,
+    VirtualDisplayMode,
 };
-use hbb_common::{log, tokio, ResultType};
+use hbb_common::{bail, log, tokio, ResultType};
 use std::sync::Arc;
 
 pub(in crate::server) fn get_platform_additions() -> serde_json::Map<String, serde_json::Value> {
@@ -100,24 +101,14 @@ pub(in crate::server) fn resize(
     mut connection: ConnInner,
     name: &str,
     resolution: &Resolution,
-    scale: Option<u32>,
 ) {
     // Queue before spawning so disconnect cleanup cannot overtake this request.
-    let pending = match scale {
-        None => virtual_display_manager::resize(
-            connection.id(),
-            name,
-            resolution.width,
-            resolution.height,
-        ),
-        Some(scale) => virtual_display_manager::configure(
-            connection.id(),
-            name,
-            resolution.width,
-            resolution.height,
-            scale,
-        ),
-    };
+    let pending = virtual_display_manager::resize(
+        connection.id(),
+        name,
+        resolution.width,
+        resolution.height,
+    );
     let pending = match pending {
         Ok(pending) => pending,
         Err(error) => {
@@ -131,6 +122,58 @@ pub(in crate::server) fn resize(
         if let Err(error) = result {
             connection.send(Arc::new(error_message("Resolution", error)));
         }
+    });
+}
+
+pub(in crate::server) fn configure(
+    mut connection: ConnInner,
+    request: VirtualDisplayMode,
+    allowed: bool,
+) {
+    let display_id = request.display_id;
+    let pending = (|| {
+        if !allowed {
+            bail!("No permission to change display settings.");
+        }
+        if request.request_id.is_empty() || request.request_id.len() > 64 {
+            bail!("Failed to resize macOS virtual display");
+        }
+        virtual_display_manager::configure(
+            connection.id(),
+            &display_id.to_string(),
+            request.width,
+            request.height,
+            request.scale,
+        )
+    })();
+    tokio::spawn(async move {
+        let result: ResultType<_> = async {
+            let result = pending?.await?;
+            super::refresh_virtual_displays();
+            result?;
+            tokio::task::spawn_blocking(move || virtual_display_manager::display_mode(display_id))
+                .await?
+                .ok_or_else(|| hbb_common::anyhow::anyhow!("Display settings changed. Reopen the resolution menu and try again."))
+        }
+        .await;
+        let response = match result {
+            Ok(mode) => serde_json::json!({
+                "request_id": request.request_id,
+                "display_id": display_id,
+                "width": mode.width,
+                "height": mode.height,
+                "scale": mode.scale,
+            }),
+            Err(error) => {
+                log::debug!("Virtual display mode: {error}");
+                serde_json::json!({"request_id": request.request_id, "error": error.to_string()})
+            }
+        };
+        let mut misc = Misc::new();
+        misc.set_virtual_display_mode_response(response.to_string());
+        let mut message = Message::new();
+        message.set_misc(misc);
+        connection.send(Arc::new(message));
     });
 }
 
@@ -182,14 +225,12 @@ mod tests {
 
     #[tokio::test]
     async fn resize_validation_and_worker_errors_reach_the_requesting_connection() {
-        for (width, scale, expected) in [
+        for (width, expected) in [
             (
                 0,
-                Some(1),
-                "Virtual display dimensions must be between 320 and 4096",
+                "Virtual display dimensions must be between 1 and 4096 logical pixels",
             ),
-            (1920, Some(1), "Remote connection has closed"),
-            (1920, None, "Remote connection has closed"),
+            (1920, "Remote connection has closed"),
         ] {
             let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
             resize(
@@ -200,13 +241,41 @@ mod tests {
                     height: 1080,
                     ..Default::default()
                 },
-                scale,
             );
             let (_, message) = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
                 .await
                 .unwrap()
                 .unwrap();
             assert_error(&message, "Resolution", expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn configure_errors_return_correlated_results() {
+        for (allowed, expected) in [
+            (false, "No permission to change display settings."),
+            (true, "Remote connection has closed"),
+        ] {
+            let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+            configure(
+                ConnInner::new(i32::MIN, Some(sender), None),
+                VirtualDisplayMode {
+                    request_id: "mode-1".into(),
+                    width: 1920,
+                    height: 1080,
+                    scale: 1,
+                    ..Default::default()
+                },
+                allowed,
+            );
+            let (_, message) = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            let response: serde_json::Value =
+                serde_json::from_str(message.misc().virtual_display_mode_response()).unwrap();
+            assert_eq!(response["request_id"], "mode-1");
+            assert_eq!(response["error"], expected);
         }
     }
 

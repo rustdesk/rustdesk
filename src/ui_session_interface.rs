@@ -1553,10 +1553,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.set_custom_resolution(display);
     }
 
-    pub fn configure_virtual_display(&self, display_id: u32, width: i32, height: i32, scale: u32) {
+    pub fn configure_virtual_display(&self, request_id: String, display_id: u32, width: i32, height: i32, scale: u32) {
         let mut misc = Misc::new();
         misc.set_virtual_display_mode(VirtualDisplayMode {
-            display_id, width, height, scale, ..Default::default()
+            request_id, display_id, width, height, scale, ..Default::default()
         });
         let mut message = Message::new();
         message.set_misc(misc);
@@ -1704,6 +1704,7 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_displays(&self, displays: &Vec<DisplayInfo>);
     fn set_platform_additions(&self, data: &str);
     fn handle_display_scale(&self, _data: &str) {}
+    fn handle_virtual_display_mode(&self, _data: &str) {}
     fn on_connected(&self, conn_type: ConnType);
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);

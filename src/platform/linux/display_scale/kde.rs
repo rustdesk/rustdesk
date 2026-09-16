@@ -1,4 +1,4 @@
-use super::{percent, Display, State, UNSUPPORTED};
+use super::{layout, percent, Display, State, UNSUPPORTED};
 use hbb_common::{allow_err, bail, log, ResultType};
 use serde_json::Value;
 use std::{
@@ -141,9 +141,13 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
         bail!(UNSUPPORTED);
     }
     if output["replicationSource"].as_i64().unwrap_or(0) != 0
-        || outputs
-            .iter()
-            .any(|o| o["replicationSource"].as_i64() == Some(id))
+        || outputs.iter().any(|o| {
+            o["replicationSource"].as_i64() == Some(id)
+                || (o["id"] != output["id"]
+                    && o["connected"] == true
+                    && o["enabled"] != false
+                    && o["pos"] == output["pos"])
+        })
     {
         bail!(UNSUPPORTED);
     }
@@ -171,58 +175,109 @@ fn snapshot(data: &Value, display: &Display) -> ResultType<(State, i64)> {
     ))
 }
 
-fn arguments(data: &Value, id: i64, percent: f64) -> ResultType<Vec<String>> {
-    let Some(outputs) = data["outputs"].as_array() else {
-        bail!(UNSUPPORTED);
-    };
-    let Some(target) = outputs.iter().find(|o| o["id"].as_i64() == Some(id)) else {
-        bail!(UNSUPPORTED);
-    };
-    let Some(mode) = target["modes"]
+fn logical_size(output: &Value, scale: f64) -> ResultType<(i32, i32)> {
+    let Some(mode) = output["modes"]
         .as_array()
-        .and_then(|modes| modes.iter().find(|m| m["id"] == target["currentModeId"]))
+        .and_then(|modes| modes.iter().find(|m| m["id"] == output["currentModeId"]))
     else {
         bail!(UNSUPPORTED);
     };
-    let (Some(w), Some(h), Some(x), Some(y), Some(scale)) = (
+    let (Some(w), Some(h), Some(rotation)) = (
         mode["size"]["width"].as_f64(),
         mode["size"]["height"].as_f64(),
-        target["pos"]["x"].as_i64(),
-        target["pos"]["y"].as_i64(),
-        target["scale"].as_f64(),
+        output["rotation"].as_u64(),
     ) else {
         bail!(UNSUPPORTED);
     };
-    let (w, h) = if matches!(target["rotation"].as_u64(), Some(2 | 8 | 32 | 128)) {
+    if !matches!(rotation, 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128)
+        || !scale.is_finite()
+        || scale <= 0.0
+    {
+        bail!(UNSUPPORTED);
+    }
+    let (w, h) = if matches!(rotation, 2 | 8 | 32 | 128) {
         (h, w)
     } else {
         (w, h)
     };
-    let old = ((w / scale).round() as i64, (h / scale).round() as i64);
-    let new = (
-        (w * 100.0 / percent).round() as i64,
-        (h * 100.0 / percent).round() as i64,
-    );
-    let mut args = vec![format!("output.{id}.scale.{}", percent / 100.0)];
-    for output in outputs {
-        let (Some(other), Some(ox), Some(oy)) = (
-            output["id"].as_i64(),
-            output["pos"]["x"].as_i64(),
-            output["pos"]["y"].as_i64(),
-        ) else {
-            continue;
-        };
-        if other == id
-            || output["connected"] != true
-            || output["enabled"] == false
-            || output["replicationSource"].as_i64().unwrap_or(0) != 0
-        {
+    let (w, h) = ((w / scale).round(), (h / scale).round());
+    if !(1.0..=i32::MAX as f64).contains(&w) || !(1.0..=i32::MAX as f64).contains(&h) {
+        bail!(UNSUPPORTED);
+    }
+    Ok((w as i32, h as i32))
+}
+
+fn arguments(data: &Value, id: i64, percent: f64) -> ResultType<Vec<String>> {
+    let Some(outputs) = data["outputs"].as_array() else {
+        bail!(UNSUPPORTED);
+    };
+    let active: Vec<_> = outputs
+        .iter()
+        .filter(|o| o["connected"] == true && o["enabled"] != false)
+        .collect();
+    let mut ids: Vec<Vec<i64>> = Vec::new();
+    let mut rects: Vec<layout::Rect> = Vec::new();
+    for output in &active {
+        let source = output["replicationSource"].as_i64().unwrap_or(0);
+        if source != 0 {
+            if !active.iter().any(|o| {
+                o["id"].as_i64() == Some(source)
+                    && o["replicationSource"].as_i64().unwrap_or(0) == 0
+            }) {
+                bail!(UNSUPPORTED);
+            }
             continue;
         }
-        let nx = ox + if ox >= x + old.0 { new.0 - old.0 } else { 0 };
-        let ny = oy + if oy >= y + old.1 { new.1 - old.1 } else { 0 };
-        if (ox, oy) != (nx, ny) {
-            args.push(format!("output.{other}.position.{nx},{ny}"));
+        let (Some(other), Some(x), Some(y), Some(scale)) = (
+            output["id"].as_i64(),
+            output["pos"]["x"]
+                .as_i64()
+                .and_then(|v| i32::try_from(v).ok()),
+            output["pos"]["y"]
+                .as_i64()
+                .and_then(|v| i32::try_from(v).ok()),
+            output["scale"].as_f64(),
+        ) else {
+            bail!(UNSUPPORTED);
+        };
+        if other <= 0 || ids.iter().any(|group| group.contains(&other)) {
+            bail!(UNSUPPORTED);
+        }
+        let (width, height) = logical_size(output, scale)?;
+        // Older KScreen backends represent cloned outputs only by equal geometry.
+        if let Some(index) = rects
+            .iter()
+            .position(|r| (r.x, r.y, r.width, r.height) == (x, y, width, height))
+        {
+            ids[index].push(other);
+        } else {
+            ids.push(vec![other]);
+            rects.push(layout::Rect {
+                x,
+                y,
+                width,
+                height,
+            });
+        }
+    }
+    let Some(index) = ids.iter().position(|group| group.contains(&id)) else {
+        bail!(UNSUPPORTED);
+    };
+    if ids[index].len() != 1 {
+        bail!(UNSUPPORTED);
+    }
+    let Some(target) = active.iter().find(|o| o["id"].as_i64() == Some(id)) else {
+        bail!(UNSUPPORTED);
+    };
+    // Match KWin's scale quantization before rounding logical dimensions.
+    let scale = (percent / 100.0 * 120.0).round() / 120.0;
+    let next = layout::resize(&rects, index, logical_size(target, scale)?)?;
+    let mut args = vec![format!("output.{id}.scale.{scale}")];
+    for ((group, before), after) in ids.iter().zip(&rects).zip(next) {
+        if (before.x, before.y) != (after.x, after.y) {
+            for other in group {
+                args.push(format!("output.{other}.position.{},{}", after.x, after.y));
+            }
         }
     }
     Ok(args)
@@ -336,7 +391,7 @@ mod tests {
 
     #[test]
     fn rejects_ambiguous_capture_and_replication() {
-        let display = Display {
+        let mut display = Display {
             name: String::new(),
             origin: (0, 0),
             size: (3840, 2160),
@@ -345,6 +400,19 @@ mod tests {
         let mut mirror = output(2, 2560);
         mirror["replicationSource"] = json!(1);
         assert!(snapshot(&json!({"outputs": [output(1, 0), mirror]}), &display).is_err());
+
+        let mut data = json!({"outputs": [output(1, 0), output(2, 0), output(3, 2560)]});
+        display.name = "DP-1".into();
+        assert!(snapshot(&data, &display)
+            .unwrap_err()
+            .is::<crate::platform::display_scale::Unsupported>());
+        for key in ["enabled", "connected"] {
+            data["outputs"][1][key] = json!(false);
+            assert!(snapshot(&data, &display).is_ok());
+            data["outputs"][1][key] = json!(true);
+        }
+        display.name = "DP-3".into();
+        assert!(snapshot(&data, &display).is_ok());
     }
 
     #[test]
@@ -396,6 +464,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(args, ["output.2.scale.2"]);
+
+        let mut below = output(3, 0);
+        below["pos"]["y"] = json!(1440);
+        below["modes"][0]["size"]["width"] = json!(7680);
+        let mut replica = below.clone();
+        replica["id"] = json!(4);
+        replica["replicationSource"] = json!(3);
+        let mut data = json!({"outputs": [output(1, 0), output(2, 2560), below, replica]});
+        assert_eq!(
+            arguments(&data, 1, 200.0).unwrap(),
+            ["output.1.scale.2", "output.2.position.1920,0"]
+        );
+        data["outputs"][1]["currentModeId"] = json!("missing");
+        assert!(arguments(&data, 1, 200.0).is_err());
+
+        let mut data = json!({"outputs": [output(1, 0), output(2, 2560), output(3, 2560)]});
+        assert_eq!(
+            arguments(&data, 1, 200.0).unwrap(),
+            [
+                "output.1.scale.2",
+                "output.2.position.1920,0",
+                "output.3.position.1920,0"
+            ]
+        );
+        assert!(arguments(&data, 2, 200.0).is_err());
+        data["outputs"][0]["pos"]["x"] = json!(2560);
+        data["outputs"][1]["pos"]["x"] = json!(0);
+        data["outputs"][2]["pos"]["x"] = json!(0);
+        assert_eq!(arguments(&data, 1, 200.0).unwrap(), ["output.1.scale.2"]);
+        data["outputs"][2]["pos"]["x"] = json!(1);
+        assert!(arguments(&data, 1, 200.0).is_err());
+
+        let mut target = output(1, 0);
+        target["modes"][0]["size"] = json!({"width": 1922, "height": 1080});
+        target["scale"] = json!(1.0);
+        assert_eq!(
+            arguments(
+                &json!({"outputs": [target, output(2, 1922)]}),
+                1,
+                160.0 * (100.0 / 120.0)
+            )
+            .unwrap(),
+            [
+                "output.1.scale.1.3333333333333333",
+                "output.2.position.1442,0"
+            ]
+        );
     }
 
     #[test]

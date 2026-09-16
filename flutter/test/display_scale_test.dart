@@ -9,7 +9,7 @@ import 'package:flutter_hbb/models/display_scale_model.dart';
 import 'package:flutter_hbb/common.dart' as app;
 
 Widget _displaySettings({
-  required FutureOr<void> Function(int, int, int) onApply,
+  required FutureOr<DisplayScaleState?> Function(int, int, int) onApply,
   required VoidCallback onCancel,
   required Future<DisplayScaleState> Function(double, String)? requestScale,
   bool allowArbitrarySize = true,
@@ -143,6 +143,40 @@ void main() {
     expect(await controller.refresh(), isFalse);
     expect(controller.error, 'Invalid display scaling response');
     expect(controller.busy, isFalse);
+  });
+
+  test('explicit unsupported is neutral only before a native baseline',
+      () async {
+    const unsupported = {
+      'error':
+          'System scaling is unavailable for this display or desktop environment.',
+      'code': 'unsupported'
+    };
+    var response = <String, dynamic>{...unsupported};
+    final controller = DisplayScaleModel((_, __) =>
+        DisplayScaleRequests.request(
+            'unsupported-session',
+            (id) async => DisplayScaleRequests.handle('unsupported-session',
+                jsonEncode({'request_id': id, ...response}))));
+    addTearDown(controller.dispose);
+    expect(await controller.refresh(), isFalse);
+    expect(controller.unavailable, isTrue);
+    expect(controller.error, isNull);
+    expect(controller.canApply, isTrue);
+    response.remove('code');
+    expect(await controller.refresh(), isFalse);
+    expect(controller.unavailable, isFalse);
+    expect(controller.error, unsupported['error']);
+    response = {'state': data};
+    expect(await controller.refresh(), isTrue);
+    controller.select(125);
+    response = {...unsupported};
+    expect(await controller.refresh(), isFalse);
+    expect(controller.unavailable, isFalse);
+    expect(controller.current!.percent, 150);
+    expect(controller.percent, 125);
+    expect(controller.needsRefresh, isTrue);
+    expect(controller.canApply, isFalse);
   });
 
   test(
@@ -342,6 +376,12 @@ void main() {
       var scaleRequests = 0;
       var attempts = 0;
       var resolution = (1920, 1080);
+      DisplayScaleState readback(double percent) => DisplayScaleState(
+          identity: 'display',
+          resolution: resolution,
+          percent: percent == 0 ? 150 : percent,
+          options: [100, 125, 150],
+          token: 'after');
       final pending = Completer<void>();
       await tester.pumpWidget(_displaySettings(
           onCancel: () => closes++,
@@ -349,17 +389,13 @@ void main() {
             attempts++;
             if (attempts == 1) await pending.future;
             resolution = (width, height);
+            return withScale ? readback(0) : null;
           },
           requestScale: !withScale
               ? null
               : (percent, _) async {
                   if (percent != 0) scaleRequests++;
-                  return DisplayScaleState(
-                      identity: 'display',
-                      resolution: resolution,
-                      percent: percent == 0 ? 150 : percent,
-                      options: [100, 125, 150],
-                      token: 'after');
+                  return readback(percent);
                 }));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '2560');
@@ -453,7 +489,7 @@ void main() {
     await tester.pumpWidget(_displaySettings(
         excludeInputSemantics: true,
         onCancel: () {},
-        onApply: (_, __, ___) {},
+        onApply: (_, __, ___) => null,
         requestScale: (value, token) async {
           calls.add(value);
           return value == 0
@@ -576,6 +612,7 @@ void main() {
           modes.add((w, h, scale));
           await confirmation.future;
           resolution = (w, h);
+          return readback();
         },
         requestScale: (percent, token) async {
           calls.add((percent, token));
@@ -599,17 +636,30 @@ void main() {
         isNull);
     confirmation.complete();
     await tester.pump();
-    expect(calls, [(0, ''), (0, ''), (125, 'resized')]);
+    expect(calls, [(0, ''), (125, 'resized')]);
     expect(closed, isFalse);
+    expect(find.textContaining('Resolution: Successful'), findsNothing);
     response.completeError(const DisplayScaleError('stale'));
     await tester.pumpAndSettle();
     expect(closed, isFalse);
+    expect(find.text('Resolution: Successful (1280 × 720)'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         '1280');
     expect(rawRequested, 200);
+    await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.widgetWithText(MenuItemButton, 'Custom').hitTestable());
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Refresh'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '1920');
+    expect(
+        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+        '720');
+    await tester.enterText(find.byType(TextField).first, '1280');
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(closed, isTrue);
@@ -622,18 +672,21 @@ void main() {
   });
 
   testWidgets(
-      'failed refresh after resolution confirmation retries only scaling',
+      'manual readback recovery confirms partial success and retries only scaling',
       (tester) async {
     final modes = <(int, int, int)>[];
     final calls = <double>[];
     var closed = false;
     await tester.pumpWidget(_displaySettings(
         onCancel: () => closed = true,
-        onApply: (width, height, scale) => modes.add((width, height, scale)),
+        onApply: (width, height, scale) {
+          modes.add((width, height, scale));
+          throw const DisplayScaleError('confirmation failed');
+        },
         requestScale: (percent, _) async {
           calls.add(percent);
           if (calls.length == 2) {
-            throw const DisplayScaleError('refresh failed');
+            throw const DisplayScaleError('readback failed');
           }
           return DisplayScaleState(
               identity: 'display',
@@ -654,36 +707,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(closed, isFalse);
     expect(calls, [0, 0]);
-    expect(find.text('refresh failed'), findsOneWidget);
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.tap(find.text('Reset changes'));
-    await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(width).controller!.text, '2560');
-    await tester.enterText(width, '1280');
-    await tester.pumpAndSettle();
-    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
-        isNull);
-    await tester.enterText(width, '2560');
-    await tester.tap(menu);
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '125%').hitTestable());
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('resolution-aspect-ratio')));
-    await tester.pumpAndSettle();
-    await tester
-        .tap(find.widgetWithText(MenuItemButton, 'Custom').hitTestable());
-    await tester.pumpAndSettle();
+    expect(find.text('Resolution: Successful (2560 × 1440)'), findsNothing);
+    expect(find.text('Cancel'), findsOneWidget);
     await tester.tap(find.text('Refresh'));
     await tester.pumpAndSettle();
-    expect(find.text('refresh failed'), findsNothing);
-    await tester.enterText(width, '1280');
-    await tester.pumpAndSettle();
-    expect(
-        tester.widget<TextField>(find.byType(TextField).last).controller!.text,
-        '1440');
-    await tester.enterText(width, '2560');
-    await tester.pumpAndSettle();
+    expect(find.text('Resolution: Successful (2560 × 1440)'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(find.text('confirmation failed'), findsNothing);
+    expect(tester.widget<TextField>(width).controller!.text, '2560');
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
     expect(closed, isTrue);
@@ -695,7 +726,6 @@ void main() {
   testWidgets(
       'changed resolution rejects a scale no longer supported by the host',
       (tester) async {
-    var resolution = (1920, 1080);
     var resolutionsApplied = 0;
     var closed = false;
     final calls = <double>[];
@@ -703,18 +733,16 @@ void main() {
         onCancel: () => closed = true,
         onApply: (width, height, _) {
           resolutionsApplied++;
-          resolution = (width, height);
+          return DisplayScaleState(
+              identity: 'display',
+              resolution: (width, height),
+              percent: 150,
+              options: [100, 150],
+              token: 'reduced');
         },
         requestScale: (percent, _) async {
           calls.add(percent);
-          return resolutionsApplied == 0
-              ? state
-              : DisplayScaleState(
-                  identity: 'display',
-                  resolution: resolution,
-                  percent: 150,
-                  options: [100, 150],
-                  token: 'reduced');
+          return state;
         }));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '1280');
@@ -727,6 +755,11 @@ void main() {
     expect(closed, isFalse);
     expect(resolutionsApplied, 1);
     expect(calls, everyElement(0));
+    expect(find.text('Resolution: Successful (1280 × 720)'), findsOneWidget);
+    expect(find.text('Select a scaling level supported by the display.'),
+        findsOneWidget);
+    expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        isNull);
     await tester.tap(find.text('Reset changes'));
     await tester.pumpAndSettle();
     expect(
@@ -736,6 +769,43 @@ void main() {
         isNull);
     expect(tester.takeException(), isNull);
   });
+
+  for (final canEditResolution in [true, false]) {
+    testWidgets(
+        'unsupported scaling leaves available resolution controls usable ($canEditResolution)',
+        (tester) async {
+      var applied = false;
+      const message =
+          'System scaling is unavailable for this display or desktop environment.';
+      await tester.pumpWidget(_displaySettings(
+          allowArbitrarySize: canEditResolution,
+          onApply: (_, __, ___) {
+            applied = true;
+            return null;
+          },
+          onCancel: () {},
+          requestScale: (_, __) async =>
+              throw const DisplayScaleError(message, code: 'unsupported')));
+      await tester.pumpAndSettle();
+      expect(find.text('Interface size'), findsNothing);
+      expect(find.text('Refresh'), findsNothing);
+      expect(find.text(message),
+          canEditResolution ? findsNothing : findsOneWidget);
+      if (canEditResolution) {
+        await tester.enterText(find.byType(TextField).first, '2560');
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Apply'));
+        await tester.pumpAndSettle();
+        expect(applied, isTrue);
+      } else {
+        expect(
+            tester
+                .widget<ElevatedButton>(find.byType(ElevatedButton))
+                .onPressed,
+            isNull);
+      }
+    });
+  }
 
   testWidgets(
       'scaling menu stays above narrow session dialog and keeps other drafts',
@@ -761,7 +831,7 @@ void main() {
                 height: 1080,
                 minDimension: 1,
                 maxDimension: 9999,
-                onApply: (_, __, ___) {},
+                onApply: (_, __, ___) => null,
                 translate: (s) => s,
                 onCancel: close,
                 requestScale: (_, __) async => state))));

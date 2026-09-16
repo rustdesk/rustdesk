@@ -53,7 +53,12 @@ pub(in crate::server) async fn request(request: DisplayScaleRequest, allowed: bo
         Ok(state) => serde_json::json!({"request_id": request_id, "state": state}),
         Err(error) => {
             log::debug!("Display scaling: {error}");
-            serde_json::json!({"request_id": request_id, "error": error.to_string()})
+            let mut response =
+                serde_json::json!({"request_id": request_id, "error": error.to_string()});
+            if error.is::<crate::platform::display_scale::Unsupported>() {
+                response["code"] = serde_json::json!("unsupported");
+            }
+            response
         }
     };
     let mut misc = Misc::new();

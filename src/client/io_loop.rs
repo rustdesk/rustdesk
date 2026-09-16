@@ -2103,6 +2103,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::DisplayScaleResponse(data)) => {
                         self.handler.ui_handler.handle_display_scale(&data);
                     }
+                    Some(misc::Union::VirtualDisplayModeResponse(data)) => {
+                        self.handler.ui_handler.handle_virtual_display_mode(&data);
+                    }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);
                     }

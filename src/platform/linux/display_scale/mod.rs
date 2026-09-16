@@ -5,6 +5,7 @@ use std::time::Duration;
 
 mod gnome;
 mod kde;
+mod layout;
 
 const TIMEOUT: Duration = Duration::from_secs(2);
 

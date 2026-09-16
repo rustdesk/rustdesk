@@ -6,6 +6,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/display_scale_model.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/virtual_display_model.dart';
 import 'package:flutter_hbb/utils/display_resolution.dart';
 import 'package:flutter_hbb/utils/virtual_display.dart';
 import 'display_scale.dart';
@@ -133,7 +134,7 @@ class DisplaySettingsTarget {
     return state;
   }
 
-  Future<void> applyResolution(FutureOr<void> Function() apply,
+  Future<DisplayScaleState?> applyResolution(FutureOr<void> Function() apply,
       {(int, int)? resolution}) async {
     await _check();
     if (_pendingResolution != null || !identical(_display, _selected())) {
@@ -141,7 +142,7 @@ class DisplaySettingsTarget {
     }
     final confirm = resolution != null && _nativeState != null;
     await apply();
-    if (!confirm) return;
+    if (!confirm) return null;
     _pendingResolution = resolution;
     // The legacy resolution command only acknowledges local dispatch. Read the
     // native mode before allowing scaling to use the new mode's capabilities.
@@ -170,7 +171,7 @@ class DisplaySettingsTarget {
           _nativeState = state;
           _confirmedToken = state.token;
           _pendingResolution = null;
-          return;
+          return state;
         }
       }
       if (elapsed.elapsed >= timeout) {
@@ -187,7 +188,6 @@ class DisplaySettingsTarget {
 Future<void> showDisplaySettingsDialog(
   FFI ffi, {
   (int, int)? localResolution,
-  double? localPixelRatio,
   void Function(int, int)? onApplied,
 }) async {
   if (!canChangeDisplaySettings(ffi)) return;
@@ -272,13 +272,12 @@ Future<void> showDisplaySettingsDialog(
                   defaultLabel:
                       isVirtual ? 'Default' : 'resolution_original_tip',
                   localResolution: localResolution,
-                  localPixelRatio: localPixelRatio,
                   outputPixelRatio: resolutionPixelRatio,
                   scales: nativeScale ? const [1, 2] : const [1],
                   initialScale: nativeScale ? nativeMode!.$3 : 1,
                   onCancel: close,
                   onApply: (width, height, scale) async {
-                    await target.applyResolution(() async {
+                    final confirmed = await target.applyResolution(() async {
                       if (hasNativeMode &&
                           nativeVirtualDisplayMode(
                                   pi.platformAdditions, displayIndex) !=
@@ -293,8 +292,15 @@ Future<void> showDisplaySettingsDialog(
                             'Select a resolution supported by the display');
                       }
                       if (nativeScale) {
-                        await bind.sessionConfigureVirtualDisplay(
-                            sessionId: ffi.sessionId,
+                        await VirtualDisplayRequests.request(
+                            ffi.sessionId.toString(),
+                            (requestId) => bind.sessionConfigureVirtualDisplay(
+                                sessionId: ffi.sessionId,
+                                requestId: requestId,
+                                displayId: nativeMode.$4,
+                                width: width,
+                                height: height,
+                                scale: scale),
                             displayId: nativeMode!.$4,
                             width: width,
                             height: height,
@@ -308,6 +314,7 @@ Future<void> showDisplaySettingsDialog(
                       }
                     }, resolution: (width, height));
                     onApplied?.call(width, height);
+                    return confirmed;
                   },
                 ),
               ),
@@ -328,7 +335,7 @@ class DisplaySettings extends StatefulWidget {
   final int maxDimension;
   final int width;
   final int height;
-  final FutureOr<void> Function(int, int, int) onApply;
+  final FutureOr<DisplayScaleState?> Function(int, int, int) onApply;
   final bool usesLogicalSize;
   final bool allowArbitrarySize;
   final bool excludeInputSemantics;
@@ -336,7 +343,6 @@ class DisplaySettings extends StatefulWidget {
   final String defaultLabel;
   // Local display size is in physical pixels; Web mode requests may use logical pixels.
   final (int, int)? localResolution;
-  final double? localPixelRatio;
   final double outputPixelRatio;
   // Advertised modes use input dimensions, before applying the render scale.
   final List<(int, int)> supportedResolutions;
@@ -360,7 +366,6 @@ class DisplaySettings extends StatefulWidget {
     this.defaultResolution,
     this.defaultLabel = 'Default',
     this.localResolution,
-    this.localPixelRatio,
     this.outputPixelRatio = 1,
     this.supportedResolutions = const [],
     this.scales = const [1],
@@ -390,6 +395,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
   DisplayScaleModel? _systemScale;
   bool _applying = false;
   String? _applyError;
+  bool _resolutionApplied = false;
   DisplayScaleState? _scaleSnapshot;
   late (int, int, int) _currentMode =
       (widget.width, widget.height, widget.initialScale);
@@ -415,6 +421,10 @@ class _DisplaySettingsState extends State<DisplaySettings> {
         (!identical(state, _scaleSnapshot) ||
             (state.resolution.$1, state.resolution.$2, 1) != _currentMode)) {
       final preserveDraft = _applying || _hasEdits;
+      if (_scaleSnapshot != null &&
+          _scaleSnapshot!.resolution != state.resolution) {
+        _resolutionApplied = true;
+      }
       _scaleSnapshot = state;
       _currentMode = (state.resolution.$1, state.resolution.$2, 1);
       if (!_hasChanges && _systemScale!.canApply) _applyError = null;
@@ -439,15 +449,14 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final confirmResolution = systemScale?.current != null;
     try {
       if (resolutionChanged) {
-        await widget.onApply(mode.$1, mode.$2, mode.$3);
+        final confirmed = await widget.onApply(mode.$1, mode.$2, mode.$3);
         if (!mounted) return;
         if (confirmResolution) {
-          _currentMode = mode;
-          if (!await systemScale!.refresh() || !mounted) return;
-          if (systemScale.current!.resolution != (mode.$1, mode.$2)) {
+          if (confirmed == null || confirmed.resolution != (mode.$1, mode.$2)) {
             throw const DisplayScaleError(
                 'Display settings changed. Reopen the resolution menu and try again.');
           }
+          systemScale!.acceptConfirmedResolution(confirmed);
           if (!systemScale.canApply) return;
         }
       }
@@ -692,32 +701,22 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final size = View.of(context).display.size;
     final pixels =
         widget.localResolution ?? (size.width.round(), size.height.round());
-    final pixelRatio = widget.scales.length > 1
-        ? _localPixelRatio(context) / _localScale(context)
-        : widget.outputPixelRatio;
-    return ((pixels.$1 / pixelRatio).round(), (pixels.$2 / pixelRatio).round());
+    return (
+      (pixels.$1 / widget.outputPixelRatio).round(),
+      (pixels.$2 / widget.outputPixelRatio).round()
+    );
   }
-
-  double _localPixelRatio(BuildContext context) {
-    final ratio =
-        widget.localPixelRatio ?? View.of(context).display.devicePixelRatio;
-    return ratio.isFinite && ratio > 0 ? ratio : 1;
-  }
-
-  int _localScale(BuildContext context) =>
-      widget.scales.contains(2) && _localPixelRatio(context) >= 1.5 ? 2 : 1;
 
   (int, int, int)? _localMode(BuildContext context) {
-    final scale = _localScale(context);
-    if (!widget.scales.contains(scale)) return null;
+    if (!widget.scales.contains(_scale)) return null;
     final size = fitDisplayResolution(
         localSize: _localSize(context),
         minDimension: widget.minDimension,
         maxDimension: widget.maxDimension,
-        scale: scale,
+        scale: _scale,
         allowArbitrarySize: widget.allowArbitrarySize,
         supported: widget.supportedResolutions);
-    return size == null ? null : (size.$1, size.$2, scale);
+    return size == null ? null : (size.$1, size.$2, _scale);
   }
 
   void _setMode((int, int, int) mode) => setState(() {
@@ -786,6 +785,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
     final scaleChanged = _systemScale?.changed == true;
     final canEditResolution =
         widget.allowArbitrarySize || widget.supportedResolutions.isNotEmpty;
+    final showSystemScale = _systemScale != null &&
+        (!_systemScale!.unavailable || !canEditResolution);
     final canApply = !busy &&
         (_valid || (!_hasChanges && scaleChanged)) &&
         (_systemScale?.canApply ?? true) &&
@@ -797,7 +798,7 @@ class _DisplaySettingsState extends State<DisplaySettings> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_systemScale != null) ...[
+            if (showSystemScale) ...[
               DisplayScale(
                   excludeInputSemantics: widget.excludeInputSemantics,
                   translate: widget.translate,
@@ -881,6 +882,11 @@ class _DisplaySettingsState extends State<DisplaySettings> {
             ],
             if (_applying && _systemScale?.busy != true)
               const LinearProgressIndicator(),
+            if (!busy && _resolutionApplied)
+              Text(
+                  '${widget.translate('Resolution')}: ${widget.translate('Successful')} '
+                  '(${_modeLabel(_currentMode)})',
+                  style: theme.textTheme.bodySmall),
             if (_applyError != null) ...[
               const SizedBox(height: 12),
               Text(widget.translate(_applyError!),
@@ -909,7 +915,8 @@ class _DisplaySettingsState extends State<DisplaySettings> {
                   Wrap(spacing: 8, children: [
                     TextButton(
                       onPressed: busy ? null : widget.onCancel,
-                      child: Text(widget.translate('Cancel')),
+                      child: Text(widget.translate(
+                          _resolutionApplied ? 'Close' : 'Cancel')),
                     ),
                     ElevatedButton(
                       onPressed: canApply ? _apply : null,

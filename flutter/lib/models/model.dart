@@ -24,6 +24,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/utils/virtual_display.dart';
 import 'package:flutter_hbb/models/display_scale_model.dart';
+import 'package:flutter_hbb/models/virtual_display_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
@@ -350,6 +351,11 @@ class FfiModel with ChangeNotifier {
         final data = evt['data'];
         if (data is String) {
           DisplayScaleRequests.handle(sessionId.toString(), data);
+        }
+      } else if (name == 'virtual_display_mode') {
+        final data = evt['data'];
+        if (data is String) {
+          VirtualDisplayRequests.handle(sessionId.toString(), data);
         }
       } else if (name == 'connection_ready') {
         setConnectionType(peerId, evt['secure'] == 'true',

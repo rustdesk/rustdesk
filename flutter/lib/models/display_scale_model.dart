@@ -118,7 +118,8 @@ class DisplayScaleState {
 
 class DisplayScaleError implements Exception {
   final String message;
-  const DisplayScaleError(this.message);
+  final String? code;
+  const DisplayScaleError(this.message, {this.code});
   @override
   String toString() => message;
 }
@@ -160,7 +161,8 @@ class DisplayScaleRequests {
     if (pending == null || pending.isCompleted) return;
     try {
       if (response['error'] is String) {
-        throw DisplayScaleError(response['error']);
+        throw DisplayScaleError(response['error'],
+            code: response['code'] is String ? response['code'] : null);
       }
       pending.complete(DisplayScaleState.fromJson(response['state']));
     } catch (error) {
@@ -178,6 +180,7 @@ class DisplayScaleModel extends ChangeNotifier {
   bool valid = true;
   bool customMode = false;
   bool needsRefresh = false;
+  bool unavailable = false;
   String draftText = '';
 
   double? suggestion;
@@ -252,10 +255,49 @@ class DisplayScaleModel extends ChangeNotifier {
   Future<bool> refresh() => _request(false);
   Future<bool> apply() => _request(true);
 
+  void acceptConfirmedResolution(DisplayScaleState state) {
+    if (_disposed || busy) return;
+    _acceptState(state, applied: false);
+    notifyListeners();
+  }
+
+  void _acceptState(DisplayScaleState state, {required bool applied}) {
+    final preserveDraft =
+        !applied && current != null && (changed || customMode || !valid);
+    _pendingChange = !applied && changed;
+    needsRefresh = false;
+    unavailable = false;
+    error = null;
+    current = state;
+    if (preserveDraft) {
+      if (customMode && !valid) {
+        final input = draftText.trim().replaceAll(',', '.');
+        final value = RegExp(r'^\d+(?:\.\d+)?$').hasMatch(input)
+            ? double.tryParse(input)
+            : null;
+        final accepted = value == null ? null : state.supported(value);
+        valid = accepted != null;
+        suggestion = value == null || valid ? null : state.nearest(value);
+        if (valid) percent = accepted;
+      } else {
+        valid = percent != null && state.supported(percent!) != null;
+        suggestion = valid || percent == null ? null : state.nearest(percent!);
+      }
+      if (valid) {
+        customMode = state.custom != null &&
+            (customMode || !state.options.contains(percent));
+      }
+    } else {
+      valid = true;
+      suggestion = null;
+      customMode = customMode && state.custom != null;
+      percent = state.percent;
+      draftText = formatDisplayScale(state.percent);
+    }
+  }
+
   Future<bool> _request(bool apply) async {
     if (busy || (apply && (!canApply || !changed))) return false;
-    final preserveDraft =
-        !apply && current != null && (changed || customMode || !valid);
     // A mode can cap the native scale to the draft without applying the user's
     // choice. Only an acknowledged apply or Reset clears that pending choice.
     if (!apply) _pendingChange = changed;
@@ -270,40 +312,18 @@ class DisplayScaleModel extends ChangeNotifier {
             'The system did not apply the requested scale. Refresh and try again.');
       }
       if (_disposed) return false;
-      if (apply) _pendingChange = false;
-      needsRefresh = false;
-      current = state;
-      if (preserveDraft) {
-        if (customMode && !valid) {
-          final input = draftText.trim().replaceAll(',', '.');
-          final value = RegExp(r'^\d+(?:\.\d+)?$').hasMatch(input)
-              ? double.tryParse(input)
-              : null;
-          final accepted = value == null ? null : state.supported(value);
-          valid = accepted != null;
-          suggestion = value == null || valid ? null : state.nearest(value);
-          if (valid) percent = accepted;
-        } else {
-          valid = percent != null && state.supported(percent!) != null;
-          suggestion =
-              valid || percent == null ? null : state.nearest(percent!);
-        }
-        if (valid) {
-          customMode = state.custom != null &&
-              (customMode || !state.options.contains(percent));
-        }
-      } else {
-        valid = true;
-        suggestion = null;
-        customMode = customMode && state.custom != null;
-        percent = state.percent;
-        draftText = formatDisplayScale(state.percent);
-      }
+      _acceptState(state, applied: apply);
       return true;
     } catch (failure) {
       if (!_disposed) {
-        error =
-            failure is FormatException ? failure.message : failure.toString();
+        unavailable = current == null &&
+            failure is DisplayScaleError &&
+            failure.code == 'unsupported';
+        error = unavailable
+            ? null
+            : failure is FormatException
+                ? failure.message
+                : failure.toString();
         needsRefresh = current != null;
       }
       return false;

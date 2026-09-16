@@ -121,7 +121,10 @@ void main() {
                         (3840, 2160)
                       ],
                       localResolution: const (2560, 1440),
-                      onApply: (w, h, scale) => modes.add((w, h, scale)),
+                      onApply: (w, h, scale) {
+                        modes.add((w, h, scale));
+                        return null;
+                      },
                       onCancel: () {})))));
       await tester.pumpAndSettle();
       (int, int) inputs() {
@@ -466,7 +469,7 @@ void main() {
                     maxDimension: 4096,
                     requestScale: target.requestScale,
                     onApply: (width, height, scale) async {
-                      await target.applyResolution(
+                      return await target.applyResolution(
                           () => modes.add((width, height, scale)),
                           resolution: (width, height));
                     },

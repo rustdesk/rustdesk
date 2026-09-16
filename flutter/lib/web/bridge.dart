@@ -696,6 +696,7 @@ class RustdeskImpl {
 
   Future<void> sessionConfigureVirtualDisplay({
     required UuidValue sessionId,
+    required String requestId,
     required int displayId,
     required int width,
     required int height,
