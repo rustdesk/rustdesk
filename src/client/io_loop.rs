@@ -2550,7 +2550,8 @@ impl<T: InvokeUiSession> Remote<T> {
 fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
     use hbb_common::{anyhow::anyhow, bail};
 
-    const MAX_CURSOR_SIZE: i32 = 4096;
+    // Limit decoded cursor data to 1 MiB before JSON serialization.
+    const MAX_CURSOR_SIZE: i32 = 512;
     const RGBA_CHANNELS: usize = 4;
 
     let mut cd = data;

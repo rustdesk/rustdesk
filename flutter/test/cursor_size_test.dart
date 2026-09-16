@@ -111,7 +111,6 @@ void main() {
     ((1, 64), 0.25, (1, 16)),
     ((8, 8), 0.5, (12, 12)),
     ((4, 64), 1.0, (4, 64)),
-    ((64, 64), (2.25 / 1.75) / 2.25 * 1.75, (65, 65)),
   ]) {
     test('native cursor size $scenario',
         () => _checkSize(scenario, registrations));
@@ -238,16 +237,17 @@ void _expectSize(Map<dynamic, dynamic> args, (int, int) expected) {
 Future<void> _checkRasterTransitions(
     List<Map<dynamic, dynamic>> registrations) async {
   const delta = 3e-8;
+  const scaleAboveOne = (2.25 / 1.75) / 2.25 * 1.75;
   final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
   final cursor = _Cursor(_data((64, 64)), ffi);
   addTearDown(() => _dispose(cursor));
   addTearDown(ffi.canvasModel.dispose);
   for (final (scale, expected) in [
+    (scaleAboveOne, (65, 65)),
     (0.5 - delta, (32, 32)),
     (0.5 + delta, (33, 33)),
     (1.0, (64, 64)),
-    (1.0000000000000002, (65, 65)),
-    (1.0, (64, 64)),
+    (scaleAboveOne, (65, 65)),
   ]) {
     buildCursorOfCache(cursor, scale, cursor.cache);
     await Future<void>.delayed(Duration.zero);
