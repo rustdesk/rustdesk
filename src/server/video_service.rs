@@ -947,7 +947,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 if !c.is_gdi() {
                     if err.kind() == ConnectionReset {
                         if let Some(attempt) = recovery_attempt {
-                            log::info!(
+                            log::debug!(
                                 "dxgi access lost, restart capture: attempt {attempt}, error: {err:?}"
                             );
                             bail!("SWITCH");
