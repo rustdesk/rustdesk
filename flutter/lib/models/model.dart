@@ -3601,9 +3601,11 @@ class QualityMonitorModel with ChangeNotifier {
   bool get show => _show;
   QualityMonitorData get data => _data;
 
-  // Only a WebRTC session names its transport here: web has no session tab
-  // to show it on, and WebRTC is the one path that can be direct or TURN.
+  // Only a WebRTC session on the web names its transport here: web has no
+  // session tab to show it on (the desktop tab's tooltip already does), and
+  // WebRTC is the one path that can be direct or TURN.
   String? get webrtcTransport {
+    if (!isWeb) return null;
     final ffiModel = parent.target?.ffiModel;
     if (ffiModel == null) return null;
     final streamType = ffiModel.cachedPeerData.streamType;

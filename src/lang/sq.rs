@@ -282,7 +282,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_service_will_start_tip", "Aktivizimi i \"Regjistrimi i ekranit\" do të nisë automatikisht shërbimin, duke lejuar pajisjet e tjera të kërkojnë një lidhje me pajisjen tuaj."),
         ("android_stop_service_tip", "Mbyllja e shërbimit do të mbyllë automatikisht të gjitha lidhjet e vendosura."),
         ("android_version_audio_tip", "Versioni aktual i Android nuk mbështet regjistrimin e audios, ju lutemi përmirësoni në Android 10 ose më të lartë."),
-        ("android_start_service_tip", "Trokitni te [Nis shërbimin] ose aktivizoni lejen [Kapja e ekranit] për të nisur shërbimin e ndarjes së ekranit."),
+        ("android_start_service_tip", "Trokitni te [Nis Shërbimin] ose aktivizoni lejen [Kapja e ekranit] për të nisur shërbimin e ndarjes së ekranit."),
         ("android_permission_may_not_change_tip", "Lejet për lidhjet e themeluara mund të mos ndryshohen menjëherë derisa të rilidheni."),
         ("Account", "Llogaria"),
         ("Overwrite", "Përshkruaj"),
@@ -778,5 +778,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("The screen sharing request ended without completing on the remote device", "Kërkesa për ndarjen e ekranit në pajisjen e largët përfundoi pa u kryer"),
         ("RustDesk could not obtain a usable screen from the XDG Desktop Portal, the PipeWire library may be too old", "RustDesk nuk mori një ekran të përdorshëm nga XDG Desktop Portal, biblioteka PipeWire mund të jetë shumë e vjetër"),
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk nuk mundi të ngarkojë një komponent të GStreamer të nevojshëm për regjistrimin e ekranit ({})"),
+        ("Relay fallback delay in seconds", "Vonesa para kalimit te releja në sekonda"),
+        ("relay-fallback-delay-tip", "Sa gjatë pret një lidhje releje tashmë e vendosur lidhjen e drejtpërdrejtë WebRTC përpara se të përdoret në vend të saj. Rriteni për t'i dhënë më shumë kohë një lidhjeje të drejtpërdrejtë të ngadaltë; uleni për të kaluar më shpejt te releja në rrjete ku lidhja e drejtpërdrejtë nuk është e mundur. Lëreni bosh për vlerën e parazgjedhur prej 2.5 sekondash."),
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
     ].iter().cloned().collect();
 }

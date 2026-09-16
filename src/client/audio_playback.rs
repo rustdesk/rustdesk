@@ -1,4 +1,4 @@
-use hbb_common::{log, thiserror};
+use hbb_common::{log, log_throttle::LogThrottle, thiserror};
 use ringbuf::{ring_buffer::RbBase, Rb};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -6,6 +6,8 @@ use std::sync::{
 };
 
 pub(super) const UNDERRUN_DECLICK_MS: usize = 5;
+pub(super) const AUDIO_PLAYBACK_LOG_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(5);
 const MILLISECONDS_PER_SECOND: usize = 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,17 +38,30 @@ pub(super) struct AudioPlaybackRecovery {
     output_frame: Vec<f32>,
 }
 
-#[derive(Default)]
 pub(super) struct AudioPlaybackStatus {
     pub(super) ready: AtomicBool,
     contentions: AtomicUsize,
+    contention_log_throttle: LogThrottle,
     buffer_poisoned: AtomicBool,
+}
+
+impl Default for AudioPlaybackStatus {
+    fn default() -> Self {
+        Self {
+            ready: AtomicBool::new(false),
+            contentions: AtomicUsize::new(0),
+            contention_log_throttle: LogThrottle::new(AUDIO_PLAYBACK_LOG_INTERVAL),
+            buffer_poisoned: AtomicBool::new(false),
+        }
+    }
 }
 
 impl AudioPlaybackStatus {
     pub(super) fn report_errors(&self) {
-        let contentions = self.contentions.swap(0, Ordering::Relaxed);
-        if contentions != 0 {
+        if self.contentions.load(Ordering::Relaxed) != 0
+            && self.contention_log_throttle.due().is_some()
+        {
+            let contentions = self.contentions.swap(0, Ordering::Relaxed);
             log::debug!("Audio playback PCM buffer contention: callbacks={contentions}");
         }
         if self.buffer_poisoned.swap(false, Ordering::Relaxed) {

@@ -969,7 +969,7 @@ class MainActivity : FlutterActivity() {
             flutterMethodChannel?.invokeMethod("msgbox", mapOf(
                 "type" to "custom-nook-nocancel-hasclose-error",
                 "title" to "Voice call",
-                "text" to "Failed to start voice call."))
+                "text" to audioRecordHandle.getVoiceCallStartError()))
         } else {
             Log.d(logTag, "onVoiceCallStarted success")
         }
