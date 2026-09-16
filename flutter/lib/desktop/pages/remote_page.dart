@@ -1201,7 +1201,7 @@ class _ImagePaintState extends State<ImagePaint> {
         peer.pi.platform == kPeerPlatformMacOS &&
         (c.viewStyle.style == kRemoteViewStyleAdaptive ||
             c.viewStyle.style == kRemoteViewStyleCustom)) {
-      return isWindows ? dpr : 1.0 / dpr;
+      return isWindows ? dpr : (isMacOS ? 1.0 : 1.0 / dpr);
     }
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
       if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
