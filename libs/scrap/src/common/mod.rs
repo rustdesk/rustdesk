@@ -108,6 +108,31 @@ pub struct ImageTexture {
     pub h: usize,
 }
 
+/// Packed NV12 plane pointers for Linux GPU present (shader YUV→RGB).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct GpuNv12Desc {
+    pub y: *const u8,
+    pub y_stride: i32,
+    pub uv: *const u8,
+    pub uv_stride: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl Default for GpuNv12Desc {
+    fn default() -> Self {
+        Self {
+            y: std::ptr::null(),
+            y_stride: 0,
+            uv: std::ptr::null(),
+            uv_stride: 0,
+            width: 0,
+            height: 0,
+        }
+    }
+}
+
 impl Default for ImageTexture {
     fn default() -> Self {
         Self {

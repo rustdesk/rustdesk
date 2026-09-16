@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gpu_texture_renderer/flutter_gpu_texture_renderer.dart';
+import 'package:flutter_hbb/native/nv12_gl_texture.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -68,6 +69,8 @@ class _GpuTexture {
   int get display => _display;
 
   final gpuTextureRenderer = FlutterGpuTextureRenderer();
+  final nv12GlTexture = Nv12GlTexture();
+  int _nv12Key = -1;
 
   _GpuTexture();
 
@@ -75,6 +78,27 @@ class _GpuTexture {
     if (support) {
       _sessionId = sessionId;
       _display = d;
+
+      if (Nv12GlTexture.supported) {
+        _nv12Key = bind.getNextTextureKey();
+        nv12GlTexture.createTexture(_nv12Key).then((id) async {
+          _id = id;
+          if (id != -1) {
+            _textureId = id;
+            ffi.textureModel.setGpuTextureId(display: d, id: id);
+            final ptr = await nv12GlTexture.getTexturePtr(_nv12Key);
+            _output = ptr;
+            if (ptr != 0) {
+              platformFFI.registerGpuTexture(sessionId, d, ptr);
+            }
+            debugPrint(
+                "create nv12 gl texture: peerId: ${ffi.id} display:$_display, textureId:$id, ptr:$ptr");
+          }
+        }, onError: (err) {
+          debugPrint("Failed to register nv12 gl texture:$err");
+        });
+        return;
+      }
 
       gpuTextureRenderer.registerTexture().then((id) async {
         _id = id;
@@ -104,7 +128,12 @@ class _GpuTexture {
         // sleep for a while to avoid the texture is used after it's unregistered.
         await Future.delayed(Duration(milliseconds: 100));
       }
-      await gpuTextureRenderer.unregisterTexture(_textureId);
+      if (_nv12Key != -1) {
+        await nv12GlTexture.closeTexture(_nv12Key);
+        _nv12Key = -1;
+      } else {
+        await gpuTextureRenderer.unregisterTexture(_textureId);
+      }
       _textureId = -1;
       _destroying = false;
       debugPrint(

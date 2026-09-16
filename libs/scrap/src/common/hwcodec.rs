@@ -11,6 +11,7 @@ use hbb_common::{
     serde_derive::{Deserialize, Serialize},
     serde_json, ResultType,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use hwcodec::{
     common::{
         DataFormat, HwcodecErrno,
@@ -24,6 +25,16 @@ use hwcodec::{
         ffmpeg_linesize_offset_length, CodecInfo,
     },
 };
+
+pub static PRESENT_NV12_TEXTURE: AtomicBool = AtomicBool::new(false);
+
+pub fn present_nv12_texture() -> bool {
+    PRESENT_NV12_TEXTURE.load(Ordering::Relaxed)
+}
+
+pub fn set_present_nv12_texture(v: bool) {
+    PRESENT_NV12_TEXTURE.store(v, Ordering::Relaxed);
+}
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_NV12;
 pub const DEFAULT_FPS: i32 = 60;
@@ -378,6 +389,34 @@ pub struct HwRamDecoderImage<'a> {
 }
 
 impl HwRamDecoderImage<'_> {
+    pub fn copy_nv12(&self, packed: &mut Vec<u8>, desc: &mut crate::GpuNv12Desc) -> bool {
+        if self.frame.pixfmt != AVPixelFormat::AV_PIX_FMT_NV12 {
+            return false;
+        }
+        let width = self.frame.width;
+        let height = self.frame.height;
+        if width <= 0 || height <= 0 {
+            return false;
+        }
+        let y_stride = self.frame.linesize[0] as usize;
+        let uv_stride = self.frame.linesize[1] as usize;
+        let y_len = y_stride.saturating_mul(height as usize);
+        let uv_len = uv_stride.saturating_mul((height as usize) / 2);
+        if self.frame.data[0].len() < y_len || self.frame.data[1].len() < uv_len {
+            return false;
+        }
+        packed.clear();
+        packed.extend_from_slice(&self.frame.data[0][..y_len]);
+        packed.extend_from_slice(&self.frame.data[1][..uv_len]);
+        desc.y = packed.as_ptr();
+        desc.y_stride = y_stride as i32;
+        desc.uv = packed[y_len..].as_ptr();
+        desc.uv_stride = uv_stride as i32;
+        desc.width = width as i32;
+        desc.height = height as i32;
+        true
+    }
+
     // rgb [in/out] fmt and stride must be set in ImageRgb
     pub fn to_fmt(&self, rgb: &mut ImageRgb, i420: &mut Vec<u8>) -> ResultType<()> {
         let frame = self.frame;

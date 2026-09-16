@@ -13,6 +13,7 @@
 #include <desktop_multi_window/desktop_multi_window_plugin.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "nv12_gl_texture.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -93,6 +94,8 @@ static void on_subwindow_created(FlPluginRegistry* registry) {
 #endif
   // Set up side button forwarding for sub-windows.
   if (registry == NULL || !FL_IS_VIEW(registry)) return;
+  nv12_gl_texture_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(registry, "Nv12GlTexturePlugin"));
   FlView* view = FL_VIEW(registry);
   GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(view));
   if (toplevel != NULL && GTK_IS_WINDOW(toplevel)) {
@@ -178,6 +181,9 @@ static void my_application_activate(GApplication* application) {
       (WindowCreatedCallback)on_subwindow_created);
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  nv12_gl_texture_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(FL_PLUGIN_REGISTRY(view),
+                                                  "Nv12GlTexturePlugin"));
 
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   self->host_channel = fl_method_channel_new(

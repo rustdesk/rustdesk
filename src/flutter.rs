@@ -216,7 +216,7 @@ struct SessionHandler {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum RenderType {
     PixelBuffer,
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     Texture,
 }
 
@@ -266,13 +266,39 @@ pub type FlutterGpuTextureRendererPluginCApiSetTexture =
 #[cfg(feature = "vram")]
 pub type FlutterGpuTextureRendererPluginCApiGetAdapterLuid = unsafe extern "C" fn() -> i64;
 
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub type RustDeskNv12GlOnNv12 = unsafe extern "C" fn(
+    texture: *mut c_void,
+    y: *const u8,
+    y_stride: c_int,
+    uv: *const u8,
+    uv_stride: c_int,
+    width: c_int,
+    height: c_int,
+);
+
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+fn load_nv12_gl_on_nv12() -> Option<RustDeskNv12GlOnNv12> {
+    unsafe {
+        let p = hbb_common::libc::dlsym(
+            hbb_common::libc::RTLD_DEFAULT,
+            b"RustDeskNv12GlOnNv12\0".as_ptr() as _,
+        );
+        if p.is_null() {
+            None
+        } else {
+            Some(std::mem::transmute(p))
+        }
+    }
+}
+
 pub(super) type TextureRgbaPtr = usize;
 
 struct DisplaySessionInfo {
     // TextureRgba pointer in flutter native.
     texture_rgba_ptr: TextureRgbaPtr,
     size: (usize, usize),
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     gpu_output_ptr: usize,
     notify_render_type: Option<RenderType>,
 }
@@ -286,6 +312,8 @@ struct VideoRenderer {
     on_rgba_func: Option<Symbol<'static, FlutterRgbaRendererPluginOnRgba>>,
     #[cfg(feature = "vram")]
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    on_nv12_func: Option<RustDeskNv12GlOnNv12>,
 }
 
 impl Default for VideoRenderer {
@@ -331,6 +359,14 @@ impl Default for VideoRenderer {
             }
         };
 
+        #[cfg(all(target_os = "linux", feature = "flutter"))]
+        let on_nv12_func = load_nv12_gl_on_nv12();
+        #[cfg(all(target_os = "linux", feature = "flutter", feature = "hwcodec"))]
+        if on_nv12_func.is_some() {
+            scrap::hwcodec::set_present_nv12_texture(true);
+            log::info!("Linux NV12 GPU present enabled");
+        }
+
         Self {
             map_display_sessions: Default::default(),
             is_support_multi_ui_session: false,
@@ -338,6 +374,8 @@ impl Default for VideoRenderer {
             on_rgba_func,
             #[cfg(feature = "vram")]
             on_texture_func,
+            #[cfg(all(target_os = "linux", feature = "flutter"))]
+            on_nv12_func,
         }
     }
 }
@@ -355,7 +393,7 @@ impl VideoRenderer {
                 DisplaySessionInfo {
                     texture_rgba_ptr: usize::default(),
                     size: (width, height),
-                    #[cfg(feature = "vram")]
+                    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
                     gpu_output_ptr: usize::default(),
                     notify_render_type: None,
                 },
@@ -370,7 +408,7 @@ impl VideoRenderer {
                 if info.texture_rgba_ptr != usize::default() {
                     info.texture_rgba_ptr = usize::default();
                 }
-                #[cfg(feature = "vram")]
+                #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
                 if info.gpu_output_ptr != usize::default() {
                     return;
                 }
@@ -396,7 +434,7 @@ impl VideoRenderer {
                         DisplaySessionInfo {
                             texture_rgba_ptr: ptr as _,
                             size: (0, 0),
-                            #[cfg(feature = "vram")]
+                            #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
                             gpu_output_ptr: usize::default(),
                             notify_render_type: None,
                         },
@@ -406,7 +444,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     pub fn register_gpu_output(&self, display: usize, ptr: usize) {
         let mut sessions_lock = self.map_display_sessions.write().unwrap();
         if ptr == 0 {
@@ -495,7 +533,7 @@ impl VideoRenderer {
         }
     }
 
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     pub fn on_texture(&self, display: usize, texture: *mut c_void) -> bool {
         let mut write_lock = self.map_display_sessions.write().unwrap();
         let opt_info = if !self.is_support_multi_ui_session {
@@ -509,8 +547,26 @@ impl VideoRenderer {
         if info.gpu_output_ptr == usize::default() {
             return false;
         }
+        #[cfg(feature = "vram")]
         if let Some(func) = &self.on_texture_func {
             unsafe { func(info.gpu_output_ptr as _, texture) };
+        }
+        #[cfg(all(target_os = "linux", feature = "flutter"))]
+        if let Some(func) = self.on_nv12_func {
+            if !texture.is_null() {
+                let d = unsafe { &*(texture as *const scrap::GpuNv12Desc) };
+                unsafe {
+                    func(
+                        info.gpu_output_ptr as _,
+                        d.y,
+                        d.y_stride,
+                        d.uv,
+                        d.uv_stride,
+                        d.width,
+                        d.height,
+                    )
+                };
+            }
         }
         if info.notify_render_type != Some(RenderType::Texture) {
             info.notify_render_type = Some(RenderType::Texture);
@@ -855,7 +911,7 @@ impl InvokeUiSession for FlutterHandler {
     }
 
     #[inline]
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     fn on_texture(&self, display: usize, texture: *mut c_void) {
         if !self.use_texture_render.load(Ordering::Relaxed) {
             return;
@@ -1744,7 +1800,7 @@ pub fn session_register_pixelbuffer_texture(session_id: SessionID, display: usiz
 
 #[inline]
 pub fn session_register_gpu_texture(_session_id: SessionID, _display: usize, _output_ptr: usize) {
-    #[cfg(feature = "vram")]
+    #[cfg(any(feature = "vram", all(target_os = "linux", feature = "flutter")))]
     for s in sessions::get_sessions() {
         if let Some(h) = s
             .ui_handler

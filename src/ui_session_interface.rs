@@ -1731,8 +1731,8 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn on_voice_call_incoming(&self);
     fn get_rgba(&self, display: usize) -> *const u8;
     fn next_rgba(&self, display: usize);
-    #[cfg(all(feature = "vram", feature = "flutter"))]
-    fn on_texture(&self, display: usize, texture: *mut c_void);
+    #[cfg(all(feature = "flutter", any(feature = "vram", target_os = "linux")))]
+    fn on_texture(&self, display: usize, texture: *mut std::ffi::c_void) {}
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>);
     fn set_current_display(&self, disp_idx: i32);
     #[cfg(feature = "flutter")]

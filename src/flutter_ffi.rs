@@ -2433,7 +2433,7 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
-    SyncReturn(cfg!(feature = "vram"))
+    SyncReturn(cfg!(feature = "vram") || cfg!(all(target_os = "linux", feature = "flutter")))
 }
 
 pub fn cm_init() {

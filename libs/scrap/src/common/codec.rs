@@ -120,6 +120,8 @@ pub struct Decoder {
     valid: bool,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
+    #[cfg(feature = "hwcodec")]
+    nv12_desc: crate::GpuNv12Desc,
 }
 
 #[derive(Debug, Clone)]
@@ -616,6 +618,8 @@ impl Decoder {
             valid,
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+            #[cfg(feature = "hwcodec")]
+            nv12_desc: Default::default(),
         }
     }
 
@@ -676,6 +680,9 @@ impl Decoder {
                         h264s,
                         rgb,
                         &mut self.i420,
+                        &mut self.nv12_desc,
+                        _texture,
+                        _pixelbuffer,
                         present,
                     );
                 }
@@ -696,6 +703,9 @@ impl Decoder {
                         h265s,
                         rgb,
                         &mut self.i420,
+                        &mut self.nv12_desc,
+                        _texture,
+                        _pixelbuffer,
                         present,
                     );
                 }
@@ -784,6 +794,9 @@ impl Decoder {
         frames: &EncodedVideoFrames,
         rgb: &mut ImageRgb,
         i420: &mut Vec<u8>,
+        nv12_desc: &mut crate::GpuNv12Desc,
+        texture: &mut ImageTexture,
+        pixelbuffer: &mut bool,
         present: bool,
     ) -> ResultType<bool> {
         let mut ret = false;
@@ -791,7 +804,13 @@ impl Decoder {
             let images = decoder.decode(&h264.data)?;
             if let Some(image) = images.last() {
                 if present {
-                    if image.to_fmt(rgb, i420).is_ok() {
+                    if present_nv12_texture() && image.copy_nv12(i420, nv12_desc) {
+                        texture.texture = nv12_desc as *mut crate::GpuNv12Desc as *mut _;
+                        texture.w = nv12_desc.width as usize;
+                        texture.h = nv12_desc.height as usize;
+                        *pixelbuffer = false;
+                        ret = true;
+                    } else if image.to_fmt(rgb, i420).is_ok() {
                         ret = true;
                     }
                 } else {

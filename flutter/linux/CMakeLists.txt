@@ -109,12 +109,15 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 # not the value here, or `flutter run` will no longer work.
 #
 # Any new source files that you add to the application should be added here.
+pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
+
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
   "wayland_shortcuts_inhibit.cc"
   "bump_mouse.cc"
   "bump_mouse_x11.cc"
+  "nv12_gl_texture.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   ${WAYLAND_PROTOCOL_SOURCES}
 )
@@ -127,6 +130,9 @@ apply_standard_settings(${BINARY_NAME})
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
+if(EPOXY_FOUND)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EPOXY)
+endif()
 # target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 
 # Wayland support for keyboard shortcuts inhibit
