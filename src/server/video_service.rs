@@ -76,6 +76,7 @@ struct DxgiRecoveryState {
     attempts: usize,
     window_started: Option<Instant>,
     restart_pending: bool,
+    fallback_pending: bool,
 }
 
 #[cfg(windows)]
@@ -85,6 +86,7 @@ impl DxgiRecoveryState {
             attempts: 0,
             window_started: None,
             restart_pending: false,
+            fallback_pending: false,
         }
     }
 
@@ -98,6 +100,7 @@ impl DxgiRecoveryState {
             self.window_started = Some(Instant::now());
         }
         if self.attempts >= DXGI_RECOVERY_LIMIT {
+            self.fallback_pending = true;
             return None;
         }
         self.attempts += 1;
@@ -107,6 +110,10 @@ impl DxgiRecoveryState {
 
     fn take_restart_pending(&mut self) -> bool {
         std::mem::take(&mut self.restart_pending)
+    }
+
+    fn take_fallback_pending(&mut self) -> bool {
+        std::mem::take(&mut self.fallback_pending)
     }
 }
 
@@ -631,6 +638,11 @@ fn run(vs: VideoService) -> ResultType<()> {
         .take_restart_pending()
         .then(Instant::now);
     #[cfg(windows)]
+    if dxgi_recovery_state.lock().unwrap().take_fallback_pending() {
+        c.set_gdi();
+        log::info!("dxgi recovery exhausted, fall back to gdi");
+    }
+    #[cfg(windows)]
     if !scrap::codec::enable_directx_capture() && !c.is_gdi() {
         log::info!("disable dxgi with option, fall back to gdi");
         c.set_gdi();
@@ -918,6 +930,13 @@ fn run(vs: VideoService) -> ResultType<()> {
                 }
             }
             Err(err) => {
+                #[cfg(windows)]
+                // The display-change check can restart capture before error handling below.
+                let recovery_attempt = if !c.is_gdi() && err.kind() == ConnectionReset {
+                    dxgi_recovery_state.lock().unwrap().next_attempt()
+                } else {
+                    None
+                };
                 // This check may be redundant, but it is better to be safe.
                 // The previous check in `sp.is_option_true(OPTION_REFRESH)` block may be enough.
                 if vs.source.is_monitor() {
@@ -927,7 +946,6 @@ fn run(vs: VideoService) -> ResultType<()> {
                 #[cfg(windows)]
                 if !c.is_gdi() {
                     if err.kind() == ConnectionReset {
-                        let recovery_attempt = dxgi_recovery_state.lock().unwrap().next_attempt();
                         if let Some(attempt) = recovery_attempt {
                             log::info!(
                                 "dxgi access lost, restart capture: attempt {attempt}, error: {err:?}"
@@ -938,6 +956,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                             "dxgi access lost after {DXGI_RECOVERY_LIMIT} restarts in {} seconds, fall back to gdi: {err:?}",
                             DXGI_RECOVERY_WINDOW.as_secs()
                         );
+                        dxgi_recovery_state.lock().unwrap().take_fallback_pending();
                     }
                     c.set_gdi();
                     log::info!("dxgi error, fall back to gdi: {:?}", err);
