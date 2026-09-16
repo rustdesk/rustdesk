@@ -3539,15 +3539,24 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	{
 		if (fileContentsRequest->dwFlags == FILECONTENTS_SIZE)
 		{
+			FILEDESCRIPTORW *fd;
+
 			if (clipboard->nFiles <= fileContentsRequest->listIndex)
 			{
 				rc = ERROR_INTERNAL_ERROR;
 				goto exit;
 			}
-			*((UINT32 *)&pData[0]) =
-				clipboard->fileDescriptor[fileContentsRequest->listIndex]->nFileSizeLow;
-			*((UINT32 *)&pData[4]) =
-				clipboard->fileDescriptor[fileContentsRequest->listIndex]->nFileSizeHigh;
+
+			fd = clipboard->fileDescriptor[fileContentsRequest->listIndex];
+			// The size fields only mean anything when FD_FILESIZE says so. Answering with
+			// them regardless would describe an entry whose size could not be read as empty.
+			if ((fd->dwFlags & FD_FILESIZE) == 0)
+			{
+				rc = ERROR_INTERNAL_ERROR;
+				goto exit;
+			}
+			*((UINT32 *)&pData[0]) = fd->nFileSizeLow;
+			*((UINT32 *)&pData[4]) = fd->nFileSizeHigh;
 			uSize = cbRequested;
 		}
 		else if (fileContentsRequest->dwFlags == FILECONTENTS_RANGE)
