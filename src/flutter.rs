@@ -292,6 +292,25 @@ fn load_nv12_gl_on_nv12() -> Option<RustDeskNv12GlOnNv12> {
     }
 }
 
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub type RustDeskNv12GlOnPrime =
+    unsafe extern "C" fn(texture: *mut c_void, frame: *const c_void);
+
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+fn load_nv12_gl_on_prime() -> Option<RustDeskNv12GlOnPrime> {
+    unsafe {
+        let p = hbb_common::libc::dlsym(
+            hbb_common::libc::RTLD_DEFAULT,
+            b"RustDeskNv12GlOnPrime\0".as_ptr() as _,
+        );
+        if p.is_null() {
+            None
+        } else {
+            Some(std::mem::transmute(p))
+        }
+    }
+}
+
 pub(super) type TextureRgbaPtr = usize;
 
 struct DisplaySessionInfo {
@@ -314,6 +333,8 @@ struct VideoRenderer {
     on_texture_func: Option<Symbol<'static, FlutterGpuTextureRendererPluginCApiSetTexture>>,
     #[cfg(all(target_os = "linux", feature = "flutter"))]
     on_nv12_func: Option<RustDeskNv12GlOnNv12>,
+    #[cfg(all(target_os = "linux", feature = "flutter"))]
+    on_prime_func: Option<RustDeskNv12GlOnPrime>,
 }
 
 impl Default for VideoRenderer {
@@ -361,10 +382,18 @@ impl Default for VideoRenderer {
 
         #[cfg(all(target_os = "linux", feature = "flutter"))]
         let on_nv12_func = load_nv12_gl_on_nv12();
+        #[cfg(all(target_os = "linux", feature = "flutter"))]
+        let on_prime_func = load_nv12_gl_on_prime();
         #[cfg(all(target_os = "linux", feature = "flutter", feature = "hwcodec"))]
         if on_nv12_func.is_some() {
             scrap::hwcodec::set_present_nv12_texture(true);
             log::info!("Linux NV12 GPU present enabled");
+        }
+        #[cfg(all(target_os = "linux", feature = "flutter", feature = "hwcodec"))]
+        if on_prime_func.is_some() && scrap::vaapi_prime::egl_dmabuf_ok() {
+            log::info!("Linux VAAPI DRM-PRIME zero-copy present enabled (Wayland/EGL)");
+        } else if on_prime_func.is_some() {
+            log::info!("Linux VAAPI PRIME symbols present; X11 uses NV12 upload (no dma-buf)");
         }
 
         Self {
@@ -376,6 +405,8 @@ impl Default for VideoRenderer {
             on_texture_func,
             #[cfg(all(target_os = "linux", feature = "flutter"))]
             on_nv12_func,
+            #[cfg(all(target_os = "linux", feature = "flutter"))]
+            on_prime_func,
         }
     }
 }
@@ -552,8 +583,18 @@ impl VideoRenderer {
             unsafe { func(info.gpu_output_ptr as _, texture) };
         }
         #[cfg(all(target_os = "linux", feature = "flutter"))]
-        if let Some(func) = self.on_nv12_func {
-            if !texture.is_null() {
+        if !texture.is_null() {
+            let kind = unsafe { *(texture as *const i32) };
+            if kind == 2 {
+                if let Some(func) = self.on_prime_func {
+                    static LOGGED: std::sync::atomic::AtomicBool =
+                        std::sync::atomic::AtomicBool::new(false);
+                    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                        log::info!("PRIME present first frame");
+                    }
+                    unsafe { func(info.gpu_output_ptr as _, texture as _) };
+                }
+            } else if let Some(func) = self.on_nv12_func {
                 let d = unsafe { &*(texture as *const scrap::GpuNv12Desc) };
                 unsafe {
                     func(

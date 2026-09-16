@@ -42,6 +42,8 @@ pub mod codec;
 pub mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
+#[cfg(all(feature = "hwcodec", target_os = "linux"))]
+pub mod vaapi_prime;
 #[cfg(feature = "mediacodec")]
 pub mod mediacodec;
 pub mod vpxcodec;
@@ -112,6 +114,7 @@ pub struct ImageTexture {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct GpuNv12Desc {
+    pub kind: i32,
     pub y: *const u8,
     pub y_stride: i32,
     pub uv: *const u8,
@@ -123,6 +126,7 @@ pub struct GpuNv12Desc {
 impl Default for GpuNv12Desc {
     fn default() -> Self {
         Self {
+            kind: 1,
             y: std::ptr::null(),
             y_stride: 0,
             uv: std::ptr::null(),

@@ -1097,6 +1097,8 @@ jobs:
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \
@@ -1370,6 +1372,8 @@ jobs:
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \
@@ -1668,6 +1672,8 @@ jobs:
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \
@@ -1989,6 +1995,8 @@ jobs:
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \
@@ -2224,6 +2232,8 @@ jobs:
                liblzma-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \
                libxcb-xfixes0-dev \

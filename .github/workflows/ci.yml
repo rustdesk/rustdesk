@@ -131,6 +131,8 @@ jobs:
                libgtk-3-dev \
                libpulse-dev \
                libva-dev \
+               libavcodec-dev \
+               libavutil-dev \
                libvdpau-dev \
                libxcb-randr0-dev \
                libxcb-shape0-dev \

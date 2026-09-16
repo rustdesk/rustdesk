@@ -35,6 +35,8 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
         libgstreamer-plugins-base1.0-dev \
         libgtk-3-dev \
         libpulse-dev \
+        libavcodec-dev \
+        libavutil-dev \
         libva-dev \
         libxcb-randr0-dev \
         libxcb-shape0-dev \

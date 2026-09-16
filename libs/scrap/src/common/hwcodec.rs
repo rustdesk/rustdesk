@@ -339,6 +339,8 @@ impl HwRamDecoder {
             _ => {}
         }
         if enable_hwcodec_option() {
+            // Present is NV12 upload + shader (not CPU RGB). VAAPI download of
+            // NV12 is much cheaper than software 4K H264 + I420 pack.
             let best = CodecInfo::prioritized(HwCodecConfig::get().ram_decode);
             match format {
                 CodecFormat::H264 => {
@@ -390,31 +392,71 @@ pub struct HwRamDecoderImage<'a> {
 
 impl HwRamDecoderImage<'_> {
     pub fn copy_nv12(&self, packed: &mut Vec<u8>, desc: &mut crate::GpuNv12Desc) -> bool {
-        if self.frame.pixfmt != AVPixelFormat::AV_PIX_FMT_NV12 {
-            return false;
-        }
         let width = self.frame.width;
         let height = self.frame.height;
         if width <= 0 || height <= 0 {
             return false;
         }
+        let w = width as usize;
+        let h = height as usize;
         let y_stride = self.frame.linesize[0] as usize;
-        let uv_stride = self.frame.linesize[1] as usize;
-        let y_len = y_stride.saturating_mul(height as usize);
-        let uv_len = uv_stride.saturating_mul((height as usize) / 2);
-        if self.frame.data[0].len() < y_len || self.frame.data[1].len() < uv_len {
+        let y_len = y_stride.saturating_mul(h);
+        if self.frame.data[0].len() < y_len {
             return false;
         }
-        packed.clear();
-        packed.extend_from_slice(&self.frame.data[0][..y_len]);
-        packed.extend_from_slice(&self.frame.data[1][..uv_len]);
-        desc.y = packed.as_ptr();
-        desc.y_stride = y_stride as i32;
-        desc.uv = packed[y_len..].as_ptr();
-        desc.uv_stride = uv_stride as i32;
-        desc.width = width as i32;
-        desc.height = height as i32;
-        true
+        match self.frame.pixfmt {
+            AVPixelFormat::AV_PIX_FMT_NV12 => {
+                let uv_stride = self.frame.linesize[1] as usize;
+                let uv_len = uv_stride.saturating_mul(h / 2);
+                if self.frame.data[1].len() < uv_len {
+                    return false;
+                }
+                // Point at the decoder buffer; OnNv12 copies once for the GL thread.
+                let _ = packed;
+                desc.kind = 1;
+                desc.y = self.frame.data[0].as_ptr();
+                desc.y_stride = y_stride as i32;
+                desc.uv = self.frame.data[1].as_ptr();
+                desc.uv_stride = uv_stride as i32;
+                desc.width = width as i32;
+                desc.height = height as i32;
+                true
+            }
+            AVPixelFormat::AV_PIX_FMT_YUV420P => {
+                let u_stride = self.frame.linesize[1] as usize;
+                let v_stride = self.frame.linesize[2] as usize;
+                let uh = h / 2;
+                let uw = w / 2;
+                if self.frame.data[1].len() < u_stride.saturating_mul(uh)
+                    || self.frame.data[2].len() < v_stride.saturating_mul(uh)
+                {
+                    return false;
+                }
+                let nv_stride = w;
+                packed.clear();
+                packed.resize(y_len + nv_stride * uh, 0);
+                packed[..y_len].copy_from_slice(&self.frame.data[0][..y_len]);
+                let uv = &mut packed[y_len..];
+                for row in 0..uh {
+                    let u = &self.frame.data[1][row * u_stride..row * u_stride + uw];
+                    let v = &self.frame.data[2][row * v_stride..row * v_stride + uw];
+                    let dst = &mut uv[row * nv_stride..row * nv_stride + w];
+                    for x in 0..uw {
+                        dst[x * 2] = u[x];
+                        dst[x * 2 + 1] = v[x];
+                    }
+                }
+                desc.kind = 1;
+                desc.y = packed.as_ptr();
+                desc.y_stride = y_stride as i32;
+                desc.uv = packed[y_len..].as_ptr();
+                desc.uv_stride = nv_stride as i32;
+                desc.width = width as i32;
+                desc.height = height as i32;
+                true
+            }
+            _ => false,
+        }
     }
 
     // rgb [in/out] fmt and stride must be set in ImageRgb

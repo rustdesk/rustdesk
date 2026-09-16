@@ -122,6 +122,10 @@ pub struct Decoder {
     i420: Vec<u8>,
     #[cfg(feature = "hwcodec")]
     nv12_desc: crate::GpuNv12Desc,
+    #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+    h264_prime: Option<crate::vaapi_prime::VaapiPrimeDecoder>,
+    #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+    h265_prime: Option<crate::vaapi_prime::VaapiPrimeDecoder>,
 }
 
 #[derive(Debug, Clone)]
@@ -505,6 +509,8 @@ impl Decoder {
         let (mut vp8, mut vp9, mut av1) = (None, None, None);
         #[cfg(feature = "hwcodec")]
         let (mut h264_ram, mut h265_ram) = (None, None);
+        #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+        let (mut h264_prime, mut h265_prime) = (None, None);
         #[cfg(feature = "vram")]
         let (mut h264_vram, mut h265_vram) = (None, None);
         #[cfg(feature = "mediacodec")]
@@ -546,6 +552,19 @@ impl Decoder {
                     }
                     valid = h264_vram.is_some();
                 }
+                #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+                if !valid
+                    && crate::vaapi_prime::available()
+                    && crate::vaapi_prime::egl_dmabuf_ok()
+                {
+                    match crate::vaapi_prime::VaapiPrimeDecoder::open(false) {
+                        Ok(v) => {
+                            h264_prime = Some(v);
+                            valid = true;
+                        }
+                        Err(e) => log::error!("create H264 VAAPI PRIME decoder failed: {}", e),
+                    }
+                }
                 #[cfg(feature = "hwcodec")]
                 if !valid {
                     match HwRamDecoder::new(format) {
@@ -571,6 +590,19 @@ impl Decoder {
                         Err(e) => log::error!("create H265 vram decoder failed: {}", e),
                     }
                     valid = h265_vram.is_some();
+                }
+                #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+                if !valid
+                    && crate::vaapi_prime::available()
+                    && crate::vaapi_prime::egl_dmabuf_ok()
+                {
+                    match crate::vaapi_prime::VaapiPrimeDecoder::open(true) {
+                        Ok(v) => {
+                            h265_prime = Some(v);
+                            valid = true;
+                        }
+                        Err(e) => log::error!("create H265 VAAPI PRIME decoder failed: {}", e),
+                    }
                 }
                 #[cfg(feature = "hwcodec")]
                 if !valid {
@@ -620,6 +652,10 @@ impl Decoder {
             i420: vec![],
             #[cfg(feature = "hwcodec")]
             nv12_desc: Default::default(),
+            #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+            h264_prime,
+            #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+            h265_prime,
         }
     }
 
@@ -673,6 +709,10 @@ impl Decoder {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h264s, _texture, present);
                 }
+                #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+                if let Some(decoder) = &mut self.h264_prime {
+                    return Decoder::handle_prime_video_frame(decoder, h264s, _texture, _pixelbuffer, present);
+                }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h264_ram {
                     return Decoder::handle_hwram_video_frame(
@@ -695,6 +735,10 @@ impl Decoder {
                 if let Some(decoder) = &mut self.h265_vram {
                     *_pixelbuffer = false;
                     return Decoder::handle_vram_video_frame(decoder, h265s, _texture, present);
+                }
+                #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+                if let Some(decoder) = &mut self.h265_prime {
+                    return Decoder::handle_prime_video_frame(decoder, h265s, _texture, _pixelbuffer, present);
                 }
                 #[cfg(feature = "hwcodec")]
                 if let Some(decoder) = &mut self.h265_ram {
@@ -804,6 +848,7 @@ impl Decoder {
             let images = decoder.decode(&h264.data)?;
             if let Some(image) = images.last() {
                 if present {
+                    // RAM NV12 upload + GL shader (not dma-buf). Faster than CPU RGB.
                     if present_nv12_texture() && image.copy_nv12(i420, nv12_desc) {
                         texture.texture = nv12_desc as *mut crate::GpuNv12Desc as *mut _;
                         texture.w = nv12_desc.width as usize;
@@ -815,6 +860,30 @@ impl Decoder {
                     }
                 } else {
                     ret = true;
+                }
+            }
+        }
+        Ok(ret)
+    }
+
+    #[cfg(all(feature = "hwcodec", target_os = "linux"))]
+    fn handle_prime_video_frame(
+        decoder: &mut crate::vaapi_prime::VaapiPrimeDecoder,
+        frames: &EncodedVideoFrames,
+        texture: &mut ImageTexture,
+        pixelbuffer: &mut bool,
+        present: bool,
+    ) -> ResultType<bool> {
+        let mut ret = false;
+        for f in frames.frames.iter() {
+            if decoder.decode(&f.data)? {
+                ret = true;
+                if present {
+                    *pixelbuffer = false;
+                    texture.texture =
+                        &mut decoder.last as *mut crate::vaapi_prime::GpuPrimeDesc as *mut _;
+                    texture.w = decoder.last.width as usize;
+                    texture.h = decoder.last.height as usize;
                 }
             }
         }

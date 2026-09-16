@@ -23,6 +23,9 @@ void RustDeskNv12GlOnNv12(void* texture,
                           int width,
                           int height);
 
+struct RustDeskPrimeFrame;
+void RustDeskNv12GlOnPrime(void* texture, const struct RustDeskPrimeFrame* frame);
+
 #ifdef __cplusplus
 }
 #endif

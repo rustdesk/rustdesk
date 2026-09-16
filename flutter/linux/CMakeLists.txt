@@ -110,6 +110,9 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 #
 # Any new source files that you add to the application should be added here.
 pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
+# FFmpeg 4+ (libavcodec 58). Ubuntu 18.04 CI has 3.4 / 57 and cannot compile
+# extra_hw_frames + DRM PRIME mapping; skip rather than fail the job.
+pkg_check_modules(LIBAV IMPORTED_TARGET libavcodec>=58 libavutil>=56)
 
 add_executable(${BINARY_NAME}
   "main.cc"
@@ -121,10 +124,18 @@ add_executable(${BINARY_NAME}
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   ${WAYLAND_PROTOCOL_SOURCES}
 )
+if(LIBAV_FOUND)
+  target_sources(${BINARY_NAME} PRIVATE "vaapi_prime_dec.c")
+else()
+  message(WARNING "libavcodec/libavutil not found; VAAPI PRIME decoder disabled")
+endif()
 
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+# librustdesk.so dlsyms RustDeskVaapiPrime* / Nv12Gl* via RTLD_DEFAULT; PIE
+# executables omit those from .dynsym unless exports are enabled.
+set_target_properties(${BINARY_NAME} PROPERTIES ENABLE_EXPORTS ON)
 
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
@@ -132,6 +143,9 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
 if(EPOXY_FOUND)
   target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EPOXY)
+endif()
+if(LIBAV_FOUND)
+  target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::LIBAV)
 endif()
 # target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 
