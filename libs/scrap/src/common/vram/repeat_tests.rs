@@ -1,4 +1,4 @@
-use super::super::VRamEncoder;
+use super::VRamEncoder;
 use crate::{codec::EncoderApi, EncodeInput};
 use base::message_proto::{video_frame, VideoFrame};
 use hwcodec::{
