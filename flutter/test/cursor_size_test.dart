@@ -248,6 +248,7 @@ Future<void> _checkRasterTransitions(
     (0.5 + delta, (33, 33)),
     (1.0, (64, 64)),
     (scaleAboveOne, (65, 65)),
+    (1.0, (64, 64)),
   ]) {
     buildCursorOfCache(cursor, scale, cursor.cache);
     await Future<void>.delayed(Duration.zero);
