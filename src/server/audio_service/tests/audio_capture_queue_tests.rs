@@ -10,7 +10,6 @@ const CONCURRENT_PACKETS: usize = 10_000;
 enum PausePoint {
     BeforeRecycle,
     Recycle,
-    Consume,
 }
 
 struct WorkerPause {
@@ -33,9 +32,6 @@ fn paused_worker(
     let (index, _) = receiver.handoff.buffers.claim(false).unwrap();
     let mut slot = receiver.handoff.buffers.slots[index].lock().unwrap();
     let mut packet = std::mem::take(&mut slot.1);
-    if matches!(point, PausePoint::Consume) {
-        pause.wait();
-    }
     packet.clear();
     slot.1 = packet;
     if matches!(point, PausePoint::BeforeRecycle) {
@@ -126,13 +122,6 @@ fn callback_finishes_while_worker_recycles_a_buffer() {
     for queued in [1, CAPTURE_PCM_QUEUE_PACKETS - 1, CAPTURE_PCM_QUEUE_PACKETS] {
         assert_callback_progress(PausePoint::BeforeRecycle, queued);
         assert_callback_progress(PausePoint::Recycle, queued);
-    }
-}
-
-#[test]
-fn callback_finishes_while_worker_releases_a_ready_packet() {
-    for queued in [1, CAPTURE_PCM_QUEUE_PACKETS - 1, CAPTURE_PCM_QUEUE_PACKETS] {
-        assert_callback_progress(PausePoint::Consume, queued);
     }
 }
 

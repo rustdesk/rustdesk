@@ -250,5 +250,5 @@ pub(super) fn start_capture_encoder(
 }
 
 #[cfg(test)]
-#[path = "audio_capture_queue_tests.rs"]
+#[path = "tests/audio_capture_queue_tests.rs"]
 mod tests;
