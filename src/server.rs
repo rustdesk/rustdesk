@@ -118,6 +118,15 @@ pub struct Server {
 pub type ServerPtr = Arc<RwLock<Server>>;
 pub type ServerPtrWeak = Weak<RwLock<Server>>;
 
+#[cfg(test)]
+pub fn new_for_test() -> ServerPtr {
+    Arc::new(RwLock::new(Server {
+        connections: HashMap::new(),
+        services: HashMap::new(),
+        id_count: 1000,
+    }))
+}
+
 pub fn new() -> ServerPtr {
     let mut server = Server {
         connections: HashMap::new(),
@@ -204,7 +213,48 @@ pub async fn create_tcp_connection(
     meta: ConnectionMeta,
 ) -> ResultType<()> {
     let mut stream = stream;
+    // The address the connection layer keys on, whitelist and admission alike.
+    let addr = hbb_common::try_into_v4(addr);
     let id = server.write().unwrap().get_new_id();
+    // Admitted before the identity handshake, so a peer that stalls in it, or after it without
+    // logging in, holds its place the whole time; an address over its share is turned away.
+    let Some(unauthorized) = admit_unauthorized(id, addr.ip()) else {
+        bail!("too many unauthenticated connections from {}", addr.ip());
+    };
+    tokio::select! {
+        handshake = identity_handshake(&mut stream, secure) => handshake?,
+        _ = unauthorized.evicted() => {
+            bail!("evicted to make room for a newer unauthenticated connection");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(task) = Command::new("/usr/bin/caffeinate")
+            .arg("-u")
+            .arg("-t 5")
+            .spawn()
+        {
+            super::CHILD_PROCESS.lock().unwrap().push(task);
+        }
+        log::info!("wake up macos");
+    }
+    Connection::start(
+        addr,
+        stream,
+        id,
+        Arc::downgrade(&server),
+        meta,
+        unauthorized,
+    )
+    .await;
+    Ok(())
+}
+
+/// Our signed identity goes out and, when `secure`, the controller's reply keys `stream`.
+/// Separate so it can be raced against the connection's eviction.
+async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()> {
     let (sk, pk) = Config::get_key_pair();
     if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
@@ -267,19 +317,6 @@ pub async fn create_tcp_connection(
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        if let Ok(task) = Command::new("/usr/bin/caffeinate")
-            .arg("-u")
-            .arg("-t 5")
-            .spawn()
-        {
-            super::CHILD_PROCESS.lock().unwrap().push(task);
-        }
-        log::info!("wake up macos");
-    }
-    Connection::start(addr, stream, id, Arc::downgrade(&server), meta).await;
     Ok(())
 }
 
