@@ -38,8 +38,16 @@ pub struct CursorSnapshot {
 }
 
 /// Where a cursor bitmap's hotspot most likely is, from its opaque pixels alone: the top-left of
-/// the opaque bounding box for an arrow, its centre for a tall shape (an I-beam). Only meaningful
-/// on an UPRIGHT sprite - a rotated arrow's tip is some other corner of its box.
+/// the opaque bounding box for an arrow, its centre for an ELONGATED shape (an I-beam), in either
+/// direction. Only meaningful on an UPRIGHT sprite - a rotated arrow's tip is some other corner of
+/// its box.
+///
+/// The aspect test is symmetric because a text cursor is not always the vertical one. Adwaita's
+/// `vertical-text` shape is a horizontal I-beam: at 24 px its opaque box is 20x9 and the theme's
+/// own hotspot is (12, 11), i.e. its centre. A tall-only test calls that shape an arrow and returns
+/// (2, 6), which is 11.2 px from the truth; the centre is 1.4 px away. Checked against all 35
+/// shapes of the installed theme at 24 px: making the test symmetric moves exactly that one shape
+/// and leaves the other 34 byte-identical, arrows included.
 pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
     let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
     for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
@@ -55,7 +63,7 @@ pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
         return (0, 0);
     }
     let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
-    if bh > bw * 2 {
+    if bh > bw * 2 || bw > bh * 2 {
         ((minx + maxx) / 2, (miny + maxy) / 2)
     } else {
         (minx, miny)

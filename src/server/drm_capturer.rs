@@ -1972,6 +1972,55 @@ mod drm_capturer_tests {
         (px, w, h)
     }
 
+    /// An I-beam lying along x, deliberately NOT centred in its bitmap: 16x8, opaque rows 2..4 and
+    /// columns 1..13, so the opaque box is (1,2)-(12,3), 12x2 - elongated, which is what Adwaita's
+    /// `vertical-text` shape is. Its click point is the centre of that BOX, (6,2), while the centre
+    /// of the bitmap is (7,3). The offset is the point: a real sprite sits somewhere inside a
+    /// 64x64 hardware buffer (the adwaita box above is (2,6)-(21,14) in a 24x24 one), and a fixture
+    /// centred in its bitmap would let an implementation that returns the bitmap centre pass a test
+    /// claiming to check the box centre.
+    fn ibeam_horizontal() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (16usize, 8usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 2..4 {
+            for x in 1..13 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (6, 2))
+    }
+
+    /// The shape at the aspect ratio that actually matters: a 20x9 opaque box, which is what the
+    /// installed Adwaita `vertical-text` measures at 24 px. 2.22:1, only just past the rule's
+    /// factor of two, so it pins the threshold from ABOVE: a stricter rule (say `bw > bh * 3`)
+    /// leaves the 6:1 bars below centred and silently un-centres the real cursor. Placed
+    /// off-centre in a 24x24 buffer like the real one, box (2,6)-(21,14), centre (11,10) - the
+    /// same numbers the theme file gives, against its declared hotspot of (12,11).
+    fn ibeam_theme_aspect() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (24usize, 24usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 6..15 {
+            for x in 2..22 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (11, 10))
+    }
+
+    /// The same shape standing up and equally off-centre: 8x16, opaque columns 2..4 and rows 1..13,
+    /// box (2,1)-(3,12), centre (2,6) against a bitmap centre of (3,7). The tall case the guess
+    /// already handled, kept so the symmetric rule cannot pass by breaking it.
+    fn ibeam_vertical() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (8usize, 16usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 1..13 {
+            for x in 2..4 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (2, 6))
+    }
+
     /// What the compositor puts in the cursor plane on an output rotated by `t`: the upright sprite
     /// rotated forward by t, which is what turning it back by (360 - t) degrees produces.
     fn as_scanned_out(upright: &[u8], w: usize, h: usize, t: i32) -> (Vec<u8>, usize, usize) {
@@ -2019,6 +2068,80 @@ mod drm_capturer_tests {
         }
         // The old flow is wrong at every angle, not only the one that was noticed.
         assert_eq!(old_wrong_at, vec![90, 180, 270]);
+    }
+
+    // rustdesk#16242, the maintainer's pixel-level finding: the guess only centred TALL shapes, so
+    // a horizontal I-beam got the corner of its box. Before the rotation rework such a cursor
+    // reached a quarter-turned output as a tall bitmap and the same rule centred it by accident, so
+    // turning the sprite upright first - correct in itself - turned a nearly right hotspot into one
+    // about 11 px out. Measured on the installed Adwaita `vertical-text` at 24 px: theme hotspot
+    // (12, 11), opaque box 20x9, corner guess (2, 6) = 11.2 px away, centre guess (11, 10) = 1.4 px.
+    //
+    // The old flow is not the fix: it was right for this one shape and wrong for arrows at every
+    // angle, which is what the test above pins. The fix is for the guess to centre an elongated box
+    // whichever way it lies, and that is what this checks - for both orientations and at the real
+    // 2.22:1 aspect of the shape that was wrong - by driving `deliver_drm_cursor` and reading the
+    // published hotspot back, not by chaining the helpers itself.
+    #[test]
+    fn an_ibeam_keeps_its_centre_whichever_way_it_lies() {
+        use scrap::drm_reader::infer_hotspot;
+        for (i, (name, (up, w, h, box_centre))) in [
+            ("horizontal", ibeam_horizontal()),
+            ("vertical", ibeam_vertical()),
+            ("theme-aspect", ibeam_theme_aspect()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            // The fixture must not be centred in its own bitmap, or this test cannot tell the
+            // centre of the opaque BOX - which is what the guess computes and what a cursor's
+            // click point is - from the centre of the buffer the sprite happens to sit in.
+            let bitmap_centre = (((w - 1) / 2) as i32, ((h - 1) / 2) as i32);
+            assert_ne!(
+                box_centre, bitmap_centre,
+                "the {name} fixture is centred in its bitmap, so it cannot discriminate"
+            );
+
+            // The upright guess is the centre of the opaque box, not its corner.
+            let guess = infer_hotspot(&up, w, h);
+            assert_eq!(guess, box_centre, "the {name} I-beam is centred, not cornered");
+
+            // And it is what the delivery path PUBLISHES, not just what the helper computes:
+            // `deliver_drm_cursor` is where the guessed branch is chosen and where the sprite is
+            // turned back, so the sprite is handed over pre-rotated exactly as the compositor
+            // scans it out, and the published hotspot is read back out of DRM_CURSOR.
+            for (j, t) in [0, 90, 180, 270].into_iter().enumerate() {
+                let display = 9_300 + (i * 8 + j) as i32;
+                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+                // What the producer actually sends for a guessed hotspot: its own guess, made on
+                // the sprite AS SCANNED OUT (drm_reader does exactly that). At 0 the delivery path
+                // publishes it unchanged, which is why it has to be the real value and not a
+                // placeholder; at every other angle the path discards it and guesses again.
+                let (phx, phy) = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
+                deliver_drm_cursor(display, 1, 7, sw as u32, sh as u32, phx, phy, false, scan, t);
+                let map = DRM_CURSOR.lock().unwrap();
+                let (_, c) = map.get(&display).expect("the cursor path published nothing");
+                assert_eq!(
+                    (c.width as usize, c.height as usize),
+                    (w, h),
+                    "the published {name} sprite is upright-sized at {t}"
+                );
+                assert_eq!(c.colors, up, "the published {name} sprite is upright at {t}");
+                assert_eq!(
+                    (c.hotx, c.hoty),
+                    box_centre,
+                    "the published {name} hotspot is the box centre at {t}"
+                );
+            }
+        }
+
+        // The arrow is untouched, and it sits exactly ON the boundary rather than safely inside
+        // it: its box is 3x6, which is the factor of two itself, so it keeps its tip only because
+        // the comparison is strict. That makes it the control for the other side of the threshold
+        // - loosen the rule to `* 1` and this line fails, tighten it past 2.22 and the
+        // theme-aspect case above fails. The two together pin where the boundary is.
+        let (arrow_px, aw, ah) = arrow();
+        assert_eq!(infer_hotspot(&arrow_px, aw, ah), (0, 0));
     }
 
     // The frame keeps master's 180 behaviour (hardware-rotated 180 scans out upright), but the
