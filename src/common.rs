@@ -2257,7 +2257,143 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+fn parse_server_config(content: &str) -> Option<crate::custom_server::CustomServer> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(trimmed) {
+            let host = map
+                .get("host")
+                .or_else(|| map.get("custom-rendezvous-server"))
+                .cloned()
+                .unwrap_or_default();
+            if !host.is_empty() {
+                let key = map.get("key").cloned().unwrap_or_default();
+                let relay = map
+                    .get("relay")
+                    .or_else(|| map.get("relay-server"))
+                    .cloned()
+                    .unwrap_or_default();
+                let api = map
+                    .get("api")
+                    .or_else(|| map.get("api-server"))
+                    .cloned()
+                    .unwrap_or_default();
+                return Some(crate::custom_server::CustomServer {
+                    host,
+                    key,
+                    api,
+                    relay,
+                });
+            }
+        }
+    }
+    if let Ok(server) = crate::custom_server::get_custom_server_from_string(trimmed) {
+        if !server.host.is_empty() {
+            return Some(server);
+        }
+    }
+    let mut server = crate::custom_server::CustomServer::default();
+    let delimiters = [',', ';', '\n'];
+    let parts: Vec<&str> = trimmed
+        .split(|c| delimiters.contains(&c))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    for part in parts {
+        if let Some((k, v)) = part.split_once('=') {
+            let k = k.trim().to_lowercase();
+            let v = v.trim().to_string();
+            match k.as_str() {
+                "host" | "custom-rendezvous-server" => server.host = v,
+                "key" => server.key = v,
+                "relay" | "relay-server" => server.relay = v,
+                "api" | "api-server" => server.api = v,
+                _ => {}
+            }
+        }
+    }
+    if !server.host.is_empty() {
+        return Some(server);
+    }
+    None
+}
+
+fn apply_custom_server(lic: crate::custom_server::CustomServer) {
+    if lic.host.is_empty() {
+        return;
+    }
+    if let Ok(mut overwrite) = config::OVERWRITE_SETTINGS.write() {
+        overwrite.insert("custom-rendezvous-server".into(), lic.host.clone());
+        if !lic.key.is_empty() {
+            overwrite.insert("key".into(), lic.key);
+        }
+        if !lic.relay.is_empty() {
+            overwrite.insert("relay-server".into(), lic.relay);
+        }
+        if !lic.api.is_empty() {
+            overwrite.insert("api-server".into(), lic.api);
+        }
+    }
+    if let Ok(mut exe_server) = config::EXE_RENDEZVOUS_SERVER.write() {
+        *exe_server = lic.host;
+    }
+}
+
+pub fn load_local_server_config() {
+    #[cfg(debug_assertions)]
+    for name in ["./server.txt", "./server.conf"] {
+        if let Ok(data) = std::fs::read_to_string(name) {
+            if let Some(server) = parse_server_config(&data) {
+                log::info!("Loaded server config from {}", name);
+                apply_custom_server(server);
+                return;
+            }
+        }
+    }
+    let mut dirs = Vec::new();
+    if let Ok(p) = std::env::var("RUSTDESK_PORTABLE_DIR") {
+        dirs.push(std::path::PathBuf::from(p));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            #[cfg(target_os = "macos")]
+            {
+                let res = parent.join("../Resources");
+                if res.is_dir() {
+                    dirs.push(res);
+                }
+            }
+            dirs.push(parent.to_path_buf());
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        if !dirs.contains(&cwd) {
+            dirs.push(cwd);
+        }
+    }
+    for dir in dirs {
+        for name in ["server.txt", "server.conf"] {
+            let conf_path = dir.join(name);
+            if conf_path.is_file() {
+                let Ok(data) = std::fs::read_to_string(&conf_path) else {
+                    log::error!("Failed to read server config from {:?}", conf_path);
+                    return;
+                };
+                if let Some(server) = parse_server_config(&data) {
+                    log::info!("Loaded local server config from {:?}", conf_path);
+                    apply_custom_server(server);
+                    return;
+                }
+            }
+        }
+    }
+}
+
 pub fn load_custom_client() {
+    load_local_server_config();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -3415,5 +3551,41 @@ mod tests {
         // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
         // non-WebRTC handshakes.
         assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
+    }
+
+    #[test]
+    fn test_parse_server_config() {
+        assert!(parse_server_config("").is_none());
+        assert!(parse_server_config("   ").is_none());
+
+        // Comma-separated
+        let s = parse_server_config("host=srv.test,key=pk123,relay=relay.test").unwrap();
+        assert_eq!(s.host, "srv.test");
+        assert_eq!(s.key, "pk123");
+        assert_eq!(s.relay, "relay.test");
+
+        // Multi-line with spaces
+        let multiline = "host = srv.test\nkey = pk123\nrelay = relay.test\napi = http://srv.test:21114";
+        let s = parse_server_config(multiline).unwrap();
+        assert_eq!(s.host, "srv.test");
+        assert_eq!(s.key, "pk123");
+        assert_eq!(s.relay, "relay.test");
+        assert_eq!(s.api, "http://srv.test:21114");
+
+        // Full option aliases
+        let aliases = "custom-rendezvous-server=srv.test\nkey=pk123\nrelay-server=relay.test\napi-server=http://srv.test:21114";
+        let s = parse_server_config(aliases).unwrap();
+        assert_eq!(s.host, "srv.test");
+        assert_eq!(s.key, "pk123");
+        assert_eq!(s.relay, "relay.test");
+        assert_eq!(s.api, "http://srv.test:21114");
+
+        // JSON format
+        let json = r#"{"host": "srv.test", "key": "pk123", "relay": "relay.test", "api": "http://srv.test:21114"}"#;
+        let s = parse_server_config(json).unwrap();
+        assert_eq!(s.host, "srv.test");
+        assert_eq!(s.key, "pk123");
+        assert_eq!(s.relay, "relay.test");
+        assert_eq!(s.api, "http://srv.test:21114");
     }
 }
