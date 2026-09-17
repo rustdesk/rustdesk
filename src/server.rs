@@ -182,6 +182,7 @@ async fn accept_connection_(
     socket: Stream,
     secure: bool,
     meta: ConnectionMeta,
+    slot: crate::rendezvous_mediator::PunchSlot,
 ) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
@@ -191,6 +192,8 @@ async fn accept_connection_(
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
+        // The peer is in: the place goes back before the session runs, as every punch's does.
+        drop(slot);
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
         create_tcp_connection(
@@ -320,14 +323,15 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
     Ok(())
 }
 
-pub async fn accept_connection(
+pub(crate) async fn accept_connection(
     server: ServerPtr,
     socket: Stream,
     peer_addr: SocketAddr,
     secure: bool,
     meta: ConnectionMeta,
+    slot: crate::rendezvous_mediator::PunchSlot,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure, meta).await {
+    if let Err(err) = accept_connection_(server, socket, secure, meta, slot).await {
         log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }
