@@ -111,12 +111,19 @@ void main() {
     ((1, 64), 0.25, (1, 16)),
     ((8, 8), 0.5, (12, 12)),
     ((4, 64), 1.0, (4, 64)),
+    ((1, 512), 10.0, (2, 1024)),
   ]) {
     test('native cursor size $scenario',
         () => _checkSize(scenario, registrations));
   }
   test('native raster boundaries rebuild buffers and distinguish cache keys',
       () => _checkRasterTransitions(registrations));
+  test('cursor resize limits preserve the last valid raster', () async {
+    for (final size in [(32, 16), (16, 32)]) {
+      await _checkResizeLimits(size, registrations);
+      registrations.clear();
+    }
+  });
   for (final pattern in [
     ([128, 0, 0, 128], 128),
     ([255, 0, 0, 255, 0, 0, 0, 0], 127),
@@ -136,7 +143,7 @@ void main() {
   }
 }
 
-CursorData _data((int, int) size) {
+CursorData _data((int, int) size, {Offset hotspot = Offset.zero}) {
   final image = img.Image(width: size.$1, height: size.$2, numChannels: 4);
   for (final pixel in image) {
     pixel.setRgba(64, 32, 16, 255);
@@ -150,8 +157,8 @@ CursorData _data((int, int) size) {
       data: Platform.isWindows
           ? image.getBytes(order: img.ChannelOrder.bgra)
           : Uint8List.fromList(img.encodePng(image)),
-      hotxOrigin: 0,
-      hotyOrigin: 0,
+      hotxOrigin: hotspot.dx,
+      hotyOrigin: hotspot.dy,
       width: size.$1,
       height: size.$2);
 }
@@ -257,6 +264,46 @@ Future<void> _checkRasterTransitions(
         registrations.singleWhere((args) => args['name'] == key), expected);
   }
   expect(registrations.length, 4);
+}
+
+Future<void> _checkResizeLimits(
+    (int, int) size, List<Map<dynamic, dynamic>> registrations) async {
+  const maxSide = 1024;
+  const sourceLongEdge = 32;
+  const validScale = maxSide / sourceLongEdge;
+  final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
+  const hotspot = Offset(2, 3);
+  final cursor = _Cursor(_data(size, hotspot: hotspot), ffi);
+  addTearDown(() => _dispose(cursor));
+  addTearDown(ffi.canvasModel.dispose);
+  buildCursorOfCache(cursor, validScale, cursor.cache);
+  await Future<void>.delayed(Duration.zero);
+  final expected = Platform.isLinux
+      ? (maxSide, maxSide)
+      : ((size.$1 * validScale).ceil(), (size.$2 * validScale).ceil());
+  _expectSize(registrations.single, expected);
+  final raster = (cursor.cache.rasterWidth, cursor.cache.rasterHeight);
+  // Fail on a small allocation before reaching unsafe sizes without the guard.
+  for (final scale in [
+    (maxSide + 1) / sourceLongEdge,
+    double.maxFinite,
+    double.infinity,
+    double.nan,
+    0.0,
+    -1.0,
+  ]) {
+    buildCursorOfCache(cursor, scale, cursor.cache);
+    await Future<void>.delayed(Duration.zero);
+    expect(cursor.cache.scale, validScale);
+    expect((cursor.cache.rasterWidth, cursor.cache.rasterHeight), raster);
+    expect((cursor.cache.hotx, cursor.cache.hoty),
+        (hotspot.dx * validScale, hotspot.dy * validScale));
+  }
+  buildCursorOfCache(cursor, 1.0, cursor.cache);
+  await Future<void>.delayed(Duration.zero);
+  expect(cursor.cache.scale, 1.0);
+  _expectSize(registrations.last,
+      Platform.isLinux ? (sourceLongEdge, sourceLongEdge) : size);
 }
 
 const _viewCases = [

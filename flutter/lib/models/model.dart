@@ -2858,6 +2858,9 @@ class CanvasModel with ChangeNotifier {
 
 // data for cursor
 class CursorData {
+  // At most 4 MiB of RGBA, including Linux's square cursor padding.
+  static const _maxRasterSize = 1024;
+
   final String peerId;
   final String id;
   final img2.Image image;
@@ -2871,6 +2874,7 @@ class CursorData {
   final int height;
   int _rasterWidth;
   int _rasterHeight;
+  bool _scaleLimitReported = false;
 
   int get rasterWidth => _rasterWidth;
   int get rasterHeight => _rasterHeight;
@@ -2892,7 +2896,24 @@ class CursorData {
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
+  double _limitScale(double requestedScale) {
+    final valid = requestedScale.isFinite && requestedScale > 0;
+    // Invalid requests retain the last valid raster and hotspot.
+    final limitedScale = valid
+        ? min(requestedScale, _maxRasterSize / max(width, height))
+        : scale;
+    final limited = !valid || limitedScale != requestedScale;
+    if (limited && !_scaleLimitReported) {
+      debugPrint(
+          'Cursor $id: rejected scale $requestedScale for ${width}x$height; '
+          'using $limitedScale (maximum raster side $_maxRasterSize).');
+    }
+    _scaleLimitReported = limited;
+    return limitedScale;
+  }
+
   double _checkUpdateScale(double scale) {
+    scale = _limitScale(scale);
     if (scale != 1.0) {
       // A thin cursor must not grow just to make its short edge reach the minimum.
       scale = max(scale, kMinCursorSize / max(width, height));
