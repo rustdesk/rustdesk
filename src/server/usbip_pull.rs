@@ -19,7 +19,6 @@ use hbb_common::{
 };
 use std::{
     collections::HashMap,
-    process::Command,
     sync::{Arc, LazyLock, Mutex},
 };
 
@@ -210,25 +209,21 @@ async fn pull(
     });
 
     let attach_bus_id = bus_id.clone();
-    let attach_result =
-        tokio::task::spawn_blocking(move || usb_attach_privileged(port, &attach_bus_id)).await;
-    match attach_result {
-        Ok(true) => {
-            let local_port = tokio::task::spawn_blocking({
-                let bus_id = bus_id.clone();
-                move || find_attached_port(&bus_id)
-            })
+    let local_port =
+        tokio::task::spawn_blocking(move || usb_attach_privileged(port, &attach_bus_id))
             .await
             .ok()
             .flatten();
+    match local_port {
+        Some(local_port) => {
             log::info!(
-                "usb push: attached {} on local port {:?} (channel {})",
+                "usb push: attached {} on local port {} (channel {})",
                 bus_id, local_port, id
             );
-            *attached_port.lock().unwrap() = local_port;
+            *attached_port.lock().unwrap() = Some(local_port);
             send(&tx, push_result_msg(bus_id, String::new()));
         }
-        Ok(false) | Err(_) => {
+        None => {
             let message = format!("Failed to push {}", bus_id);
             log::error!("usb push: `usbip attach` failed: {}", message);
             send(&tx, push_result_msg(bus_id, message));
@@ -236,28 +231,52 @@ async fn pull(
     }
 }
 
-fn usb_attach_privileged(port: u16, bus_id: &str) -> bool {
-    crate::platform::run_cmds_privileged(&format!(
-        "usbip -t {port} attach -r 127.0.0.1 -b {bus_id}"
-    ))
-}
-
 static USB_PORT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Port (\d+):").unwrap());
+// The remote bus id is the last path segment of the `usbip://host:port/busid`
+// URL, not the token before the arrow (that's some other local identifier,
+// e.g. "5-1" for a remote busid of "18-1").
 static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\s*(\S+)\s+->\s+usbip://").unwrap());
+    LazyLock::new(|| Regex::new(r"->\s+usbip://[^/]+/(\S+)").unwrap());
 
-fn usbip_command() -> Command {
-    let mut cmd = Command::new("usbip");
-    let path = std::env::var("PATH").unwrap_or_default();
-    cmd.env("PATH", format!("{path}:/usr/sbin:/sbin:/usr/local/sbin"));
-    cmd
+/// Blocking; call via `spawn_blocking`. Mirrors
+/// `client/usbip_attach.rs::usb_attach_privileged` -- two problems in one.
+/// `usbip attach` writes its attach record as root, so a follow-up
+/// unprivileged `usbip port` can't read it back to report the remote bus id
+/// (`fopen`/`read_record` fail, the match below always comes up empty).
+/// Query the port as part of the *same* privileged command instead, via a
+/// temp file `chmod`ed readable afterwards, rather than a second sudo
+/// prompt. Separately, even run right after as root, the kernel's vhci
+/// state can lag a moment behind `usbip attach` returning success, so the
+/// retry loop is shell-side too (same privileged session).
+fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
+    let tmp_path = std::env::temp_dir().join(format!(
+        "rustdesk-usbip-port-{}-{}.txt",
+        std::process::id(),
+        bus_id
+    ));
+    let ok = crate::platform::run_cmds_privileged(&format!(
+        "usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
+         for i in 1 2 3 4 5 6 7 8 9 10; do \
+           usbip port > {0} 2>&1; \
+           grep -q -- '/{bus_id}$' {0} && break; \
+           sleep 0.2; \
+         done && chmod 644 {0}",
+        tmp_path.display()
+    ));
+    let local_port = if ok {
+        std::fs::read_to_string(&tmp_path)
+            .ok()
+            .and_then(|output| parse_attached_port(&output, bus_id))
+    } else {
+        None
+    };
+    let _ = std::fs::remove_file(&tmp_path);
+    local_port
 }
 
-fn find_attached_port(bus_id: &str) -> Option<i32> {
-    let output = usbip_command().arg("port").output().ok()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
+fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
     let mut current_port: Option<i32> = None;
-    for line in stdout.lines() {
+    for line in output.lines() {
         if let Some(caps) = USB_PORT_RE.captures(line) {
             current_port = caps[1].parse().ok();
             continue;

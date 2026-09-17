@@ -919,6 +919,13 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // A dead peer never answers the usbip request this session may be
+    // waiting on -- clear it so the RemoteUsb page's toggle buttons don't
+    // stay disabled forever (harmless no-op for every other session type).
+    if (title == 'Connection Error') {
+      parent.target?.usbipModel.clearPendingOnDisconnect();
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.

@@ -430,12 +430,21 @@ impl Session<FlutterHandler> {
     /// moment after the entry is dropped, not synchronously with this call,
     /// so the unshare below retries briefly rather than racing it.
     pub fn usb_unpush(&self, bus_id: String) {
-        let Some(channel_id) = self.ui_handler.usb_share_channel_for_bus_id(&bus_id) else {
-            return;
-        };
-        log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
-        self.usb_close_forward(channel_id);
-        self.ui_handler.unregister_usb_share_channel(channel_id);
+        // No live channel happens whenever this app instance never saw the
+        // push complete -- e.g. restarted after sharing, with the peer
+        // still gone. The device can still genuinely be locally bound
+        // though (`usbip bind` is a kernel fact, not app state), so the
+        // actual unshare below must not depend on a channel existing.
+        if let Some(channel_id) = self.ui_handler.usb_share_channel_for_bus_id(&bus_id) {
+            log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
+            self.usb_close_forward(channel_id);
+            self.ui_handler.unregister_usb_share_channel(channel_id);
+        } else {
+            log::info!(
+                "usb push: unpushing {} with no live channel (peer gone or app restarted since sharing)",
+                bus_id
+            );
+        }
 
         let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
             return;

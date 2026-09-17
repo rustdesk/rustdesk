@@ -46,6 +46,22 @@ class UsbipModel with ChangeNotifier {
 
   SessionID get _sessionId => parent.target!.sessionId;
 
+  /// Called when the underlying session dies unexpectedly (peer/network
+  /// loss) rather than a clean detach/unpush -- the `usb_bind_result` these
+  /// pending sets are waiting on will never arrive from a gone peer, so the
+  /// toggle buttons would stay disabled forever otherwise. Local state
+  /// (`attachedPorts`/`localDevices`) is left as-is: a pull-direction attach
+  /// is a local `usbip attach`, so the device may still genuinely be
+  /// attached on this machine even though the peer is gone.
+  void clearPendingOnDisconnect() {
+    if (pendingBusIds.isEmpty && localPendingBusIds.isEmpty) return;
+    pendingBusIds.clear();
+    localPendingBusIds.clear();
+    _pendingShareForAttach.clear();
+    lastError = 'Connection lost';
+    notifyListeners();
+  }
+
   void requestDevices() {
     loading = true;
     notifyListeners();
