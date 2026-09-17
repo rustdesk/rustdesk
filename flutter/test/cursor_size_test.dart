@@ -119,7 +119,7 @@ void main() {
   test('native raster boundaries rebuild buffers and distinguish cache keys',
       () => _checkRasterTransitions(registrations));
   test('cursor resize limits preserve the last valid raster', () async {
-    for (final size in [(32, 16), (16, 32)]) {
+    for (final size in [(30, 20), (20, 30)]) {
       await _checkResizeLimits(size, registrations);
       registrations.clear();
     }
@@ -269,20 +269,22 @@ Future<void> _checkRasterTransitions(
 Future<void> _checkResizeLimits(
     (int, int) size, List<Map<dynamic, dynamic>> registrations) async {
   const maxSide = 1024;
-  const sourceLongEdge = 32;
+  const sourceLongEdge = 30;
   const validScale = maxSide / sourceLongEdge;
   final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
-  const hotspot = Offset(2, 3);
+  const hotspot = Offset(4, 7);
   final cursor = _Cursor(_data(size, hotspot: hotspot), ffi);
   addTearDown(() => _dispose(cursor));
   addTearDown(ffi.canvasModel.dispose);
   buildCursorOfCache(cursor, validScale, cursor.cache);
   await Future<void>.delayed(Duration.zero);
-  final expected = Platform.isLinux
-      ? (maxSide, maxSide)
-      : ((size.$1 * validScale).ceil(), (size.$2 * validScale).ceil());
-  _expectSize(registrations.single, expected);
-  final raster = (cursor.cache.rasterWidth, cursor.cache.rasterHeight);
+  final raster = ((size.$1 * validScale).ceil(), (size.$2 * validScale).ceil());
+  final expectedHotspot =
+      (hotspot.dx * raster.$1 / size.$1, hotspot.dy * raster.$2 / size.$2);
+  _expectSize(
+      registrations.single, Platform.isLinux ? (maxSide, maxSide) : raster);
+  expect((registrations.single['hotX'], registrations.single['hotY']),
+      expectedHotspot);
   // Fail on a small allocation before reaching unsafe sizes without the guard.
   for (final scale in [
     (maxSide + 1) / sourceLongEdge,
@@ -296,8 +298,7 @@ Future<void> _checkResizeLimits(
     await Future<void>.delayed(Duration.zero);
     expect(cursor.cache.scale, validScale);
     expect((cursor.cache.rasterWidth, cursor.cache.rasterHeight), raster);
-    expect((cursor.cache.hotx, cursor.cache.hoty),
-        (hotspot.dx * validScale, hotspot.dy * validScale));
+    expect((cursor.cache.hotx, cursor.cache.hoty), expectedHotspot);
   }
   buildCursorOfCache(cursor, 1.0, cursor.cache);
   await Future<void>.delayed(Duration.zero);

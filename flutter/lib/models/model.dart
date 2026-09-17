@@ -2951,8 +2951,8 @@ class CursorData {
     }
 
     this.scale = scale;
-    hotx = hotxOrigin * scale;
-    hoty = hotyOrigin * scale;
+    hotx = hotxOrigin * _rasterWidth / width;
+    hoty = hotyOrigin * _rasterHeight / height;
     return scale;
   }
 
