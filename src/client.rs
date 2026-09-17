@@ -2681,12 +2681,16 @@ impl VideoHandler {
     }
 
     /// Handle a new video frame.
+    ///
+    /// `present` is false when catching up: the decoder still consumes the
+    /// bitstream (P-frames depend on it) but skips YUV→RGB / texture upload.
     #[inline]
     pub fn handle_frame(
         &mut self,
         vf: VideoFrame,
         pixelbuffer: &mut bool,
         chroma: &mut Option<Chroma>,
+        present: bool,
     ) -> ResultType<bool> {
         let format = CodecFormat::from(&vf);
         if format != self.decoder.format() {
@@ -2700,6 +2704,7 @@ impl VideoHandler {
                     &mut self.texture,
                     pixelbuffer,
                     chroma,
+                    present,
                 );
                 if res.as_ref().is_ok_and(|x| *x) {
                     self.fail_counter = 0;
@@ -4006,84 +4011,101 @@ pub fn start_video_thread<F, T>(
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(_) | MediaData::VideoQueue => {
-                        let vf = match data {
-                            MediaData::VideoFrame(vf) => {
-                                *discard_queue.write().unwrap() = false;
-                                *vf
-                            }
-                            MediaData::VideoQueue => {
-                                if let Some(vf) = video_queue.read().unwrap().pop() {
-                                    if discard_queue.read().unwrap().clone() {
-                                        continue;
-                                    }
-                                    vf
-                                } else {
-                                    continue;
-                                }
-                            }
-                            _ => {
-                                // unreachable!();
-                                continue;
-                            }
-                        };
-                        let display = vf.display as usize;
-                        let start = std::time::Instant::now();
-                        let format = CodecFormat::from(&vf);
-                        if video_handler.is_none() {
-                            let mut handler = VideoHandler::new(format, display);
-                            let record_state = session.lc.read().unwrap().record_state;
-                            let record_permission = session.lc.read().unwrap().record_permission;
-                            let id = session.lc.read().unwrap().id.clone();
-                            if record_state && record_permission {
-                                handler.record_screen(true, id, display, is_view_camera);
-                            }
-                            video_handler = Some(handler);
+                        let mut keyframe = None;
+                        if let MediaData::VideoFrame(vf) = data {
+                            *discard_queue.write().unwrap() = false;
+                            // Keyframes bypass the queue; drop pre-keyframe
+                            // deltas so they cannot be decoded after this GOP.
+                            let q = video_queue.read().unwrap();
+                            while q.pop().is_some() {}
+                            drop(q);
+                            keyframe = Some(*vf);
                         }
-                        if let Some(handler) = video_handler.as_mut() {
-                            let mut pixelbuffer = true;
-                            let mut tmp_chroma = None;
-                            let format_changed = handler.decoder.format() != format;
-                            match handler.handle_frame(vf, &mut pixelbuffer, &mut tmp_chroma) {
-                                Ok(true) => {
-                                    video_callback(
-                                        display,
-                                        &mut handler.rgb,
-                                        handler.texture.texture,
-                                        pixelbuffer,
-                                    );
-
-                                    // chroma
-                                    if tmp_chroma.is_some() && last_chroma != tmp_chroma {
-                                        last_chroma = tmp_chroma;
-                                        *chroma.write().unwrap() = tmp_chroma;
+                        loop {
+                            let frames: Vec<VideoFrame> = if let Some(vf) = keyframe.take() {
+                                vec![vf]
+                            } else if discard_queue.read().unwrap().clone() {
+                                let q = video_queue.read().unwrap();
+                                while q.pop().is_some() {}
+                                Vec::new()
+                            } else {
+                                let q = video_queue.read().unwrap();
+                                let mut frames = Vec::with_capacity(q.len());
+                                while let Some(vf) = q.pop() {
+                                    frames.push(vf);
+                                }
+                                frames
+                            };
+                            if frames.is_empty() {
+                                break;
+                            }
+                            let n = frames.len();
+                            for (i, vf) in frames.into_iter().enumerate() {
+                                let present = i + 1 == n;
+                                let display = vf.display as usize;
+                                let start = std::time::Instant::now();
+                                let format = CodecFormat::from(&vf);
+                                if video_handler.is_none() {
+                                    let mut handler = VideoHandler::new(format, display);
+                                    let record_state = session.lc.read().unwrap().record_state;
+                                    let record_permission =
+                                        session.lc.read().unwrap().record_permission;
+                                    let id = session.lc.read().unwrap().id.clone();
+                                    if record_state && record_permission {
+                                        handler.record_screen(true, id, display, is_view_camera);
                                     }
+                                    video_handler = Some(handler);
+                                }
+                                if let Some(handler) = video_handler.as_mut() {
+                                    let mut pixelbuffer = true;
+                                    let mut tmp_chroma = None;
+                                    let format_changed = handler.decoder.format() != format;
+                                    match handler.handle_frame(
+                                        vf,
+                                        &mut pixelbuffer,
+                                        &mut tmp_chroma,
+                                        present,
+                                    ) {
+                                        Ok(true) if present => {
+                                            video_callback(
+                                                display,
+                                                &mut handler.rgb,
+                                                handler.texture.texture,
+                                                pixelbuffer,
+                                            );
 
-                                    // fps calculation
-                                    fps_calculate(
-                                        &mut skip_beginning,
-                                        &fps,
-                                        format_changed,
-                                        start.elapsed(),
-                                        &mut count,
-                                        &mut duration,
-                                    );
+                                            if tmp_chroma.is_some() && last_chroma != tmp_chroma {
+                                                last_chroma = tmp_chroma;
+                                                *chroma.write().unwrap() = tmp_chroma;
+                                            }
+
+                                            fps_calculate(
+                                                &mut skip_beginning,
+                                                &fps,
+                                                format_changed,
+                                                start.elapsed(),
+                                                &mut count,
+                                                &mut duration,
+                                            );
+                                        }
+                                        Err(e) => {
+                                            // This is a simple workaround.
+                                            //
+                                            // I only see the following error:
+                                            // FailedCall("errcode=1 scrap::common::vpxcodec:libs\\scrap\\src\\common\\vpxcodec.rs:433:9")
+                                            // When switching from all displays to one display, the error occurs.
+                                            // eg:
+                                            // 1. Connect to a device with two displays (A and B).
+                                            // 2. Switch to display A. The error occurs.
+                                            // 3. If the error does not occur. Switch from A to display B. The error occurs.
+                                            //
+                                            // to-do: fix the error
+                                            log::error!("handle video frame error, {}", e);
+                                            session.refresh_video(display as _);
+                                        }
+                                        _ => {}
+                                    }
                                 }
-                                Err(e) => {
-                                    // This is a simple workaround.
-                                    //
-                                    // I only see the following error:
-                                    // FailedCall("errcode=1 scrap::common::vpxcodec:libs\\scrap\\src\\common\\vpxcodec.rs:433:9")
-                                    // When switching from all displays to one display, the error occurs.
-                                    // eg:
-                                    // 1. Connect to a device with two displays (A and B).
-                                    // 2. Switch to display A. The error occurs.
-                                    // 3. If the error does not occur. Switch from A to display B. The error occurs.
-                                    //
-                                    // to-do: fix the error
-                                    log::error!("handle video frame error, {}", e);
-                                    session.refresh_video(display as _);
-                                }
-                                _ => {}
                             }
                         }
 
