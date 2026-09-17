@@ -3,7 +3,7 @@ use std::{
     hash::BuildHasher,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -63,6 +63,36 @@ const MAX_PENDING_REMOTE_ICE: usize = 64;
 /// Queued candidates remembered so the controller's re-send is skipped instead of taking a slot
 /// of its own. Far more than an honest peer gathers, at eight bytes each.
 const ICE_DEDUP_WINDOW: usize = 256;
+/// Answerers between an offer and an open data channel. An offer arrives before any password or
+/// accept prompt, and each one builds a peer connection that binds a socket per interface and
+/// runs ICE for up to `CONNECT_TIMEOUT`, where a forged TCP punch costs one connect. Past this
+/// many the offer is declined, and the controller carries on over punch and relay as it does
+/// for a peer without WebRTC. A guard against pathological setup concurrency, above what
+/// legitimate controllers reach at once in the seconds ICE takes; once the channel is open the
+/// connection is one like any other, and the connection layer bounds unauthenticated
+/// connections in number and in time for every transport alike.
+const MAX_WEBRTC_ANSWERERS: usize = 16;
+static WEBRTC_ANSWERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// One of the `MAX_WEBRTC_ANSWERERS` slots, given back on drop.
+struct AnswererSlot;
+
+impl AnswererSlot {
+    fn take() -> Option<Self> {
+        WEBRTC_ANSWERERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_WEBRTC_ANSWERERS).then(|| n + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for AnswererSlot {
+    fn drop(&mut self) {
+        WEBRTC_ANSWERERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 // The rendezvous ICE route is reachable without a prior punch and the peer decides how many
 // candidates it sends, so these sites would let someone else set how much this machine writes to
 // its log file. One line a minute each, carrying the suppressed count.
@@ -763,6 +793,15 @@ impl RendezvousMediator {
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
+        let Some(slot) = AnswererSlot::take() else {
+            hbb_common::throttled_log!(
+                ICE_LOG_INTERVAL,
+                warn,
+                "declined a WebRTC offer: {} answerers already in flight",
+                MAX_WEBRTC_ANSWERERS
+            );
+            return Ok(String::new());
+        };
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
         let answer = stream.local_endpoint().to_owned();
@@ -893,10 +932,20 @@ impl RendezvousMediator {
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
                 // Release the pc now rather than waiting for the ICE agent to time out into a
-                // terminal state (~30s); this also drops the SESSIONS entry promptly.
-                stream.close().await;
+                // terminal state (~30s); this also drops the SESSIONS entry promptly. The slot
+                // goes with it and comes back when the teardown has finished, not when this task
+                // gives up on the offer: what it stands for is a peer connection built for an
+                // unauthenticated offer, and one that will not die still costs what it costs.
+                // `pc.close()` has no timeout of its own, so were the slot freed here a teardown
+                // that never finished would leave the pcs to pile up unbounded, with the count
+                // reading zero. Detached, the wait is on WEBRTC_RT, which owns the pc, and not on
+                // this task.
+                stream.close_detached_with(slot);
                 return;
             }
+            // The channel is open: from here the session is a connection like any other, and the
+            // connection layer's own limits apply to it.
+            drop(slot);
             // create_tcp_connection takes ownership of the stream; keep a handle to close the pc
             // once the session returns. It runs the whole session and returns Ok on normal end,
             // Err on setup failure — either way the pc must be closed, else it lingers forever in
@@ -1519,7 +1568,10 @@ impl Drop for CheckIfResendPk {
 
 #[cfg(test)]
 mod tests {
-    use super::{mpsc, socket_client, tokio, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
+    use super::{
+        mpsc, socket_client, tokio, AnswererSlot, IceRoute, ICE_DEDUP_WINDOW,
+        MAX_PENDING_REMOTE_ICE, MAX_WEBRTC_ANSWERERS,
+    };
     use hbb_common::tcp::new_listener;
     use std::net::SocketAddr;
 
@@ -1766,5 +1818,15 @@ mod tests {
             until + Duration::from_millis(PUNCH_GRACE),
             "must return when the grace runs out, not a backoff later"
         );
+    }
+
+    #[test]
+    fn test_answerer_slots_cap_and_release() {
+        let held: Vec<_> = (0..MAX_WEBRTC_ANSWERERS)
+            .map(|_| AnswererSlot::take().unwrap())
+            .collect();
+        assert!(AnswererSlot::take().is_none());
+        drop(held);
+        assert!(AnswererSlot::take().is_some());
     }
 }
