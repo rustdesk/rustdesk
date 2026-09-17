@@ -3,7 +3,7 @@ use std::{
     hash::BuildHasher,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, RwLock,
     },
     time::{Duration, Instant},
@@ -63,6 +63,36 @@ const MAX_PENDING_REMOTE_ICE: usize = 64;
 /// Queued candidates remembered so the controller's re-send is skipped instead of taking a slot
 /// of its own. Far more than an honest peer gathers, at eight bytes each.
 const ICE_DEDUP_WINDOW: usize = 256;
+/// Answerers between an offer and an open data channel. An offer arrives before any password or
+/// accept prompt, and each one builds a peer connection that binds a socket per interface and
+/// runs ICE for up to `CONNECT_TIMEOUT`, where a forged TCP punch costs one connect. Past this
+/// many the offer is declined, and the controller carries on over punch and relay as it does
+/// for a peer without WebRTC. A guard against pathological setup concurrency, above what
+/// legitimate controllers reach at once in the seconds ICE takes; once the channel is open the
+/// connection is one like any other, and the connection layer bounds unauthenticated
+/// connections in number and in time for every transport alike.
+const MAX_WEBRTC_ANSWERERS: usize = 16;
+static WEBRTC_ANSWERERS: AtomicUsize = AtomicUsize::new(0);
+
+/// One of the `MAX_WEBRTC_ANSWERERS` slots, given back on drop.
+struct AnswererSlot;
+
+impl AnswererSlot {
+    fn take() -> Option<Self> {
+        WEBRTC_ANSWERERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_WEBRTC_ANSWERERS).then(|| n + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for AnswererSlot {
+    fn drop(&mut self) {
+        WEBRTC_ANSWERERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 // The rendezvous ICE route is reachable without a prior punch and the peer decides how many
 // candidates it sends, so these sites would let someone else set how much this machine writes to
 // its log file. One line a minute each, carrying the suppressed count.
@@ -625,6 +655,20 @@ impl RendezvousMediator {
         );
 
         let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+        // A relay response carrying an answer carries this machine's ICE candidates with it, so
+        // that half goes out only on an encrypted channel. A server that does not complete the
+        // exchange loses the answer, not the relay: the response goes without it, on a fresh
+        // socket since the failed exchange may have consumed a message on this one, and the
+        // controller falls back to its other transports.
+        let mut webrtc_sdp_answer = webrtc_sdp_answer;
+        if !webrtc_sdp_answer.is_empty() {
+            let key = crate::get_key(true).await;
+            if let Err(err) = crate::secure_tcp_required(&mut socket, &key).await {
+                log::warn!("relaying without the WebRTC answer, it cannot be encrypted: {err}");
+                webrtc_sdp_answer = String::new();
+                socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            }
+        }
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
@@ -749,6 +793,15 @@ impl RendezvousMediator {
         peer_addr: SocketAddr,
         meta: ConnectionMeta,
     ) -> ResultType<String> {
+        let Some(slot) = AnswererSlot::take() else {
+            hbb_common::throttled_log!(
+                ICE_LOG_INTERVAL,
+                warn,
+                "declined a WebRTC offer: {} answerers already in flight",
+                MAX_WEBRTC_ANSWERERS
+            );
+            return Ok(String::new());
+        };
         let mut stream =
             WebRTCStream::new(&ph.webrtc_sdp_offer, relay_only_ice, CONNECT_TIMEOUT).await?;
         let answer = stream.local_endpoint().to_owned();
@@ -806,6 +859,7 @@ impl RendezvousMediator {
                 // trickle, and TCP reliability replaces the old 400ms duplicate re-send
                 // (the controller keeps its own re-send for the server->peer UDP downlink).
                 let mut conn = None;
+                let key = crate::get_key(true).await;
                 while let Some(candidate) = local_ice_rx.recv().await {
                     let mut msg = Message::new();
                     msg.set_ice_candidate(IceCandidate {
@@ -819,7 +873,20 @@ impl RendezvousMediator {
                     for _ in 0..2 {
                         if conn.is_none() {
                             match connect_tcp(&*host, CONNECT_TIMEOUT).await {
-                                Ok(s) => conn = Some(s),
+                                Ok(mut s) => {
+                                    // Candidates are every interface address of this machine:
+                                    // sent only on a channel that is actually encrypted, else
+                                    // this WebRTC attempt goes without them.
+                                    if let Err(err) = crate::secure_tcp_required(&mut s, &key).await
+                                    {
+                                        log::warn!(
+                                            "failed to secure the WebRTC ICE candidate connection: {}",
+                                            err
+                                        );
+                                        break;
+                                    }
+                                    conn = Some(s);
+                                }
                                 Err(err) => {
                                     log::warn!(
                                         "failed to connect for WebRTC ICE candidate: {}",
@@ -865,10 +932,20 @@ impl RendezvousMediator {
             if let Err(err) = result {
                 log::warn!("webrtc wait_connected failed: {}", err);
                 // Release the pc now rather than waiting for the ICE agent to time out into a
-                // terminal state (~30s); this also drops the SESSIONS entry promptly.
-                stream.close().await;
+                // terminal state (~30s); this also drops the SESSIONS entry promptly. The slot
+                // goes with it and comes back when the teardown has finished, not when this task
+                // gives up on the offer: what it stands for is a peer connection built for an
+                // unauthenticated offer, and one that will not die still costs what it costs.
+                // `pc.close()` has no timeout of its own, so were the slot freed here a teardown
+                // that never finished would leave the pcs to pile up unbounded, with the count
+                // reading zero. Detached, the wait is on WEBRTC_RT, which owns the pc, and not on
+                // this task.
+                stream.close_detached_with(slot);
                 return;
             }
+            // The channel is open: from here the session is a connection like any other, and the
+            // connection layer's own limits apply to it.
+            drop(slot);
             // create_tcp_connection takes ownership of the stream; keep a handle to close the pc
             // once the session returns. It runs the whole session and returns Ok on normal end,
             // Err on setup failure — either way the pc must be closed, else it lingers forever in
@@ -993,6 +1070,9 @@ impl RendezvousMediator {
             let mut msg_out = Message::new();
             msg_out.set_punch_hole_sent(msg_punch);
             let mut socket = connect_tcp(&*self.host, CONNECT_TIMEOUT).await?;
+            // The answer goes out only on a channel that is actually encrypted; otherwise this
+            // WebRTC attempt is abandoned and the controller falls back to its other transports.
+            crate::secure_tcp_required(&mut socket, &crate::get_key(true).await).await?;
             socket.send(&msg_out).await?;
             return Ok(());
         }
@@ -1488,7 +1568,10 @@ impl Drop for CheckIfResendPk {
 
 #[cfg(test)]
 mod tests {
-    use super::{mpsc, socket_client, tokio, IceRoute, ICE_DEDUP_WINDOW, MAX_PENDING_REMOTE_ICE};
+    use super::{
+        mpsc, socket_client, tokio, AnswererSlot, IceRoute, ICE_DEDUP_WINDOW,
+        MAX_PENDING_REMOTE_ICE, MAX_WEBRTC_ANSWERERS,
+    };
     use hbb_common::tcp::new_listener;
     use std::net::SocketAddr;
 
@@ -1735,5 +1818,15 @@ mod tests {
             until + Duration::from_millis(PUNCH_GRACE),
             "must return when the grace runs out, not a backoff later"
         );
+    }
+
+    #[test]
+    fn test_answerer_slots_cap_and_release() {
+        let held: Vec<_> = (0..MAX_WEBRTC_ANSWERERS)
+            .map(|_| AnswererSlot::take().unwrap())
+            .collect();
+        assert!(AnswererSlot::take().is_none());
+        drop(held);
+        assert!(AnswererSlot::take().is_some());
     }
 }
