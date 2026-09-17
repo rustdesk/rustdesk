@@ -93,6 +93,14 @@ const MAX_UNAUTHORIZED_CONNS: usize = 64;
 /// of addresses passes it, and the bound above is what holds. Meaningful only while the
 /// address is the controller's own, which punch and relay messages carry today.
 const MAX_UNAUTHORIZED_CONNS_PER_ADDR: usize = 16;
+/// The largest message a connection may send before it authorizes. Until then a peer sends only
+/// a public key, a login request, a test delay and a close reason, none of which carries an
+/// unbounded field - a server hands the login request's avatar out as a URL, and only a custom
+/// client that inlines an image into the avatar option instead reaches this. Sized to the read
+/// buffer tungstenite allocates per WebSocket connection regardless, so there the cap costs
+/// nothing beyond a floor already paid; with MAX_UNAUTHORIZED_CONNS it holds them to 8 MiB in
+/// all, against the 1 GiB a single one could make us hold before.
+pub const MAX_UNAUTHORIZED_MESSAGE: usize = 128 * 1024;
 
 /// A place among the unauthorized connections, taken before the identity handshake and given
 /// back on drop: at authorization, or when the connection ends first. The count of live
@@ -1868,6 +1876,10 @@ impl Connection {
         if let Some(keep_alive) = self.prepare_terminal_login_for_authorization().await {
             return keep_alive;
         }
+        // Lifted here rather than below with the rest of authorization: a multiplexed tunnel
+        // narrows it again for its own framing (`port_forward_mux::cap_packet_size`), so that
+        // call has to come after this one, not before.
+        self.stream.set_max_packet_length(usize::MAX);
         if !self.connect_port_forward_if_needed().await {
             return false;
         }
