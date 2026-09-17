@@ -39,6 +39,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   var _currentState = GestureState.none;
   Timer? _debounceTimer;
+  Timer? _resetTimer;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
@@ -52,6 +53,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         onTwoFingerStartDebounce(d);
       } else if (d.pointerCount == 3 &&
           _currentState != GestureState.threeFingerVerticalDrag) {
+        _resetTimer?.cancel();
         _currentState = GestureState.threeFingerVerticalDrag;
         if (onThreeFingerVerticalDragStart != null) {
           onThreeFingerVerticalDragStart!(
@@ -85,6 +87,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     onEnd = (d) {
       debugPrint("ScaleGestureRecognizer onEnd");
       _debounceTimer?.cancel();
+      _resetTimer?.cancel();
       // end
       switch (_currentState) {
         case GestureState.oneFingerPan:
@@ -114,7 +117,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         default:
           break;
       }
-      _debounceTimer = Timer(Duration(milliseconds: 200), () {
+      _resetTimer = Timer(const Duration(milliseconds: 200), () {
+        _resetTimer = null;
         _currentState = GestureState.none;
       });
     };
@@ -124,6 +128,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   // If we move our finger very fast, we won't be able to detect the "oneFingerPan" event sometimes.
   void onOneFingerStartDebounce(ScaleUpdateDetails d) {
     start(ScaleUpdateDetails d) {
+      _resetTimer?.cancel();
       _currentState = GestureState.oneFingerPan;
       if (onOneFingerPanStart != null) {
         onOneFingerPanStart!(DragStartDetails(
@@ -144,6 +149,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   void onTwoFingerStartDebounce(ScaleUpdateDetails d) {
     start(ScaleUpdateDetails d) {
+      _resetTimer?.cancel();
       _currentState = GestureState.twoFingerScale;
       if (onTwoFingerScaleStart != null) {
         onTwoFingerScaleStart!(ScaleStartDetails(
@@ -174,14 +180,21 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   @override
   void rejectGesture(int pointer) {
     super.rejectGesture(pointer);
+    _debounceTimer?.cancel();
+    _resetTimer?.cancel();
     switch (_currentState) {
       case GestureState.oneFingerPan:
+        if (onOneFingerPanEnd != null) {
+          onOneFingerPanEnd!(DragEndDetails());
+        }
         if (onOneFingerPanCancel != null) {
           onOneFingerPanCancel!();
         }
         break;
       case GestureState.twoFingerScale:
-        // Reset scale state if needed, currently self-contained
+        if (onTwoFingerScaleEnd != null) {
+          onTwoFingerScaleEnd!(ScaleEndDetails(pointerCount: 0));
+        }
         break;
       case GestureState.threeFingerVerticalDrag:
         // Reset drag state if needed, currently self-contained
@@ -190,6 +203,13 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         break;
     }
     _currentState = GestureState.none;
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _resetTimer?.cancel();
+    super.dispose();
   }
 }
 
