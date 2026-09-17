@@ -10,6 +10,7 @@ const READY_BITS: u32 = INDEX_BITS * MAX_BUFFERS as u32;
 const READY_MASK: u64 = (1 << READY_BITS) - 1;
 const INDEX_MASK: u64 = (1 << INDEX_BITS) - 1;
 
+// Refer to the diagrams in https://github.com/rustdesk/rustdesk/pull/16146
 pub(super) struct BufferPool {
     // Low nibbles hold ready indices plus one, oldest first. High bits mark free slots.
     // Claiming an index transfers exclusive access to its slot. Release the slot's
