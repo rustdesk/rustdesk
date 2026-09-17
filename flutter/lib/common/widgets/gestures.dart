@@ -184,12 +184,17 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     _resetTimer?.cancel();
     switch (_currentState) {
       case GestureState.oneFingerPan:
+        if (onOneFingerPanEnd != null) {
+          onOneFingerPanEnd!(DragEndDetails());
+        }
         if (onOneFingerPanCancel != null) {
           onOneFingerPanCancel!();
         }
         break;
       case GestureState.twoFingerScale:
-        // Reset scale state if needed, currently self-contained
+        if (onTwoFingerScaleEnd != null) {
+          onTwoFingerScaleEnd!(ScaleEndDetails(pointerCount: 0));
+        }
         break;
       case GestureState.threeFingerVerticalDrag:
         // Reset drag state if needed, currently self-contained

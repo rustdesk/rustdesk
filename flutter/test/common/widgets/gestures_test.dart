@@ -59,4 +59,56 @@ void main() {
     expect(oneFingerStart, 2);
     expect(twoFingerEnd, 1);
   });
+
+  testWidgets('reject closes an active gesture so no end is lost',
+      (tester) async {
+    var oneStart = 0;
+    var oneEnd = 0;
+    var oneCancel = 0;
+    var twoStart = 0;
+    var twoEnd = 0;
+    final recognizer = CustomTouchGestureRecognizer();
+    addTearDown(recognizer.dispose);
+    recognizer
+      ..onOneFingerPanStart = (d) {
+        oneStart++;
+      }
+      ..onOneFingerPanEnd = (d) {
+        oneEnd++;
+      }
+      ..onOneFingerPanCancel = () {
+        oneCancel++;
+      }
+      ..onTwoFingerScaleStart = (d) {
+        twoStart++;
+      }
+      ..onTwoFingerScaleEnd = (d) {
+        twoEnd++;
+      };
+
+    ScaleUpdateDetails update(int pointerCount) => ScaleUpdateDetails(
+          focalPoint: Offset.zero,
+          localFocalPoint: Offset.zero,
+          focalPointDelta: Offset.zero,
+          pointerCount: pointerCount,
+        );
+
+    recognizer.onUpdate!.call(update(1));
+    expect(oneStart, 1);
+    recognizer.rejectGesture(1);
+    expect(oneCancel, 1);
+    expect(oneEnd, 1);
+
+    recognizer.rejectGesture(2);
+    expect(oneStart, 1);
+    expect(oneEnd, 1);
+    expect(oneCancel, 1);
+    expect(twoStart, 0);
+    expect(twoEnd, 0);
+
+    recognizer.onUpdate!.call(update(2));
+    expect(twoStart, 1);
+    recognizer.rejectGesture(3);
+    expect(twoEnd, 1);
+  });
 }
