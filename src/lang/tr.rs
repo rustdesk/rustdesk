@@ -763,8 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Tuvali kilitle"),
         ("Sync clipboard between sessions", "Oturumlar arasında panoyu senkronize et"),
         ("sync-clipboard-between-sessions-tip", "Bir uzak oturumda kopyalanan metin veya görseller, bağlı diğer oturumlarınızın panosuna da gönderilir."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Terminaldeki bir uygulama bu cihazın panosuna metin kopyalamak istiyor. İzin verirseniz bu izin, Ayarlar'dan kapatana kadar tüm bağlantılardaki terminal uygulamaları için geçerli olur. Elle kopyalama ve yapıştırma bundan etkilenmez."),
+        ("Allow terminal apps to copy to clipboard", "Terminal uygulamalarının panoya kopyalamasına izin ver"),
         ("Enable", "Etkinleştir"),
         ("Reuse one connection for port forwarding", "Port yönlendirme için tek bağlantıyı yeniden kullan"),
         ("port-forward-mux-tip", "Bir port yönlendirmesindeki tüm bağlantıları, her biri için yeniden bağlanıp oturum açmak yerine karşı tarafa açılan tek bir bağlantı üzerinden taşır."),
@@ -780,6 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk ekran yakalama için gereken GStreamer bileşenini yükleyemedi ({})"),
         ("Relay fallback delay in seconds", "Aktarıcıya geçiş gecikmesi (saniye)"),
         ("relay-fallback-delay-tip", "Zaten kurulmuş bir aktarıcı bağlantısının, onun yerine kullanılmadan önce doğrudan WebRTC bağlantısını ne kadar beklediğidir. Yavaş bir doğrudan bağlantıya daha fazla süre tanımak için artırın; doğrudan bağlantının kurulamadığı ağlarda aktarıcıya daha erken geçmek için azaltın. Varsayılan 2.5 saniye için boş bırakın."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "Sesli arama başlatmak için \"Ekran paylaşımı\" sayfasındaki \"Ses yakalama\" seçeneğini açın.")
     ].iter().cloned().collect();
 }
