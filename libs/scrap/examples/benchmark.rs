@@ -228,7 +228,7 @@ fn test_av1(
 mod hw {
     use hwcodec::ffmpeg_ram::CodecInfo;
     use scrap::{
-        hwcodec::{HwRamDecoder, HwRamEncoder, HwRamEncoderConfig},
+        hwcodec::{HwRamDecoder, HwRamEncoder, HwRamEncoderConfig, DEFAULT_FPS},
         CodecFormat,
     };
 
@@ -264,6 +264,7 @@ mod hw {
                 height,
                 quality,
                 keyframe_interval: None,
+                fps: scrap::hwcodec::DEFAULT_FPS,
             }),
             false,
         )
