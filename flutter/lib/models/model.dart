@@ -1152,9 +1152,10 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    dialogManager.dismissByTag('$sessionId-$type');
     final retrySeconds = 5.obs;
     Timer? retryTimer;
-    await dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
+    dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
       retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!context.mounted ||
             parent.target?.closed != false ||
@@ -1185,15 +1186,24 @@ class FfiModel with ChangeNotifier {
           dialogButton('Close', onPressed: onClose, isOutline: true),
           if (type == 'relay-hint')
             dialogButton('Connect via relay',
-                onPressed: () => reconnect(dialogManager, sessionId, true),
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, true);
+                },
                 buttonStyle: style,
                 isOutline: true),
           Obx(() => dialogButton(
               '${translate('Retry')} (${retrySeconds.value}s)',
-              onPressed: () => reconnect(dialogManager, sessionId, false))),
+              onPressed: () {
+                retryTimer?.cancel();
+                reconnect(dialogManager, sessionId, false);
+              })),
           if (type == 'relay-hint2')
             dialogButton('Connect via relay',
-                onPressed: () => reconnect(dialogManager, sessionId, true),
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, true);
+                },
                 buttonStyle: style),
         ],
         onCancel: onClose,
