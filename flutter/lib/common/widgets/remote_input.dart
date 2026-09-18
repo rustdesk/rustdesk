@@ -126,7 +126,9 @@ class _RawTouchGestureDetectorRegionState
   }
 
   bool isNotTouchBasedDevice() {
-    return !kTouchBasedDeviceKinds.contains(lastDeviceKind);
+    return lastDeviceKind != null &&
+        !kTouchBasedDeviceKinds.contains(lastDeviceKind) &&
+        inputModel.isPhysicalMouse.value;
   }
 
   // Mobile, mouse mode.
@@ -355,7 +357,7 @@ class _RawTouchGestureDetectorRegionState
   onOneFingerPanStart(BuildContext context, DragStartDetails d) async {
     final TapDownDetails? lastTapDownDetails = _lastTapDownDetails;
     _lastTapDownDetails = null;
-    lastDeviceKind = d.kind ?? lastDeviceKind;
+    lastDeviceKind = d.kind ?? lastDeviceKind ?? PointerDeviceKind.touch;
     if (isNotTouchBasedDevice()) {
       return;
     }

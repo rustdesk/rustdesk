@@ -568,14 +568,15 @@ class InputModel {
       if (iosCapsLock) {
         lockModes |= (1 << capslock);
       }
-      // Ignore "NumLock/ScrollLock" on iOS for now.
+      lockModes |= (1 << numlock);
     } else {
       if (HardwareKeyboard.instance.lockModesEnabled
           .contains(KeyboardLockMode.capsLock)) {
         lockModes |= (1 << capslock);
       }
       if (HardwareKeyboard.instance.lockModesEnabled
-          .contains(KeyboardLockMode.numLock)) {
+          .contains(KeyboardLockMode.numLock) ||
+          isMobile) {
         lockModes |= (1 << numlock);
       }
       if (HardwareKeyboard.instance.lockModesEnabled
