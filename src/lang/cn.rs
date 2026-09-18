@@ -763,7 +763,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "锁定画布"),
         ("Sync clipboard between sessions", "在会话间同步剪贴板"),
         ("sync-clipboard-between-sessions-tip", "在一个远程会话中复制的文本或图片也会发送到其他已连接会话的剪贴板。"),
-        ("terminal-clipboard-write-tip", ""),
+        ("terminal-clipboard-write-tip", "终端中的一个应用希望将文本复制到此设备的剪贴板。如果授权，此权限将适用于所有连接中的终端应用，直到您在设置中关闭为止。手动复制和粘贴不受影响。"),
         ("Allow terminal apps to copy to clipboard", "允许终端应用复制到剪贴板"),
         ("Enable", "启用"),
         ("Reuse one connection for port forwarding", "端口转发复用同一条连接"),
@@ -780,6 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk 无法加载屏幕捕获所需的 GStreamer 组件 ({})"),
         ("Relay fallback delay in seconds", "回落到中继前的等待时间（秒）"),
         ("relay-fallback-delay-tip", "已经建立的中继连接会等待直连的 WebRTC 多久，超过这个时间就改用中继。调大可以让较慢的直连有更多机会胜出；调小则在无法直连的网络上更快回落到中继。留空表示使用默认值 2.5 秒。"),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "开始语音通话前请在\"仅共享屏幕\"页面启用\"音频录制\"。")
     ].iter().cloned().collect();
 }
