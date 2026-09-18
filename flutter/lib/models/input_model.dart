@@ -1106,6 +1106,7 @@ class InputModel {
   }
 
   void resetPointerDevices() {
+    _lastHoverPosition = null;
     _physicalPointerDevices.clear();
     _activeMousePointers.clear();
     _ignoredTouchPointers.clear();
@@ -1292,6 +1293,8 @@ class InputModel {
   }
 
   final Set<int> _physicalPointerDevices = {};
+  Offset? _lastHoverPosition;
+  int _lastHoverTimeMs = 0;
 
   bool _isMouseOrTrackpad(ui.PointerDeviceKind kind) {
     return kind == ui.PointerDeviceKind.mouse ||
@@ -1300,16 +1303,29 @@ class InputModel {
 
   bool _isPhysicalPointerDevice(PointerEvent e) {
     if (e.kind == ui.PointerDeviceKind.stylus ||
-        e.kind == ui.PointerDeviceKind.invertedStylus ||
-        e.kind == ui.PointerDeviceKind.touch) {
+        e.kind == ui.PointerDeviceKind.invertedStylus) {
       return false;
     }
-    return _isMouseOrTrackpad(e.kind) ||
-        _physicalPointerDevices.contains(e.device);
+    if (_isMouseOrTrackpad(e.kind)) {
+      return true;
+    }
+    if (isMobile && e.kind == ui.PointerDeviceKind.touch) {
+      if (_lastHoverPosition != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (now - _lastHoverTimeMs < 5000) {
+          final dist = (e.position - _lastHoverPosition!).distance;
+          if (dist < 40.0) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
-  bool isPhysicalPointerDeviceId(int device) =>
-      _physicalPointerDevices.contains(device);
+  bool isPhysicalPointerEvent(PointerDownEvent e) =>
+      _isPhysicalPointerDevice(e);
+  bool isPhysicalPointerDeviceId(int device) => false;
 
   void onPointHoverImage(PointerHoverEvent e) {
     _stopFling = true;
@@ -1318,9 +1334,10 @@ class InputModel {
         e.kind == ui.PointerDeviceKind.invertedStylus) {
       return;
     }
-    if (!_isMouseOrTrackpad(e.kind)) return;
+    if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
 
-    _physicalPointerDevices.add(e.device);
+    _lastHoverPosition = e.position;
+    _lastHoverTimeMs = DateTime.now().millisecondsSinceEpoch;
 
     // May fix https://github.com/rustdesk/rustdesk/issues/13009
     if (isIOS && e.synthesized && e.position == Offset.zero && e.buttons == 0) {
@@ -1561,7 +1578,6 @@ class InputModel {
     final isPhysical = _isPhysicalPointerDevice(e);
 
     if (isPhysical) {
-      _physicalPointerDevices.add(e.device);
       _activeMousePointers.add(e.pointer);
       if (!isPhysicalMouse.value) {
         isPhysicalMouse.value = true;
@@ -1569,6 +1585,7 @@ class InputModel {
       _lastMouseDownTimeMs = nowMs;
       _lastMouseDownPos = e.position;
     } else {
+      _lastHoverPosition = null;
       // Ignore duplicate touch events that follow a recent mouse click (iOS Magic Mouse issue).
       if (isPhysicalMouse.value && _shouldIgnoreTouchAfterMouse(nowMs)) {
         _ignoredTouchPointers.add(e.pointer);
@@ -1609,6 +1626,11 @@ class InputModel {
 
     final isPhysical = _isPhysicalPointerDevice(e) || isTrackedMouse;
     if (!isPhysical) return;
+
+    if (isPhysical) {
+      _lastHoverPosition = e.position;
+      _lastHoverTimeMs = DateTime.now().millisecondsSinceEpoch;
+    }
 
     // Send mouse up unconditionally for mouse/trackpad pointers so buttons never get stuck.
     if (_relativeMouse.enabled.value) {
