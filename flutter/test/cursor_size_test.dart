@@ -359,7 +359,7 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
     final w = peer == kPeerPlatformMacOS &&
             !mode.$2 &&
             mode.$1 != kRemoteViewStyleOriginal
-        ? (sourceSize * (Platform.isWindows ? dpr : (Platform.isMacOS ? 1.0 : 1.0 / dpr))).ceil()
+        ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
         : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
     final key = cursor.cache.updateGetKey(cursor.cache.scale);
     _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
