@@ -901,7 +901,11 @@ class RustdeskImpl {
   }
 
   String mainGetLocalOption({required String key, dynamic hint}) {
-    return js.context.callMethod('getByName', ['option:local', key]);
+    final v = js.context.callMethod('getByName', ['option:local', key]);
+    if (key == 'lang' && (v == 'pt' || v == 'br')) {
+      return 'pt-br';
+    }
+    return v;
   }
 
   // Do not return the real environment variables.
