@@ -71,6 +71,8 @@ pub mod input_service {
 mod connection;
 mod login_failure_check;
 pub(crate) mod port_forward_mux;
+#[cfg(target_os = "linux")]
+pub(crate) mod usbip_mux;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
@@ -117,15 +119,6 @@ pub struct Server {
 
 pub type ServerPtr = Arc<RwLock<Server>>;
 pub type ServerPtrWeak = Weak<RwLock<Server>>;
-
-#[cfg(test)]
-pub fn new_for_test() -> ServerPtr {
-    Arc::new(RwLock::new(Server {
-        connections: HashMap::new(),
-        services: HashMap::new(),
-        id_count: 1000,
-    }))
-}
 
 pub fn new() -> ServerPtr {
     let mut server = Server {
@@ -182,7 +175,6 @@ async fn accept_connection_(
     socket: Stream,
     secure: bool,
     meta: ConnectionMeta,
-    slot: crate::rendezvous_mediator::PunchSlot,
 ) -> ResultType<()> {
     let local_addr = socket.local_addr();
     drop(socket);
@@ -192,8 +184,6 @@ async fn accept_connection_(
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
-        // The peer is in: the place goes back before the session runs, as every punch's does.
-        drop(slot);
         stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
         create_tcp_connection(
@@ -216,48 +206,7 @@ pub async fn create_tcp_connection(
     meta: ConnectionMeta,
 ) -> ResultType<()> {
     let mut stream = stream;
-    // The address the connection layer keys on, whitelist and admission alike.
-    let addr = hbb_common::try_into_v4(addr);
     let id = server.write().unwrap().get_new_id();
-    // Admitted before the identity handshake, so a peer that stalls in it, or after it without
-    // logging in, holds its place the whole time; an address over its share is turned away.
-    let Some(unauthorized) = admit_unauthorized(id, addr.ip()) else {
-        bail!("too many unauthenticated connections from {}", addr.ip());
-    };
-    tokio::select! {
-        handshake = identity_handshake(&mut stream, secure) => handshake?,
-        _ = unauthorized.evicted() => {
-            bail!("evicted to make room for a newer unauthenticated connection");
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        if let Ok(task) = Command::new("/usr/bin/caffeinate")
-            .arg("-u")
-            .arg("-t 5")
-            .spawn()
-        {
-            super::CHILD_PROCESS.lock().unwrap().push(task);
-        }
-        log::info!("wake up macos");
-    }
-    Connection::start(
-        addr,
-        stream,
-        id,
-        Arc::downgrade(&server),
-        meta,
-        unauthorized,
-    )
-    .await;
-    Ok(())
-}
-
-/// Our signed identity goes out and, when `secure`, the controller's reply keys `stream`.
-/// Separate so it can be raced against the connection's eviction.
-async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()> {
     let (sk, pk) = Config::get_key_pair();
     if secure && pk.len() == sign::PUBLICKEYBYTES && sk.len() == sign::SECRETKEYBYTES {
         let mut sk_ = [0u8; sign::SECRETKEYBYTES];
@@ -320,18 +269,30 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        if let Ok(task) = Command::new("/usr/bin/caffeinate")
+            .arg("-u")
+            .arg("-t 5")
+            .spawn()
+        {
+            super::CHILD_PROCESS.lock().unwrap().push(task);
+        }
+        log::info!("wake up macos");
+    }
+    Connection::start(addr, stream, id, Arc::downgrade(&server), meta).await;
     Ok(())
 }
 
-pub(crate) async fn accept_connection(
+pub async fn accept_connection(
     server: ServerPtr,
     socket: Stream,
     peer_addr: SocketAddr,
     secure: bool,
     meta: ConnectionMeta,
-    slot: crate::rendezvous_mediator::PunchSlot,
 ) {
-    if let Err(err) = accept_connection_(server, socket, secure, meta, slot).await {
+    if let Err(err) = accept_connection_(server, socket, secure, meta).await {
         log::warn!("Failed to accept connection from {}: {}", peer_addr, err);
     }
 }

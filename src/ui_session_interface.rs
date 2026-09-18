@@ -833,6 +833,62 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    // RemoteUsb methods
+    pub fn request_usb_devices(&self) {
+        let mut ch = UsbChannel::new();
+        ch.set_list_devices(UsbListDevicesRequest::new());
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_bind(&self, bus_id: String, bind: bool) {
+        let mut ch = UsbChannel::new();
+        ch.set_bind(UsbBind {
+            bus_id,
+            bind,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_open_forward(&self, channel_id: i32, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_open(UsbForwardOpen {
+            channel_id,
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_forward_data(&self, channel_id: i32, data: bytes::Bytes) {
+        let mut ch = UsbChannel::new();
+        ch.set_data(UsbForwardData {
+            channel_id,
+            data,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_close_forward(&self, channel_id: i32) {
+        let mut ch = UsbChannel::new();
+        ch.set_close(UsbForwardClose {
+            channel_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();
         misc.set_capture_displays(CaptureDisplays {
@@ -1742,6 +1798,11 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn printer_request(&self, id: i32, path: String);
     fn handle_screenshot_resp(&self, sid: String, msg: String);
     fn handle_terminal_response(&self, response: TerminalResponse);
+    /// `ch` carries both simple control responses (`device_list`,
+    /// `bind_result`) and the forwarded USB/IP byte stream (`opened`,
+    /// `data`, `close`); implementations route the latter to the local
+    /// attach-side relay rather than the UI.
+    fn handle_usb_channel(&self, ch: UsbChannel);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

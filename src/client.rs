@@ -30,10 +30,9 @@ use uuid::Uuid;
 use crate::{
     check_port,
     common::input::{MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_TYPE_DOWN, MOUSE_TYPE_UP},
-    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, dtls_fingerprint_bound, get_rs_pk,
-    is_keyboard_mode_supported,
+    create_symmetric_key_msg, decode_id_pk, decode_id_pk_dtls, get_rs_pk, is_keyboard_mode_supported,
     kcp_stream::KcpStream,
-    secure_tcp, secure_tcp_required,
+    secure_tcp,
     ui_interface::{get_builtin_option, resolve_avatar_url, use_texture_render},
     ui_session_interface::{InvokeUiSession, Session},
 };
@@ -96,15 +95,14 @@ pub use super::lang::*;
 
 #[cfg(not(target_os = "linux"))]
 mod audio_playback;
-#[cfg(target_os = "windows")]
-mod audio_playback_recovery;
 #[cfg(all(test, not(target_os = "linux")))]
-#[path = "client/tests/audio_state_tests.rs"]
 mod audio_state_tests;
 pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
 pub mod screenshot;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub mod usbip_attach;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
@@ -833,7 +831,7 @@ impl Client {
         }
         log::info!("rendezvous server: {}", rendezvous_server);
         let mut socket = socket?;
-        let mut my_addr = socket.local_addr();
+        let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
         let mut peer_addr = Config::get_any_listen_addr(true);
@@ -849,44 +847,12 @@ impl Client {
         };
 
         let switch_code = interface.get_switch_code();
-        let legacy_secure = !key.is_empty() && (!token.is_empty() || !switch_code.is_empty());
-        let carries_offer = webrtc_offerer.as_ref().and_then(|g| g.stream()).is_some();
-        // Counted from before the key exchange, so the exchange spends the UDP NAT test's own
-        // wait rather than replacing it: the test runs beside both.
-        let udp_nat_wait_from = Instant::now();
-        let mut exchanged = false;
-        if carries_offer {
-            // An offer puts both sides' ICE candidates, every interface address of both
-            // machines, on this socket, so it goes out only once the server's key exchange has
-            // encrypted it. When the server does not complete one, an hbbs from before the
-            // exchange, the offer is dropped and this becomes a punch without WebRTC, on a fresh
-            // socket since the failed exchange may have consumed a message on this one. Degrade
-            // to no WebRTC, never to WebRTC signalling in the clear.
-            match secure_tcp_required(&mut socket, &key).await {
-                Ok(()) => exchanged = true,
-                Err(err) => {
-                    log::warn!(
-                        "WebRTC signalling to {} cannot be encrypted, punching without WebRTC: {}",
-                        rendezvous_server,
-                        err
-                    );
-                    webrtc_offerer = None;
-                    socket = connect_tcp(&*rendezvous_server, CONNECT_TIMEOUT).await?;
-                    my_addr = socket.local_addr();
-                }
-            }
-        }
-        if !exchanged && legacy_secure {
+        if !key.is_empty() && (!token.is_empty() || !switch_code.is_empty()) {
             secure_tcp(&mut socket, &key)
                 .await
                 .map_err(|e| anyhow!("Failed to secure tcp: {}", e))?;
-        }
-        // A token or switch code has always taken this socket straight to the punch without
-        // waiting for the UDP NAT test. The WebRTC exchange does not replace that wait, it only
-        // spends part of the same budget, so what is left of it is waited out here and a result
-        // that has already arrived is taken at once.
-        if let Some(udp) = udp.1.as_ref().filter(|_| !legacy_secure) {
-            let tm = udp_nat_wait_from;
+        } else if let Some(udp) = udp.1.as_ref() {
+            let tm = Instant::now();
             // rtt is the TCP connect time. When it is too short to be a real WAN round trip it
             // says nothing about the UDP path (a TUN VPN or the LAN gateway answered the
             // handshake, not the server), so fall back to the flat grace; otherwise trust it.
@@ -1704,7 +1670,7 @@ impl Client {
                                     let actual_fp = conn.dtls_fingerprint(false).await.ok_or_else(
                                         || anyhow!("WebRTC DTLS fingerprint unavailable"),
                                     )?;
-                                    if !dtls_fingerprint_bound(&signed_fp, &actual_fp) {
+                                    if signed_fp.is_empty() || signed_fp != actual_fp {
                                         bail!("WebRTC DTLS fingerprint not bound to peer identity (possible MITM)");
                                     }
                                 }
@@ -2119,8 +2085,6 @@ pub struct AudioHandler {
     device_channel: u16,
     #[cfg(not(target_os = "linux"))]
     playback_status: Arc<audio_playback::AudioPlaybackStatus>,
-    #[cfg(target_os = "windows")]
-    playback_recovery: audio_playback_recovery::PlaybackRecovery,
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2428,53 +2392,22 @@ impl AudioHandler {
 
     /// Handle audio format and create an audio decoder.
     pub fn handle_format(&mut self, f: AudioFormat) {
-        self.handle_format_with_start(f, Self::start_audio);
-    }
-
-    fn handle_format_with_start(
-        &mut self,
-        f: AudioFormat,
-        start: impl FnOnce(&mut Self, AudioFormat) -> ResultType<()>,
-    ) {
         if !is_supported_audio_channel_count(f.channels) {
             log::error!("Unsupported audio channel count: {}", f.channels);
             return;
         }
         match AudioDecoder::new(f.sample_rate, if f.channels > 1 { Stereo } else { Mono }) {
             Ok(d) => {
-                #[cfg(target_os = "windows")]
-                let playback_failed = self.cancel_pending_playback();
                 #[cfg(target_os = "linux")]
                 let keep_existing_stream = self.simple.is_some()
                     && self.sample_rate.0 == f.sample_rate
                     && u32::from(self.channels) == f.channels;
                 #[cfg(not(target_os = "linux"))]
-                let keep_existing_stream = self.audio_stream.is_some()
-                    && self.sample_rate.0 == f.sample_rate
-                    && u32::from(self.channels) == f.channels;
+                let keep_existing_stream = false;
                 let buffer = vec![0.; f.sample_rate as usize * f.channels as usize];
-                #[cfg(not(target_os = "linux"))]
-                let mut previous = std::mem::take(self);
-                #[cfg(target_os = "windows")]
-                self.prepare_playback(&f);
                 self.audio_decoder = Some((d, buffer));
                 self.channels = f.channels as _;
-                let result = start(self, f);
-                #[cfg(target_os = "windows")]
-                let keep_existing_stream = keep_existing_stream
-                    && !playback_failed
-                    && !previous.playback_recovery.report_pending();
-                #[cfg(not(target_os = "linux"))]
-                if result.is_err() && keep_existing_stream {
-                    // The restarted capture has new Opus history even when output startup fails.
-                    previous.audio_decoder = self.audio_decoder.take();
-                    *self = previous;
-                    self.handle_audio_start_result(result, true);
-                    return;
-                }
-                #[cfg(target_os = "windows")]
-                self.finish_playback_replacement(result, keep_existing_stream.then_some(previous));
-                #[cfg(not(target_os = "windows"))]
+                let result = self.start_audio(f);
                 self.handle_audio_start_result(result, keep_existing_stream);
             }
             Err(err) => {
@@ -2562,9 +2495,6 @@ impl AudioHandler {
         device: &Device,
     ) -> ResultType<()> {
         self.device_channel = config.channels;
-        #[cfg(target_os = "windows")]
-        let err_fn = self.playback_recovery.new_error_callback();
-        #[cfg(not(target_os = "windows"))]
         let err_fn = move |err| {
             // too many errors, will improve later
             log::trace!("an error occurred on stream: {}", err);
@@ -4137,11 +4067,7 @@ pub fn start_audio_thread() -> MediaSender {
     std::thread::spawn(move || {
         let mut audio_handler = AudioHandler::default();
         loop {
-            #[cfg(target_os = "windows")]
-            let received = audio_handler.receive_audio(&audio_receiver);
-            #[cfg(not(target_os = "windows"))]
-            let received = audio_receiver.recv();
-            if let Ok(data) = received {
+            if let Ok(data) = audio_receiver.recv() {
                 match data {
                     MediaData::AudioFrame(af) => {
                         audio_handler.handle_frame(*af);

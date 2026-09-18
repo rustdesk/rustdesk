@@ -227,6 +227,10 @@ pub struct FlutterHandler {
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
+    // Local usbip-attach relay channels, keyed by the id chosen when the channel opened.
+    #[cfg(target_os = "linux")]
+    usb_forward_channels:
+        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::UnboundedSender<crate::client::usbip_attach::Inbound>>>>,
 }
 
 impl Default for FlutterHandler {
@@ -238,7 +242,51 @@ impl Default for FlutterHandler {
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
+            #[cfg(target_os = "linux")]
+            usb_forward_channels: Default::default(),
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl FlutterHandler {
+    pub(crate) fn next_usb_channel_id() -> i32 {
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub(crate) fn register_usb_forward_channel(
+        &self,
+        channel_id: i32,
+        tx: hbb_common::tokio::sync::mpsc::UnboundedSender<crate::client::usbip_attach::Inbound>,
+    ) {
+        self.usb_forward_channels
+            .write()
+            .unwrap()
+            .insert(channel_id, tx);
+    }
+
+    pub(crate) fn unregister_usb_forward_channel(&self, channel_id: i32) {
+        self.usb_forward_channels.write().unwrap().remove(&channel_id);
+    }
+
+    fn usb_forward_send(&self, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
+        if let Some(tx) = self.usb_forward_channels.read().unwrap().get(&channel_id) {
+            tx.send(msg).ok();
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Session<FlutterHandler> {
+    pub fn usb_attach(&self, bus_id: String) {
+        let session = self.clone();
+        hbb_common::tokio::spawn(crate::client::usbip_attach::attach(session, bus_id));
+    }
+
+    pub fn usb_detach(&self, port: i32) {
+        crate::client::usbip_attach::detach(port);
     }
 }
 
@@ -1160,6 +1208,54 @@ impl InvokeUiSession for FlutterHandler {
             Some(_) => {
                 log::warn!("Unhandled terminal response type");
             }
+        }
+    }
+
+    fn handle_usb_channel(&self, ch: UsbChannel) {
+        use base::message_proto::usb_channel::Union;
+
+        match ch.union {
+            Some(Union::DeviceList(list)) => {
+                let devices: Vec<serde_json::Value> = list
+                    .devices
+                    .iter()
+                    .map(|d| {
+                        json!({
+                            "bus_id": d.bus_id,
+                            "vendor": d.vendor,
+                            "product": d.product,
+                            "shared": d.shared,
+                            "attached_port": d.attached_port,
+                        })
+                    })
+                    .collect();
+                self.push_event_("usb_device_list", &[("devices", json!(devices))], &[], &[]);
+            }
+            Some(Union::BindResult(r)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("bus_id", json!(&r.bus_id)),
+                    ("bind", json!(r.bind)),
+                    ("error", json!(&r.error)),
+                ];
+                self.push_event_("usb_bind_result", &event_data, &[], &[]);
+            }
+            // The forward-relay frames belong to the local usbip-attach relay
+            // (`client::usbip_attach`), not the UI.
+            #[cfg(target_os = "linux")]
+            Some(Union::Opened(o)) => self.usb_forward_send(
+                o.channel_id,
+                crate::client::usbip_attach::Inbound::Opened {
+                    success: o.success,
+                    message: o.message,
+                },
+            ),
+            #[cfg(target_os = "linux")]
+            Some(Union::Data(d)) => self
+                .usb_forward_send(d.channel_id, crate::client::usbip_attach::Inbound::Data(d.data)),
+            #[cfg(target_os = "linux")]
+            Some(Union::Close(c)) => self
+                .usb_forward_send(c.channel_id, crate::client::usbip_attach::Inbound::Closed),
+            _ => {}
         }
     }
 }

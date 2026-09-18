@@ -2,7 +2,6 @@ package com.carriez.flutter_hbb
 
 import android.app.Activity
 import android.content.Intent
-import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -20,13 +19,7 @@ class PermissionRequestTransparentActivity: Activity() {
             ACT_REQUEST_MEDIA_PROJECTION -> {
                 val mediaProjectionManager =
                     getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    mediaProjectionManager.createScreenCaptureIntent(
-                        MediaProjectionConfig.createConfigForDefaultDisplay()
-                    )
-                } else {
-                    mediaProjectionManager.createScreenCaptureIntent()
-                }
+                val intent = mediaProjectionManager.createScreenCaptureIntent()
                 startActivityForResult(intent, REQ_REQUEST_MEDIA_PROJECTION)
             }
             else -> finish()
