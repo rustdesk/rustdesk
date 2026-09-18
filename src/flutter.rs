@@ -227,6 +227,19 @@ pub struct FlutterHandler {
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
+    // Local usbip-attach relay channels, keyed by the id chosen when the channel opened.
+    #[cfg(target_os = "linux")]
+    usb_forward_channels:
+        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::UnboundedSender<crate::client::usbip_attach::Inbound>>>>,
+    // Local usbip-share relay channels (push direction), keyed by the
+    // negative channel_id the peer's usbip_pull chose.
+    #[cfg(target_os = "linux")]
+    usb_share_channels:
+        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::UnboundedSender<hbb_common::bytes::Bytes>>>>,
+    // bus_id -> the channel_id above, so "unpush" (given only a bus_id) can
+    // find the channel to close.
+    #[cfg(target_os = "linux")]
+    usb_share_bus_ids: Arc<RwLock<HashMap<String, i32>>>,
 }
 
 impl Default for FlutterHandler {
@@ -238,7 +251,232 @@ impl Default for FlutterHandler {
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
+            #[cfg(target_os = "linux")]
+            usb_forward_channels: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_channels: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_bus_ids: Default::default(),
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl FlutterHandler {
+    pub(crate) fn next_usb_channel_id() -> i32 {
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub(crate) fn register_usb_forward_channel(
+        &self,
+        channel_id: i32,
+        tx: hbb_common::tokio::sync::mpsc::UnboundedSender<crate::client::usbip_attach::Inbound>,
+    ) {
+        self.usb_forward_channels
+            .write()
+            .unwrap()
+            .insert(channel_id, tx);
+    }
+
+    pub(crate) fn unregister_usb_forward_channel(&self, channel_id: i32) {
+        self.usb_forward_channels.write().unwrap().remove(&channel_id);
+    }
+
+    fn usb_forward_send(&self, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
+        if let Some(tx) = self.usb_forward_channels.read().unwrap().get(&channel_id) {
+            tx.send(msg).ok();
+        }
+    }
+
+    fn register_usb_share_channel(
+        &self,
+        channel_id: i32,
+        bus_id: String,
+        tx: hbb_common::tokio::sync::mpsc::UnboundedSender<hbb_common::bytes::Bytes>,
+    ) {
+        self.usb_share_channels.write().unwrap().insert(channel_id, tx);
+        self.usb_share_bus_ids.write().unwrap().insert(bus_id, channel_id);
+    }
+
+    pub(crate) fn unregister_usb_share_channel(&self, channel_id: i32) {
+        self.usb_share_channels.write().unwrap().remove(&channel_id);
+        self.usb_share_bus_ids
+            .write()
+            .unwrap()
+            .retain(|_, id| *id != channel_id);
+    }
+
+    fn usb_share_channel_for_bus_id(&self, bus_id: &str) -> Option<i32> {
+        self.usb_share_bus_ids.read().unwrap().get(bus_id).copied()
+    }
+
+    fn usb_share_channel_live(&self, channel_id: i32) -> bool {
+        self.usb_share_channels.read().unwrap().contains_key(&channel_id)
+    }
+
+    fn usb_share_send(&self, channel_id: i32, data: hbb_common::bytes::Bytes) {
+        if let Some(tx) = self.usb_share_channels.read().unwrap().get(&channel_id) {
+            tx.send(data).ok();
+        }
+    }
+
+    /// Any one of this handler's registered UI sessions works -- a RemoteUsb
+    /// `FlutterHandler` only ever has the one.
+    fn any_session(&self) -> Option<FlutterSession> {
+        let sid = self.session_handlers.read().unwrap().keys().next().copied()?;
+        sessions::get_session_by_session_id(&sid)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Session<FlutterHandler> {
+    pub fn usb_attach(&self, bus_id: String) {
+        let session = self.clone();
+        if let Some(rt) = crate::client::usbip_attach::usb_runtime() {
+            rt.spawn(crate::client::usbip_attach::attach(session, bus_id));
+        }
+    }
+
+    pub fn usb_detach(&self, port: i32) {
+        crate::client::usbip_attach::detach(port);
+    }
+
+    /// Purely local (no network): what's shareable on this machine, for the
+    /// "My local devices" push section.
+    pub fn usb_local_devices(&self) {
+        let devices = crate::client::usbip_share::list_local_devices();
+        let devices: Vec<serde_json::Value> = devices
+            .iter()
+            .map(|d| {
+                json!({
+                    "bus_id": d.bus_id,
+                    "vendor": d.vendor,
+                    "product": d.product,
+                    "shared": d.shared,
+                })
+            })
+            .collect();
+        self.push_event_("usb_local_device_list", &[("devices", json!(devices))], &[], &[]);
+    }
+
+    /// Also local -- `usbip bind`/`unbind` needs root, so run it off the FFI
+    /// thread the same way `usb_attach` does.
+    pub fn usb_local_bind(&self, bus_id: String, bind: bool) {
+        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let ok = crate::client::usbip_share::bind_device(&bus_id, bind);
+            let error = if ok {
+                String::new()
+            } else {
+                format!("Failed to {} {}", if bind { "share" } else { "unshare" }, bus_id)
+            };
+            session.push_event_(
+                "usb_local_bind_result",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("bind", json!(bind)),
+                    ("error", json!(error)),
+                ],
+                &[],
+                &[],
+            );
+        });
+    }
+
+    /// Push direction "Push": one user action instead of two ("share" then
+    /// "push" separately) -- share the device locally first, then ask the
+    /// peer to attach it. Keeping "shared" and "pushed" from being two
+    /// independently-toggleable states means there's only one thing to
+    /// track and show in the UI, and it can't drift out of sync with the
+    /// button label the way share-then-separately-push could.
+    pub fn usb_push(&self, bus_id: String) {
+        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            log::info!("usb push: sharing {} before push", bus_id);
+            if !crate::client::usbip_share::bind_device(&bus_id, true) {
+                log::error!("usb push: failed to share {} locally, not pushing", bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!(format!("Failed to share {}", bus_id))),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
+            log::info!("usb push: shared {}, asking peer to attach", bus_id);
+            session.usb_push_request(bus_id);
+        });
+    }
+
+    /// Push direction "Unpush": tell the peer to detach and free our own
+    /// relay slot immediately, then unshare. The peer's own read loop
+    /// aborts as soon as it sees our channel entry gone
+    /// (`usbip_pull.rs::handle_close`), so it never echoes a Close back to
+    /// confirm -- freeing the entry here (not just sending the close
+    /// request and waiting) matters, because our relay's TCP connection to
+    /// the local usbipd is exactly what keeps the device "in use" and
+    /// `usbip unbind` failing. That connection closes asynchronously a
+    /// moment after the entry is dropped, not synchronously with this call,
+    /// so the unshare below retries briefly rather than racing it.
+    pub fn usb_unpush(&self, bus_id: String) {
+        // No live channel happens whenever this app instance never saw the
+        // push complete -- e.g. restarted after sharing, with the peer
+        // still gone. The device can still genuinely be locally bound
+        // though (`usbip bind` is a kernel fact, not app state), so the
+        // actual unshare below must not depend on a channel existing.
+        if let Some(channel_id) = self.ui_handler.usb_share_channel_for_bus_id(&bus_id) {
+            log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
+            self.usb_close_forward(channel_id);
+            self.ui_handler.unregister_usb_share_channel(channel_id);
+        } else {
+            log::info!(
+                "usb push: unpushing {} with no live channel (peer gone or app restarted since sharing)",
+                bus_id
+            );
+        }
+
+        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let mut ok = false;
+            for attempt in 1..=10 {
+                if crate::client::usbip_share::bind_device(&bus_id, false) {
+                    ok = true;
+                    break;
+                }
+                log::debug!("usb push: {} still busy unsharing, retry {}/10", bus_id, attempt);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            let error = if ok {
+                log::info!("usb push: unshared {} after unpush", bus_id);
+                String::new()
+            } else {
+                log::error!(
+                    "usb push: failed to unshare {} after unpush (still busy after retries)",
+                    bus_id
+                );
+                format!("Failed to unshare {}", bus_id)
+            };
+            session.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!(error))],
+                &[],
+                &[],
+            );
+        });
     }
 }
 
@@ -1162,6 +1400,105 @@ impl InvokeUiSession for FlutterHandler {
             }
         }
     }
+
+    fn handle_usb_channel(&self, ch: UsbChannel) {
+        use base::message_proto::usb_channel::Union;
+
+        match ch.union {
+            Some(Union::DeviceList(list)) => {
+                let devices: Vec<serde_json::Value> = list
+                    .devices
+                    .iter()
+                    .map(|d| {
+                        json!({
+                            "bus_id": d.bus_id,
+                            "vendor": d.vendor,
+                            "product": d.product,
+                            "shared": d.shared,
+                            "attached_port": d.attached_port,
+                        })
+                    })
+                    .collect();
+                self.push_event_("usb_device_list", &[("devices", json!(devices))], &[], &[]);
+            }
+            Some(Union::BindResult(r)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("bus_id", json!(&r.bus_id)),
+                    ("bind", json!(r.bind)),
+                    ("error", json!(&r.error)),
+                ];
+                self.push_event_("usb_bind_result", &event_data, &[], &[]);
+            }
+            #[cfg(target_os = "linux")]
+            Some(Union::PushResult(r)) => {
+                if r.error.is_empty() {
+                    log::info!("usb push: peer confirmed attach of {}", r.bus_id);
+                } else {
+                    log::error!(
+                        "usb push: peer failed to attach {}: {}, rolling back share",
+                        r.bus_id, r.error
+                    );
+                    if let Some(rt) = crate::client::usbip_attach::usb_runtime() {
+                        let bus_id = r.bus_id.clone();
+                        rt.spawn_blocking(move || {
+                            if crate::client::usbip_share::bind_device(&bus_id, false) {
+                                log::info!("usb push: rolled back share of {}", bus_id);
+                            } else {
+                                log::error!("usb push: rollback unshare of {} also failed", bus_id);
+                            }
+                        });
+                    }
+                }
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("bus_id", json!(&r.bus_id)),
+                    ("error", json!(&r.error)),
+                ];
+                self.push_event_("usb_push_result", &event_data, &[], &[]);
+            }
+            // `channel_id >= 0` is the local usbip-attach relay (pull,
+            // `client::usbip_attach`); `< 0` is the local usbip-share relay
+            // (push, `client::usbip_share`) -- see `usbip_pull.rs`'s doc
+            // comment on the controlled side for the sign convention.
+            #[cfg(target_os = "linux")]
+            Some(Union::Opened(o)) if o.channel_id >= 0 => self.usb_forward_send(
+                o.channel_id,
+                crate::client::usbip_attach::Inbound::Opened {
+                    success: o.success,
+                    message: o.message,
+                },
+            ),
+            #[cfg(target_os = "linux")]
+            Some(Union::Data(d)) if d.channel_id >= 0 => self
+                .usb_forward_send(d.channel_id, crate::client::usbip_attach::Inbound::Data(d.data)),
+            #[cfg(target_os = "linux")]
+            Some(Union::Close(c)) if c.channel_id >= 0 => self
+                .usb_forward_send(c.channel_id, crate::client::usbip_attach::Inbound::Closed),
+            #[cfg(target_os = "linux")]
+            Some(Union::Data(d)) => self.usb_share_send(d.channel_id, d.data),
+            #[cfg(target_os = "linux")]
+            Some(Union::Close(c)) => {
+                log::info!("usb push: peer closed channel {}", c.channel_id);
+                self.unregister_usb_share_channel(c.channel_id);
+            }
+            // The peer pulling one of the devices we're sharing.
+            #[cfg(target_os = "linux")]
+            Some(Union::Open(open)) => {
+                let id = open.channel_id;
+                if self.usb_share_channel_live(id) {
+                    return;
+                }
+                let Some(session) = self.any_session() else {
+                    log::error!("usb push: peer opened channel {} but no session to relay it", id);
+                    return;
+                };
+                log::info!("usb push: peer opened channel {} for {}", id, open.bus_id);
+                let (tx, rx) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+                self.register_usb_share_channel(id, open.bus_id, tx);
+                hbb_common::tokio::spawn(crate::client::usbip_share::run_channel(id, session, rx));
+            }
+            _ => {}
+        }
+    }
 }
 
 impl FlutterHandler {
@@ -1270,6 +1607,7 @@ pub fn session_add(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
+    is_remote_usb: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1282,6 +1620,8 @@ pub fn session_add(
         ConnType::VIEW_CAMERA
     } else if is_terminal {
         ConnType::TERMINAL
+    } else if is_remote_usb {
+        ConnType::REMOTE_USB
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP
@@ -2379,5 +2719,21 @@ pub(super) mod async_tasks {
             super::APP_TYPE_MAIN,
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod usb_channel_id_tests {
+    use super::FlutterHandler;
+
+    #[test]
+    fn channel_ids_are_positive_and_increasing() {
+        // Non-negative, so the controller's own channel ids can never
+        // collide with `usbip_pull.rs`'s negative, controlled-side ones --
+        // see the sign dispatch in `connection.rs::handle_usb_channel`.
+        let first = FlutterHandler::next_usb_channel_id();
+        let second = FlutterHandler::next_usb_channel_id();
+        assert!(first >= 0);
+        assert!(second > first);
     }
 }

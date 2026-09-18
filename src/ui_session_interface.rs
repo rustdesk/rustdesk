@@ -227,6 +227,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL)
     }
 
+    pub fn is_remote_usb(&self) -> bool {
+        self.lc.read().unwrap().conn_type.eq(&ConnType::REMOTE_USB)
+    }
+
     pub fn is_port_forward(&self) -> bool {
         let conn_type = self.lc.read().unwrap().conn_type;
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
@@ -830,6 +834,92 @@ impl<T: InvokeUiSession> Session<T> {
         });
         let mut msg_out = Message::new();
         msg_out.set_terminal_action(action);
+        self.send(Data::Message(msg_out));
+    }
+
+    // RemoteUsb methods
+    pub fn request_usb_devices(&self) {
+        let mut ch = UsbChannel::new();
+        ch.set_list_devices(UsbListDevicesRequest::new());
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_bind(&self, bus_id: String, bind: bool) {
+        let mut ch = UsbChannel::new();
+        ch.set_bind(UsbBind {
+            bus_id,
+            bind,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_open_forward(&self, channel_id: i32, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_open(UsbForwardOpen {
+            channel_id,
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_forward_data(&self, channel_id: i32, data: bytes::Bytes) {
+        let mut ch = UsbChannel::new();
+        ch.set_data(UsbForwardData {
+            channel_id,
+            data,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn usb_close_forward(&self, channel_id: i32) {
+        let mut ch = UsbChannel::new();
+        ch.set_close(UsbForwardClose {
+            channel_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    /// Push direction: raw "attach the device I just bound locally" message
+    /// -- the peer pulls it via `usb_open_forward`'s message shape, in
+    /// reverse. Platform-specific code (`Session<FlutterHandler>::usb_push`
+    /// on Linux) shares the device locally before calling this.
+    pub fn usb_push_request(&self, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_push_request(UsbPushRequest {
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    /// Push direction: reply to a peer's `usb_open_forward`-equivalent for
+    /// one of the devices we're sharing.
+    pub fn usb_reply_opened(&self, channel_id: i32, success: bool, message: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_opened(UsbForwardOpened {
+            channel_id,
+            success,
+            message,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
         self.send(Data::Message(msg_out));
     }
 
@@ -1742,6 +1832,11 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn printer_request(&self, id: i32, path: String);
     fn handle_screenshot_resp(&self, sid: String, msg: String);
     fn handle_terminal_response(&self, response: TerminalResponse);
+    /// `ch` carries both simple control responses (`device_list`,
+    /// `bind_result`) and the forwarded USB/IP byte stream (`opened`,
+    /// `data`, `close`); implementations route the latter to the local
+    /// attach-side relay rather than the UI.
+    fn handle_usb_channel(&self, ch: UsbChannel);
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -1802,7 +1897,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }
-        } else if !self.is_port_forward() && !self.is_terminal() {
+        } else if !self.is_port_forward() && !self.is_terminal() && !self.is_remote_usb() {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
@@ -1838,7 +1933,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.
         self.lc.write().unwrap().handle_peer_info(&pi);
         self.set_peer_info(&pi);
-        if self.is_file_transfer() {
+        if self.is_file_transfer() || self.is_remote_usb() {
             self.close_success();
         } else if !self.is_port_forward() && !self.is_terminal() {
             self.msgbox(

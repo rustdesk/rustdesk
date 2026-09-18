@@ -25,6 +25,7 @@ import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:flutter_hbb/models/usbip_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_hbb/utils/http_service.dart' as http;
@@ -376,6 +377,16 @@ class FfiModel with ChangeNotifier {
             .receive(int.parse(evt['id'] as String), evt['text'] ?? '');
       } else if (name == 'terminal_response') {
         parent.target?.routeTerminalResponse(evt);
+      } else if (name == 'usb_device_list') {
+        parent.target?.usbipModel.updateDeviceList(evt);
+      } else if (name == 'usb_bind_result') {
+        parent.target?.usbipModel.handleBindResult(evt);
+      } else if (name == 'usb_attached') {
+        parent.target?.usbipModel.handleAttached(evt);
+      } else if (name == 'usb_local_device_list') {
+        parent.target?.usbipModel.updateLocalDeviceList(evt);
+      } else if (name == 'usb_push_result') {
+        parent.target?.usbipModel.handlePushResult(evt);
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'empty_dirs') {
@@ -908,6 +919,13 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // A dead peer never answers the usbip request this session may be
+    // waiting on -- clear it so the RemoteUsb page's toggle buttons don't
+    // stay disabled forever (harmless no-op for every other session type).
+    if (title == 'Connection Error') {
+      parent.target?.usbipModel.clearPendingOnDisconnect();
+    }
+
     // Disable relative mouse mode on any error-type message to ensure cursor is released.
     // This includes connection errors, session-ending messages, elevation errors, etc.
     // Safety: releasing pointer lock on errors prevents the user from being stuck.
@@ -1286,6 +1304,7 @@ class FfiModel with ChangeNotifier {
         ConnType.rdp => 2,
         ConnType.viewCamera => 3,
         ConnType.terminal => 4,
+        ConnType.remoteUsb => 5,
         _ => 0,
       };
 
@@ -1422,6 +1441,9 @@ class FfiModel with ChangeNotifier {
       for (final model in models) {
         model.onReady();
       }
+    } else if (connType == ConnType.remoteUsb) {
+      parent.target?.usbipModel.requestDevices();
+      parent.target?.usbipModel.requestLocalDevices();
     } else if (connType == ConnType.defaultConn ||
         connType == ConnType.viewCamera) {
       List<Display> newDisplays = [];
@@ -3794,7 +3816,8 @@ enum ConnType {
   portForward,
   rdp,
   viewCamera,
-  terminal
+  terminal,
+  remoteUsb
 }
 
 /// Flutter state manager and data communication with the Rust core.
@@ -3825,6 +3848,7 @@ class FFI {
   late final ElevationModel elevationModel; // session
   late final CmFileModel cmFileModel; // cm
   late final TextureModel textureModel; //session
+  late final UsbipModel usbipModel; // session
   late final Peers recentPeersModel; // global
   late final Peers favoritePeersModel; // global
   late final Peers lanPeersModel; // global
@@ -3854,6 +3878,7 @@ class FFI {
     elevationModel = ElevationModel(WeakReference(this));
     cmFileModel = CmFileModel(WeakReference(this));
     textureModel = TextureModel(WeakReference(this));
+    usbipModel = UsbipModel(WeakReference(this));
     recentPeersModel = Peers(
         name: PeersModelName.recent,
         loadEvent: LoadEvent.recent,
@@ -3884,6 +3909,7 @@ class FFI {
     bool isPortForward = false,
     bool isRdp = false,
     bool isTerminal = false,
+    bool isRemoteUsb = false,
     String? switchUuid,
     String? password,
     bool? isSharedPassword,
@@ -3901,7 +3927,11 @@ class FFI {
             (!(isPortForward && isFileTransfer)) &&
             (!(isTerminal && isFileTransfer)) &&
             (!(isTerminal && isViewCamera)) &&
-            (!(isTerminal && isPortForward)),
+            (!(isTerminal && isPortForward)) &&
+            (!(isRemoteUsb && isFileTransfer)) &&
+            (!(isRemoteUsb && isViewCamera)) &&
+            (!(isRemoteUsb && isPortForward)) &&
+            (!(isRemoteUsb && isTerminal)),
         'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
@@ -3911,6 +3941,8 @@ class FFI {
       connType = ConnType.portForward;
     } else if (isTerminal) {
       connType = ConnType.terminal;
+    } else if (isRemoteUsb) {
+      connType = ConnType.remoteUsb;
     } else {
       chatModel.resetClientMode();
       connType = ConnType.defaultConn;
@@ -3932,6 +3964,7 @@ class FFI {
         isPortForward: isPortForward,
         isRdp: isRdp,
         isTerminal: isTerminal,
+        isRemoteUsb: isRemoteUsb,
         switchUuid: switchUuid ?? '',
         forceRelay: forceRelay ?? false,
         password: password ?? '',

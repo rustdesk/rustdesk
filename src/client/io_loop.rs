@@ -2189,6 +2189,9 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     self.handler.handle_terminal_response(response);
                 }
+                Some(message::Union::UsbChannel(ch)) => {
+                    self.handler.handle_usb_channel(ch);
+                }
                 _ => {}
             }
         }
