@@ -37,7 +37,7 @@ RustDesk вітає внески від усіх охочих. Дивіться 
 
 ## Залежності
 
-Стільничні версії використовують Flutter чи Sciter (застаріле) для графічного інтерфейсу. Ця інструкція лише для Sciter, оскільки він є більш простим та дружнім для початківців. Перегляньте [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) для збірки версії на Flutter.
+Версії для настільних ОС використовують Flutter або Sciter (застарілий) для графічного інтерфейсу. Ця інструкція стосується лише Sciter, оскільки з ним простіше почати. Для збірки версії на Flutter дивіться наш [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml).
 
 Динамічну бібліотеку Sciter потрібно завантажити окремо.
 
