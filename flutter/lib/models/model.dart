@@ -1685,7 +1685,7 @@ class FfiModel with ChangeNotifier {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
-          await bind.sessionSwitchDisplay(
+          bind.sessionSwitchDisplay(
               isDesktop: isDesktop,
               sessionId: sessionId,
               value: Int32List.fromList(allDisplays));
