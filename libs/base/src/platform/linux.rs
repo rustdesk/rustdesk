@@ -320,6 +320,9 @@ pub struct WaylandDisplayInfo {
     pub width: i32,
     pub height: i32,
     pub logical_size: Option<(i32, i32)>,
+    // wl_output.scale is independent of desktop coordinates. Older probes omit it.
+    #[serde(default)]
+    pub scale_factor: i32,
     pub refresh_rate: i32,
     /// Output rotation in degrees (0/90/180/270), from `wl_output.geometry`. The mode keeps its
     /// unrotated dimensions and `logical_size` arrives already swapped, so without this field a
@@ -450,6 +453,7 @@ fn collect_wayland_displays(conn: &Connection) -> ResultType<Vec<WaylandDisplayI
                         width,
                         height,
                         logical_size,
+                        scale_factor: info.scale_factor,
                         refresh_rate,
                         transform,
                     });
@@ -542,9 +546,11 @@ mod tests {
         let old = r#"{"name":"HDMI-1","x":0,"y":0,"width":1920,"height":1080,"logical_size":null,"refresh_rate":60}"#;
         let info: WaylandDisplayInfo = serde_json::from_str(old).unwrap();
         assert_eq!(info.transform, 0);
+        assert_eq!(info.scale_factor, 0);
         let roundtrip: WaylandDisplayInfo =
             serde_json::from_str(&serde_json::to_string(&info).unwrap()).unwrap();
         assert_eq!(roundtrip.transform, 0);
+        assert_eq!(roundtrip.scale_factor, 0);
     }
 
     #[test]

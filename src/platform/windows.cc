@@ -413,7 +413,9 @@ extern "C"
     {
         auto in = in0;
         auto out0_end = out0 + out0_size;
-        auto offset = width * 4 + 4;
+        // The output adds a pixel on each side; place the source at (1, 1)
+        // using the padded stride to match the caller's hotspot +1 adjustment.
+        auto offset = (width + 2) * 4 + 4;
         auto out = out0 + offset;
         for (int y = 0; y < height; y++)
         {

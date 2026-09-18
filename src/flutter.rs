@@ -642,7 +642,7 @@ impl FlutterHandler {
 
 impl InvokeUiSession for FlutterHandler {
     fn set_cursor_data(&self, cd: CursorData) {
-        let colors = hbb_common::compress::decompress(&cd.colors);
+        let colors = &cd.colors;
         self.push_event(
             "cursor_data",
             &[
@@ -651,6 +651,7 @@ impl InvokeUiSession for FlutterHandler {
                 ("hoty", &cd.hoty.to_string()),
                 ("width", &cd.width.to_string()),
                 ("height", &cd.height.to_string()),
+                ("scale", &cd.scale.to_string()),
                 (
                     "colors",
                     &serde_json::ser::to_string(&colors).unwrap_or("".to_owned()),

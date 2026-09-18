@@ -35,6 +35,9 @@ use std::{
 use terminfo::{capability as cap, Database};
 use wallpaper;
 
+// Cursor density is capture metadata, independent of either endpoint's UI.
+mod cursor;
+
 pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
@@ -570,7 +573,9 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
     // polled there is a live session, which is the case the latch reads correctly.
     #[cfg(feature = "drm")]
     if !is_x11() {
-        if let Some(id) = crate::server::drm_capturer::drm_cursor_id() {
+        let cursor = cursor::drm_snapshot(|c| c.id)?
+            .map(|(id, scale)| cursor::cache_id(id, scale));
+        if let Some(id) = cursor {
             // In a mixed DRM + PipeWire session the DRM streams only cover the DRM-backed displays;
             // when the pointer sits on a PipeWire-served display every DRM stream reports the hidden
             // sentinel. Returning that sentinel here would hide the cursor globally, including on the
@@ -598,6 +603,7 @@ pub fn get_cursor() -> ResultType<Option<u64>> {
             }
         }
     });
+    let res = res.map(cursor::x11_cursor_id);
     Ok(res)
 }
 
@@ -610,7 +616,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     // agree anyway, since a caller that took the DRM branch there has to take it here.
     #[cfg(feature = "drm")]
     if !is_x11() {
-        if let Some(c) = crate::server::drm_capturer::drm_cursor() {
+        let cursor = cursor::drm_snapshot(Clone::clone)?;
+        if let Some((c, scale)) = cursor {
             // See get_cursor(): a hidden DRM sentinel is authoritative only in a pure-DRM session. In
             // a mixed DRM + PipeWire session fall through so the PipeWire display's cursor is served
             // by the normal path instead of being hidden everywhere.
@@ -618,7 +625,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 || !crate::server::display_service::has_non_drm_backed_display()
             {
                 let mut cd: CursorData = Default::default();
-                cd.id = c.id;
+                cd.id = cursor::cache_id(c.id, scale);
+                cd.scale = scale;
                 cd.width = c.width;
                 cd.height = c.height;
                 cd.hotx = c.hotx;
@@ -628,20 +636,23 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
             }
         }
     }
+    let scale = cursor::x11_cursor_scale();
+    let matches = |id| cursor::cache_id(id, scale) == hcursor;
     let mut res = None;
     DISPLAY.with(|conn| {
         if let Ok(ref mut d) = conn.try_borrow_mut() {
             if !d.is_null() {
                 unsafe {
                     let img = XFixesGetCursorImage(**d);
-                    if !img.is_null() && hcursor == (*img).cursor_serial as u64 {
+                    if !img.is_null() && matches((*img).cursor_serial as u64) {
                         let mut cd: CursorData = Default::default();
                         cd.hotx = (*img).xhot as _;
                         cd.hoty = (*img).yhot as _;
                         cd.width = (*img).width as _;
                         cd.height = (*img).height as _;
                         // to-do: how about if it is 0
-                        cd.id = (*img).cursor_serial as _;
+                        cd.id = hcursor;
+                        cd.scale = scale;
                         let pixels =
                             std::slice::from_raw_parts((*img).pixels, (cd.width * cd.height) as _);
                         // cd.colors.resize(pixels.len() * 4, 0);
