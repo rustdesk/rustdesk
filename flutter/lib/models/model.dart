@@ -1684,6 +1684,9 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
+          if (!_pi.forceTextureRender) {
+            parent.target!.imageModel.clearImage();
+          }
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
               isDesktop: isDesktop,
@@ -4308,7 +4311,8 @@ class PeerInfo with ChangeNotifier {
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
-  bool get forceTextureRender => currentDisplay == kAllDisplayValue;
+  bool get forceTextureRender =>
+      currentDisplay == kAllDisplayValue && displays.length > 1;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 
