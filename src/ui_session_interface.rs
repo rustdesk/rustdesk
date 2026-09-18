@@ -489,9 +489,18 @@ impl<T: InvokeUiSession> Session<T> {
             self.send(Data::Message(msg));
         }
         if value != "custom" {
-            let last_auto_fps = self.lc.read().unwrap().last_auto_fps;
-            if last_auto_fps.unwrap_or(usize::MAX) >= 30 {
-                // non custom quality use 30 fps
+            // custom_fps is restored from saved custom-quality options.
+            // set_custom_fps updates both fields for manual FPS changes and preset-quality resets.
+            // Auto FPS control updates only last_send_fps when it queues a new FPS limit.
+            let (custom_fps, last_send_fps) = {
+                let lc = self.lc.read().unwrap();
+                let custom_fps = *lc.custom_fps.lock().unwrap();
+                (custom_fps, lc.last_send_fps)
+            };
+            // Preset quality uses a 30 FPS cap, replacing both higher and lower custom caps.
+            // Keep lower auto FPS if the cap is already 30; after a reset, auto control can readjust.
+            // An unset custom cap means 30, but an unknown last sent FPS needs an explicit limit.
+            if custom_fps.unwrap_or(30) != 30 || last_send_fps.unwrap_or(usize::MAX) > 30 {
                 let msg = self.lc.write().unwrap().set_custom_fps(30, false);
                 self.send(Data::Message(msg));
             }
