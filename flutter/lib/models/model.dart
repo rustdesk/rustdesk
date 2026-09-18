@@ -1679,6 +1679,7 @@ class FfiModel with ChangeNotifier {
   handleSyncPeerInfo(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
     if (evt['displays'] != null) {
+      final previousDisplayCount = _pi.displays.length;
       cachedPeerData.peerInfo['displays'] = evt['displays'];
       List<dynamic> displays = json.decode(evt['displays']);
       List<Display> newDisplays = [];
@@ -1696,7 +1697,16 @@ class FfiModel with ChangeNotifier {
 
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
-        // to-do: What if the displays are changed?
+        if (previousDisplayCount != _pi.displays.length) {
+          if (!_pi.forceTextureRender) {
+            parent.target!.imageModel.clearImage();
+          }
+          final allDisplays = List.generate(_pi.displays.length, (i) => i);
+          bind.sessionSwitchDisplay(
+              isDesktop: isDesktop,
+              sessionId: sessionId,
+              value: Int32List.fromList(allDisplays));
+        }
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
@@ -4329,7 +4339,8 @@ class PeerInfo with ChangeNotifier {
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
-  bool get forceTextureRender => currentDisplay == kAllDisplayValue;
+  bool get forceTextureRender =>
+      currentDisplay == kAllDisplayValue && displays.length > 1;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 
