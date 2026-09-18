@@ -1244,6 +1244,13 @@ fn is_tcp_proxy_api_target(url: &str) -> bool {
     should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
 }
 
+#[inline]
+fn is_heartbeat_url(url: &str) -> bool {
+    url::Url::parse(url)
+        .map(|parsed| parsed.path().ends_with("/api/heartbeat"))
+        .unwrap_or(false)
+}
+
 fn tcp_proxy_log_target(url: &str) -> String {
     url::Url::parse(url)
         .ok()
@@ -1293,12 +1300,14 @@ async fn tcp_proxy_request(
         parsed.path().to_string()
     };
 
-    log::debug!(
-        "Sending {} {} via TCP proxy to {}",
-        method,
-        parsed.path(),
-        tcp_addr
-    );
+    if !parsed.path().ends_with("/api/heartbeat") {
+        log::debug!(
+            "Sending {} {} via TCP proxy to {}",
+            method,
+            parsed.path(),
+            tcp_addr
+        );
+    }
 
     let overall_timeout = CONNECT_TIMEOUT + READ_TIMEOUT;
     timeout(overall_timeout, async {
@@ -1453,19 +1462,24 @@ where
     };
 
     if should_fallback && can_fallback_to_raw_tcp(url) {
-        log::warn!(
-            "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
-            method,
-            tcp_proxy_log_target(url),
-            http_result
-                .as_ref()
-                .map(|(s, _)| *s)
-                .map_err(|e| e.to_string()),
-        );
+        let is_heartbeat = is_heartbeat_url(url);
+        if !is_heartbeat {
+            log::warn!(
+                "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
+                method,
+                tcp_proxy_log_target(url),
+                http_result
+                    .as_ref()
+                    .map(|(s, _)| *s)
+                    .map_err(|e| e.to_string()),
+            );
+        }
         match tcp_fn.await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                if !is_heartbeat {
+                    log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                }
             }
         }
     }
@@ -1590,11 +1604,14 @@ async fn post_request_(
             }
             Err(e) => {
                 if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
+                    let is_heartbeat = is_heartbeat_url(url);
                     if danger_accept_invalid_cert.is_none() {
-                        log::warn!(
-                            "HTTP request failed: {:?}, try again, danger accept invalid cert",
-                            e
-                        );
+                        if !is_heartbeat {
+                            log::warn!(
+                                "HTTP request failed: {:?}, try again, danger accept invalid cert",
+                                e
+                            );
+                        }
                         post_request_(
                             url,
                             tls_url,
@@ -1606,7 +1623,9 @@ async fn post_request_(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        if !is_heartbeat {
+                            log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        }
                         post_request_(
                             url,
                             tls_url,
