@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../res/logo-header.svg" alt="RustDesk - Ваша віддалена стільниця"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - Ваш віддалений робочий стіл"><br>
   <a href="#публічні-сервери">Сервери</a> •
   <a href="#кроки-для-збірки">Збирання</a> •
   <a href="#як-зібрати-за-допомогою-docker">Docker</a> •
