@@ -48,11 +48,15 @@ class _UsbipPageState extends State<UsbipPage> {
 
   @override
   void dispose() {
-    // Detach locally-attached devices before the session (and its ability to
-    // resolve session_id -> session) goes away, or they'd be orphaned in
-    // vhci-hcd with no way to detach them from the UI anymore.
+    // Detach locally-attached devices, and unpush devices pushed into the
+    // peer, before the session (and its ability to resolve session_id ->
+    // session) goes away, or they'd be orphaned with no way to
+    // detach/unpush them from the UI anymore.
     for (final busId in _ffi.usbipModel.attachedPorts.keys.toList()) {
-      _ffi.usbipModel.detachDevice(busId);
+      _ffi.usbipModel.toggleAttach(busId, false);
+    }
+    for (final device in _ffi.usbipModel.localDevices.where((d) => d.shared)) {
+      _ffi.usbipModel.togglePush(device.busId, false);
     }
     _ffi.close();
     _ffi.dialogManager.dismissAll();
@@ -79,26 +83,9 @@ class _UsbipPageState extends State<UsbipPage> {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Text(
-                translate('USB forwarding'),
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              if (model.loading)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              IconButton(
-                tooltip: translate('Refresh'),
-                icon: const Icon(Icons.refresh),
-                onPressed: model.loading ? null : model.requestDevices,
-              ),
-            ],
+          child: Text(
+            translate('USB forwarding'),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
         if (model.lastError != null)
@@ -119,19 +106,108 @@ class _UsbipPageState extends State<UsbipPage> {
             ),
           ),
         Expanded(
-          child: model.devices.isEmpty
-              ? Center(
+          child: ListView(
+            children: [
+              _buildSectionHeader(
+                context,
+                title: translate('My local devices'),
+                loading: false,
+                onRefresh: model.requestLocalDevices,
+              ),
+              if (model.localDevices.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  child: Text(translate('No USB devices')),
+                )
+              else
+                ...model.localDevices.map(
+                    (device) => _buildLocalDeviceRow(context, model, device)),
+              const Divider(height: 24),
+              _buildSectionHeader(
+                context,
+                title: translate('Peer\'s devices'),
+                loading: model.loading,
+                onRefresh: model.loading ? null : model.requestDevices,
+              ),
+              if (model.devices.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
                   child: Text(model.loading
                       ? translate('Loading...')
-                      : translate('No USB devices')))
-              : ListView.separated(
-                  itemCount: model.devices.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) =>
-                      _buildDeviceRow(context, model, model.devices[index]),
-                ),
+                      : translate('No USB devices')),
+                )
+              else
+                ...model.devices
+                    .map((device) => _buildDeviceRow(context, model, device)),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required String title,
+    required bool loading,
+    required VoidCallback? onRefresh,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const Spacer(),
+          if (loading)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          IconButton(
+            tooltip: translate('Refresh'),
+            icon: const Icon(Icons.refresh),
+            onPressed: onRefresh,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocalDeviceRow(
+      BuildContext context, UsbipModel model, UsbDeviceInfo device) {
+    final pending = model.localPendingBusIds.contains(device.busId);
+    final pushed = device.shared;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  device.product.isNotEmpty ? device.product : device.busId,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  '${device.busId}  ${device.vendor}',
+                  style: TextStyle(
+                      fontSize: 12, color: Theme.of(context).hintColor),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: pending
+                ? null
+                : () => model.togglePush(device.busId, !pushed),
+            child: Text(pushed ? translate('Unpush') : translate('Push')),
+          ),
+        ],
+      ),
     );
   }
 
@@ -160,19 +236,10 @@ class _UsbipPageState extends State<UsbipPage> {
               ],
             ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: pending
                 ? null
-                : () => model.toggleShare(device.busId, !device.shared),
-            child: Text(device.shared ? translate('Unshare') : translate('Share')),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: !device.shared || pending
-                ? null
-                : () => attached
-                    ? model.detachDevice(device.busId)
-                    : model.attachDevice(device.busId),
+                : () => model.toggleAttach(device.busId, !attached),
             child: Text(attached ? translate('Detach') : translate('Attach')),
           ),
         ],

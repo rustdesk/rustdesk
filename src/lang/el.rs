@@ -788,6 +788,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Share", "Κοινή χρήση"),
         ("Unshare", "Κατάργηση κοινής χρήσης"),
         ("Attach", "Σύνδεση"),
-        ("Detach", "Αποσύνδεση")
+        ("Detach", "Αποσύνδεση"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", "")
     ].iter().cloned().collect();
 }

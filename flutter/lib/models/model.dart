@@ -383,6 +383,10 @@ class FfiModel with ChangeNotifier {
         parent.target?.usbipModel.handleBindResult(evt);
       } else if (name == 'usb_attached') {
         parent.target?.usbipModel.handleAttached(evt);
+      } else if (name == 'usb_local_device_list') {
+        parent.target?.usbipModel.updateLocalDeviceList(evt);
+      } else if (name == 'usb_push_result') {
+        parent.target?.usbipModel.handlePushResult(evt);
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'empty_dirs') {
@@ -1432,6 +1436,7 @@ class FfiModel with ChangeNotifier {
       }
     } else if (connType == ConnType.remoteUsb) {
       parent.target?.usbipModel.requestDevices();
+      parent.target?.usbipModel.requestLocalDevices();
     } else if (connType == ConnType.defaultConn ||
         connType == ConnType.viewCamera) {
       List<Display> newDisplays = [];

@@ -788,6 +788,10 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Share", "แชร์"),
         ("Unshare", "ยกเลิกการแชร์"),
         ("Attach", "เชื่อมต่อ"),
-        ("Detach", "ยกเลิกการเชื่อมต่อ")
+        ("Detach", "ยกเลิกการเชื่อมต่อ"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", "")
     ].iter().cloned().collect();
 }

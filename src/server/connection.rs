@@ -362,6 +362,8 @@ pub struct Connection {
     remote_usb: bool,
     #[cfg(target_os = "linux")]
     usbip_mux: Option<super::usbip_mux::UsbipMux>,
+    #[cfg(target_os = "linux")]
+    usbip_pull: Option<super::usbip_pull::UsbPullState>,
     port_forward_socket: Option<Framed<TcpStream, BytesCodec>>,
     port_forward_mux: Option<super::port_forward_mux::PortForwardMux>,
     port_forward_address: String,
@@ -581,6 +583,8 @@ impl Connection {
             remote_usb: false,
             #[cfg(target_os = "linux")]
             usbip_mux: None,
+            #[cfg(target_os = "linux")]
+            usbip_pull: None,
             port_forward_socket: None,
             port_forward_mux: None,
             port_forward_address: "".to_owned(),
@@ -1790,6 +1794,11 @@ impl Connection {
             .tx
             .clone()
             .map(super::usbip_mux::UsbipMux::new);
+        self.usbip_pull = self
+            .inner
+            .tx
+            .clone()
+            .map(super::usbip_pull::UsbPullState::new);
     }
 
     async fn connect_port_forward_if_needed(&mut self) -> bool {
@@ -2390,13 +2399,46 @@ impl Connection {
 
     #[cfg(target_os = "linux")]
     fn handle_usb_channel(&mut self, ch: UsbChannel) {
-        let Some(mux) = self.usbip_mux.as_mut() else {
-            log::debug!("usb channel frame on a connection without an active usbip session");
+        // A negative `channel_id` means the frame belongs to a push channel
+        // we opened ourselves (see `usbip_pull`'s doc comment); everything
+        // else, including `PushRequest` (no id yet) and any non-negative id,
+        // still means "peer pulling from us" and goes to the existing mux.
+        let for_pull = match &ch.union {
+            Some(usb_channel::Union::PushRequest(_)) => true,
+            Some(usb_channel::Union::Opened(o)) => o.channel_id < 0,
+            Some(usb_channel::Union::Data(d)) => d.channel_id < 0,
+            Some(usb_channel::Union::Close(c)) => c.channel_id < 0,
+            _ => false,
+        };
+
+        if !for_pull {
+            let Some(mux) = self.usbip_mux.as_mut() else {
+                log::debug!("usb channel frame on a connection without an active usbip session");
+                return;
+            };
+            mux.handle(ch, || {
+                Self::permission(keys::OPTION_ENABLE_USBIP, &self.control_permissions)
+            });
+            return;
+        }
+
+        let Some(pull) = self.usbip_pull.as_mut() else {
+            log::debug!("usb push frame on a connection without an active usbip session");
             return;
         };
-        mux.handle(ch, || {
-            Self::permission(keys::OPTION_ENABLE_USBIP, &self.control_permissions)
-        });
+        match ch.union {
+            Some(usb_channel::Union::PushRequest(r)) => {
+                if !Self::permission(keys::OPTION_ENABLE_USBIP, &self.control_permissions) {
+                    log::debug!("usb push denied: no permission");
+                    return;
+                }
+                pull.handle_push_request(r.bus_id);
+            }
+            Some(usb_channel::Union::Opened(o)) => pull.handle_opened(o),
+            Some(usb_channel::Union::Data(d)) => pull.handle_data(d),
+            Some(usb_channel::Union::Close(c)) => pull.handle_close(c),
+            _ => {}
+        }
     }
 
     #[inline]
@@ -5307,6 +5349,10 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if let Some(mut mux) = self.usbip_mux.take() {
             mux.close_all();
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(mut pull) = self.usbip_pull.take() {
+            pull.close_all();
         }
     }
 

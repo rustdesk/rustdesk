@@ -125,7 +125,7 @@ impl UsbipMux {
                 tokio::spawn(async move {
                     let bus_id = b.bus_id.clone();
                     let bind = b.bind;
-                    let ok = tokio::task::spawn_blocking(move || bind_device(&b.bus_id, b.bind))
+                    let ok = tokio::task::spawn_blocking(move || bind_device_retrying(&b.bus_id, b.bind))
                         .await
                         .unwrap_or(false);
                     let error = if ok {
@@ -302,4 +302,27 @@ fn shared_bus_ids() -> std::collections::HashSet<String> {
 fn bind_device(bus_id: &str, bind: bool) -> bool {
     let sub_cmd = if bind { "bind" } else { "unbind" };
     crate::platform::run_cmds_privileged(&format!("usbip {} -b {}", sub_cmd, bus_id))
+}
+
+/// Blocking; call via `spawn_blocking`. The puller's combined "detach and
+/// unshare" sends its unshare request right after detaching, but the
+/// detach's own relay teardown here (`run_channel`'s reader noticing EOF
+/// once the puller's kernel-level detach closes things) happens
+/// asynchronously, not synchronously with the puller's detach call -- so an
+/// unbind request can legitimately race the relay that's still holding the
+/// device "in use" for a brief moment. Retry rather than surface a spurious
+/// error for that race; a share request isn't subject to the same race, so
+/// it fails fast.
+fn bind_device_retrying(bus_id: &str, bind: bool) -> bool {
+    for attempt in 1..=10 {
+        if bind_device(bus_id, bind) {
+            return true;
+        }
+        if bind {
+            return false;
+        }
+        log::debug!("usbip: {} still busy unsharing, retry {}/10", bus_id, attempt);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    false
 }

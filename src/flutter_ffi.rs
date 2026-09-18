@@ -739,6 +739,34 @@ pub fn session_usb_detach(session_id: SessionID, port: i32) {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn session_usb_local_devices(session_id: SessionID) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_local_devices();
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn session_usb_local_bind(session_id: SessionID, bus_id: String, bind: bool) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_local_bind(bus_id, bind);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn session_usb_push(session_id: SessionID, bus_id: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_push(bus_id);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn session_usb_unpush(session_id: SessionID, bus_id: String) {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        session.usb_unpush(bus_id);
+    }
+}
+
 pub fn session_input_os_password(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         session.input_os_password(value, true);

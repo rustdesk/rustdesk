@@ -893,6 +893,36 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    /// Push direction: raw "attach the device I just bound locally" message
+    /// -- the peer pulls it via `usb_open_forward`'s message shape, in
+    /// reverse. Platform-specific code (`Session<FlutterHandler>::usb_push`
+    /// on Linux) shares the device locally before calling this.
+    pub fn usb_push_request(&self, bus_id: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_push_request(UsbPushRequest {
+            bus_id,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
+    /// Push direction: reply to a peer's `usb_open_forward`-equivalent for
+    /// one of the devices we're sharing.
+    pub fn usb_reply_opened(&self, channel_id: i32, success: bool, message: String) {
+        let mut ch = UsbChannel::new();
+        ch.set_opened(UsbForwardOpened {
+            channel_id,
+            success,
+            message,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_usb_channel(ch);
+        self.send(Data::Message(msg_out));
+    }
+
     pub fn capture_displays(&self, add: Vec<i32>, sub: Vec<i32>, set: Vec<i32>) {
         let mut misc = Misc::new();
         misc.set_capture_displays(CaptureDisplays {

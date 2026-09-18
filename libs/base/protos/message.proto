@@ -1037,6 +1037,19 @@ message UsbForwardClose {
   int32 channel_id = 1;
 }
 
+// Controller -> controlled: "attach the device I just bound locally." The
+// controlled side then opens a channel back (UsbForwardOpen, with a negative
+// channel_id) to pull it, mirroring the controller's own pull flow in
+// reverse.
+message UsbPushRequest {
+  string bus_id = 1;
+}
+
+message UsbPushResult {
+  string bus_id = 1;
+  string error = 2; // empty on success
+}
+
 // Same shape as PortForwardChannel: one symmetric message carrying both the
 // device-listing/bind control plane and the forwarded USB/IP byte stream.
 message UsbChannel {
@@ -1049,6 +1062,8 @@ message UsbChannel {
     UsbForwardOpened opened = 6;
     UsbForwardData data = 7;
     UsbForwardClose close = 8;
+    UsbPushRequest push_request = 9;
+    UsbPushResult push_result = 10;
   }
 }
 
