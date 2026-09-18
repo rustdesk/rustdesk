@@ -1152,8 +1152,25 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
-    dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
+    final retrySeconds = 5.obs;
+    Timer? retryTimer;
+    await dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
+      retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!context.mounted ||
+            parent.target?.closed != false ||
+            !dialogManager.existing('$sessionId-$type')) {
+          timer.cancel();
+          return;
+        }
+        retrySeconds.value--;
+        if (retrySeconds.value <= 0) {
+          timer.cancel();
+          reconnect(dialogManager, sessionId, false);
+        }
+      });
+
       onClose() {
+        retryTimer?.cancel();
         closeConnection();
         close();
       }
@@ -1171,8 +1188,9 @@ class FfiModel with ChangeNotifier {
                 onPressed: () => reconnect(dialogManager, sessionId, true),
                 buttonStyle: style,
                 isOutline: true),
-          dialogButton('Retry',
-              onPressed: () => reconnect(dialogManager, sessionId, false)),
+          Obx(() => dialogButton(
+              '${translate('Retry')} (${retrySeconds.value}s)',
+              onPressed: () => reconnect(dialogManager, sessionId, false))),
           if (type == 'relay-hint2')
             dialogButton('Connect via relay',
                 onPressed: () => reconnect(dialogManager, sessionId, true),
@@ -1180,7 +1198,7 @@ class FfiModel with ChangeNotifier {
         ],
         onCancel: onClose,
       );
-    });
+    }).whenComplete(() => retryTimer?.cancel());
   }
 
   void showConnectedWaitingForImage(OverlayDialogManager dialogManager,
