@@ -166,6 +166,7 @@ class FfiModel with ChangeNotifier {
   bool get isPeerMobile => isPeerAndroid;
 
   bool get isPeerLinux => _pi.platform == kPeerPlatformLinux;
+  bool get isPeerWindows => _pi.platform == kPeerPlatformWindows;
 
   bool get viewOnly => _viewOnly;
   bool get showMyCursor => _showMyCursor;
@@ -2401,7 +2402,9 @@ class CanvasModel with ChangeNotifier {
     // ViewStyle fields and is not captured by the equality check. Therefore, we must
     // allow updates to proceed when style == kRemoteViewStyleCustom, even if the
     // rest of the ViewStyle fields are unchanged.
-    if (_lastViewStyle == viewStyle && style != kRemoteViewStyleCustom) {
+    if (_lastViewStyle == viewStyle &&
+        _devicePixelRatio == ui.window.devicePixelRatio &&
+        style != kRemoteViewStyleCustom) {
       return;
     }
     if (_lastViewStyle.style != viewStyle.style) {
@@ -2461,6 +2464,8 @@ class CanvasModel with ChangeNotifier {
     _resetScroll();
 
     Future.delayed(duration, () async {
+      // Layout updates scroll extents and detaches scrollbars no longer needed.
+      await SchedulerBinding.instance.endOfFrame;
       updateScrollPercent();
     });
   }
@@ -2472,7 +2477,8 @@ class CanvasModel with ChangeNotifier {
         style != null ? ScrollStyle.fromString(style) : ScrollStyle.scrollauto;
 
     if (_scrollStyle != ScrollStyle.scrollauto) {
-      _resetScroll();
+      // Scrollbar and Scroll Edge share controllers and retain their positions.
+      updateScrollPercent();
     }
 
     notifyListeners();
@@ -2852,6 +2858,9 @@ class CanvasModel with ChangeNotifier {
 
 // data for cursor
 class CursorData {
+  // At most 4 MiB of RGBA, including Linux's square cursor padding.
+  static const _maxRasterSize = 1024;
+
   final String peerId;
   final String id;
   final img2.Image image;
@@ -2863,6 +2872,12 @@ class CursorData {
   double hoty;
   final int width;
   final int height;
+  int _rasterWidth;
+  int _rasterHeight;
+  bool _scaleLimitReported = false;
+
+  int get rasterWidth => _rasterWidth;
+  int get rasterHeight => _rasterHeight;
 
   CursorData({
     required this.peerId,
@@ -2874,57 +2889,109 @@ class CursorData {
     required this.hotyOrigin,
     required this.width,
     required this.height,
-  })  : hotx = hotxOrigin * scale,
+  })  : _rasterWidth = (width * scale).ceil(),
+        _rasterHeight = (height * scale).ceil(),
+        hotx = hotxOrigin * scale,
         hoty = hotyOrigin * scale;
 
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
+  double _limitScale(double requestedScale) {
+    final valid = requestedScale.isFinite && requestedScale > 0;
+    // Invalid requests retain the last valid raster and hotspot.
+    final limitedScale = valid
+        ? min(requestedScale, _maxRasterSize / max(width, height))
+        : scale;
+    final limited = !valid || limitedScale != requestedScale;
+    if (limited && !_scaleLimitReported) {
+      debugPrint(
+          'Cursor $id: rejected scale $requestedScale for ${width}x$height; '
+          'using $limitedScale (maximum raster side $_maxRasterSize).');
+    }
+    _scaleLimitReported = limited;
+    return limitedScale;
+  }
+
   double _checkUpdateScale(double scale) {
-    double oldScale = this.scale;
+    scale = _limitScale(scale);
     if (scale != 1.0) {
-      // Update data if scale changed.
-      final tgtWidth = (width * scale).toInt();
-      final tgtHeight = (width * scale).toInt();
-      if (tgtWidth < kMinCursorSize || tgtHeight < kMinCursorSize) {
-        double sw = kMinCursorSize.toDouble() / width;
-        double sh = kMinCursorSize.toDouble() / height;
-        scale = sw < sh ? sh : sw;
-      }
+      // A thin cursor must not grow just to make its short edge reach the minimum.
+      scale = max(scale, kMinCursorSize / max(width, height));
     }
 
-    if (_doubleToInt(oldScale) != _doubleToInt(scale)) {
+    final targetWidth = (width * scale).ceil();
+    final targetHeight = (height * scale).ceil();
+    if (_rasterWidth != targetWidth || _rasterHeight != targetHeight) {
       if (isWindows) {
         data = img2
             .copyResize(
               image,
-              width: (width * scale).toInt(),
-              height: (height * scale).toInt(),
+              width: targetWidth,
+              height: targetHeight,
               interpolation: img2.Interpolation.average,
             )
             .getBytes(order: img2.ChannelOrder.bgra);
+      } else if (isDesktop && scale < 1.0 && !image.hasPalette) {
+        data = Uint8List.fromList(
+            img2.encodePng(_resizeWithAlpha(targetWidth, targetHeight)));
       } else {
         data = Uint8List.fromList(
           img2.encodePng(
             img2.copyResize(
               image,
-              width: (width * scale).toInt(),
-              height: (height * scale).toInt(),
+              width: targetWidth,
+              height: targetHeight,
               interpolation: img2.Interpolation.average,
             ),
           ),
         );
       }
+      _rasterWidth = targetWidth;
+      _rasterHeight = targetHeight;
     }
 
     this.scale = scale;
-    hotx = hotxOrigin * scale;
-    hoty = hotyOrigin * scale;
+    hotx = hotxOrigin * _rasterWidth / width;
+    hoty = hotyOrigin * _rasterHeight / height;
     return scale;
+  }
+
+  img2.Image _resizeWithAlpha(int targetWidth, int targetHeight) {
+    final resized =
+        img2.Image.fromResized(image, width: targetWidth, height: targetHeight);
+    final dx = image.width / targetWidth;
+    final dy = image.height / targetHeight;
+    // Use the average filter's sample area, but weight RGB by alpha so
+    // transparent pixels do not darken visible edges in the straight-alpha PNG.
+    for (final pixel in resized) {
+      final x = (pixel.x * dx).toInt();
+      final y = (pixel.y * dy).toInt();
+      final sampleWidth = ((pixel.x + 1) * dx).toInt() - x;
+      final sampleHeight = ((pixel.y + 1) * dy).toInt() - y;
+      final samples = image.getRange(x, y, sampleWidth, sampleHeight);
+      num r = 0;
+      num g = 0;
+      num b = 0;
+      num a = 0;
+      while (samples.moveNext()) {
+        final sample = samples.current;
+        r += sample.r * sample.a;
+        g += sample.g * sample.a;
+        b += sample.b * sample.a;
+        a += sample.a;
+      }
+      if (a == 0) {
+        pixel.setRgba(0, 0, 0, 0);
+        continue;
+      }
+      pixel.setRgba(r / a, g / a, b / a, a / (sampleWidth * sampleHeight));
+    }
+    return resized;
   }
 
   String updateGetKey(double scale) {
     scale = _checkUpdateScale(scale);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}_${rasterWidth}_$rasterHeight';
   }
 }
 
@@ -3466,6 +3533,17 @@ class CursorModel with ChangeNotifier {
         return false;
       }
       data = imgBytes.buffer.asUint8List();
+      if (isDesktop &&
+          (parent.target?.ffiModel.isPeerLinux == true ||
+              parent.target?.ffiModel.isPeerWindows == true)) {
+        // PNG decoding supplies straight alpha for Linux/Windows cursor resizing.
+        final decoded = img2.decodePng(data);
+        if (decoded == null) {
+          debugPrint('Unable to decode cursor $id PNG for resizing');
+          return false;
+        }
+        imgOrigin = decoded;
+      }
     }
     final cache = CursorData(
       peerId: peerId,

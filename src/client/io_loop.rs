@@ -1511,7 +1511,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     _ => {}
                 },
                 Some(message::Union::CursorData(cd)) => {
-                    self.handler.set_cursor_data(cd);
+                    let id = cd.id;
+                    match decode_cursor_data(cd) {
+                        Ok(cd) => self.handler.set_cursor_data(cd),
+                        Err(err) => log::warn!("Rejected cursor {id}: {err}"),
+                    }
                 }
                 Some(message::Union::CursorId(id)) => {
                     self.handler.set_cursor_id(id.to_string());
@@ -2543,6 +2547,47 @@ impl<T: InvokeUiSession> Remote<T> {
         msg.set_misc(misc);
         self.sender.send(Data::Message(msg)).ok();
     }
+}
+
+// Both UI handlers receive validated, uncompressed RGBA from the receive loop.
+fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
+    use hbb_common::{anyhow::anyhow, bail};
+
+    // Limit decoded cursor data to 1 MiB before JSON serialization.
+    const MAX_CURSOR_SIZE: i32 = 512;
+    const RGBA_CHANNELS: usize = 4;
+
+    let mut cd = data;
+    if !(1..=MAX_CURSOR_SIZE).contains(&cd.width) || !(1..=MAX_CURSOR_SIZE).contains(&cd.height) {
+        bail!("invalid source size {}x{}", cd.width, cd.height);
+    }
+    if !(0..cd.width).contains(&cd.hotx) || !(0..cd.height).contains(&cd.hoty) {
+        bail!(
+            "hotspot ({},{}) is outside the cursor image",
+            cd.hotx,
+            cd.hoty
+        );
+    }
+    let expected = (cd.width as usize)
+        .checked_mul(cd.height as usize)
+        .and_then(|pixels| pixels.checked_mul(RGBA_CHANNELS))
+        .ok_or_else(|| anyhow!("cursor RGBA size overflow"))?;
+    let max_compressed_size = zstd::zstd_safe::compress_bound(expected);
+    if cd.colors.len() > max_compressed_size {
+        bail!(
+            "compressed cursor data too large: {} bytes (limit {max_compressed_size})",
+            cd.colors.len()
+        );
+    }
+    let colors = zstd::bulk::decompress(&cd.colors, expected)?;
+    if colors.len() != expected {
+        bail!(
+            "invalid RGBA length: expected {expected}, got {}",
+            colors.len()
+        );
+    }
+    cd.colors = colors.into();
+    Ok(cd)
 }
 
 struct RemoveJob {

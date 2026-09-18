@@ -386,14 +386,35 @@ var cur_local_x = 0;
 var cur_local_y = 0;
 var cursors = {};
 var image_binded;
+const MAX_CURSOR_RASTER_SIZE = 1024;
+var cursor_scale_limited = false;
+
+function limitCursorImageScale(img, factor) {
+    // Subtraction rejects NaN and Infinity without converting them to integers.
+    var valid = factor > 0 && factor - factor == 0;
+    var side = img.width > img.height ? img.width : img.height;
+    var max_factor = MAX_CURSOR_RASTER_SIZE.toFloat() / side;
+    // Invalid factors use the validated source image at its original size.
+    var limited_factor = valid ? (factor > max_factor ? max_factor : factor) : 1.;
+    var limited = !valid || limited_factor != factor;
+    if (limited && !cursor_scale_limited) {
+        stdout.println("Cursor image scale " + factor + " limited to " + limited_factor
+            + " (maximum raster side " + MAX_CURSOR_RASTER_SIZE + ")");
+    }
+    cursor_scale_limited = limited;
+    return limited_factor;
+}
 
 function scaleCursorImage(img) {
     var factor = cursor_scale;
     if (cursor_img.style#display != 'none') {
         factor /= scaleFactor;
     }
+    factor = limitCursorImageScale(img, factor);
     var w = (img.width * factor).toInteger();
     var h = (img.height * factor).toInteger();
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
     cursor_img.style.set {
         width: w + "px",
         height: h + "px",
@@ -413,7 +434,10 @@ function updateCursor(system=false) {
     if (system) {
         handler.style#cursor = undefined;
     } else if (cur_img) {
-        handler.style.cursor(cur_img, (cur_hotx * cursor_scale).toInteger(), (cur_hoty * cursor_scale).toInteger());
+        var img = cursors[cur_id][0];
+        handler.style.cursor(cur_img,
+            (cur_hotx * cur_img.width.toFloat() / img.width).toInteger(),
+            (cur_hoty * cur_img.height.toFloat() / img.height).toInteger());
     }
 }
 
@@ -468,6 +492,16 @@ handler.setCursorPosition = function(x, y) {
     var y = cur_y - cur_hoty;
     x *= cursor_scale / scaleFactor;
     y *= cursor_scale / scaleFactor;
+    // The overlay may still be hidden, so compute its raster before refreshCursor().
+    // Keep screen coordinates on the video scale and only adjust the hotspot.
+    var img = cursors[cur_id][0];
+    var hotspot_scale = limitCursorImageScale(img, cursor_scale / scaleFactor);
+    var w = (img.width * hotspot_scale).toInteger();
+    var h = (img.height * hotspot_scale).toInteger();
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    x += cur_hotx * (cursor_scale / scaleFactor - w.toFloat() / img.width);
+    y += cur_hoty * (cursor_scale / scaleFactor - h.toFloat() / img.height);
     cursor_img.style.set {
         left: x + "px",
         top: y + "px",
