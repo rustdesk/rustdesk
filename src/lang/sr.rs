@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Кашњење пре преласка на релеј у секундама"),
         ("relay-fallback-delay-tip", "Колико дуго већ успостављена релејна веза чека на директну WebRTC везу пре него што се употреби уместо ње. Повећајте да бисте спорој директној вези дали више времена; смањите да бисте на мрежама где директна веза није могућа брже прешли на релеј. Оставите празно за подразумевану вредност од 2.5 секунде."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
-        ("Enable USB forwarding", "Omogući USB prosleđivanje")
+        ("Enable USB forwarding", "Omogući USB prosleđivanje"),
+        ("USB forwarding", "USB prosleđivanje"),
+        ("Loading...", "Učitavanje..."),
+        ("No USB devices", "Nema USB uređaja"),
+        ("Share", "Deli"),
+        ("Unshare", "Prekini deljenje"),
+        ("Attach", "Priključi"),
+        ("Detach", "Otkači")
     ].iter().cloned().collect();
 }

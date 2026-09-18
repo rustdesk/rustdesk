@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Độ trễ trước khi chuyển sang trung chuyển (giây)"),
         ("relay-fallback-delay-tip", "Kết nối trung chuyển đã thiết lập sẽ chờ kết nối WebRTC trực tiếp trong bao lâu trước khi được dùng thay thế. Tăng giá trị để cho kết nối trực tiếp chậm thêm thời gian; giảm để chuyển sang trung chuyển sớm hơn trên các mạng không thể kết nối trực tiếp. Để trống để dùng giá trị mặc định 2.5 giây."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
-        ("Enable USB forwarding", "Bật chuyển tiếp USB")
+        ("Enable USB forwarding", "Bật chuyển tiếp USB"),
+        ("USB forwarding", "Chuyển tiếp USB"),
+        ("Loading...", "Đang tải..."),
+        ("No USB devices", "Không có thiết bị USB"),
+        ("Share", "Chia sẻ"),
+        ("Unshare", "Bỏ chia sẻ"),
+        ("Attach", "Kết nối"),
+        ("Detach", "Ngắt kết nối")
     ].iter().cloned().collect();
 }

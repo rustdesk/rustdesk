@@ -282,7 +282,9 @@ impl FlutterHandler {
 impl Session<FlutterHandler> {
     pub fn usb_attach(&self, bus_id: String) {
         let session = self.clone();
-        hbb_common::tokio::spawn(crate::client::usbip_attach::attach(session, bus_id));
+        if let Some(rt) = crate::client::usbip_attach::usb_runtime() {
+            rt.spawn(crate::client::usbip_attach::attach(session, bus_id));
+        }
     }
 
     pub fn usb_detach(&self, port: i32) {
@@ -1366,6 +1368,7 @@ pub fn session_add(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
+    is_remote_usb: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1378,6 +1381,8 @@ pub fn session_add(
         ConnType::VIEW_CAMERA
     } else if is_terminal {
         ConnType::TERMINAL
+    } else if is_remote_usb {
+        ConnType::REMOTE_USB
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP

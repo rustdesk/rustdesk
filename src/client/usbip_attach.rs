@@ -6,20 +6,55 @@
 use crate::flutter::FlutterHandler;
 use crate::ui_session_interface::Session;
 use hbb_common::{
-    bytes::Bytes, log,
+    bytes::Bytes, log, regex::Regex,
     tokio::{
         self,
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
+        runtime::Runtime,
         sync::mpsc,
     },
 };
-use std::process::Command;
+use serde_json::json;
+use std::{
+    process::Command,
+    sync::{LazyLock, OnceLock},
+};
+
+/// `usb_attach`/`usb_detach` are called directly from Flutter's FFI worker
+/// pool, which has no ambient Tokio runtime -- `tokio::spawn` there panics
+/// with "there is no reactor running". Keep one background runtime alive for
+/// the process so those entry points (and the long-lived relay task `attach`
+/// spawns) have somewhere to run.
+static USB_RUNTIME: OnceLock<Option<Runtime>> = OnceLock::new();
+
+pub(crate) fn usb_runtime() -> Option<&'static Runtime> {
+    USB_RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .map_err(|err| log::error!("usb: failed to create background runtime: {}", err))
+                .ok()
+        })
+        .as_ref()
+}
 
 pub enum Inbound {
     Opened { success: bool, message: String },
     Data(Bytes),
     Closed,
+}
+
+/// Debian/Ubuntu install `usbip` under `/usr/sbin`, which is on root's PATH
+/// but not a regular desktop user's -- widen it so a plain `Command::new`
+/// can still find the binary when RustDesk runs unprivileged.
+fn usbip_command() -> Command {
+    let mut cmd = Command::new("usbip");
+    let path = std::env::var("PATH").unwrap_or_default();
+    cmd.env("PATH", format!("{path}:/usr/sbin:/sbin:/usr/local/sbin"));
+    cmd
 }
 
 pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
@@ -47,30 +82,91 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
         }
     });
 
+    let attach_bus_id = bus_id.clone();
     let attach_result = tokio::task::spawn_blocking(move || {
-        Command::new("usbip")
-            .args(["-t", &port.to_string(), "attach", "-r", "127.0.0.1", "-b", &bus_id])
-            .output()
+        usb_attach_privileged(port, &attach_bus_id)
     })
     .await;
     match attach_result {
-        Ok(Ok(out)) if out.status.success() => {}
-        Ok(Ok(out)) => log::error!(
-            "usb attach: `usbip attach` failed: {}",
-            String::from_utf8_lossy(&out.stderr)
-        ),
-        Ok(Err(err)) => log::error!("usb attach: failed to run usbip: {}", err),
-        Err(err) => log::error!("usb attach: spawn_blocking join error: {}", err),
+        Ok(true) => {
+            let local_port = tokio::task::spawn_blocking({
+                let bus_id = bus_id.clone();
+                move || find_attached_port(&bus_id)
+            })
+            .await
+            .ok()
+            .flatten();
+            session.ui_handler.push_event_(
+                "usb_attached",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("success", json!(true)),
+                    ("port", json!(local_port.unwrap_or(-1))),
+                    ("message", json!("")),
+                ],
+                &[],
+                &[],
+            );
+        }
+        Ok(false) | Err(_) => {
+            let message = format!("Failed to attach {}", bus_id);
+            log::error!("usb attach: `usbip attach` failed: {}", message);
+            session.ui_handler.push_event_(
+                "usb_attached",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("success", json!(false)),
+                    ("port", json!(-1)),
+                    ("message", json!(message)),
+                ],
+                &[],
+                &[],
+            );
+        }
     }
 }
 
+/// Bind/unbind needs root, so `attach`/`detach` go through the same
+/// on-demand privilege-elevation prompt, mirroring
+/// `usbip_mux.rs::bind_device`.
+fn usb_attach_privileged(port: u16, bus_id: &str) -> bool {
+    crate::platform::run_cmds_privileged(&format!(
+        "usbip -t {port} attach -r 127.0.0.1 -b {bus_id}"
+    ))
+}
+
+static USB_PORT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Port (\d+):").unwrap());
+static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s*(\S+)\s+->\s+usbip://").unwrap());
+
+/// Blocking; call via `spawn_blocking`. `usbip attach` doesn't print the
+/// local vhci port it landed on, so ask `usbip port` and match it back up
+/// by remote bus id.
+fn find_attached_port(bus_id: &str) -> Option<i32> {
+    let output = usbip_command().arg("port").output().ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut current_port: Option<i32> = None;
+    for line in stdout.lines() {
+        if let Some(caps) = USB_PORT_RE.captures(line) {
+            current_port = caps[1].parse().ok();
+            continue;
+        }
+        if let Some(caps) = USB_PORT_BUS_ID_RE.captures(line) {
+            if &caps[1] == bus_id {
+                return current_port;
+            }
+        }
+    }
+    None
+}
+
 pub fn detach(port: i32) {
-    tokio::task::spawn_blocking(move || {
-        if let Err(err) = Command::new("usbip")
-            .args(["detach", "-p", &port.to_string()])
-            .output()
-        {
-            log::error!("usb detach: failed to run usbip: {}", err);
+    let Some(rt) = usb_runtime() else {
+        return;
+    };
+    rt.spawn_blocking(move || {
+        if !crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
+            log::error!("usb detach: failed to detach port {}", port);
         }
     });
 }

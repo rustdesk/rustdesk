@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "مهلة التراجع إلى الترحيل بالثواني"),
         ("relay-fallback-delay-tip", "المدة التي ينتظرها اتصال الترحيل القائم بالفعل الاتصالَ المباشر عبر WebRTC قبل أن يُستخدم بدلًا منه. زِدها لمنح الاتصال المباشر البطيء فرصة أكبر للفوز؛ وقلّلها للاستقرار على الترحيل أسرع في الشبكات التي يتعذر فيها الاتصال المباشر. اتركها فارغة للقيمة الافتراضية 2.5 ثانية."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
-        ("Enable USB forwarding", "تمكين إعادة توجيه USB")
+        ("Enable USB forwarding", "تمكين إعادة توجيه USB"),
+        ("USB forwarding", "إعادة توجيه USB"),
+        ("Loading...", "جارٍ التحميل..."),
+        ("No USB devices", "لا توجد أجهزة USB"),
+        ("Share", "مشاركة"),
+        ("Unshare", "إلغاء المشاركة"),
+        ("Attach", "إرفاق"),
+        ("Detach", "فصل")
     ].iter().cloned().collect();
 }

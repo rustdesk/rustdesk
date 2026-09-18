@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "回退到中繼前的等待時間（秒）"),
         ("relay-fallback-delay-tip", "已經建立的中繼連線會等待直連的 WebRTC 多久，超過這個時間就改用中繼。調大可以讓較慢的直連有更多機會勝出；調小則在無法直連的網路上更快回退到中繼。留空表示使用預設值 2.5 秒。"),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
-        ("Enable USB forwarding", "啟用 USB 轉發")
+        ("Enable USB forwarding", "啟用 USB 轉發"),
+        ("USB forwarding", "USB 轉發"),
+        ("Loading...", "載入中..."),
+        ("No USB devices", "沒有 USB 裝置"),
+        ("Share", "共享"),
+        ("Unshare", "取消共享"),
+        ("Attach", "掛載"),
+        ("Detach", "卸載")
     ].iter().cloned().collect();
 }

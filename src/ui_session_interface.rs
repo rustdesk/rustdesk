@@ -227,6 +227,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.lc.read().unwrap().conn_type.eq(&ConnType::TERMINAL)
     }
 
+    pub fn is_remote_usb(&self) -> bool {
+        self.lc.read().unwrap().conn_type.eq(&ConnType::REMOTE_USB)
+    }
+
     pub fn is_port_forward(&self) -> bool {
         let conn_type = self.lc.read().unwrap().conn_type;
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
@@ -1863,7 +1867,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }
-        } else if !self.is_port_forward() && !self.is_terminal() {
+        } else if !self.is_port_forward() && !self.is_terminal() && !self.is_remote_usb() {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
@@ -1899,7 +1903,7 @@ impl<T: InvokeUiSession> Interface for Session<T> {
         // Save recent peers, then push event to flutter. So flutter can refresh peer page.
         self.lc.write().unwrap().handle_peer_info(&pi);
         self.set_peer_info(&pi);
-        if self.is_file_transfer() {
+        if self.is_file_transfer() || self.is_remote_usb() {
             self.close_success();
         } else if !self.is_port_forward() && !self.is_terminal() {
             self.msgbox(

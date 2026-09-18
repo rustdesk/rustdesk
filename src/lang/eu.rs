@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Errelera itzultzeko atzerapena segundotan"),
         ("relay-fallback-delay-tip", "Dagoeneko ezarritako errele-konexio batek WebRTC konexio zuzenari zenbat denbora itxaroten dion, haren ordez erabili aurretik. Handitu konexio zuzen motel bati denbora gehiago emateko; txikitu konexio zuzena egin ezin den sareetan lehenago errelera itzultzeko. Utzi hutsik 2.5 segundoko balio lehenetsirako."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
-        ("Enable USB forwarding", "Gaitu USB birbidalketa")
+        ("Enable USB forwarding", "Gaitu USB birbidalketa"),
+        ("USB forwarding", ""),
+        ("Loading...", ""),
+        ("No USB devices", ""),
+        ("Share", ""),
+        ("Unshare", ""),
+        ("Attach", ""),
+        ("Detach", "")
     ].iter().cloned().collect();
 }

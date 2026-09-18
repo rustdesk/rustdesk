@@ -781,6 +781,13 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay fallback delay in seconds", "Aktarıcıya geçiş gecikmesi (saniye)"),
         ("relay-fallback-delay-tip", "Zaten kurulmuş bir aktarıcı bağlantısının, onun yerine kullanılmadan önce doğrudan WebRTC bağlantısını ne kadar beklediğidir. Yavaş bir doğrudan bağlantıya daha fazla süre tanımak için artırın; doğrudan bağlantının kurulamadığı ağlarda aktarıcıya daha erken geçmek için azaltın. Varsayılan 2.5 saniye için boş bırakın."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "Sesli arama başlatmak için \"Ekran paylaşımı\" sayfasındaki \"Ses yakalama\" seçeneğini açın."),
-        ("Enable USB forwarding", "USB yönlendirmeyi etkinleştir")
+        ("Enable USB forwarding", "USB yönlendirmeyi etkinleştir"),
+        ("USB forwarding", "USB yönlendirme"),
+        ("Loading...", "Yükleniyor..."),
+        ("No USB devices", "USB aygıtı yok"),
+        ("Share", "Paylaş"),
+        ("Unshare", "Paylaşımı kaldır"),
+        ("Attach", "Bağla"),
+        ("Detach", "Ayır")
     ].iter().cloned().collect();
 }

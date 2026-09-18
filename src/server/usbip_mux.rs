@@ -236,11 +236,21 @@ fn send_result(tx: &Sender, msg: Message) -> bool {
 static USB_DEVICE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#").unwrap());
 
+/// Debian/Ubuntu install `usbip` under `/usr/sbin`, which is on root's PATH
+/// but not a regular desktop user's -- widen it so a plain `Command::new`
+/// can still find the binary when RustDesk runs unprivileged.
+fn usbip_command() -> Command {
+    let mut cmd = Command::new("usbip");
+    let path = std::env::var("PATH").unwrap_or_default();
+    cmd.env("PATH", format!("{path}:/usr/sbin:/sbin:/usr/local/sbin"));
+    cmd
+}
+
 /// Runs `usbip list -p -l` and cross-references `/sys/.../usbip-host` to
 /// report which devices are already shared. Blocking; call via
 /// `spawn_blocking`.
 fn list_local_devices() -> Vec<UsbDevice> {
-    let output = match Command::new("usbip").args(["list", "-p", "-l"]).output() {
+    let output = match usbip_command().args(["list", "-p", "-l"]).output() {
         Ok(o) => o,
         Err(err) => {
             log::error!("usbip list failed: {}", err);
@@ -249,6 +259,12 @@ fn list_local_devices() -> Vec<UsbDevice> {
     };
     let shared = shared_bus_ids();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    log::debug!(
+        "usbip list status={:?} stdout={:?} stderr={:?}",
+        output.status,
+        stdout,
+        String::from_utf8_lossy(&output.stderr)
+    );
     stdout
         .lines()
         .filter_map(|line| USB_DEVICE_RE.captures(line))
