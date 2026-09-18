@@ -218,7 +218,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       _currentState = GestureState.oneFingerPan;
       if (onOneFingerPanStart != null) {
         onOneFingerPanStart!(DragStartDetails(
-            localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
+            localPosition: d.localFocalPoint,
+            globalPosition: d.focalPoint,
+            kind: PointerDeviceKind.touch));
       }
     }
 
