@@ -23,7 +23,12 @@ class TouchTapGestureRecognizer extends TapGestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }
@@ -44,7 +49,12 @@ class TouchDoubleTapGestureRecognizer extends DoubleTapGestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }
@@ -65,7 +75,12 @@ class TouchLongPressGestureRecognizer extends LongPressGestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }
@@ -88,7 +103,12 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }
@@ -302,7 +322,12 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }
@@ -574,7 +599,12 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
-    if (isPhysicalPointerDevice != null &&
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
         isPhysicalPointerDevice!(event.device)) {
       return false;
     }

@@ -1300,7 +1300,8 @@ class InputModel {
 
   bool _isPhysicalPointerDevice(PointerEvent e) {
     if (e.kind == ui.PointerDeviceKind.stylus ||
-        e.kind == ui.PointerDeviceKind.invertedStylus) {
+        e.kind == ui.PointerDeviceKind.invertedStylus ||
+        e.kind == ui.PointerDeviceKind.touch) {
       return false;
     }
     return _isMouseOrTrackpad(e.kind) ||
@@ -1317,7 +1318,7 @@ class InputModel {
         e.kind == ui.PointerDeviceKind.invertedStylus) {
       return;
     }
-    if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
+    if (!_isMouseOrTrackpad(e.kind)) return;
 
     _physicalPointerDevices.add(e.device);
 
