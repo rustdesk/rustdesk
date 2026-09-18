@@ -98,6 +98,7 @@ pub struct Remote<T: InvokeUiSession> {
     elevation_requested: bool,
     peer_info: ParsedPeerInfo,
     video_threads: HashMap<usize, VideoThread>,
+    last_auto_fps: Option<usize>,
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
@@ -150,6 +151,7 @@ impl<T: InvokeUiSession> Remote<T> {
             elevation_requested: false,
             peer_info: Default::default(),
             video_threads: Default::default(),
+            last_auto_fps: None,
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
@@ -382,7 +384,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.frame_count.write().unwrap() = 0;
                             });
-                            self.fps_control(direct, fps.clone());
+                            self.fps_control(direct, fps.clone(), &mut peer).await;
                             let chroma = self.chroma.read().unwrap().clone();
                             let chroma = match chroma {
                                 Some(Chroma::I444) => "4:4:4",
@@ -787,6 +789,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.initial_clipboard_pending = false;
                     }
                     Some(message::Union::Misc(misc)) => match misc.union {
+                        Some(misc::Union::Option(ref option)) => {
+                            if option.custom_fps > 0 {
+                                self.last_auto_fps = None;
+                            }
+                        }
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.discard_queue.write().unwrap() = true;
@@ -1386,7 +1393,12 @@ impl<T: InvokeUiSession> Remote<T> {
     // Currently, this function only considers decoding speed and queue length, not network delay.
     // The controlled end can consider auto fps as the maximum decoding fps.
     #[inline]
-    fn fps_control(&mut self, direct: bool, real_fps_map: HashMap<usize, i32>) {
+    async fn fps_control(
+        &mut self,
+        direct: bool,
+        real_fps_map: HashMap<usize, i32>,
+        peer: &mut Stream,
+    ) {
         self.video_threads.iter_mut().for_each(|(k, v)| {
             let real_fps = real_fps_map.get(k).cloned().unwrap_or_default();
             if real_fps == 0 {
@@ -1426,7 +1438,7 @@ impl<T: InvokeUiSession> Remote<T> {
         if limited_fps > custom_fps {
             limited_fps = custom_fps;
         }
-        let last_auto_fps = self.handler.lc.read().unwrap().last_auto_fps.clone();
+        let last_auto_fps = self.last_auto_fps;
         let displays = self.video_threads.keys().cloned().collect::<Vec<_>>();
         let mut fps_trending = |display: usize| {
             let thread = self.video_threads.get_mut(&display)?;
@@ -1472,9 +1484,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 });
                 let mut msg = Message::new();
                 msg.set_misc(misc);
-                self.sender.send(Data::Message(msg)).ok();
+                // Send inline so a queued manual FPS update is applied after this decision.
+                allow_err!(peer.send(&msg).await);
                 log::info!("Set fps to {}", auto_fps);
-                self.handler.lc.write().unwrap().last_auto_fps = Some(auto_fps);
+                self.last_auto_fps = Some(auto_fps);
             }
         }
         // send refresh
@@ -2387,6 +2400,7 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         self.peer_info.platform = pi.platform.clone();
 
         // Check features field for terminal support
