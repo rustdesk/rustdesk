@@ -10,15 +10,114 @@ enum GestureState {
   threeFingerVerticalDrag
 }
 
+class TouchTapGestureRecognizer extends TapGestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
+  TouchTapGestureRecognizer({
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
+  }) : super(
+          debugOwner: debugOwner,
+          supportedDevices: supportedDevices,
+        );
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
+    return super.isPointerAllowed(event);
+  }
+}
+
+class TouchDoubleTapGestureRecognizer extends DoubleTapGestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
+  TouchDoubleTapGestureRecognizer({
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
+  }) : super(
+          debugOwner: debugOwner,
+          supportedDevices: supportedDevices,
+        );
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
+    return super.isPointerAllowed(event);
+  }
+}
+
+class TouchLongPressGestureRecognizer extends LongPressGestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
+  TouchLongPressGestureRecognizer({
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
+  }) : super(
+          debugOwner: debugOwner,
+          supportedDevices: supportedDevices,
+        );
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
+    return super.isPointerAllowed(event);
+  }
+}
+
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
   CustomTouchGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
         ) {
     _init();
+  }
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
+    return super.isPointerAllowed(event);
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    // Ignore trackpad pan/zoom so RawPointerMouseRegion handles trackpad scrolling/zoom.
   }
 
   // oneFingerPan
@@ -194,9 +293,11 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 }
 
 class HoldTapMoveGestureRecognizer extends GestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
   HoldTapMoveGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
@@ -221,6 +322,15 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
     if (_firstTap == null) {
       switch (event.buttons) {
         case kPrimaryButton:
@@ -462,9 +572,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 }
 
 class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
+  final bool Function(int device)? isPhysicalPointerDevice;
   DoubleFinerTapGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
+    this.isPhysicalPointerDevice,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
@@ -487,6 +599,15 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.mouse ||
+        event.kind == PointerDeviceKind.trackpad) {
+      return false;
+    }
+    if (event.kind != PointerDeviceKind.touch &&
+        isPhysicalPointerDevice != null &&
+        isPhysicalPointerDevice!(event.device)) {
+      return false;
+    }
     if (_firstTap == null) {
       switch (event.buttons) {
         case kPrimaryButton:
