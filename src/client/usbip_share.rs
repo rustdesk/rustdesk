@@ -46,6 +46,12 @@ pub fn list_local_devices() -> Vec<UsbDevice> {
     };
     let shared = shared_bus_ids();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_local_devices(&stdout, &shared)
+}
+
+/// Pure text parsing half of `list_local_devices`, split out for testing
+/// without a real `usbip`/sysfs on the machine running the tests.
+fn parse_local_devices(stdout: &str, shared: &std::collections::HashSet<String>) -> Vec<UsbDevice> {
     stdout
         .lines()
         .filter_map(|line| USB_DEVICE_RE.captures(line))
@@ -135,4 +141,45 @@ pub(crate) async fn run_channel(
     to_tunnel.abort();
     log::info!("usb share: channel {} relay closed", id);
     session.ui_handler.unregister_usb_share_channel(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    const USBIP_LIST_P_L_OUTPUT: &str = "\
+ - busid 1-3 (04f3:0c4f)
+   Elan Microelectronics Corp. : unknown product (04f3:0c4f)
+busid=1-3#usbid=04f3:0c4f#Elan Microelectronics Corp.#unknown product#
+ - busid 2-2 (0dd8:3801)
+   Netac Technology Co., Ltd : unknown product (0dd8:3801)
+busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
+";
+
+    #[test]
+    fn parse_local_devices_extracts_bus_id_and_ids() {
+        let devices = parse_local_devices(USBIP_LIST_P_L_OUTPUT, &HashSet::new());
+        assert_eq!(devices.len(), 2);
+        assert_eq!(devices[0].bus_id, "1-3");
+        assert_eq!(devices[0].vendor, "04f3");
+        assert_eq!(devices[0].product, "0c4f");
+        assert_eq!(devices[1].bus_id, "2-2");
+        assert_eq!(devices[1].vendor, "0dd8");
+        assert_eq!(devices[1].product, "3801");
+    }
+
+    #[test]
+    fn parse_local_devices_marks_shared_from_sysfs_set() {
+        let shared: HashSet<String> = ["2-2".to_string()].into_iter().collect();
+        let devices = parse_local_devices(USBIP_LIST_P_L_OUTPUT, &shared);
+        let by_bus_id = |id: &str| devices.iter().find(|d| d.bus_id == id).unwrap();
+        assert!(!by_bus_id("1-3").shared);
+        assert!(by_bus_id("2-2").shared);
+    }
+
+    #[test]
+    fn parse_local_devices_empty_output() {
+        assert!(parse_local_devices("", &HashSet::new()).is_empty());
+    }
 }

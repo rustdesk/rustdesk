@@ -2721,3 +2721,19 @@ pub(super) mod async_tasks {
         );
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod usb_channel_id_tests {
+    use super::FlutterHandler;
+
+    #[test]
+    fn channel_ids_are_positive_and_increasing() {
+        // Non-negative, so the controller's own channel ids can never
+        // collide with `usbip_pull.rs`'s negative, controlled-side ones --
+        // see the sign dispatch in `connection.rs::handle_usb_channel`.
+        let first = FlutterHandler::next_usb_channel_id();
+        let second = FlutterHandler::next_usb_channel_id();
+        assert!(first >= 0);
+        assert!(second > first);
+    }
+}

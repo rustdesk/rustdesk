@@ -96,8 +96,7 @@ impl UsbPullState {
 
     pub fn handle_push_request(&mut self, bus_id: String) {
         let tx = self.tx.clone();
-        let id = self.next_id;
-        self.next_id -= 1;
+        let id = self.next_channel_id();
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
 
         let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
@@ -151,6 +150,15 @@ impl UsbPullState {
                 c.channel_id
             );
         }
+    }
+
+    /// Negative, so this side's channel ids can never collide with
+    /// `usbip_mux.rs`'s non-negative, controller-allocated ones -- see the
+    /// sign dispatch in `connection.rs::handle_usb_channel`.
+    fn next_channel_id(&mut self) -> i32 {
+        let id = self.next_id;
+        self.next_id -= 1;
+        id
     }
 
     fn forward(&mut self, channel_id: i32, msg: Inbound) {
@@ -341,4 +349,61 @@ async fn run_channel(
         }
     }
     to_tunnel.abort();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_state() -> UsbPullState {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        UsbPullState::new(tx)
+    }
+
+    #[test]
+    fn channel_ids_are_negative_and_decreasing() {
+        // Negative so they can never collide with `usbip_mux.rs`'s
+        // non-negative, controller-allocated ids -- see the sign dispatch
+        // in `connection.rs::handle_usb_channel`.
+        let mut state = test_state();
+        let first = state.next_channel_id();
+        let second = state.next_channel_id();
+        let third = state.next_channel_id();
+        assert_eq!(first, -1);
+        assert_eq!(second, -2);
+        assert_eq!(third, -3);
+        assert!(first < 0 && second < 0 && third < 0);
+    }
+
+    const USBIP_PORT_OUTPUT: &str = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> usbip://127.0.0.1:38963/18-1
+           -> remote bus/dev 018/002
+";
+
+    #[test]
+    fn parse_attached_port_matches_by_trailing_url_segment() {
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "18-1"), Some(0));
+    }
+
+    #[test]
+    fn parse_attached_port_no_match_for_unrelated_bus_id() {
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_ignores_unreadable_record_fallback_line() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> unknown host, remote port and remote busid
+           -> remote bus/dev 018/002
+";
+        assert_eq!(parse_attached_port(output, "18-1"), None);
+    }
 }

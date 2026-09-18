@@ -248,3 +248,69 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
     to_tunnel.abort();
     session.ui_handler.unregister_usb_forward_channel(id);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const USBIP_PORT_OUTPUT: &str = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> usbip://127.0.0.1:38963/18-1
+           -> remote bus/dev 018/002
+";
+
+    #[test]
+    fn parse_attached_port_matches_by_trailing_url_segment() {
+        // The token right after "Port NN:" before the arrow ("5-1" here) is
+        // some other local identifier, not the remote bus id -- only the
+        // last path segment of the usbip:// URL ("18-1") is.
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "18-1"), Some(0));
+    }
+
+    #[test]
+    fn parse_attached_port_no_match_for_unrelated_bus_id() {
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_empty_output() {
+        assert_eq!(parse_attached_port("", "18-1"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_picks_the_right_port_among_several() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> usbip://127.0.0.1:38963/2-2
+           -> remote bus/dev 018/002
+Port 01: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (1a86:7523)
+       3-1 -> usbip://127.0.0.1:38963/18-1
+           -> remote bus/dev 003/007
+";
+        assert_eq!(parse_attached_port(output, "18-1"), Some(1));
+        assert_eq!(parse_attached_port(output, "2-2"), Some(0));
+    }
+
+    #[test]
+    fn parse_attached_port_ignores_unreadable_record_fallback_line() {
+        // When the attach record can't be read (permissions, or queried too
+        // soon after attach), `usbip port` falls back to a line with no
+        // "-> usbip://..." at all -- must not spuriously match.
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       Transcend Information, Inc. : JetFlash (8564:1000)
+       5-1 -> unknown host, remote port and remote busid
+           -> remote bus/dev 018/002
+";
+        assert_eq!(parse_attached_port(output, "18-1"), None);
+    }
+}
