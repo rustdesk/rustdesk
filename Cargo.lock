@@ -4121,7 +4121,7 @@ dependencies = [
 [[package]]
 name = "interceptor"
 version = "0.14.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "async-trait",
  "bytes",
@@ -7007,7 +7007,7 @@ dependencies = [
 [[package]]
 name = "rtcp"
 version = "0.13.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "bytes",
  "thiserror 1.0.61",
@@ -7017,7 +7017,7 @@ dependencies = [
 [[package]]
 name = "rtp"
 version = "0.13.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "bytes",
  "memchr",
@@ -7463,7 +7463,7 @@ dependencies = [
 [[package]]
 name = "sdp"
 version = "0.8.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "rand 0.8.5",
  "substring",
@@ -8035,7 +8035,7 @@ dependencies = [
 [[package]]
 name = "stun"
 version = "0.8.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "base64 0.22.1",
  "crc",
@@ -8916,7 +8916,7 @@ dependencies = [
 [[package]]
 name = "turn"
 version = "0.10.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -9579,7 +9579,7 @@ dependencies = [
 [[package]]
 name = "webrtc"
 version = "0.13.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -9622,7 +9622,7 @@ dependencies = [
 [[package]]
 name = "webrtc-data"
 version = "0.11.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "bytes",
  "log",
@@ -9636,7 +9636,7 @@ dependencies = [
 [[package]]
 name = "webrtc-dtls"
 version = "0.12.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -9672,11 +9672,12 @@ dependencies = [
 [[package]]
 name = "webrtc-ice"
 version = "0.13.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "arc-swap",
  "async-trait",
  "crc",
+ "ipnet",
  "log",
  "portable-atomic",
  "rand 0.8.5",
@@ -9696,7 +9697,7 @@ dependencies = [
 [[package]]
 name = "webrtc-mdns"
 version = "0.9.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "log",
  "socket2 0.5.10",
@@ -9708,7 +9709,7 @@ dependencies = [
 [[package]]
 name = "webrtc-media"
 version = "0.10.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "byteorder",
  "bytes",
@@ -9720,7 +9721,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sctp"
 version = "0.12.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -9737,7 +9738,7 @@ dependencies = [
 [[package]]
 name = "webrtc-srtp"
 version = "0.15.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "aead",
  "aes",
@@ -9759,7 +9760,7 @@ dependencies = [
 [[package]]
 name = "webrtc-util"
 version = "0.11.0"
-source = "git+https://github.com/rustdesk-org/webrtc?rev=80d5a20532cf58f5d4d237c437a98ceb85ee40dc#80d5a20532cf58f5d4d237c437a98ceb85ee40dc"
+source = "git+https://github.com/rustdesk-org/webrtc?rev=49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63#49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63"
 dependencies = [
  "async-trait",
  "bitflags 1.3.2",

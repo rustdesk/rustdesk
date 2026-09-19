@@ -220,7 +220,14 @@ exclude = ["vdi/host"]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # One branch off upstream v0.13.0, the tag whose crate versions match this stack.
 # webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
-# one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows.
+# one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows;
+# and names every Windows adapter "" with no mask, so ICE cannot tell one adapter's addresses
+# from another's; and lays the adapter struct out in nested parts, whose padding on x64 shifts
+# every field after OperStatus, Ipv6IfIndex first.
+# webrtc-ice: best effort, one IPv6 host candidate per interface and prefix - the one the OS
+# sends from when that is one of the group's, else all of them - since the stable address beside
+# the temporary one is an identifier that outlives every rotation and that nothing else this
+# machine sends out ever shows.
 # webrtc-sctp: RFC 4960's 1s RTO floor makes a single loss cost 1-3s on a link whose RTT is 24-64ms,
 # and fast retransmit cannot cover a request/response exchange; INITIAL_MTU 1228 also fragments on
 # IPv6; and its AIMD pins a lossy long-haul link to MSS/(RTT*sqrt(p)), so a switch sends without
@@ -230,13 +237,15 @@ libxdo-sys = { path = "libs/libxdo-sys-stub" }
 # RTT at KCP's RTO floors, and bundles of small chunks stay within the MTU. A T3-rtx resends
 # everything outstanding when it packs into four packets and otherwise probes with one and lets
 # the SACK settle the rest (F-RTO), timed from the latest send, so a stall no longer resends the
-# whole backlog behind itself while a short lost tail still comes back at once.
+# whole backlog behind itself while a short lost tail still comes back at once. A DATA chunk
+# received again is listed in the SACK, which never happened - the sender widens its reordering
+# window on that - and the SACK keeps to the MTU too, the lowest gap blocks first.
 # Pinned by rev, not branch: a fork branch can be rewritten out from under the lockfile.
 # webrtc: SettingEngine cannot reach the ICE agent's max_binding_requests, which decides how
 # long the answerer keeps checking a pair that has not answered yet.
-webrtc = { git = "https://github.com/rustdesk-org/webrtc", rev = "80d5a20532cf58f5d4d237c437a98ceb85ee40dc" }
-webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "80d5a20532cf58f5d4d237c437a98ceb85ee40dc" }
-webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "80d5a20532cf58f5d4d237c437a98ceb85ee40dc" }
+webrtc = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
+webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
+webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
