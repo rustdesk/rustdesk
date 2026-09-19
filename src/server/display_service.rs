@@ -1,3 +1,8 @@
+#[cfg(any(windows, target_os = "linux"))]
+pub(super) mod scale;
+#[cfg(target_os = "macos")]
+pub(super) mod virtual_display;
+
 use super::*;
 use crate::common::SimpleCallOnReturn;
 #[cfg(target_os = "linux")]
@@ -455,6 +460,16 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
         pi.platform_additions = serde_json::to_string(&m).unwrap_or_default();
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        let mut additions = virtual_display::get_platform_additions();
+        if !additions.is_empty() {
+            additions.insert("macos_virtual_display_modes".into(),
+                virtual_display::display_modes(&displays));
+            pi.platform_additions = serde_json::Value::Object(additions).to_string();
+        }
+    }
+
     // current_display should not be used in server.
     // It is set to 0 for compatibility with old clients.
     pi.current_display = 0;
@@ -510,12 +525,21 @@ pub fn check_displays_changed() -> ResultType<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn refresh_virtual_displays() {
+    // CoreGraphics can publish a display before its creation finishes. Send the
+    // final virtual-display state even if the display geometry has not changed.
+    SYNC_DISPLAYS.lock().unwrap().is_synced = false;
+}
+
 fn get_displays_msg() -> Option<Message> {
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
 }
 
 fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
+    #[cfg(target_os = "macos")]
+    let mut virtual_display_modes = virtual_display::DisplayModeMonitor::new();
     while sp.ok() {
         sp.snapshot(|sps| {
             if !TEMP_IGNORE_DISPLAYS_CHANGED.load(Ordering::Relaxed) {
@@ -527,6 +551,10 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
             Ok(())
         })?;
 
+        #[cfg(target_os = "macos")]
+        if virtual_display_modes.check_changed(&get_sync_displays()) {
+            refresh_virtual_displays();
+        }
         if let Some(msg_out) = check_get_displays_changed_msg() {
             sp.send(msg_out);
             log::info!("Displays changed");
@@ -552,7 +580,10 @@ pub(super) fn get_original_resolution(
     #[cfg(windows)]
     let is_rustdesk_virtual_display =
         crate::virtual_display_manager::rustdesk_idd::is_virtual_display(&display_name);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let is_rustdesk_virtual_display =
+        crate::virtual_display_manager::owns_display(display_name);
+    #[cfg(not(any(windows, target_os = "macos")))]
     let is_rustdesk_virtual_display = false;
     Some(if is_rustdesk_virtual_display {
         Resolution {

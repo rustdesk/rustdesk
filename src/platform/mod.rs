@@ -20,6 +20,9 @@ pub mod delegate;
 #[cfg(target_os = "linux")]
 pub mod linux;
 
+#[cfg(any(windows, target_os = "linux"))]
+pub mod display_scale;
+
 #[cfg(target_os = "linux")]
 pub mod gtk_sudo;
 

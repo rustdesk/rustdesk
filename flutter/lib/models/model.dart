@@ -22,6 +22,9 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
+import 'package:flutter_hbb/utils/virtual_display.dart';
+import 'package:flutter_hbb/models/display_scale_model.dart';
+import 'package:flutter_hbb/models/virtual_display_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
@@ -139,12 +142,8 @@ class FfiModel with ChangeNotifier {
   Timer? timerScreenshot;
 
   Rect? get rect => _rect;
-  bool get isOriginalResolutionSet =>
-      _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolutionSet ?? false;
   bool get isVirtualDisplayResolution =>
       _pi.tryGetDisplayIfNotAllDisplay()?.isVirtualDisplayResolution ?? false;
-  bool get isOriginalResolution =>
-      _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolution ?? false;
 
   Map<String, bool> get permissions => _permissions;
   setPermissions(Map<String, bool> permissions) {
@@ -349,6 +348,16 @@ class FfiModel with ChangeNotifier {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
+      } else if (name == 'display_scale') {
+        final data = evt['data'];
+        if (data is String) {
+          DisplayScaleRequests.handle(sessionId.toString(), data);
+        }
+      } else if (name == 'virtual_display_mode') {
+        final data = evt['data'];
+        if (data is String) {
+          VirtualDisplayRequests.handle(sessionId.toString(), data);
+        }
       } else if (name == 'connection_ready') {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
@@ -1488,7 +1497,6 @@ class FfiModel with ChangeNotifier {
     }
 
     _pi.isSet.value = true;
-    stateGlobal.resetLastResolutionGroupValues(peerId);
 
     if (isDesktop || isWebDesktop) {
       // checkDesktopKeyboardMode may change the keyboard mode if the current
@@ -1677,6 +1685,12 @@ class FfiModel with ChangeNotifier {
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
+      // The matching native modes arrive in the next platform-additions event.
+      if (_pi.platformAdditions.containsKey(kMacOSVirtualDisplayModes)) {
+        _pi.platformAdditions[kMacOSVirtualDisplayModes] = <String, dynamic>{};
+        cachedPeerData.peerInfo['platform_additions'] =
+            json.encode(_pi.platformAdditions);
+      }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
@@ -1727,12 +1741,29 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // Display updates replace virtual-display state but omit other capabilities.
+    final virtualDisplayKeys = [
+      kMacOSVirtualDisplayModes,
+      if (_pi.platform == kPeerPlatformMacOS) ...[
+        'macos_virtual_display_supported',
+        'macos_virtual_displays',
+        'virtual_display_native_scale',
+      ],
+    ];
     if (updateData.isEmpty) {
+      for (final key in virtualDisplayKeys) {
+        _pi.platformAdditions.remove(key);
+      }
       _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
       _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
+        for (final key in virtualDisplayKeys) {
+          if (!updateJson.containsKey(key)) {
+            _pi.platformAdditions.remove(key);
+          }
+        }
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
@@ -1751,6 +1782,9 @@ class FfiModel with ChangeNotifier {
 
     cachedPeerData.peerInfo['platform_additions'] =
         json.encode(_pi.platformAdditions);
+    if (_pi.platform == kPeerPlatformMacOS) {
+      notifyListeners();
+    }
   }
 
   handleFollowCurrentDisplay(
@@ -4245,15 +4279,9 @@ class Display {
       other.height == height &&
       other.cursorEmbedded == cursorEmbedded;
 
-  bool get isOriginalResolutionSet =>
-      originalWidth != kInvalidResolutionValue &&
-      originalHeight != kInvalidResolutionValue;
   bool get isVirtualDisplayResolution =>
       originalWidth == kVirtualDisplayResolutionValue &&
       originalHeight == kVirtualDisplayResolutionValue;
-  bool get isOriginalResolution =>
-      width == (originalWidth * scale).round() &&
-      height == (originalHeight * scale).round();
 }
 
 class Resolution {

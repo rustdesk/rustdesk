@@ -1,3 +1,5 @@
+pub(super) mod display_scale;
+
 use super::{gtk_sudo, CursorData, ResultType};
 use desktop::Desktop;
 pub use base::platform::linux::*;

@@ -103,6 +103,7 @@ struct ParsedPeerInfo {
     platform: String,
     is_installed: bool,
     idd_impl: String,
+    macos_virtual_display_supported: bool,
     support_view_camera: bool,
     support_terminal: bool,
 }
@@ -1169,6 +1170,33 @@ impl<T: InvokeUiSession> Remote<T> {
         true
     }
 
+    async fn send_toggle_macos_virtual_display_msg(&self, peer: &mut Stream) {
+        if !self.handler.is_default()
+            || self.peer_info.platform != "Mac OS"
+            || !self.peer_info.macos_virtual_display_supported
+        {
+            return;
+        }
+        let displays = self.handler.lc.read().unwrap().get_option("virtual-display");
+        for index in displays
+            .split(',')
+            .filter_map(|value| value.parse::<i32>().ok())
+        {
+            if !(1..=4).contains(&index) {
+                continue;
+            }
+            let mut misc = Misc::new();
+            misc.set_toggle_virtual_display(ToggleVirtualDisplay {
+                display: index,
+                on: true,
+                ..Default::default()
+            });
+            let mut msg = Message::new();
+            msg.set_misc(misc);
+            allow_err!(peer.send(&msg).await);
+        }
+    }
+
     async fn send_toggle_virtual_display_msg(&self, peer: &mut Stream) {
         if self.handler.is_view_camera() {
             return;
@@ -1451,6 +1479,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                         }
                         self.handler.handle_peer_info(pi);
+                        self.send_toggle_macos_virtual_display_msg(peer).await;
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
                         self.check_clipboard_file_context();
                         if self.handler.is_default() {
@@ -2075,6 +2104,12 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
+                    Some(misc::Union::DisplayScaleResponse(data)) => {
+                        self.handler.ui_handler.handle_display_scale(&data);
+                    }
+                    Some(misc::Union::VirtualDisplayModeResponse(data)) => {
+                        self.handler.ui_handler.handle_virtual_display_mode(&data);
+                    }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);
                     }
@@ -2197,6 +2232,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     fn set_peer_info(&mut self, pi: &PeerInfo) {
         self.peer_info.platform = pi.platform.clone();
+        self.peer_info.macos_virtual_display_supported = false;
 
         // Check features field for terminal support
         if let Some(features) = pi.features.as_ref() {
@@ -2206,6 +2242,10 @@ impl<T: InvokeUiSession> Remote<T> {
         if let Ok(platform_additions) =
             serde_json::from_str::<HashMap<String, serde_json::Value>>(&pi.platform_additions)
         {
+            self.peer_info.macos_virtual_display_supported = platform_additions
+                .get("macos_virtual_display_supported")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             self.peer_info.is_installed = platform_additions
                 .get("is_installed")
                 .map(|v| v.as_bool())
