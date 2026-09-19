@@ -118,6 +118,24 @@ class _RawTouchGestureDetectorRegionState
   bool get canvasLocked => isMobile && ffi.canvasModel.locked;
 
   @override
+  void initState() {
+    super.initState();
+    widget.ffiModel.addListener(_onFfiModelChanged);
+  }
+
+  void _onFfiModelChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.ffiModel.removeListener(_onFfiModelChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return RawGestureDetector(
       child: widget.child,
