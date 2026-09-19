@@ -65,6 +65,17 @@ class _GestureHelpState extends State<GestureHelp> {
     _selectedIndex = _touchMode ? 1 : 0;
   }
 
+  @override
+  void didUpdateWidget(covariant GestureHelp oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.touchMode != widget.touchMode) {
+      setState(() {
+        _touchMode = widget.touchMode;
+        _selectedIndex = _touchMode ? 1 : 0;
+      });
+    }
+  }
+
   /// Helper to exit relative mouse mode when certain conditions are met.
   /// This reduces code duplication across multiple UI callbacks.
   void _exitRelativeMouseModeIf(bool condition) {
