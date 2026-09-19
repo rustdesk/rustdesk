@@ -283,6 +283,34 @@ class _GestureHelpState extends State<GestureHelp> {
                                     ],
                                   )),
                             )),
+                      if (!_touchMode && widget.inputModel != null)
+                        Obx(() => Transform.translate(
+                              offset: const Offset(-10.0, -6.0),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Checkbox(
+                                    value: widget.inputModel!
+                                        .enableHardwareTouchpad.value,
+                                    onChanged: (value) async {
+                                      if (value == null) return;
+                                      await widget.inputModel!
+                                          .setEnableHardwareTouchpad(value);
+                                    },
+                                  ),
+                                  InkWell(
+                                    onTap: () async {
+                                      final cur = widget.inputModel!
+                                          .enableHardwareTouchpad.value;
+                                      await widget.inputModel!
+                                          .setEnableHardwareTouchpad(!cur);
+                                    },
+                                    child: Text(
+                                        translate("Hardware touchpad")),
+                                  ),
+                                ],
+                              ),
+                            )),
                     ],
                   ),
                 ),

@@ -89,5 +89,30 @@ void main() {
         isTrue,
       );
     });
+
+    test('When hardware touchpad feature is disabled, all touchscreen touches are allowed',
+        () {
+      // When enableHardwareTouchpad is false, isPhysicalPointer returns false
+      final tapRecognizer = TouchTapGestureRecognizer(
+        isPhysicalPointer: (event) => false,
+      )..onTap = () {};
+
+      final gestureRecognizer = CustomTouchGestureRecognizer(
+        isPhysicalPointer: (event) => false,
+      );
+
+      for (final recognizer in [tapRecognizer, gestureRecognizer]) {
+        expect(
+          recognizer.isPointerAllowed(
+            const PointerDownEvent(
+              kind: PointerDeviceKind.touch,
+              buttons: kPrimaryButton,
+              position: Offset(150, 250),
+            ),
+          ),
+          isTrue,
+        );
+      }
+    });
   });
 }
