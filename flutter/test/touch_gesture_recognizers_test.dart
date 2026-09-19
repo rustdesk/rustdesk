@@ -4,10 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Touch gesture recognizers isPointerAllowed', () {
-    test('TouchTapGestureRecognizer rejects mouse and physical touchpad clicks',
-        () {
+    test('TouchTapGestureRecognizer rejects mouse and allows direct touch', () {
       final recognizer = TouchTapGestureRecognizer(
-        isPhysicalPointer: (event) => event.position == const Offset(10, 10),
+        isPhysicalPointer: (event) => false,
       )..onTap = () {};
 
       // Mouse is always rejected
@@ -22,7 +21,7 @@ void main() {
         isFalse,
       );
 
-      // Touchpad click at hover position is rejected
+      // Direct touchscreen touch is allowed, even near cursor/hover position
       expect(
         recognizer.isPointerAllowed(
           const PointerDownEvent(
@@ -31,26 +30,13 @@ void main() {
             position: Offset(10, 10),
           ),
         ),
-        isFalse,
-      );
-
-      // Direct touchscreen touch is allowed
-      expect(
-        recognizer.isPointerAllowed(
-          const PointerDownEvent(
-            kind: PointerDeviceKind.touch,
-            buttons: kPrimaryButton,
-            position: Offset(100, 200),
-          ),
-        ),
         isTrue,
       );
     });
 
-    test('CustomTouchGestureRecognizer rejects mouse and allows direct touch',
-        () {
+    test('CustomTouchGestureRecognizer rejects mouse and allows direct touch', () {
       final recognizer = CustomTouchGestureRecognizer(
-        isPhysicalPointer: (event) => event.position == const Offset(20, 20),
+        isPhysicalPointer: (event) => false,
       );
 
       // Mouse is rejected
@@ -65,7 +51,7 @@ void main() {
         isFalse,
       );
 
-      // Physical touchpad click at hover position is rejected
+      // Direct touchscreen touch for virtual trackpad / pan is allowed
       expect(
         recognizer.isPointerAllowed(
           const PointerDownEvent(
@@ -74,25 +60,11 @@ void main() {
             position: Offset(20, 20),
           ),
         ),
-        isFalse,
-      );
-
-      // Direct touchscreen touch for virtual trackpad / pan is allowed
-      expect(
-        recognizer.isPointerAllowed(
-          const PointerDownEvent(
-            kind: PointerDeviceKind.touch,
-            buttons: kPrimaryButton,
-            position: Offset(300, 400),
-          ),
-        ),
         isTrue,
       );
     });
 
-    test('When hardware touchpad feature is disabled, all touchscreen touches are allowed',
-        () {
-      // When enableHardwareTouchpad is false, isPhysicalPointer returns false
+    test('Touchscreen touches are always allowed and never impersonated as trackpad', () {
       final tapRecognizer = TouchTapGestureRecognizer(
         isPhysicalPointer: (event) => false,
       )..onTap = () {};
