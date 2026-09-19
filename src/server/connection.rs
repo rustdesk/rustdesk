@@ -7252,6 +7252,41 @@ mod test {
         assert_eq!(unauthorized_count(), 0, "no handshake outlives the test");
     }
 
+    // The cap is on before the identity handshake reads. A header declaring one byte over it,
+    // written to the wire as the codec would read it, ends the handshake on the header alone -
+    // the payload is neither waited for nor read - and releases the place the connection held.
+    #[tokio::test]
+    async fn test_unauthorized_frame_is_refused_on_its_header() {
+        use hbb_common::tokio::io::AsyncWriteExt;
+        let _serial = UNAUTHORIZED_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let server = crate::server::new_for_test();
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let (controller, accepted) = tokio::join!(
+            tokio::net::TcpStream::connect(listener.local_addr().unwrap()),
+            listener.accept()
+        );
+        let (mut controller, (accepted, addr)) = (controller.unwrap(), accepted.unwrap());
+        let served = Stream::Tcp(hbb_common::tcp::FramedStream::from(accepted, addr));
+        let handshake = tokio::spawn(async move {
+            crate::server::create_tcp_connection(server, served, addr, true, Default::default())
+                .await
+        });
+        let n = MAX_UNAUTHORIZED_MESSAGE + 1;
+        controller
+            .write_all(&(((n << 2) | 0x3) as u32).to_le_bytes())
+            .await
+            .unwrap();
+        match hbb_common::timeout(2000, handshake).await {
+            Ok(Ok(Err(e))) => assert!(e.to_string().contains("Too big packet"), "{}", e),
+            Ok(Ok(Ok(_))) => panic!("a frame over the cap was accepted"),
+            Ok(Err(e)) => panic!("the handshake task panicked: {}", e),
+            Err(_) => panic!("the handshake waited for a payload the header should have refused"),
+        }
+        assert_eq!(unauthorized_count(), 0);
+    }
+
     #[cfg(feature = "flutter")]
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[test]
