@@ -468,6 +468,19 @@ class InputModel {
   // Disposer for the relativeMouseMode observer (to prevent memory leaks).
   Worker? _relativeMouseModeDisposer;
 
+  final enableHardwareTouchpad = false.obs;
+
+  void loadHardwareTouchpadOption() {
+    enableHardwareTouchpad.value =
+        bind.mainGetLocalOption(key: kOptionHardwareTouchpad) == 'Y';
+  }
+
+  Future<void> setEnableHardwareTouchpad(bool value) async {
+    enableHardwareTouchpad.value = value;
+    await bind.mainSetLocalOption(
+        key: kOptionHardwareTouchpad, value: value ? 'Y' : 'N');
+  }
+
   bool _queryOtherWindowCoords = false;
   Rect? _windowRect;
   List<RemoteWindowCoords> _remoteWindowCoords = [];
@@ -494,6 +507,7 @@ class InputModel {
   bool get isRelativeMouseModeSupported => _relativeMouse.isSupported;
 
   InputModel(this.parent) {
+    loadHardwareTouchpadOption();
     initSideButtonChannel();
     sessionId = parent.target!.sessionId;
     _relativeMouse = RelativeMouseModel(
@@ -1307,6 +1321,9 @@ class InputModel {
         e.kind == ui.PointerDeviceKind.invertedStylus) {
       return false;
     }
+    if (isMobile && !enableHardwareTouchpad.value) {
+      return false;
+    }
     if (_isMouseOrTrackpad(e.kind)) {
       return true;
     }
@@ -1335,6 +1352,7 @@ class InputModel {
         e.kind == ui.PointerDeviceKind.invertedStylus) {
       return;
     }
+    if (isMobile && !enableHardwareTouchpad.value) return;
     if (!isMobile && !_isMouseOrTrackpad(e.kind)) return;
 
     _lastHoverPosition = e.position;
