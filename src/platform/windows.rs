@@ -3963,9 +3963,9 @@ fn run_after_run_cmds(silent: bool) {
             .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
             .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
             .spawn());
-    }
-    if Config::get_option("stop-service") != "Y" {
-        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+        if Config::get_option("stop-service") != "Y" {
+            allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+        }
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
 }
