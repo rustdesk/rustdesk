@@ -2832,4 +2832,19 @@ mod usb_channel_id_tests {
         assert!(first >= 0);
         assert!(second > first);
     }
+
+    #[test]
+    fn open_for_unpushed_bus_id_is_not_authorized() {
+        // `usb_share_pending_take` gates the `Open` handler: a peer that was
+        // never offered a device via `usb_push` must not get a channel just
+        // by naming its bus_id.
+        let handler = FlutterHandler::default();
+        assert!(!handler.usb_share_pending_take("1-1"));
+
+        handler.usb_share_pending_add("1-1".into());
+        assert!(handler.usb_share_pending_take("1-1"));
+        // Consumed by the first take -- a second `Open` for the same bus_id
+        // must not be authorized by the same push.
+        assert!(!handler.usb_share_pending_take("1-1"));
+    }
 }

@@ -434,4 +434,19 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         assert!(!is_valid_bus_id("$(id)"));
         assert!(!is_valid_bus_id("../etc/passwd"));
     }
+
+    #[test]
+    fn on_open_rejects_negative_channel_id() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut mux = UsbipMux::new(tx);
+        mux.on_open(
+            UsbForwardOpen {
+                channel_id: -1,
+                bus_id: "1-1".into(),
+                ..Default::default()
+            },
+            true,
+        );
+        assert!(mux.channels.is_empty());
+    }
 }
