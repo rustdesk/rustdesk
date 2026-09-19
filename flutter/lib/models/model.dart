@@ -56,6 +56,8 @@ final _constSessionId = Uuid().v4obj();
 const _restartReconnectSilentDelaySecs = 5;
 
 class CachedPeerData {
+  static const int kMaxCursorDataCount = 50;
+
   Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
   List<Map<String, dynamic>> cursorDataList = [];
@@ -1663,7 +1665,14 @@ class FfiModel with ChangeNotifier {
   }
 
   handleCursorData(Map<String, dynamic> evt) async {
+    final id = evt['id'];
+    if (id != null) {
+      cachedPeerData.cursorDataList.removeWhere((item) => item['id'] == id);
+    }
     cachedPeerData.cursorDataList.add(evt);
+    if (cachedPeerData.cursorDataList.length > CachedPeerData.kMaxCursorDataCount) {
+      cachedPeerData.cursorDataList.removeAt(0);
+    }
     await parent.target?.cursorModel.updateCursorData(evt);
   }
 
@@ -3075,6 +3084,7 @@ class PredefinedCursor {
 }
 
 class CursorModel with ChangeNotifier {
+  static const int kMaxCachedCursors = 50;
   ui.Image? _image;
   final _images = <String, Tuple3<ui.Image, double, double>>{};
   CursorData? _cache;
@@ -3505,6 +3515,14 @@ class CursorModel with ChangeNotifier {
     if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
       _images[id]?.item1.dispose();
       _images[id] = Tuple3(image, hotx, hoty);
+      if (_images.length > kMaxCachedCursors) {
+        final oldestId = _images.keys.firstWhere((k) => k != id && k != _id, orElse: () => '');
+        if (oldestId.isNotEmpty) {
+          _images.remove(oldestId)?.item1.dispose();
+          _cacheMap.remove(oldestId);
+          _cacheKeys.remove(oldestId);
+        }
+      }
     }
 
     // Update last cursor data.

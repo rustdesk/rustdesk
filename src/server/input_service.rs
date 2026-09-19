@@ -433,12 +433,9 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 // Past the ceiling, drop the map and start over: the next request for any evicted
                 // shape just recompresses it, and the ceiling comfortably covers every static shape
                 // plus a generous animation window.
-                #[cfg(all(target_os = "linux", feature = "drm"))]
-                {
-                    const CURSOR_CACHE_MAX: usize = 64;
-                    if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
-                        state.cached_cursor_data.clear();
-                    }
+                const CURSOR_CACHE_MAX: usize = 64;
+                if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
+                    state.cached_cursor_data.clear();
                 }
                 state.cached_cursor_data.insert(cache_key, msg.clone());
                 super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
