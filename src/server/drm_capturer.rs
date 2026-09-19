@@ -53,17 +53,22 @@ impl FrameSlot {
     }
 }
 
-/// `Shared.transform` before new() stores the real value: a cursor arriving this early is held
-/// back and replayed once the session transform is in, because the producer will not resend it
-/// until the shape changes.
+/// `Shared.cursor_transform` before new() stores the real value: a cursor arriving this early is
+/// held back and replayed once the session transform is in, because the producer will not resend
+/// it until the shape changes.
 const TRANSFORM_PENDING: i32 = i32::MIN;
 
 struct Shared {
     slot: Mutex<FrameSlot>,
     cv: Condvar,
-    // Session transform, TRANSFORM_PENDING until new() stores it post-handshake; the receive
-    // thread turns cursor bitmaps with it and defers any cursor that races the store.
-    transform: std::sync::atomic::AtomicI32,
+    // The output's real transform, TRANSFORM_PENDING until new() stores it post-handshake. Only
+    // the cursor needs it across threads: it differs from the angle the FRAME is turned by on a
+    // hardware-rotated 180 output, where the primary plane scans out upright but the compositor
+    // still pre-rotates the sprite (measured on i915 + mutter: the frame arrived upright and the
+    // sprite upside down). The frame's own angle is not shared - it is fixed for the session and
+    // lives on the capturer that uses it. The receive thread defers any cursor that races the
+    // store.
+    cursor_transform: std::sync::atomic::AtomicI32,
 }
 
 pub struct IpcDrmCapturer {
@@ -177,15 +182,23 @@ fn transform_and_origin(
         .copied()
         .flatten()
         .map(|j| wl.displays[j].transform)
-        // Hardware-rotated 180 scans out already upright (i915 advertises rotate-180 and
-        // mutter uses it), and wl_output cannot tell hardware from software rotation, so 180
-        // keeps master behavior until the plane rotation property travels the wire.
-        .map(|t| if t == 90 || t == 270 { t } else { 0 })
         .unwrap_or(0);
     let origin = augment_with_wayland_geometry_from(drm, wl, &assignment)
         .get(wire_idx)
         .map(|di| (di.x, di.y));
     (transform, origin)
+}
+
+/// The angle the FRAME has to be turned back by. Hardware-rotated 180 scans out already upright
+/// (i915 advertises rotate-180 and mutter uses it), and wl_output cannot tell hardware from
+/// software rotation, so 180 keeps master behavior until the plane rotation property travels
+/// the wire. The cursor does not go through this: see `Shared::cursor_transform`.
+fn frame_transform(wl_transform: i32) -> i32 {
+    if wl_transform == 90 || wl_transform == 270 {
+        wl_transform
+    } else {
+        0
+    }
 }
 
 /// Takes DRM_STATE: never call it while holding one of the per-display maps below.
@@ -325,7 +338,7 @@ impl IpcDrmCapturer {
                 ended: None,
             }),
             cv: Condvar::new(),
-            transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
+            cursor_transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -350,13 +363,14 @@ impl IpcDrmCapturer {
         // clear racing the build rebuilds once instead of running a session on stale geometry.
         let snapshot_gen = scrap::wayland::display::wayland_snapshot_generation();
         let wl = scrap::wayland::display::get_displays();
-        let (transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
+        let (wl_transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
+        let transform = frame_transform(wl_transform);
         // This capturer now shows that layout. If the session init's own wayland query failed it
         // saved an empty baseline, so this is the only record of what the stream is built on.
         super::display_service::note_capturer_layout(&wl.displays, snapshot_gen);
         shared
-            .transform
-            .store(transform, std::sync::atomic::Ordering::Release);
+            .cursor_transform
+            .store(wl_transform, std::sync::atomic::Ordering::Release);
         Ok((
             IpcDrmCapturer {
                 shared,
@@ -634,16 +648,18 @@ async fn recv_thread(
 
     // A cursor that arrived before new() stored the session transform, held for replay. Only the
     // newest matters; the 200 ms recv timeout guarantees this is retried even on an idle wire.
-    let mut pending_cursor: Option<(u64, u32, u32, i32, i32, Vec<u8>)> = None;
+    let mut pending_cursor: Option<(u64, u32, u32, i32, i32, bool, Vec<u8>)> = None;
     let end_reason = loop {
         if stop.load(Ordering::SeqCst) {
             break "stopped".to_owned();
         }
         if pending_cursor.is_some() {
-            let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+            let t = shared.cursor_transform.load(std::sync::atomic::Ordering::Acquire);
             if t != TRANSFORM_PENDING {
-                if let Some((id, width, height, hotx, hoty, raw)) = pending_cursor.take() {
-                    deliver_drm_cursor(display, cursor_epoch, id, width, height, hotx, hoty, raw, t);
+                if let Some((id, width, height, hotx, hoty, hot_measured, raw)) = pending_cursor.take() {
+                    deliver_drm_cursor(
+                        display, cursor_epoch, id, width, height, hotx, hoty, hot_measured, raw, t,
+                    );
                 }
             }
         }
@@ -745,6 +761,7 @@ async fn recv_thread(
                 height,
                 hotx,
                 hoty,
+                hot_measured,
             } => {
                 // get_cursor_data() hands `colors` straight to the client, which renders
                 // width*height*4 RGBA bytes: a short body would make it READ PAST THE BUFFER. A
@@ -763,9 +780,9 @@ async fn recv_thread(
                                 raw.len()
                             );
                         }
-                        let t = shared.transform.load(std::sync::atomic::Ordering::Acquire);
+                        let t = shared.cursor_transform.load(std::sync::atomic::Ordering::Acquire);
                         if t == TRANSFORM_PENDING {
-                            pending_cursor = Some((id, width, height, hotx, hoty, raw));
+                            pending_cursor = Some((id, width, height, hotx, hoty, hot_measured, raw));
                         } else {
                             pending_cursor = None;
                             deliver_drm_cursor(
@@ -776,6 +793,7 @@ async fn recv_thread(
                                 height,
                                 hotx,
                                 hoty,
+                                hot_measured,
                                 raw,
                                 t,
                             );
@@ -921,14 +939,30 @@ fn deliver_drm_cursor(
     height: u32,
     hotx: i32,
     hoty: i32,
+    hot_measured: bool,
     raw: Vec<u8>,
     t: i32,
 ) {
-    let (width, height, hotx, hoty, colors) = if t == 90 || t == 270 {
+    // Every non-zero angle, 180 included. Measured on i915 + mutter with the output at 180: the
+    // frame arrived upright and the sprite upside down, so the compositor had pre-rotated the
+    // sprite by the full transform while the plane scanned out already turned. wl_output cannot
+    // say which of the two happened - the same blindness `frame_transform` defers to - so the
+    // sprite is treated as pre-rotated at every angle.
+    let (width, height, hotx, hoty, colors) = if t != 0 {
         let mut turned = Vec::new();
         unrotate_bgra(&raw, width as usize, height as usize, t, &mut turned);
-        let (hx, hy) = unrotate_hotspot(t, width as i32, height as i32, hotx, hoty);
-        (height as i32, width as i32, hx, hy, turned)
+        let (dw, dh) = rotated_dims(t, width as usize, height as usize);
+        // A hotspot the driver measured is a point on the scanout sprite and maps like a pixel.
+        // A guessed one was guessed on the ROTATED sprite - top-left of an arrow's box - and
+        // the tip of a turned arrow is some other corner, so it is guessed again on the upright
+        // one. The old flow was off at every angle; what differs is the size of the error, which
+        // is why only one of them got reported (see the test below).
+        let (hx, hy) = if hot_measured {
+            unrotate_hotspot(t, width as i32, height as i32, hotx, hoty)
+        } else {
+            scrap::drm_reader::infer_hotspot(&turned, dw, dh)
+        };
+        (dw as i32, dh as i32, hx, hy, turned)
     } else {
         (width as i32, height as i32, hotx, hoty, raw)
     };
@@ -1783,7 +1817,7 @@ mod drm_capturer_tests {
                     ended: None,
                 }),
                 cv: Condvar::new(),
-                transform: std::sync::atomic::AtomicI32::new(0),
+                cursor_transform: std::sync::atomic::AtomicI32::new(0),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
@@ -1920,6 +1954,232 @@ mod drm_capturer_tests {
         let mut back = Vec::new();
         unrotate_bgra(&once, h, w, 270, &mut back);
         assert_eq!(back, src);
+    }
+
+    /// An upright arrow, tip at (0,0): a 4x6 bitmap, every pixel with x <= y/2 opaque, so the
+    /// opaque box is the left 3 columns. Its top-left corner IS the tip - which is exactly why
+    /// the bare-metal guess works when the sprite is upright, and only then.
+    fn arrow() -> (Vec<u8>, usize, usize) {
+        let (w, h) = (4usize, 6usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 0..h {
+            for x in 0..w {
+                if x <= y / 2 {
+                    px[(y * w + x) * 4 + 3] = 255;
+                }
+            }
+        }
+        (px, w, h)
+    }
+
+    /// An I-beam lying along x, deliberately NOT centred in its bitmap: 16x8, opaque rows 2..4 and
+    /// columns 1..13, so the opaque box is (1,2)-(12,3), 12x2 - elongated, which is what Adwaita's
+    /// `vertical-text` shape is. Its click point is the centre of that BOX, (6,2), while the centre
+    /// of the bitmap is (7,3). The offset is the point: a real sprite sits somewhere inside a
+    /// 64x64 hardware buffer (the adwaita box above is (2,6)-(21,14) in a 24x24 one), and a fixture
+    /// centred in its bitmap would let an implementation that returns the bitmap centre pass a test
+    /// claiming to check the box centre.
+    fn ibeam_horizontal() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (16usize, 8usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 2..4 {
+            for x in 1..13 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (6, 2))
+    }
+
+    /// The shape at the aspect ratio that actually matters: a 20x9 opaque box, which is what the
+    /// installed Adwaita `vertical-text` measures at 24 px. 2.22:1, only just past the rule's
+    /// factor of two, so it pins the threshold from ABOVE: a stricter rule (say `bw > bh * 3`)
+    /// leaves the 6:1 bars below centred and silently un-centres the real cursor. Placed
+    /// off-centre in a 24x24 buffer like the real one, box (2,6)-(21,14), centre (11,10) - the
+    /// same numbers the theme file gives, against its declared hotspot of (12,11).
+    fn ibeam_theme_aspect() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (24usize, 24usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 6..15 {
+            for x in 2..22 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (11, 10))
+    }
+
+    /// The same shape standing up and equally off-centre: 8x16, opaque columns 2..4 and rows 1..13,
+    /// box (2,1)-(3,12), centre (2,6) against a bitmap centre of (3,7). The tall case the guess
+    /// already handled, kept so the symmetric rule cannot pass by breaking it.
+    fn ibeam_vertical() -> (Vec<u8>, usize, usize, (i32, i32)) {
+        let (w, h) = (8usize, 16usize);
+        let mut px = vec![0u8; w * h * 4];
+        for y in 1..13 {
+            for x in 2..4 {
+                px[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        (px, w, h, (2, 6))
+    }
+
+    /// What the compositor puts in the cursor plane on an output rotated by `t`: the upright sprite
+    /// rotated forward by t, which is what turning it back by (360 - t) degrees produces.
+    fn as_scanned_out(upright: &[u8], w: usize, h: usize, t: i32) -> (Vec<u8>, usize, usize) {
+        let mut out = Vec::new();
+        unrotate_bgra(upright, w, h, (360 - t) % 360, &mut out);
+        let (dw, dh) = rotated_dims(t, w, h);
+        (out, dw, dh)
+    }
+
+    // rustdesk#15886, the maintainer's physical test: the cursor looked right at 0 and 90, drawn
+    // above the click point at 270, and upside down at 180. Two causes, not one. The sprite came
+    // out upside down at 180 because master turned it only at 90 and 270, so a 180 sprite was
+    // never turned back at all. And at every angle the hotspot was GUESSED on the sprite as
+    // scanned out and only afterwards mapped as if it were a point on it: the guess picks the
+    // top-left of the opaque box, and a turned arrow's tip is not in that corner - at 90 the
+    // error is the arrow's WIDTH along x, small enough to pass as fine; at 270 it is its HEIGHT
+    // along y, which is the one that got reported.
+    //
+    // The 180 entry below is about that mapping, not about what was seen: on master the clamp sent
+    // 180 down the untouched branch, so the guess and the sprite were turned together and the
+    // hotspot landed on the tip anyway - measured as (0,0) there, with only the sprite wrong. What
+    // the loop shows is that the guess is not a point that survives being mapped, at any angle.
+    // This test covers the mapping; the sprite is covered by the two below.
+    #[test]
+    fn a_guessed_hotspot_is_guessed_on_the_upright_sprite() {
+        use scrap::drm_reader::infer_hotspot;
+        let (up, w, h) = arrow();
+        let tip = infer_hotspot(&up, w, h);
+        assert_eq!(tip, (0, 0));
+        let mut old_wrong_at = Vec::new();
+        for t in [90, 180, 270] {
+            let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+            // The old flow: guess on the scanned-out sprite, then map the point.
+            let (gx, gy) = infer_hotspot(&scan, sw, sh);
+            let old = unrotate_hotspot(t, sw as i32, sh as i32, gx, gy);
+            // The new flow: turn the sprite back first, then guess.
+            let mut turned = Vec::new();
+            unrotate_bgra(&scan, sw, sh, t, &mut turned);
+            let (dw, dh) = rotated_dims(t, sw, sh);
+            assert_eq!(turned, up, "the sprite turns back to upright at {t}");
+            assert_eq!(infer_hotspot(&turned, dw, dh), tip, "the tip is found again at {t}");
+            if old != tip {
+                old_wrong_at.push(t);
+            }
+        }
+        // The old flow is wrong at every angle, not only the one that was noticed.
+        assert_eq!(old_wrong_at, vec![90, 180, 270]);
+    }
+
+    // rustdesk#16242, the maintainer's pixel-level finding: the guess only centred TALL shapes, so
+    // a horizontal I-beam got the corner of its box. Before the rotation rework such a cursor
+    // reached a quarter-turned output as a tall bitmap and the same rule centred it by accident, so
+    // turning the sprite upright first - correct in itself - turned a nearly right hotspot into one
+    // about 11 px out. Measured on the installed Adwaita `vertical-text` at 24 px: theme hotspot
+    // (12, 11), opaque box 20x9, corner guess (2, 6) = 11.2 px away, centre guess (11, 10) = 1.4 px.
+    //
+    // The old flow is not the fix: it was right for this one shape and wrong for arrows at every
+    // angle, which is what the test above pins. The fix is for the guess to centre an elongated box
+    // whichever way it lies, and that is what this checks - for both orientations and at the real
+    // 2.22:1 aspect of the shape that was wrong - by driving `deliver_drm_cursor` and reading the
+    // published hotspot back, not by chaining the helpers itself.
+    #[test]
+    fn an_ibeam_keeps_its_centre_whichever_way_it_lies() {
+        use scrap::drm_reader::infer_hotspot;
+        for (i, (name, (up, w, h, box_centre))) in [
+            ("horizontal", ibeam_horizontal()),
+            ("vertical", ibeam_vertical()),
+            ("theme-aspect", ibeam_theme_aspect()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            // The fixture must not be centred in its own bitmap, or this test cannot tell the
+            // centre of the opaque BOX - which is what the guess computes and what a cursor's
+            // click point is - from the centre of the buffer the sprite happens to sit in.
+            let bitmap_centre = (((w - 1) / 2) as i32, ((h - 1) / 2) as i32);
+            assert_ne!(
+                box_centre, bitmap_centre,
+                "the {name} fixture is centred in its bitmap, so it cannot discriminate"
+            );
+
+            // The upright guess is the centre of the opaque box, not its corner.
+            let guess = infer_hotspot(&up, w, h);
+            assert_eq!(guess, box_centre, "the {name} I-beam is centred, not cornered");
+
+            // And it is what the delivery path PUBLISHES, not just what the helper computes:
+            // `deliver_drm_cursor` is where the guessed branch is chosen and where the sprite is
+            // turned back, so the sprite is handed over pre-rotated exactly as the compositor
+            // scans it out, and the published hotspot is read back out of DRM_CURSOR.
+            for (j, t) in [0, 90, 180, 270].into_iter().enumerate() {
+                let display = 9_300 + (i * 8 + j) as i32;
+                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+                // What the producer actually sends for a guessed hotspot: its own guess, made on
+                // the sprite AS SCANNED OUT (drm_reader does exactly that). At 0 the delivery path
+                // publishes it unchanged, which is why it has to be the real value and not a
+                // placeholder; at every other angle the path discards it and guesses again.
+                let (phx, phy) = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
+                deliver_drm_cursor(display, 1, 7, sw as u32, sh as u32, phx, phy, false, scan, t);
+                let map = DRM_CURSOR.lock().unwrap();
+                let (_, c) = map.get(&display).expect("the cursor path published nothing");
+                assert_eq!(
+                    (c.width as usize, c.height as usize),
+                    (w, h),
+                    "the published {name} sprite is upright-sized at {t}"
+                );
+                assert_eq!(c.colors, up, "the published {name} sprite is upright at {t}");
+                assert_eq!(
+                    (c.hotx, c.hoty),
+                    box_centre,
+                    "the published {name} hotspot is the box centre at {t}"
+                );
+            }
+        }
+
+        // The arrow is untouched, and it sits exactly ON the boundary rather than safely inside
+        // it: its box is 3x6, which is the factor of two itself, so it keeps its tip only because
+        // the comparison is strict. That makes it the control for the other side of the threshold
+        // - loosen the rule to `* 1` and this line fails, tighten it past 2.22 and the
+        // theme-aspect case above fails. The two together pin where the boundary is.
+        let (arrow_px, aw, ah) = arrow();
+        assert_eq!(infer_hotspot(&arrow_px, aw, ah), (0, 0));
+    }
+
+    // The frame keeps master's 180 behaviour (hardware-rotated 180 scans out upright), but the
+    // cursor plane is pre-rotated by the compositor regardless, so the cursor path turns 180.
+    #[test]
+    fn a_180_output_turns_the_cursor_but_not_the_frame() {
+        assert_eq!(frame_transform(180), 0);
+        assert_eq!(frame_transform(90), 90);
+        assert_eq!(frame_transform(270), 270);
+        let (up, w, h) = arrow();
+        let (scan, sw, sh) = as_scanned_out(&up, w, h, 180);
+        let mut turned = Vec::new();
+        unrotate_bgra(&scan, sw, sh, 180, &mut turned);
+        assert_eq!(turned, up);
+    }
+
+    // The two above exercise the helpers, which cannot see WHICH angle the cursor path is handed
+    // or whether it turns 180 at all - the line that decides both is `if t != 0` in
+    // `deliver_drm_cursor`, and reverting it to master's `t == 90 || t == 270` leaves every helper
+    // assertion above still passing. So this drives the real path and reads back what it published.
+    #[test]
+    fn the_cursor_path_publishes_an_upright_sprite_at_every_angle() {
+        let (up, w, h) = arrow();
+        for (i, t) in [0, 90, 180, 270].into_iter().enumerate() {
+            // A display id of its own per angle: DRM_CURSOR is process-wide and keyed by display.
+            let display = 9_100 + i as i32;
+            let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+            deliver_drm_cursor(display, 1, 7, sw as u32, sh as u32, 0, 0, false, scan, t);
+            let map = DRM_CURSOR.lock().unwrap();
+            let (_, c) = map.get(&display).expect("the cursor path published nothing");
+            assert_eq!(
+                (c.width as usize, c.height as usize),
+                (w, h),
+                "the published sprite is upright-sized at {t}"
+            );
+            assert_eq!(c.colors, up, "the published sprite is upright at {t}");
+            assert_eq!((c.hotx, c.hoty), (0, 0), "the tip is the hotspot at {t}");
+        }
     }
 
     #[test]
