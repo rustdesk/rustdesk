@@ -292,11 +292,17 @@ async fn pull(
     });
 
     let attach_bus_id = bus_id.clone();
-    let local_port =
-        tokio::task::spawn_blocking(move || usb_attach_privileged(port, &attach_bus_id))
-            .await
-            .ok()
-            .flatten();
+    let local_port = match tokio::task::spawn_blocking(move || {
+        usb_attach_privileged(port, &attach_bus_id)
+    })
+    .await
+    {
+        Ok(local_port) => local_port,
+        Err(err) => {
+            log::error!("usb push: blocking task failed: {}", err);
+            None
+        }
+    };
 
     if cancel.is_cancelled() {
         // The controller already unpushed/closed while attach was still in

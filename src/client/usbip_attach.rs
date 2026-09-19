@@ -49,12 +49,17 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
     });
 
     let attach_bus_id = bus_id.clone();
-    let local_port = tokio::task::spawn_blocking(move || {
+    let local_port = match tokio::task::spawn_blocking(move || {
         usb_attach_privileged(port, &attach_bus_id)
     })
     .await
-    .ok()
-    .flatten();
+    {
+        Ok(local_port) => local_port,
+        Err(err) => {
+            log::error!("usb attach: blocking task failed: {}", err);
+            None
+        }
+    };
     match local_port {
         Some(local_port) => {
             session.ui_handler.push_event_(

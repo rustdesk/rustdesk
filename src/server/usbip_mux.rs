@@ -122,9 +122,13 @@ impl UsbipMux {
                 }
                 let tx = self.tx.clone();
                 tokio::spawn(async move {
-                    let devices = tokio::task::spawn_blocking(list_local_devices)
-                        .await
-                        .unwrap_or_default();
+                    let devices = match tokio::task::spawn_blocking(list_local_devices).await {
+                        Ok(devices) => devices,
+                        Err(err) => {
+                            log::error!("usb forward: blocking task failed: {}", err);
+                            Vec::new()
+                        }
+                    };
                     send(&tx, device_list_msg(devices));
                 });
             }
@@ -141,9 +145,17 @@ impl UsbipMux {
                 tokio::spawn(async move {
                     let bus_id = b.bus_id.clone();
                     let bind = b.bind;
-                    let ok = tokio::task::spawn_blocking(move || bind_device_retrying(&b.bus_id, b.bind))
-                        .await
-                        .unwrap_or(false);
+                    let ok = match tokio::task::spawn_blocking(move || {
+                        bind_device_retrying(&b.bus_id, b.bind)
+                    })
+                    .await
+                    {
+                        Ok(ok) => ok,
+                        Err(err) => {
+                            log::error!("usb forward: blocking task failed: {}", err);
+                            false
+                        }
+                    };
                     let error = if ok {
                         String::new()
                     } else {
