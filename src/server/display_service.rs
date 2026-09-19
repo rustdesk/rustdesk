@@ -312,6 +312,8 @@ static TEMP_IGNORE_DISPLAYS_CHANGED: AtomicBool = AtomicBool::new(false);
 struct SyncDisplaysInfo {
     displays: Vec<DisplayInfo>,
     is_synced: bool,
+    #[cfg(target_os = "linux")]
+    scroll_capabilities: (bool, bool),
 }
 
 impl SyncDisplaysInfo {
@@ -449,6 +451,17 @@ fn displays_to_msg(displays: Vec<DisplayInfo>) -> Message {
     };
     pi.displays = displays.clone();
 
+    #[cfg(target_os = "linux")]
+    {
+        let (high_resolution, smooth) = SYNC_DISPLAYS.lock().unwrap().scroll_capabilities;
+        // Explicit false values withdraw capabilities from already connected clients.
+        pi.platform_additions = serde_json::json!({
+            "supports_high_resolution_scroll": high_resolution,
+            "supports_smooth_scroll": smooth,
+        })
+        .to_string();
+    }
+
     #[cfg(windows)]
     if crate::platform::is_installed() {
         let m = crate::virtual_display_manager::get_platform_additions();
@@ -511,6 +524,23 @@ pub fn check_displays_changed() -> ResultType<()> {
 }
 
 fn get_displays_msg() -> Option<Message> {
+    #[cfg(target_os = "linux")]
+    {
+        let capabilities = (
+            input_service::supports_high_resolution_scroll(),
+            input_service::supports_smooth_scroll(),
+        );
+        let mut sync = SYNC_DISPLAYS.lock().unwrap();
+        if sync.scroll_capabilities != capabilities {
+            log::info!(
+                "Linux scroll capabilities changed: high-resolution={}, smooth={}",
+                capabilities.0,
+                capabilities.1
+            );
+            sync.scroll_capabilities = capabilities;
+            sync.is_synced = false;
+        }
+    }
     let displays = SYNC_DISPLAYS.lock().unwrap().get_update_sync_displays()?;
     Some(displays_to_msg(displays))
 }
@@ -529,7 +559,7 @@ fn run(sp: EmptyExtraFieldService) -> ResultType<()> {
 
         if let Some(msg_out) = check_get_displays_changed_msg() {
             sp.send(msg_out);
-            log::info!("Displays changed");
+            log::info!("Display information changed");
         }
 
         #[cfg(target_os = "linux")]
