@@ -1312,6 +1312,8 @@ impl<T: InvokeUiSession> Session<T> {
             lc.peer_relay = true;
         }
         self.lc.write().unwrap().peer_info = None;
+        // The new connection starts with a fresh FPS limit on the peer.
+        self.lc.write().unwrap().last_send_fps = None;
         self.reconnect_count.fetch_add(1, Ordering::SeqCst);
         let mut lock = self.thread.lock().unwrap();
         // No need to join the previous thread, because it will exit automatically.
