@@ -3,8 +3,7 @@
 // connection that has to land somewhere -- so we stand up a local listener
 // that plays the role of the (otherwise unreachable) remote `usbipd`, and
 // relay everything it sees through `UsbChannel` frames.
-use crate::flutter::FlutterHandler;
-use crate::ui_session_interface::Session;
+use crate::{flutter::FlutterHandler, ui_session_interface::Session};
 use hbb_common::{
     bytes::Bytes, log, regex::Regex,
     tokio::{

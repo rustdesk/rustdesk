@@ -21,6 +21,10 @@ use std::{process::Command, sync::LazyLock};
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
+// A peer that opens a channel and then goes silent (never finishing the
+// 40-byte `OP_REQ_IMPORT` prefix) would otherwise leak this relay task and
+// its `usbipd` connection until the whole session ends.
+const IMPORT_REQUEST_TIMEOUT_MS: u64 = 5000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 
 // `Option`, not `Regex` directly -- see the identical comment in
@@ -166,10 +170,15 @@ pub(crate) async fn run_channel(
         if prefix.len() >= USBIP_OP_REQ_IMPORT_LEN {
             break;
         }
-        match inbound.recv().await {
-            Some(chunk) => prefix.extend_from_slice(&chunk),
-            None => {
+        match timeout(IMPORT_REQUEST_TIMEOUT_MS, inbound.recv()).await {
+            Ok(Some(chunk)) => prefix.extend_from_slice(&chunk),
+            Ok(None) => {
                 log::info!("usb share: channel {} closed before import request", id);
+                session.ui_handler.unregister_usb_share_channel(id);
+                return;
+            }
+            Err(_) => {
+                log::warn!("usb share: channel {} import request timed out, closing", id);
                 session.ui_handler.unregister_usb_share_channel(id);
                 return;
             }

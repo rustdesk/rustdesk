@@ -277,13 +277,16 @@ async fn pull(
 
     let relay_tx = tx.clone();
     let relay_bus_id = bus_id.clone();
+    let relay_attached_port = attached_port.clone();
     // Kept so a failed/cancelled attach can abort it below instead of
     // leaving it parked on an `accept()` that the peer's real `usbip
     // attach` process -- which only exists if our own attach succeeded --
     // will now never make.
     let accept_task = tokio::spawn(async move {
         match listener.accept().await {
-            Ok((socket, _)) => run_channel(id, relay_bus_id, socket, relay_tx, inbound).await,
+            Ok((socket, _)) => {
+                run_channel(id, relay_bus_id, socket, relay_tx, inbound, relay_attached_port).await
+            }
             Err(err) => log::error!("usb push: accept failed: {}", err),
         }
     });
@@ -435,22 +438,28 @@ async fn run_channel(
     socket: TcpStream,
     tx: Sender,
     mut inbound: mpsc::Receiver<Inbound>,
+    attached_port: Arc<Mutex<Option<i32>>>,
 ) {
-    send(&tx, open_msg(id, bus_id));
+    send(&tx, open_msg(id, bus_id.clone()));
 
-    let success = loop {
+    let (success, message) = loop {
         match inbound.recv().await {
             Some(Inbound::Opened { success, message }) => {
                 if !success {
                     log::error!("usb push: peer refused channel {}: {}", id, message);
                 }
-                break success;
+                break (success, message);
             }
             Some(_) => continue,
             None => return,
         }
     };
     if !success {
+        // Otherwise the controller's UI never learns the push failed and
+        // stays stuck showing it as pushed -- the pending-authorization
+        // bookkeeping it cleans up on this reply (`flutter.rs`'s
+        // `PushResult` handler) would then never run either.
+        send(&tx, push_result_msg(bus_id, message));
         return;
     }
 
@@ -462,6 +471,18 @@ async fn run_channel(
             match reader.read(&mut buf).await {
                 Ok(0) | Err(_) => {
                     send(&tx_read, close_msg(id));
+                    // Otherwise a push whose remote transport just closes on
+                    // its own (not via an explicit unpush) leaves this port
+                    // attached to the controlled machine's vhci driver
+                    // indefinitely -- nothing else ever detaches it once
+                    // this task returns.
+                    if let Some(port) = attached_port.lock().unwrap().take() {
+                        log::info!(
+                            "usb push: channel {} relay ended, detaching port {}",
+                            id, port
+                        );
+                        detach_port(port);
+                    }
                     return;
                 }
                 Ok(n) => send(&tx_read, data_msg(id, Bytes::copy_from_slice(&buf[..n]))),
