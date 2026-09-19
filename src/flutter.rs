@@ -1554,8 +1554,13 @@ impl InvokeUiSession for FlutterHandler {
                 };
                 log::info!("usb push: peer opened channel {} for {}", id, open.bus_id);
                 let (tx, rx) = hbb_common::tokio::sync::mpsc::channel(USB_RELAY_CHANNEL_CAPACITY);
-                self.register_usb_share_channel(id, open.bus_id, tx);
-                hbb_common::tokio::spawn(crate::client::usbip_share::run_channel(id, session, rx));
+                self.register_usb_share_channel(id, open.bus_id.clone(), tx);
+                hbb_common::tokio::spawn(crate::client::usbip_share::run_channel(
+                    id,
+                    open.bus_id,
+                    session,
+                    rx,
+                ));
             }
             _ => {}
         }

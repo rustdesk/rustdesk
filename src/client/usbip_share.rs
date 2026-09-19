@@ -99,11 +99,45 @@ pub fn bind_device(bus_id: &str, bind: bool) -> bool {
     crate::platform::run_cmds_privileged(&format!("usbip {} -b {}", sub_cmd, bus_id))
 }
 
+// USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
+// 4-byte status, followed by a 32-byte NUL-padded busid -- see the Linux
+// kernel's `drivers/usb/usbip/usbip_common.h` (`op_common`) and userspace
+// `usbip`'s `src/usbip_network.h` (`SYSFS_BUS_ID_SIZE` = 32).
+const USBIP_OP_REQ_IMPORT_LEN: usize = 2 + 2 + 4 + 32;
+const USBIP_OP_REQ_IMPORT_CODE: u16 = 0x8003;
+
+/// The busid the peer's real USB/IP client actually asked to import, parsed
+/// from the start of the raw protocol bytes it sends once the channel opens.
+/// `None` if `prefix` isn't (yet, or ever) a well-formed import request.
+fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
+    if prefix.len() < USBIP_OP_REQ_IMPORT_LEN {
+        return None;
+    }
+    let code = u16::from_be_bytes([prefix[2], prefix[3]]);
+    if code != USBIP_OP_REQ_IMPORT_CODE {
+        return None;
+    }
+    let busid = &prefix[8..USBIP_OP_REQ_IMPORT_LEN];
+    let end = busid.iter().position(|&b| b == 0).unwrap_or(busid.len());
+    std::str::from_utf8(&busid[..end]).ok().map(str::to_string)
+}
+
 /// The peer pulling one of our shared devices: dial our own local `usbipd`,
 /// relay bytes both ways until either side closes. Mirrors
 /// `server/usbip_mux.rs`'s `on_open`/`run_channel`.
+///
+/// `bus_id` is the one authorized for this channel (checked against the
+/// pending-push set in `flutter.rs`'s `Open` handler before this is even
+/// called) -- but that's only the peer's self-reported metadata for the
+/// `Open` message. Nothing stops it from opening a channel claiming one
+/// bus_id while actually sending a USB/IP import request for a different
+/// one, and our local `usbipd` would happily serve whatever bus id the
+/// request names as long as it's shared for some other, unrelated reason.
+/// So the actual `OP_REQ_IMPORT` busid is inspected before any byte reaches
+/// `usbipd`, not just trusted from `Open`.
 pub(crate) async fn run_channel(
     id: i32,
+    bus_id: String,
     session: FlutterSession,
     mut inbound: mpsc::Receiver<Bytes>,
 ) {
@@ -126,6 +160,45 @@ pub(crate) async fn run_channel(
     session.usb_reply_opened(id, true, String::new());
 
     let (mut reader, mut writer) = socket.into_split();
+
+    let mut prefix = Vec::with_capacity(USBIP_OP_REQ_IMPORT_LEN);
+    loop {
+        if prefix.len() >= USBIP_OP_REQ_IMPORT_LEN {
+            break;
+        }
+        match inbound.recv().await {
+            Some(chunk) => prefix.extend_from_slice(&chunk),
+            None => {
+                log::info!("usb share: channel {} closed before import request", id);
+                session.ui_handler.unregister_usb_share_channel(id);
+                return;
+            }
+        }
+    }
+    match parse_import_request_busid(&prefix) {
+        Some(requested) if requested == bus_id => {}
+        Some(requested) => {
+            log::error!(
+                "usb share: channel {} import request for {:?} does not match authorized {:?}, refusing",
+                id, requested, bus_id
+            );
+            session.ui_handler.unregister_usb_share_channel(id);
+            return;
+        }
+        None => {
+            log::error!(
+                "usb share: channel {} sent a malformed USB/IP import request, refusing",
+                id
+            );
+            session.ui_handler.unregister_usb_share_channel(id);
+            return;
+        }
+    }
+    if writer.write_all(&prefix).await.is_err() {
+        session.ui_handler.unregister_usb_share_channel(id);
+        return;
+    }
+
     let session_read = session.clone();
     let to_tunnel = hbb_common::tokio::spawn(async move {
         let mut buf = vec![0u8; 64 * 1024];
@@ -189,5 +262,35 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
     #[test]
     fn parse_local_devices_empty_output() {
         assert!(parse_local_devices("", &HashSet::new()).is_empty());
+    }
+
+    fn import_request(busid: &str) -> Vec<u8> {
+        let mut req = vec![0x01, 0x11, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00];
+        let mut busid_field = vec![0u8; 32];
+        busid_field[..busid.len()].copy_from_slice(busid.as_bytes());
+        req.extend_from_slice(&busid_field);
+        req
+    }
+
+    #[test]
+    fn parse_import_request_busid_extracts_busid_from_well_formed_request() {
+        assert_eq!(
+            parse_import_request_busid(&import_request("1-2.3")),
+            Some("1-2.3".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_import_request_busid_rejects_wrong_command_code() {
+        let mut req = import_request("1-2.3");
+        req[2] = 0x80;
+        req[3] = 0x05; // OP_REQ_DEVLIST, not OP_REQ_IMPORT
+        assert_eq!(parse_import_request_busid(&req), None);
+    }
+
+    #[test]
+    fn parse_import_request_busid_none_when_too_short() {
+        let req = import_request("1-2.3");
+        assert_eq!(parse_import_request_busid(&req[..10]), None);
     }
 }
