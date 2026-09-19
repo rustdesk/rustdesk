@@ -1835,8 +1835,10 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     /// `ch` carries both simple control responses (`device_list`,
     /// `bind_result`) and the forwarded USB/IP byte stream (`opened`,
     /// `data`, `close`); implementations route the latter to the local
-    /// attach-side relay rather than the UI.
-    fn handle_usb_channel(&self, ch: UsbChannel);
+    /// attach-side relay rather than the UI. Default no-op: RemoteUsb is
+    /// Flutter/Linux-only, so other `InvokeUiSession` implementations (e.g.
+    /// the Sciter UI) don't need to know about it.
+    fn handle_usb_channel(&self, _ch: UsbChannel) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {

@@ -178,6 +178,8 @@ impl<T: InvokeUiSession> Remote<T> {
             ConnType::VIEW_CAMERA
         } else if self.handler.is_terminal() {
             ConnType::TERMINAL
+        } else if self.handler.is_remote_usb() {
+            ConnType::REMOTE_USB
         } else {
             ConnType::default()
         };

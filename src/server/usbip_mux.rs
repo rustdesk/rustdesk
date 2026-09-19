@@ -170,6 +170,18 @@ impl UsbipMux {
 
     fn on_open(&mut self, open: UsbForwardOpen, permitted: bool) {
         let id = open.channel_id;
+        if id < 0 {
+            // Negative ids are the push direction's own id space
+            // (`usbip_pull.rs`); an `Open` here only ever means a peer
+            // pulling one of our shared devices, which always uses
+            // non-negative ids (`FlutterHandler::next_usb_channel_id`).
+            // Reject before creating any channel/task: `connection.rs`'s
+            // sign dispatch would route this id's later Data/Close frames to
+            // `usbip_pull` instead of back here, orphaning the relay task
+            // and its TCP connection to the local usbipd forever.
+            log::warn!("usb forward: rejecting open with non-pull channel id {}", id);
+            return;
+        }
         self.channels.retain(|_, e| !e.inbound.is_closed());
         if !permitted {
             self.reply(opened_msg(id, false, "No permission of USB forwarding".into()));

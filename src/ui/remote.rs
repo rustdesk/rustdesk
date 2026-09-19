@@ -417,10 +417,6 @@ impl InvokeUiSession for SciterHandler {
         // Terminal support is not implemented for Sciter UI
         // This is a stub implementation to satisfy the trait requirements
     }
-
-    fn handle_usb_channel(&self, _ch: UsbChannel) {
-        // RemoteUsb support is not implemented for Sciter UI
-    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
