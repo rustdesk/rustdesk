@@ -34,6 +34,14 @@ const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 // Each queued chunk is up to 64KiB (`run_channel`'s read buffer size), so
 // this bounds one relay channel to a few MiB, not unbounded process memory.
 const RELAY_CHANNEL_CAPACITY: usize = 256;
+// `run_channel` never reads more than this per frame; a larger `Data.data`
+// is a protocol violation (the generic message framing allows up to ~1GiB,
+// which would otherwise let a peer balloon a single queued chunk far past
+// what `RELAY_CHANNEL_CAPACITY` alone bounds).
+const MAX_USB_DATA_LEN: usize = 64 * 1024;
+// Mirrors `port_forward_mux::MAX_CHANNELS` -- caps how many relay tasks (and
+// their `usbipd` TCP connections) a single permitted peer can make us spawn.
+const MAX_LIVE_CHANNELS: usize = 256;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
@@ -153,6 +161,15 @@ impl UsbipMux {
                     log::debug!("usb forward data for unknown channel {}", d.channel_id);
                     return;
                 };
+                if d.data.len() > MAX_USB_DATA_LEN {
+                    log::warn!(
+                        "usb forward: oversized data frame ({} bytes) on channel {}, closing",
+                        d.data.len(),
+                        d.channel_id
+                    );
+                    self.channels.remove(&d.channel_id);
+                    return;
+                }
                 if entry.inbound.try_send(d.data).is_err() {
                     // Full (peer outrunning the local socket) or closed --
                     // either way this channel can't keep relaying faithfully,
@@ -189,6 +206,11 @@ impl UsbipMux {
         }
         if self.channels.contains_key(&id) {
             log::debug!("ignoring open for live usb channel {}", id);
+            return;
+        }
+        if self.channels.len() >= MAX_LIVE_CHANNELS {
+            log::warn!("usb forward: rejecting open, {} channels already live", self.channels.len());
+            self.reply(opened_msg(id, false, "Too many open USB channels".into()));
             return;
         }
         let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);

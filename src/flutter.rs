@@ -284,6 +284,9 @@ impl Default for FlutterHandler {
 // see the identical comment in `server/usbip_mux.rs`.
 #[cfg(target_os = "linux")]
 const USB_RELAY_CHANNEL_CAPACITY: usize = 256;
+// See the identical constant/comment in `server/usbip_mux.rs`.
+#[cfg(target_os = "linux")]
+const USB_MAX_DATA_LEN: usize = 64 * 1024;
 
 #[cfg(target_os = "linux")]
 impl FlutterHandler {
@@ -309,6 +312,16 @@ impl FlutterHandler {
     }
 
     fn usb_forward_send(&self, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
+        if let crate::client::usbip_attach::Inbound::Data(data) = &msg {
+            if data.len() > USB_MAX_DATA_LEN {
+                log::warn!(
+                    "usb forward: oversized data frame ({} bytes) on channel {}, closing",
+                    data.len(), channel_id
+                );
+                self.unregister_usb_forward_channel(channel_id);
+                return;
+            }
+        }
         let full = match self.usb_forward_channels.read().unwrap().get(&channel_id) {
             Some(tx) => tx.try_send(msg).is_err(),
             None => return,
@@ -348,6 +361,14 @@ impl FlutterHandler {
     }
 
     fn usb_share_send(&self, channel_id: i32, data: hbb_common::bytes::Bytes) {
+        if data.len() > USB_MAX_DATA_LEN {
+            log::warn!(
+                "usb push: oversized data frame ({} bytes) on channel {}, closing",
+                data.len(), channel_id
+            );
+            self.unregister_usb_share_channel(channel_id);
+            return;
+        }
         let full = match self.usb_share_channels.read().unwrap().get(&channel_id) {
             Some(tx) => tx.try_send(data).is_err(),
             None => return,

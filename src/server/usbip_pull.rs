@@ -27,6 +27,12 @@ use std::{
 // this bounds one relay channel to a few MiB, not unbounded process memory --
 // see the identical comment in `server/usbip_mux.rs`.
 const RELAY_CHANNEL_CAPACITY: usize = 256;
+// See the identical constant/comment in `server/usbip_mux.rs`.
+const MAX_USB_DATA_LEN: usize = 64 * 1024;
+// Each live channel here is a privileged `usbip attach` plus its own local
+// vhci port, a much heavier resource than a plain relay task -- kept far
+// below `usbip_mux::MAX_LIVE_CHANNELS`.
+const MAX_PENDING_PUSHES: usize = 32;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
@@ -106,6 +112,14 @@ impl UsbPullState {
     }
 
     pub fn handle_push_request(&mut self, bus_id: String) {
+        if self.channels.len() >= MAX_PENDING_PUSHES {
+            log::warn!(
+                "usb push: rejecting push of {}, {} channels already pending/live",
+                bus_id, self.channels.len()
+            );
+            send(&self.tx, push_result_msg(bus_id, "Too many pending USB pushes".into()));
+            return;
+        }
         let tx = self.tx.clone();
         let id = self.next_channel_id();
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
@@ -177,6 +191,17 @@ impl UsbPullState {
             log::debug!("usb push: frame for unknown channel {}", channel_id);
             return;
         };
+        if let Inbound::Data(data) = &msg {
+            if data.len() > MAX_USB_DATA_LEN {
+                log::warn!(
+                    "usb push: oversized data frame ({} bytes) on channel {}, closing",
+                    data.len(),
+                    channel_id
+                );
+                self.channels.remove(&channel_id);
+                return;
+            }
+        }
         if entry.inbound.try_send(msg).is_err() {
             // Full or closed -- either way this channel can't keep relaying
             // faithfully, so drop it instead of growing the queue or
