@@ -641,6 +641,19 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.check_clipboard_file_context();
             }
             Data::Message(msg) => {
+                // The Flutter clipboard broadcast is process-wide, so a clipboard can reach this
+                // round's queue before the round has logged in; it is dropped here, on the round
+                // itself.
+                #[cfg(feature = "flutter")]
+                if !self.is_connected
+                    && matches!(
+                        msg.union.as_ref(),
+                        Some(message::Union::Clipboard(_))
+                            | Some(message::Union::MultiClipboards(_))
+                    )
+                {
+                    return true;
+                }
                 match &msg.union {
                     Some(message::Union::Misc(misc)) => match misc.union {
                         Some(misc::Union::RefreshVideo(_)) => {
@@ -2641,5 +2654,74 @@ impl Drop for VideoThread {
     fn drop(&mut self) {
         // since channels are buffered, messages sent before the disconnect will still be properly received.
         *self.discard_queue.write().unwrap() = true;
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "flutter")]
+mod tests {
+    use super::*;
+    use crate::flutter::FlutterHandler;
+
+    /// A round's `Remote` over a loopback pair, before any login: what it sends to `peer`
+    /// arrives at `far`.
+    async fn remote_and_peer() -> (Remote<FlutterHandler>, Stream, Stream) {
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (peer, accepted) = tokio::join!(
+            hbb_common::socket_client::connect_tcp(addr.to_string(), 3000),
+            listener.accept()
+        );
+        let (accepted, far_addr) = accepted.unwrap();
+        let far = Stream::Tcp(hbb_common::tcp::FramedStream::from(accepted, far_addr));
+        let (sender, receiver) = mpsc::unbounded_channel::<Data>();
+        let remote = Remote::new(Session::<FlutterHandler>::default(), receiver, sender);
+        (remote, peer.unwrap(), far)
+    }
+
+    async fn arrives(far: &mut Stream) -> bool {
+        matches!(hbb_common::timeout(300, far.next()).await, Ok(Some(Ok(_))))
+    }
+
+    fn clipboard() -> Data {
+        let mut msg = Message::new();
+        msg.set_clipboard(Clipboard {
+            content: b"copied while this login was pending".to_vec().into(),
+            ..Default::default()
+        });
+        Data::Message(msg)
+    }
+
+    fn auth_2fa() -> Data {
+        let mut msg = Message::new();
+        msg.set_auth_2fa(Auth2FA {
+            code: "123456".to_owned(),
+            ..Default::default()
+        });
+        Data::Message(msg)
+    }
+
+    // A clipboard queued before this round's login stays here; what the login itself sends
+    // through the same queue does not.
+    #[tokio::test]
+    async fn a_clipboard_queued_before_this_rounds_login_is_dropped() {
+        let (mut remote, mut peer, mut far) = remote_and_peer().await;
+        assert!(!remote.is_connected);
+        assert!(remote.handle_msg_from_ui(clipboard(), &mut peer).await);
+        assert!(
+            !arrives(&mut far).await,
+            "a clipboard went out before the login"
+        );
+        assert!(remote.handle_msg_from_ui(auth_2fa(), &mut peer).await);
+        assert!(arrives(&mut far).await, "the 2FA code was held back");
+
+        remote.is_connected = true;
+        assert!(remote.handle_msg_from_ui(clipboard(), &mut peer).await);
+        assert!(
+            arrives(&mut far).await,
+            "a clipboard after the login was held back"
+        );
     }
 }
