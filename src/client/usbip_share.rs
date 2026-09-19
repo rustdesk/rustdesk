@@ -23,8 +23,13 @@ const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 
-static USB_DEVICE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#").unwrap());
+// `Option`, not `Regex` directly -- see the identical comment in
+// `client/usbip_attach.rs`.
+static USB_DEVICE_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
+        .map_err(|err| log::error!("usb share: invalid USB_DEVICE_RE: {}", err))
+        .ok()
+});
 
 fn usbip_command() -> Command {
     let mut cmd = Command::new("usbip");
@@ -52,9 +57,12 @@ pub fn list_local_devices() -> Vec<UsbDevice> {
 /// Pure text parsing half of `list_local_devices`, split out for testing
 /// without a real `usbip`/sysfs on the machine running the tests.
 fn parse_local_devices(stdout: &str, shared: &std::collections::HashSet<String>) -> Vec<UsbDevice> {
+    let Some(device_re) = USB_DEVICE_RE.as_ref() else {
+        return Vec::new();
+    };
     stdout
         .lines()
-        .filter_map(|line| USB_DEVICE_RE.captures(line))
+        .filter_map(|line| device_re.captures(line))
         .map(|caps| {
             let bus_id = caps[1].to_string();
             UsbDevice {
@@ -97,7 +105,7 @@ pub fn bind_device(bus_id: &str, bind: bool) -> bool {
 pub(crate) async fn run_channel(
     id: i32,
     session: FlutterSession,
-    mut inbound: mpsc::UnboundedReceiver<Bytes>,
+    mut inbound: mpsc::Receiver<Bytes>,
 ) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,

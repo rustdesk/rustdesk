@@ -1,9 +1,14 @@
 // Controlled side of a `RemoteUsb` session: device listing/bind (via the
 // system `usbip` CLI) and the byte relay for the actual USB/IP TCP stream,
 // tunneled through `UsbChannel` frames. Mirrors the shape of
-// `port_forward_mux.rs`'s `PortForwardMux`, but without its flow-control
-// windowing -- USB/IP traffic here is bursty control + bulk transfers, not a
-// generic proxied protocol that needs backpressure tuning.
+// `port_forward_mux.rs`'s `PortForwardMux`, but without its protocol-level
+// flow-control windowing -- USB/IP traffic here is bursty control + bulk
+// transfers, not a generic proxied protocol that needs backpressure tuning.
+// The per-channel relay queue is still capacity-bounded (`RELAY_CHANNEL_CAPACITY`
+// below), so a peer that keeps sending faster than the local socket drains
+// can't grow it without bound; once full, the channel is torn down rather
+// than silently dropping frames mid-stream (which would corrupt the byte
+// stream a USB/IP connection actually is).
 use super::connection::Sender;
 use base::message_proto::*;
 use hbb_common::{
@@ -26,6 +31,9 @@ use std::{
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
+// Each queued chunk is up to 64KiB (`run_channel`'s read buffer size), so
+// this bounds one relay channel to a few MiB, not unbounded process memory.
+const RELAY_CHANNEL_CAPACITY: usize = 256;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
@@ -76,7 +84,7 @@ fn close_msg(channel_id: i32) -> Message {
 }
 
 struct Entry {
-    inbound: mpsc::UnboundedSender<Bytes>,
+    inbound: mpsc::Sender<Bytes>,
 }
 
 /// The controlled side of one `RemoteUsb` session. The connection's main loop
@@ -145,7 +153,11 @@ impl UsbipMux {
                     log::debug!("usb forward data for unknown channel {}", d.channel_id);
                     return;
                 };
-                if entry.inbound.send(d.data).is_err() {
+                if entry.inbound.try_send(d.data).is_err() {
+                    // Full (peer outrunning the local socket) or closed --
+                    // either way this channel can't keep relaying faithfully,
+                    // so drop it instead of growing the queue or silently
+                    // losing bytes out of the stream.
                     self.channels.remove(&d.channel_id);
                 }
             }
@@ -167,7 +179,7 @@ impl UsbipMux {
             log::debug!("ignoring open for live usb channel {}", id);
             return;
         }
-        let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
+        let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);
         self.channels.insert(id, Entry { inbound: inbound_tx });
         tokio::spawn(run_channel(id, inbound_rx, self.tx.clone()));
     }
@@ -188,7 +200,7 @@ fn send(tx: &Sender, msg: Message) {
 
 /// One forwarded USB/IP TCP connection: dial the local `usbipd`, relay bytes
 /// both ways until either side closes.
-async fn run_channel(id: i32, mut inbound: mpsc::UnboundedReceiver<Bytes>, tx: Sender) {
+async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
         Ok(Err(e)) => {
@@ -233,8 +245,13 @@ fn send_result(tx: &Sender, msg: Message) -> bool {
     tx.send((tokio::time::Instant::now(), Arc::new(msg))).is_ok()
 }
 
-static USB_DEVICE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#").unwrap());
+// `Option`, not `Regex` directly -- see the identical comment in
+// `client/usbip_attach.rs`.
+static USB_DEVICE_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
+        .map_err(|err| log::error!("usbip: invalid USB_DEVICE_RE: {}", err))
+        .ok()
+});
 
 /// Debian/Ubuntu install `usbip` under `/usr/sbin`, which is on root's PATH
 /// but not a regular desktop user's -- widen it so a plain `Command::new`
@@ -271,9 +288,12 @@ fn list_local_devices() -> Vec<UsbDevice> {
 /// Pure text parsing half of `list_local_devices`, split out for testing
 /// without a real `usbip`/sysfs on the machine running the tests.
 fn parse_local_devices(stdout: &str, shared: &std::collections::HashSet<String>) -> Vec<UsbDevice> {
+    let Some(device_re) = USB_DEVICE_RE.as_ref() else {
+        return Vec::new();
+    };
     stdout
         .lines()
-        .filter_map(|line| USB_DEVICE_RE.captures(line))
+        .filter_map(|line| device_re.captures(line))
         .map(|caps| {
             let bus_id = caps[1].to_string();
             UsbDevice {
@@ -302,10 +322,25 @@ fn shared_bus_ids() -> std::collections::HashSet<String> {
         .collect()
 }
 
+/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
+/// here comes straight from the peer's `Bind` request and is interpolated
+/// into a root-privileged shell command below, so anything else must be
+/// rejected before it gets near the shell.
+fn is_valid_bus_id(bus_id: &str) -> bool {
+    !bus_id.is_empty()
+        && bus_id
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+}
+
 /// Blocking; call via `spawn_blocking`. Bind/unbind needs root, so it goes
 /// through the same on-demand privilege-elevation prompt the service
 /// install/uninstall path already uses.
 fn bind_device(bus_id: &str, bind: bool) -> bool {
+    if !is_valid_bus_id(bus_id) {
+        log::error!("usbip: rejected malformed bus id {:?}", bus_id);
+        return false;
+    }
     let sub_cmd = if bind { "bind" } else { "unbind" };
     crate::platform::run_cmds_privileged(&format!("usbip {} -b {}", sub_cmd, bus_id))
 }
@@ -371,5 +406,20 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
     #[test]
     fn parse_local_devices_empty_output() {
         assert!(parse_local_devices("", &HashSet::new()).is_empty());
+    }
+
+    #[test]
+    fn is_valid_bus_id_accepts_normal_bus_ids() {
+        assert!(is_valid_bus_id("18-1"));
+        assert!(is_valid_bus_id("1-2.3"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_shell_metacharacters() {
+        assert!(!is_valid_bus_id(""));
+        assert!(!is_valid_bus_id("1-1; touch /etc/x"));
+        assert!(!is_valid_bus_id("1-1 && rm -rf /"));
+        assert!(!is_valid_bus_id("$(id)"));
+        assert!(!is_valid_bus_id("../etc/passwd"));
     }
 }

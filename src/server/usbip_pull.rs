@@ -22,6 +22,11 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
+// Each queued chunk is up to 64KiB (`run_channel`'s read buffer size), so
+// this bounds one relay channel to a few MiB, not unbounded process memory --
+// see the identical comment in `server/usbip_mux.rs`.
+const RELAY_CHANNEL_CAPACITY: usize = 256;
+
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
     ch.union = Some(union);
@@ -71,7 +76,7 @@ enum Inbound {
 }
 
 struct Entry {
-    inbound: mpsc::UnboundedSender<Inbound>,
+    inbound: mpsc::Sender<Inbound>,
     /// Local vhci port, once `usbip attach` reports it -- needed to run
     /// `usbip detach -p <port>` when the controller unpushes. Set from the
     /// spawned `pull()` task, which has no `&mut self` access back here.
@@ -99,7 +104,7 @@ impl UsbPullState {
         let id = self.next_channel_id();
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
 
-        let (inbound_tx, inbound_rx) = mpsc::unbounded_channel();
+        let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);
         let attached_port = Arc::new(Mutex::new(None));
         self.channels.insert(
             id,
@@ -166,7 +171,10 @@ impl UsbPullState {
             log::debug!("usb push: frame for unknown channel {}", channel_id);
             return;
         };
-        if entry.inbound.send(msg).is_err() {
+        if entry.inbound.try_send(msg).is_err() {
+            // Full or closed -- either way this channel can't keep relaying
+            // faithfully, so drop it instead of growing the queue or
+            // silently losing bytes out of the stream.
             self.channels.remove(&channel_id);
         }
     }
@@ -187,7 +195,7 @@ async fn pull(
     id: i32,
     bus_id: String,
     tx: Sender,
-    inbound: mpsc::UnboundedReceiver<Inbound>,
+    inbound: mpsc::Receiver<Inbound>,
     attached_port: Arc<Mutex<Option<i32>>>,
 ) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
@@ -239,12 +247,43 @@ async fn pull(
     }
 }
 
-static USB_PORT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Port (\d+):").unwrap());
+// `Option`, not `Regex` directly -- see the identical comment in
+// `client/usbip_attach.rs`.
+static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"^Port (\d+):")
+        .map_err(|err| log::error!("usb push: invalid USB_PORT_RE: {}", err))
+        .ok()
+});
 // The remote bus id is the last path segment of the `usbip://host:port/busid`
 // URL, not the token before the arrow (that's some other local identifier,
 // e.g. "5-1" for a remote busid of "18-1").
-static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"->\s+usbip://[^/]+/(\S+)").unwrap());
+static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"->\s+usbip://[^/]+/(\S+)")
+        .map_err(|err| log::error!("usb push: invalid USB_PORT_BUS_ID_RE: {}", err))
+        .ok()
+});
+
+/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
+/// here comes straight from the peer's `PushRequest` and is interpolated
+/// into a root-privileged shell command below, so anything else must be
+/// rejected before it gets near the shell.
+fn is_valid_bus_id(bus_id: &str) -> bool {
+    !bus_id.is_empty()
+        && bus_id
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+}
+
+/// A per-call random value with no dependency on the `rand` crate: each
+/// `RandomState` is seeded from the OS RNG, so hashing anything through it
+/// yields an unpredictable `u64`. Used to make the temp file name in
+/// `usb_attach_privileged` unguessable.
+fn random_nonce() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish()
+}
 
 /// Blocking; call via `spawn_blocking`. Mirrors
 /// `client/usbip_attach.rs::usb_attach_privileged` -- two problems in one.
@@ -257,13 +296,21 @@ static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
 /// state can lag a moment behind `usbip attach` returning success, so the
 /// retry loop is shell-side too (same privileged session).
 fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
+    if !is_valid_bus_id(bus_id) {
+        log::error!("usb push: rejected malformed bus id {:?}", bus_id);
+        return None;
+    }
+    // Unguessable suffix plus `set -C` (noclobber) on the first write below --
+    // see the identical comment in `client/usbip_attach.rs::usb_attach_privileged`.
     let tmp_path = std::env::temp_dir().join(format!(
-        "rustdesk-usbip-port-{}-{}.txt",
+        "rustdesk-usbip-port-{}-{}-{:016x}.txt",
         std::process::id(),
-        bus_id
+        bus_id,
+        random_nonce()
     ));
     let ok = crate::platform::run_cmds_privileged(&format!(
-        "usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
+        "set -C && : > {0} && set +C && \
+         usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
          for i in 1 2 3 4 5 6 7 8 9 10; do \
            usbip port > {0} 2>&1; \
            grep -q -- '/{bus_id}$' {0} && break; \
@@ -283,13 +330,15 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
 }
 
 fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
+    let port_re = USB_PORT_RE.as_ref()?;
+    let bus_id_re = USB_PORT_BUS_ID_RE.as_ref()?;
     let mut current_port: Option<i32> = None;
     for line in output.lines() {
-        if let Some(caps) = USB_PORT_RE.captures(line) {
+        if let Some(caps) = port_re.captures(line) {
             current_port = caps[1].parse().ok();
             continue;
         }
-        if let Some(caps) = USB_PORT_BUS_ID_RE.captures(line) {
+        if let Some(caps) = bus_id_re.captures(line) {
             if &caps[1] == bus_id {
                 return current_port;
             }
@@ -303,7 +352,7 @@ async fn run_channel(
     bus_id: String,
     socket: TcpStream,
     tx: Sender,
-    mut inbound: mpsc::UnboundedReceiver<Inbound>,
+    mut inbound: mpsc::Receiver<Inbound>,
 ) {
     send(&tx, open_msg(id, bus_id));
 
@@ -392,6 +441,21 @@ Port 00: <Port in Use> at High Speed(480Mbps)
     #[test]
     fn parse_attached_port_no_match_for_unrelated_bus_id() {
         assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
+    }
+
+    #[test]
+    fn is_valid_bus_id_accepts_normal_bus_ids() {
+        assert!(is_valid_bus_id("18-1"));
+        assert!(is_valid_bus_id("1-2.3"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_shell_metacharacters() {
+        assert!(!is_valid_bus_id(""));
+        assert!(!is_valid_bus_id("1-1; touch /etc/x"));
+        assert!(!is_valid_bus_id("1-1 && rm -rf /"));
+        assert!(!is_valid_bus_id("$(id)"));
+        assert!(!is_valid_bus_id("../etc/passwd"));
     }
 
     #[test]

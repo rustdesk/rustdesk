@@ -108,12 +108,45 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
     }
 }
 
-static USB_PORT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Port (\d+):").unwrap());
+// `Option`, not `Regex` directly: these patterns are fixed string literals
+// that can never actually fail to compile, but `Regex::new(...).unwrap()`
+// would still be an unwrap on a production path -- log and fall back to "no
+// match" instead, mirroring `usb_runtime()`'s Option-returning shape above.
+static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"^Port (\d+):")
+        .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
+        .ok()
+});
 // The remote bus id is the last path segment of the `usbip://host:port/busid`
 // URL, not the token before the arrow (that's some other local identifier,
 // e.g. "5-1" for a remote busid of "18-1").
-static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"->\s+usbip://[^/]+/(\S+)").unwrap());
+static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(r"->\s+usbip://[^/]+/(\S+)")
+        .map_err(|err| log::error!("usb attach: invalid USB_PORT_BUS_ID_RE: {}", err))
+        .ok()
+});
+
+/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
+/// here comes from the peer's device list and is interpolated into a
+/// root-privileged shell command below, so anything else must be rejected
+/// before it gets near the shell.
+fn is_valid_bus_id(bus_id: &str) -> bool {
+    !bus_id.is_empty()
+        && bus_id
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+}
+
+/// A per-call random value with no dependency on the `rand` crate: each
+/// `RandomState` is seeded from the OS RNG, so hashing anything through it
+/// yields an unpredictable `u64`. Used to make the temp file name in
+/// `usb_attach_privileged` unguessable.
+fn random_nonce() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish()
+}
 
 /// Blocking; call via `spawn_blocking`. Two problems in one: `usbip attach`
 /// needs root and writes its attach record (`/var/run/vhci_hcd/...`) as
@@ -125,13 +158,26 @@ static USB_PORT_BUS_ID_RE: LazyLock<Regex> =
 /// attach` returning success, so the retry loop is shell-side too (same
 /// privileged session) rather than a second `run_cmds_privileged` call.
 fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
+    if !is_valid_bus_id(bus_id) {
+        log::error!("usb attach: rejected malformed bus id {:?}", bus_id);
+        return None;
+    }
+    // Unguessable suffix plus `set -C` (noclobber) on the first write below:
+    // a world-writable /tmp lets another local user pre-plant a symlink at a
+    // predictable path, which a root `>` redirect would otherwise follow and
+    // overwrite. Noclobber makes that first redirect fail instead of
+    // following an existing path (symlink or not); once it has created the
+    // file itself, /tmp's sticky bit stops anyone else from swapping it out
+    // from under the retry loop's later overwrites.
     let tmp_path = std::env::temp_dir().join(format!(
-        "rustdesk-usbip-port-{}-{}.txt",
+        "rustdesk-usbip-port-{}-{}-{:016x}.txt",
         std::process::id(),
-        bus_id
+        bus_id,
+        random_nonce()
     ));
     let ok = crate::platform::run_cmds_privileged(&format!(
-        "usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
+        "set -C && : > {0} && set +C && \
+         usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
          for i in 1 2 3 4 5 6 7 8 9 10; do \
            usbip port > {0} 2>&1; \
            grep -q -- '/{bus_id}$' {0} && break; \
@@ -168,13 +214,15 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
 }
 
 fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
+    let port_re = USB_PORT_RE.as_ref()?;
+    let bus_id_re = USB_PORT_BUS_ID_RE.as_ref()?;
     let mut current_port: Option<i32> = None;
     for line in output.lines() {
-        if let Some(caps) = USB_PORT_RE.captures(line) {
+        if let Some(caps) = port_re.captures(line) {
             current_port = caps[1].parse().ok();
             continue;
         }
-        if let Some(caps) = USB_PORT_BUS_ID_RE.captures(line) {
+        if let Some(caps) = bus_id_re.captures(line) {
             if &caps[1] == bus_id {
                 return current_port;
             }
@@ -196,7 +244,10 @@ pub fn detach(port: i32) {
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
     let id = FlutterHandler::next_usb_channel_id();
-    let (tx, mut rx) = mpsc::unbounded_channel::<Inbound>();
+    // Bounded so a peer that keeps sending faster than the local socket
+    // drains can't grow this without bound -- see the identical comment in
+    // `server/usbip_mux.rs`.
+    let (tx, mut rx) = mpsc::channel::<Inbound>(256);
     session.ui_handler.register_usb_forward_channel(id, tx);
     session.usb_open_forward(id, bus_id);
 
@@ -296,6 +347,21 @@ Port 01: <Port in Use> at High Speed(480Mbps)
 ";
         assert_eq!(parse_attached_port(output, "18-1"), Some(1));
         assert_eq!(parse_attached_port(output, "2-2"), Some(0));
+    }
+
+    #[test]
+    fn is_valid_bus_id_accepts_normal_bus_ids() {
+        assert!(is_valid_bus_id("18-1"));
+        assert!(is_valid_bus_id("1-2.3"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_shell_metacharacters() {
+        assert!(!is_valid_bus_id(""));
+        assert!(!is_valid_bus_id("1-1; touch /etc/x"));
+        assert!(!is_valid_bus_id("1-1 && rm -rf /"));
+        assert!(!is_valid_bus_id("$(id)"));
+        assert!(!is_valid_bus_id("../etc/passwd"));
     }
 
     #[test]
