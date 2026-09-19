@@ -1153,22 +1153,24 @@ class FfiModel with ChangeNotifier {
     }
 
     dialogManager.dismissByTag('$sessionId-$type');
-    final retrySeconds = 5.obs;
+    final retrySeconds = type == 'relay-hint' ? 5.obs : null;
     Timer? retryTimer;
     dialogManager.show(tag: '$sessionId-$type', (setState, close, context) {
-      retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (!context.mounted ||
-            parent.target?.closed != false ||
-            !dialogManager.existing('$sessionId-$type')) {
-          timer.cancel();
-          return;
-        }
-        retrySeconds.value--;
-        if (retrySeconds.value <= 0) {
-          timer.cancel();
-          reconnect(dialogManager, sessionId, false);
-        }
-      });
+      if (retrySeconds != null) {
+        retryTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!context.mounted ||
+              parent.target?.closed != false ||
+              !dialogManager.existing('$sessionId-$type')) {
+            timer.cancel();
+            return;
+          }
+          retrySeconds.value--;
+          if (retrySeconds.value <= 0) {
+            timer.cancel();
+            reconnect(dialogManager, sessionId, false);
+          }
+        });
+      }
 
       onClose() {
         retryTimer?.cancel();
@@ -1192,12 +1194,16 @@ class FfiModel with ChangeNotifier {
                 },
                 buttonStyle: style,
                 isOutline: true),
-          Obx(() => dialogButton(
-              '${translate('Retry')} (${retrySeconds.value}s)',
-              onPressed: () {
-                retryTimer?.cancel();
-                reconnect(dialogManager, sessionId, false);
-              })),
+          if (retrySeconds != null)
+            Obx(() => dialogButton(
+                '${translate('Retry')} (${retrySeconds.value}s)',
+                onPressed: () {
+                  retryTimer?.cancel();
+                  reconnect(dialogManager, sessionId, false);
+                }))
+          else
+            dialogButton('Retry',
+                onPressed: () => reconnect(dialogManager, sessionId, false)),
           if (type == 'relay-hint2')
             dialogButton('Connect via relay',
                 onPressed: () {
