@@ -112,6 +112,14 @@ impl UsbPullState {
     }
 
     pub fn handle_push_request(&mut self, bus_id: String) {
+        // A channel whose `pull()`/`run_channel` task already ended (failed
+        // listener bind, failed `usbip attach`, or a relay that hit EOF) has
+        // dropped its `inbound` receiver, but nothing else removes the entry
+        // -- without this, those stale channels would count against
+        // `MAX_PENDING_PUSHES` forever and eventually block every future
+        // push for the rest of the session. Mirrors the identical cleanup in
+        // `server/usbip_mux.rs::on_open`.
+        self.channels.retain(|_, e| !e.inbound.is_closed());
         if self.channels.len() >= MAX_PENDING_PUSHES {
             log::warn!(
                 "usb push: rejecting push of {}, {} channels already pending/live",
@@ -533,6 +541,24 @@ mod tests {
         state.close_all();
         assert!(state.channels.is_empty());
         assert!(tokens.iter().all(|t| t.is_cancelled()));
+    }
+
+    #[tokio::test]
+    async fn handle_push_request_prunes_stale_entries_before_checking_the_cap() {
+        // Fill the map with `MAX_PENDING_PUSHES` already-closed entries --
+        // `fake_entry()` drops its receiver immediately, so these look
+        // exactly like channels whose `pull()` task already ended (failed
+        // setup or a relay that hit EOF) without anything removing them.
+        let mut state = test_state();
+        for id in 0..MAX_PENDING_PUSHES as i32 {
+            let (entry, _cancel) = fake_entry();
+            state.channels.insert(id, entry);
+        }
+        assert_eq!(state.channels.len(), MAX_PENDING_PUSHES);
+        state.handle_push_request("1-1".into());
+        // The stale entries were pruned, so this push was accepted (one live
+        // entry) instead of being wrongly rejected as "too many pending".
+        assert_eq!(state.channels.len(), 1);
     }
 
     #[test]
