@@ -16,6 +16,7 @@ use hbb_common::{
         net::{TcpListener, TcpStream},
         sync::mpsc,
     },
+    tokio_util::sync::CancellationToken,
 };
 use std::{
     collections::HashMap,
@@ -81,6 +82,11 @@ struct Entry {
     /// `usbip detach -p <port>` when the controller unpushes. Set from the
     /// spawned `pull()` task, which has no `&mut self` access back here.
     attached_port: Arc<Mutex<Option<i32>>>,
+    /// Signals the spawned `pull()` task that this channel closed while it
+    /// was still attaching, so it detaches the port itself once `usbip
+    /// attach` finishes instead of leaving it owned by nothing (`handle_close`
+    /// already ran and won't run again for this id by the time that happens).
+    cancel: CancellationToken,
 }
 
 /// The controlled side of every push offered in one `RemoteUsb` session.
@@ -106,15 +112,17 @@ impl UsbPullState {
 
         let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);
         let attached_port = Arc::new(Mutex::new(None));
+        let cancel = CancellationToken::new();
         self.channels.insert(
             id,
             Entry {
                 inbound: inbound_tx,
                 attached_port: attached_port.clone(),
+                cancel: cancel.clone(),
             },
         );
 
-        tokio::spawn(pull(id, bus_id, tx, inbound_rx, attached_port));
+        tokio::spawn(pull(id, bus_id, tx, inbound_rx, attached_port, cancel));
     }
 
     /// Routes `Opened`/`Data`/`Close` frames whose `channel_id` belongs to
@@ -134,21 +142,19 @@ impl UsbPullState {
     }
 
     /// The controller unpushing: detach locally, then drop the channel so
-    /// its relay task ends.
+    /// its relay task ends. Cancels the entry regardless of whether attach
+    /// has finished yet -- if it hasn't, `pull()` notices once it does and
+    /// detaches the port itself (see `Entry::cancel`'s doc comment), since
+    /// this function only runs once per channel and can't do it later.
     pub fn handle_close(&mut self, c: UsbForwardClose) {
         let Some(entry) = self.channels.remove(&c.channel_id) else {
             return;
         };
+        entry.cancel.cancel();
         let port = *entry.attached_port.lock().unwrap();
         if let Some(port) = port {
             log::info!("usb push: peer unpushed channel {}, detaching port {}", c.channel_id, port);
-            tokio::task::spawn_blocking(move || {
-                if crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
-                    log::info!("usb push: detached port {}", port);
-                } else {
-                    log::error!("usb push: failed to detach port {}", port);
-                }
-            });
+            detach_port(port);
         } else {
             log::info!(
                 "usb push: peer unpushed channel {} before it finished attaching",
@@ -179,12 +185,32 @@ impl UsbPullState {
         }
     }
 
-    /// Drops every channel's inbound sender, ending its relay task. Doesn't
-    /// run `usbip detach` -- an abrupt connection loss shouldn't silently
-    /// rip a device out from under whatever's using it locally.
+    /// Session teardown (peer disconnected, connection lost): cancels every
+    /// channel's in-flight attach and detaches any port that had already
+    /// finished attaching, same as an explicit unpush for each. A device
+    /// left attached with no surviving session to unpush it is worse than
+    /// detaching it here -- there would be no way to reach it again except
+    /// locally on the controlled machine.
     pub fn close_all(&mut self) {
-        self.channels.clear();
+        for (_, entry) in self.channels.drain() {
+            entry.cancel.cancel();
+            if let Some(port) = *entry.attached_port.lock().unwrap() {
+                detach_port(port);
+            }
+        }
     }
+}
+
+/// Fire-and-forget (spawns its own blocking task) so callers don't need to
+/// already be inside one.
+fn detach_port(port: i32) {
+    tokio::task::spawn_blocking(move || {
+        if crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
+            log::info!("usb push: detached port {}", port);
+        } else {
+            log::error!("usb push: failed to detach port {}", port);
+        }
+    });
 }
 
 /// Mirrors `client/usbip_attach.rs::attach()`: bind a local listener to play
@@ -197,6 +223,7 @@ async fn pull(
     tx: Sender,
     inbound: mpsc::Receiver<Inbound>,
     attached_port: Arc<Mutex<Option<i32>>>,
+    cancel: CancellationToken,
 ) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
         Ok(l) => l,
@@ -217,7 +244,11 @@ async fn pull(
 
     let relay_tx = tx.clone();
     let relay_bus_id = bus_id.clone();
-    tokio::spawn(async move {
+    // Kept so a failed/cancelled attach can abort it below instead of
+    // leaving it parked on an `accept()` that the peer's real `usbip
+    // attach` process -- which only exists if our own attach succeeded --
+    // will now never make.
+    let accept_task = tokio::spawn(async move {
         match listener.accept().await {
             Ok((socket, _)) => run_channel(id, relay_bus_id, socket, relay_tx, inbound).await,
             Err(err) => log::error!("usb push: accept failed: {}", err),
@@ -230,6 +261,23 @@ async fn pull(
             .await
             .ok()
             .flatten();
+
+    if cancel.is_cancelled() {
+        // The controller already unpushed/closed while attach was still in
+        // flight, so `handle_close` already ran and won't run again for
+        // this id -- if attach succeeded anyway, detaching the port is on
+        // us now instead of leaking it.
+        accept_task.abort();
+        if let Some(local_port) = local_port {
+            log::info!(
+                "usb push: {} attached on local port {} after channel {} was closed, detaching",
+                bus_id, local_port, id
+            );
+            detach_port(local_port);
+        }
+        return;
+    }
+
     match local_port {
         Some(local_port) => {
             log::info!(
@@ -240,6 +288,7 @@ async fn pull(
             send(&tx, push_result_msg(bus_id, String::new()));
         }
         None => {
+            accept_task.abort();
             let message = format!("Failed to push {}", bus_id);
             log::error!("usb push: `usbip attach` failed: {}", message);
             send(&tx, push_result_msg(bus_id, message));
@@ -407,6 +456,58 @@ mod tests {
     fn test_state() -> UsbPullState {
         let (tx, _rx) = mpsc::unbounded_channel();
         UsbPullState::new(tx)
+    }
+
+    fn fake_entry() -> (Entry, CancellationToken) {
+        let (inbound, _rx) = mpsc::channel(1);
+        let cancel = CancellationToken::new();
+        (
+            Entry {
+                inbound,
+                attached_port: Arc::new(Mutex::new(None)),
+                cancel: cancel.clone(),
+            },
+            cancel,
+        )
+    }
+
+    #[test]
+    fn handle_close_on_unknown_channel_is_a_no_op() {
+        let mut state = test_state();
+        state.handle_close(UsbForwardClose {
+            channel_id: -1,
+            ..Default::default()
+        });
+        assert!(state.channels.is_empty());
+    }
+
+    #[test]
+    fn handle_close_cancels_and_removes_the_channel() {
+        let mut state = test_state();
+        let (entry, cancel) = fake_entry();
+        state.channels.insert(-1, entry);
+        state.handle_close(UsbForwardClose {
+            channel_id: -1,
+            ..Default::default()
+        });
+        assert!(state.channels.is_empty());
+        assert!(cancel.is_cancelled());
+    }
+
+    #[test]
+    fn close_all_cancels_every_channel_and_clears_the_map() {
+        let mut state = test_state();
+        let tokens: Vec<_> = [-1, -2, -3]
+            .into_iter()
+            .map(|id| {
+                let (entry, cancel) = fake_entry();
+                state.channels.insert(id, entry);
+                cancel
+            })
+            .collect();
+        state.close_all();
+        assert!(state.channels.is_empty());
+        assert!(tokens.iter().all(|t| t.is_cancelled()));
     }
 
     #[test]
