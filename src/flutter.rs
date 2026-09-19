@@ -248,6 +248,12 @@ pub struct FlutterHandler {
     // can't pull an arbitrary locally-shared device it was never offered.
     #[cfg(target_os = "linux")]
     usb_share_pending: Arc<RwLock<HashSet<String>>>,
+    // This session's own `io_loop` runtime, registered by
+    // `register_session_runtime` once `io_loop` starts running on it --
+    // lets `usb_attach`/`usb_push`/etc, called from Flutter's FFI thread
+    // pool, `spawn`/`spawn_blocking` onto it instead of a separate runtime.
+    #[cfg(target_os = "linux")]
+    usb_session_runtime: Arc<RwLock<Option<hbb_common::tokio::runtime::Handle>>>,
 }
 
 impl Default for FlutterHandler {
@@ -267,6 +273,8 @@ impl Default for FlutterHandler {
             usb_share_bus_ids: Default::default(),
             #[cfg(target_os = "linux")]
             usb_share_pending: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_session_runtime: Default::default(),
         }
     }
 }
@@ -370,19 +378,31 @@ impl FlutterHandler {
         let sid = self.session_handlers.read().unwrap().keys().next().copied()?;
         sessions::get_session_by_session_id(&sid)
     }
+
+    /// The runtime `register_session_runtime` recorded once `io_loop`
+    /// started running on it, for `usb_attach`/`usb_push`/etc (called from
+    /// Flutter's FFI thread pool, which has none of its own) to `spawn`/
+    /// `spawn_blocking` onto instead of creating a separate one. `None`
+    /// only if called before the session's `io_loop` has started or after
+    /// it's already torn down.
+    fn session_runtime(&self) -> Option<hbb_common::tokio::runtime::Handle> {
+        self.usb_session_runtime.read().unwrap().clone()
+    }
 }
 
 #[cfg(target_os = "linux")]
 impl Session<FlutterHandler> {
     pub fn usb_attach(&self, bus_id: String) {
         let session = self.clone();
-        if let Some(rt) = crate::client::usbip_attach::usb_runtime() {
+        if let Some(rt) = self.ui_handler.session_runtime() {
             rt.spawn(crate::client::usbip_attach::attach(session, bus_id));
         }
     }
 
     pub fn usb_detach(&self, port: i32) {
-        crate::client::usbip_attach::detach(port);
+        if let Some(rt) = self.ui_handler.session_runtime() {
+            crate::client::usbip_attach::detach(&rt, port);
+        }
     }
 
     /// Purely local (no network): what's shareable on this machine, for the
@@ -406,7 +426,7 @@ impl Session<FlutterHandler> {
     /// Also local -- `usbip bind`/`unbind` needs root, so run it off the FFI
     /// thread the same way `usb_attach` does.
     pub fn usb_local_bind(&self, bus_id: String, bind: bool) {
-        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+        let Some(rt) = self.ui_handler.session_runtime() else {
             return;
         };
         let session = self.clone();
@@ -437,7 +457,7 @@ impl Session<FlutterHandler> {
     /// track and show in the UI, and it can't drift out of sync with the
     /// button label the way share-then-separately-push could.
     pub fn usb_push(&self, bus_id: String) {
-        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+        let Some(rt) = self.ui_handler.session_runtime() else {
             return;
         };
         let session = self.clone();
@@ -492,7 +512,7 @@ impl Session<FlutterHandler> {
             );
         }
 
-        let Some(rt) = crate::client::usbip_attach::usb_runtime() else {
+        let Some(rt) = self.ui_handler.session_runtime() else {
             return;
         };
         let session = self.clone();
@@ -1485,7 +1505,7 @@ impl InvokeUiSession for FlutterHandler {
                         r.bus_id, r.error
                     );
                     self.usb_share_pending_remove(&r.bus_id);
-                    if let Some(rt) = crate::client::usbip_attach::usb_runtime() {
+                    if let Some(rt) = self.session_runtime() {
                         let bus_id = r.bus_id.clone();
                         rt.spawn_blocking(move || {
                             if crate::client::usbip_share::bind_device(&bus_id, false) {
@@ -1564,6 +1584,16 @@ impl InvokeUiSession for FlutterHandler {
             }
             _ => {}
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn register_session_runtime(&self, handle: hbb_common::tokio::runtime::Handle) {
+        *self.usb_session_runtime.write().unwrap() = Some(handle);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn unregister_session_runtime(&self) {
+        *self.usb_session_runtime.write().unwrap() = None;
     }
 }
 

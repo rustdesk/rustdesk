@@ -1839,6 +1839,14 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     /// Flutter/Linux-only, so other `InvokeUiSession` implementations (e.g.
     /// the Sciter UI) don't need to know about it.
     fn handle_usb_channel(&self, _ch: UsbChannel) {}
+    /// `usb_attach`/`usb_push`/etc. are called from Flutter's FFI worker
+    /// pool, which has no ambient Tokio runtime of its own -- these let
+    /// that path borrow this session's own `io_loop` runtime (registered
+    /// once `io_loop` starts running on it) instead of creating a separate
+    /// background one just to have somewhere to `tokio::spawn`. Default
+    /// no-op: only the Flutter/Linux implementation needs it.
+    fn register_session_runtime(&self, _handle: tokio::runtime::Handle) {}
+    fn unregister_session_runtime(&self) {}
 }
 
 impl<T: InvokeUiSession> Deref for Session<T> {
@@ -2038,6 +2046,19 @@ impl<T: InvokeUiSession> Session<T> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
+    // Registers this function's own `#[tokio::main]`-created runtime so
+    // RemoteUsb's FFI-thread entry points can borrow it instead of creating
+    // a separate background one -- see `register_session_runtime`'s doc
+    // comment. Unregistered on every exit path via the guard's `Drop`.
+    handler.register_session_runtime(tokio::runtime::Handle::current());
+    struct RuntimeUnregisterGuard<T: InvokeUiSession>(Session<T>);
+    impl<T: InvokeUiSession> Drop for RuntimeUnregisterGuard<T> {
+        fn drop(&mut self) {
+            self.0.unregister_session_runtime();
+        }
+    }
+    let _runtime_guard = RuntimeUnregisterGuard(handler.clone());
+
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

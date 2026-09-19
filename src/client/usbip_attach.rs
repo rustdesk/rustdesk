@@ -11,32 +11,12 @@ use hbb_common::{
         self,
         io::{AsyncReadExt, AsyncWriteExt},
         net::{TcpListener, TcpStream},
-        runtime::Runtime,
+        runtime::Handle,
         sync::mpsc,
     },
 };
 use serde_json::json;
-use std::sync::{LazyLock, OnceLock};
-
-/// `usb_attach`/`usb_detach` are called directly from Flutter's FFI worker
-/// pool, which has no ambient Tokio runtime -- `tokio::spawn` there panics
-/// with "there is no reactor running". Keep one background runtime alive for
-/// the process so those entry points (and the long-lived relay task `attach`
-/// spawns) have somewhere to run.
-static USB_RUNTIME: OnceLock<Option<Runtime>> = OnceLock::new();
-
-pub(crate) fn usb_runtime() -> Option<&'static Runtime> {
-    USB_RUNTIME
-        .get_or_init(|| {
-            tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(1)
-                .enable_all()
-                .build()
-                .map_err(|err| log::error!("usb: failed to create background runtime: {}", err))
-                .ok()
-        })
-        .as_ref()
-}
+use std::sync::LazyLock;
 
 pub enum Inbound {
     Opened { success: bool, message: String },
@@ -111,7 +91,7 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
 // `Option`, not `Regex` directly: these patterns are fixed string literals
 // that can never actually fail to compile, but `Regex::new(...).unwrap()`
 // would still be an unwrap on a production path -- log and fall back to "no
-// match" instead, mirroring `usb_runtime()`'s Option-returning shape above.
+// match" instead.
 static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(r"^Port (\d+):")
         .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
@@ -231,10 +211,7 @@ fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
     None
 }
 
-pub fn detach(port: i32) {
-    let Some(rt) = usb_runtime() else {
-        return;
-    };
+pub fn detach(rt: &Handle, port: i32) {
     rt.spawn_blocking(move || {
         if !crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
             log::error!("usb detach: failed to detach port {}", port);
