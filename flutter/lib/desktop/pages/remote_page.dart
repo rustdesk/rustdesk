@@ -1204,12 +1204,15 @@ class _ImagePaintState extends State<ImagePaint> {
       return isWindows ? dpr : 1.0;
     }
     if (peer.isPeerLinux && peer.pi.currentDisplay == kAllDisplayValue) {
+      final displayScale = peer.pi.displays.length == 1
+          ? peer.pi.displays.first.scale
+          : _cursorDisplayScale.value;
       if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
         // Remove the host output's density without applying canvas zoom.
-        final scale = 1.0 / _cursorDisplayScale.value;
+        final scale = 1.0 / displayScale;
         return isWindows ? scale : scale / dpr;
       }
-      final scale = c.scale / _cursorDisplayScale.value;
+      final scale = c.scale / displayScale;
       return isWindows ? scale * dpr : scale;
     }
     if (!zoomCursor.value || c.viewStyle.style == kRemoteViewStyleOriginal) {
