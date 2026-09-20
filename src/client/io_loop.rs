@@ -85,6 +85,10 @@ pub struct Remote<T: InvokeUiSession> {
     timer: crate::RustDeskInterval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     is_connected: bool,
+    // Whether the scheduled initial snapshot may still be sent.
+    // The connection loop clears this when handling its result or a live clipboard update.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    initial_clipboard_pending: bool,
     first_frame: bool,
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
@@ -132,6 +136,8 @@ impl<T: InvokeUiSession> Remote<T> {
             timer: crate::rustdesk_interval(time::interval(SEC30)),
             last_update_jobs_status: (Instant::now(), Default::default()),
             is_connected: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            initial_clipboard_pending: false,
             first_frame: false,
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
@@ -640,8 +646,23 @@ impl<T: InvokeUiSession> Remote<T> {
             Data::ToggleClipboardFile => {
                 self.check_clipboard_file_context();
             }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            Data::InitialClipboard(msg) => {
+                // A live update supersedes any initial snapshot still being prepared.
+                if !self.initial_clipboard_pending {
+                    return true;
+                }
+                self.initial_clipboard_pending = false;
+                if self.handler.is_text_clipboard_required() {
+                    allow_err!(peer.send(&msg).await);
+                }
+            }
             Data::Message(msg) => {
                 match &msg.union {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_)) => {
+                        self.initial_clipboard_pending = false;
+                    }
                     Some(message::Union::Misc(misc)) => match misc.union {
                         Some(misc::Union::RefreshVideo(_)) => {
                             self.video_threads.iter().for_each(|(_, v)| {
@@ -1479,6 +1500,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             if self.handler.is_text_clipboard_required()
                                 && self.handler.lc.read().unwrap().sync_init_clipboard.v
                             {
+                                self.initial_clipboard_pending = true;
                                 let sender = self.sender.clone();
                                 let permission_config = self.handler.get_permission_config();
                                 // Clipboard access and encoding must not block the connection loop.
@@ -1494,7 +1516,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                         return;
                                     };
                                     if permission_config.is_text_clipboard_required() {
-                                        if let Err(err) = sender.send(Data::Message(msg_out)) {
+                                        if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
                                             log::debug!("Failed to send initial clipboard: {}", err);
                                         }
                                     }
