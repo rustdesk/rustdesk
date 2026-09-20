@@ -1476,20 +1476,29 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
 
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if self.handler.lc.read().unwrap().sync_init_clipboard.v {
-                                if let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
-                                    &peer_version,
-                                    &peer_platform,
-                                    crate::clipboard::ClipboardSide::Client,
-                                ) {
-                                    let sender = self.sender.clone();
-                                    let permission_config = self.handler.get_permission_config();
-                                    tokio::spawn(async move {
-                                        if permission_config.is_text_clipboard_required() {
-                                            sender.send(Data::Message(msg_out)).ok();
+                            if self.handler.is_text_clipboard_required()
+                                && self.handler.lc.read().unwrap().sync_init_clipboard.v
+                            {
+                                let sender = self.sender.clone();
+                                let permission_config = self.handler.get_permission_config();
+                                // Clipboard access and encoding must not block the connection loop.
+                                tokio::task::spawn_blocking(move || {
+                                    if !permission_config.is_text_clipboard_required() {
+                                        return;
+                                    }
+                                    let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
+                                        &peer_version,
+                                        &peer_platform,
+                                        crate::clipboard::ClipboardSide::Client,
+                                    ) else {
+                                        return;
+                                    };
+                                    if permission_config.is_text_clipboard_required() {
+                                        if let Err(err) = sender.send(Data::Message(msg_out)) {
+                                            log::debug!("Failed to send initial clipboard: {}", err);
                                         }
-                                    });
-                                }
+                                    }
+                                });
                             }
                             // to-do: Android, is `sync_init_clipboard` really needed?
                             // https://github.com/rustdesk/rustdesk/discussions/9010

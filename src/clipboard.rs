@@ -34,8 +34,6 @@ const CLIPBOARD_FORMAT_EXCEL_XML_SPREADSHEET: &'static str = "XML Spreadsheet";
 #[cfg(not(target_os = "android"))]
 lazy_static::lazy_static! {
     static ref ARBOARD_MTX: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
-    // cache the clipboard msg
-    static ref LAST_MULTI_CLIPBOARDS: Arc<Mutex<MultiClipboards>> = Arc::new(Mutex::new(MultiClipboards::new()));
     // For updating in server and getting content in cm.
     // Clipboard on Linux is "server--clients" mode.
     // The clipboard content is owned by the server and passed to the clients when requested.
@@ -79,8 +77,7 @@ pub fn check_clipboard(
     side: ClipboardSide,
     force: bool,
 ) -> Option<Message> {
-    let (msg, clipboards) = read_clipboard_message(ctx, side, force)?;
-    *LAST_MULTI_CLIPBOARDS.lock().unwrap() = clipboards;
+    let (msg, _) = read_clipboard_message(ctx, side, force)?;
     Some(msg)
 }
 
@@ -564,18 +561,20 @@ pub fn get_current_clipboard_msg(
     peer_platform: &str,
     side: ClipboardSide,
 ) -> Option<Message> {
-    let mut multi_clipboards = LAST_MULTI_CLIPBOARDS.lock().unwrap();
-    if multi_clipboards.clipboards.is_empty() {
-        let mut ctx = ClipboardContext::new().ok()?;
-        *multi_clipboards = proto::create_multi_clipboards(ctx.get(side, true).ok()?);
-    }
+    // Clipboard changes can be skipped while synchronization is disabled.
+    let ctx = match ClipboardContext::new() {
+        Ok(ctx) => ctx,
+        Err(err) => {
+            log::error!("Failed to create clipboard context for initial sync: {}", err);
+            return None;
+        }
+    };
+    let (msg, multi_clipboards) = read_clipboard_message(&mut Some(ctx), side, true)?;
     if multi_clipboards.clipboards.is_empty() {
         return None;
     }
 
     if is_support_multi_clipboard(peer_version, peer_platform) {
-        let mut msg = Message::new();
-        msg.set_multi_clipboards(multi_clipboards.clone());
         Some(msg)
     } else {
         // Find the first text clipboard and send it.
