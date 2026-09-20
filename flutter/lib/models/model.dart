@@ -1685,10 +1685,7 @@ class FfiModel with ChangeNotifier {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
           if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.clearImage();
-            if (_pi.displays.isEmpty) {
-              parent.target!.imageModel.notifyListeners();
-            }
+            parent.target!.imageModel.clearImage(notify: _pi.displays.isEmpty);
           }
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
@@ -1949,7 +1946,12 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
-  clearImage() => _image = null;
+  clearImage({bool notify = false}) {
+    _image = null;
+    if (notify) {
+      notifyListeners();
+    }
+  }
 
   bool _webDecodingRgba = false;
   final List<Uint8List> _webRgbaList = List.empty(growable: true);
