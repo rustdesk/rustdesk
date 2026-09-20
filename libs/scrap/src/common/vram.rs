@@ -291,20 +291,20 @@ impl VRamEncoder {
         }
     }
 
-    pub fn encode(&mut self, texture: *mut c_void, ms: i64) -> ResultType<Vec<EncodeFrame>> {
+    pub fn encode(
+        &mut self,
+        texture: *mut c_void,
+        ms: i64,
+    ) -> ResultType<std::vec::Drain<'_, EncodeFrame>> {
         match self.encoder.encode(texture, ms) {
-            Ok(v) => {
-                let mut data = Vec::<EncodeFrame>::new();
-                data.append(v);
-                Ok(data)
-            }
-            Err(_) => Ok(Vec::<EncodeFrame>::new()),
+            Ok(frames) => Ok(frames.drain(..)),
+            Err(_) => Err(anyhow!("no valid frame")),
         }
     }
 
-    fn encode_repeat(&mut self, ms: i64) -> ResultType<Vec<EncodeFrame>> {
+    fn encode_repeat(&mut self, ms: i64) -> ResultType<std::vec::Drain<'_, EncodeFrame>> {
         match self.encoder.encode_repeat(ms) {
-            Ok(frames) => Ok(std::mem::take(frames)),
+            Ok(frames) => Ok(frames.drain(..)),
             Err(code) => Err(anyhow!("VRAM repeat encode failed: {}", code)),
         }
     }
