@@ -2058,8 +2058,8 @@ impl ClientClipboardHandler {
                 }
             }
 
-            if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
-                if self.is_text_required() {
+            if self.is_text_required() {
+                if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
                     self.send_msg(msg, false);
                 }
             }
