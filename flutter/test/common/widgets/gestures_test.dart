@@ -176,4 +176,97 @@ void main() {
     expect(oneActive, isFalse);
     expect(twoActive, isFalse);
   });
+
+  testWidgets('small pinch in and out movements start scaling', (tester) async {
+    var scaleStarts = 0;
+    final scales = <double>[];
+
+    await tester.pumpWidget(
+      RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: <Type, GestureRecognizerFactory>{
+          CustomTouchGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  CustomTouchGestureRecognizer>(
+              CustomTouchGestureRecognizer.new,
+              (recognizer) => recognizer
+                ..onTwoFingerScaleStart = (_) {
+                  scaleStarts++;
+                }
+                ..onTwoFingerScaleUpdate = (details) {
+                  scales.add(details.scale);
+                }),
+          DoubleFinerTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  DoubleFinerTapGestureRecognizer>(
+              DoubleFinerTapGestureRecognizer.new,
+              (recognizer) => recognizer.onDoubleFinerTap = (_) {}),
+        },
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    Future<void> pinch(
+      Offset firstDelta,
+      Offset secondDelta,
+      int expectedStarts,
+      bool Function(double) scaleMatches,
+    ) async {
+      final first = await tester.startGesture(const Offset(100, 100));
+      final second = await tester.startGesture(const Offset(200, 100));
+      await first.moveBy(firstDelta);
+      await second.moveBy(secondDelta);
+      await tester.pump();
+      expect(scaleStarts, expectedStarts);
+      expect(scales.where(scaleMatches), isNotEmpty);
+      await first.up();
+      await second.up();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    await pinch(
+        const Offset(-6, 0), const Offset(6, 0), 1, (scale) => scale > 1);
+    await pinch(
+        const Offset(6, 0), const Offset(-6, 0), 2, (scale) => scale < 1);
+
+    expect(scaleStarts, 2);
+  });
+
+  testWidgets('two finger tap jitter does not start scaling', (tester) async {
+    var scaleStarts = 0;
+    var twoFingerTaps = 0;
+
+    await tester.pumpWidget(
+      RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: <Type, GestureRecognizerFactory>{
+          CustomTouchGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  CustomTouchGestureRecognizer>(
+              CustomTouchGestureRecognizer.new,
+              (recognizer) => recognizer.onTwoFingerScaleStart = (_) {
+                    scaleStarts++;
+                  }),
+          DoubleFinerTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  DoubleFinerTapGestureRecognizer>(
+              DoubleFinerTapGestureRecognizer.new,
+              (recognizer) => recognizer.onDoubleFinerTap = (_) {
+                    twoFingerTaps++;
+                  }),
+        },
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    final first = await tester.startGesture(const Offset(100, 100));
+    final second = await tester.startGesture(const Offset(200, 100));
+    await first.moveBy(const Offset(-5, 0));
+    await second.moveBy(const Offset(5, 0));
+    await tester.pump();
+    expect(scaleStarts, 0);
+
+    await first.up();
+    await second.up();
+    await tester.pump(kDoubleTapTimeout);
+
+    expect(scaleStarts, 0);
+    expect(twoFingerTaps, 1);
+  });
 }

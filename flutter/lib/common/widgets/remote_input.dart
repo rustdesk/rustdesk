@@ -51,10 +51,6 @@ class RawKeyFocusScope extends StatelessWidget {
   }
 }
 
-// For virtual mouse when using the mouse mode on mobile.
-// Special hold-drag mode: one finger holds a button (left/right button), another finger pans.
-// This flag is to override the scale gesture to a pan gesture.
-bool isSpecialHoldDragActive = false;
 // Cache the last focal point to calculate deltas in special hold-drag mode.
 Offset _lastSpecialHoldDragFocalPoint = Offset.zero;
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_hbb/common/widgets/remote_input.dart';
 
 enum GestureState {
   none,
@@ -10,7 +9,14 @@ enum GestureState {
   threeFingerVerticalDrag
 }
 
+// For virtual mouse when using the mouse mode on mobile.
+// Special hold-drag mode: one finger holds a button (left/right button), another finger pans.
+// This flag is to override the scale gesture to a pan gesture.
+bool isSpecialHoldDragActive = false;
+
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
+  static const double _pinchStartSlop = 12;
+
   CustomTouchGestureRecognizer({
     Object? debugOwner,
     Set<PointerDeviceKind>? supportedDevices,
@@ -41,6 +47,45 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   bool _ended = false;
   Timer? _debounceTimer;
   Timer? _resetTimer;
+  final Map<int, Offset> _touchLocations = {};
+  double? _initialPinchDistance;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _touchLocations[event.pointer] = event.position;
+    _resetPinchBaseline();
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      _touchLocations[event.pointer] = event.position;
+      final initialDistance = _initialPinchDistance;
+      if (event.kind == PointerDeviceKind.touch &&
+          initialDistance != null &&
+          (_pinchDistance() - initialDistance).abs() >= _pinchStartSlop) {
+        resolve(GestureDisposition.accepted);
+      }
+    } else if (event is PointerDownEvent) {
+      _touchLocations[event.pointer] = event.position;
+      _resetPinchBaseline();
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      _touchLocations.remove(event.pointer);
+      _resetPinchBaseline();
+    }
+    super.handleEvent(event);
+  }
+
+  double _pinchDistance() {
+    final locations = _touchLocations.values.take(2).toList();
+    return (locations[0] - locations[1]).distance;
+  }
+
+  void _resetPinchBaseline() {
+    _initialPinchDistance =
+        _touchLocations.length == 2 ? _pinchDistance() : null;
+  }
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
@@ -195,6 +240,8 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   @override
   void rejectGesture(int pointer) {
     super.rejectGesture(pointer);
+    _touchLocations.remove(pointer);
+    _resetPinchBaseline();
     _debounceTimer?.cancel();
     _resetTimer?.cancel();
     if (_ended) {
@@ -230,6 +277,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   void dispose() {
     _debounceTimer?.cancel();
     _resetTimer?.cancel();
+    _touchLocations.clear();
     super.dispose();
   }
 }
