@@ -298,7 +298,7 @@ impl VRamEncoder {
     ) -> ResultType<std::vec::Drain<'_, EncodeFrame>> {
         match self.encoder.encode(texture, ms) {
             Ok(frames) => Ok(frames.drain(..)),
-            Err(_) => Err(anyhow!("no valid frame")),
+            Err(code) => Err(anyhow!("VRAM encode failed: {}", code)),
         }
     }
 
