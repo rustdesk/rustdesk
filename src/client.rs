@@ -57,7 +57,7 @@ use hbb_common::{
     rand,
     rendezvous_proto::*,
     sha2::{Digest, Sha256},
-    socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6, new_direct_udp_for},
+    socket_client::{connect_tcp, connect_tcp_local, ipv4_to_ipv6, new_direct_udp_for_unverified},
     sodiumoxide::{base64, crypto::sign},
     timeout,
     tokio::{
@@ -490,7 +490,7 @@ impl Client {
         // no need to care about multiple rendezvous servers case, since it is acutally not used any more.
         // Shared state for UDP NAT test result
         if crate::get_udp_punch_enabled() && !interface.is_force_relay() {
-            if let Ok((socket, addr)) = new_direct_udp_for(&rendezvous_server).await {
+            if let Ok((socket, addr)) = new_direct_udp_for_unverified(&rendezvous_server).await {
                 let udp_port = Arc::new(Mutex::new(0));
                 let up_cloned = udp_port.clone();
                 let socket_cloned = socket.clone();
