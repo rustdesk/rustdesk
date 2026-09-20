@@ -3625,6 +3625,7 @@ impl LoginConfigHandler {
     /// * `username` - The name of the peer.
     /// * `pi` - The peer info.
     pub fn handle_peer_info(&mut self, pi: &PeerInfo) {
+        self.last_auto_fps = None;
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
@@ -4748,7 +4749,6 @@ async fn send_login(
         .read()
         .unwrap()
         .create_login_msg(os_username, os_password, password);
-    lc.write().unwrap().last_auto_fps = None;
     allow_err!(peer.send(&msg_out).await);
 }
 
@@ -4814,7 +4814,6 @@ async fn send_switch_login_request(
         ),
         ..Default::default()
     });
-    lc.write().unwrap().last_auto_fps = None;
     allow_err!(peer.send(&msg_out).await);
 }
 
