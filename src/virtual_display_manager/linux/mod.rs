@@ -2031,4 +2031,57 @@ mod tests {
         );
         assert!(all4.iter().all(|c| c.ours));
     }
+
+    /// A delay this watcher waits out is not `d`, it is the first poll at or past `d`: the tick
+    /// returns while `elapsed() < d` and the next one is a whole `POLL_INTERVAL` later. So a 5 s
+    /// stability delay on a 2 s grid is really 6 s, and a test that adds the constants raw
+    /// understates the transition by up to one poll.
+    fn polls_to_wait_out(d: Duration) -> Duration {
+        let ticks = (d.as_secs_f64() / POLL_INTERVAL.as_secs_f64()).ceil() as u32;
+        POLL_INTERVAL * ticks
+    }
+
+    /// The transition this feature makes IS an empty topology, and the capture side rides it out on
+    /// one clock: while `EMPTY_TOPOLOGY_SINCE` is inside its window the cached verdict holds and a
+    /// capture-build failure is retried instead of starting the portal. That only covers the
+    /// transition as long as the transition fits in the window, and the two numbers live in
+    /// different modules, so nothing but this says they are coupled. Raise a constant here and this
+    /// is what tells you a live session would be handed to a portal a headless box cannot answer.
+    ///
+    /// What is bounded here is the SYSFS half only: noticing the gap, waiting the delay out, and
+    /// the forced connector reporting itself. The compositor then has to commit a mode on it and
+    /// the producer only lists outputs that are CRTC-bound, and neither is a constant we own --
+    /// that is what `MODESET_ALLOWANCE` stands in for. The window has to cover both.
+    #[cfg(feature = "drm")]
+    #[test]
+    fn the_force_lands_before_the_capture_side_gives_up_on_drm() {
+        use crate::server::drm_capturer::{EMPTY_TOPOLOGY_DEMOTE_AFTER, MODESET_ALLOWANCE};
+        // The output vanishes right after a poll, so a full interval passes before the gap is even
+        // noticed; then the delay is waited out on the grid; then the forced connector takes the
+        // whole settle timeout to report itself.
+        let sysfs_half = POLL_INTERVAL + polls_to_wait_out(NO_OUTPUT_STABLE) + SETTLE_TIMEOUT;
+        assert_eq!(
+            sysfs_half,
+            Duration::from_millis(9_500),
+            "the sysfs half of the transition moved; check the window still covers it"
+        );
+        assert!(
+            sysfs_half + MODESET_ALLOWANCE <= EMPTY_TOPOLOGY_DEMOTE_AFTER,
+            "the headless transition takes {sysfs_half:?} of sysfs plus a modeset, against the \
+             {EMPTY_TOPOLOGY_DEMOTE_AFTER:?} the capture side holds DRM available: a session live \
+             across the transition would fall to PipeWire"
+        );
+    }
+
+    /// The quantization the sum above exists to capture, stated on its own so the helper cannot be
+    /// quietly turned back into an identity function.
+    #[test]
+    fn a_delay_is_waited_out_on_the_poll_grid_not_to_the_second() {
+        assert_eq!(polls_to_wait_out(NO_OUTPUT_STABLE), Duration::from_secs(6));
+        assert_eq!(polls_to_wait_out(POLL_INTERVAL), POLL_INTERVAL);
+        assert_eq!(
+            polls_to_wait_out(POLL_INTERVAL + Duration::from_millis(1)),
+            POLL_INTERVAL * 2
+        );
+    }
 }
