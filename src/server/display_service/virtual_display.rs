@@ -83,15 +83,16 @@ pub(in crate::server) async fn sync_display_modes(peer: &mut PeerInfo) {
     }
 }
 
-pub(in crate::server) async fn toggle(
-    conn_id: i32,
-    request: ToggleVirtualDisplay,
-) -> Option<Message> {
-    let result = virtual_display_manager::toggle(conn_id, request.display, request.on).await;
-    super::refresh_virtual_displays();
-    result
-        .err()
-        .map(|error| error_message("Virtual display", error))
+pub(in crate::server) fn toggle(mut connection: ConnInner, request: ToggleVirtualDisplay) {
+    // Queue before spawning so disconnect cleanup cannot overtake this request.
+    let pending = virtual_display_manager::toggle(connection.id(), request.display, request.on);
+    tokio::spawn(async move {
+        let result: ResultType<()> = async { pending?.await? }.await;
+        super::refresh_virtual_displays();
+        if let Err(error) = result {
+            connection.send(Arc::new(error_message("Virtual display", error)));
+        }
+    });
 }
 
 pub(in crate::server) fn resize(
@@ -259,16 +260,19 @@ mod tests {
 
     #[tokio::test]
     async fn closed_connections_cannot_toggle_displays() {
-        let message = toggle(
-            i32::MIN,
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        toggle(
+            ConnInner::new(i32::MIN, Some(sender), None),
             ToggleVirtualDisplay {
                 display: 1,
                 on: true,
                 ..Default::default()
             },
-        )
-        .await
-        .unwrap();
+        );
+        let (_, message) = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
         assert_error(&message, "Virtual display", "Remote connection has closed");
     }
 }

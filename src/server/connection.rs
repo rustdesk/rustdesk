@@ -3829,9 +3829,7 @@ impl Connection {
                     #[cfg(target_os = "macos")]
                     Some(misc::Union::ToggleVirtualDisplay(t)) => {
                         if !self.view_camera && self.peer_keyboard_enabled() {
-                            if let Some(message) = display_service::virtual_display::toggle(self.inner.id(), t).await {
-                                self.send(message).await;
-                            }
+                            display_service::virtual_display::toggle(self.inner.clone(), t);
                         }
                     }
                     Some(misc::Union::TogglePrivacyMode(t)) => {

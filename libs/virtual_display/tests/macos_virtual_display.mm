@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -18,6 +19,45 @@ extern "C" bool RustDeskResizeVirtualDisplay(unsigned int, unsigned int, unsigne
 
 extern "C" bool RustDeskConfigureVirtualDisplay(unsigned int, unsigned int, unsigned int, unsigned int);
 
+static IMP originalApplySettings;
+static std::atomic<unsigned int> applySettingsCalls{0};
+static std::atomic<bool> throwApplySettings{false};
+static std::atomic<bool> applySettingsFailureInjected{false};
+
+static BOOL countApplySettings(id display, SEL selector, id settings) {
+    ++applySettingsCalls;
+    bool injectFailure = throwApplySettings.exchange(false);
+    BOOL success = reinterpret_cast<BOOL (*)(id, SEL, id)>(originalApplySettings)(display, selector, settings);
+    if (injectFailure && success) {
+        applySettingsFailureInjected = true;
+        [NSException raise:@"TestApplySettingsFailure" format:@"Injected failure after apply"];
+    }
+    return success;
+}
+
+struct ApplySettingsProbe {
+    Method method = class_getInstanceMethod(NSClassFromString(@"CGVirtualDisplay"), @selector(applySettings:));
+    ApplySettingsProbe() {
+        applySettingsCalls = 0;
+        applySettingsFailureInjected = false;
+        if (method) originalApplySettings = method_setImplementation(method, reinterpret_cast<IMP>(countApplySettings));
+    }
+    ~ApplySettingsProbe() {
+        if (method) method_setImplementation(method, originalApplySettings);
+        throwApplySettings = false;
+    }
+};
+
+static bool testUnchangedMode(CGDirectDisplayID display, unsigned int width,
+    unsigned int height, unsigned int scale) {
+    ApplySettingsProbe probe;
+    if (!probe.method) return false;
+    bool success = RustDeskConfigureVirtualDisplay(display, width, height, scale) &&
+        RustDeskResizeVirtualDisplay(display, width / scale, height / scale);
+    if (applySettingsCalls) fprintf(stderr, "Unchanged mode reapplied native settings\n");
+    return success && applySettingsCalls == 0;
+}
+
 static bool testResolution(unsigned int width, unsigned int height, unsigned int scale = 1) {
     CGDirectDisplayID ids[32];
     uint32_t count = 0;
@@ -28,11 +68,6 @@ static bool testResolution(unsigned int width, unsigned int height, unsigned int
         if (RustDeskResizeVirtualDisplay(ids[i], 4097, height)) return false;
         if (!RustDeskConfigureVirtualDisplay(ids[i], width, height, scale)) {
             fprintf(stderr, "Configuration failed for %ux%u@%u\n", width, height, scale);
-            return false;
-        }
-        // Legacy clients send logical dimensions and must preserve active HiDPI.
-        if (!RustDeskResizeVirtualDisplay(ids[i], width / scale, height / scale)) {
-            fprintf(stderr, "Logical resize failed for %ux%u@%u\n", width, height, scale);
             return false;
         }
         unsigned int actualWidth = 0, actualHeight = 0, actualScale = 0;
@@ -49,7 +84,8 @@ static bool testResolution(unsigned int width, unsigned int height, unsigned int
                 CGDisplayModeGetHeight(mode) == height / scale &&
                 CGDisplayModeGetPixelWidth(mode) == width && CGDisplayModeGetPixelHeight(mode) == height;
             CGDisplayModeRelease(mode);
-            if (matches) return true;
+            // Both current and legacy clients must leave the active mode unchanged.
+            if (matches) return testUnchangedMode(ids[i], width, height, scale);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
         return false;
@@ -125,7 +161,22 @@ static bool testExternalModeChange() {
             after.origin.x, after.origin.y, after.size.width, after.size.height);
         return false;
     }
-    return RustDeskConfigureVirtualDisplay(displayID, 1920, 1080, 1);
+    {
+        ApplySettingsProbe probe;
+        if (!probe.method) return false;
+        throwApplySettings = true;
+        if (RustDeskConfigureVirtualDisplay(displayID, 1920, 1080, 1) ||
+            !applySettingsFailureInjected ||
+            !RustDeskVirtualDisplayMode(displayID, &width, &height, &scale) ||
+            width != 1280 || height != 800 || scale != 1) {
+            fprintf(stderr, "Failed configuration did not restore the external mode\n");
+            return false;
+        }
+    }
+    // The cached HiDPI settings must not hide an externally selected low-resolution mode.
+    return RustDeskConfigureVirtualDisplay(displayID, 2560, 1600, 2) &&
+        RustDeskVirtualDisplayMode(displayID, &width, &height, &scale) && width == 2560 && height == 1600 && scale == 2 &&
+        RustDeskConfigureVirtualDisplay(displayID, 1920, 1080, 1);
 }
 
 static bool testStableDisplayIdentity() {

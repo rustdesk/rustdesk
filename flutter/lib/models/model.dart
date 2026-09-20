@@ -1699,13 +1699,13 @@ class FfiModel with ChangeNotifier {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
           if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.clearImage();
+            parent.target!.imageModel.disposeImage();
           }
-          final allDisplays = List.generate(_pi.displays.length, (i) => i);
-          bind.sessionSwitchDisplay(
-              isDesktop: isDesktop,
-              sessionId: sessionId,
-              value: Int32List.fromList(allDisplays));
+          try {
+            bind.sessionRefreshDisplayCapture(sessionId: sessionId);
+          } catch (e) {
+            debugPrint('Failed to refresh display capture: $e');
+          }
         }
       } else {
         if (_pi.currentDisplay >= 0 &&

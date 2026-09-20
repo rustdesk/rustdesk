@@ -564,8 +564,21 @@ pub fn session_ctrl_alt_del(session_id: SessionID) {
     }
 }
 
-pub fn session_switch_display(is_desktop: bool, session_id: SessionID, value: Vec<i32>) {
+// Keep local selection writes ordered with automatic capture refreshes.
+pub fn session_switch_display(
+    is_desktop: bool,
+    session_id: SessionID,
+    value: Vec<i32>,
+) -> SyncReturn<()> {
     sessions::session_switch_display(is_desktop, session_id, value);
+    SyncReturn(())
+}
+
+pub fn session_refresh_display_capture(session_id: SessionID) -> SyncReturn<()> {
+    if let Some(session) = sessions::get_session_by_session_id(&session_id) {
+        flutter::display::refresh_capture(&session, &session_id);
+    }
+    SyncReturn(())
 }
 
 pub fn session_handle_flutter_key_event(
@@ -933,8 +946,15 @@ pub fn session_change_resolution(session_id: SessionID, display: i32, width: i32
     }
 }
 
-pub fn session_set_size(session_id: SessionID, display: usize, width: usize, height: usize) {
-    super::flutter::session_set_size(session_id, display, width, height)
+// A queued size write could otherwise restore a display removed by a refresh.
+pub fn session_set_size(
+    session_id: SessionID,
+    display: usize,
+    width: usize,
+    height: usize,
+) -> SyncReturn<()> {
+    super::flutter::session_set_size(session_id, display, width, height);
+    SyncReturn(())
 }
 
 pub fn session_send_selected_session_id(session_id: SessionID, sid: String) {

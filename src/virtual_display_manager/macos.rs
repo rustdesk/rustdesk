@@ -7,6 +7,7 @@ use std::{
     collections::HashSet,
     sync::{mpsc, Arc},
     thread,
+    time::Instant,
 };
 use virtual_display::macos as native;
 
@@ -91,7 +92,11 @@ fn run_worker(
                     if !connections.contains(&conn_id) {
                         bail!("Remote connection has closed");
                     }
-                    if !resize(display_id, width, height, scale) {
+                    log::info!("macOS virtual display: resize begin, connection={conn_id}, display={display_id}, size={width}x{height}, scale={scale}");
+                    let started = Instant::now();
+                    let success = resize(display_id, width, height, scale);
+                    log::info!("macOS virtual display: resize end, connection={conn_id}, display={display_id}, success={success}, elapsed={:?}", started.elapsed());
+                    if !success {
                         bail!("Failed to resize macOS virtual display: {display_id}, {width}x{height}");
                     }
                     Ok(())
@@ -104,10 +109,19 @@ fn run_worker(
             }
             Command::Connected(conn_id) => {
                 connections.insert(conn_id);
+                log::info!("macOS virtual display: connection opened, connection={conn_id}, active_connections={}", connections.len());
             }
             Command::Disconnected(conn_id) => {
-                if connections.remove(&conn_id) && connections.is_empty() && !toggle(-1, false) {
-                    log::error!("Failed to remove macOS virtual displays");
+                let removed = connections.remove(&conn_id);
+                log::info!("macOS virtual display: connection closed, connection={conn_id}, registered={removed}, active_connections={}", connections.len());
+                if removed && connections.is_empty() {
+                    log::info!("macOS virtual display: cleanup begin, connection={conn_id}, reason=last_connection");
+                    let started = Instant::now();
+                    let success = toggle(-1, false);
+                    log::info!("macOS virtual display: cleanup end, connection={conn_id}, success={success}, elapsed={:?}", started.elapsed());
+                    if !success {
+                        log::error!("Failed to remove macOS virtual displays");
+                    }
                 }
             }
             Command::Toggle {
@@ -121,7 +135,11 @@ fn run_worker(
                     if !connections.contains(&conn_id) {
                         bail!("Remote connection has closed");
                     }
-                    if !toggle(index, on) {
+                    log::info!("macOS virtual display: toggle begin, connection={conn_id}, index={index}, on={on}, reason=peer_request");
+                    let started = Instant::now();
+                    let success = toggle(index, on);
+                    log::info!("macOS virtual display: toggle end, connection={conn_id}, index={index}, on={on}, success={success}, elapsed={:?}", started.elapsed());
+                    if !success {
                         bail!("Failed to toggle macOS virtual display: {index}");
                     }
                     Ok(())
@@ -230,7 +248,7 @@ fn queue_configuration(
     Ok(result)
 }
 
-pub async fn toggle(conn_id: i32, index: i32, on: bool) -> ResultType<()> {
+pub fn toggle(conn_id: i32, index: i32, on: bool) -> ResultType<oneshot::Receiver<ResultType<()>>> {
     let (reply, result) = oneshot::channel();
     send(Command::Toggle {
         conn_id,
@@ -239,7 +257,7 @@ pub async fn toggle(conn_id: i32, index: i32, on: bool) -> ResultType<()> {
         reply,
         _permit: operation_permit(&PENDING_OPERATIONS)?,
     })?;
-    result.await?
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -29,6 +29,8 @@ use std::{
     },
 };
 
+pub(crate) mod display;
+
 /// tag "main" for [Desktop Main Page] and [Mobile (Client and Server)] (the mobile don't need multiple windows, only one global event stream is needed)
 /// tag "cm" only for [Desktop CM Page]
 pub(crate) const APP_TYPE_MAIN: &str = "main";
@@ -1723,6 +1725,9 @@ pub fn session_set_size(session_id: SessionID, display: usize, width: usize, hei
             .unwrap()
             .get_mut(&session_id)
         {
+            if display >= s.ui_handler.peer_info.read().unwrap().displays.len() {
+                return;
+            }
             // If the session is the first connection, displays is not set yet.
             // `displays`` is set while switching displays or adding a new session.
             if !h.displays.contains(&display) {
@@ -2171,6 +2176,8 @@ pub mod sessions {
             if k == session_id {
                 continue;
             }
+            // A selected display may not have a registered texture yet.
+            remains_displays.extend(h.displays.iter().copied());
             remains_displays.extend(
                 h.renderer
                     .map_display_sessions
@@ -2320,6 +2327,56 @@ pub mod sessions {
                 && s.session_handlers.read().unwrap().len() != 0
                 && s.connection_round_state.lock().unwrap().is_connected()
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn keep_selected_displays_before_texture_registration() {
+            let session = Arc::new(Session::<FlutterHandler>::default());
+            let (sender, mut receiver) = hbb_common::tokio::sync::mpsc::unbounded_channel();
+            *session.sender.write().unwrap() = Some(sender);
+            let current_id = SessionID::new_v4();
+            let handlers = HashMap::from([
+                (
+                    current_id,
+                    SessionHandler {
+                        displays: vec![2],
+                        ..Default::default()
+                    },
+                ),
+                (
+                    SessionID::new_v4(),
+                    SessionHandler {
+                        displays: vec![0, 1],
+                        ..Default::default()
+                    },
+                ),
+            ]);
+
+            for current in [Some(2), None] {
+                check_remove_unused_displays(current, &current_id, &session, &handlers);
+                let Data::Message(message) = receiver.try_recv().unwrap() else {
+                    panic!("Expected a capture subscription message");
+                };
+                let Some(message::Union::Misc(misc)) = message.union else {
+                    panic!("Expected a capture subscription message");
+                };
+                let Some(misc::Union::CaptureDisplays(mut displays)) = misc.union else {
+                    panic!("Expected a capture subscription message");
+                };
+                displays.set.sort_unstable();
+                let expected = if current.is_some() {
+                    vec![0, 1, 2]
+                } else {
+                    vec![0, 1]
+                };
+                assert_eq!(displays.set, expected);
+                assert!(receiver.try_recv().is_err());
+            }
+        }
     }
 }
 

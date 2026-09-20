@@ -417,6 +417,11 @@ class RustdeskImpl {
         ]));
   }
 
+  void sessionRefreshDisplayCapture(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnsupportedError('All displays is unavailable in the web client');
+  }
+
   Future<void> sessionHandleFlutterKeyEvent(
       {required UuidValue sessionId,
       required String character,

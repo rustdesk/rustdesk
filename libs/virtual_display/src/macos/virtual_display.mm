@@ -34,26 +34,37 @@ extern "C" unsigned int RustDeskVirtualDisplayMask() {
 }
 
 extern "C" bool RustDeskToggleVirtualDisplay(int index, bool on) {
+    auto started = std::chrono::steady_clock::now();
+    NSLog(@"RustDesk virtual display toggle begin: slot=%d on=%d display_ids=%u,%u,%u,%u", index, on,
+        displayIDs[1].load(), displayIDs[2].load(), displayIDs[3].load(), displayIDs[4].load());
     std::lock_guard<std::mutex> lock(displayMutex);
     @autoreleasepool {
+        const char *result = "failed";
         @try {
             if (!on && index == -1) {
+                bool hadDisplays = displayMask.load() != 0;
                 for (int i = 1; i <= 4; ++i) displayIDs[i].store(0);
                 [displays removeAllObjects];
                 [displaySettings removeAllObjects];
                 displayMask.store(0);
+                result = hadDisplays ? "removed all" : "unchanged";
                 return true;
             }
             if (index < 1 || index > 4) return false;
             if (!on) {
+                bool hadDisplay = displayIDs[index].load() != 0;
                 displayIDs[index].store(0);
                 [displays removeObjectForKey:@(index)];
                 [displaySettings removeObjectForKey:@(index)];
                 displayMask.fetch_and(~(1u << index));
+                result = hadDisplay ? "removed" : "unchanged";
                 return true;
             }
             if (!RustDeskVirtualDisplaySupported()) return false;
-            if (displays[@(index)]) return true;
+            if (displays[@(index)]) {
+                result = "unchanged";
+                return true;
+            }
             id descriptor = [[NSClassFromString(@"CGVirtualDisplayDescriptor") alloc] init];
             [descriptor setValue:[NSString stringWithFormat:@"RustDesk %d", index] forKey:@"name"];
             [descriptor setValue:dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0) forKey:@"queue"];
@@ -86,10 +97,15 @@ extern "C" bool RustDeskToggleVirtualDisplay(int index, bool on) {
             displaySettings[@(index)] = settings;
             displayIDs[index].store(displayID);
             displayMask.fetch_or(1u << index);
+            result = "created";
             return true;
         } @catch (NSException *exception) {
             NSLog(@"RustDesk virtual display failed: %@", exception);
             return false;
+        } @finally {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+            NSLog(@"RustDesk virtual display toggle end: slot=%d on=%d result=%s display_id=%u elapsed_ms=%lld", index, on,
+                result, index >= 1 && index <= 4 ? displayIDs[index].load() : 0, static_cast<long long>(elapsed));
         }
     }
 }
@@ -134,9 +150,14 @@ static bool selectMode(unsigned int displayID, unsigned int width, unsigned int 
                     CGDisplayModeGetHeight(mode) == height / scale &&
                     CGDisplayModeGetPixelWidth(mode) == width &&
                     CGDisplayModeGetPixelHeight(mode) == height) {
-                    bool applied = CGDisplaySetDisplayMode(displayID, mode, nullptr) == kCGErrorSuccess;
-                    CFRelease(modes);
-                    return applied;
+                    auto error = CGDisplaySetDisplayMode(displayID, mode, nullptr);
+                    if (error != kCGErrorIllegalArgument) {
+                        CFRelease(modes);
+                        return error == kCGErrorSuccess;
+                    }
+                    // applySettings can briefly leave a stale mode in the list.
+                    // Re-enumerate it without applying the settings again.
+                    break;
                 }
             }
             CFRelease(modes);
@@ -149,39 +170,68 @@ static bool selectMode(unsigned int displayID, unsigned int width, unsigned int 
 extern "C" bool RustDeskConfigureVirtualDisplay(unsigned int displayID, unsigned int width, unsigned int height, unsigned int scale) {
     if (scale != 1 && scale != 2) return false;
     if (width < 320 || height < 320 || width > 4096 || height > 4096 || width % scale || height % scale) return false;
+    auto started = std::chrono::steady_clock::now();
+    NSLog(@"RustDesk virtual display configure begin: display_id=%u size=%ux%u scale=%u", displayID, width, height, scale);
     std::lock_guard<std::mutex> lock(displayMutex);
     @autoreleasepool {
+        int index = 0;
+        const char *result = "failed";
         @try {
             for (int i = 1; i <= 4; ++i) {
                 if (!displayID || displayIDs[i].load() != displayID) continue;
+                index = i;
+                struct ModeGuard {
+                    CGDisplayModeRef value;
+                    ~ModeGuard() { if (value) CGDisplayModeRelease(value); }
+                } previousMode{CGDisplayCopyDisplayMode(displayID)};
+                // Check the live mode: System Settings can change it independently.
+                if (previousMode.value &&
+                    CGDisplayModeGetWidth(previousMode.value) == width / scale &&
+                    CGDisplayModeGetHeight(previousMode.value) == height / scale &&
+                    CGDisplayModeGetPixelWidth(previousMode.value) == width &&
+                    CGDisplayModeGetPixelHeight(previousMode.value) == height) {
+                    result = "unchanged";
+                    return true;
+                }
                 id mode = [[NSClassFromString(@"CGVirtualDisplayMode") alloc]
                     initWithWidth:width / scale height:height / scale refreshRate:60.0];
                 if (!mode) return false;
                 id settings = [[NSClassFromString(@"CGVirtualDisplaySettings") alloc] init];
                 [settings setValue:@(scale == 2) forKey:@"hiDPI"];
                 [settings setValue:@[mode] forKey:@"modes"];
-                struct ModeGuard {
-                    CGDisplayModeRef value;
-                    ~ModeGuard() { if (value) CGDisplayModeRelease(value); }
-                } previousMode{CGDisplayCopyDisplayMode(displayID)};
-                bool success = [displays[@(i)] applySettings:settings] && selectMode(displayID, width, height, scale);
-                if (success) {
-                    displaySettings[@(i)] = settings;
-                } else {
-                    if (![displays[@(i)] applySettings:displaySettings[@(i)]]) {
-                        NSLog(@"RustDesk virtual display settings rollback failed");
-                    } else if (previousMode.value) {
-                        auto oldWidth = CGDisplayModeGetWidth(previousMode.value);
-                        auto oldPixels = CGDisplayModeGetPixelWidth(previousMode.value);
-                        if (!selectMode(displayID, oldPixels, CGDisplayModeGetPixelHeight(previousMode.value), oldWidth ? oldPixels / oldWidth : 1)) {
-                            NSLog(@"RustDesk virtual display mode rollback failed");
+                bool success = false;
+                @try {
+                    if ([displays[@(i)] applySettings:settings] && selectMode(displayID, width, height, scale)) {
+                        displaySettings[@(i)] = settings;
+                        success = true;
+                    }
+                } @catch (NSException *exception) {
+                    NSLog(@"RustDesk virtual display configuration failed: display_id=%u %@", displayID, exception);
+                }
+                if (!success) {
+                    @try {
+                        if (![displays[@(i)] applySettings:displaySettings[@(i)]]) {
+                            NSLog(@"RustDesk virtual display settings rollback failed: display_id=%u", displayID);
+                        } else if (previousMode.value) {
+                            auto oldWidth = CGDisplayModeGetWidth(previousMode.value);
+                            auto oldPixels = CGDisplayModeGetPixelWidth(previousMode.value);
+                            if (!selectMode(displayID, oldPixels, CGDisplayModeGetPixelHeight(previousMode.value), oldWidth ? oldPixels / oldWidth : 1)) {
+                                NSLog(@"RustDesk virtual display mode rollback failed: display_id=%u", displayID);
+                            }
                         }
+                    } @catch (NSException *exception) {
+                        NSLog(@"RustDesk virtual display rollback failed: display_id=%u %@", displayID, exception);
                     }
                 }
+                result = success ? "configured" : "failed";
                 return success;
             }
         } @catch (NSException *exception) {
             NSLog(@"RustDesk virtual display configuration failed: %@", exception);
+        } @finally {
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+            NSLog(@"RustDesk virtual display configure end: slot=%d display_id=%u result=%s elapsed_ms=%lld",
+                index, displayID, result, static_cast<long long>(elapsed));
         }
     }
     return false;
