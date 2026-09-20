@@ -111,4 +111,69 @@ void main() {
     recognizer.rejectGesture(3);
     expect(twoEnd, 1);
   });
+
+  testWidgets('rapid pinch cycles keep callback lifecycles balanced',
+      (tester) async {
+    var oneActive = false;
+    var twoActive = false;
+
+    await tester.pumpWidget(
+      RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: <Type, GestureRecognizerFactory>{
+          CustomTouchGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  CustomTouchGestureRecognizer>(
+              CustomTouchGestureRecognizer.new,
+              (recognizer) => recognizer
+                ..onOneFingerPanStart = (_) {
+                  expect(oneActive, isFalse);
+                  oneActive = true;
+                }
+                ..onOneFingerPanUpdate = (_) {
+                  expect(oneActive, isTrue);
+                }
+                ..onOneFingerPanEnd = (_) {
+                  expect(oneActive, isTrue);
+                  oneActive = false;
+                }
+                ..onTwoFingerScaleStart = (_) {
+                  expect(twoActive, isFalse);
+                  twoActive = true;
+                }
+                ..onTwoFingerScaleUpdate = (_) {
+                  expect(twoActive, isTrue);
+                }
+                ..onTwoFingerScaleEnd = (_) {
+                  expect(twoActive, isTrue);
+                  twoActive = false;
+                }),
+        },
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    final first = await tester.startGesture(const Offset(100, 100), pointer: 1);
+    await first.moveTo(const Offset(130, 100));
+    await tester.pump();
+
+    for (var i = 0; i < 3; i++) {
+      final second = await tester.startGesture(
+        Offset(200 + i.toDouble(), 100),
+        pointer: i + 2,
+      );
+      await second.moveBy(const Offset(30, 0));
+      await first.moveBy(const Offset(-5, 0));
+      await tester.pump();
+      await second.up();
+      await tester.pump();
+      await first.moveBy(const Offset(5, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await first.up();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(oneActive, isFalse);
+    expect(twoActive, isFalse);
+  });
 }
