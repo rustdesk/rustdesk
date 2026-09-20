@@ -81,6 +81,8 @@ impl<'a> StaticRefresh<'a> {
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
             || self.repeat_failures >= 3
+            // Count attempts so network backpressure preserves the refinement budget.
+            // The 100 attempts can take longer than 10 seconds.
             || self.repeat_counter >= 100
             || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
         {

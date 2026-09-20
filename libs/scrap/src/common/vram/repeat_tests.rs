@@ -181,6 +181,9 @@ fn hardware_repeats_own_pixels_preserve_watchdog_and_reset_on_recreation() {
                             same_bad_len_counter: 0,
                         };
                         assert!(encoder.encode_to_message(EncodeInput::Repeat, 0).is_err());
+                        assert!(encoder
+                            .encode_to_message(EncodeInput::Texture((ptr::null_mut(), 0)), 0)
+                            .is_err());
                         let mut decoder = Decoder::new(DecodeContext {
                             name: if format == DataFormat::H264 {
                                 "h264"
