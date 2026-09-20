@@ -1226,8 +1226,9 @@ class _ImagePaintState extends State<ImagePaint> {
 
   double _getCursorScaleForDisplay(double scale) {
     final peer = widget.ffi.ffiModel;
-    // All Displays can mix densities; no single display scale applies.
-    if (peer.pi.currentDisplay == kAllDisplayValue) return scale;
+    // Multiple displays can mix densities; no single display scale applies.
+    if (peer.pi.currentDisplay == kAllDisplayValue &&
+        peer.pi.displays.length != 1) return scale;
     final displays = peer.pi.getCurDisplays();
     if (displays.isEmpty) return scale;
     if (peer.pi.platform == kPeerPlatformMacOS) {
