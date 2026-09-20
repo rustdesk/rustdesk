@@ -99,6 +99,16 @@
         </service>
 
         <service
+            android:name=".TunnelService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a user-initiated RustDesk TCP tunnel active while the UI is in the background" />
+        </service>
+
+        <service
             android:name=".FloatingWindowService"
             android:enabled="true" />
 

@@ -4905,6 +4905,16 @@ pub trait Interface: Send + Clone + 'static + Sized {
         self.get_lch().write().unwrap().received = received;
     }
 
+    fn update_port_forward_status(
+        &self,
+        _is_secured: bool,
+        _direct: bool,
+        _stream_type: &str,
+        _mux: bool,
+        _peer_version: &str,
+    ) {
+    }
+
     fn on_establish_connection_error(&self, err: String) {
         let title = "Connection Error";
         let text = err.to_string();

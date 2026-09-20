@@ -723,6 +723,27 @@ impl InvokeUiSession for FlutterHandler {
         );
     }
 
+    fn update_port_forward_status(
+        &self,
+        is_secured: bool,
+        direct: bool,
+        stream_type: &str,
+        mux: bool,
+        peer_version: &str,
+    ) {
+        self.push_event(
+            "port_forward_status",
+            &[
+                ("secure", &is_secured.to_string()),
+                ("direct", &direct.to_string()),
+                ("stream_type", &stream_type.to_string()),
+                ("mux", &mux.to_string()),
+                ("peer_version", &peer_version.to_string()),
+            ],
+            &[],
+        );
+    }
+
     fn set_fingerprint(&self, fingerprint: String) {
         self.push_event("fingerprint", &[("fingerprint", &fingerprint)], &[]);
     }

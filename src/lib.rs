@@ -45,7 +45,9 @@ mod clipboard;
 pub mod core_main;
 mod custom_server;
 mod lang;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+// TCP port forwarding is also used by the Android tunnel UI. iOS remains
+// excluded until its lifecycle/background behavior is implemented.
+#[cfg(not(target_os = "ios"))]
 mod port_forward;
 mod port_forward_mux;
 

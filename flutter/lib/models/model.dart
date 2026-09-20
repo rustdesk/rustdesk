@@ -118,6 +118,11 @@ class FfiModel with ChangeNotifier {
   final _permissions = <String, bool>{};
   bool? _secure;
   bool? _direct;
+  bool? _portForwardMux;
+  String _portForwardPeerVersion = '';
+  bool _portForwardAuthPending = false;
+  String _portForwardError = '';
+  bool _portForwardClosed = false;
   bool _touchMode = false;
   late VirtualMouseMode virtualMouseMode;
   Timer? _timer;
@@ -155,6 +160,16 @@ class FfiModel with ChangeNotifier {
   bool? get secure => _secure;
 
   bool? get direct => _direct;
+
+  bool? get portForwardMux => _portForwardMux;
+
+  String get portForwardPeerVersion => _portForwardPeerVersion;
+
+  bool get portForwardAuthPending => _portForwardAuthPending;
+
+  String get portForwardError => _portForwardError;
+
+  bool get portForwardClosed => _portForwardClosed;
 
   PeerInfo get pi => _pi;
 
@@ -255,6 +270,11 @@ class FfiModel with ChangeNotifier {
     _cancelPendingMonitorRestore();
     _secure = null;
     _direct = null;
+    _portForwardMux = null;
+    _portForwardPeerVersion = '';
+    _portForwardAuthPending = false;
+    _portForwardError = '';
+    _portForwardClosed = false;
     _inputBlocked = false;
     _timer?.cancel();
     _timer = null;
@@ -353,6 +373,15 @@ class FfiModel with ChangeNotifier {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
         resetRestartReconnectState();
+      } else if (name == 'port_forward_status') {
+        setConnectionType(peerId, evt['secure'] == 'true',
+            evt['direct'] == 'true', evt['stream_type'] ?? '');
+        _portForwardMux = evt['mux'] == 'true';
+        _portForwardPeerVersion = evt['peer_version'] ?? '';
+        _portForwardAuthPending = false;
+        _portForwardError = '';
+        _portForwardClosed = false;
+        notifyListeners();
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
@@ -897,6 +926,21 @@ class FfiModel with ChangeNotifier {
     final text = evt['text'];
     final link = evt['link'];
 
+    if (parent.target?.connType == ConnType.portForward) {
+      if (type == 'input-password' ||
+          type == 're-input-password' ||
+          type == 'input-2fa') {
+        _portForwardAuthPending = true;
+        _portForwardError = '';
+        _portForwardClosed = false;
+        notifyListeners();
+      } else if (title == 'Connection Error' && type == 'error') {
+        _portForwardAuthPending = false;
+        _portForwardError = text?.toString() ?? 'Connection Error';
+        notifyListeners();
+      }
+    }
+
     // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
     // it needs naming here too. By its own title, not the type: an explicitly restarted remote
     // device reaches the same type from a path this change does not touch.
@@ -977,6 +1021,15 @@ class FfiModel with ChangeNotifier {
       }
       showMsgBox(sessionId, type, title, text, link, hasRetry, dialogManager);
     }
+  }
+
+  void markPortForwardClosed() {
+    _portForwardAuthPending = false;
+    _portForwardClosed = true;
+    if (_portForwardError.isEmpty) {
+      _portForwardError = 'Connection closed';
+    }
+    notifyListeners();
   }
 
   void resetRestartReconnectState() {
@@ -3835,8 +3888,11 @@ class FFI {
   // Getter for terminal models
   Map<int, TerminalModel> get terminalModels => _terminalModels;
 
-  FFI(SessionID? sId) {
-    sessionId = sId ?? (isDesktop ? Uuid().v4obj() : _constSessionId);
+  FFI(SessionID? sId, {bool forceUniqueSession = false}) {
+    // Mobile normally reuses one session id. TCP tunnels need their own id so
+    // they can stay alive independently from the regular remote-control UI.
+    sessionId = sId ??
+        ((isDesktop || forceUniqueSession) ? Uuid().v4obj() : _constSessionId);
     imageModel = ImageModel(WeakReference(this));
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
@@ -4037,6 +4093,9 @@ class FFI {
         if (message is EventToUI_Event) {
           if (message.field0 == "close") {
             closed = true;
+            if (connType == ConnType.portForward) {
+              ffiModel.markPortForwardClosed();
+            }
             debugPrint('Exit session event loop');
             return;
           }

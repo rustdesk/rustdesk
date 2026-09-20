@@ -134,7 +134,10 @@ pub async fn listen(
                         break;
                     }
                     Err(err) => {
-                        interface.on_establish_connection_error(err.to_string());
+                        report_establish_connection_error(
+                            &interface,
+                            err.to_string(),
+                        );
                     }
                     _ => {}
                 }
@@ -156,6 +159,21 @@ pub async fn listen(
     Ok(())
 }
 
+fn report_establish_connection_error(interface: &impl Interface, err: String) {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("target device is offline or does not exist")
+        || lower.contains("id does not exist")
+    {
+        // Keep the tunnel flow consistent with the normal connection page.
+        // Passing RustDesk's existing i18n key lets Flutter render the concise
+        // localized "ID does not exist" message instead of a low-level
+        // WebRTC/fallback error chain.
+        interface.msgbox("error", "Connection Error", "ID does not exist", "");
+    } else {
+        interface.on_establish_connection_error(err);
+    }
+}
+
 async fn connect_and_login(
     id: &str,
     password: &str,
@@ -174,8 +192,9 @@ async fn connect_and_login(
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, _pk, _kcp, stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
+    let is_secured = stream.is_secured();
     interface.update_direct(Some(direct));
     if !stream.is_secured() && !crate::common::is_direct_ip_access(id) {
         if !confirm_insecure_connection(&interface, ui_receiver).await {
@@ -216,7 +235,15 @@ async fn connect_and_login(
                                 }
                             }
                             Some(login_response::Union::PeerInfo(pi)) => {
+                                let peer_version = pi.version.clone();
                                 interface.handle_peer_info(pi);
+                                interface.update_port_forward_status(
+                                    is_secured,
+                                    direct,
+                                    stream_type,
+                                    false,
+                                    &peer_version,
+                                );
                                 break;
                             }
                             _ => {}
@@ -384,7 +411,10 @@ async fn establish_tunnel(
         }
         Err(err) => {
             tunnel.set_failed();
-            interface.on_establish_connection_error(err.to_string());
+            report_establish_connection_error(
+                interface,
+                err.to_string(),
+            );
         }
         _ => tunnel.set_failed(),
     }
@@ -415,8 +445,9 @@ async fn connect_and_login_mux(
     } else {
         ConnType::PORT_FORWARD
     };
-    let ((mut stream, direct, _pk, _kcp, _stream_type), (feedback, rendezvous_server)) =
+    let ((mut stream, direct, _pk, _kcp, stream_type), (feedback, rendezvous_server)) =
         Client::start(id, key, token, conn_type, interface.clone()).await?;
+    let is_secured = stream.is_secured();
     interface.update_direct(Some(direct));
     if !stream.is_secured() && !crate::common::is_direct_ip_access(id) {
         if !confirm_insecure_connection(&interface, ui_receiver).await {
@@ -460,7 +491,15 @@ async fn connect_and_login_mux(
                             }
                             Some(login_response::Union::PeerInfo(pi)) => {
                                 mux = peer_supports_mux(&pi);
+                                let peer_version = pi.version.clone();
                                 interface.handle_peer_info(pi);
+                                interface.update_port_forward_status(
+                                    is_secured,
+                                    direct,
+                                    stream_type,
+                                    mux,
+                                    &peer_version,
+                                );
                                 break;
                             }
                             _ => {}

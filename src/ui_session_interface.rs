@@ -232,7 +232,7 @@ impl<T: InvokeUiSession> Session<T> {
         conn_type == ConnType::PORT_FORWARD || conn_type == ConnType::RDP
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "ios"))]
     pub fn is_rdp(&self) -> bool {
         self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
     }
@@ -1691,6 +1691,15 @@ pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool, stream_type: &str);
+    fn update_port_forward_status(
+        &self,
+        _is_secured: bool,
+        _direct: bool,
+        _stream_type: &str,
+        _mux: bool,
+        _peer_version: &str,
+    ) {
+    }
     fn set_fingerprint(&self, fingerprint: String);
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);
@@ -1786,6 +1795,23 @@ impl<T: InvokeUiSession> Interface for Session<T> {
 
     fn set_multiple_windows_session(&self, sessions: Vec<WindowsSession>) {
         self.ui_handler.set_multiple_windows_session(sessions);
+    }
+
+    fn update_port_forward_status(
+        &self,
+        is_secured: bool,
+        direct: bool,
+        stream_type: &str,
+        mux: bool,
+        peer_version: &str,
+    ) {
+        self.ui_handler.update_port_forward_status(
+            is_secured,
+            direct,
+            stream_type,
+            mux,
+            peer_version,
+        );
     }
 
     fn handle_peer_info(&self, mut pi: PeerInfo) {
@@ -1941,14 +1967,14 @@ impl<T: InvokeUiSession> Session<T> {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let (sender, receiver) = mpsc::unbounded_channel::<Data>();
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let token = LocalConfig::get_option("access_token");
     let key = crate::get_key(false).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    // Android uses the same RustDesk PORT_FORWARD protocol as desktop. The
+    // local listener binds to 127.0.0.1, so it is only reachable from apps on
+    // this device unless Android itself exposes it.
+    #[cfg(not(target_os = "ios"))]
     if handler.is_port_forward() {
         handler.lc.write().unwrap().port_forward_mux = crate::port_forward::mux_enabled();
         if handler.is_rdp() {
@@ -2040,7 +2066,7 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     let _ = remote.sync_jobs_status_to_local().await;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 async fn start_one_port_forward<T: InvokeUiSession>(
     handler: Session<T>,
     port: i32,
