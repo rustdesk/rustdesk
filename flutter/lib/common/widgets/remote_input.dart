@@ -13,6 +13,8 @@ import 'package:flutter_hbb/models/input_model.dart';
 
 import './gestures.dart';
 
+export './gestures.dart' show isSpecialHoldDragActive;
+
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<bool>? onFocusChange;
