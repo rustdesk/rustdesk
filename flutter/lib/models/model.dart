@@ -1686,6 +1686,9 @@ class FfiModel with ChangeNotifier {
         if (previousDisplayCount != _pi.displays.length) {
           if (!_pi.forceTextureRender) {
             parent.target!.imageModel.clearImage();
+            if (_pi.displays.isEmpty) {
+              parent.target!.imageModel.notifyListeners();
+            }
           }
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
