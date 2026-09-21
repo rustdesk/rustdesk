@@ -251,10 +251,12 @@ fn handle_batch(first: Job, rx_helper: &mpsc::Receiver<Job>) {
             Err(_) => break,
         }
     }
-    // A helper move superseded by a later move of the same connection is dropped instead
-    // of injected: this bounds how long a move flood delays everything else.
-    let keep: Vec<bool> = (0..batch.len())
-        .map(|index| !superseded(index, &batch))
+    // Absolute moves that a later move of the same connection supersedes are skipped
+    // instead of injected: this bounds how long a move flood delays everything else.
+    let entries: Vec<(i32, bool)> = batch.iter().map(job_entry).collect();
+    let keep: Vec<bool> = multi_control::superseded_moves(&entries)
+        .into_iter()
+        .map(|superseded| !superseded)
         .collect();
     for (job, keep) in batch.drain(..).zip(keep) {
         if keep {
@@ -263,23 +265,16 @@ fn handle_batch(first: Job, rx_helper: &mpsc::Receiver<Job>) {
     }
 }
 
-fn superseded(index: usize, batch: &[Job]) -> bool {
-    let Job::Mouse { conn, evt, .. } = &batch[index] else {
-        return false;
-    };
-    if evt.mask & MOUSE_TYPE_MASK != crate::input::MOUSE_TYPE_MOVE {
-        return false;
+/// The coalescing view of a job: which connection it belongs to and whether it is an
+/// absolute move, the only kind that may be merged away.
+fn job_entry(job: &Job) -> (i32, bool) {
+    match job {
+        Job::Mouse { conn, evt, .. } => (
+            *conn,
+            evt.mask & MOUSE_TYPE_MASK == crate::input::MOUSE_TYPE_MOVE,
+        ),
+        _ => (0, false),
     }
-    batch[index + 1..].iter().any(|later| match later {
-        Job::Mouse {
-            conn: later_conn,
-            evt: later_evt,
-            ..
-        } => {
-            later_conn == conn && later_evt.mask & MOUSE_TYPE_MASK == crate::input::MOUSE_TYPE_MOVE
-        }
-        _ => false,
-    })
 }
 
 fn handle(job: Job) {

@@ -555,6 +555,28 @@ pub fn primary_conn() -> i32 {
     STATE.lock().unwrap().primary.unwrap_or(0)
 }
 
+/// Marks the entries of one drained helper batch that a later absolute move of the same
+/// connection supersedes.
+///
+/// A superseded move only carries position sampling, so skipping it bounds how long a
+/// move flood delays the primary without losing an edge: the last move of every
+/// connection in the batch is kept, and anything that is not an absolute move is kept as
+/// it is, so no button, wheel step or key can be dropped here.
+pub fn superseded_moves(entries: &[(i32, bool)]) -> Vec<bool> {
+    entries
+        .iter()
+        .enumerate()
+        .map(|(index, (conn, is_move))| {
+            if !*is_move {
+                return false;
+            }
+            entries[index + 1..]
+                .iter()
+                .any(|(later_conn, later_is_move)| later_conn == conn && *later_is_move)
+        })
+        .collect()
+}
+
 /// The connections and their role as JSON, so the controlled side UI can show and change
 /// the primary controller without knowing anything about the arbitration.
 pub fn peers_status_json() -> String {
@@ -1958,6 +1980,38 @@ mod tests {
             .iter()
             .any(|cmd| matches!(cmd, Command::Mouse { conn: 2, .. })));
         assert_eq!(st.peers.get(&2).map(|peer| peer.keys.len()), Some(0));
+    }
+
+    #[test]
+    fn only_the_last_move_of_a_connection_in_a_batch_survives() {
+        // (connection, is an absolute move)
+        let move_ = true;
+        let other = false;
+        // Two moves of the same connection: only the newest one has to be injected.
+        assert_eq!(
+            superseded_moves(&[(1, move_), (1, move_)]),
+            vec![true, false]
+        );
+        assert_eq!(
+            superseded_moves(&[(1, move_), (2, move_), (1, move_)]),
+            vec![true, false, false]
+        );
+        // Moves of different connections do not supersede each other.
+        assert_eq!(
+            superseded_moves(&[(1, move_), (2, move_), (3, move_)]),
+            vec![false, false, false]
+        );
+        // Nothing that is not an absolute move may ever be dropped, and a move is only
+        // superseded by a later move of the same connection.
+        assert_eq!(
+            superseded_moves(&[(1, move_), (1, other), (2, move_), (2, move_)]),
+            vec![false, false, true, false]
+        );
+        assert_eq!(
+            superseded_moves(&[(1, other), (1, other)]),
+            vec![false, false]
+        );
+        assert!(superseded_moves(&[]).is_empty());
     }
 
     #[test]
