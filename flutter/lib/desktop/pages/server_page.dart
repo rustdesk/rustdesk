@@ -1056,15 +1056,16 @@ class _CmControlPanel extends StatelessWidget {
   }
 
   /// Lets the local user pick which incoming connection owns the real pointer. Only
-  /// shown while the controlled side runs the primary-first mode.
+  /// shown while the controlled side runs the primary-first mode. The role and the borrow
+  /// come from the server through the connection manager model, because the server runs
+  /// in its own process.
   Widget buildMultiControlPrimary(BuildContext context) {
     final enabled = bind.mainGetOptionSync(key: kOptionMultiControlMode) ==
         kMultiControlModePrimaryFirst;
     if (!enabled) return const SizedBox.shrink();
-    final isPrimary = bind.multiControlPrimaryConn() == client.id;
-    // A borrowing helper moves the visible pointer, so the local user needs to see which
-    // connection is operating right now.
-    final isOperating = bind.multiControlBorrowerConn() == client.id;
+    final serverModel = Provider.of<ServerModel>(context);
+    final isPrimary = serverModel.multiControlPrimary == client.id;
+    final isOperating = serverModel.multiControlBorrower == client.id;
     return Column(children: [
       Offstage(
         offstage: false,
@@ -1075,9 +1076,6 @@ class _CmControlPanel extends StatelessWidget {
               ? () {}
               : () {
                   bind.multiControlSetPrimary(connId: client.id);
-                  // The role lives in the Rust side, so the panel has to be rebuilt from
-                  // there instead of keeping a copy of it in the widget state.
-                  gFFI.serverModel.updateClientState();
                 },
           icon: Icon(
             isPrimary ? Icons.star_rounded : Icons.star_border_rounded,

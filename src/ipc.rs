@@ -349,6 +349,17 @@ pub enum Data {
         name: String,
         enabled: bool,
     },
+    /// The connection manager asks the server to make this connection the primary
+    /// controller of the real pointer. Sent on the target connection's own channel, so
+    /// the subject is the connection that receives it.
+    MultiControlSetPrimary,
+    /// The server tells the connection manager who currently owns the real pointer, and
+    /// which connection borrows it. The ids are global, so a single message updates every
+    /// row of the window.
+    MultiControlRole {
+        primary: i32,
+        borrower: i32,
+    },
     SystemInfo(Option<String>),
     ClickTime(i64),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

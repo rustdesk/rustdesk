@@ -703,34 +703,12 @@ pub fn multi_control_peers() -> String {
     }
 }
 
-/// Makes the given incoming connection the primary controller of the real pointer.
+/// Makes the given incoming connection the primary controller of the real pointer. The
+/// connection manager runs in its own process, so this goes through the same IPC path as
+/// a permission change instead of touching the server state directly.
 pub fn multi_control_set_primary(conn_id: i32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::server::multi_control_worker::designate_primary(conn_id);
-}
-
-/// The connection that currently owns the real pointer, 0 when there is none.
-pub fn multi_control_primary_conn() -> i32 {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::server::multi_control::primary_conn()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        0
-    }
-}
-
-/// The connection that currently borrows the real pointer, 0 when nobody does.
-pub fn multi_control_borrower_conn() -> i32 {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::server::multi_control::borrower_conn()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        0
-    }
+    crate::ui_cm_interface::set_multi_control_primary(conn_id);
 }
 
 /// This session's role and borrow state, as JSON, for the controlling side.

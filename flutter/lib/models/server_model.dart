@@ -744,6 +744,24 @@ class ServerModel with ChangeNotifier {
     }
   }
 
+  /// Who owns the real pointer and who borrows it, as reported by the server. The server
+  /// is a different process, so the connection manager cannot query this from here.
+  int _multiControlPrimary = 0;
+  int _multiControlBorrower = 0;
+
+  int get multiControlPrimary => _multiControlPrimary;
+  int get multiControlBorrower => _multiControlBorrower;
+
+  void updateMultiControlRole(Map<String, dynamic> evt) {
+    final primary = int.tryParse(evt['primary']?.toString() ?? '') ?? 0;
+    final borrower = int.tryParse(evt['borrower']?.toString() ?? '') ?? 0;
+    if (_multiControlPrimary != primary || _multiControlBorrower != borrower) {
+      _multiControlPrimary = primary;
+      _multiControlBorrower = borrower;
+      notifyListeners();
+    }
+  }
+
   void updateVoiceCallState(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));

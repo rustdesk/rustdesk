@@ -198,6 +198,11 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn update_voice_call_state(&self, client: &Client);
 
     fn file_transfer_log(&self, action: &str, log: &str);
+
+    /// The server reports who owns the real pointer and who borrows it, so the window can
+    /// show it next to every connection. The ids are global; 0 means nobody.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn update_multi_control_role(&self, primary: i32, borrower: i32);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -403,6 +408,17 @@ pub fn send_chat(id: i32, text: String) {
     }
 }
 
+/// Asks the server to make this connection the primary controller of the real pointer.
+/// Sent on that connection's own channel, so the connection that receives it is the one
+/// the user picked in the window.
+#[inline]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub fn set_multi_control_primary(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::MultiControlSetPrimary));
+    };
+}
+
 #[inline]
 #[cfg(not(any(target_os = "ios")))]
 pub fn switch_permission(id: i32, name: String, enabled: bool) {
@@ -603,6 +619,10 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                             self.cm.ui_handler.add_connection(&client);
                                         }
                                     }
+                                }
+                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                Data::MultiControlRole { primary, borrower } => {
+                                    self.cm.ui_handler.update_multi_control_role(primary, borrower);
                                 }
                                 Data::FS(mut fs) => {
                                     if let ipc::FS::WriteBlock { id, file_num, data: _, compressed } = fs {

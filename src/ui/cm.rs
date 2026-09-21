@@ -53,6 +53,12 @@ impl InvokeUiCM for SciterHandler {
         self.call("newMessage", &make_args!(id, text));
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn update_multi_control_role(&self, primary: i32, borrower: i32) {
+        // The legacy Sciter UI has no multi-controller view.
+        let _ = (primary, borrower);
+    }
+
     fn change_theme(&self, dark: String) {
         self.call("changeTheme", &make_args!(dark));
     }

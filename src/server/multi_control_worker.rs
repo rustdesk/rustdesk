@@ -77,6 +77,9 @@ enum Job {
 /// What the worker needs about a connection beyond the arbitration state.
 struct Peer {
     sender: Sender,
+    /// The connection's message channel to the connection manager, so a role or borrow
+    /// change can update the window the local user is looking at.
+    cm: Option<hbb_common::tokio::sync::mpsc::UnboundedSender<crate::ipc::Data>>,
     username: String,
     argb: u32,
     show_cursor: bool,
@@ -129,12 +132,21 @@ fn enqueue(job: Job, priority: bool) {
     }
 }
 
-/// Registers a connection and the channel that pushes state back to it.
-pub fn register(conn: i32, supported: bool, can_inject: bool, sender: Sender, username: String) {
+/// Registers a connection, the channel that pushes state back to it, and the channel that
+/// updates its row in the connection manager window.
+pub fn register(
+    conn: i32,
+    supported: bool,
+    can_inject: bool,
+    sender: Sender,
+    cm: hbb_common::tokio::sync::mpsc::UnboundedSender<crate::ipc::Data>,
+    username: String,
+) {
     PEERS.lock().unwrap().insert(
         conn,
         Peer {
             sender,
+            cm: Some(cm),
             username,
             argb: 0,
             show_cursor: false,
@@ -415,6 +427,7 @@ fn execute(commands: Vec<Command>) {
                 for conn in conns {
                     notify(conn);
                 }
+                notify_cm();
             }
         }
     }
@@ -436,6 +449,24 @@ fn peer_name(conn: i32) -> String {
         .get(&conn)
         .map(|peer| peer.username.clone())
         .unwrap_or_default()
+}
+
+/// Tells the connection manager who owns the real pointer and who borrows it. The ids are
+/// global, so one message per window is enough; a duplicate just sets the same value again.
+fn notify_cm() {
+    let primary = multi_control::primary_conn();
+    let borrower = multi_control::borrower_conn();
+    let senders: Vec<_> = PEERS
+        .lock()
+        .unwrap()
+        .values()
+        .filter_map(|peer| peer.cm.clone())
+        .collect();
+    for sender in senders {
+        sender
+            .send(crate::ipc::Data::MultiControlRole { primary, borrower })
+            .ok();
+    }
 }
 
 /// Pushes the current arbitration state to a peer, so it can show its role and why its

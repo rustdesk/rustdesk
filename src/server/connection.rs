@@ -714,6 +714,7 @@ impl Connection {
                 conn.lr.multi_control,
                 conn.keyboard && !conn.disable_keyboard,
                 tx_cloned.clone(),
+                conn.tx_to_cm.clone(),
                 conn.lr.my_name.clone(),
             );
         }
@@ -806,6 +807,14 @@ impl Connection {
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
                             conn.chat_unanswered = false;
+                        }
+                        // Only meaningful while this mode runs: with it off the message is
+                        // ignored instead of waking the arbitration worker up.
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        ipc::Data::MultiControlSetPrimary => {
+                            if multi_control_worker::enabled() {
+                                multi_control_worker::designate_primary(conn.inner.id());
+                            }
                         }
                         ipc::Data::SwitchPermission{name, enabled} => {
                             log::info!("Change permission {} -> {}", name, enabled);

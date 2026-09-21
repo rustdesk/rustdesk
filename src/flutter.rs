@@ -1522,6 +1522,17 @@ pub mod connection_manager {
             self.push_event("theme", &[("dark", &dark)]);
         }
 
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        fn update_multi_control_role(&self, primary: i32, borrower: i32) {
+            self.push_event(
+                "multi_control_role",
+                &[
+                    ("primary", &primary.to_string()),
+                    ("borrower", &borrower.to_string()),
+                ],
+            );
+        }
+
         fn change_language(&self) {
             self.push_event::<&str>("language", &[]);
         }
