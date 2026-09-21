@@ -555,6 +555,13 @@ pub fn primary_conn() -> i32 {
     STATE.lock().unwrap().primary.unwrap_or(0)
 }
 
+/// The connection that currently borrows the pointer, 0 when nobody does. The local user
+/// sees this as "this peer is operating right now", which is what the visible pointer of
+/// a borrowing helper cannot tell it.
+pub fn borrower_conn() -> i32 {
+    STATE.lock().unwrap().borrow.map_or(0, |borrow| borrow.peer)
+}
+
 /// Whether this connection may inject an unarbitrated pointer device event (touch, pen).
 ///
 /// Those events do not go through the per-event arbitration, so only the connection that

@@ -721,6 +721,18 @@ pub fn multi_control_primary_conn() -> i32 {
     }
 }
 
+/// The connection that currently borrows the real pointer, 0 when nobody does.
+pub fn multi_control_borrower_conn() -> i32 {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::server::multi_control::borrower_conn()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        0
+    }
+}
+
 /// This session's role and borrow state, as JSON, for the controlling side.
 pub fn multi_control_status() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

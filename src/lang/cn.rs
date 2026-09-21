@@ -790,5 +790,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-notice-preempted", "操作已被主控接管"),
         ("multi-control-notice-busy", "主控正在操作，本次输入未生效"),
         ("multi-control-notice-needs-target", "请先点击一次要输入的位置"),
+        ("multi-control-operating-now", "该控制端正在操作"),
     ].iter().cloned().collect();
 }

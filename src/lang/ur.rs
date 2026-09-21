@@ -790,6 +790,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-notice-preempted", ""),
         ("multi-control-notice-busy", ""),
         ("multi-control-notice-needs-target", ""),
+        ("multi-control-operating-now", ""),
     ].iter().cloned().collect();
 }
 

@@ -1062,28 +1062,44 @@ class _CmControlPanel extends StatelessWidget {
         kMultiControlModePrimaryFirst;
     if (!enabled) return const SizedBox.shrink();
     final isPrimary = bind.multiControlPrimaryConn() == client.id;
-    return Offstage(
-      offstage: false,
-      child: buildButton(
-        context,
-        color: isPrimary ? Colors.teal : MyTheme.accent,
-        onClick: isPrimary
-            ? () {}
-            : () {
-                bind.multiControlSetPrimary(connId: client.id);
-                // The role lives in the Rust side, so the panel has to be rebuilt from
-                // there instead of keeping a copy of it in the widget state.
-                gFFI.serverModel.updateClientState();
-              },
-        icon: Icon(
-          isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
-          color: Colors.white,
-          size: 14,
+    // A borrowing helper moves the visible pointer, so the local user needs to see which
+    // connection is operating right now.
+    final isOperating = bind.multiControlBorrowerConn() == client.id;
+    return Column(children: [
+      Offstage(
+        offstage: false,
+        child: buildButton(
+          context,
+          color: isPrimary ? Colors.teal : MyTheme.accent,
+          onClick: isPrimary
+              ? () {}
+              : () {
+                  bind.multiControlSetPrimary(connId: client.id);
+                  // The role lives in the Rust side, so the panel has to be rebuilt from
+                  // there instead of keeping a copy of it in the widget state.
+                  gFFI.serverModel.updateClientState();
+                },
+          icon: Icon(
+            isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
+            color: Colors.white,
+            size: 14,
+          ),
+          text: translate('multi-control-set-primary'),
+          textColor: Colors.white,
         ),
-        text: translate('multi-control-set-primary'),
-        textColor: Colors.white,
       ),
-    );
+      Offstage(
+        offstage: !isOperating,
+        child: buildButton(
+          context,
+          color: Colors.deepOrange,
+          onClick: () {},
+          icon: Icon(Icons.touch_app_rounded, color: Colors.white, size: 14),
+          text: translate('multi-control-operating-now'),
+          textColor: Colors.white,
+        ),
+      ),
+    ]);
   }
 
   buildDisconnected(BuildContext context) {
