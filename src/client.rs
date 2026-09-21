@@ -1712,7 +1712,13 @@ impl Client {
                                 }
                                 let (asymmetric_value, symmetric_value, key) =
                                     create_symmetric_key_msg(their_pk_b);
-                                let picked = hbb_common::tcp::kx_version_for(kx_version);
+                                // A WebRTC stream is encrypted by DTLS and takes no stream
+                                // key of its own, split or not, so the pick says what runs: 0.
+                                let picked = if is_webrtc {
+                                    0
+                                } else {
+                                    hbb_common::tcp::kx_version_for(kx_version)
+                                };
                                 let mut msg_out = Message::new();
                                 msg_out.set_public_key(PublicKey {
                                     asymmetric_value: asymmetric_value.clone(),
