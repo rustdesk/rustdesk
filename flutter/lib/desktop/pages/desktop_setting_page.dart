@@ -1455,8 +1455,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         await bind.mainSetOption(
             key: key, value: value ? kMultiControlModePrimaryFirst : '');
         if (value) {
-          await bind.mainSetBoolOption(
-              key: kOptionIndependentMouse, value: false);
+          await mainSetBoolOption(kOptionIndependentMouse, false);
         }
       }),
       Align(
@@ -1518,7 +1517,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           optGetter: () =>
               bind.mainGetOptionSync(key: kOptionIndependentMouse) == 'Y',
           optSetter: (key, value) async {
-        await bind.mainSetBoolOption(key: key, value: value);
+        await mainSetBoolOption(key, value);
         if (value) {
           // The two arbitrations are mutually exclusive.
           await bind.mainSetOption(key: kOptionMultiControlMode, value: '');

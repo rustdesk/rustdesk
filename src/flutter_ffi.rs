@@ -704,9 +704,9 @@ pub fn multi_control_peers() -> String {
 }
 
 /// Makes the given incoming connection the primary controller of the real pointer.
-pub fn multi_control_set_primary(conn: i32) {
+pub fn multi_control_set_primary(conn_id: i32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::server::multi_control_worker::designate_primary(conn);
+    crate::server::multi_control_worker::designate_primary(conn_id);
 }
 
 /// The connection that currently owns the real pointer, 0 when there is none.
