@@ -2528,45 +2528,42 @@ async fn stun_ipv6_test(stun_server: String) -> ResultType<(SocketAddr, String)>
     })
 }
 
+/// A global address to ask the kernel for a route to; libwebrtc's QueryDefaultLocalAddress asks
+/// for the same one. Nothing is ever sent to it.
+const IPV6_ROUTE_PROBE: std::net::Ipv6Addr =
+    std::net::Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888);
+/// The public IPv6 address the STUN servers report is looked for in the background, and for no
+/// longer than this: a probe that outlived the minute could write an earlier network's address
+/// over a later probe's.
+const STUN_IPV6_TIMEOUT_MS: u64 = 5_000;
+
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
-    use hbb_common::futures::future::FutureExt;
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
     let socket = UdpSocket::bind(local_addr).await?;
-    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so any
-    // resolvable target answers equally and the whole cost is DNS. Race the lookups rather than
-    // walk them: this is awaited inline on the connection path, not every STUN host publishes a
-    // AAAA, and one resolver that hangs must not decide whether this host has v6.
-    let lookups = hbb_common::webrtc::WebRTCStream::default_stun_servers()
-        .into_iter()
-        .map(|stun| {
-            (async move {
-                let addr = tokio::net::lookup_host(&stun)
-                    .await?
-                    .find(|x| x.is_ipv6())
-                    .ok_or_else(|| {
-                        anyhow!("Failed to resolve STUN ipv6 server address: {}", stun)
-                    })?;
-                Ok::<SocketAddr, hbb_common::anyhow::Error>(addr)
-            })
-            .boxed()
-        })
-        .collect::<Vec<_>>();
-    let (addr, _) = hbb_common::futures::future::select_ok(lookups).await?;
-    socket.connect(addr).await?;
+    // Nothing is sent - `connect` only makes the kernel pick a route and a source address - so
+    // the target can be any global address, and given as a number it is: this is awaited on the
+    // connection path, and resolving a STUN host's name first was the one thing on it that
+    // could wait on the network - for as long as the resolver takes, when there is none.
+    socket
+        .connect(SocketAddr::from((IPV6_ROUTE_PROBE, 53)))
+        .await?;
     Ok(socket.local_addr()?)
 }
 
 pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
-    if PUBLIC_IPV6_ADDR
-        .lock()
-        .unwrap()
-        .1
-        .map(|x| x.elapsed().as_secs() < 60)
-        .unwrap_or(false)
     {
-        return None;
+        // One look and one claim of the minute, under one lock: two connections arriving
+        // together would otherwise both find it over and both probe.
+        let mut cached = PUBLIC_IPV6_ADDR.lock().unwrap();
+        if cached
+            .1
+            .map(|x| x.elapsed().as_secs() < 60)
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        cached.1 = Some(Instant::now());
     }
-    PUBLIC_IPV6_ADDR.lock().unwrap().1 = Some(Instant::now());
 
     match test_bind_ipv6().await {
         Ok(mut addr) => {
@@ -2623,8 +2620,8 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
             .map(|stun| stun_ipv6_test(stun).boxed())
             .collect::<Vec<_>>();
 
-        match select_ok(tests).await {
-            Ok(res) => {
+        match hbb_common::timeout(STUN_IPV6_TIMEOUT_MS, select_ok(tests)).await {
+            Ok(Ok(res)) => {
                 let mut addr = res.0 .0;
                 addr.set_port(0); // Set port to 0 to avoid conflicts
                 PUBLIC_IPV6_ADDR.lock().unwrap().0 = Some(addr);
@@ -2634,8 +2631,11 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
                     addr
                 );
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 log::error!("Failed to get public IPv6 address: {}", e);
+            }
+            Err(_) => {
+                log::warn!("No STUN server answered for IPv6 within {STUN_IPV6_TIMEOUT_MS}ms");
             }
         };
     }))
@@ -3415,5 +3415,12 @@ mod tests {
         // `decode_id_pk` is the same blob minus the fingerprint, so the field is invisible to
         // non-WebRTC handshakes.
         assert_eq!(decode_id_pk(&signed, &pk).unwrap(), (id, their_pk));
+    }
+
+    // The route probe is awaited on the connection path, so whatever it finds - an address, or
+    // no IPv6 route on this machine - it finds without waiting on the network.
+    #[tokio::test]
+    async fn test_ipv6_route_probe_does_not_wait_on_the_network() {
+        assert!(hbb_common::timeout(1_000, test_bind_ipv6()).await.is_ok());
     }
 }

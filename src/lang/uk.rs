@@ -763,8 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Блокування полотна"),
         ("Sync clipboard between sessions", "Синхронізувати буфер обміну між сеансами"),
         ("sync-clipboard-between-sessions-tip", "Текст або зображення, скопійовані в одному віддаленому сеансі, також надсилаються до буфера обміну інших підключених сеансів."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Застосунок у терміналі хоче скопіювати текст до буфера обміну цього пристрою. Якщо надати дозвіл, він застосовуватиметься до термінальних застосунків у всіх підключеннях, доки ви не вимкнете його в налаштуваннях. Ручне копіювання та вставлення працюватимуть як і раніше."),
+        ("Allow terminal apps to copy to clipboard", "Дозволити термінальним застосункам копіювати до буфера обміну"),
         ("Enable", "Увімкнути"),
         ("Reuse one connection for port forwarding", "Використовувати одне з'єднання для перенаправлення портів"),
         ("port-forward-mux-tip", "Передавати всі з'єднання одного перенаправлення портів через одне з'єднання з віддаленим пристроєм замість повторного під'єднання та входу для кожного з них."),
@@ -780,6 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk не вдалося завантажити компонент GStreamer, потрібний для захоплення екрана ({})"),
         ("Relay fallback delay in seconds", "Затримка перед переходом на ретранслятор у секундах"),
         ("relay-fallback-delay-tip", "Скільки часу вже встановлене з'єднання через ретранслятор чекає на пряме з'єднання WebRTC, перш ніж буде використане замість нього. Збільште, щоб дати повільному прямому з'єднанню більше часу; зменште, щоб швидше переходити на ретранслятор у мережах, де пряме з'єднання неможливе. Залиште порожнім для типового значення 2.5 секунди."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "Щоб розпочати голосовий виклик, увімкніть «Захоплення аудіо» на сторінці «Демонстрація екрана»."),
     ].iter().cloned().collect();
 }

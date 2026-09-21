@@ -224,6 +224,8 @@ pub async fn create_tcp_connection(
     let Some(unauthorized) = admit_unauthorized(id, addr.ip()) else {
         bail!("too many unauthenticated connections from {}", addr.ip());
     };
+    // Before the handshake, so its read is bounded too; lifted again at authorization.
+    stream.set_max_packet_length(MAX_UNAUTHORIZED_MESSAGE);
     tokio::select! {
         handshake = identity_handshake(&mut stream, secure) => handshake?,
         _ = unauthorized.evicted() => {
