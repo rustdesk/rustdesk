@@ -709,6 +709,18 @@ pub fn multi_control_set_primary(conn: i32) {
     crate::server::multi_control_worker::designate_primary(conn);
 }
 
+/// The connection that currently owns the real pointer, 0 when there is none.
+pub fn multi_control_primary_conn() -> i32 {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::server::multi_control::primary_conn()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        0
+    }
+}
+
 /// This session's role and borrow state, as JSON, for the controlling side.
 pub fn multi_control_status() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]

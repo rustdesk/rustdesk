@@ -284,5 +284,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-mode-label", "Primary-first multi-controller"),
         ("multi-control-mode-tip", "One controller owns the real pointer. Other controllers only move their own cursor, and borrow the real pointer around their own clicks, scrolling and dragging; while the borrow lasts, the owner can hover menus and type after clicking the target once. The owner's input always takes the pointer back, which cancels a helper's drag without undoing what it already did. Needs the same option on both sides; the controlling side can set the helper operate key on the same page (for example RControl), which it holds to hover and type continuously."),
         ("multi-control-operate-key-label", "Helper operate key"),
+        ("multi-control-set-primary", "Set as primary controller"),
     ].iter().cloned().collect();
 }

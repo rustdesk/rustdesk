@@ -1016,6 +1016,7 @@ class _CmControlPanel extends StatelessWidget {
               text: "Switch Sides",
               textColor: Colors.white),
         ),
+        buildMultiControlPrimary(context),
         Offstage(
           offstage: !showElevation,
           child: buildButton(
@@ -1052,6 +1053,37 @@ class _CmControlPanel extends StatelessWidget {
         )
       ],
     ).marginOnly(bottom: buttonBottomMargin);
+  }
+
+  /// Lets the local user pick which incoming connection owns the real pointer. Only
+  /// shown while the controlled side runs the primary-first mode.
+  Widget buildMultiControlPrimary(BuildContext context) {
+    final enabled = bind.mainGetOptionSync(key: kOptionMultiControlMode) ==
+        kMultiControlModePrimaryFirst;
+    if (!enabled) return const SizedBox.shrink();
+    final isPrimary = bind.multiControlPrimaryConn() == client.id;
+    return Offstage(
+      offstage: false,
+      child: buildButton(
+        context,
+        color: isPrimary ? Colors.teal : MyTheme.accent,
+        onClick: isPrimary
+            ? () {}
+            : () {
+                bind.multiControlSetPrimary(connId: client.id);
+                // The role lives in the Rust side, so the panel has to be rebuilt from
+                // there instead of keeping a copy of it in the widget state.
+                gFFI.serverModel.updateClientState();
+              },
+        icon: Icon(
+          isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
+          color: Colors.white,
+          size: 14,
+        ),
+        text: translate('multi-control-set-primary'),
+        textColor: Colors.white,
+      ),
+    );
   }
 
   buildDisconnected(BuildContext context) {
