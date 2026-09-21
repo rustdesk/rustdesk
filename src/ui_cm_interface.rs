@@ -412,7 +412,7 @@ pub fn send_chat(id: i32, text: String) {
 /// Sent on that connection's own channel, so the connection that receives it is the one
 /// the user picked in the window.
 #[inline]
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(all(feature = "flutter", not(any(target_os = "ios", target_os = "android"))))]
 pub fn set_multi_control_primary(id: i32) {
     if let Some(client) = CLIENTS.read().unwrap().get(&id) {
         allow_err!(client.tx.send(Data::MultiControlSetPrimary));

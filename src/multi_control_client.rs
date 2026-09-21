@@ -160,7 +160,9 @@ pub fn heartbeat_epoch() -> Option<u64> {
     (active.held && active.borrowed).then_some(active.epoch)
 }
 
-/// Drops the local borrow state, e.g. when the session ends.
+/// Starts a session with no borrowed pointer and the operate key not held: a session that
+/// ended while the key was down must not swallow the next press, and must not hand back a
+/// borrow the peer no longer knows about.
 pub fn reset() {
     *ACTIVE.lock().unwrap() = Active::default();
 }
@@ -269,6 +271,35 @@ mod tests {
         assert!(!is_held());
         assert_eq!(heartbeat_epoch(), None);
         assert_eq!(epoch(), 0);
+    }
+
+    #[test]
+    fn a_new_session_does_not_inherit_a_held_operate_key() {
+        clear();
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        let mut state = MultiControlState::new();
+        state.borrowed_by_me = true;
+        state.epoch = 5;
+        on_state(&state);
+        assert_eq!(heartbeat_epoch(), Some(5));
+        // The session ends while the key is still down.
+        reset();
+        assert!(!is_held());
+        assert_eq!(heartbeat_epoch(), None);
+        assert_eq!(epoch(), 0);
+        // The next press of the new session starts its own borrow instead of being
+        // swallowed by the stale state.
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        assert_eq!(
+            on_operate_key(false),
+            Some((MultiControlBorrowKind::End, 0))
+        );
     }
 
     #[test]

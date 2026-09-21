@@ -149,6 +149,12 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     pub async fn io_loop(&mut self, key: &str, token: &str, round: u32) {
+        // A new session starts with no borrowed pointer: a previous session may have ended
+        // while the local operate key was still held.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if round == 0 {
+            crate::multi_control_client::reset();
+        }
         #[cfg(target_os = "windows")]
         let _file_clip_context_holder = {
             // `is_port_forward()` will not reach here, but we still check it for clarity.
