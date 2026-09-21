@@ -1463,7 +1463,48 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         alignment: Alignment.topLeft,
         child: Text(translate('multi-control-mode-tip')),
       ).marginOnly(left: _kCardLeftMargin),
+      multiControlOperateKey(context, enabled),
     ]);
+  }
+
+  /// The controlling side's key that keeps a borrowed pointer for as long as it is held.
+  /// Empty means no key is claimed and every key is forwarded to the peer as before.
+  Widget multiControlOperateKey(BuildContext context, bool enabled) {
+    TextEditingController controller = TextEditingController(
+        text: bind.mainGetOptionSync(key: kOptionMultiControlOperateKey));
+    RxBool applyEnabled = false.obs;
+    final isOptFixed = isOptionFixed(kOptionMultiControlOperateKey);
+    return _SubLabeledWidget(
+      context,
+      'multi-control-operate-key-label',
+      Row(children: [
+        SizedBox(
+          width: 140,
+          child: TextField(
+            controller: controller,
+            enabled: enabled && !locked && !isOptFixed,
+            onChanged: (_) => applyEnabled.value = true,
+            decoration: const InputDecoration(
+              hintText: 'RControl',
+              contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            ),
+          ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+        ),
+        Obx(() => ElevatedButton(
+              onPressed:
+                  applyEnabled.value && enabled && !locked && !isOptFixed
+                      ? () async {
+                          applyEnabled.value = false;
+                          await bind.mainSetOption(
+                              key: kOptionMultiControlOperateKey,
+                              value: controller.text.trim());
+                        }
+                      : null,
+              child: Text(translate('Apply')),
+            ))
+      ]),
+      enabled: enabled && !locked && !isOptFixed,
+    );
   }
 
   // Every connection keeps its own mouse position, the host pointer is only moved

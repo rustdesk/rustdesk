@@ -690,6 +690,37 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
     }
 }
 
+/// Role and borrow state of every incoming connection, as JSON, for the controlled side.
+/// Empty when the primary-first mode is not built for this platform.
+pub fn multi_control_peers() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::server::multi_control::peers_status_json()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        "{}".to_owned()
+    }
+}
+
+/// Makes the given incoming connection the primary controller of the real pointer.
+pub fn multi_control_set_primary(conn: i32) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::server::multi_control_worker::designate_primary(conn);
+}
+
+/// This session's role and borrow state, as JSON, for the controlling side.
+pub fn multi_control_status() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        crate::multi_control_client::status_json()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        "{}".to_owned()
+    }
+}
+
 pub fn session_input_string(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]

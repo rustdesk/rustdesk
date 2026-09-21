@@ -530,6 +530,10 @@ fn snapshot_in(st: &State, conn: i32) -> StateOut {
 /// Every registered connection, for the host UI.
 pub fn peers_status() -> Vec<PeerOut> {
     let st = STATE.lock().unwrap();
+    peers_status_in(&st)
+}
+
+fn peers_status_in(st: &State) -> Vec<PeerOut> {
     st.order
         .iter()
         .filter_map(|conn| {
@@ -544,6 +548,36 @@ pub fn peers_status() -> Vec<PeerOut> {
             })
         })
         .collect()
+}
+
+/// The connection that currently owns the real pointer, 0 when there is none.
+pub fn primary_conn() -> i32 {
+    STATE.lock().unwrap().primary.unwrap_or(0)
+}
+
+/// The connections and their role as JSON, so the controlled side UI can show and change
+/// the primary controller without knowing anything about the arbitration.
+pub fn peers_status_json() -> String {
+    let st = STATE.lock().unwrap();
+    let peers: Vec<serde_json::Value> = peers_status_in(&st)
+        .into_iter()
+        .map(|peer| {
+            serde_json::json!({
+                "conn": peer.conn,
+                "isPrimary": peer.is_primary,
+                "canInject": peer.can_inject,
+                "supported": peer.supported,
+                "hasPosition": peer.has_position,
+                "borrowed": peer.borrowed,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "enabled": enabled(),
+        "primary": st.primary.unwrap_or(0),
+        "peers": peers,
+    })
+    .to_string()
 }
 
 /// Whether the module currently holds any state, for the worker's idle path.

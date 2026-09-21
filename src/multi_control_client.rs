@@ -93,7 +93,10 @@ pub fn on_state(state: &MultiControlState) -> Status {
 
 /// The current status, for the session UI.
 pub fn status() -> Status {
-    let active = ACTIVE.lock().unwrap();
+    status_in(&ACTIVE.lock().unwrap())
+}
+
+fn status_in(active: &Active) -> Status {
     Status {
         enabled: active.enabled,
         primary: active.primary,
@@ -103,6 +106,24 @@ pub fn status() -> Status {
         epoch: active.epoch,
         notice: active.notice.clone(),
     }
+}
+
+/// The status as JSON, so the session UI can show why its input was refused without
+/// knowing anything about the borrow protocol.
+pub fn status_json() -> String {
+    let active = ACTIVE.lock().unwrap();
+    let status = status_in(&active);
+    serde_json::json!({
+        "enabled": status.enabled,
+        "primary": status.primary,
+        "borrowedByMe": status.borrowed_by_me,
+        "keyboardOk": status.keyboard_ok,
+        "epoch": status.epoch,
+        "notice": status.notice,
+        "operateKey": operate_key(),
+        "operateKeyHeld": active.held,
+    })
+    .to_string()
 }
 
 /// The epoch to use for end/heartbeat messages, 0 while the peer has not granted one.

@@ -232,6 +232,8 @@ const String kOptionIndependentMouse = "independent-mouse";
 // "primary-first" enables it, so the generic boolean reader cannot be used.
 const String kOptionMultiControlMode = "multi-control-mode";
 const String kMultiControlModePrimaryFirst = "primary-first";
+// Controlling side: the local key held to keep the pointer borrowed from the peer.
+const String kOptionMultiControlOperateKey = "multi-control-operate-key";
 
 const String kOptionShowMobileAction = "showMobileActions";
 
