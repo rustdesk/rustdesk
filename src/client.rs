@@ -4014,11 +4014,8 @@ pub fn start_video_thread<F, T>(
                         let mut keyframe = None;
                         if let MediaData::VideoFrame(vf) = data {
                             *discard_queue.write().unwrap() = false;
-                            // Keyframes bypass the queue; drop pre-keyframe
-                            // deltas so they cannot be decoded after this GOP.
-                            let q = video_queue.read().unwrap();
-                            while q.pop().is_some() {}
-                            drop(q);
+                            // Producer already drained pre-keyframe deltas
+                            // under the write lock before sending this.
                             keyframe = Some(*vf);
                         }
                         loop {

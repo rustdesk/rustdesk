@@ -1401,6 +1401,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         return true;
                     };
                     if Self::contains_key_frame(&vf) {
+                        // Drain pre-keyframe deltas under the write lock, then
+                        // send the keyframe before releasing it so a new-GOP
+                        // delta cannot be queued and later discarded.
+                        let video_queue = thread.video_queue.write().unwrap();
+                        while video_queue.pop().is_some() {}
                         thread
                             .video_sender
                             .send(MediaData::VideoFrame(Box::new(vf)))
