@@ -787,6 +787,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-mode-tip", ""),
         ("multi-control-operate-key-label", ""),
         ("multi-control-set-primary", ""),
+        ("multi-control-notice-preempted", ""),
+        ("multi-control-notice-busy", ""),
+        ("multi-control-notice-needs-target", ""),
     ].iter().cloned().collect();
 }
 

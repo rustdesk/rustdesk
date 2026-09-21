@@ -2092,6 +2092,21 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::MultiControlState(state)) => {
                         let status = crate::multi_control_client::on_state(&state);
                         log::debug!("multi-control state: {:?}", status);
+                        // The session UI shows why an input was refused, so it has to know
+                        // about a role or borrow change right away.
+                        #[cfg(feature = "flutter")]
+                        crate::flutter::push_global_event(
+                            crate::flutter::APP_TYPE_MAIN,
+                            serde_json::json!({
+                                "name": "multi_control",
+                                "notice": status.notice,
+                                "primary": status.primary,
+                                "borrowedByMe": status.borrowed_by_me,
+                                "borrowedByOther": status.borrowed_by_other,
+                                "keyboardOk": status.keyboard_ok,
+                            })
+                            .to_string(),
+                        );
                     }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);

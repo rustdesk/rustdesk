@@ -787,5 +787,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-mode-tip", "由一个控制端持有真实鼠标：其他控制端只移动自己的光标，在点击、滚动、拖拽时临时借用真实鼠标，借用期间可以悬停菜单，先点击一次目标后即可输入；主控一有输入就会夺回鼠标，这会中止协控正在进行的拖拽，但不会撤销它已经产生的效果。两端都需要开启该选项；控制端可在同一页设置“协控操作键”（例如 RControl），按住它即可连续悬停与输入。"),
         ("multi-control-operate-key-label", "协控操作键"),
         ("multi-control-set-primary", "设为主控"),
+        ("multi-control-notice-preempted", "操作已被主控接管"),
+        ("multi-control-notice-busy", "主控正在操作，本次输入未生效"),
+        ("multi-control-notice-needs-target", "请先点击一次要输入的位置"),
     ].iter().cloned().collect();
 }

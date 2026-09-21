@@ -249,6 +249,29 @@ class FfiModel with ChangeNotifier {
 
   bool get keyboard => _permissions['keyboard'] != false;
 
+  String _multiControlNotice = '';
+
+  /// Role, borrow and refusal notices of the primary-first multi-controller mode. The
+  /// controlling side has no other way to learn that its input was refused, so the
+  /// reason is shown as a short, non-blocking notice.
+  handleMultiControlStatus(Map<String, dynamic> evt) {
+    final notice = evt['notice'] as String? ?? '';
+    if (notice.isEmpty || notice == _multiControlNotice) return;
+    _multiControlNotice = notice;
+    const keys = {
+      'borrow-preempted': 'multi-control-notice-preempted',
+      'primary-busy': 'multi-control-notice-busy',
+      'other-busy': 'multi-control-notice-busy',
+      'keyboard-needs-target': 'multi-control-notice-needs-target',
+    };
+    final key = keys[notice];
+    if (key == null) {
+      debugPrint('multi_control: $notice');
+      return;
+    }
+    showToast(translate(key));
+  }
+
   clear() {
     _pi = PeerInfo();
     lastUserDisplay = null;
@@ -368,6 +391,8 @@ class FfiModel with ChangeNotifier {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         updatePermission(evt, peerId);
+      } else if (name == 'multi_control') {
+        handleMultiControlStatus(evt);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? '');
