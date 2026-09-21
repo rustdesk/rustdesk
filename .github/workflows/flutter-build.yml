@@ -2041,6 +2041,23 @@ jobs:
                 *) echo "::error::build.py returned no '$want' feature: $FEATURES"; exit 1 ;;
               esac
             done
+            # Run the drm-gated unit tests HERE, because nowhere else does. The ordinary linux CI
+            # runs the suite, but `drm` is opt-in, so every test behind that feature -- the cursor
+            # rotation and hotspot ones especially -- has no continuous coverage at all otherwise.
+            # Debug rather than --release: these are pure logic tests and the release build is
+            # already the slow part of this job.
+            # A cargo test FILTER that matches nothing exits 0, so a rename would turn this step
+            # into a green no-op. Assert it actually ran something.
+            for filter in drm_capturer_tests ipc::test; do
+              out=$(cargo test --locked --lib --features "$FEATURES" "$filter" 2>&1) || {
+                echo "$out"; echo "::error::drm tests failed for filter '$filter'"; exit 1; }
+              ran=$(echo "$out" | sed -nE 's/^running ([0-9]+) tests?$/\1/p' | paste -sd+ | bc)
+              echo "$filter ran ${ran:-0} tests"
+              if [ "${ran:-0}" -lt 1 ]; then
+                echo "::error::filter '$filter' selected no tests; it was renamed or removed"
+                exit 1
+              fi
+            done
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo

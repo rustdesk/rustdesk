@@ -6,6 +6,7 @@ use super::drmtap_dl::{
 };
 use hbb_common::log;
 use std::ffi::CString;
+use std::os::raw::c_int;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
 
@@ -48,6 +49,51 @@ pub struct CursorSnapshot {
 /// (2, 6), which is 11.2 px from the truth; the centre is 1.4 px away. Checked against all 35
 /// shapes of the installed theme at 24 px: making the test symmetric moves exactly that one shape
 /// and leaves the other 34 byte-identical, arrows included.
+/// Fold everything that makes a cursor a DIFFERENT cursor into its id.
+///
+/// The producer dedupes by comparing this against the last one it sent, so anything left out is
+/// something a change in which the consumer will never be told about. Geometry and the hotspot are
+/// the obvious ones: identical pixels at a new size or hotspot are a new shape.
+///
+/// `hot_measured` belongs here too, and that is less obvious. It is not metadata about the cursor,
+/// it selects what the consumer DOES with it: false means rotate the bitmap and re-infer a
+/// hotspot, true means map the supplied point. So a sample whose pixels and `(0, 0)` hotspot are
+/// unchanged but whose provenance flipped is a different cursor as far as the client is concerned,
+/// and without this it would be deduped away and never sent.
+fn cursor_id(hash: u64, width: u32, height: u32, hotx: i32, hoty: i32, hot_measured: bool) -> u64 {
+    let mut id = hash;
+    for v in [
+        width as u64,
+        height as u64,
+        hotx as u32 as u64,
+        hoty as u32 as u64,
+        hot_measured as u64,
+    ] {
+        id ^= v;
+        id = id.wrapping_mul(1099511628211);
+    }
+    id
+}
+
+/// Whether `hot_x`/`hot_y` are the driver's answer rather than a guess.
+///
+/// `answered` is what `drmtap_cursor_hotspot_valid` said: `Some(v)` when it answered, `None` when
+/// the symbol is absent (a library older than 0.5.6) or it reported that nothing recorded an
+/// answer for this sample.
+///
+/// When it answered, that is the answer, full stop - including `Some(true)` on a `(0, 0)` hotspot,
+/// which is the whole reason the entry point exists: a para-virtualized driver really can put the
+/// hotspot at the top-left corner, and the coordinates alone cannot tell that apart from a plane
+/// that exposes no HOTSPOT_X/Y at all. When it could not answer, fall back to the old test. That
+/// test is wrong in both directions, but it is what this code did before, and it keeps a deployed
+/// older `.so` behaving exactly as it used to instead of changing under it.
+fn hot_measured_from(answered: Option<bool>, hot_x: i32, hot_y: i32) -> bool {
+    match answered {
+        Some(measured) => measured,
+        None => hot_x != 0 || hot_y != 0,
+    }
+}
+
 pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
     let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
     for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
@@ -423,7 +469,20 @@ impl DrmReader {
                     hash ^= p as u64;
                     hash = hash.wrapping_mul(1099511628211);
                 }
-                let hot_measured = c.hot_x != 0 || c.hot_y != 0;
+                // Ask the library where the hotspot came from instead of guessing from the
+                // coordinates. `hot_x/hot_y == (0, 0)` means two opposite things - the plane
+                // exposes no HOTSPOT_X/Y (every bare-metal driver), or it exposes them and the
+                // driver's answer IS the top-left corner - and the old test below cannot separate
+                // them: it overrides a real (0, 0) measurement with a guess from the bitmap, and
+                // on a driver without the properties it would trust a hotspot nobody published.
+                // Asked BEFORE cursor_release, which is what owns this sample.
+                let answered = self.lib.cursor_hotspot_valid.and_then(|f| {
+                    let mut valid: c_int = 0;
+                    // 0 = answered; -ENOTSUP = nothing recorded an answer for this sample, which
+                    // is what a cursor read through a pre-0.5.6 privileged helper produces.
+                    (f(&c, &mut valid) == 0).then(|| valid != 0)
+                });
+                let hot_measured = hot_measured_from(answered, c.hot_x, c.hot_y);
                 let (hotx, hoty) = if hot_measured {
                     (c.hot_x, c.hot_y)
                 } else {
@@ -432,11 +491,7 @@ impl DrmReader {
                 // Fold geometry + hotspot into the id: identical pixels with a changed size or
                 // hotspot must count as a new shape, otherwise drm_capture_worker suppresses the
                 // update (it dedupes by id) and the client keeps rendering the stale cursor.
-                let mut id = hash;
-                for v in [cw as u32 as u64, ch as u32 as u64, hotx as u32 as u64, hoty as u32 as u64] {
-                    id ^= v;
-                    id = id.wrapping_mul(1099511628211);
-                }
+                let id = cursor_id(hash, cw as u32, ch as u32, hotx, hoty, hot_measured);
                 Some(CursorSnapshot {
                     id,
                     width: cw as u32,
@@ -494,5 +549,55 @@ impl Drop for DrmReader {
             unsafe { (self.lib.close)(self.ctx) };
             self.ctx = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod hotspot_provenance_tests {
+    use super::{cursor_id, hot_measured_from};
+
+    /// The dedup key has to move when the provenance does, or the consumer is never told that the
+    /// same picture now means something different. This is the transition that produces it: the
+    /// properties become readable, the driver's answer is the corner, and the bitmap is unchanged.
+    #[test]
+    fn provenance_changes_the_cursor_identity() {
+        let guessed = cursor_id(0xabc, 24, 24, 0, 0, false);
+        let measured = cursor_id(0xabc, 24, 24, 0, 0, true);
+        assert_ne!(
+            guessed, measured,
+            "same pixels, same (0, 0), different meaning: the producer must not dedupe this away"
+        );
+        // And the pre-existing parts still count, so this did not trade one blind spot for another.
+        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 32, 24, 0, 0, true));
+        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xabc, 24, 24, 1, 0, true));
+        assert_ne!(cursor_id(0xabc, 24, 24, 0, 0, true), cursor_id(0xdef, 24, 24, 0, 0, true));
+    }
+
+    /// The case the whole entry point exists for, and the one the old heuristic got backwards: a
+    /// para-virtualized driver that really publishes the hotspot at the image's top-left corner.
+    /// `(0, 0)` measured is still measured, and re-inferring one from the bitmap would move a
+    /// cursor the driver had already placed.
+    #[test]
+    fn a_measured_zero_hotspot_is_measured() {
+        assert!(hot_measured_from(Some(true), 0, 0));
+    }
+
+    /// And the mirror: when the library says it was NOT measured, that is the answer even if the
+    /// coordinates happen to be non-zero. The old test would have trusted them.
+    #[test]
+    fn the_librarys_no_beats_the_coordinates() {
+        assert!(!hot_measured_from(Some(false), 12, 11));
+        assert!(!hot_measured_from(Some(false), 0, 0));
+    }
+
+    /// No answer available: either the symbol is absent (a library older than 0.5.6) or nothing
+    /// recorded one for this sample (a cursor read through an older privileged helper). Neither
+    /// is "it was a guess", so the pre-existing behaviour is kept rather than resolved either way
+    /// -- an older deployed .so must keep behaving as it used to.
+    #[test]
+    fn without_an_answer_the_old_heuristic_stands() {
+        assert!(!hot_measured_from(None, 0, 0));
+        assert!(hot_measured_from(None, 12, 11));
+        assert!(hot_measured_from(None, 0, 5));
     }
 }

@@ -127,6 +127,12 @@ type FnGrabMapped = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info
 type FnFrameRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_frame_info);
 type FnGetCursor = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info) -> c_int;
 type FnCursorRelease = unsafe extern "C" fn(*mut drmtap_ctx, *mut drmtap_cursor_info);
+/// `drmtap_cursor_hotspot_valid`, added in libdrmtap 0.5.6. Answers, for the sample in hand,
+/// whether `hot_x`/`hot_y` were read from the driver's HOTSPOT_X/Y plane properties: 0 with
+/// `*valid` set, `-EINVAL` on a null argument, and `-ENOTSUP` when nothing recorded an answer,
+/// which is what a cursor read through an older privileged helper produces.
+type FnCursorHotspotValid =
+    unsafe extern "C" fn(*const drmtap_cursor_info, *mut c_int) -> c_int;
 // Split-capture entry points (libdrmtap >= 0.4.10), required: `grab_desc` runs on the privileged
 // export side, `open_render`/`convert_dmabuf` on the unprivileged converter side.
 type FnGrabDesc =
@@ -148,6 +154,10 @@ pub struct DrmtapLib {
     pub frame_release: FnFrameRelease,
     pub get_cursor: FnGetCursor,
     pub cursor_release: FnCursorRelease,
+    /// Optional: it only exists from libdrmtap 0.5.6. Absent means the library cannot say where a
+    /// hotspot came from, NOT that it was a guess; `drm_reader` keeps the old heuristic for that
+    /// case and nothing else changes.
+    pub cursor_hotspot_valid: Option<FnCursorHotspotValid>,
     pub grab_desc: FnGrabDesc,
     pub open_render: FnOpenRender,
     pub convert_dmabuf: FnConvertDmabuf,
@@ -278,6 +288,8 @@ impl DrmtapLib {
             };
             let render_node: Option<FnRenderNode> =
                 lib.get(b"drmtap_render_node").ok().map(|s| *s);
+            let cursor_hotspot_valid: Option<FnCursorHotspotValid> =
+                lib.get(b"drmtap_cursor_hotspot_valid").ok().map(|s| *s);
             // Log the load only now that every required symbol resolved: this fn still returns None on a missing one.
             let loaded_from = real
                 .as_ref()
@@ -309,6 +321,18 @@ impl DrmtapLib {
                      points at and remove any leftover libdrmtap.so.0* beside it. {effect}"
                 );
             }
+            // Same shape as the check above, and for the same reason: a library that REPORTS a
+            // version which exports the symbol and then does not have it is a stale or
+            // hand-substituted object, and saying so beats silently taking the legacy path.
+            if (minor, patch) >= (5, 6) && cursor_hotspot_valid.is_none() {
+                log::warn!(
+                    "libdrmtap at {loaded_from} reports v{major}.{minor}.{patch} but is missing \
+                     drmtap_cursor_hotspot_valid: it is a stale or pre-release build. Check what \
+                     the soname symlink points at. Cursor hotspot provenance falls back to \
+                     guessing from the coordinates, which cannot tell an absent HOTSPOT_X/Y from \
+                     a driver that really puts the hotspot at (0, 0)."
+                );
+            }
             Some(DrmtapLib {
                 _lib: lib,
                 open,
@@ -319,6 +343,7 @@ impl DrmtapLib {
                 frame_release,
                 get_cursor,
                 cursor_release,
+                cursor_hotspot_valid,
                 grab_desc,
                 open_render,
                 convert_dmabuf,

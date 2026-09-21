@@ -523,6 +523,11 @@ def build_libdrmtap_so():
                 f'libdrmtap at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
                 f'(stale checkout from a different pin; removed, re-run to re-fetch)')
     build_dir = os.path.join(src, 'build-pkg')
+    # Configure a fresh dir, or RE-configure one an earlier build left behind. Without the second
+    # branch a build-pkg created before this option was added keeps its old configuration, meson
+    # skips setup, and the compile produces a helper-enabled .so. The assertion below then fails
+    # the build rather than shipping it, so this is a developer-build correctness fix and not a
+    # security one -- but it turns a confusing failure into no failure at all.
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
         # -Dhelper=disabled: rustdesk never uses the privileged helper. The capture context is
         # opened only in the root service (every drmtap_open lives in src/ipc/drm.rs), which
@@ -532,6 +537,8 @@ def build_libdrmtap_so():
         # of its owner or mode -- inside the ROOT process. The option compiles that path out
         # entirely. Requested by the maintainer on rustdesk#16242.
         system2(f'meson setup "{build_dir}" "{src}" --buildtype=release -Dhelper=disabled')
+    else:
+        system2(f'meson configure "{build_dir}" -Dhelper=disabled')
     # Build only the shared library, not the bundled helper binary or the static archive. Since
     # libdrmtap 0.4.11 the project is `both_libraries` (a version-scripted .so + a static .a), so the
     # bare `drmtap` target is ambiguous ("drmtap:shared_library" vs "drmtap:static_library"); ask for
