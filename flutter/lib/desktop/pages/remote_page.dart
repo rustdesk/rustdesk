@@ -1249,6 +1249,10 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollbarNonTextureRender(
       ImageModel m, Size imageSize, double s) {
+    if (widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue &&
+        widget.ffi.ffiModel.pi.displays.isEmpty) {
+      return SizedBox.fromSize(size: imageSize);
+    }
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
@@ -1264,6 +1268,10 @@ class _ImagePaintState extends State<ImagePaint> {
 
   Widget _buildScrollAutoNonTextureRender(
       ImageModel m, CanvasModel c, double s) {
+    if (widget.ffi.ffiModel.pi.currentDisplay == kAllDisplayValue &&
+        widget.ffi.ffiModel.pi.displays.isEmpty) {
+      return SizedBox.fromSize(size: c.size);
+    }
     double sizeScale = s;
     if (widget.ffi.ffiModel.isPeerLinux) {
       final displays = widget.ffi.ffiModel.pi.getCurDisplays();
