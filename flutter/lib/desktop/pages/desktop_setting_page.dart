@@ -1392,6 +1392,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
+      independentMouse(context, enabled),
       _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
       ...directIp(context),
@@ -1434,6 +1435,23 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           ).marginOnly(left: _kCheckBoxLeftMargin),
           onTap: enabled ? () => onChanged(!value) : null),
     );
+  }
+
+  // Every connection keeps its own mouse position, the host pointer is only moved
+  // right before a click, a wheel step or a key press.
+  Widget independentMouse(BuildContext context, bool enabled) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _OptionCheckBox(
+          context, 'independent-mouse-label', kOptionIndependentMouse,
+          enabled: enabled,
+          // Only "Y" means on, the generic option reader treats "" as on.
+          optGetter: () =>
+              bind.mainGetOptionSync(key: kOptionIndependentMouse) == 'Y'),
+      Align(
+        alignment: Alignment.topLeft,
+        child: Text(translate('independent-mouse-tip')),
+      ).marginOnly(left: _kCardLeftMargin),
+    ]);
   }
 
   List<Widget> directIp(BuildContext context) {

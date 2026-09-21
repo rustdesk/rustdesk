@@ -1,3 +1,4 @@
+use super::independent_mouse::{self, Plan};
 #[cfg(target_os = "linux")]
 use super::rdp_input::client::{RdpInputKeyboard, RdpInputMouse};
 use super::*;
@@ -355,6 +356,14 @@ fn update_last_cursor_pos(x: i32, y: i32) {
 fn run_pos(sp: EmptyExtraFieldService, state: &mut StatePos) -> ResultType<()> {
     let (_, (x, y)) = *LATEST_SYS_CURSOR_POS.lock().unwrap();
     if x == INVALID_CURSOR_POS || y == INVALID_CURSOR_POS {
+        return Ok(());
+    }
+
+    // With independent mouse positions every peer keeps its own cursor, so the host
+    // position is not published at all. The position is still tracked, so that
+    // publishing resumes from the current one once the option is turned off.
+    if independent_mouse::enabled() {
+        state.cursor_pos = (x, y);
         return Ok(());
     }
 
@@ -811,6 +820,89 @@ pub fn handle_mouse(
     crate::portable_service::client::handle_mouse(evt, conn, username, argb, simulate, show_cursor);
     #[cfg(not(windows))]
     handle_mouse_(evt, conn, username, argb, simulate, show_cursor);
+}
+
+/// Entry point for mouse events of a remote connection.
+///
+/// With the host option off this is `handle_mouse` and nothing else happens.
+/// With the option on, every connection keeps its own position: a plain move only
+/// records it, and the host pointer is moved right before an event that has to
+/// land somewhere. See `server/independent_mouse.rs`.
+pub fn handle_remote_mouse(
+    evt: &MouseEvent,
+    conn: i32,
+    username: String,
+    argb: u32,
+    simulate: bool,
+    show_cursor: bool,
+) {
+    if !independent_mouse::enabled() {
+        handle_mouse(evt, conn, username, argb, simulate, show_cursor);
+        return;
+    }
+    match independent_mouse::plan_mouse(conn, simulate, evt) {
+        // `simulate` is false here: the event must not reach the host, but the
+        // cursor UI of the other peers still follows this connection.
+        Plan::Track => {
+            // An absolute move ends relative mode for this connection, as it does on
+            // the injection path, otherwise its cursor UI would stay suppressed.
+            set_relative_mouse_active(conn, false);
+            handle_mouse(evt, conn, username, argb, false, show_cursor)
+        }
+        Plan::Drop => {}
+        Plan::Locate { x, y } => {
+            handle_mouse(
+                &independent_mouse::position_event(x, y),
+                conn,
+                String::new(),
+                0,
+                true,
+                false,
+            );
+            handle_mouse(evt, conn, username, argb, true, show_cursor);
+        }
+        Plan::Inject => handle_mouse(evt, conn, username, argb, true, show_cursor),
+    }
+}
+
+/// Places the host pointer at the connection's own position before a key press.
+pub fn locate_before_key(conn: i32) {
+    if !independent_mouse::enabled() {
+        return;
+    }
+    if let Some((x, y)) = independent_mouse::plan_key(conn) {
+        handle_mouse(
+            &independent_mouse::position_event(x, y),
+            conn,
+            String::new(),
+            0,
+            true,
+            false,
+        );
+    }
+}
+
+/// Releases what a connection that went silent still holds.
+///
+/// Called from the input threads, which are not async, so the injection can block.
+pub fn sweep_independent_mouse() {
+    for (conn, evt) in independent_mouse::sweep() {
+        handle_mouse(&evt, conn, String::new(), 0, true, false);
+    }
+}
+
+/// Forgets a closed connection and releases the buttons it still pressed.
+pub fn release_independent_mouse(conn: i32) {
+    let events = independent_mouse::on_conn_closed(conn);
+    if events.is_empty() {
+        return;
+    }
+    // Called from the async teardown, so the blocking injection gets its own thread.
+    std::thread::spawn(move || {
+        for (conn, evt) in events {
+            handle_mouse(&evt, conn, String::new(), 0, true, false);
+        }
+    });
 }
 
 // to-do: merge handle_mouse and handle_pointer

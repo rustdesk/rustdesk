@@ -53,6 +53,8 @@ pub mod rdp_input;
 #[cfg(target_os = "linux")]
 pub mod dbus;
 #[cfg(not(target_os = "android"))]
+pub mod independent_mouse;
+#[cfg(not(target_os = "android"))]
 pub mod input_service;
 } else {
 mod clipboard_service {

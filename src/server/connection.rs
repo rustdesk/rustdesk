@@ -706,7 +706,7 @@ impl Connection {
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
+        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, id));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
         #[cfg(feature = "unix-file-copy-paste")]
@@ -799,6 +799,12 @@ impl Connection {
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
+                                // The peer can no longer release what it pressed, and
+                                // its position is no longer used for the host pointer.
+                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                if !enabled {
+                                    input_service::release_independent_mouse(conn.inner.id());
+                                }
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
@@ -1233,7 +1239,7 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
+    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender, conn_id: i32) {
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
@@ -1246,7 +1252,7 @@ impl Connection {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
                     MessageInput::Mouse(mouse_input) => {
-                        handle_mouse(
+                        handle_remote_mouse(
                             &mouse_input.msg,
                             mouse_input.conn_id,
                             mouse_input.username,
@@ -1256,6 +1262,10 @@ impl Connection {
                         );
                     }
                     MessageInput::Key((mut msg, press)) => {
+                        // Independent mouse positions: place the pointer at this
+                        // connection's own position before the key goes out, on the
+                        // same injection path so the order is kept.
+                        locate_before_key(conn_id);
                         // Set the press state to false, use `down` only in `handle_key()`.
                         msg.press = false;
                         if press {
@@ -1299,6 +1309,9 @@ impl Connection {
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
                     }
+                    // Give up the pointer of a connection that went silent, and drop
+                    // the state once the option is turned off.
+                    sweep_independent_mouse();
                     if std_mpsc::RecvTimeoutError::Disconnected == err {
                         break;
                     }
@@ -5214,6 +5227,9 @@ impl Connection {
             return;
         }
         self.closed = true;
+        // Give up this connection's own mouse position and release what it holds.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        input_service::release_independent_mouse(self.inner.id());
         // If voice A,B -> C, and A,B has voice call
         // B disconnects, C will reset the voice call input.
         //

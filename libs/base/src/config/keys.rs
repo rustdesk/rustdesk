@@ -176,6 +176,11 @@ pub const OPTION_KEEP_SCREEN_ON: &str = "keep-screen-on";
 // Server-side: keep host system awake during incoming sessions (Security setting)
 pub const OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS: &str = "keep-awake-during-incoming-sessions";
 
+// Server-side: every remote connection keeps its own mouse position, the host
+// pointer is moved to it only right before an actual input event (Security setting).
+// Only "Y" enables it, any other value means off.
+pub const OPTION_INDEPENDENT_MOUSE: &str = "independent-mouse";
+
 // Client-side: keep client system awake during outgoing sessions (General setting)
 pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
 
