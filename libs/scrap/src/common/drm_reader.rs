@@ -75,6 +75,51 @@ fn cursor_id(hash: u64, width: u32, height: u32, hotx: i32, hoty: i32, hot_measu
     id
 }
 
+/// Encodes a provenance answer for the one-shot log below. -1 is "nothing reported yet".
+fn provenance_code(answered: Option<bool>) -> i8 {
+    match answered {
+        None => 0,
+        Some(false) => 1,
+        Some(true) => 2,
+    }
+}
+
+/// Whether this sample's provenance is worth a log line, given what was last reported.
+///
+/// Its own function because the obvious version of this is a line per cursor read, and a cursor is
+/// read far more often than it changes. A per-sample log here was a real defect in libdrmtap for
+/// the same reason. So: the first sample of a run, and thereafter only a genuine change of state.
+fn provenance_is_news(last: i8, now: i8) -> bool {
+    last != now
+}
+
+static LAST_PROVENANCE: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(-1);
+
+/// Say once, and again only if it changes, where the hotspot is coming from. Without this the
+/// three states are indistinguishable on a running box, which makes the decision unverifiable
+/// anywhere but a unit test.
+fn note_hotspot_provenance(answered: Option<bool>, hot_measured: bool) {
+    let now = provenance_code(answered);
+    let last = LAST_PROVENANCE.swap(now, std::sync::atomic::Ordering::Relaxed);
+    if !provenance_is_news(last, now) {
+        return;
+    }
+    match answered {
+        Some(true) => log::info!(
+            "drm: cursor hotspot provenance: the driver published HOTSPOT_X/Y, using its value"
+        ),
+        Some(false) => log::info!(
+            "drm: cursor hotspot provenance: the plane exposes no HOTSPOT_X/Y, inferring the \
+             hotspot from the bitmap"
+        ),
+        None => log::info!(
+            "drm: cursor hotspot provenance: unavailable (libdrmtap older than 0.5.6, or a \
+             pre-0.5.6 privileged helper); falling back to the coordinate heuristic, which says \
+             hot_measured={hot_measured}"
+        ),
+    }
+}
+
 /// Whether `hot_x`/`hot_y` are the driver's answer rather than a guess.
 ///
 /// `answered` is what `drmtap_cursor_hotspot_valid` said: `Some(v)` when it answered, `None` when
@@ -483,6 +528,7 @@ impl DrmReader {
                     (f(&c, &mut valid) == 0).then(|| valid != 0)
                 });
                 let hot_measured = hot_measured_from(answered, c.hot_x, c.hot_y);
+                note_hotspot_provenance(answered, hot_measured);
                 let (hotx, hoty) = if hot_measured {
                     (c.hot_x, c.hot_y)
                 } else {
@@ -554,7 +600,30 @@ impl Drop for DrmReader {
 
 #[cfg(test)]
 mod hotspot_provenance_tests {
-    use super::{cursor_id, hot_measured_from};
+    use super::{cursor_id, hot_measured_from, provenance_code, provenance_is_news};
+
+    /// The log this makes observable is one line per CHANGE, not one per cursor read. A cursor is
+    /// read far more often than its provenance changes, and a per-sample line here would be the
+    /// same defect libdrmtap already had once.
+    #[test]
+    fn provenance_is_logged_once_and_then_only_on_a_change() {
+        let (none, guessed, measured) = (
+            provenance_code(None),
+            provenance_code(Some(false)),
+            provenance_code(Some(true)),
+        );
+        assert_ne!(none, guessed);
+        assert_ne!(guessed, measured);
+        assert_ne!(none, measured);
+        // First sample of a run: -1 is the unset sentinel, so anything is news.
+        assert!(provenance_is_news(-1, measured));
+        // The same state again is not.
+        assert!(!provenance_is_news(measured, measured));
+        assert!(!provenance_is_news(guessed, guessed));
+        // A real transition is.
+        assert!(provenance_is_news(guessed, measured));
+        assert!(provenance_is_news(measured, none));
+    }
 
     /// The dedup key has to move when the provenance does, or the consumer is never told that the
     /// same picture now means something different. This is the transition that produces it: the
