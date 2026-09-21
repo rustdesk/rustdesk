@@ -1684,9 +1684,9 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
+          parent.target!.imageModel.invalidatePendingFrames();
           if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.clearImage(
-                notify: _pi.displays.isEmpty, invalidatePending: true);
+            parent.target!.imageModel.clearImage(notify: _pi.displays.isEmpty);
           }
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
@@ -1948,9 +1948,13 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
+  void invalidatePendingFrames() {
+    _imageGeneration++;
+  }
+
   clearImage({bool notify = false, bool invalidatePending = false}) {
     if (invalidatePending) {
-      _imageGeneration++;
+      invalidatePendingFrames();
     }
     _image = null;
     if (notify) {
