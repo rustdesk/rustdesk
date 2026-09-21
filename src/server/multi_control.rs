@@ -555,6 +555,29 @@ pub fn primary_conn() -> i32 {
     STATE.lock().unwrap().primary.unwrap_or(0)
 }
 
+/// Whether this connection may inject an unarbitrated pointer device event (touch, pen).
+///
+/// Those events do not go through the per-event arbitration, so only the connection that
+/// already owns the real pointer may send them: for anybody else they would move the
+/// desktop without following the borrow rules. Ownership only changes between batches,
+/// so such an event cannot jump ahead of another connection's locate.
+pub fn can_inject_pointer(conn: i32) -> bool {
+    let st = STATE.lock().unwrap();
+    can_inject_pointer_in(&st, conn)
+}
+
+fn can_inject_pointer_in(st: &State, conn: i32) -> bool {
+    if st.suspended.is_some() {
+        return false;
+    }
+    let owns_pointer = st.primary == Some(conn) || st.borrow.map_or(false, |b| b.peer == conn);
+    owns_pointer
+        && st
+            .peers
+            .get(&conn)
+            .map_or(false, |peer| peer.can_inject && peer.supported)
+}
+
 /// Marks the entries of one drained helper batch that a later absolute move of the same
 /// connection supersedes.
 ///
@@ -2014,6 +2037,47 @@ mod tests {
         assert!(superseded_moves(&[]).is_empty());
     }
 
+    #[test]
+    fn only_the_owner_of_the_pointer_may_send_touch_or_pen() {
+        let now = Instant::now();
+        let mut st = host(now);
+        register_in(&mut st, 3, true, true);
+        on_mouse_in(&mut st, 3, &moved(40, 40), now);
+        // The primary owns the pointer and may send unarbitrated pointer devices.
+        assert!(can_inject_pointer_in(&st, 1));
+        // A helper that does not hold a borrow may not.
+        assert!(!can_inject_pointer_in(&st, 2));
+        // The borrower may, for as long as its borrow lasts.
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(can_inject_pointer_in(&st, 2));
+        // Losing the pointer takes that right away again.
+        assert!(injected(&on_mouse_in(&mut st, 1, &moved(11, 11), now)));
+        assert!(!can_inject_pointer_in(&st, 2));
+        // A peer without keyboard/mouse permission may not send it either, and losing
+        // that permission also hands the role over to another connection.
+        set_can_inject_in(&mut st, 1, false);
+        assert!(!can_inject_pointer_in(&st, 1));
+        assert_eq!(st.primary, Some(2));
+        set_can_inject_in(&mut st, 1, true);
+        // The role does not come back by itself; the local user picks who owns it.
+        assert!(!can_inject_pointer_in(&st, 1));
+        set_primary_in(&mut st, 1);
+        assert!(can_inject_pointer_in(&st, 1));
+        // A peer that does not speak the protocol may only watch.
+        register_in(&mut st, 4, false, true);
+        on_mouse_in(&mut st, 4, &moved(50, 50), now);
+        assert!(!can_inject_pointer_in(&st, 4));
+        // While arbitration is paused nothing may enter the desktop.
+        set_local_pause_in(&mut st, true);
+        assert!(!can_inject_pointer_in(&st, 1));
+        set_local_pause_in(&mut st, false);
+        assert!(can_inject_pointer_in(&st, 1));
+    }
     #[test]
     fn key_release_events_target_the_same_key_code() {
         let evt = key_release_event(KeyId(30));

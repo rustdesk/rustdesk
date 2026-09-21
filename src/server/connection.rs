@@ -1299,6 +1299,16 @@ impl Connection {
                         }
                     }
                     MessageInput::Pointer((msg, id)) => {
+                        // Touch and pen events do not go through the per-event arbitration,
+                        // so in the primary-first mode only the connection that owns the
+                        // real pointer may send them.
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if multi_control_worker::enabled() && !multi_control::can_inject_pointer(id)
+                        {
+                            log::debug!("#{} pointer device input refused", id);
+                            multi_control_worker::refuse(id, multi_control::Reject::UnsupportedEvent);
+                            continue;
+                        }
                         handle_pointer(&msg, id);
                     }
                     MessageInput::BlockOn => {

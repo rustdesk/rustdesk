@@ -383,6 +383,12 @@ fn locate(conn: i32, x: i32, y: i32) {
     input_service::handle_mouse(&evt, conn, String::new(), 0, true, false);
 }
 
+/// Tells a connection that the input it just sent was refused, so its session UI can
+/// explain why nothing happened.
+pub fn refuse(conn: i32, reject: Reject) {
+    note_reject(conn, reject);
+}
+
 fn note_reject(conn: i32, reject: Reject) {
     if reject == Reject::Suppressed {
         return;
