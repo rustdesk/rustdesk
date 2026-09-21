@@ -1685,7 +1685,8 @@ class FfiModel with ChangeNotifier {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
           if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.clearImage(notify: _pi.displays.isEmpty);
+            parent.target!.imageModel.clearImage(
+                notify: _pi.displays.isEmpty, invalidatePending: true);
           }
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
@@ -1925,6 +1926,7 @@ class VirtualMouseMode with ChangeNotifier {
 
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
+  int _imageGeneration = 0;
 
   ui.Image? get image => _image;
 
@@ -1946,7 +1948,10 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
-  clearImage({bool notify = false}) {
+  clearImage({bool notify = false, bool invalidatePending = false}) {
+    if (invalidatePending) {
+      _imageGeneration++;
+    }
     _image = null;
     if (notify) {
       notifyListeners();
@@ -1990,6 +1995,7 @@ class ImageModel with ChangeNotifier {
   }
 
   decodeAndUpdate(int display, Uint8List rgba) async {
+    final imageGeneration = _imageGeneration;
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
     final image = await img.decodeImageFromPixels(
@@ -2004,7 +2010,8 @@ class ImageModel with ChangeNotifier {
       image?.dispose();
       return;
     }
-    await update(image);
+    await update(image,
+        isCurrentSession: () => imageGeneration == _imageGeneration);
   }
 
   Future<void> update(ui.Image? image,
@@ -2027,9 +2034,8 @@ class ImageModel with ChangeNotifier {
   }
 
   bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
-    if (image == null || isCurrentSession == null) return false;
-    if (isCurrentSession()) return false;
-    image.dispose();
+    if (isCurrentSession == null || isCurrentSession()) return false;
+    image?.dispose();
     return true;
   }
 
