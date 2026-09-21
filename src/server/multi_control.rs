@@ -247,18 +247,6 @@ pub fn is_primary(conn: i32) -> bool {
     STATE.lock().unwrap().primary == Some(conn)
 }
 
-/// Hooks the mode into the older option: enabling this one turns the other off, so the
-/// two arbitration models can never run at the same time.
-pub fn enforce_exclusive_mode() {
-    let mode = Config::get_option(keys::OPTION_MULTI_CONTROL_MODE);
-    if mode != MODE_PRIMARY_FIRST {
-        return;
-    }
-    if Config::get_option(keys::OPTION_INDEPENDENT_MOUSE) == "Y" {
-        Config::set_option(keys::OPTION_INDEPENDENT_MOUSE.to_owned(), "N".to_owned());
-    }
-}
-
 /// State of one connection, for the peer's own status line.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct StateOut {
@@ -270,17 +258,6 @@ pub struct StateOut {
     pub keyboard_target_confirmed: bool,
     pub epoch: u64,
     pub notice: String,
-}
-
-/// One connection as the host UI shows it.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct PeerOut {
-    pub conn: i32,
-    pub is_primary: bool,
-    pub can_inject: bool,
-    pub supported: bool,
-    pub has_position: bool,
-    pub borrowed: bool,
 }
 
 /// Registers a connection. `supported` is the negotiated capability, `can_inject` its
@@ -582,13 +559,6 @@ pub fn superseded_moves(entries: &[(i32, bool)]) -> Vec<bool> {
                 .any(|(later_conn, later_is_move)| later_conn == conn && *later_is_move)
         })
         .collect()
-}
-
-
-/// Whether the module currently holds any state, for the worker's idle path.
-pub fn is_idle() -> bool {
-    let st = STATE.lock().unwrap();
-    st.peers.is_empty() && st.borrow.is_none()
 }
 
 fn borrow_typing_allowed(borrow: &Option<Borrow>) -> bool {

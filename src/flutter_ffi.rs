@@ -690,19 +690,6 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
     }
 }
 
-/// Role and borrow state of every incoming connection, as JSON, for the controlled side.
-/// Empty when the primary-first mode is not built for this platform.
-pub fn multi_control_peers() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::server::multi_control::peers_status_json()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        "{}".to_owned()
-    }
-}
-
 /// Makes the given incoming connection the primary controller of the real pointer. The
 /// connection manager runs in its own process, so this goes through the same IPC path as
 /// a permission change instead of touching the server state directly.
