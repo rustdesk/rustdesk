@@ -1,0 +1,62 @@
+diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
+--- a/libavcodec/qsvenc.c
++++ b/libavcodec/qsvenc.c
+@@ -43,6 +43,9 @@
+ #include "qsv_internal.h"
+ #include "qsvenc.h"
+ #include "refstruct.h"
++
++#define QSV_MAX_ENCODE_RETRIES 100
++#define QSV_MAX_SYNC_RETRIES 10
+ 
+ struct profile_names {
+     mfxU16 profile;
+@@ -2468,6 +2471,7 @@
+     QSVFrame *qsv_frame = NULL;
+     mfxEncodeCtrl* enc_ctrl = NULL;
+     int ret;
++    int retries = 0;
+ 
+     if (frame) {
+         ret = submit_frame(q, frame, &qsv_frame);
+@@ -2538,6 +2542,18 @@
+ 
+     do {
+         ret = MFXVideoENCODE_EncodeFrameAsync(q->session, enc_ctrl, surf, pkt.bs, pkt.sync);
++        if ((ret == MFX_WRN_DEVICE_BUSY || ret == MFX_WRN_IN_EXECUTION) &&
++            retries++ >= QSV_MAX_ENCODE_RETRIES) {
++            av_log(avctx, AV_LOG_ERROR, "QSV encoder submission retry limit exceeded\n");
++            ret = AVERROR_EXTERNAL;
++            goto free;
++        }
++#ifdef _WIN32
++        // Sub-millisecond waits become Sleep(0) on Windows.
++        if (ret == MFX_WRN_DEVICE_BUSY || ret == MFX_WRN_IN_EXECUTION)
++            av_usleep(1000);
++#else
+         if (ret == MFX_WRN_DEVICE_BUSY)
+             av_usleep(500);
++#endif
+     } while (ret == MFX_WRN_DEVICE_BUSY || ret == MFX_WRN_IN_EXECUTION);
+@@ -2656,12 +2672,19 @@
+         mfxExtAVCEncodedFrameInfo *enc_info;
+         mfxExtBuffer **enc_buf;
+         enum AVPictureType pict_type;
+-
+-        av_fifo_read(q->async_fifo, &qpkt, 1);
++        int retries = 0;
++
++        // The SDK may still use these buffers after a synchronization timeout.
++        av_fifo_peek(q->async_fifo, &qpkt, 1, 0);
+ 
+         do {
+             ret = MFXVideoCORE_SyncOperation(q->session, *qpkt.sync, 1000);
++            if (ret == MFX_WRN_IN_EXECUTION && retries++ >= QSV_MAX_SYNC_RETRIES) {
++                av_log(avctx, AV_LOG_ERROR, "QSV encoder synchronization retry limit exceeded\n");
++                return AVERROR_EXTERNAL;
++            }
+         } while (ret == MFX_WRN_IN_EXECUTION);
++        av_fifo_drain2(q->async_fifo, 1);
+ 
+         qpkt.pkt.dts  = av_rescale_q(qpkt.bs->DecodeTimeStamp, (AVRational){1, 90000}, avctx->time_base);
+         qpkt.pkt.pts  = av_rescale_q(qpkt.bs->TimeStamp,       (AVRational){1, 90000}, avctx->time_base);
