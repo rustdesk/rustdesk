@@ -218,6 +218,11 @@ exclude = ["vdi/host"]
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+# Upstream reserves a frame's whole declared length as soon as its header is in, so a header alone
+# buys an allocation the size it names, bounded only by max_frame_size. This fork grows the read
+# buffer one read_buffer_size chunk at a time as the bytes actually arrive. Patched rather than
+# depended on directly, so tokio-tungstenite's own tungstenite resolves to the same copy.
+tungstenite = { git = "https://github.com/rustdesk-org/tungstenite-rs", rev = "efce47e5364f00a63302cf07ab1fb13ded478914" }
 # One branch off upstream v0.13.0, the tag whose crate versions match this stack.
 # webrtc-util: reads the Windows adapter list's IPv6 addresses as host-order u16 groups, so every
 # one comes out byte-swapped, fails to bind, and ICE gathers no IPv6 host candidate on Windows;
