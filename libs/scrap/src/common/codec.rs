@@ -785,11 +785,10 @@ impl Decoder {
         present: bool,
     ) -> ResultType<bool> {
         let mut ret = false;
-        let n = frames.frames.len();
-        for (i, h264) in frames.frames.iter().enumerate() {
+        for h264 in frames.frames.iter() {
             let images = decoder.decode(&h264.data)?;
             if let Some(image) = images.last() {
-                if present && i + 1 == n {
+                if present {
                     if image.to_fmt(rgb, i420).is_ok() {
                         ret = true;
                     }
