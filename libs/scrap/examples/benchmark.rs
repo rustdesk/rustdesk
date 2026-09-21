@@ -264,7 +264,7 @@ mod hw {
                 height,
                 quality,
                 keyframe_interval: None,
-                fps: scrap::hwcodec::DEFAULT_FPS,
+                fps: DEFAULT_FPS,
             }),
             false,
         )
