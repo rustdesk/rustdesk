@@ -891,6 +891,7 @@ pub mod clipboard_listener {
     use std::{
         collections::HashMap,
         io,
+        sync::atomic::{AtomicUsize, Ordering},
         sync::mpsc::{channel, Sender},
         sync::{Arc, Mutex},
         thread::JoinHandle,
@@ -900,12 +901,20 @@ pub mod clipboard_listener {
         pub static ref CLIPBOARD_LISTENER: Arc<Mutex<ClipboardListener>> = Default::default();
     }
 
+    static CLIPBOARD_GENERATION: AtomicUsize = AtomicUsize::new(0);
+
+    pub fn current_generation() -> usize {
+        CLIPBOARD_GENERATION.load(Ordering::SeqCst)
+    }
+
     struct Handler {
         subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
     }
 
     impl ClipboardHandler for Handler {
         fn on_clipboard_change(&mut self) -> CallbackResult {
+            // Empty or unsupported contents still invalidate an initial snapshot.
+            CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
                 tx.send(CallbackResult::Next).ok();

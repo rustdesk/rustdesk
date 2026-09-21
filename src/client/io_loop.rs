@@ -1,5 +1,5 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::{update_clipboard, ClipboardSide};
+use crate::clipboard::{clipboard_listener, update_clipboard, ClipboardSide};
 #[cfg(not(any(target_os = "ios")))]
 use crate::{audio_service, clipboard::CLIPBOARD_INTERVAL, ConnInner, CLIENT_SERVER};
 use crate::{
@@ -89,6 +89,9 @@ pub struct Remote<T: InvokeUiSession> {
     // The connection loop clears this when handling its result or a live clipboard update.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     initial_clipboard_pending: bool,
+    // Local changes can supersede the snapshot without producing a clipboard message.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    initial_clipboard_generation: usize,
     first_frame: bool,
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
@@ -138,6 +141,8 @@ impl<T: InvokeUiSession> Remote<T> {
             is_connected: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             initial_clipboard_pending: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            initial_clipboard_generation: 0,
             first_frame: false,
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
@@ -635,6 +640,43 @@ impl<T: InvokeUiSession> Remote<T> {
         self.sent_close_reason = true;
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn start_initial_clipboard_sync(&mut self) {
+        let peer_info = {
+            let lc = self.handler.lc.read().unwrap();
+            lc.peer_info
+                .as_ref()
+                .map(|pi| (pi.version.clone(), pi.platform.clone()))
+        };
+        let Some((peer_version, peer_platform)) = peer_info else {
+            log::error!("Cannot start initial clipboard sync without peer information");
+            return;
+        };
+
+        self.initial_clipboard_pending = true;
+        self.initial_clipboard_generation = clipboard_listener::current_generation();
+        let sender = self.sender.clone();
+        let permission_config = self.handler.get_permission_config();
+        // Clipboard access and encoding must not block the connection loop.
+        tokio::task::spawn_blocking(move || {
+            if !permission_config.is_text_clipboard_required() {
+                return;
+            }
+            let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
+                &peer_version,
+                &peer_platform,
+                crate::clipboard::ClipboardSide::Client,
+            ) else {
+                return;
+            };
+            if permission_config.is_text_clipboard_required() {
+                if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
+                    log::debug!("Failed to send initial clipboard: {}", err);
+                }
+            }
+        });
+    }
+
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         match data {
             Data::Close => {
@@ -657,9 +699,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     return true;
                 }
                 self.initial_clipboard_pending = false;
-                if self.handler.is_text_clipboard_required() {
-                    allow_err!(peer.send(&msg).await);
+                if !self.handler.is_text_clipboard_required() {
+                    return true;
                 }
+                if self.initial_clipboard_generation != clipboard_listener::current_generation() {
+                    // Wayland also reports the existing selection when the listener starts.
+                    // Refresh instead of losing initial sync if no live update has superseded it.
+                    drop(msg);
+                    self.start_initial_clipboard_sync();
+                    return true;
+                }
+                allow_err!(peer.send(&msg).await);
             }
             Data::Message(msg) => {
                 match &msg.union {
@@ -1506,31 +1556,15 @@ impl<T: InvokeUiSession> Remote<T> {
                                 timeout(CLIPBOARD_INTERVAL, rx.recv()).await.ok();
                             }
 
+                            // `is_connected`` becomes true after the first PeerInfo.
+                            // Reconnects create a new Remote. Refreshes after a generation change
+                            // use a separate entry point and are not blocked by this guard.
                             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                            if self.handler.is_text_clipboard_required()
+                            if !self.is_connected
+                                && self.handler.is_text_clipboard_required()
                                 && self.handler.lc.read().unwrap().sync_init_clipboard.v
                             {
-                                self.initial_clipboard_pending = true;
-                                let sender = self.sender.clone();
-                                let permission_config = self.handler.get_permission_config();
-                                // Clipboard access and encoding must not block the connection loop.
-                                tokio::task::spawn_blocking(move || {
-                                    if !permission_config.is_text_clipboard_required() {
-                                        return;
-                                    }
-                                    let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
-                                        &peer_version,
-                                        &peer_platform,
-                                        crate::clipboard::ClipboardSide::Client,
-                                    ) else {
-                                        return;
-                                    };
-                                    if permission_config.is_text_clipboard_required() {
-                                        if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
-                                            log::debug!("Failed to send initial clipboard: {}", err);
-                                        }
-                                    }
-                                });
+                                self.start_initial_clipboard_sync();
                             }
                             // to-do: Android, is `sync_init_clipboard` really needed?
                             // https://github.com/rustdesk/rustdesk/discussions/9010
