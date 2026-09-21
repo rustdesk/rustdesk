@@ -966,6 +966,7 @@ fn deliver_drm_cursor(
     } else {
         (width as i32, height as i32, hotx, hoty, raw)
     };
+    note_received_provenance(hot_measured);
     let id = fold_cursor_id(id, t);
     set_drm_cursor(
         display,
@@ -979,6 +980,34 @@ fn deliver_drm_cursor(
             colors,
         },
     );
+}
+
+static LAST_RECEIVED_PROVENANCE: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(-1);
+
+/// Say once, and again only on a change, what the producer told us about the hotspot.
+///
+/// The counterpart of the producer's own provenance line, and it exists for the case that line
+/// cannot cover: an UPGRADE. The two processes are replaced separately, so an old service can be
+/// streaming to a freshly started `--server`, and its `DrmCursor` carries no `hot_measured` at all.
+/// What this consumer then does with it is decided by the field's serde default, and without this
+/// line that decision is invisible on a running box -- which is exactly the window where it
+/// matters and the hardest one to reproduce on purpose.
+fn note_received_provenance(hot_measured: bool) {
+    let now = hot_measured as i8;
+    if LAST_RECEIVED_PROVENANCE.swap(now, std::sync::atomic::Ordering::Relaxed) == now {
+        return;
+    }
+    if hot_measured {
+        log::info!(
+            "drm: cursor hotspots arrive MEASURED; mapping the point the producer sent. \
+             (a producer that predates the field reads as measured too, on purpose: that \
+              preserves what the old protocol meant)"
+        );
+    } else {
+        log::info!(
+            "drm: cursor hotspots arrive as a GUESS; re-inferring from the upright bitmap"
+        );
+    }
 }
 
 fn fold_cursor_id(id: u64, t: i32) -> u64 {
@@ -2082,6 +2111,91 @@ mod drm_capturer_tests {
     // whichever way it lies, and that is what this checks - for both orientations and at the real
     // 2.22:1 aspect of the shape that was wrong - by driving `deliver_drm_cursor` and reading the
     // published hotspot back, not by chaining the helpers itself.
+    /// The upgrade window, end to end from the WIRE rather than from a struct literal.
+    ///
+    /// An old root service can be streaming to a freshly started `--server`, and its `DrmCursor`
+    /// carries no `hot_measured` at all. This takes the exact bytes such a producer puts on the
+    /// socket, deserializes them the way the consumer's receive loop does, and drives the real
+    /// delivery path, then reads back what was published. Staging it with two live processes is
+    /// not possible with how the package is built - a `--server` from one build will not run
+    /// inside the other's tree - so this is the honest form of that test, and it runs in CI
+    /// instead of once on somebody's desk.
+    ///
+    /// The transform must be non-zero: at 0 the delivery path never consults `hot_measured`, so a
+    /// test at 0 could not tell the two branches apart.
+    #[test]
+    fn a_legacy_cursor_message_keeps_the_hotspot_the_old_protocol_meant() {
+        use crate::ipc::Data;
+
+        let (up, w, h, _box_centre) = ibeam_theme_aspect();
+        let t = 90;
+        let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+        // A hotspot the old producer measured and sent as a point on the scanned-out sprite.
+        let (hotx, hoty) = (3, 5);
+
+        // Exactly what an old producer writes: `Data` is adjacently tagged, and there is no
+        // `hot_measured` key because that build has no such field.
+        let legacy = format!(
+            r#"{{"t":"DrmCursor","c":{{"id":11,"width":{sw},"height":{sh},"hotx":{hotx},"hoty":{hoty}}}}}"#
+        );
+        let (id, mw, mh, mx, my, measured) =
+            match serde_json::from_str::<Data>(&legacy).expect("a legacy DrmCursor must parse") {
+                Data::DrmCursor { id, width, height, hotx, hoty, hot_measured } => {
+                    (id, width, height, hotx, hoty, hot_measured)
+                }
+                other => panic!("expected DrmCursor, got {other:?}"),
+            };
+        assert!(measured, "no provenance on the wire must mean what the old protocol meant");
+
+        // The two branches must disagree here, or the assertion below proves nothing.
+        let mapped = unrotate_hotspot(t, mw as i32, mh as i32, mx, my);
+        let mut turned = Vec::new();
+        unrotate_bgra(&scan, sw, sh, t, &mut turned);
+        let (dw, dh) = rotated_dims(t, sw, sh);
+        let reinferred = scrap::drm_reader::infer_hotspot(&turned, dw, dh);
+        assert_ne!(
+            mapped, reinferred,
+            "fixture cannot discriminate: mapping and re-inferring give the same point"
+        );
+
+        let display = 9_400;
+        deliver_drm_cursor(display, 1, id, mw, mh, mx, my, measured, scan, t);
+        let published = {
+            let map = DRM_CURSOR.lock().unwrap();
+            let (_, c) = map.get(&display).expect("the delivery path published nothing");
+            (c.hotx, c.hoty)
+        };
+        assert_eq!(
+            published, mapped,
+            "a legacy message must keep the hotspot the producer sent, transformed as a point; \
+             re-inferring it would move the cursor for the length of an upgrade"
+        );
+
+        // The control: a NEW producer asking for re-inference says so explicitly, and that must
+        // not be swallowed by the default.
+        let modern = format!(
+            r#"{{"t":"DrmCursor","c":{{"id":12,"width":{sw},"height":{sh},"hotx":{hotx},"hoty":{hoty},"hot_measured":false}}}}"#
+        );
+        let Data::DrmCursor { hot_measured, .. } =
+            serde_json::from_str::<Data>(&modern).expect("a modern DrmCursor must parse")
+        else {
+            panic!("expected DrmCursor")
+        };
+        assert!(!hot_measured);
+        let (scan2, _, _) = as_scanned_out(&up, w, h, t);
+        deliver_drm_cursor(display + 1, 1, 12, sw as u32, sh as u32, hotx, hoty, false, scan2, t);
+        let published2 = {
+            let map = DRM_CURSOR.lock().unwrap();
+            let (_, c) = map.get(&(display + 1)).expect("nothing published for the control");
+            (c.hotx, c.hoty)
+        };
+        assert_eq!(
+            published2, reinferred,
+            "an explicit false must still re-infer, or the legacy default has eaten the new \
+             producer's request"
+        );
+    }
+
     #[test]
     fn an_ibeam_keeps_its_centre_whichever_way_it_lies() {
         use scrap::drm_reader::infer_hotspot;
