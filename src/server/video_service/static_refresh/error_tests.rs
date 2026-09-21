@@ -80,7 +80,7 @@ fn encoder(outcomes: &[Outcome]) -> (Encoder, Rc<RefCell<State>>) {
 }
 
 fn attempt(refresh: &mut StaticRefresh<'_>, encoder: &mut Encoder) {
-    refresh.last_encode = Instant::now() - Duration::from_secs(1);
+    refresh.elapsed_since_encode = Duration::from_secs(1);
     refresh
         .try_encode(
             &[1],

@@ -16,6 +16,8 @@ pub(super) struct StaticRefresh<'a> {
     width: usize,
     height: usize,
     last_encode: Instant,
+    #[cfg(test)]
+    elapsed_since_encode: Duration,
     repeat_counter: usize,
     repeat_failures: usize,
     source_ready: bool,
@@ -42,6 +44,8 @@ impl<'a> StaticRefresh<'a> {
             width,
             height,
             last_encode: Instant::now(),
+            #[cfg(test)]
+            elapsed_since_encode: Duration::ZERO,
             repeat_counter: 0,
             repeat_failures: 0,
             source_ready: false,
@@ -62,6 +66,10 @@ impl<'a> StaticRefresh<'a> {
 
     pub(super) fn on_encoded(&mut self, success: bool) {
         self.last_encode = Instant::now();
+        #[cfg(test)]
+        {
+            self.elapsed_since_encode = Duration::ZERO;
+        }
         if success {
             self.source_ready = true;
             self.repeat_failures = 0;
@@ -84,7 +92,13 @@ impl<'a> StaticRefresh<'a> {
             // Count attempts so network backpressure preserves the refinement budget.
             // The 100 attempts can take longer than 10 seconds.
             || self.repeat_counter >= 100
-            || self.last_encode.elapsed() < Duration::from_millis(100).max(spf)
+            || {
+                #[cfg(not(test))]
+                let elapsed = self.last_encode.elapsed();
+                #[cfg(test)]
+                let elapsed = self.elapsed_since_encode;
+                elapsed < Duration::from_millis(100).max(spf)
+            }
         {
             return Ok(());
         }
@@ -106,6 +120,10 @@ impl<'a> StaticRefresh<'a> {
             self.repeat_counter += 1;
             let result = encoder.encode_to_message(frame, ms);
             self.last_encode = Instant::now();
+            #[cfg(test)]
+            {
+                self.elapsed_since_encode = Duration::ZERO;
+            }
             let mut vf = match result {
                 Ok(vf) if vf.union.is_none() => return Ok(()),
                 Ok(vf) => vf,
@@ -236,18 +254,18 @@ mod tests {
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
         for _ in 0..100 {
-            refresh.last_encode = Instant::now() - Duration::from_secs(60);
+            refresh.elapsed_since_encode = Duration::from_secs(60);
             attempt(&mut refresh, &calls, &[1], spf);
         }
         assert_eq!(calls.get(), 100);
 
-        refresh.last_encode = Instant::now() - Duration::from_secs(600);
+        refresh.elapsed_since_encode = Duration::from_secs(600);
         attempt(&mut refresh, &calls, &[1], spf);
         assert_eq!(calls.get(), 100);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
-        refresh.last_encode = Instant::now() - Duration::from_secs(1);
+        refresh.elapsed_since_encode = Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[1], spf);
         assert_eq!(calls.get(), 101);
     }
@@ -271,33 +289,33 @@ mod tests {
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 0);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(50);
+        refresh.elapsed_since_encode = Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 0);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(100);
+        refresh.elapsed_since_encode = Duration::from_millis(100);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(50);
+        refresh.elapsed_since_encode = Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.last_encode = Instant::now() - Duration::from_millis(100);
+        refresh.elapsed_since_encode = Duration::from_millis(100);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 2);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
-        refresh.last_encode = Instant::now() - Duration::from_millis(50);
+        refresh.elapsed_since_encode = Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 2);
 
-        refresh.last_encode = Instant::now() - Duration::from_secs(1);
+        refresh.elapsed_since_encode = Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
         assert_eq!(calls.get(), 2);
 
-        refresh.last_encode = Instant::now() - Duration::from_secs(3);
+        refresh.elapsed_since_encode = Duration::from_secs(3);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
         assert_eq!(calls.get(), 3);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
@@ -325,7 +343,7 @@ mod tests {
             refresh.on_frame(&EncodeInput::Texture((texture, 0)));
         }
         refresh.on_encoded(true);
-        refresh.last_encode = Instant::now() - Duration::from_secs(1);
+        refresh.elapsed_since_encode = Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[], Duration::from_millis(16));
         assert_eq!(calls.get(), 1);
 
@@ -336,7 +354,7 @@ mod tests {
         ] {
             refresh.on_frame(&frame);
             refresh.on_encoded(true);
-            refresh.last_encode = Instant::now() - Duration::from_secs(1);
+            refresh.elapsed_since_encode = Duration::from_secs(1);
             attempt(&mut refresh, &calls, &[], Duration::from_millis(16));
             assert_eq!(calls.get(), 1);
         }
@@ -355,7 +373,7 @@ mod tests {
             let mut refresh = StaticRefresh::new(source, codec_format, &sp, &recorder, 0, 1, 1);
             refresh.on_frame(&EncodeInput::YUV(yuv));
             refresh.on_encoded(true);
-            refresh.last_encode = Instant::now() - Duration::from_secs(60);
+            refresh.elapsed_since_encode = Duration::from_secs(60);
             attempt(&mut refresh, &calls, yuv, Duration::from_millis(100));
         }
         assert_eq!(calls.get(), 0);
