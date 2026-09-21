@@ -451,7 +451,7 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     async fn handle_local_clipboard_msg(
-        &self,
+        &mut self,
         peer: &mut Stream,
         msg: Option<clipboard::ClipboardFile>,
     ) {
@@ -491,6 +491,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             // to-do: Show msgbox with "Don't show again" option
                         };
                         log::debug!("Send system clipboard message to remote");
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if matches!(&clip, clipboard::ClipboardFile::FormatList { .. }) {
+                            self.initial_clipboard_pending = false;
+                        }
                         let msg = crate::clipboard_file::clip_2_msg(clip);
                         allow_err!(peer.send(&msg).await);
                     }
@@ -661,6 +665,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 match &msg.union {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_)) => {
+                        self.initial_clipboard_pending = false;
+                    }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(message::Union::Cliprdr(clip))
+                        if matches!(clip.union.as_ref(), Some(cliprdr::Union::FormatList(_))) =>
+                    {
                         self.initial_clipboard_pending = false;
                     }
                     Some(message::Union::Misc(misc)) => match misc.union {
@@ -1573,7 +1583,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(vec![cb], ClipboardSide::Client);
+                        {
+                            self.initial_clipboard_pending = false;
+                            update_clipboard(vec![cb], ClipboardSide::Client);
+                        }
                         #[cfg(target_os = "ios")]
                         {
                             let content = if cb.compress {
@@ -1608,7 +1621,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             crate::flutter::send_clipboard_msg_to_other_sessions(msg, session_id);
                         }
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        update_clipboard(_mcb.clipboards, ClipboardSide::Client);
+                        {
+                            self.initial_clipboard_pending = false;
+                            update_clipboard(_mcb.clipboards, ClipboardSide::Client);
+                        }
                         #[cfg(target_os = "ios")]
                         {
                             if let Some(cb) = _mcb
@@ -2466,6 +2482,9 @@ impl<T: InvokeUiSession> Remote<T> {
             };
             #[cfg(target_os = "windows")]
             {
+                if matches!(&clip, clipboard::ClipboardFile::FormatList { .. }) {
+                    self.initial_clipboard_pending = false;
+                }
                 let _ = ContextSend::proc(|context| -> ResultType<()> {
                     context
                         .server_clip_file(self.client_conn_id, clip)
@@ -2474,6 +2493,10 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             #[cfg(feature = "unix-file-copy-paste")]
             if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                if matches!(&clip, clipboard::ClipboardFile::FormatList { .. }) {
+                    self.initial_clipboard_pending = false;
+                }
                 let mut out_msgs = vec![];
 
                 #[cfg(target_os = "macos")]
