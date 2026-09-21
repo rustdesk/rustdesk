@@ -6,9 +6,9 @@ use super::drmtap_dl::{
 };
 use hbb_common::log;
 use std::ffi::CString;
-use std::os::raw::c_int;
 use std::io;
 use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::raw::c_int;
 
 // Trust-boundary limits and formats `drm_render` (the unprivileged converter) imports: two copies that drift apart would weaken one side.
 // 16384 covers 8K+ with headroom; anything larger is rejected as a bogus/hostile geometry.
@@ -93,14 +93,13 @@ fn provenance_is_news(last: i8, now: i8) -> bool {
     last != now
 }
 
-static LAST_PROVENANCE: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(-1);
-
+impl DrmReader {
 /// Say once, and again only if it changes, where the hotspot is coming from. Without this the
 /// three states are indistinguishable on a running box, which makes the decision unverifiable
 /// anywhere but a unit test.
-fn note_hotspot_provenance(answered: Option<bool>, hot_measured: bool) {
+fn note_hotspot_provenance(&mut self, answered: Option<bool>, hot_measured: bool) {
     let now = provenance_code(answered);
-    let last = LAST_PROVENANCE.swap(now, std::sync::atomic::Ordering::Relaxed);
+    let last = std::mem::replace(&mut self.last_provenance, now);
     if !provenance_is_news(last, now) {
         return;
     }
@@ -118,6 +117,7 @@ fn note_hotspot_provenance(answered: Option<bool>, hot_measured: bool) {
              hot_measured={hot_measured}"
         ),
     }
+}
 }
 
 /// Whether `hot_x`/`hot_y` are the driver's answer rather than a guess.
@@ -230,6 +230,13 @@ pub struct DrmReader {
     lib: &'static DrmtapLib,
     ctx: *mut drmtap_ctx,
     buf: Vec<u8>,
+    /// Last provenance reported by THIS reader, for the one-shot log. Per reader and not global:
+    /// several readers run at once, one per captured display, and their provenance can legitimately
+    /// differ and be stable -- a virtio-gpu output publishes HOTSPOT_X/Y while an i915 one on the
+    /// same host does not. A single global would read those two steady streams as an endless
+    /// alternation and log on every sample, which is the per-frame logging this was written to
+    /// avoid. -1 is "nothing reported yet".
+    last_provenance: i8,
 }
 
 impl DrmReader {
@@ -263,6 +270,7 @@ impl DrmReader {
             return None;
         }
         Some(DrmReader {
+            last_provenance: -1,
             lib,
             ctx,
             buf: Vec::new(),
@@ -528,7 +536,7 @@ impl DrmReader {
                     (f(&c, &mut valid) == 0).then(|| valid != 0)
                 });
                 let hot_measured = hot_measured_from(answered, c.hot_x, c.hot_y);
-                note_hotspot_provenance(answered, hot_measured);
+                self.note_hotspot_provenance(answered, hot_measured);
                 let (hotx, hoty) = if hot_measured {
                     (c.hot_x, c.hot_y)
                 } else {

@@ -966,7 +966,7 @@ fn deliver_drm_cursor(
     } else {
         (width as i32, height as i32, hotx, hoty, raw)
     };
-    note_received_provenance(hot_measured);
+    note_received_provenance(display, id, hot_measured);
     let id = fold_cursor_id(id, t);
     set_drm_cursor(
         display,
@@ -982,19 +982,35 @@ fn deliver_drm_cursor(
     );
 }
 
-static LAST_RECEIVED_PROVENANCE: std::sync::atomic::AtomicI8 = std::sync::atomic::AtomicI8::new(-1);
+/// Last provenance seen PER DISPLAY. Not one global: several streams run at once and their
+/// provenance can differ and still be stable -- one output publishing HOTSPOT_X/Y while another
+/// does not is a normal multi-GPU host -- and a single slot would read that as an endless
+/// alternation and log on every cursor message.
+static LAST_RECEIVED_PROVENANCE: Mutex<BTreeMap<i32, bool>> = Mutex::new(BTreeMap::new());
 
-/// Say once, and again only on a change, what the producer told us about the hotspot.
+/// Whether this display's provenance changed, recording the new value. Its own function so the
+/// per-display behaviour can be asserted without reading a log.
+fn provenance_is_news_for(display: i32, hot_measured: bool) -> bool {
+    LAST_RECEIVED_PROVENANCE
+        .lock()
+        .unwrap()
+        .insert(display, hot_measured)
+        != Some(hot_measured)
+}
+
+/// Say once per display, and again only on a change, what the producer told us about the hotspot.
 ///
 /// The counterpart of the producer's own provenance line, and it exists for the case that line
-/// cannot cover: an UPGRADE. The two processes are replaced separately, so an old service can be
-/// streaming to a freshly started `--server`, and its `DrmCursor` carries no `hot_measured` at all.
-/// What this consumer then does with it is decided by the field's serde default, and without this
-/// line that decision is invisible on a running box -- which is exactly the window where it
-/// matters and the hardest one to reproduce on purpose.
-fn note_received_provenance(hot_measured: bool) {
-    let now = hot_measured as i8;
-    if LAST_RECEIVED_PROVENANCE.swap(now, std::sync::atomic::Ordering::Relaxed) == now {
+/// cannot cover: a message that arrives with no `hot_measured` field at all, where what happens is
+/// decided by the field's serde default and is otherwise invisible on a running box.
+///
+/// The hidden-cursor sentinel is skipped. It is sent with `hot_measured: false` because there is no
+/// hotspot to describe, so recording it would make every hide/show look like a provenance change.
+fn note_received_provenance(display: i32, id: u64, hot_measured: bool) {
+    if id == scrap::drm_reader::HIDDEN_CURSOR_ID {
+        return;
+    }
+    if !provenance_is_news_for(display, hot_measured) {
         return;
     }
     if hot_measured {
@@ -2123,6 +2139,45 @@ mod drm_capturer_tests {
     ///
     /// The transform must be non-zero: at 0 the delivery path never consults `hot_measured`, so a
     /// test at 0 could not tell the two branches apart.
+    /// Two streams with different but STABLE provenance must not read as a change on every
+    /// message. A single global slot did exactly that: display A measured and display B inferred,
+    /// alternating forever, is a normal multi-GPU host and would have logged per cursor message -
+    /// the per-frame logging this was written to avoid. And the hidden-cursor sentinel carries
+    /// `hot_measured: false` because it has no hotspot, so recording it would turn every hide and
+    /// show into a provenance transition.
+    #[test]
+    fn provenance_is_tracked_per_display_and_ignores_the_hidden_cursor() {
+        let (a, b) = (9_510, 9_511);
+        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&a);
+        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&b);
+
+        // First sighting of each is news; the same value again is not.
+        assert!(provenance_is_news_for(a, true));
+        assert!(!provenance_is_news_for(a, true));
+        assert!(provenance_is_news_for(b, false));
+        assert!(!provenance_is_news_for(b, false));
+
+        // The interleaving that a single global slot could not survive.
+        for _ in 0..4 {
+            assert!(!provenance_is_news_for(a, true), "display A is stable");
+            assert!(!provenance_is_news_for(b, false), "display B is stable");
+        }
+
+        // A real change on one display is still reported, and does not disturb the other.
+        assert!(provenance_is_news_for(a, false));
+        assert!(!provenance_is_news_for(b, false));
+
+        // The hidden sentinel is not recorded at all: it would otherwise look like B flipping.
+        note_received_provenance(b, scrap::drm_reader::HIDDEN_CURSOR_ID, true);
+        assert!(
+            !provenance_is_news_for(b, false),
+            "the hidden cursor must not count as a provenance change"
+        );
+
+        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&a);
+        LAST_RECEIVED_PROVENANCE.lock().unwrap().remove(&b);
+    }
+
     #[test]
     fn a_legacy_cursor_message_keeps_the_hotspot_the_old_protocol_meant() {
         use crate::ipc::Data;
@@ -2258,10 +2313,16 @@ mod drm_capturer_tests {
         assert_eq!(infer_hotspot(&arrow_px, aw, ah), (0, 0));
     }
 
-    // The frame keeps master's 180 behaviour (hardware-rotated 180 scans out upright), but the
-    // cursor plane is pre-rotated by the compositor regardless, so the cursor path turns 180.
+    /// NOT a general DRM/Wayland contract, and should not be read as one. This pins the behaviour
+    /// MEASURED on i915 advertising rotate-180 with mutter: the primary plane scans out already
+    /// upright while the compositor pre-rotates the cursor sprite, and `wl_output` cannot tell
+    /// hardware rotation from compositor rotation, so the frame is left alone and the sprite is
+    /// turned. Arch with KDE Plasma is still wrong at 180, which is exactly why this is scoped to
+    /// what was measured rather than stated as a rule. The robust fix is to propagate the actual
+    /// KMS plane rotation instead of inferring both from the `wl_output` transform; until then,
+    /// changing this test means re-measuring on the compositor in question, not reasoning from it.
     #[test]
-    fn a_180_output_turns_the_cursor_but_not_the_frame() {
+    fn a_180_output_turns_the_cursor_but_not_the_frame_on_i915_plus_mutter() {
         assert_eq!(frame_transform(180), 0);
         assert_eq!(frame_transform(90), 90);
         assert_eq!(frame_transform(270), 270);
