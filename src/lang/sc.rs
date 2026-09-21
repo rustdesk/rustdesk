@@ -782,6 +782,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay-fallback-delay-tip", "Cantu tempus una connessione de relè giai istabilida abetat sa connessione direta WebRTC prima de èssere impreada in su postu suo. Aumenta pro dare prus tempus a una connessione direta lenta; diminuì pro colare prima a su relè in sas retes in ue non si podet fàghere una connessione direta. Lassa bòidu pro su valore predefinidu de 2.5 segundos."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
         ("independent-mouse-label", ""),
-        ("independent-mouse-tip", "")
+        ("independent-mouse-tip", ""),
+        ("multi-control-mode-label", ""),
+        ("multi-control-mode-tip", ""),
     ].iter().cloned().collect();
 }

@@ -782,6 +782,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay-fallback-delay-tip", "Hur länge en redan upprättad reläanslutning väntar på den direkta WebRTC-anslutningen innan den används i stället. Öka värdet för att ge en långsam direktanslutning mer tid; sänk det för att snabbare falla tillbaka på reläet i nätverk där direktanslutning inte är möjlig. Lämna tomt för standardvärdet 2.5 sekunder."),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", ""),
         ("independent-mouse-label", ""),
-        ("independent-mouse-tip", "")
+        ("independent-mouse-tip", ""),
+        ("multi-control-mode-label", ""),
+        ("multi-control-mode-tip", ""),
     ].iter().cloned().collect();
 }

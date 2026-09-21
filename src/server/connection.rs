@@ -706,6 +706,18 @@ impl Connection {
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        if multi_control_worker::enabled() && conn.is_remote() {
+            // Arbitration state of this connection, so remote input can be routed to the
+            // single worker thread instead of being injected here.
+            multi_control_worker::register(
+                id,
+                conn.lr.multi_control,
+                conn.keyboard && !conn.disable_keyboard,
+                tx_cloned.clone(),
+                conn.lr.my_name.clone(),
+            );
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, id));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
@@ -805,6 +817,8 @@ impl Connection {
                                 if !enabled {
                                     input_service::release_independent_mouse(conn.inner.id());
                                 }
+                                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                                multi_control_worker::set_can_inject(conn.inner.id(), enabled);
                                 conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
@@ -1262,6 +1276,13 @@ impl Connection {
                         );
                     }
                     MessageInput::Key((mut msg, press)) => {
+                        // Primary-first arbitration routes the whole key event through the
+                        // single worker thread, which decides and injects it in order.
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if multi_control_worker::enabled() {
+                            multi_control_worker::send_key(conn_id, msg, press);
+                            continue;
+                        }
                         // Independent mouse positions: place the pointer at this
                         // connection's own position before the key goes out, on the
                         // same injection path so the order is kept.
@@ -3856,6 +3877,21 @@ impl Connection {
                         self.chat_unanswered = true;
                         self.update_auto_disconnect_timer();
                     }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::MultiControlBorrow(b)) => {
+                        if self.peer_keyboard_enabled() {
+                            let request = match b.kind.enum_value() {
+                                Ok(multi_control_borrow::Kind::KIND_BEGIN) => {
+                                    multi_control::BorrowRequest::Begin
+                                }
+                                Ok(multi_control_borrow::Kind::KIND_END) => {
+                                    multi_control::BorrowRequest::End
+                                }
+                                _ => multi_control::BorrowRequest::Heartbeat,
+                            };
+                            multi_control_worker::send_borrow(self.inner.id(), request, b.epoch);
+                        }
+                    }
                     Some(misc::Union::Option(o)) => {
                         if self.authed_conn_type() == Some(AuthConnType::Remote) {
                             self.update_options(&o).await;
@@ -5230,6 +5266,8 @@ impl Connection {
         // Give up this connection's own mouse position and release what it holds.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         input_service::release_independent_mouse(self.inner.id());
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        multi_control_worker::unregister(self.inner.id());
         // If voice A,B -> C, and A,B has voice call
         // B disconnects, C will reset the voice call input.
         //

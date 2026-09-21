@@ -782,6 +782,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("relay-fallback-delay-tip", "已经建立的中继连接会等待直连的 WebRTC 多久，超过这个时间就改用中继。调大可以让较慢的直连有更多机会胜出；调小则在无法直连的网络上更快回落到中继。留空表示使用默认值 2.5 秒。"),
         ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "开始语音通话前请在\"仅共享屏幕\"页面启用\"音频录制\"。"),
         ("independent-mouse-label", "每个连接使用独立的鼠标位置"),
-        ("independent-mouse-tip", "每个远程连接各自保留鼠标位置，只有点击、滚轮或按键时才会把被控端指针移到该连接的位置，因此各连接不会互相抢鼠标。开启后不支持相对鼠标模式，也不会同步远端光标位置。")
+        ("independent-mouse-tip", "每个远程连接各自保留鼠标位置，只有点击、滚轮或按键时才会把被控端指针移到该连接的位置，因此各连接不会互相抢鼠标。开启后不支持相对鼠标模式，也不会同步远端光标位置。"),
+        ("multi-control-mode-label", "主控优先的多控一"),
+        ("multi-control-mode-tip", "由一个控制端持有真实鼠标：其他控制端只移动自己的光标，在点击、滚动、拖拽时临时借用真实鼠标，借用期间可以悬停菜单，先点击一次目标后即可输入；主控一有输入就会夺回鼠标，这会中止协控正在进行的拖拽，但不会撤销它已经产生的效果。两端都需要开启该选项。"),
     ].iter().cloned().collect();
 }

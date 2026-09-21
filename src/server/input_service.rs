@@ -362,7 +362,15 @@ fn run_pos(sp: EmptyExtraFieldService, state: &mut StatePos) -> ResultType<()> {
     // With independent mouse positions every peer keeps its own cursor, so the host
     // position is not published at all. The position is still tracked, so that
     // publishing resumes from the current one once the option is turned off.
-    if independent_mouse::enabled() {
+    // The primary-first mode needs the same: its helpers must keep their own pointer
+    // and see the others through the whiteboard cursor path, not through a position
+    // broadcast that would drag their local pointer to the primary's place.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let own_cursor_per_peer =
+        independent_mouse::enabled() || super::multi_control_worker::enabled();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let own_cursor_per_peer = independent_mouse::enabled();
+    if own_cursor_per_peer {
         state.cursor_pos = (x, y);
         return Ok(());
     }
@@ -836,6 +844,20 @@ pub fn handle_remote_mouse(
     simulate: bool,
     show_cursor: bool,
 ) {
+    // Primary-first arbitration hands the event to the single worker thread, which
+    // decides and injects it in arrival order. See `server/multi_control_worker.rs`.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if super::multi_control_worker::enabled() {
+        super::multi_control_worker::send_mouse(
+            conn,
+            evt.clone(),
+            username,
+            argb,
+            simulate,
+            show_cursor,
+        );
+        return;
+    }
     if !independent_mouse::enabled() {
         handle_mouse(evt, conn, username, argb, simulate, show_cursor);
         return;

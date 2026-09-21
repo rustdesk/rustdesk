@@ -647,9 +647,46 @@ pub fn session_input_key(
     shift: bool,
     command: bool,
 ) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if crate::multi_control_client::is_operate_key(&name) {
+        session_operate_key(&session_id, down);
+        return;
+    }
+    let _ = press;
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_key(&name, down, press, alt, ctrl, shift, command);
+    }
+}
+
+/// Turns the local operate key into borrow messages for the peer that runs the
+/// primary-first mode, and keeps that borrow alive while the key is held.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn session_operate_key(session_id: &SessionID, down: bool) {
+    use crate::multi_control_client::{self, MultiControlBorrowKind};
+
+    let Some((kind, epoch)) = multi_control_client::on_operate_key(down) else {
+        return;
+    };
+    if let Some(session) = sessions::get_session_by_session_id(session_id) {
+        session.send_multi_control_borrow(kind, epoch);
+    }
+    if kind == MultiControlBorrowKind::Begin {
+        let session_id = session_id.clone();
+        std::thread::spawn(move || {
+            while multi_control_client::is_held() {
+                std::thread::sleep(multi_control_client::HEARTBEAT_INTERVAL);
+                let Some(epoch) = multi_control_client::heartbeat_epoch() else {
+                    continue;
+                };
+                match sessions::get_session_by_session_id(&session_id) {
+                    Some(session) => {
+                        session.send_multi_control_borrow(MultiControlBorrowKind::Heartbeat, epoch)
+                    }
+                    None => break,
+                }
+            }
+        });
     }
 }
 

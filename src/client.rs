@@ -3859,6 +3859,9 @@ impl LoginConfigHandler {
             os_login,
             hwid,
             avatar,
+            // The controlled side may then treat this session as usable for the
+            // primary-first mode instead of view-only.
+            multi_control: true,
             ..Default::default()
         };
         match self.conn_type {

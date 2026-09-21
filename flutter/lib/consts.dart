@@ -228,6 +228,10 @@ const String kOptionKeepScreenOn = "keep-screen-on";
 const String kOptionKeepAwakeDuringIncomingSessions = "keep-awake-during-incoming-sessions";
 const String kOptionKeepAwakeDuringOutgoingSessions = "keep-awake-during-outgoing-sessions";
 const String kOptionIndependentMouse = "independent-mouse";
+// Primary-first multi-controller arbitration of the controlled side. Only the value
+// "primary-first" enables it, so the generic boolean reader cannot be used.
+const String kOptionMultiControlMode = "multi-control-mode";
+const String kMultiControlModePrimaryFirst = "primary-first";
 
 const String kOptionShowMobileAction = "showMobileActions";
 

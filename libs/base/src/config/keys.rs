@@ -181,6 +181,19 @@ pub const OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS: &str = "keep-awake-during-
 // Only "Y" enables it, any other value means off.
 pub const OPTION_INDEPENDENT_MOUSE: &str = "independent-mouse";
 
+// Server-side: primary-first multi-controller arbitration (Security setting).
+// One connection is the primary controller and owns the real pointer, other
+// connections only move their own virtual cursor and borrow the real pointer
+// around their own operations. Only the value "primary-first" enables it, so an
+// unset or unknown value keeps the legacy behavior. Mutually exclusive with
+// `OPTION_INDEPENDENT_MOUSE`.
+pub const OPTION_MULTI_CONTROL_MODE: &str = "multi-control-mode";
+
+// Client-side: the local key that borrows the real pointer of a peer running
+// `OPTION_MULTI_CONTROL_MODE` (e.g. "RControl"). Empty means the key is not claimed and
+// the local key is forwarded to the peer as before.
+pub const OPTION_MULTI_CONTROL_OPERATE_KEY: &str = "multi-control-operate-key";
+
 // Client-side: keep client system awake during outgoing sessions (General setting)
 pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
 

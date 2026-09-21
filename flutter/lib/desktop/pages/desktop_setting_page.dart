@@ -1392,6 +1392,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       shareRdp(context, enabled),
+      multiControlMode(context, enabled),
       independentMouse(context, enabled),
       _OptionCheckBox(context, 'Deny LAN discovery', 'enable-lan-discovery',
           reverse: true, enabled: enabled),
@@ -1437,6 +1438,34 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     );
   }
 
+  /// Primary-first multi-controller mode of the controlled side: one controller owns the
+  /// real pointer, the others borrow it around their own operations. Enabling it turns
+  /// the older per-connection pointer mode off, because the two arbitrations must not
+  /// run at the same time.
+  Widget multiControlMode(BuildContext context, bool enabled) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _OptionCheckBox(
+          context, 'multi-control-mode-label', kOptionMultiControlMode,
+          enabled: enabled,
+          // Only "primary-first" means on, the generic option reader treats "" as on.
+          optGetter: () =>
+              bind.mainGetOptionSync(key: kOptionMultiControlMode) ==
+              kMultiControlModePrimaryFirst,
+          optSetter: (key, value) async {
+        await bind.mainSetOption(
+            key: key, value: value ? kMultiControlModePrimaryFirst : '');
+        if (value) {
+          await bind.mainSetBoolOption(
+              key: kOptionIndependentMouse, value: false);
+        }
+      }),
+      Align(
+        alignment: Alignment.topLeft,
+        child: Text(translate('multi-control-mode-tip')),
+      ).marginOnly(left: _kCardLeftMargin),
+    ]);
+  }
+
   // Every connection keeps its own mouse position, the host pointer is only moved
   // right before a click, a wheel step or a key press.
   Widget independentMouse(BuildContext context, bool enabled) {
@@ -1446,7 +1475,14 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           enabled: enabled,
           // Only "Y" means on, the generic option reader treats "" as on.
           optGetter: () =>
-              bind.mainGetOptionSync(key: kOptionIndependentMouse) == 'Y'),
+              bind.mainGetOptionSync(key: kOptionIndependentMouse) == 'Y',
+          optSetter: (key, value) async {
+        await bind.mainSetBoolOption(key: key, value: value);
+        if (value) {
+          // The two arbitrations are mutually exclusive.
+          await bind.mainSetOption(key: kOptionMultiControlMode, value: '');
+        }
+      }),
       Align(
         alignment: Alignment.topLeft,
         child: Text(translate('independent-mouse-tip')),

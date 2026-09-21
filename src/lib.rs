@@ -62,6 +62,9 @@ mod ui_cm_interface;
 mod ui_interface;
 mod ui_session_interface;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+mod multi_control_client;
+
 mod hbbs_http;
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]

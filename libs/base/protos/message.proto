@@ -84,6 +84,8 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  // The controlling side understands the primary-first borrowing protocol.
+  bool multi_control = 18;
 }
 
 message Terminal {
@@ -101,6 +103,8 @@ message Features {
   bool privacy_mode = 1;
   bool terminal = 2;
   bool port_forward_mux = 3;
+  // The controlled side runs primary-first multi-controller arbitration.
+  bool multi_control = 4;
 }
 
 message CodecAbility {
@@ -819,6 +823,43 @@ message MessageQuery {
   int32 switch_display = 1;
 }
 
+// Primary-first multi-controller arbitration, see docs/multi-control-master-plan.md.
+// Sent by the controlled side to every authenticated controlling connection.
+message MultiControlState {
+  // The controlled side runs the primary-first arbitration.
+  bool enabled = 1;
+  // This connection is the primary controller.
+  bool is_primary = 2;
+  // Some other connection currently holds the real pointer.
+  bool borrowed_by_other = 3;
+  // This connection currently holds the real pointer.
+  bool borrowed_by_me = 4;
+  // Name of the connection holding the real pointer, empty if none.
+  string borrower_name = 5;
+  // This connection may inject keyboard input right now.
+  bool keyboard_target_confirmed = 6;
+  // Epoch of the current borrowing, 0 if none.
+  uint64 epoch = 7;
+  // Short localized reason of the last change, for the peer's status line.
+  string notice = 8;
+}
+
+// Sent by a controlling side that supports primary-first arbitration.
+message MultiControlBorrow {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // The local "operate" key is held: keep the real pointer with this peer.
+    KIND_BEGIN = 1;
+    // The local "operate" key was released or the session lost focus.
+    KIND_END = 2;
+    // Liveness of the borrowing identified by `epoch`.
+    KIND_HEARTBEAT = 3;
+  }
+  Kind kind = 1;
+  // Epoch granted by the controlled side, required for END and HEARTBEAT.
+  uint64 epoch = 2;
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -856,6 +897,8 @@ message Misc {
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
     int32 follow_current_display = 38;
+    MultiControlState multi_control_state = 39;
+    MultiControlBorrow multi_control_borrow = 40;
   }
 }
 

@@ -910,6 +910,23 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    /// Asks the peer to lend the real pointer to this session, or hands it back.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn send_multi_control_borrow(
+        &self,
+        kind: crate::multi_control_client::MultiControlBorrowKind,
+        epoch: u64,
+    ) {
+        let mut borrow = MultiControlBorrow::new();
+        borrow.kind = kind.to_proto().into();
+        borrow.epoch = epoch;
+        let mut misc = Misc::new();
+        misc.set_multi_control_borrow(borrow);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
     #[cfg(any(target_os = "ios"))]
     pub fn handle_flutter_raw_key_event(
         &self,

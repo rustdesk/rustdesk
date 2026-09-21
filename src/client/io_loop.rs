@@ -2088,6 +2088,11 @@ impl<T: InvokeUiSession> Remote<T> {
                         log::info!("update supported encoding:{:?}", e);
                         self.handler.lc.write().unwrap().supported_encoding = e;
                     }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::MultiControlState(state)) => {
+                        let status = crate::multi_control_client::on_state(&state);
+                        log::debug!("multi-control state: {:?}", status);
+                    }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);
                     }
