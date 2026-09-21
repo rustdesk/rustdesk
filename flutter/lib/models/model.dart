@@ -816,6 +816,16 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _invalidatePendingFramesForDisplayChange(
+      Display previous, Display current) {
+    if (_pi.currentDisplay != kAllDisplayValue || _pi.displays.length != 1) {
+      return;
+    }
+    if (previous != current || previous.scale != current.scale) {
+      parent.target!.imageModel.invalidatePendingFrames();
+    }
+  }
+
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final display = int.parse(evt['display']);
@@ -848,6 +858,7 @@ class FfiModel with ChangeNotifier {
             evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
         kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
+    _invalidatePendingFramesForDisplayChange(_pi.displays[display], newDisplay);
     _pi.displays[display] = newDisplay;
 
     if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
@@ -1677,6 +1688,10 @@ class FfiModel with ChangeNotifier {
       List<Display> newDisplays = [];
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
+      }
+      if (previousDisplayCount == 1 && newDisplays.length == 1) {
+        _invalidatePendingFramesForDisplayChange(
+            _pi.displays.first, newDisplays.first);
       }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
