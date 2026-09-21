@@ -3889,7 +3889,9 @@ impl Connection {
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::MultiControlBorrow(b)) => {
-                        if self.peer_keyboard_enabled() {
+                        // Only meaningful while this mode runs: with it off the message is
+                        // ignored instead of waking the arbitration worker up.
+                        if multi_control_worker::enabled() && self.peer_keyboard_enabled() {
                             let request = match b.kind.enum_value() {
                                 Ok(multi_control_borrow::Kind::KIND_BEGIN) => {
                                     multi_control::BorrowRequest::Begin
