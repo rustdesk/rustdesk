@@ -1697,6 +1697,10 @@ class FfiModel with ChangeNotifier {
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
+        if (previousDisplayCount != _pi.displays.length &&
+            displaysRect() == _rect) {
+          _updateSessionWidthHeight(sessionId);
+        }
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
           parent.target!.imageModel.clearImage(
