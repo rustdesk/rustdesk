@@ -295,13 +295,24 @@ impl PipeWireRecorder {
         // settle on a format it can deliver via its SHM path.
         let convert = gst_element("videoconvert")?;
 
+        // Wayland/PipeWire fix: apply any affine transform metadata (e.g. dmabuf y-invert flag on AMD).
+        let flip_opt = gst_element("videoflip").ok();
+
         let sink = gst_element("appsink")?;
         sink.set_property("drop", &true)?;
         sink.set_property("max-buffers", &1u32)?;
 
-        pipeline.add_many(&[&src, &convert, &sink])?;
-        src.link(&convert)?;
-        convert.link(&sink)?;
+        if let Some(ref flip) = flip_opt {
+            gst::util_set_object_arg(flip, "video-direction", "auto");
+            pipeline.add_many(&[&src, &convert, flip, &sink])?;
+            src.link(&convert)?;
+            convert.link(flip)?;
+            flip.link(&sink)?;
+        } else {
+            pipeline.add_many(&[&src, &convert, &sink])?;
+            src.link(&convert)?;
+            convert.link(&sink)?;
+        }
 
         let appsink = sink
             .dynamic_cast::<AppSink>()
