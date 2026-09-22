@@ -9,17 +9,25 @@
 //! whose Flutter/Sciter key name matches exactly is swallowed locally instead of being
 //! forwarded to the peer.
 
-// The consumers of this module are the Flutter build (the operate key and the session
-// UI), so a build without it legitimately leaves parts of the API unused.
-#![allow(dead_code)]
+// The consumers of this module are the Flutter build (the operate key and the session UI),
+// so a build without it legitimately leaves parts of the API unused.
+#![cfg_attr(not(feature = "flutter"), allow(dead_code))]
 
 use base::{config::keys, message_proto::MultiControlState};
 use hbb_common::config::Config;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 use std::time::{Duration, Instant};
 
 /// Heartbeat cadence of an active borrow; the peer revokes it after 5 s of silence.
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+
+lazy_static::lazy_static! {
+    /// Whether the process already has a thread renewing its borrows.
+    static ref HEARTBEATING: AtomicBool = AtomicBool::new(false);
+}
 
 #[derive(Default)]
 struct Active {
@@ -91,44 +99,21 @@ pub fn on_state(state: &MultiControlState) -> Status {
     }
 }
 
-/// The current status, for the session UI.
-pub fn status() -> Status {
-    status_in(&ACTIVE.lock().unwrap())
-}
-
-fn status_in(active: &Active) -> Status {
-    Status {
-        enabled: active.enabled,
-        primary: active.primary,
-        borrowed_by_me: active.borrowed,
-        borrowed_by_other: false,
-        keyboard_ok: active.keyboard_ok,
-        epoch: active.epoch,
-        notice: active.notice.clone(),
-    }
-}
-
-/// The status as JSON, so the session UI can show why its input was refused without
-/// knowing anything about the borrow protocol.
+/// The current status as JSON, so the session UI can show why its input was refused
+/// without knowing anything about the borrow protocol.
 pub fn status_json() -> String {
     let active = ACTIVE.lock().unwrap();
-    let status = status_in(&active);
     serde_json::json!({
-        "enabled": status.enabled,
-        "primary": status.primary,
-        "borrowedByMe": status.borrowed_by_me,
-        "keyboardOk": status.keyboard_ok,
-        "epoch": status.epoch,
-        "notice": status.notice,
+        "enabled": active.enabled,
+        "primary": active.primary,
+        "borrowedByMe": active.borrowed,
+        "keyboardOk": active.keyboard_ok,
+        "epoch": active.epoch,
+        "notice": active.notice,
         "operateKey": operate_key(),
         "operateKeyHeld": active.held,
     })
     .to_string()
-}
-
-/// The epoch to use for end/heartbeat messages, 0 while the peer has not granted one.
-pub fn epoch() -> u64 {
-    ACTIVE.lock().unwrap().epoch
 }
 
 /// Marks the borrow as started or stopped; returns what has to be sent.
@@ -146,18 +131,45 @@ pub fn on_operate_key(down: bool) -> Option<(MultiControlBorrowKind, u64)> {
         return None;
     }
     active.held = false;
-    Some((MultiControlBorrowKind::End, active.epoch))
+    // The pointer is handed back right here, so nothing is left to renew until the peer
+    // reports a borrow again.
+    active.borrowed = false;
+    let epoch = active.epoch;
+    active.epoch = 0;
+    Some((MultiControlBorrowKind::End, epoch))
 }
 
-/// Whether a borrow started by the operate key is still waiting for its heartbeat.
-pub fn is_held() -> bool {
-    ACTIVE.lock().unwrap().held
-}
-
-/// The epoch to put into a heartbeat, only while a borrow is held.
-pub fn heartbeat_epoch() -> Option<u64> {
+/// The message that keeps a borrow alive, or `None` when there is nothing to renew.
+///
+/// Every borrow this session still holds has to be renewed, not only the one begun by the
+/// operate key: the peer gives up a borrow that stops speaking, and a click that borrowed
+/// the pointer is a borrow like any other.
+pub fn heartbeat() -> Option<(MultiControlBorrowKind, u64)> {
     let active = ACTIVE.lock().unwrap();
-    (active.held && active.borrowed).then_some(active.epoch)
+    if active.epoch == 0 || (!active.held && !active.borrowed) {
+        return None;
+    }
+    Some((MultiControlBorrowKind::Heartbeat, active.epoch))
+}
+
+/// Claims the one heartbeat thread of this process; false when it is already running.
+pub fn claim_heartbeat() -> bool {
+    !HEARTBEATING.swap(true, Ordering::SeqCst)
+}
+
+/// Lets a later borrow start a heartbeat thread again.
+pub fn release_heartbeat() {
+    HEARTBEATING.store(false, Ordering::SeqCst);
+}
+
+/// The end message for the borrow this side still holds, if any; the state is cleared, so a
+/// session that ends does not hand back a borrow twice.
+pub fn end_for_close() -> Option<(MultiControlBorrowKind, u64)> {
+    let mut active = ACTIVE.lock().unwrap();
+    let pending = active.held || active.borrowed;
+    let epoch = active.epoch;
+    *active = Active::default();
+    pending.then_some((MultiControlBorrowKind::End, epoch))
 }
 
 /// Starts a session with no borrowed pointer and the operate key not held: a session that
@@ -196,9 +208,20 @@ mod tests {
         *active = Active::default();
     }
 
+    /// The state of this module is process-global, so its tests take turns and start from
+    /// a clean one.
+    fn exclusive() -> std::sync::MutexGuard<'static, ()> {
+        lazy_static::lazy_static! {
+            static ref TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        }
+        let guard = TESTS.lock().unwrap_or_else(|err| err.into_inner());
+        clear();
+        guard
+    }
+
     #[test]
     fn the_operate_key_is_off_until_it_is_configured() {
-        clear();
+        let _guard = exclusive();
         assert!(!is_operate_key("RControl"));
         Config::set_option(
             keys::OPTION_MULTI_CONTROL_OPERATE_KEY.to_owned(),
@@ -214,7 +237,7 @@ mod tests {
 
     #[test]
     fn the_borrow_is_begun_once_and_ended_once() {
-        clear();
+        let _guard = exclusive();
         assert_eq!(
             on_operate_key(true),
             Some((MultiControlBorrowKind::Begin, 0))
@@ -231,28 +254,48 @@ mod tests {
 
     #[test]
     fn the_granted_epoch_is_used_for_end_and_heartbeat() {
-        clear();
+        let _guard = exclusive();
         assert_eq!(
             on_operate_key(true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
-        assert_eq!(heartbeat_epoch(), None);
+        assert_eq!(heartbeat(), None);
         let mut state = MultiControlState::new();
         state.enabled = true;
         state.borrowed_by_me = true;
         state.epoch = 7;
         on_state(&state);
-        assert_eq!(heartbeat_epoch(), Some(7));
+        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 7)));
         assert_eq!(
             on_operate_key(false),
             Some((MultiControlBorrowKind::End, 7))
         );
-        assert_eq!(heartbeat_epoch(), None);
+        // The borrow is over, so there is nothing left to renew.
+        assert_eq!(heartbeat(), None);
+    }
+
+    #[test]
+    fn a_click_borrow_is_renewed_too() {
+        let _guard = exclusive();
+        // Nothing is held locally: the peer gave this side the pointer because of a click,
+        // and it still has to be renewed, or the peer takes it back mid-operation.
+        let mut state = MultiControlState::new();
+        state.borrowed_by_me = true;
+        state.epoch = 4;
+        on_state(&state);
+        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 4)));
+        // A borrow the peer has not granted yet has no epoch to renew.
+        clear();
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        assert_eq!(heartbeat(), None);
     }
 
     #[test]
     fn losing_the_borrow_stops_the_heartbeat_and_drops_the_epoch() {
-        clear();
+        let _guard = exclusive();
         assert_eq!(
             on_operate_key(true),
             Some((MultiControlBorrowKind::Begin, 0))
@@ -268,14 +311,20 @@ mod tests {
         revoked.notice = "borrow-preempted".to_owned();
         let status = on_state(&revoked);
         assert_eq!(status.notice, "borrow-preempted");
-        assert!(!is_held());
-        assert_eq!(heartbeat_epoch(), None);
-        assert_eq!(epoch(), 0);
+        assert!(status.epoch == 0);
+        assert_eq!(heartbeat(), None);
+        // The key is still down, but the peer already took the pointer back: asking again
+        // is a fresh begin and never a late release of a borrow that is gone.
+        assert_eq!(on_operate_key(false), None);
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
     }
 
     #[test]
-    fn a_new_session_does_not_inherit_a_held_operate_key() {
-        clear();
+    fn closing_a_session_hands_a_borrow_back_once() {
+        let _guard = exclusive();
         assert_eq!(
             on_operate_key(true),
             Some((MultiControlBorrowKind::Begin, 0))
@@ -284,12 +333,32 @@ mod tests {
         state.borrowed_by_me = true;
         state.epoch = 5;
         on_state(&state);
-        assert_eq!(heartbeat_epoch(), Some(5));
+        assert_eq!(
+            end_for_close(),
+            Some((MultiControlBorrowKind::End, 5)),
+            "the peer must be told, or it keeps the pointer for a session that is gone"
+        );
+        // Nothing is left to hand back.
+        assert_eq!(end_for_close(), None);
+        assert_eq!(heartbeat(), None);
+    }
+
+    #[test]
+    fn a_new_session_does_not_inherit_a_held_operate_key() {
+        let _guard = exclusive();
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        let mut state = MultiControlState::new();
+        state.borrowed_by_me = true;
+        state.epoch = 5;
+        on_state(&state);
+        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 5)));
         // The session ends while the key is still down.
         reset();
-        assert!(!is_held());
-        assert_eq!(heartbeat_epoch(), None);
-        assert_eq!(epoch(), 0);
+        assert_eq!(heartbeat(), None);
+        assert_eq!(end_for_close(), None);
         // The next press of the new session starts its own borrow instead of being
         // swallowed by the stale state.
         assert_eq!(

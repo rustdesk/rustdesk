@@ -176,6 +176,9 @@ pub const OPTION_KEEP_SCREEN_ON: &str = "keep-screen-on";
 // Server-side: keep host system awake during incoming sessions (Security setting)
 pub const OPTION_KEEP_AWAKE_DURING_INCOMING_SESSIONS: &str = "keep-awake-during-incoming-sessions";
 
+// Client-side: keep client system awake during outgoing sessions (General setting)
+pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
+
 // Server-side: every remote connection keeps its own mouse position, the host
 // pointer is moved to it only right before an actual input event (Security setting).
 // Only "Y" enables it, any other value means off.
@@ -198,9 +201,6 @@ pub const OPTION_MULTI_CONTROL_OPERATE_KEY: &str = "multi-control-operate-key";
 // local user can see where each of them points. Only "Y" enables it; off by default,
 // because it puts a click-through window on the local desktop.
 pub const OPTION_MULTI_CONTROL_OVERLAY: &str = "multi-control-overlay";
-
-// Client-side: keep client system awake during outgoing sessions (General setting)
-pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
 
 pub const OPTION_DISABLE_GROUP_PANEL: &str = "disable-group-panel";
 pub const OPTION_DISABLE_DISCOVERY_PANEL: &str = "disable-discovery-panel";
@@ -265,6 +265,8 @@ pub const KEYS_LOCAL_SETTINGS: &[&str] = &[
     OPTION_FLOATING_WINDOW_TRANSPARENCY,
     OPTION_FLOATING_WINDOW_SVG,
     OPTION_KEEP_SCREEN_ON,
+    // Client-side: the local key that borrows the real pointer of a peer (Security setting)
+    OPTION_MULTI_CONTROL_OPERATE_KEY,
     // Client-side: keep client system awake during outgoing sessions (General setting)
     OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS,
     OPTION_DISABLE_GROUP_PANEL,
@@ -306,6 +308,10 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_ENABLE_RECORD_SESSION,
     OPTION_ENABLE_BLOCK_INPUT,
     OPTION_ENABLE_PRIVACY_MODE,
+    // Server-side: how several controllers share the real pointer (Security setting)
+    OPTION_INDEPENDENT_MOUSE,
+    OPTION_MULTI_CONTROL_MODE,
+    OPTION_MULTI_CONTROL_OVERLAY,
     OPTION_ALLOW_SCOPE_VIOLATION_CLOSE,
     OPTION_ALLOW_SCOPE_VIOLATION_ALARM,
     OPTION_ALLOW_REMOTE_CONFIG_MODIFICATION,

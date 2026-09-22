@@ -1443,20 +1443,22 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   /// the older per-connection pointer mode off, because the two arbitrations must not
   /// run at the same time.
   Widget multiControlMode(BuildContext context, bool enabled) {
+    final primaryFirst = bind.mainGetOptionSync(key: kOptionMultiControlMode) ==
+        kMultiControlModePrimaryFirst;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _OptionCheckBox(
           context, 'multi-control-mode-label', kOptionMultiControlMode,
           enabled: enabled,
           // Only "primary-first" means on, the generic option reader treats "" as on.
-          optGetter: () =>
-              bind.mainGetOptionSync(key: kOptionMultiControlMode) ==
-              kMultiControlModePrimaryFirst,
+          optGetter: () => primaryFirst,
           optSetter: (key, value) async {
         await bind.mainSetOption(
             key: key, value: value ? kMultiControlModePrimaryFirst : '');
         if (value) {
           await mainSetBoolOption(kOptionIndependentMouse, false);
         }
+        // The two modes turn each other off, so both rows have to be redrawn.
+        setState(() {});
       }),
       Align(
         alignment: Alignment.topLeft,
@@ -1464,7 +1466,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       ).marginOnly(left: _kCardLeftMargin),
       _OptionCheckBox(
           context, 'multi-control-overlay-label', kOptionMultiControlOverlay,
-          enabled: enabled,
+          // The overlay only draws while the mode itself runs.
+          enabled: enabled && primaryFirst,
           // Only "Y" means on, the generic option reader treats "" as on.
           optGetter: () =>
               bind.mainGetOptionSync(key: kOptionMultiControlOverlay) == 'Y'),
@@ -1472,41 +1475,61 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     ]);
   }
 
+  /// Whether a key name is one the controlling side can claim. Names come from the local
+  /// key event, and a name that matches nothing would silently do nothing, while a plain
+  /// letter would stop being forwarded to the peer.
+  static final RegExp _operateKeyName = RegExp(
+      r'^(([LR]?(Control|Shift|Alt|Meta|Win))|(F([1-9]|1[0-9]|2[0-4]))|([A-Za-z])|([0-9]))$');
+
   /// The controlling side's key that keeps a borrowed pointer for as long as it is held.
   /// Empty means no key is claimed and every key is forwarded to the peer as before.
   Widget multiControlOperateKey(BuildContext context, bool enabled) {
     TextEditingController controller = TextEditingController(
         text: bind.mainGetOptionSync(key: kOptionMultiControlOperateKey));
     RxBool applyEnabled = false.obs;
+    RxString name = controller.text.trim().obs;
     final isOptFixed = isOptionFixed(kOptionMultiControlOperateKey);
+    final valid = name.value.isEmpty || _operateKeyName.hasMatch(name.value);
     return _SubLabeledWidget(
       context,
       'multi-control-operate-key-label',
-      Row(children: [
-        SizedBox(
-          width: 140,
-          child: TextField(
-            controller: controller,
-            enabled: enabled && !locked && !isOptFixed,
-            onChanged: (_) => applyEnabled.value = true,
-            decoration: const InputDecoration(
-              hintText: 'RControl',
-              contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-            ),
-          ).workaroundFreezeLinuxMint().marginOnly(right: 15),
-        ),
-        Obx(() => ElevatedButton(
-              onPressed:
-                  applyEnabled.value && enabled && !locked && !isOptFixed
-                      ? () async {
-                          applyEnabled.value = false;
-                          await bind.mainSetOption(
-                              key: kOptionMultiControlOperateKey,
-                              value: controller.text.trim());
-                        }
-                      : null,
-              child: Text(translate('Apply')),
-            ))
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          SizedBox(
+            width: 140,
+            child: TextField(
+              controller: controller,
+              enabled: enabled && !locked && !isOptFixed,
+              onChanged: (value) {
+                name.value = value.trim();
+                applyEnabled.value = true;
+              },
+              decoration: const InputDecoration(
+                hintText: 'RControl',
+                contentPadding:
+                    EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              ),
+            ).workaroundFreezeLinuxMint().marginOnly(right: 15),
+          ),
+          Obx(() => ElevatedButton(
+                onPressed: applyEnabled.value &&
+                        enabled &&
+                        !locked &&
+                        !isOptFixed &&
+                        (name.value.isEmpty || _operateKeyName.hasMatch(name.value))
+                    ? () async {
+                        applyEnabled.value = false;
+                        await bind.mainSetOption(
+                            key: kOptionMultiControlOperateKey, value: name.value);
+                      }
+                    : null,
+                child: Text(translate('Apply')),
+              ))
+        ]),
+        Obx(() => (name.value.isNotEmpty && !_operateKeyName.hasMatch(name.value))
+            ? Text(translate('multi-control-operate-key-invalid'))
+                .marginOnly(top: 6)
+            : const SizedBox.shrink()),
       ]),
       enabled: enabled && !locked && !isOptFixed,
     );
@@ -1528,6 +1551,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           // The two arbitrations are mutually exclusive.
           await bind.mainSetOption(key: kOptionMultiControlMode, value: '');
         }
+        setState(() {});
       }),
       Align(
         alignment: Alignment.topLeft,

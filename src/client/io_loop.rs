@@ -2098,21 +2098,24 @@ impl<T: InvokeUiSession> Remote<T> {
                     Some(misc::Union::MultiControlState(state)) => {
                         let status = crate::multi_control_client::on_state(&state);
                         log::debug!("multi-control state: {:?}", status);
-                        // The session UI shows why an input was refused, so it has to know
-                        // about a role or borrow change right away.
+                        // The session UI shows why an input was refused, and the peer only
+                        // shows a notice when it changes, so this goes to the window that
+                        // owns this session, not to the main one.
                         #[cfg(feature = "flutter")]
-                        crate::flutter::push_global_event(
-                            crate::flutter::APP_TYPE_MAIN,
-                            serde_json::json!({
-                                "name": "multi_control",
-                                "notice": status.notice,
-                                "primary": status.primary,
-                                "borrowedByMe": status.borrowed_by_me,
-                                "borrowedByOther": status.borrowed_by_other,
-                                "keyboardOk": status.keyboard_ok,
-                            })
-                            .to_string(),
-                        );
+                        {
+                            let session_id = self.handler.lc.read().unwrap().session_id.clone();
+                            crate::flutter::push_session_event(
+                                &session_id,
+                                "multi_control",
+                                vec![("notice", status.notice.as_str())],
+                            );
+                            // A borrow that was just granted has to be renewed while this
+                            // side still holds it, whatever started it: a click that
+                            // borrows the pointer is as much a borrow as the operate key.
+                            if status.borrowed_by_me {
+                                crate::flutter_ffi::session_multi_control_heartbeat(&session_id);
+                            }
+                        }
                     }
                     Some(misc::Union::FollowCurrentDisplay(d_idx)) => {
                         self.handler.set_current_display(d_idx);

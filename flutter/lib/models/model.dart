@@ -251,21 +251,35 @@ class FfiModel with ChangeNotifier {
 
   String _multiControlNotice = '';
 
-  /// Role, borrow and refusal notices of the primary-first multi-controller mode. The
-  /// controlling side has no other way to learn that its input was refused, so the
-  /// reason is shown as a short, non-blocking notice.
+  /// Why the last input did nothing, in the primary-first multi-controller mode. The
+  /// controlling side has no other way to learn that its input was refused, so the reason
+  /// is shown as a short, non-blocking notice. The host clears a notice as soon as input
+  /// works again, so a refusal that happens twice in a row is shown twice.
   handleMultiControlStatus(Map<String, dynamic> evt) {
     final notice = evt['notice'] as String? ?? '';
     if (notice.isEmpty || notice == _multiControlNotice) return;
     _multiControlNotice = notice;
+    // Every code the controlled side can send, so no refusal is silent.
     const keys = {
       'borrow-preempted': 'multi-control-notice-preempted',
+      'borrow-expired': 'multi-control-notice-borrow-expired',
       'primary-busy': 'multi-control-notice-busy',
       'other-busy': 'multi-control-notice-busy',
       'keyboard-needs-target': 'multi-control-notice-needs-target',
+      'primary-changed': 'multi-control-notice-handover',
+      'permission-lost': 'multi-control-notice-permission-lost',
+      'layout-changed': 'multi-control-notice-layout-changed',
+      'suspended': 'multi-control-notice-layout-changed',
+      'no-position': 'multi-control-notice-no-position',
+      'no-primary': 'multi-control-notice-no-primary',
+      'no-permission': 'multi-control-notice-no-permission',
+      'peer-unsupported': 'multi-control-notice-peer-unsupported',
+      'not-pointer-owner': 'multi-control-notice-not-owner',
+      'unsupported-event': 'multi-control-notice-unsupported',
     };
     final key = keys[notice];
     if (key == null) {
+      // `borrow-finished` is the normal end of a borrow: nothing to tell the user.
       debugPrint('multi_control: $notice');
       return;
     }
@@ -273,6 +287,7 @@ class FfiModel with ChangeNotifier {
   }
 
   clear() {
+    _multiControlNotice = '';
     _pi = PeerInfo();
     lastUserDisplay = null;
     _cancelPendingMonitorRestore();

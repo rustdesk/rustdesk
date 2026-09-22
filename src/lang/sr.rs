@@ -792,5 +792,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-notice-needs-target", ""),
         ("multi-control-operating-now", ""),
         ("multi-control-overlay-label", ""),
+        ("multi-control-notice-borrow-expired", ""),
+        ("multi-control-notice-handover", ""),
+        ("multi-control-notice-layout-changed", ""),
+        ("multi-control-notice-no-permission", ""),
+        ("multi-control-notice-no-position", ""),
+        ("multi-control-notice-no-primary", ""),
+        ("multi-control-notice-not-owner", ""),
+        ("multi-control-notice-peer-unsupported", ""),
+        ("multi-control-notice-permission-lost", ""),
+        ("multi-control-notice-unsupported", ""),
+        ("multi-control-is-primary", ""),
+        ("multi-control-operate-key-invalid", ""),
     ].iter().cloned().collect();
 }

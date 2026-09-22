@@ -262,6 +262,8 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 }
 
 pub fn session_close(session_id: SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    session_end_multi_control_borrow(&session_id);
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
@@ -652,7 +654,6 @@ pub fn session_input_key(
         session_operate_key(&session_id, down);
         return;
     }
-    let _ = press;
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         // #[cfg(any(target_os = "android", target_os = "ios"))]
         session.input_key(&name, down, press, alt, ctrl, shift, command);
@@ -660,7 +661,7 @@ pub fn session_input_key(
 }
 
 /// Turns the local operate key into borrow messages for the peer that runs the
-/// primary-first mode, and keeps that borrow alive while the key is held.
+/// primary-first mode.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn session_operate_key(session_id: &SessionID, down: bool) {
     use crate::multi_control_client::{self, MultiControlBorrowKind};
@@ -672,22 +673,48 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
         session.send_multi_control_borrow(kind, epoch);
     }
     if kind == MultiControlBorrowKind::Begin {
-        let session_id = session_id.clone();
-        std::thread::spawn(move || {
-            while multi_control_client::is_held() {
-                std::thread::sleep(multi_control_client::HEARTBEAT_INTERVAL);
-                let Some(epoch) = multi_control_client::heartbeat_epoch() else {
-                    continue;
-                };
-                match sessions::get_session_by_session_id(&session_id) {
-                    Some(session) => {
-                        session.send_multi_control_borrow(MultiControlBorrowKind::Heartbeat, epoch)
-                    }
-                    None => break,
-                }
-            }
-        });
+        // The borrow may be granted later, so the renewal has to be running by then.
+        session_multi_control_heartbeat(session_id);
     }
+}
+
+/// Renews whatever borrow this session holds until none is left, so the peer does not give
+/// the pointer up in the middle of an operation. One thread per process is enough, and it
+/// ends by itself when there is nothing left to renew.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn session_multi_control_heartbeat(session_id: &SessionID) {
+    use crate::multi_control_client;
+    if !multi_control_client::claim_heartbeat() {
+        return;
+    }
+    let session_id = session_id.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(multi_control_client::HEARTBEAT_INTERVAL);
+            let Some((kind, epoch)) = multi_control_client::heartbeat() else {
+                break;
+            };
+            match sessions::get_session_by_session_id(&session_id) {
+                Some(session) => session.send_multi_control_borrow(kind, epoch),
+                None => break,
+            }
+        }
+        multi_control_client::release_heartbeat();
+    });
+}
+
+/// Hands the borrowed pointer back when a session ends, so the peer does not keep the
+/// pointer for a session that will never send another heartbeat.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn session_end_multi_control_borrow(session_id: &SessionID) {
+    use crate::multi_control_client;
+
+    if let Some((kind, epoch)) = multi_control_client::end_for_close() {
+        if let Some(session) = sessions::get_session_by_session_id(session_id) {
+            session.send_multi_control_borrow(kind, epoch);
+        }
+    }
+    multi_control_client::release_heartbeat();
 }
 
 /// Makes the given incoming connection the primary controller of the real pointer. The
@@ -696,18 +723,6 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
 pub fn multi_control_set_primary(conn_id: i32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::ui_cm_interface::set_multi_control_primary(conn_id);
-}
-
-/// This session's role and borrow state, as JSON, for the controlling side.
-pub fn multi_control_status() -> String {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        crate::multi_control_client::status_json()
-    }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        "{}".to_owned()
-    }
 }
 
 pub fn session_input_string(session_id: SessionID, value: String) {

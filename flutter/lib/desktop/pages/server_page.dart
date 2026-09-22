@@ -1067,22 +1067,27 @@ class _CmControlPanel extends StatelessWidget {
     final isPrimary = serverModel.multiControlPrimary == client.id;
     final isOperating = serverModel.multiControlBorrower == client.id;
     return Column(children: [
+      // The owner keeps the button, so every row of the list says who owns the pointer;
+      // only another row can hand it over.
+      if (!isPrimary)
+        buildButton(
+          context,
+          color: MyTheme.accent,
+          onClick: () {
+            bind.multiControlSetPrimary(connId: client.id);
+          },
+          icon: Icon(Icons.star_border_rounded, color: Colors.white, size: 14),
+          text: translate('multi-control-set-primary'),
+          textColor: Colors.white,
+        ),
       Offstage(
-        offstage: false,
+        offstage: !isPrimary,
         child: buildButton(
           context,
-          color: isPrimary ? Colors.teal : MyTheme.accent,
-          onClick: isPrimary
-              ? () {}
-              : () {
-                  bind.multiControlSetPrimary(connId: client.id);
-                },
-          icon: Icon(
-            isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
-            color: Colors.white,
-            size: 14,
-          ),
-          text: translate('multi-control-set-primary'),
+          color: Colors.teal,
+          onClick: () {},
+          icon: Icon(Icons.star_rounded, color: Colors.white, size: 14),
+          text: translate('multi-control-is-primary'),
           textColor: Colors.white,
         ),
       ),

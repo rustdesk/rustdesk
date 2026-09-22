@@ -710,6 +710,8 @@ class ServerModel with ChangeNotifier {
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
+      if (_multiControlPrimary == id) _multiControlPrimary = 0;
+      if (_multiControlBorrower == id) _multiControlBorrower = 0;
       if (desktopType == DesktopType.cm && _clients.isEmpty) {
         hideCmWindow();
       }

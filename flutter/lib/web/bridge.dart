@@ -1385,6 +1385,10 @@ class RustdeskImpl {
     throw UnimplementedError("cmCloseConnection");
   }
 
+  Future<void> multiControlSetPrimary({required int connId, dynamic hint}) {
+    throw UnimplementedError("multiControlSetPrimary");
+  }
+
   Future<void> cmRemoveDisconnectedConnection(
       {required int connId, dynamic hint}) {
     throw UnimplementedError("cmRemoveDisconnectedConnection");
