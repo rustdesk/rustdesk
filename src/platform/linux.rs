@@ -886,14 +886,26 @@ fn try_start_server_(desktop: Option<&Desktop>) -> ResultType<Option<Child>> {
             if !desktop.xauth.is_empty() {
                 envs.push(("XAUTHORITY", desktop.xauth.clone()));
             }
-            if !desktop.wl_display.is_empty() {
-                envs.push(("WAYLAND_DISPLAY", desktop.wl_display.clone()));
+            let mut wl_display = desktop.wl_display.clone();
+            let mut dbus = desktop.dbus.clone();
+            if (wl_display.is_empty() || dbus.is_empty()) && desktop.is_wayland() {
+                let (portal_wl, portal_dbus) = desktop::Desktop::get_portal_wayland_envs(&desktop.uid);
+                if wl_display.is_empty() {
+                    wl_display = portal_wl;
+                }
+                if dbus.is_empty() {
+                    dbus = portal_dbus;
+                }
+            }
+
+            if !wl_display.is_empty() {
+                envs.push(("WAYLAND_DISPLAY", wl_display));
             }
             if !desktop.home.is_empty() {
                 envs.push(("HOME", desktop.home.clone()));
             }
-            if !desktop.dbus.is_empty() {
-                envs.push(("DBUS_SESSION_BUS_ADDRESS", desktop.dbus.clone()));
+            if !dbus.is_empty() {
+                envs.push(("DBUS_SESSION_BUS_ADDRESS", dbus));
             }
             if let Ok(forced_display_server) =
                 std::env::var("RUSTDESK_FORCED_DISPLAY_SERVER")
@@ -2032,6 +2044,18 @@ mod desktop {
         #[inline]
         pub fn is_login_wayland(&self) -> bool {
             super::is_gdm_user(&self.username) && self.protocol == DISPLAY_SERVER_WAYLAND
+        }
+
+        pub fn get_portal_wayland_envs(uid: &str) -> (String, String) {
+            let mut envs = get_envs(
+                uid,
+                XDG_DESKTOP_PORTAL,
+                &[ENV_KEY_WAYLAND_DISPLAY, ENV_KEY_DBUS_SESSION_BUS_ADDRESS],
+            );
+            (
+                envs.remove(ENV_KEY_WAYLAND_DISPLAY).unwrap_or_default(),
+                envs.remove(ENV_KEY_DBUS_SESSION_BUS_ADDRESS).unwrap_or_default(),
+            )
         }
 
         fn get_display_xauth_wayland(&mut self) {
