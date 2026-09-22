@@ -1462,6 +1462,12 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         alignment: Alignment.topLeft,
         child: Text(translate('multi-control-mode-tip')),
       ).marginOnly(left: _kCardLeftMargin),
+      _OptionCheckBox(
+          context, 'multi-control-overlay-label', kOptionMultiControlOverlay,
+          enabled: enabled,
+          // Only "Y" means on, the generic option reader treats "" as on.
+          optGetter: () =>
+              bind.mainGetOptionSync(key: kOptionMultiControlOverlay) == 'Y'),
       multiControlOperateKey(context, enabled),
     ]);
   }

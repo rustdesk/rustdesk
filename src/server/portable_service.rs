@@ -796,6 +796,9 @@ pub mod server {
                                             crate::input_service::handle_key_(&evt);
                                         }
                                     }
+                                    MultiControlCursors(markers) => {
+                                        crate::server::multi_control_overlay::draw_local(&markers);
+                                    }
                                     _ => {}
                                 },
                                 _ => {}
@@ -1575,6 +1578,20 @@ pub mod client {
 
     pub fn running() -> bool {
         RUNNING.lock().unwrap().clone()
+    }
+
+    /// Hands the controller cursor markers to the process that owns the desktop. With the
+    /// service running that is this helper, not the process that holds the arbitration
+    /// state, so they travel over the same channel as the input events.
+    pub fn handle_multi_control_cursors(markers: &[(i32, i32, i32, bool)]) {
+        if RUNNING.lock().unwrap().clone() {
+            ipc_send(Data::DataPortableService(
+                DataPortableService::MultiControlCursors(markers.to_vec()),
+            ))
+            .ok();
+        } else {
+            crate::server::multi_control_overlay::draw_local(markers);
+        }
     }
 }
 

@@ -21,6 +21,7 @@ use super::{
     connection::Sender,
     input_service,
     multi_control::{self, Action, BorrowRequest, Command, Planned, Reject},
+    multi_control_overlay,
 };
 use crate::input::MOUSE_TYPE_MASK;
 use base::message_proto::{KeyEvent, Message, Misc, MouseEvent, MultiControlState};
@@ -252,7 +253,25 @@ fn run(rx_primary: mpsc::Receiver<Job>, rx_helper: mpsc::Receiver<Job>) {
                 execute(multi_control::on_layout_changed());
             }
         }
+        publish_overlay();
     }
+}
+
+/// Keeps the overlay of the local desktop in step with where the controllers are. Cheap
+/// when the option is off, which is its default.
+fn publish_overlay() {
+    if !multi_control_overlay::enabled() {
+        if multi_control_overlay::is_active() {
+            multi_control_overlay::stop();
+        }
+        return;
+    }
+    let Some(desktop) = multi_control_overlay::desktop_rect() else {
+        return;
+    };
+    let peers = multi_control::cursor_snapshot();
+    let cursors = multi_control::cursors_to_draw(&peers, desktop, multi_control::primary_conn());
+    multi_control_overlay::update(&cursors);
 }
 
 fn handle_batch(first: Job, rx_helper: &mpsc::Receiver<Job>) {

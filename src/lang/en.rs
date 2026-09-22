@@ -289,5 +289,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("multi-control-notice-busy", "The primary controller is operating, your input was not applied"),
         ("multi-control-notice-needs-target", "Click once to confirm where you type"),
         ("multi-control-operating-now", "This controller is operating now"),
+        ("multi-control-overlay-label", "Show the other controllers' cursors on this desktop"),
     ].iter().cloned().collect();
 }

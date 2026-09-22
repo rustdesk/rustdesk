@@ -65,15 +65,59 @@ pub fn update(cursors: &[DrawCursor]) {
     published.cursors = cursors.to_vec();
     let was_active = published.active;
     published.active = wanted;
-    let cursors = published.cursors.clone();
-    drop(published);
-    if !wanted {
-        if was_active {
-            imp::hide();
-        }
+    if !wanted && !was_active {
         return;
     }
-    imp::draw(&cursors);
+    let markers: Vec<(i32, i32, i32, bool)> = if wanted {
+        published
+            .cursors
+            .iter()
+            .map(|c| (c.conn, c.x, c.y, c.borrowing))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    drop(published);
+    publish(&markers);
+}
+
+/// Draws the markers in this process: called either directly, or by the process that owns
+/// the desktop after they arrived from the one holding the arbitration state.
+pub fn draw_local(markers: &[(i32, i32, i32, bool)]) {
+    {
+        let mut shared = imp::markers();
+        *shared = markers
+            .iter()
+            .map(|(conn, x, y, borrowing)| DrawCursor {
+                conn: *conn,
+                x: *x,
+                y: *y,
+                borrowing: *borrowing,
+            })
+            .collect();
+    }
+    if markers.is_empty() {
+        imp::hide();
+    } else {
+        imp::draw();
+    }
+}
+
+/// The desktop the markers are relative to, in virtual screen coordinates.
+pub fn desktop_rect() -> Option<(i32, i32, u32, u32)> {
+    imp::desktop_rect()
+}
+
+/// Draws in this process, or forwards to the one that owns the desktop.
+fn publish(markers: &[(i32, i32, i32, bool)]) {
+    #[cfg(windows)]
+    {
+        if crate::server::portable_service::client::running() {
+            crate::server::portable_service::client::handle_multi_control_cursors(markers);
+            return;
+        }
+    }
+    draw_local(markers);
 }
 
 /// Hides the overlay, e.g. when the mode is turned off or the last session ends.
@@ -83,6 +127,7 @@ pub fn stop() {
     published.last = None;
     published.cursors.clear();
     drop(published);
+    imp::markers().clear();
     imp::hide();
 }
 
@@ -136,12 +181,19 @@ mod imp {
         static ref THREAD: Mutex<Option<isize>> = Mutex::new(None);
     }
 
+    /// The markers the window paints; the caller fills it before asking for a repaint.
+    pub fn markers() -> std::sync::MutexGuard<'static, Vec<DrawCursor>> {
+        CURSORS.lock().unwrap()
+    }
+
+    /// The virtual desktop, the space every marker is relative to.
+    pub fn desktop_rect() -> Option<(i32, i32, u32, u32)> {
+        let (x, y, width, height) = virtual_screen();
+        (width > 0 && height > 0).then_some((x, y, width as u32, height as u32))
+    }
+
     /// Shows the markers, starting the window thread on first use.
-    pub fn draw(cursors: &[DrawCursor]) {
-        {
-            let mut shared = CURSORS.lock().unwrap();
-            *shared = cursors.to_vec();
-        }
+    pub fn draw() {
         let raw = *THREAD.lock().unwrap();
         match raw {
             Some(raw) => {
@@ -356,7 +408,21 @@ mod imp {
 mod imp {
     use super::DrawCursor;
 
-    pub fn draw(_cursors: &[DrawCursor]) {}
+    /// No overlay implementation for this platform yet, so nothing is ever drawn: Wayland
+    /// has no way to draw over another application, and X11 needs an ARGB visual plus an
+    /// empty input shape that is not written yet.
+    pub fn markers() -> std::sync::MutexGuard<'static, Vec<DrawCursor>> {
+        lazy_static::lazy_static! {
+            static ref MARKERS: std::sync::Mutex<Vec<DrawCursor>> = std::sync::Mutex::new(Vec::new());
+        }
+        MARKERS.lock().unwrap()
+    }
+
+    pub fn desktop_rect() -> Option<(i32, i32, u32, u32)> {
+        None
+    }
+
+    pub fn draw() {}
 
     pub fn hide() {}
 }

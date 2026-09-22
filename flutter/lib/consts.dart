@@ -234,6 +234,8 @@ const String kOptionMultiControlMode = "multi-control-mode";
 const String kMultiControlModePrimaryFirst = "primary-first";
 // Controlling side: the local key held to keep the pointer borrowed from the peer.
 const String kOptionMultiControlOperateKey = "multi-control-operate-key";
+// Controlled side: draw the other controllers' cursors on this desktop. Off by default.
+const String kOptionMultiControlOverlay = "multi-control-overlay";
 
 const String kOptionShowMobileAction = "showMobileActions";
 

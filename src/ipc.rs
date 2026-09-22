@@ -308,6 +308,9 @@ pub enum DataPortableService {
     RequestStart,
     WillClose,
     CmShowElevation(bool),
+    /// The controllers' cursor markers, for the overlay of the process that owns the
+    /// desktop: (connection, x, y, is borrowing).
+    MultiControlCursors(Vec<(i32, i32, i32, bool)>),
 }
 
 #[cfg(feature = "flutter")]
