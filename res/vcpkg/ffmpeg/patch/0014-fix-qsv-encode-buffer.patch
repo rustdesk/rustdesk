@@ -1,0 +1,27 @@
+diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
+--- a/libavcodec/qsvenc.c
++++ b/libavcodec/qsvenc.c
+@@ -1509,6 +1509,14 @@
+                                   "Error calling GetVideoParam");
+ 
+     q->packet_size = q->param.mfx.BufferSizeInKB * q->param.mfx.BRCParamMultiplier * 1000;
++    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
++        // Intel documents a larger buffer for complex CQP frames.
++        // https://github.com/Intel-Media-SDK/MediaSDK/blob/master/doc/mediasdk_release_notes.md
++        int64_t packet_size = (int64_t)q->packet_size * 4;
++        if (packet_size > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE)
++            return AVERROR(ENOMEM);
++        q->packet_size = packet_size;
++    }
+ 
+     if (!extradata.SPSBufSize || (need_pps && !extradata.PPSBufSize)
+         || (q->hevc_vps && !extradata_vps.VPSBufSize)
+@@ -2684,6 +2692,8 @@
+                 return AVERROR_EXTERNAL;
+             }
+         } while (ret == MFX_WRN_IN_EXECUTION);
++        if (ret < 0)
++            return ff_qsv_print_error(avctx, ret, "Error synchronizing encoded frame");
+         av_fifo_drain2(q->async_fifo, 1);
+ 
+         qpkt.pkt.dts  = av_rescale_q(qpkt.bs->DecodeTimeStamp, (AVRational){1, 90000}, avctx->time_base);
