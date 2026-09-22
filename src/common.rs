@@ -2106,7 +2106,11 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                         if their_pk_b[31] & 0x80 != 0 || !ex.signed_params.is_empty() {
                             let params = sign::verify(&ex.signed_params, &rs_pk)
                                 .ok()
-                                .and_then(|signed| KxParams::parse_from_bytes(&signed).ok())
+                                .and_then(|signed| {
+                                    let params =
+                                        signed.strip_prefix(hbb_common::tcp::KX_PARAMS_DOMAIN)?;
+                                    KxParams::parse_from_bytes(params).ok()
+                                })
                                 .ok_or_else(|| {
                                     anyhow!("Missing or invalid signed key exchange parameters")
                                 })?;
@@ -3357,10 +3361,12 @@ mod tests {
             version,
             ..Default::default()
         };
+        let mut payload = hbb_common::tcp::KX_PARAMS_DOMAIN.to_vec();
+        payload.extend_from_slice(&params.write_to_bytes().unwrap());
         KeyExchange {
             keys: vec![sign::sign(&pk.0, sk).into()],
             version,
-            signed_params: sign::sign(&params.write_to_bytes().unwrap(), sk).into(),
+            signed_params: sign::sign(&payload, sk).into(),
             ..Default::default()
         }
     }
@@ -3588,6 +3594,8 @@ mod tests {
             "invalid_signature",
             "wrong_signer",
             "unstructured_payload",
+            "undomained_params",
+            "signed_id_pk_as_params",
         ] {
             let mut ex = signed_key_exchange(&eph_pk, &sk, 1);
             match case {
@@ -3618,6 +3626,28 @@ mod tests {
                     let mut payload = eph_pk.0.to_vec();
                     payload.extend_from_slice(&1u32.to_le_bytes());
                     ex.signed_params = sign::sign(&payload, &sk).into();
+                }
+                "undomained_params" => {
+                    let params = KxParams {
+                        pk: eph_pk.0.to_vec().into(),
+                        version: 1,
+                        ..Default::default()
+                    };
+                    ex.signed_params = sign::sign(&params.write_to_bytes().unwrap(), &sk).into();
+                }
+                "signed_id_pk_as_params" => {
+                    // The server signs IdPk with the same key; its `id` sits where `pk` does.
+                    let mut pk = [0x2au8; box_::PUBLICKEYBYTES];
+                    pk[30] = 0xc2;
+                    pk[31] = 0xaa;
+                    let id_pk = IdPk {
+                        id: String::from_utf8(pk.to_vec()).unwrap(),
+                        pk: vec![7u8; box_::PUBLICKEYBYTES].into(),
+                        ..Default::default()
+                    };
+                    ex.keys[0] = sign::sign(&pk, &sk).into();
+                    ex.version = 0;
+                    ex.signed_params = sign::sign(&id_pk.write_to_bytes().unwrap(), &sk).into();
                 }
                 _ => unreachable!(),
             }
