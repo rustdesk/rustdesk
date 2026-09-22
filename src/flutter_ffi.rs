@@ -676,7 +676,7 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
     }
     if kind == MultiControlBorrowKind::Begin {
         // The borrow may be granted later, so the renewal has to be running by then.
-        session_multi_control_heartbeat(session_id);
+        session_multi_control_heartbeat(session_id.clone());
     }
 }
 
@@ -684,12 +684,11 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
 /// the pointer up in the middle of an operation. One thread per process is enough, and it
 /// ends by itself when there is nothing left to renew.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn session_multi_control_heartbeat(session_id: &SessionID) {
+pub fn session_multi_control_heartbeat(session_id: SessionID) {
     use crate::multi_control_client;
     if !multi_control_client::claim_heartbeat() {
         return;
     }
-    let session_id = session_id.clone();
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(multi_control_client::HEARTBEAT_INTERVAL);

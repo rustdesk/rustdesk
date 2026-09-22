@@ -2113,7 +2113,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // side still holds it, whatever started it: a click that
                             // borrows the pointer is as much a borrow as the operate key.
                             if status.borrowed_by_me {
-                                crate::flutter_ffi::session_multi_control_heartbeat(&session_id);
+                                crate::flutter_ffi::session_multi_control_heartbeat(session_id);
                             }
                         }
                     }
