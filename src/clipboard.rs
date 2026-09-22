@@ -562,6 +562,11 @@ pub fn get_current_clipboard_msg(
     side: ClipboardSide,
 ) -> Option<Message> {
     // Clipboard changes can be skipped while synchronization is disabled.
+    #[cfg(target_os = "linux")]
+    if !clipboard_listener::is_ready() {
+        log::error!("Cannot read initial clipboard before the listener is ready");
+        return None;
+    }
     let ctx = match ClipboardContext::new() {
         Ok(ctx) => ctx,
         Err(err) => {
@@ -907,11 +912,33 @@ pub mod clipboard_listener {
         CLIPBOARD_GENERATION.load(Ordering::SeqCst)
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn is_ready() -> bool {
+        CLIPBOARD_LISTENER
+            .lock()
+            .unwrap()
+            .handle
+            .as_ref()
+            .map(|(_, h)| !h.is_finished())
+            .unwrap_or(false)
+    }
+
     struct Handler {
         subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
+        #[cfg(target_os = "linux")]
+        ready: Option<Sender<()>>,
     }
 
     impl ClipboardHandler for Handler {
+        #[cfg(target_os = "linux")]
+        fn on_clipboard_ready(&mut self) {
+            if let Some(tx) = self.ready.take() {
+                if let Err(err) = tx.send(()) {
+                    log::debug!("Failed to report clipboard listener readiness: {}", err);
+                }
+            }
+        }
+
         fn on_clipboard_change(&mut self) -> CallbackResult {
             // Empty or unsupported contents still invalidate an initial snapshot.
             CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
@@ -924,13 +951,17 @@ pub mod clipboard_listener {
 
         fn on_clipboard_initial_selection(&mut self) -> CallbackResult {
             // Do not broadcast startup state; sessions handle their own initial sync.
-            // Invalidate snapshots captured before the Wayland listener became active,
-            // since copies made during listener startup may appear only in this event.
+            // A restarted listener can overlap an existing session's initial snapshot.
             CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             CallbackResult::Next
         }
 
         fn on_clipboard_error(&mut self, error: io::Error) -> CallbackResult {
+            #[cfg(target_os = "linux")]
+            if self.ready.is_some() {
+                // Stop initialization so the startup waiter receives a failure.
+                return CallbackResult::StopWithError(error);
+            }
             let msg = format!("Clipboard listener error: {}", error);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
@@ -962,8 +993,12 @@ pub mod clipboard_listener {
         cleanup_stale_listener(&mut listener_lock);
         if listener_lock.handle.is_none() {
             log::info!("Start clipboard listener thread");
+            #[cfg(target_os = "linux")]
+            let (tx_ready, rx_ready) = channel();
             let handler = Handler {
                 subscribers: listener_lock.subscribers.clone(),
+                #[cfg(target_os = "linux")]
+                ready: Some(tx_ready),
             };
             let (tx_start_res, rx_start_res) = channel();
             let h = start_clipboard_master_thread(handler, tx_start_res);
@@ -977,6 +1012,14 @@ pub mod clipboard_listener {
                     bail!("Failed to create clipboard listener: {}", e);
                 }
             };
+            // Master::new does not subscribe the Linux backend to clipboard changes.
+            // Initial reads must wait for subscription. Without initial sync,
+            // copies made before subscription are not replayed.
+            #[cfg(target_os = "linux")]
+            if let Err(err) = rx_ready.recv() {
+                listener_lock.subscribers.lock().unwrap().remove(&name);
+                bail!("Clipboard listener stopped before becoming ready: {}", err);
+            }
             listener_lock.handle = Some((shutdown, h));
             log::info!("Clipboard listener thread started");
         }

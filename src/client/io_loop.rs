@@ -667,20 +667,19 @@ impl<T: InvokeUiSession> Remote<T> {
         let permission_config = self.handler.get_permission_config();
         // Clipboard access and encoding must not block the connection loop.
         tokio::task::spawn_blocking(move || {
-            if !permission_config.is_text_clipboard_required() {
-                return;
-            }
-            let Some(msg_out) = crate::clipboard::get_current_clipboard_msg(
-                &peer_version,
-                &peer_platform,
-                crate::clipboard::ClipboardSide::Client,
-            ) else {
-                return;
+            let msg_out = if permission_config.is_text_clipboard_required() {
+                crate::clipboard::get_current_clipboard_msg(
+                    &peer_version,
+                    &peer_platform,
+                    crate::clipboard::ClipboardSide::Client,
+                )
+            } else {
+                None
             };
-            if permission_config.is_text_clipboard_required() {
-                if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
-                    log::debug!("Failed to send initial clipboard: {}", err);
-                }
+            let msg_out = msg_out.filter(|_| permission_config.is_text_clipboard_required());
+            // Empty or failed reads must also finish the pending initial-sync attempt.
+            if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
+                log::debug!("Failed to send initial clipboard result: {}", err);
             }
         });
     }
@@ -711,13 +710,15 @@ impl<T: InvokeUiSession> Remote<T> {
                     return true;
                 }
                 if self.initial_clipboard_generation != clipboard_listener::current_generation() {
-                    // Wayland also reports the existing selection when the listener starts.
-                    // Refresh instead of losing initial sync if no live update has superseded it.
+                    // A clipboard change or listener restart can invalidate the snapshot
+                    // without sending a live update that supersedes it.
                     drop(msg);
                     self.start_initial_clipboard_sync();
                     return true;
                 }
-                allow_err!(peer.send(&msg).await);
+                if let Some(msg) = msg {
+                    allow_err!(peer.send(&msg).await);
+                }
             }
             Data::Message(msg) => {
                 match &msg.union {
