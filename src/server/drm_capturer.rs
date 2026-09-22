@@ -3132,11 +3132,15 @@ mod drm_capturer_tests {
     }
 
     /// The two shapes the test above excuses are excused for a measured reason, not because they
-    /// were in the way: `alias` is a rounding-sized 0.11 px and `help` is the bitmap limit. If
-    /// either ever moves, the allow-list has to be re-argued rather than quietly widened.
+    /// were in the way, and the excuse is bounded in BOTH directions it could grow: the average
+    /// over the angles master handles, and the worst single angle. The worst angle is the bigger
+    /// number and the one that would be felt - `help` at 270 is 8.00 px under master and 21.54
+    /// here - so leaving it unbounded would let the exemption widen quietly.
     #[test]
     fn the_two_excused_shapes_are_excused_by_how_much() {
-        for (name, bound) in [("alias", 0.75f64), ("help", 5.5f64)] {
+        // (shape, mean excess allowed, worst single-angle excess allowed). Measured: alias 0.51
+        // mean and 8.94 at 90; help 4.73 mean and 13.54 at 270.
+        for (name, mean_bound, angle_bound) in [("alias", 0.75f64, 9.5f64), ("help", 5.5, 14.5)] {
             let &(_, w, h, hx, hy, mask) = THEME_SHAPES
                 .iter()
                 .find(|s| s.0 == name)
@@ -3144,16 +3148,25 @@ mod drm_capturer_tests {
             let (w, h) = (w as usize, h as usize);
             let up = theme_sprite(mask, w, h);
             let truth = (hx, hy);
-            let e_master: f64 = [0, 90, 270]
-                .iter()
-                .map(|&t| away(master_delivered(&up, w, h, t), truth))
-                .sum::<f64>()
-                / 3.0;
-            let e_now = away(scrap::drm_reader::infer_hotspot(&up, w, h), truth);
+            let now = away(scrap::drm_reader::infer_hotspot(&up, w, h), truth);
+            let angles = [0, 90, 270];
+            let mut worst = f64::MIN;
+            let mut total = 0f64;
+            for t in angles {
+                let m = away(master_delivered(&up, w, h, t), truth);
+                total += m;
+                worst = worst.max(now - m);
+            }
+            let mean_excess = now - total / angles.len() as f64;
             assert!(
-                e_now - e_master <= bound,
-                "{name} is now {:.2} px worse than master, over the {bound} px this excuses",
-                e_now - e_master
+                mean_excess <= mean_bound,
+                "{name} averages {mean_excess:.2} px worse than master, over the {mean_bound} \
+                 this excuses"
+            );
+            assert!(
+                worst <= angle_bound,
+                "{name} is {worst:.2} px worse than master at its worst angle, over the \
+                 {angle_bound} this excuses"
             );
         }
     }
