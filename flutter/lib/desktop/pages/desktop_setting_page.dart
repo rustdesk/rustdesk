@@ -1489,7 +1489,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     RxBool applyEnabled = false.obs;
     RxString name = controller.text.trim().obs;
     final isOptFixed = isOptionFixed(kOptionMultiControlOperateKey);
-    final valid = name.value.isEmpty || _operateKeyName.hasMatch(name.value);
     return _SubLabeledWidget(
       context,
       'multi-control-operate-key-label',

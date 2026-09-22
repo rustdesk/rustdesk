@@ -340,7 +340,9 @@ fn idle_tick(idle_since: &mut Option<Instant>) -> bool {
 /// when the option is off, which is its default.
 fn publish_overlay() {
     if !multi_control_overlay::enabled() {
-        if multi_control_overlay::is_active() {
+        // The window outlives a marker set, so it may still be there, hidden, from the time
+        // the option was on: hiding it is not enough, it has to be ended.
+        if multi_control_overlay::is_active() || multi_control_overlay::is_started() {
             multi_control_overlay::stop();
         }
         return;

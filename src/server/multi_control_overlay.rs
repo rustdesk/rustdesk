@@ -141,6 +141,12 @@ pub fn is_active() -> bool {
     PUBLISHED.lock().unwrap().active
 }
 
+/// Whether anything of the overlay is still alive in this process, even if it is hidden.
+/// The window and its thread have to be ended when the option goes off, not only hidden.
+pub fn is_started() -> bool {
+    imp::is_started()
+}
+
 #[cfg(windows)]
 mod imp {
     use super::DrawCursor;
@@ -255,6 +261,11 @@ mod imp {
                 let _ = PostMessageW(Some(hwnd), WM_APP_QUIT, WPARAM(0), LPARAM(0));
             }
         }
+    }
+
+    /// Whether a window, or a failed attempt at one, is still around in this process.
+    pub fn is_started() -> bool {
+        THREAD.lock().unwrap().is_some() || FAILED.load(Ordering::SeqCst)
     }
 
     /// Lets a later attempt create a window again.
@@ -538,6 +549,10 @@ mod imp {
     pub fn hide() {}
 
     pub fn shutdown() {}
+
+    pub fn is_started() -> bool {
+        false
+    }
 
     pub fn reset_failure() {}
 }
