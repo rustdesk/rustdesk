@@ -36,7 +36,7 @@ use hbb_common::{
 };
 
 use crate::{
-    hbbs_http::{create_http_client_async, get_url_for_tls, sync::API_LOG_INTERVAL},
+    hbbs_http::{create_http_client_async, get_url_for_tls},
     ui_interface::{get_api_server as ui_get_api_server, get_option, is_installed, set_option},
 };
 
@@ -59,6 +59,7 @@ pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
+pub(crate) const API_LOG_INTERVAL: Duration = Duration::from_secs(600);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
