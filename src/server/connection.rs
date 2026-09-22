@@ -2254,15 +2254,15 @@ impl Connection {
         self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
     }
 
-    /// Hands this connection to the multi-controller arbitration.
+    /// Records this connection for the multi-controller arbitration.
     ///
     /// Both the negotiated capability and the connection type come from the login request,
-    /// so this may only run once it has been handled; registering earlier would declare
-    /// every peer unsupported and make the mode inert. Input that arrives in between is
-    /// dropped for an unknown connection, which is safe.
+    /// so this may only run once the connection is authorized; and the record is kept even
+    /// while the mode is off, so turning it on later sees the connections that are already
+    /// there instead of requiring a reconnect. Nothing arbitrates until the option says so.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn register_multi_control_peer(&self) {
-        if !multi_control_worker::enabled() || !self.is_remote() {
+        if !self.is_remote() {
             return;
         }
         let Some(tx) = self.inner.tx.clone() else {
