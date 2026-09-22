@@ -2102,16 +2102,15 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                             .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
                         let their_pk_b = get_pk(&their_pk_b)
                             .context("Wrong their public length in key exchange")?;
-                        // The signed X25519 high bit marks servers that require a version signature.
-                        if their_pk_b[31] & 0x80 != 0 || !ex.signed_version.is_empty() {
-                            let signed_version =
-                                sign::verify(&ex.signed_version, &rs_pk).map_err(|_| {
-                                    anyhow!("Missing or invalid signed key exchange version")
+                        // The signed X25519 high bit marks servers that sign their parameters.
+                        if their_pk_b[31] & 0x80 != 0 || !ex.signed_params.is_empty() {
+                            let params = sign::verify(&ex.signed_params, &rs_pk)
+                                .ok()
+                                .and_then(|signed| KxParams::parse_from_bytes(&signed).ok())
+                                .ok_or_else(|| {
+                                    anyhow!("Missing or invalid signed key exchange parameters")
                                 })?;
-                            let mut expected = b"rdkx-ver".to_vec();
-                            expected.extend_from_slice(&their_pk_b);
-                            expected.extend_from_slice(&ex.version.to_le_bytes());
-                            if signed_version != expected {
+                            if params.pk[..] != their_pk_b[..] || params.version != ex.version {
                                 bail!("Key exchange version or public key does not match its signature");
                             }
                         }
@@ -3353,13 +3352,15 @@ mod tests {
         sk: &sign::SecretKey,
         version: u32,
     ) -> KeyExchange {
-        let mut payload = b"rdkx-ver".to_vec();
-        payload.extend_from_slice(&pk.0);
-        payload.extend_from_slice(&version.to_le_bytes());
+        let params = KxParams {
+            pk: pk.0.to_vec().into(),
+            version,
+            ..Default::default()
+        };
         KeyExchange {
             keys: vec![sign::sign(&pk.0, sk).into()],
             version,
-            signed_version: sign::sign(&payload, sk).into(),
+            signed_params: sign::sign(&params.write_to_bytes().unwrap(), sk).into(),
             ..Default::default()
         }
     }
@@ -3586,37 +3587,37 @@ mod tests {
             "replaced_public_key",
             "invalid_signature",
             "wrong_signer",
-            "missing_context",
+            "unstructured_payload",
         ] {
             let mut ex = signed_key_exchange(&eph_pk, &sk, 1);
             match case {
-                "missing_signature" => ex.signed_version = Bytes::new(),
+                "missing_signature" => ex.signed_params = Bytes::new(),
                 "stripped_version_and_signature" => {
-                    ex.signed_version = Bytes::new();
+                    ex.signed_params = Bytes::new();
                     ex.version = 0;
                 }
                 "cleared_marker_and_stripped_fields" => {
                     let mut signed_pk = ex.keys[0].to_vec();
                     *signed_pk.last_mut().unwrap() &= 0x7f;
                     ex.keys[0] = signed_pk.into();
-                    ex.signed_version = Bytes::new();
+                    ex.signed_params = Bytes::new();
                     ex.version = 0;
                 }
                 "lowered_version" => ex.version = 0,
                 "raised_version" => ex.version = 2,
                 "replaced_public_key" => ex.keys[0] = sign::sign(&other_pk.0, &sk).into(),
                 "invalid_signature" => {
-                    let mut signed = ex.signed_version.to_vec();
+                    let mut signed = ex.signed_params.to_vec();
                     signed[0] ^= 1;
-                    ex.signed_version = signed.into();
+                    ex.signed_params = signed.into();
                 }
                 "wrong_signer" => {
-                    ex.signed_version = signed_key_exchange(&eph_pk, &other_sk, 1).signed_version;
+                    ex.signed_params = signed_key_exchange(&eph_pk, &other_sk, 1).signed_params;
                 }
-                "missing_context" => {
+                "unstructured_payload" => {
                     let mut payload = eph_pk.0.to_vec();
                     payload.extend_from_slice(&1u32.to_le_bytes());
-                    ex.signed_version = sign::sign(&payload, &sk).into();
+                    ex.signed_params = sign::sign(&payload, &sk).into();
                 }
                 _ => unreachable!(),
             }
