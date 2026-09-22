@@ -312,10 +312,6 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                                 &pk.asymmetric_value,
                                 &our_sk_b,
                             )?;
-                            // The controller picks from what we offered; anything above that
-                            // is a bug or tampering, never a legitimate peer. Below it needs no
-                            // check: the version picked goes into both transcripts, so a pick
-                            // lowered on the way leaves the two sides with different keys.
                             if pk.kx_version > advertised {
                                 bail!(
                                     "Handshake failed: key exchange version {} not offered",

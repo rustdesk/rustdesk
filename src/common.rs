@@ -3493,10 +3493,6 @@ mod tests {
         assert_eq!(nat.port, 7);
     }
 
-    // The server advertised 1; the client was shown 0 on the way, picked 0, and the server,
-    // handed that pick, ran the original scheme and tagged its frames with what it really
-    // advertised. The exchange itself completes, since nothing in it can tell; the first tagged
-    // frame is where the stream has to be refused.
     #[tokio::test]
     async fn test_secure_tcp_refuses_an_advertisement_lowered_in_transit() {
         let (key, sk) = server_key();
