@@ -84,6 +84,7 @@ pub struct Remote<T: InvokeUiSession> {
     remove_jobs: HashMap<i32, RemoveJob>,
     timer: crate::RustDeskInterval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
+    // Set after PeerInfo for this round, not when the transport connects.
     is_connected: bool,
     // Whether the scheduled initial snapshot may still be sent.
     // The connection loop clears this when handling its result or a live clipboard update.
@@ -474,6 +475,10 @@ impl<T: InvokeUiSession> Remote<T> {
                 } => {
                     self.handler.msgbox(&r#type, &title, &text, "");
                 }
+                // File-data responses bypass is_stopping_allowed, but still require login.
+                _ if !self.is_connected => {
+                    log::debug!("Discarding local file clipboard message before login");
+                }
                 _ => {
                     let is_stopping_allowed = clip.is_stopping_allowed();
                     let server_file_transfer_enabled =
@@ -482,9 +487,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         self.handler.lc.read().unwrap().enable_file_copy_paste.v;
                     let view_only = self.handler.lc.read().unwrap().view_only.v;
                     let stop = is_stopping_allowed
-                        && (view_only
-                            || !self.is_connected
-                            || !(server_file_transfer_enabled && file_transfer_enabled));
+                        && (view_only || !(server_file_transfer_enabled && file_transfer_enabled));
                     log::debug!(
                         "Process clipboard message from system, view_only: {}, stop: {}, is_stopping_allowed: {}, server_file_transfer_enabled: {}, file_transfer_enabled: {}",
                         view_only, stop, is_stopping_allowed, server_file_transfer_enabled, file_transfer_enabled
@@ -718,6 +721,10 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::Message(msg) => {
                 match &msg.union {
+                    Some(message::Union::Cliprdr(_)) if !self.is_connected => {
+                        log::debug!("Discarding outgoing file clipboard message before login");
+                        return true;
+                    }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(message::Union::Clipboard(_)) | Some(message::Union::MultiClipboards(_)) => {
                         self.initial_clipboard_pending = false;
@@ -2491,6 +2498,10 @@ impl<T: InvokeUiSession> Remote<T> {
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     async fn handle_cliprdr_msg(&mut self, clip: base::message_proto::Cliprdr, _peer: &mut Stream) {
+        if !self.is_connected {
+            log::debug!("Discarding incoming file clipboard message before login");
+            return;
+        }
         log::debug!("handling cliprdr msg from server peer");
         #[cfg(feature = "flutter")]
         if let Some(base::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
