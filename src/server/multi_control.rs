@@ -516,6 +516,76 @@ pub fn borrower_conn() -> i32 {
     STATE.lock().unwrap().borrow.map_or(0, |borrow| borrow.peer)
 }
 
+/// One connection as the local desktop overlay needs it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PeerCursor {
+    pub conn: i32,
+    pub x: i32,
+    pub y: i32,
+    pub borrowing: bool,
+}
+
+/// One cursor the overlay has to paint, in desktop coordinates.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DrawCursor {
+    pub conn: i32,
+    pub x: i32,
+    pub y: i32,
+    pub borrowing: bool,
+}
+
+/// The cursors of every connection that has a known position, for the overlay.
+///
+/// A peer that has not moved yet has no position, and a peer that may not inject is not
+/// shown at all: it cannot put its marker anywhere on this desktop.
+pub fn cursor_snapshot() -> Vec<PeerCursor> {
+    let st = STATE.lock().unwrap();
+    let borrow = st.borrow;
+    st.order
+        .iter()
+        .filter_map(|conn| {
+            let peer = st.peers.get(conn)?;
+            let (x, y) = peer.pos?;
+            if !peer.can_inject || !peer.supported {
+                return None;
+            }
+            Some(PeerCursor {
+                conn: *conn,
+                x,
+                y,
+                borrowing: borrow.map_or(false, |b| b.peer == *conn),
+            })
+        })
+        .collect()
+}
+
+/// Which cursors the local desktop should show.
+///
+/// The primary controller drives the real pointer, so its cursor is not drawn: the local
+/// user already sees that pointer, and a second marker on top of it would only be noise.
+/// A position outside the desktop is dropped rather than clamped, because a marker at the
+/// wrong edge would claim something that is not true.
+pub fn cursors_to_draw(
+    peers: &[PeerCursor],
+    desktop: (i32, i32, u32, u32),
+    primary: i32,
+) -> Vec<DrawCursor> {
+    let (left, top, width, height) = desktop;
+    let right = left.saturating_add(width as i32);
+    let bottom = top.saturating_add(height as i32);
+    peers
+        .iter()
+        .filter(|peer| peer.conn != primary)
+        .filter(|peer| peer.x >= left && peer.x < right && peer.y >= top && peer.y < bottom)
+        .map(|peer| DrawCursor {
+            conn: peer.conn,
+            x: peer.x - left,
+            y: peer.y - top,
+            borrowing: peer.borrowing,
+        })
+        .collect()
+}
+
 /// Whether this connection may inject an unarbitrated pointer device event (touch, pen).
 ///
 /// Those events do not go through the per-event arbitration, so only the connection that
@@ -2008,6 +2078,58 @@ mod tests {
         set_local_pause_in(&mut st, false);
         assert!(can_inject_pointer_in(&st, 1));
     }
+    #[test]
+    fn only_the_helpers_with_a_position_inside_the_desktop_are_drawn() {
+        let desktop = (0, 0, 1920, 1080);
+        let peers = vec![
+            // The primary drives the real pointer: no marker for it.
+            PeerCursor {
+                conn: 1,
+                x: 100,
+                y: 100,
+                borrowing: false,
+            },
+            // A helper inside the desktop.
+            PeerCursor {
+                conn: 2,
+                x: 640,
+                y: 480,
+                borrowing: true,
+            },
+            // A helper on a second screen to the left, which the layout can have.
+            PeerCursor {
+                conn: 3,
+                x: -800,
+                y: 200,
+                borrowing: false,
+            },
+            // A stale position far outside the layout is dropped, not clamped.
+            PeerCursor {
+                conn: 4,
+                x: 9000,
+                y: 200,
+                borrowing: false,
+            },
+        ];
+        let drawn = cursors_to_draw(&peers, desktop, 1);
+        // Connection 3 is outside this desktop, so it is dropped as well.
+        assert_eq!(drawn.len(), 1);
+        assert_eq!(drawn[0].conn, 2);
+        assert_eq!((drawn[0].x, drawn[0].y), (640, 480));
+        assert!(drawn[0].borrowing);
+
+        // With a layout whose origin is not (0, 0) the coordinates are relative to it.
+        let shifted = cursors_to_draw(&peers, (-1920, -200, 3840, 1280), 1);
+        assert_eq!(shifted.len(), 2);
+        let conn3 = shifted.iter().find(|c| c.conn == 3).expect("conn 3");
+        assert_eq!((conn3.x, conn3.y), (1120, 400));
+        assert!(shifted.iter().all(|c| c.conn != 1 && c.conn != 4));
+        assert!(cursors_to_draw(&peers, desktop, 2)
+            .iter()
+            .all(|c| c.conn != 2));
+        assert!(cursors_to_draw(&[], desktop, 1).is_empty());
+    }
+
     #[test]
     fn key_release_events_target_the_same_key_code() {
         let evt = key_release_event(KeyId(30));

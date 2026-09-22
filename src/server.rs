@@ -58,6 +58,8 @@ pub mod independent_mouse;
 pub mod multi_control;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod multi_control_worker;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod multi_control_overlay;
 #[cfg(not(target_os = "android"))]
 pub mod input_service;
 } else {

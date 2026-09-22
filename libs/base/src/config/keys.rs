@@ -194,6 +194,11 @@ pub const OPTION_MULTI_CONTROL_MODE: &str = "multi-control-mode";
 // the local key is forwarded to the peer as before.
 pub const OPTION_MULTI_CONTROL_OPERATE_KEY: &str = "multi-control-operate-key";
 
+// Server-side: draw the cursors of the other controllers on the controlled desktop, so the
+// local user can see where each of them points. Only "Y" enables it; off by default,
+// because it puts a click-through window on the local desktop.
+pub const OPTION_MULTI_CONTROL_OVERLAY: &str = "multi-control-overlay";
+
 // Client-side: keep client system awake during outgoing sessions (General setting)
 pub const OPTION_KEEP_AWAKE_DURING_OUTGOING_SESSIONS: &str = "keep-awake-during-outgoing-sessions";
 
