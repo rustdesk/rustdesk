@@ -99,23 +99,6 @@ pub fn on_state(state: &MultiControlState) -> Status {
     }
 }
 
-/// The current status as JSON, so the session UI can show why its input was refused
-/// without knowing anything about the borrow protocol.
-pub fn status_json() -> String {
-    let active = ACTIVE.lock().unwrap();
-    serde_json::json!({
-        "enabled": active.enabled,
-        "primary": active.primary,
-        "borrowedByMe": active.borrowed,
-        "keyboardOk": active.keyboard_ok,
-        "epoch": active.epoch,
-        "notice": active.notice,
-        "operateKey": operate_key(),
-        "operateKeyHeld": active.held,
-    })
-    .to_string()
-}
-
 /// Marks the borrow as started or stopped; returns what has to be sent.
 pub fn on_operate_key(down: bool) -> Option<(MultiControlBorrowKind, u64)> {
     let mut active = ACTIVE.lock().unwrap();

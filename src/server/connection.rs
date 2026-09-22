@@ -2186,11 +2186,17 @@ impl Connection {
             }
             self.on_remote_authorized();
         }
+        // The connection is authorized now, and both the negotiated capability and its
+        // type are known: registering before the login request was handled would declare
+        // every peer unsupported and make the mode inert, and registering before this
+        // point would keep peers that never finished authorizing. Input that arrives in
+        // between is dropped for an unknown connection, which is safe.
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        self.register_multi_control_peer();
         let mut msg_out = Message::new();
         msg_out.set_login_response(res);
         self.send(msg_out).await;
-        self.update_scoped_login_options().await;
-        if let Some((dir, show_hidden)) = self.file_transfer.clone() {
+        self.update_scoped_login_options().await;        if let Some((dir, show_hidden)) = self.file_transfer.clone() {
             self.keyboard = false;
             let is_existing_dir = !dir.is_empty() && std::path::Path::new(&dir).is_dir();
             let is_allowed_dir =
@@ -2988,12 +2994,6 @@ impl Connection {
                     SEND_TIMEOUT_VIDEO
                 },
             );
-
-            // The connection type and what the peer can do are only known now, and the
-            // arbitration needs both: registering earlier would declare every peer
-            // unsupported. Remote input that arrives before this is dropped safely.
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            self.register_multi_control_peer();
 
             if !crate::common::is_direct_ip_access(&lr.username) && lr.username != Config::get_id()
             {

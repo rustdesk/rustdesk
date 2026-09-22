@@ -826,7 +826,8 @@ message MessageQuery {
 // Primary-first multi-controller arbitration.
 // Sent by the controlled side to every authenticated controlling connection.
 message MultiControlState {
-  // The controlled side runs the primary-first arbitration.
+  // The controlled side is accepting input right now. It reports false while the display
+  // layout is being re-established, which `notice` explains.
   bool enabled = 1;
   // This connection is the primary controller.
   bool is_primary = 2;
