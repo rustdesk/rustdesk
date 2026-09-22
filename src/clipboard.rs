@@ -923,22 +923,10 @@ pub mod clipboard_listener {
         }
 
         fn on_clipboard_initial_selection(&mut self) -> CallbackResult {
-            // The host's existing selection is not a new copy and must not cancel
-            // the controller's requested initial sync.
+            // Do not broadcast startup state; sessions handle their own initial sync.
+            // Invalidate snapshots captured before the Wayland listener became active,
+            // since copies made during listener startup may appear only in this event.
             CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
-            let sub_lock = self.subscribers.lock().unwrap();
-            for (name, tx) in sub_lock.iter() {
-                if name == super::CLIPBOARD_NAME {
-                    continue;
-                }
-                #[cfg(feature = "unix-file-copy-paste")]
-                if name == super::FILE_CLIPBOARD_NAME {
-                    continue;
-                }
-                if let Err(err) = tx.send(CallbackResult::Next) {
-                    log::debug!("Failed to notify clipboard subscriber {}: {}", name, err);
-                }
-            }
             CallbackResult::Next
         }
 
