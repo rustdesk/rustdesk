@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn a_click_needs_a_position_and_is_located_first() {
+    fn a_click_needs_a_button_and_is_located_first() {
         let at = ConnState {
             pos: Some((5, 6)),
             ..Default::default()
@@ -392,12 +392,29 @@ mod tests {
             decide(true, MOUSE_TYPE_DOWN, LEFT, true, &at),
             Decision::Locate
         );
+        // A press carries its own position, so a connection that has not moved yet is not
+        // refused; the caller locates it at the coordinates of the press itself.
         assert_eq!(
             decide(true, MOUSE_TYPE_DOWN, LEFT, true, &ConnState::default()),
-            Decision::Drop
+            Decision::Locate
         );
         // A press without a known button is not an event we can act on.
         assert_eq!(decide(true, MOUSE_TYPE_DOWN, 0, true, &at), Decision::Drop);
+    }
+
+    #[test]
+    fn a_first_press_is_located_at_the_position_it_carries() {
+        let mut state = State::default();
+        let mut evt = button(LEFT, MOUSE_TYPE_DOWN);
+        evt.x = 33;
+        evt.y = 44;
+        assert_eq!(
+            plan_mouse_in(&mut state, 9, true, &evt),
+            Plan::Locate { x: 33, y: 44 }
+        );
+        // The position is remembered, so the rest of this gesture does not need it again.
+        assert_eq!(state.conns.get(&9).and_then(|st| st.pos), Some((33, 44)));
+        assert_eq!(state.owner, Some(9));
     }
 
     #[test]
@@ -517,10 +534,11 @@ mod tests {
     fn a_drag_keeps_the_pointer_until_the_last_button_is_released() {
         let (a, b) = (7, 8);
         let mut state = State::default();
-        // No position yet: the first click is dropped, not sent to another peer.
+        // The first press of a connection that never moved is located at the position the
+        // press itself carries, instead of being dropped.
         assert_eq!(
             plan_mouse_in(&mut state, a, true, &button(LEFT, MOUSE_TYPE_DOWN)),
-            Plan::Drop
+            Plan::Locate { x: 0, y: 0 }
         );
         assert_eq!(
             plan_mouse_in(&mut state, a, true, &moved(11, 12)),
