@@ -1305,7 +1305,7 @@ dependencies = [
 [[package]]
 name = "clipboard-master"
 version = "4.0.0-beta.6"
-source = "git+https://github.com/rustdesk-org/clipboard-master#7762d74e38db37cfeb6ded88c964b9cdbddfb6db"
+source = "git+https://github.com/fufesou/clipboard-master?branch=fix/wayland-initial-selection#bf126d88df0d2f85561494c56024e37d1b880dd9"
 dependencies = [
  "objc",
  "objc-foundation",
