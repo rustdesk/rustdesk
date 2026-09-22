@@ -1699,8 +1699,8 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
-          parent.target!.imageModel
-              .clearImage(notify: true, invalidatePending: true);
+          parent.target!.imageModel.clearImage(
+              notify: true, invalidatePending: true, updateCursorPos: false);
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
               isDesktop: isDesktop,
@@ -1940,6 +1940,7 @@ class VirtualMouseMode with ChangeNotifier {
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
   int _imageGeneration = 0;
+  bool _updateCursorPosOnNextImage = true;
 
   ui.Image? get image => _image;
 
@@ -1965,11 +1966,19 @@ class ImageModel with ChangeNotifier {
     _imageGeneration++;
   }
 
-  clearImage({bool notify = false, bool invalidatePending = false}) {
+  clearImage(
+      {bool notify = false,
+      bool invalidatePending = false,
+      bool updateCursorPos = true}) {
     if (invalidatePending) {
       invalidatePendingFrames();
     }
-    _image = null;
+    if (notify && invalidatePending) {
+      disposeImage();
+    } else {
+      _image = null;
+    }
+    _updateCursorPosOnNextImage = updateCursorPos;
     if (notify) {
       notifyListeners();
     }
@@ -2034,19 +2043,27 @@ class ImageModel with ChangeNotifier {
   Future<void> update(ui.Image? image,
       {bool Function()? isCurrentSession}) async {
     if (_disposeIfStale(image, isCurrentSession)) return;
+    final updateCursorPos = _updateCursorPosOnNextImage;
     if (_image == null && image != null) {
       if (isDesktop || isWebDesktop) {
-        await parent.target?.canvasModel.updateViewStyle();
+        await parent.target?.canvasModel
+            .updateViewStyle(refreshMousePos: updateCursorPos);
         await parent.target?.canvasModel.updateScrollStyle();
         await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
-        await initializeCursorAndCanvas(parent.target!);
+        await initializeCursorAndCanvas(parent.target!,
+            updateCursorPos: updateCursorPos,
+            isCurrentSession: isCurrentSession);
       }
     }
     if (_disposeIfStale(image, isCurrentSession)) return;
     _image?.dispose();
     _image = image;
+    // A failed decode must not consume the pending cursor-preservation request.
+    if (image != null || isCurrentSession == null) {
+      _updateCursorPosOnNextImage = true;
+    }
     if (image != null) notifyListeners();
   }
 
@@ -2090,6 +2107,7 @@ class ImageModel with ChangeNotifier {
   void disposeImage() {
     _image?.dispose();
     _image = null;
+    _updateCursorPosOnNextImage = true;
   }
 }
 
@@ -4440,15 +4458,20 @@ Future<Map<String, dynamic>?> getCanvasConfig(SessionID sessionId) async {
   }
 }
 
-Future<void> initializeCursorAndCanvas(FFI ffi) async {
+Future<void> initializeCursorAndCanvas(FFI ffi,
+    {bool updateCursorPos = true, bool Function()? isCurrentSession}) async {
   var p = await getCanvasConfig(ffi.sessionId);
+  if (isCurrentSession != null && !isCurrentSession()) return;
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];
   }
-  if (p == null || currentDisplay != ffi.ffiModel.pi.currentDisplay) {
+  if (!updateCursorPos ||
+      p == null ||
+      currentDisplay != ffi.ffiModel.pi.currentDisplay) {
     ffi.cursorModel.updateDisplayOrigin(
-        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0);
+        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0,
+        updateCursorPos: updateCursorPos);
     return;
   }
   double xCursor = p['xCursor'];
