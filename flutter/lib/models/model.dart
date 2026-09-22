@@ -1699,10 +1699,8 @@ class FfiModel with ChangeNotifier {
       if (_pi.currentDisplay == kAllDisplayValue) {
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
-          parent.target!.imageModel.invalidatePendingFrames();
-          if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.clearImage(notify: _pi.displays.isEmpty);
-          }
+          parent.target!.imageModel
+              .clearImage(notify: true, invalidatePending: true);
           final allDisplays = List.generate(_pi.displays.length, (i) => i);
           bind.sessionSwitchDisplay(
               isDesktop: isDesktop,
