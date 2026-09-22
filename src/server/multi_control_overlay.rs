@@ -16,7 +16,7 @@
 //!
 //! Windows only for now: X11 needs a compositing-friendly ARGB visual and Wayland has no
 //! way to draw over another application at all, so both keep the connection-window
-//! indicator instead. See `docs/multi-control-master-progress.md`.
+//! indicator instead.
 
 use crate::server::multi_control::DrawCursor;
 use base::config::keys;

@@ -14,7 +14,6 @@
 //! This module is the pure decision layer: it owns no thread, does no I/O and takes
 //! `Instant` as a parameter, so every rule below is unit tested. The thread that runs
 //! the returned commands is `server/multi_control_worker.rs`.
-//! See `docs/multi-control-master-plan.md`.
 
 use crate::input::{
     MOUSE_BUTTON_BACK, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,

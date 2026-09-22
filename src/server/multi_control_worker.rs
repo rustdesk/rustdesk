@@ -15,7 +15,6 @@
 //! service/portable process: two batches keep their order because this one thread
 //! enqueues them in order, but there is no completion acknowledgement on that path, so
 //! "injected" still means "handed to the injector".
-//! See `docs/multi-control-master-plan.md`.
 
 use super::{
     connection::Sender,

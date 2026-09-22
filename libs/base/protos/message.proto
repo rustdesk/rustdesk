@@ -823,7 +823,7 @@ message MessageQuery {
   int32 switch_display = 1;
 }
 
-// Primary-first multi-controller arbitration, see docs/multi-control-master-plan.md.
+// Primary-first multi-controller arbitration.
 // Sent by the controlled side to every authenticated controlling connection.
 message MultiControlState {
   // The controlled side runs the primary-first arbitration.

@@ -8,7 +8,7 @@
 //!
 //! The state lives in the process that dispatches input events (the main process),
 //! which is also where the decision is made, so the injection paths stay unchanged
-//! and never arbitrate again. See `docs/multi-control-plan.md`.
+//! and never arbitrate again.
 
 use crate::input::{
     MOUSE_BUTTON_BACK, MOUSE_BUTTON_FORWARD, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT,
