@@ -858,8 +858,16 @@ class FfiModel with ChangeNotifier {
             evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
         kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
-    _invalidatePendingFramesForDisplayChange(_pi.displays[display], newDisplay);
+    final previousDisplay = _pi.displays[display];
+    _invalidatePendingFramesForDisplayChange(previousDisplay, newDisplay);
     _pi.displays[display] = newDisplay;
+
+    // A later sync_peer_info may already see these updated dimensions.
+    if (_pi.currentDisplay == kAllDisplayValue &&
+        (previousDisplay.width != newDisplay.width ||
+            previousDisplay.height != newDisplay.height)) {
+      _updateSessionWidthHeight(sessionId);
+    }
 
     if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
       updateCurDisplay(sessionId);
@@ -1689,6 +1697,11 @@ class FfiModel with ChangeNotifier {
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
+      final displaySizesChanged = _pi.currentDisplay == kAllDisplayValue &&
+          (previousDisplayCount != newDisplays.length ||
+              newDisplays.asMap().entries.any((entry) =>
+                  _pi.displays[entry.key].width != entry.value.width ||
+                  _pi.displays[entry.key].height != entry.value.height));
       if (previousDisplayCount == 1 && newDisplays.length == 1) {
         _invalidatePendingFramesForDisplayChange(
             _pi.displays.first, newDisplays.first);
@@ -1697,8 +1710,7 @@ class FfiModel with ChangeNotifier {
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
-        if (previousDisplayCount != _pi.displays.length &&
-            displaysRect() == _rect) {
+        if (displaySizesChanged && displaysRect() == _rect) {
           _updateSessionWidthHeight(sessionId);
         }
         updateCurDisplay(sessionId);
