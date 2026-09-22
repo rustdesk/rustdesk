@@ -128,6 +128,7 @@ winapi = { version = "0.3", features = [
 windows = { version = "0.61", features = [
     "Win32",
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",
@@ -144,7 +145,6 @@ windows = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
-    "Win32_Graphics_Gdi",
 ] }
 winreg = "0.11"
 windows-service = "0.6"

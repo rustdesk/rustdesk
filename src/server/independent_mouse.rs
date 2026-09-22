@@ -38,6 +38,16 @@ const OWNER_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 lazy_static::lazy_static! {
     static ref STATE: Mutex<State> = Default::default();
+    /// Held while a caller turns a plan into injected events. Without it two connections
+    /// can plan, then inject in the other order, and a click lands where the other
+    /// connection pointed - the very thing this mode exists to prevent.
+    static ref INJECT: Mutex<()> = Mutex::new(());
+}
+
+/// Runs `f` while no other connection may move the host pointer.
+pub fn with_pointer<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = INJECT.lock().unwrap();
+    f()
 }
 
 #[derive(Default)]
@@ -45,6 +55,8 @@ struct State {
     conns: HashMap<i32, ConnState>,
     /// The connection that currently keeps the host pointer, if it drags.
     owner: Option<i32>,
+    /// The desktop the stored positions belong to.
+    layout: u64,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
@@ -115,6 +127,17 @@ pub fn sweep() -> Vec<(i32, MouseEvent)> {
     if !on {
         return take_all(&mut state);
     }
+    let layout = layout_signature();
+    if layout != state.layout {
+        // The desktop changed, so every stored position belongs to a layout that is gone
+        // and moving the pointer to one of them would land somewhere else.
+        state.layout = layout;
+        let events = take_all(&mut state);
+        if !events.is_empty() {
+            log::info!("the display layout changed, dropping the stored mouse positions");
+        }
+        return events;
+    }
     let Some(conn) = idle_owner(&state, Instant::now()) else {
         return Vec::new();
     };
@@ -126,15 +149,37 @@ pub fn sweep() -> Vec<(i32, MouseEvent)> {
     take_conn(&mut state, conn)
 }
 
+/// Signature of the current display layout, so a stored position from another layout is
+/// never used to move the pointer.
+fn layout_signature() -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    match crate::server::display_service::try_get_displays() {
+        Ok(displays) => {
+            for display in displays.iter() {
+                let (x, y) = display.origin();
+                x.hash(&mut hasher);
+                y.hash(&mut hasher);
+                display.width().hash(&mut hasher);
+                display.height().hash(&mut hasher);
+            }
+        }
+        Err(err) => log::debug!("failed to read the displays: {}", err),
+    }
+    hasher.finish()
+}
+
 fn plan_mouse_in(state: &mut State, conn: i32, can_inject: bool, evt: &MouseEvent) -> Plan {
     let evt_type = evt.mask & MOUSE_TYPE_MASK;
     let buttons = evt.mask >> 3;
     let owned_by_self = state.owner.map_or(true, |owner| owner == conn);
     let st = state.conns.entry(conn).or_default();
     let plan = match decide(can_inject, evt_type, buttons, owned_by_self, st) {
-        // `decide` only answers `Locate` when there is a position to move to.
         Decision::Locate => match st.pos {
             Some((x, y)) => Plan::Locate { x, y },
+            // A press carries its own position, so a connection that has not moved yet
+            // does not lose its first click. A wheel step does not: its x and y are deltas.
+            None if evt_type == MOUSE_TYPE_DOWN => Plan::Locate { x: evt.x, y: evt.y },
             None => Plan::Drop,
         },
         Decision::Track => Plan::Track,
@@ -148,7 +193,12 @@ fn plan_mouse_in(state: &mut State, conn: i32, can_inject: bool, evt: &MouseEven
         }
         Plan::Locate { .. } | Plan::Inject => {
             match evt_type {
-                MOUSE_TYPE_DOWN => st.buttons |= buttons,
+                MOUSE_TYPE_DOWN => {
+                    st.buttons |= buttons;
+                    if st.pos.is_none() {
+                        st.pos = Some((evt.x, evt.y));
+                    }
+                }
                 MOUSE_TYPE_UP => st.buttons &= !buttons,
                 _ => {}
             }
@@ -202,7 +252,7 @@ fn decide(
         // peer's hands, and the recorded position could not follow them.
         MOUSE_TYPE_MOVE_RELATIVE => Decision::Drop,
         MOUSE_TYPE_DOWN => {
-            if buttons & known_buttons() != 0 && owned_by_self && st.pos.is_some() {
+            if buttons & known_buttons() != 0 && owned_by_self {
                 Decision::Locate
             } else {
                 Decision::Drop

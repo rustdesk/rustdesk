@@ -30,7 +30,9 @@ const PUBLISH_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Only `Y` turns the overlay on, and only while the mode itself runs.
 pub fn enabled() -> bool {
-    super::multi_control::enabled() && Config::get_option(keys::OPTION_MULTI_CONTROL_OVERLAY) == "Y"
+    SUPPORTED
+        && super::multi_control::enabled()
+        && Config::get_option(keys::OPTION_MULTI_CONTROL_OVERLAY) == "Y"
 }
 
 /// Whether this build can draw the overlay at all.
@@ -49,34 +51,30 @@ lazy_static::lazy_static! {
 
 /// Hands the current set of controller cursors to the overlay.
 ///
-/// Cheap to call on every input batch: it throttles itself, and it hides the overlay again
-/// when the set becomes empty or the option is turned off.
+/// Cheap to call on every input batch: an unchanged set is not repainted at all, and a
+/// change is rate limited, so a controller that keeps still costs nothing.
 pub fn update(cursors: &[DrawCursor]) {
     let wanted = enabled() && !cursors.is_empty();
+    let wanted_cursors: Vec<DrawCursor> = if wanted { cursors.to_vec() } else { Vec::new() };
     let mut published = PUBLISHED.lock().unwrap();
+    if published.active == wanted && published.cursors == wanted_cursors {
+        // Nothing to paint: this is the steady state while the controllers keep still.
+        return;
+    }
     if let Some(last) = published.last {
-        // Always let the last state through, otherwise a controller that stops moving
-        // would leave a stale marker behind.
-        if last.elapsed() < PUBLISH_INTERVAL && wanted == published.active {
+        if last.elapsed() < PUBLISH_INTERVAL {
+            // Too soon, and the change is not lost: the next call carries it.
             return;
         }
     }
     published.last = Some(Instant::now());
-    published.cursors = cursors.to_vec();
-    let was_active = published.active;
     published.active = wanted;
-    if !wanted && !was_active {
-        return;
-    }
-    let markers: Vec<(i32, i32, i32, bool)> = if wanted {
-        published
-            .cursors
-            .iter()
-            .map(|c| (c.conn, c.x, c.y, c.borrowing))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    published.cursors = wanted_cursors;
+    let markers: Vec<(i32, i32, i32, bool)> = published
+        .cursors
+        .iter()
+        .map(|c| (c.conn, c.x, c.y, c.borrowing))
+        .collect();
     drop(published);
     publish(&markers);
 }
@@ -120,15 +118,22 @@ fn publish(markers: &[(i32, i32, i32, bool)]) {
     draw_local(markers);
 }
 
-/// Hides the overlay, e.g. when the mode is turned off or the last session ends.
+/// Hides the overlay everywhere and ends the window, e.g. when the mode is turned off or
+/// the option is unchecked.
 pub fn stop() {
-    let mut published = PUBLISHED.lock().unwrap();
-    published.active = false;
-    published.last = None;
-    published.cursors.clear();
-    drop(published);
-    imp::markers().clear();
-    imp::hide();
+    {
+        let mut published = PUBLISHED.lock().unwrap();
+        published.active = false;
+        published.last = None;
+        published.cursors.clear();
+    }
+    // The window may live in the process that owns the desktop, so the hide travels the
+    // same way the markers did: clearing this process alone would leave the last frame
+    // frozen on the other one.
+    publish(&[]);
+    imp::shutdown();
+    // A new attempt may succeed, e.g. once there is an interactive desktop again.
+    imp::reset_failure();
 }
 
 /// Whether the cursors of the remote controllers are currently drawn.
@@ -139,7 +144,13 @@ pub fn is_active() -> bool {
 #[cfg(windows)]
 mod imp {
     use super::DrawCursor;
-    use std::{mem, sync::Mutex};
+    use std::{
+        mem,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Mutex,
+        },
+    };
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
@@ -148,13 +159,14 @@ mod imp {
         DEFAULT_GUI_FONT, HBRUSH, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetSystemMetrics,
-        RegisterClassW, SetLayeredWindowAttributes, SetWindowDisplayAffinity, ShowWindow,
-        TranslateMessage, CS_HREDRAW, CS_VREDRAW, LWA_ALPHA, LWA_COLORKEY, SM_CXVIRTUALSCREEN,
-        SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SW_HIDE, SW_SHOWNA,
-        SYSTEM_METRICS_INDEX, WDA_EXCLUDEFROMCAPTURE, WM_DESTROY, WM_PAINT, WNDCLASSW,
-        WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
-        WS_POPUP,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+        GetSystemMetrics, PostMessageW, PostQuitMessage, RegisterClassW,
+        SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos, ShowWindow,
+        TranslateMessage, UnregisterClassW, CS_HREDRAW, CS_VREDRAW, HWND_TOPMOST, LWA_ALPHA,
+        LWA_COLORKEY, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SWP_NOACTIVATE, SW_HIDE, SW_SHOWNA, SYSTEM_METRICS_INDEX, WDA_EXCLUDEFROMCAPTURE, WM_APP,
+        WM_DESTROY, WM_PAINT, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     /// The colour that means "transparent" in the layered window. Any colour works, as long
@@ -175,10 +187,19 @@ mod imp {
 
     const MARKER: i32 = 14;
     const RING: i32 = 22;
+    /// Tells the window thread to end itself; `WM_APP` and up are free for a program.
+    const WM_APP_QUIT: u32 = WM_APP + 1;
 
     lazy_static::lazy_static! {
         static ref CURSORS: Mutex<Vec<DrawCursor>> = Mutex::new(Vec::new());
         static ref THREAD: Mutex<Option<isize>> = Mutex::new(None);
+        /// The desktop the window was sized for, so a display change can be noticed.
+        static ref WINDOW_RECT: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
+        /// A window could not be created: without this latch the publish rate would retry
+        /// it for as long as the option stays on.
+        static ref FAILED: AtomicBool = AtomicBool::new(false);
+        /// A thread is on its way to a window, so two callers do not create two of them.
+        static ref STARTING: AtomicBool = AtomicBool::new(false);
     }
 
     /// The markers the window paints; the caller fills it before asking for a repaint.
@@ -194,10 +215,14 @@ mod imp {
 
     /// Shows the markers, starting the window thread on first use.
     pub fn draw() {
+        if FAILED.load(Ordering::SeqCst) {
+            return;
+        }
         let raw = *THREAD.lock().unwrap();
         match raw {
             Some(raw) => {
                 let hwnd = HWND(raw as *mut core::ffi::c_void);
+                fit_to_desktop(hwnd);
                 // The window outlives individual marker sets, so it is only hidden and
                 // shown again instead of being recreated.
                 unsafe {
@@ -212,11 +237,54 @@ mod imp {
     /// Hides the markers; the window itself stays for the next time.
     pub fn hide() {
         CURSORS.lock().unwrap().clear();
-        if let Some(raw) = *THREAD.lock().unwrap() {
+        let raw = *THREAD.lock().unwrap();
+        if let Some(raw) = raw {
             let hwnd = HWND(raw as *mut core::ffi::c_void);
             unsafe {
                 let _ = ShowWindow(hwnd, SW_HIDE);
             }
+        }
+    }
+
+    /// Ends the window and its thread, so nothing of a mode that is off stays behind.
+    pub fn shutdown() {
+        let raw = *THREAD.lock().unwrap();
+        if let Some(raw) = raw {
+            let hwnd = HWND(raw as *mut core::ffi::c_void);
+            unsafe {
+                let _ = PostMessageW(Some(hwnd), WM_APP_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
+    }
+
+    /// Lets a later attempt create a window again.
+    pub fn reset_failure() {
+        FAILED.store(false, Ordering::SeqCst);
+    }
+
+    /// Resizes the window when the desktop changed under it: the markers are relative to
+    /// the desktop, so a window that keeps the geometry of an older layout draws every
+    /// marker in the wrong place, or clips it away.
+    fn fit_to_desktop(hwnd: HWND) {
+        let screen = virtual_screen();
+        {
+            let mut rect = WINDOW_RECT.lock().unwrap();
+            if *rect == screen {
+                return;
+            }
+            *rect = screen;
+        }
+        let (x, y, width, height) = screen;
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE,
+            );
         }
     }
 
@@ -230,8 +298,11 @@ mod imp {
     }
 
     fn start_thread() {
-        let mut guard = THREAD.lock().unwrap();
-        if guard.is_some() {
+        if STARTING.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if THREAD.lock().unwrap().is_some() {
+            STARTING.store(false, Ordering::SeqCst);
             return;
         }
         let (tx, rx) = std::sync::mpsc::channel::<isize>();
@@ -241,16 +312,28 @@ mod imp {
             .is_err()
         {
             hbb_common::log::error!("failed to start the multi-control overlay thread");
+            STARTING.store(false, Ordering::SeqCst);
             return;
         }
+        // The window handle, or 0 when the thread could not create one. The lock is not
+        // held while waiting: `hide` and `draw` may be called from other threads.
         match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(0) => {
+                FAILED.store(true, Ordering::SeqCst);
+                hbb_common::log::warn!("the multi-control overlay could not be created");
+            }
             Ok(raw) => {
-                *guard = Some(raw);
+                *THREAD.lock().unwrap() = Some(raw);
                 let hwnd = HWND(raw as *mut core::ffi::c_void);
+                fit_to_desktop(hwnd);
                 repaint(hwnd);
             }
-            Err(err) => hbb_common::log::error!("the multi-control overlay did not start: {}", err),
+            Err(err) => {
+                FAILED.store(true, Ordering::SeqCst);
+                hbb_common::log::error!("the multi-control overlay did not start: {}", err);
+            }
         }
+        STARTING.store(false, Ordering::SeqCst);
     }
 
     fn run(tx: std::sync::mpsc::Sender<isize>) {
@@ -287,36 +370,55 @@ mod imp {
             ) {
                 Ok(hwnd) => hwnd,
                 Err(err) => {
-                    hbb_common::log::error!("failed to create the multi-control overlay: {}", err);
+                    hbb_common::log::warn!("failed to create the multi-control overlay: {}", err);
+                    let _ = tx.send(0);
                     return;
                 }
             };
             // Color-key transparency: everything painted in KEY_COLOR lets the desktop
             // through, and WM_NCHITTEST is never reached because the window is
             // WS_EX_TRANSPARENT.
-            let _ = SetLayeredWindowAttributes(
+            if let Err(err) = SetLayeredWindowAttributes(
                 hwnd,
                 windows::Win32::Foundation::COLORREF(KEY_COLOR),
                 255,
                 LWA_COLORKEY | LWA_ALPHA,
-            );
+            ) {
+                // A layered window whose attributes were never set is not displayed at
+                // all, so keeping it would only hide the reason.
+                hbb_common::log::warn!(
+                    "failed to make the multi-control overlay transparent: {}",
+                    err
+                );
+                let _ = DestroyWindow(hwnd);
+                let _ = tx.send(0);
+                return;
+            }
             // Keep the markers out of the screen capture, so the controllers do not see
             // them twice (they already get the cursor of every peer over the video).
             if let Err(err) = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) {
-                hbb_common::log::info!(
-                    "the multi-control overlay may appear in the screen capture: {}",
+                // Without this the markers would be burned into every controller's video,
+                // which is worse than not showing them at all.
+                hbb_common::log::warn!(
+                    "the multi-control overlay would appear in the screen capture: {}",
                     err
                 );
+                let _ = DestroyWindow(hwnd);
+                let _ = tx.send(0);
+                return;
             }
+            *WINDOW_RECT.lock().unwrap() = (x, y, width, height);
             let _ = tx.send(hwnd.0 as isize);
             let mut message = mem::zeroed();
             while GetMessageW(&mut message, None, 0, 0).as_bool() {
                 let _ = TranslateMessage(&message);
                 DispatchMessageW(&message);
-                if message.message == WM_DESTROY {
-                    break;
-                }
             }
+            // The window normally ends through `WM_APP_QUIT`; this also covers a loop that
+            // ended some other way, so neither the window nor its class stays behind.
+            let _ = DestroyWindow(hwnd);
+            let _ = UnregisterClassW(PCWSTR(class_name.as_ptr()), None);
+            *WINDOW_RECT.lock().unwrap() = (0, 0, 0, 0);
             *THREAD.lock().unwrap() = None;
         }
     }
@@ -349,6 +451,15 @@ mod imp {
                 let dc = BeginPaint(hwnd, &mut paint);
                 paint_markers(dc, hwnd);
                 let _ = EndPaint(hwnd, &paint);
+                LRESULT(0)
+            }
+            WM_APP_QUIT => {
+                // Ends the message loop through WM_DESTROY, on this thread.
+                let _ = DestroyWindow(hwnd);
+                LRESULT(0)
+            }
+            WM_DESTROY => {
+                PostQuitMessage(0);
                 LRESULT(0)
             }
             _ => DefWindowProcW(hwnd, message, wparam, lparam),
@@ -425,4 +536,8 @@ mod imp {
     pub fn draw() {}
 
     pub fn hide() {}
+
+    pub fn shutdown() {}
+
+    pub fn reset_failure() {}
 }
