@@ -443,6 +443,11 @@ impl<T: InvokeUiSession> Remote<T> {
 
         #[cfg(not(target_os = "ios"))]
         if self.handler.is_default() && _set_disconnected_ok {
+            // Other sessions may keep the listener running after this one disconnects.
+            #[cfg(feature = "flutter")]
+            crate::flutter::update_text_clipboard_required();
+            #[cfg(all(feature = "flutter", feature = "unix-file-copy-paste"))]
+            crate::flutter::update_file_clipboard_required();
             Client::try_stop_clipboard();
         }
 
