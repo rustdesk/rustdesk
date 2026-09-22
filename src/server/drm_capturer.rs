@@ -2825,4 +2825,291 @@ mod drm_capturer_tests {
         assert!(demote_cooldown(1) + burn < Duration::from_secs(40));
         assert!(demote_cooldown(5) + burn > Duration::from_secs(8 * 60));
     }
+
+    // ---------------------------------------------------------------------------------------
+    // rustdesk#16242 round 2: the measurement behind the inference model.
+    //
+    // The question a synthetic fixture cannot answer: when the driver publishes no hotspot and
+    // the sprite has to be turned upright before guessing, how far from the THEME's real click
+    // point does each flow land? Both flows are driven here, per shape and per angle, against
+    // the hotspot the theme author wrote into the cursor file. It reads the installed Adwaita
+    // theme, so it prints instead of asserting and is ignored by default:
+    //
+    //   cargo test --features drm --lib drm_capturer_tests::adwaita -- --ignored --nocapture
+    // ---------------------------------------------------------------------------------------
+
+    /// Minimal Xcursor reader. The format is a 16-byte header, a table of contents of 12-byte
+    /// entries, and one chunk per (nominal size, animation frame); an image chunk is 36 bytes of
+    /// header followed by width*height little-endian ARGB words, so byte 3 of each pixel is the
+    /// alpha `infer_hotspot` reads. Only the FIRST frame of each nominal size is taken.
+    fn xcursor_images(path: &std::path::Path) -> Vec<(u32, usize, usize, i32, i32, Vec<u8>)> {
+        let b = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return Vec::new(),
+        };
+        let u32at = |o: usize| -> u32 {
+            if o + 4 > b.len() {
+                0
+            } else {
+                u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
+            }
+        };
+        if b.len() < 16 || &b[0..4] != b"Xcur" {
+            return Vec::new();
+        }
+        let (hdr, ntoc) = (u32at(4) as usize, u32at(12) as usize);
+        let mut out: Vec<(u32, usize, usize, i32, i32, Vec<u8>)> = Vec::new();
+        for i in 0..ntoc {
+            let e = hdr + i * 12;
+            if u32at(e) != 0xfffd_0002 {
+                continue;
+            }
+            let nominal = u32at(e + 4);
+            if out.iter().any(|(n, ..)| *n == nominal) {
+                continue;
+            }
+            let p = u32at(e + 8) as usize;
+            let (w, h) = (u32at(p + 16) as usize, u32at(p + 20) as usize);
+            let (xhot, yhot) = (u32at(p + 24) as i32, u32at(p + 28) as i32);
+            let px = p + 36;
+            if w == 0 || h == 0 || px.saturating_add(w * h * 4) > b.len() {
+                continue;
+            }
+            out.push((nominal, w, h, xhot, yhot, b[px..px + w * h * 4].to_vec()));
+        }
+        out
+    }
+
+    fn dist(a: (i32, i32), b: (i32, i32)) -> f64 {
+        let (dx, dy) = ((a.0 - b.0) as f64, (a.1 - b.1) as f64);
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    #[test]
+    #[ignore]
+    fn adwaita_hotspot_survey() {
+        let dir = std::path::Path::new("/usr/share/icons/Adwaita/cursors");
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .expect("no installed Adwaita cursors to measure")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        let want: u32 = std::env::var("SURVEY_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(24);
+        let mut display = 20_000;
+        println!("SURVEY size={want}");
+        println!("shape,size,w,h,truth_x,truth_y,box,t,sent_x,sent_y,base_x,base_y,base_err,head_x,head_y,head_err");
+        for name in &names {
+            let imgs = xcursor_images(&dir.join(name));
+            let Some((n, w, h, tx, ty, up)) = imgs.into_iter().find(|(n, ..)| *n == want) else {
+                println!("# {name}: no {want} px image");
+                continue;
+            };
+            // The opaque box, to tell the shapes apart afterwards.
+            let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
+            for (i, px) in up.chunks_exact(4).take(w * h).enumerate() {
+                if px[3] >= 128 {
+                    let (x, y) = ((i % w) as i32, (i / w) as i32);
+                    minx = minx.min(x);
+                    maxx = maxx.max(x);
+                    miny = miny.min(y);
+                    maxy = maxy.max(y);
+                }
+            }
+            let bx = format!("{}x{}+{}+{}", maxx - minx + 1, maxy - miny + 1, minx, miny);
+            for t in [0, 90, 180, 270] {
+                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+                // What the producer puts on the wire: the guess taken on the sprite as the plane
+                // holds it, with hot_measured false.
+                let sent = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
+                // The flow before this PR: map that point back as if it were a pixel.
+                let base = unrotate_hotspot(t, sw as i32, sh as i32, sent.0, sent.1);
+                // The flow in this PR, read back from the real delivery path.
+                display += 1;
+                deliver_drm_cursor(display, 1, 1, sw as u32, sh as u32, sent.0, sent.1, false, scan, t);
+                let head = {
+                    let map = DRM_CURSOR.lock().unwrap();
+                    let (_, c) = map.get(&display).expect("nothing published");
+                    (c.hotx, c.hoty)
+                };
+                println!(
+                    "{name},{n},{w},{h},{tx},{ty},{bx},{t},{},{},{},{},{:.2},{},{},{:.2}",
+                    sent.0, sent.1, base.0, base.1, dist(base, (tx, ty)),
+                    head.0, head.1, dist(head, (tx, ty))
+                );
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // rustdesk#16242 round 2: the guess measured against the hotspots a THEME declares.
+    //
+    // Every test above builds its own sprite, so all of them compare the guess with the guess.
+    // That can pin a mapping but it cannot say whether the guess is any good. These two read the
+    // expected value from the cursor theme instead - the click point its author wrote into the
+    // file, which is exactly what a compositor programs into HOTSPOT_X/Y when it has the
+    // property to program.
+    // -----------------------------------------------------------------------------------------
+
+    include!("drm_cursor_theme.rs");
+
+    /// Expand a fixture's packed alpha mask into the sprite the delivery path takes. Only alpha
+    /// is set: the guess reads nothing else.
+    fn theme_sprite(mask_hex: &str, w: usize, h: usize) -> Vec<u8> {
+        let bytes: Vec<u8> = (0..mask_hex.len() / 2)
+            .map(|i| u8::from_str_radix(&mask_hex[i * 2..i * 2 + 2], 16).expect("fixture hex"))
+            .collect();
+        let mut px = vec![0u8; w * h * 4];
+        for i in 0..w * h {
+            if bytes[i / 8] & (0x80 >> (i % 8)) != 0 {
+                px[i * 4 + 3] = 255;
+            }
+        }
+        px
+    }
+
+    /// The rule this PR replaced, frozen, so "no shape gets worse" is a test and not a claim.
+    fn box_corner_guess(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
+        let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
+        for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
+            if px[3] >= 128 {
+                let (x, y) = ((i % w) as i32, (i / w) as i32);
+                minx = minx.min(x);
+                maxx = maxx.max(x);
+                miny = miny.min(y);
+                maxy = maxy.max(y);
+            }
+        }
+        if maxx < minx || maxy < miny {
+            return (0, 0);
+        }
+        let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
+        if bh > bw * 2 || bw > bh * 2 {
+            ((minx + maxx) / 2, (miny + maxy) / 2)
+        } else {
+            (minx, miny)
+        }
+    }
+
+    fn away(a: (i32, i32), b: (i32, i32)) -> f64 {
+        (((a.0 - b.0) as f64).powi(2) + ((a.1 - b.1) as f64).powi(2)).sqrt()
+    }
+
+    /// A hotspot names a point on the SHAPE, so the same sprite has to get the same click point
+    /// whatever angle the output happens to sit at. This drives the real delivery path for every
+    /// shape in the theme at all four angles and demands exactly that.
+    ///
+    /// The maintainer's objection on this PR was a table of four shapes where the old flow landed
+    /// closer than the new one. It did, at some angles - and 16 to 19 px out at the others, which
+    /// is what the second half of this test measures: with the old flow not one of the 35 shapes
+    /// keeps its hotspot across the four angles, and the point moves by 15 px on average. That
+    /// number is also the control. Without it the first assertion would still pass on a revert,
+    /// since a flow that is wrong the same way at every angle is consistent too.
+    #[test]
+    fn a_published_hotspot_does_not_move_when_the_output_turns() {
+        let mut display = 21_000;
+        let (mut spread_sum, mut spread_max, mut spread_zero) = (0f64, 0f64, 0usize);
+        for &(name, w, h, _, _, mask) in THEME_SHAPES {
+            let (w, h) = (w as usize, h as usize);
+            let up = theme_sprite(mask, w, h);
+            let (mut published, mut mapped) = (Vec::new(), Vec::new());
+            for t in [0, 90, 180, 270] {
+                let (scan, sw, sh) = as_scanned_out(&up, w, h, t);
+                // What the producer puts on the wire: the guess taken on the sprite as the plane
+                // holds it, with no provenance behind it.
+                let sent = scrap::drm_reader::infer_hotspot(&scan, sw, sh);
+                mapped.push(unrotate_hotspot(t, sw as i32, sh as i32, sent.0, sent.1));
+                display += 1;
+                deliver_drm_cursor(
+                    display, 1, 1, sw as u32, sh as u32, sent.0, sent.1, false, scan, t,
+                );
+                let map = DRM_CURSOR.lock().unwrap();
+                let (_, c) = map.get(&display).expect("the delivery path published nothing");
+                published.push((c.hotx, c.hoty));
+            }
+            assert!(
+                published.windows(2).all(|p| p[0] == p[1]),
+                "{name}: the published hotspot follows the output angle: {published:?}"
+            );
+            let spread = mapped
+                .iter()
+                .flat_map(|a| mapped.iter().map(move |b| away(*a, *b)))
+                .fold(0f64, f64::max);
+            spread_sum += spread;
+            spread_max = spread_max.max(spread);
+            if spread == 0.0 {
+                spread_zero += 1;
+            }
+        }
+        // The control. Two shapes survive the old flow as well, and they are the two the
+        // half-turn rule sends to the box centre - `nesw-resize` and `nwse-resize`, the diagonal
+        // two-headed arrows - because a box centre is the one guess that does map like a pixel.
+        // The other 33 move, by 15 px on average on a 24 px sprite. Without this the assertion
+        // above would also pass on a revert: a flow that is wrong the same way at every angle is
+        // consistent too.
+        let n = THEME_SHAPES.len();
+        assert!(
+            n - spread_zero >= 33,
+            "the control has gone vacuous: the old flow now keeps {spread_zero} of {n} shapes \
+             stable, so the assertion above no longer separates the two flows"
+        );
+        assert!(
+            spread_sum / n as f64 > 10.0 && spread_max > 20.0,
+            "the control is weak: old-flow spread mean {:.2} max {:.2} over {n} shapes",
+            spread_sum / n as f64,
+            spread_max
+        );
+    }
+
+    /// How far the guess lands from the click point the theme declares, per shape and in
+    /// aggregate, with the rule this PR replaced as the baseline.
+    ///
+    /// The bounds are the measured numbers plus a little slack, so a model change that moves any
+    /// shape has to come here and say so. `help` is the worst case and stays that way: the theme
+    /// puts its click point on the dot of the question mark, which no bitmap can predict. That is
+    /// the reason a hotspot the driver publishes is always preferred to this.
+    #[test]
+    fn the_guess_lands_where_the_theme_says_for_the_shapes_it_can() {
+        let (mut sum, mut worst, mut worst_name, mut improved) = (0f64, 0f64, "", 0usize);
+        let mut regressed = Vec::new();
+        for &(name, w, h, hx, hy, mask) in THEME_SHAPES {
+            let (w, h) = (w as usize, h as usize);
+            let up = theme_sprite(mask, w, h);
+            let truth = (hx, hy);
+            let now = away(scrap::drm_reader::infer_hotspot(&up, w, h), truth);
+            let before = away(box_corner_guess(&up, w, h), truth);
+            sum += now;
+            if now > worst {
+                worst = now;
+                worst_name = name;
+            }
+            if now < before - 0.005 {
+                improved += 1;
+            } else if now > before + 0.005 {
+                regressed.push((name, before, now));
+            }
+        }
+        let n = THEME_SHAPES.len();
+        assert!(
+            regressed.is_empty(),
+            "the new guess is further from the theme hotspot than the old one on {regressed:?}"
+        );
+        assert!(
+            improved >= 17,
+            "only {improved} of {n} shapes improved; the rule has stopped paying for itself"
+        );
+        assert!(
+            sum / n as f64 <= 7.0,
+            "mean error {:.2} px over {n} shapes at 24 px, was 6.57",
+            sum / n as f64
+        );
+        assert!(
+            worst <= 22.0,
+            "worst shape {worst_name} at {worst:.2} px, was help at 21.54"
+        );
+    }
 }

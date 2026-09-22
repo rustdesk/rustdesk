@@ -38,17 +38,6 @@ pub struct CursorSnapshot {
     pub colors: Vec<u8>,
 }
 
-/// Where a cursor bitmap's hotspot most likely is, from its opaque pixels alone: the top-left of
-/// the opaque bounding box for an arrow, its centre for an ELONGATED shape (an I-beam), in either
-/// direction. Only meaningful on an UPRIGHT sprite - a rotated arrow's tip is some other corner of
-/// its box.
-///
-/// The aspect test is symmetric because a text cursor is not always the vertical one. Adwaita's
-/// `vertical-text` shape is a horizontal I-beam: at 24 px its opaque box is 20x9 and the theme's
-/// own hotspot is (12, 11), i.e. its centre. A tall-only test calls that shape an arrow and returns
-/// (2, 6), which is 11.2 px from the truth; the centre is 1.4 px away. Checked against all 35
-/// shapes of the installed theme at 24 px: making the test symmetric moves exactly that one shape
-/// and leaves the other 34 byte-identical, arrows included.
 /// Fold everything that makes a cursor a DIFFERENT cursor into its id.
 ///
 /// The producer dedupes by comparing this against the last one it sent, so anything left out is
@@ -94,30 +83,30 @@ fn provenance_is_news(last: i8, now: i8) -> bool {
 }
 
 impl DrmReader {
-/// Say once, and again only if it changes, where the hotspot is coming from. Without this the
-/// three states are indistinguishable on a running box, which makes the decision unverifiable
-/// anywhere but a unit test.
-fn note_hotspot_provenance(&mut self, answered: Option<bool>, hot_measured: bool) {
-    let now = provenance_code(answered);
-    let last = std::mem::replace(&mut self.last_provenance, now);
-    if !provenance_is_news(last, now) {
-        return;
+    /// Say once, and again only if it changes, where the hotspot is coming from. Without this the
+    /// three states are indistinguishable on a running box, which makes the decision unverifiable
+    /// anywhere but a unit test.
+    fn note_hotspot_provenance(&mut self, answered: Option<bool>, hot_measured: bool) {
+        let now = provenance_code(answered);
+        let last = std::mem::replace(&mut self.last_provenance, now);
+        if !provenance_is_news(last, now) {
+            return;
+        }
+        match answered {
+            Some(true) => log::info!(
+                "drm: cursor hotspot provenance: the driver published HOTSPOT_X/Y, using its value"
+            ),
+            Some(false) => log::info!(
+                "drm: cursor hotspot provenance: the plane exposes no HOTSPOT_X/Y, inferring the \
+                 hotspot from the bitmap"
+            ),
+            None => log::info!(
+                "drm: cursor hotspot provenance: unavailable (libdrmtap older than 0.5.6, or a \
+                 pre-0.5.6 privileged helper); falling back to the coordinate heuristic, which says \
+                 hot_measured={hot_measured}"
+            ),
+        }
     }
-    match answered {
-        Some(true) => log::info!(
-            "drm: cursor hotspot provenance: the driver published HOTSPOT_X/Y, using its value"
-        ),
-        Some(false) => log::info!(
-            "drm: cursor hotspot provenance: the plane exposes no HOTSPOT_X/Y, inferring the \
-             hotspot from the bitmap"
-        ),
-        None => log::info!(
-            "drm: cursor hotspot provenance: unavailable (libdrmtap older than 0.5.6, or a \
-             pre-0.5.6 privileged helper); falling back to the coordinate heuristic, which says \
-             hot_measured={hot_measured}"
-        ),
-    }
-}
 }
 
 /// Whether `hot_x`/`hot_y` are the driver's answer rather than a guess.
@@ -139,6 +128,26 @@ fn hot_measured_from(answered: Option<bool>, hot_x: i32, hot_y: i32) -> bool {
     }
 }
 
+/// A mirror has to agree on this many of every 100 pixels of the union to count as symmetry.
+/// Swept against the Adwaita theme at six nominal sizes: below 90 the rule starts moving shapes
+/// whose corner guess was already right (`grabbing`, `grab`, `progress`), and from 90 up to 98
+/// nothing regresses, so 95 sits in the middle of the range that can only help.
+const MIRROR_AGREEMENT_PERCENT: u64 = 95;
+
+/// Guess the click point of a cursor bitmap, for the drivers that publish no hotspot.
+///
+/// Two facts drive it. Cursors are DRAWN pointing up and to the left, so the top-left corner of
+/// the opaque box is where an arrow's tip is - a fact about the sprite in its own upright frame,
+/// and the reason this guess is only meaningful when taken there. And a shape that is mirror
+/// symmetric about one of the box's mid-lines has no distinguished end on that axis at all - a
+/// crosshair, an I-beam, a two-headed resize arrow - so on that axis the corner names nothing and
+/// the click point is the middle.
+///
+/// Measured against the hotspots the installed theme declares (adwaita-icon-theme 50, 35 shapes
+/// at each of its six nominal sizes, 210 cases): the mean error falls from 0.43 to 0.27 of the
+/// cursor's size, 17 of the 35 shapes improve, and none gets worse. The remaining error is shapes
+/// whose click point the theme puts somewhere no bitmap can predict - `help` points at the dot of
+/// its question mark - which is why a published hotspot is always preferred to this.
 pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
     let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
     for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
@@ -154,11 +163,46 @@ pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
         return (0, 0);
     }
     let (bw, bh) = (maxx - minx + 1, maxy - miny + 1);
+    let (cx, cy) = ((minx + maxx) / 2, (miny + maxy) / 2);
+    // An elongated box keeps its centre whichever way it lies (rustdesk#16242): a bar has no
+    // corner to speak of. Kept ahead of the mirror test so it still covers an elongated shape
+    // that is NOT symmetric, which the theme happens not to contain but a custom cursor can.
     if bh > bw * 2 || bw > bh * 2 {
-        ((minx + maxx) / 2, (miny + maxy) / 2)
-    } else {
-        (minx, miny)
+        return (cx, cy);
     }
+    let opaque = |x: i32, y: i32| {
+        rgba.get((y as usize * w + x as usize) * 4 + 3)
+            .is_some_and(|&a| a >= 128)
+    };
+    // One pass over the opaque box, comparing it with its own three mirrors.
+    let (mut ix, mut ux) = (0u64, 0u64);
+    let (mut iy, mut uy) = (0u64, 0u64);
+    let (mut ih, mut uh) = (0u64, 0u64);
+    for y in miny..=maxy {
+        for x in minx..=maxx {
+            let (fx, fy) = (maxx - (x - minx), maxy - (y - miny));
+            let here = opaque(x, y);
+            for (other, (i, u)) in [
+                (opaque(fx, y), (&mut ix, &mut ux)),
+                (opaque(x, fy), (&mut iy, &mut uy)),
+                (opaque(fx, fy), (&mut ih, &mut uh)),
+            ] {
+                *i += u64::from(here && other);
+                *u += u64::from(here || other);
+            }
+        }
+    }
+    let agrees = |i: u64, u: u64| u == 0 || i * 100 >= u * MIRROR_AGREEMENT_PERCENT;
+    // Symmetric under a half turn and the centre is the only point the shape cannot tell from
+    // itself, whichever the per-axis answers are: a two-headed diagonal arrow mirrors to the
+    // other diagonal on each axis alone, so neither axis reads as symmetric.
+    if agrees(ih, uh) {
+        return (cx, cy);
+    }
+    (
+        if agrees(ix, ux) { cx } else { minx },
+        if agrees(iy, uy) { cy } else { miny },
+    )
 }
 
 /// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
@@ -676,5 +720,120 @@ mod hotspot_provenance_tests {
         assert!(!hot_measured_from(None, 0, 0));
         assert!(hot_measured_from(None, 12, 11));
         assert!(hot_measured_from(None, 0, 5));
+    }
+}
+
+#[cfg(test)]
+mod hotspot_guess_tests {
+    use super::infer_hotspot;
+
+    /// A sprite from an ASCII picture: `#` is opaque, anything else transparent. Written this way
+    /// because every case here is about a SHAPE, and a shape is unreadable as a byte array.
+    fn sprite(rows: &[&str]) -> (Vec<u8>, usize, usize) {
+        let (h, w) = (rows.len(), rows[0].len());
+        let mut px = vec![0u8; w * h * 4];
+        for (y, row) in rows.iter().enumerate() {
+            assert_eq!(row.len(), w, "ragged picture");
+            for (x, c) in row.bytes().enumerate() {
+                if c == b'#' {
+                    px[(y * w + x) * 4 + 3] = 255;
+                }
+            }
+        }
+        (px, w, h)
+    }
+
+    /// An arrow keeps the top-left corner of its box. Cursors are drawn pointing up and left, so
+    /// that corner IS the tip - and it is a fact about the sprite upright, which is why the
+    /// consumer re-takes this guess after turning a rotated sprite back.
+    #[test]
+    fn an_arrow_points_at_the_corner_of_its_box() {
+        let (px, w, h) = sprite(&[
+            ".........",
+            ".#.......",
+            ".##......",
+            ".###.....",
+            ".####....",
+            ".#####...",
+            ".###.....",
+            ".#..##...",
+            "......##.",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (1, 1));
+    }
+
+    /// A shape that mirrors onto itself about the box's mid-lines has no tip to point with, so
+    /// the corner names nothing and the middle is the only answer the shape supports. This is the
+    /// crosshair/cell/resize family, 17 of the installed theme's 35 shapes.
+    #[test]
+    fn a_symmetric_shape_is_held_by_its_middle() {
+        let (px, w, h) = sprite(&[
+            "....#....",
+            "....#....",
+            "....#....",
+            "....#....",
+            "#########",
+            "....#....",
+            "....#....",
+            "....#....",
+            "....#....",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (4, 4));
+    }
+
+    /// Each axis is decided by its OWN mirror. This shape is symmetric left-to-right and not
+    /// top-to-bottom, which is the single-direction resize family: the click point is centred
+    /// across the axis that mirrors and stays at the edge on the axis that does not.
+    #[test]
+    fn one_symmetric_axis_centres_that_axis_only() {
+        let (px, w, h) = sprite(&[
+            "....#....",
+            "...###...",
+            "..#####..",
+            ".#######.",
+            "....#....",
+            "....#....",
+            "....#....",
+            "....#....",
+            "....#....",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (4, 0));
+    }
+
+    /// A two-headed DIAGONAL arrow mirrors onto the other diagonal about either axis alone, so
+    /// neither axis reads as symmetric - and it is still a shape with no tip. The half turn is
+    /// what catches it.
+    #[test]
+    fn a_diagonal_two_headed_arrow_is_held_by_its_middle_too() {
+        let (px, w, h) = sprite(&[
+            "###......",
+            "##.......",
+            "#.#......",
+            "...#.....",
+            "....#....",
+            ".....#...",
+            "......#.#",
+            ".......##",
+            "......###",
+        ]);
+        let (hx, hy) = infer_hotspot(&px, w, h);
+        assert_eq!((hx, hy), (4, 4), "a half turn maps this shape onto itself");
+    }
+
+    /// The elongation rule stays ahead of the mirror test, so a bar that is NOT symmetric still
+    /// keeps its centre. Nothing in the installed theme is shaped like this - its two I-beams are
+    /// both symmetric - but a custom cursor can be, and this is the rustdesk#16242 round-one fix.
+    #[test]
+    fn an_elongated_shape_keeps_its_centre_even_when_it_is_lopsided() {
+        let (px, w, h) = sprite(&["##########.", "#####......", "##########."]);
+        assert_eq!(infer_hotspot(&px, w, h), (4, 1));
+    }
+
+    /// Nothing opaque is not a shape, and must not read as a box at the origin with a hotspot in
+    /// the middle of it.
+    #[test]
+    fn a_blank_sprite_has_no_hotspot_to_guess() {
+        let (px, w, h) = sprite(&["...", "...", "..."]);
+        assert_eq!(infer_hotspot(&px, w, h), (0, 0));
     }
 }

@@ -2077,6 +2077,8 @@ jobs:
               cargo test --locked --lib --features drm ipc::test
             run_drm_tests "scrap hotspot_provenance_tests" \
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
+            run_drm_tests "scrap hotspot_guess_tests" \
+              cargo test --locked -p scrap --features drm hotspot_guess_tests
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
