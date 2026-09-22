@@ -2102,6 +2102,19 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                             .map_err(|_| anyhow!("Signature mismatch in key exchange"))?;
                         let their_pk_b = get_pk(&their_pk_b)
                             .context("Wrong their public length in key exchange")?;
+                        // The signed X25519 high bit marks servers that require a version signature.
+                        if their_pk_b[31] & 0x80 != 0 || !ex.signed_version.is_empty() {
+                            let signed_version =
+                                sign::verify(&ex.signed_version, &rs_pk).map_err(|_| {
+                                    anyhow!("Missing or invalid signed key exchange version")
+                                })?;
+                            let mut expected = b"rdkx-ver".to_vec();
+                            expected.extend_from_slice(&their_pk_b);
+                            expected.extend_from_slice(&ex.version.to_le_bytes());
+                            if signed_version != expected {
+                                bail!("Key exchange version or public key does not match its signature");
+                            }
+                        }
                         let (asymmetric_value, symmetric_value, key) =
                             create_symmetric_key_msg(their_pk_b);
                         let version = hbb_common::tcp::kx_version_for(ex.version);
@@ -3336,6 +3349,22 @@ mod tests {
         (encode64(pk.0), sk)
     }
 
+    fn signed_key_exchange(
+        pk: &box_::PublicKey,
+        sk: &sign::SecretKey,
+        version: u32,
+    ) -> KeyExchange {
+        let mut payload = b"rdkx-ver".to_vec();
+        payload.extend_from_slice(&pk.0);
+        payload.extend_from_slice(&version.to_le_bytes());
+        KeyExchange {
+            keys: vec![sign::sign(&pk.0, sk).into()],
+            version,
+            signed_version: sign::sign(&payload, sk).into(),
+            ..Default::default()
+        }
+    }
+
     async fn connect(host: &str) -> Stream {
         hbb_common::socket_client::connect_tcp(host.to_owned(), 3000)
             .await
@@ -3395,6 +3424,261 @@ mod tests {
         let mut conn = connect(&host).await;
         secure_tcp_required(&mut conn, &key).await.unwrap();
         assert!(conn.is_secured());
+    }
+
+    // The stand-in does what hbbs does at version 1: advertises it, splits the exchanged key
+    // over the same transcript, and tags every frame it sends with what it advertised. Neither
+    // side's unit tests can catch a client that puts a different byte string into the
+    // transcript than the server does; only a frame crossing between the two can.
+    #[tokio::test]
+    async fn test_secure_tcp_version_1_keys_match_the_server_both_ways() {
+        let (key, sk) = server_key();
+        let host = rendezvous_stub(move |mut s| async move {
+            let (eph_pk, eph_sk) = box_::gen_keypair();
+            let mut msg = RendezvousMessage::new();
+            msg.set_key_exchange(KeyExchange {
+                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                version: 1,
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+            let reply = s.next_timeout(3000).await.unwrap().unwrap();
+            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                panic!("expected the client's key exchange");
+            };
+            let shared =
+                hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap();
+            s.set_key_split(
+                shared,
+                false,
+                &hbb_common::tcp::KxTranscript {
+                    initiator_pk: &ex.keys[0],
+                    responder_pk: &eph_pk.0,
+                    advertised: 1,
+                    picked: ex.version,
+                },
+            )
+            .unwrap();
+            // Answers with the request's serial, so the client learns from its own reply that
+            // the request was read under the right key.
+            let request = s.next_timeout(3000).await.unwrap().unwrap();
+            let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
+            let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
+                panic!("expected the client's nat request");
+            };
+            let mut msg = RendezvousMessage::new();
+            msg.set_test_nat_response(TestNatResponse {
+                port: nat.serial,
+                ..Default::default()
+            });
+            msg.kx_advertised = 1;
+            s.send(&msg).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        secure_tcp_required(&mut conn, &key).await.unwrap();
+        let mut msg = RendezvousMessage::new();
+        msg.set_test_nat_request(TestNatRequest {
+            serial: 7,
+            ..Default::default()
+        });
+        conn.send(&msg).await.unwrap();
+        let reply = conn.next_timeout(3000).await.unwrap().unwrap();
+        let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+        assert_eq!(reply.kx_advertised, 1);
+        let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
+            panic!("expected the server's nat response");
+        };
+        assert_eq!(nat.port, 7);
+    }
+
+    // The server advertised 1; the client was shown 0 on the way, picked 0, and the server,
+    // handed that pick, ran the original scheme and tagged its frames with what it really
+    // advertised. The exchange itself completes, since nothing in it can tell; the first tagged
+    // frame is where the stream has to be refused.
+    #[tokio::test]
+    async fn test_secure_tcp_refuses_an_advertisement_lowered_in_transit() {
+        let (key, sk) = server_key();
+        let host = rendezvous_stub(move |mut s| async move {
+            let (eph_pk, eph_sk) = box_::gen_keypair();
+            let mut msg = RendezvousMessage::new();
+            msg.set_key_exchange(KeyExchange {
+                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                ..Default::default()
+            });
+            s.send(&msg).await.unwrap();
+            let reply = s.next_timeout(3000).await.unwrap().unwrap();
+            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                panic!("expected the client's key exchange");
+            };
+            assert_eq!(ex.version, 0);
+            s.set_key(hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap());
+            let mut msg = RendezvousMessage::new();
+            msg.set_test_nat_response(TestNatResponse::default());
+            msg.kx_advertised = 1;
+            s.send(&msg).await.unwrap();
+        })
+        .await;
+        let mut conn = connect(&host).await;
+        secure_tcp_required(&mut conn, &key).await.unwrap();
+        assert!(matches!(conn.next_timeout(3000).await, Some(Err(_))));
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_legacy_and_signed_servers_exchange_application_data() {
+        for (advertised, signed) in [(0, false), (1, true), (3, true)] {
+            for required in [false, true] {
+                let (key, sk) = server_key();
+                let host = rendezvous_stub(move |mut s| async move {
+                    let (mut eph_pk, eph_sk) = box_::gen_keypair();
+                    let mut msg = RendezvousMessage::new();
+                    let ex = if signed {
+                        eph_pk.0[31] |= 0x80;
+                        signed_key_exchange(&eph_pk, &sk, advertised)
+                    } else {
+                        KeyExchange {
+                            keys: vec![sign::sign(&eph_pk.0, &sk).into()],
+                            ..Default::default()
+                        }
+                    };
+                    msg.set_key_exchange(ex);
+                    s.send(&msg).await.unwrap();
+                    let reply = s.next_timeout(3000).await.unwrap().unwrap();
+                    let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                    let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
+                        panic!("expected the client's key exchange");
+                    };
+                    assert_eq!(ex.keys.len(), 2);
+                    assert_eq!(ex.version, hbb_common::tcp::kx_version_for(advertised));
+                    let shared =
+                        hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk)
+                            .unwrap();
+                    if ex.version >= 1 {
+                        s.set_key_split(
+                            shared,
+                            false,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &ex.keys[0],
+                                responder_pk: &eph_pk.0,
+                                advertised,
+                                picked: ex.version,
+                            },
+                        )
+                        .unwrap();
+                    } else {
+                        s.set_key(shared);
+                    }
+                    let request = s.next_timeout(3000).await.unwrap().unwrap();
+                    let request = RendezvousMessage::parse_from_bytes(&request).unwrap();
+                    let Some(rendezvous_message::Union::TestNatRequest(nat)) = request.union else {
+                        panic!("expected the client's nat request");
+                    };
+                    let mut msg = RendezvousMessage::new();
+                    msg.set_test_nat_response(TestNatResponse {
+                        port: nat.serial,
+                        ..Default::default()
+                    });
+                    msg.kx_advertised = advertised;
+                    s.send(&msg).await.unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                if required {
+                    secure_tcp_required(&mut conn, &key).await.unwrap();
+                } else {
+                    secure_tcp(&mut conn, &key).await.unwrap();
+                }
+                assert!(conn.is_secured());
+                let mut msg = RendezvousMessage::new();
+                msg.set_test_nat_request(TestNatRequest {
+                    serial: 7,
+                    ..Default::default()
+                });
+                conn.send(&msg).await.unwrap();
+                let reply = conn.next_timeout(3000).await.unwrap().unwrap();
+                let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
+                assert_eq!(reply.kx_advertised, advertised);
+                let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
+                    panic!("expected the server's nat response");
+                };
+                assert_eq!(nat.port, 7);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_secure_tcp_rejects_unverified_versions_before_reply() {
+        let (key, sk) = server_key();
+        let (mut eph_pk, _) = box_::gen_keypair();
+        eph_pk.0[31] |= 0x80;
+        let (other_pk, _) = box_::gen_keypair();
+        let (_, other_sk) = sign::gen_keypair();
+        for case in [
+            "missing_signature",
+            "stripped_version_and_signature",
+            "cleared_marker_and_stripped_fields",
+            "lowered_version",
+            "raised_version",
+            "replaced_public_key",
+            "invalid_signature",
+            "wrong_signer",
+            "missing_context",
+        ] {
+            let mut ex = signed_key_exchange(&eph_pk, &sk, 1);
+            match case {
+                "missing_signature" => ex.signed_version = Bytes::new(),
+                "stripped_version_and_signature" => {
+                    ex.signed_version = Bytes::new();
+                    ex.version = 0;
+                }
+                "cleared_marker_and_stripped_fields" => {
+                    let mut signed_pk = ex.keys[0].to_vec();
+                    *signed_pk.last_mut().unwrap() &= 0x7f;
+                    ex.keys[0] = signed_pk.into();
+                    ex.signed_version = Bytes::new();
+                    ex.version = 0;
+                }
+                "lowered_version" => ex.version = 0,
+                "raised_version" => ex.version = 2,
+                "replaced_public_key" => ex.keys[0] = sign::sign(&other_pk.0, &sk).into(),
+                "invalid_signature" => {
+                    let mut signed = ex.signed_version.to_vec();
+                    signed[0] ^= 1;
+                    ex.signed_version = signed.into();
+                }
+                "wrong_signer" => {
+                    ex.signed_version = signed_key_exchange(&eph_pk, &other_sk, 1).signed_version;
+                }
+                "missing_context" => {
+                    let mut payload = eph_pk.0.to_vec();
+                    payload.extend_from_slice(&1u32.to_le_bytes());
+                    ex.signed_version = sign::sign(&payload, &sk).into();
+                }
+                _ => unreachable!(),
+            }
+            for required in [false, true] {
+                let mut msg = RendezvousMessage::new();
+                msg.set_key_exchange(ex.clone());
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                let host = rendezvous_stub(move |mut s| async move {
+                    s.send(&msg).await.unwrap();
+                    tx.send(s.next_timeout(3000).await.is_none()).unwrap();
+                })
+                .await;
+                let mut conn = connect(&host).await;
+                let result = if required {
+                    secure_tcp_required(&mut conn, &key).await
+                } else {
+                    secure_tcp(&mut conn, &key).await
+                };
+                assert!(result.is_err(), "accepted {case}, required={required}");
+                assert!(!conn.is_secured());
+                drop(conn);
+                assert!(rx.await.unwrap(), "replied to {case}, required={required}");
+            }
+        }
     }
 
     #[test]
