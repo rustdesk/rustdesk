@@ -129,25 +129,40 @@ fn hot_measured_from(answered: Option<bool>, hot_x: i32, hot_y: i32) -> bool {
 }
 
 /// A mirror has to agree on this many of every 100 pixels of the union to count as symmetry.
-/// Swept against the Adwaita theme at six nominal sizes: below 90 the rule starts moving shapes
-/// whose corner guess was already right (`grabbing`, `grab`, `progress`), and from 90 up to 98
-/// nothing regresses, so 95 sits in the middle of the range that can only help.
-const MIRROR_AGREEMENT_PERCENT: u64 = 95;
+/// Swept against master over two theme versions: below 86 the rule starts moving shapes whose
+/// corner guess was already right (`grabbing`), and from 92 up the directional cursors of the
+/// older theme stop being recognised and regress. 86 to 91 is the interval that holds on both,
+/// so this sits in the middle of it.
+const MIRROR_AGREEMENT_PERCENT: u64 = 88;
 
 /// Guess the click point of a cursor bitmap, for the drivers that publish no hotspot.
 ///
-/// Two facts drive it. Cursors are DRAWN pointing up and to the left, so the top-left corner of
-/// the opaque box is where an arrow's tip is - a fact about the sprite in its own upright frame,
-/// and the reason this guess is only meaningful when taken there. And a shape that is mirror
-/// symmetric about one of the box's mid-lines has no distinguished end on that axis at all - a
-/// crosshair, an I-beam, a two-headed resize arrow - so on that axis the corner names nothing and
-/// the click point is the middle.
+/// Three facts drive it, in order of how much of the shape they read.
 ///
-/// Measured against the hotspots the installed theme declares (adwaita-icon-theme 50, 35 shapes
-/// at each of its six nominal sizes, 210 cases): the mean error falls from 0.43 to 0.27 of the
-/// cursor's size, 17 of the 35 shapes improve, and none gets worse. The remaining error is shapes
-/// whose click point the theme puts somewhere no bitmap can predict - `help` points at the dot of
-/// its question mark - which is why a published hotspot is always preferred to this.
+/// A shape that is mirror symmetric about one of the box's mid-lines has no distinguished end on
+/// that axis: a crosshair, an I-beam, a two-headed resize arrow. On such an axis the click point
+/// is the middle.
+///
+/// A shape that mirrors onto itself only under a half turn or about a DIAGONAL is a two-headed or
+/// corner resize cursor. Those are a pointer plus the marker of the edge being resized, and the
+/// theme puts the click point on that marker, which is the heavier end. The heavier end is also
+/// the only thing that separates `e-resize` from `w-resize`: they are the same picture reflected.
+///
+/// Everything else keeps the top-left corner of the opaque box, because cursors are DRAWN
+/// pointing up and to the left, so that corner is where an arrow's tip is. That is a fact about
+/// the sprite in its own upright frame, and the reason this guess is only meaningful when taken
+/// there rather than on a sprite the compositor pre-rotated.
+///
+/// Measured against the hotspots the theme declares, which is the value a compositor programs
+/// into HOTSPOT_X/Y where the property exists, and against what master delivers over the angles
+/// master handles (0, 90, 270). adwaita-icon-theme 50 at 24 px: mean error per shape 12.08 px
+/// down to 4.20, better on 83 of the 105 (shape, angle) cases and worse on 4. The same holds at
+/// 48 px and on adwaita-icon-theme 46.
+///
+/// Two shapes stay further out than master and no bitmap rule reaches them: `help`, whose click
+/// point the theme puts on the dot of its question mark, and `alias` by half a pixel. That is why
+/// a hotspot the driver publishes is always preferred to this, and why rustdesk#16122 recovers it
+/// exactly from the injected pointer instead of guessing.
 pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
     let (mut minx, mut miny, mut maxx, mut maxy) = (w as i32, h as i32, -1i32, -1i32);
     for (i, px) in rgba.chunks_exact(4).take(w * h).enumerate() {
@@ -174,10 +189,14 @@ pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
         rgba.get((y as usize * w + x as usize) * 4 + 3)
             .is_some_and(|&a| a >= 128)
     };
-    // One pass over the opaque box, comparing it with its own three mirrors.
+    let agrees = |i: u64, u: u64| u == 0 || i * 100 >= u * MIRROR_AGREEMENT_PERCENT;
+    // One pass over the opaque box, comparing it with its own three mirrors, and the mass of each
+    // half while we are here.
     let (mut ix, mut ux) = (0u64, 0u64);
     let (mut iy, mut uy) = (0u64, 0u64);
     let (mut ih, mut uh) = (0u64, 0u64);
+    let (mut left, mut right, mut top, mut bottom) = (0u64, 0u64, 0u64, 0u64);
+    let (half_w, half_h) = (bw / 2, bh / 2);
     for y in miny..=maxy {
         for x in minx..=maxx {
             let (fx, fy) = (maxx - (x - minx), maxy - (y - miny));
@@ -190,19 +209,93 @@ pub fn infer_hotspot(rgba: &[u8], w: usize, h: usize) -> (i32, i32) {
                 *i += u64::from(here && other);
                 *u += u64::from(here || other);
             }
+            if here {
+                if x - minx < half_w {
+                    left += 1;
+                } else if maxx - x < half_w {
+                    right += 1;
+                }
+                if y - miny < half_h {
+                    top += 1;
+                } else if maxy - y < half_h {
+                    bottom += 1;
+                }
+            }
         }
     }
-    let agrees = |i: u64, u: u64| u == 0 || i * 100 >= u * MIRROR_AGREEMENT_PERCENT;
     // Symmetric under a half turn and the centre is the only point the shape cannot tell from
     // itself, whichever the per-axis answers are: a two-headed diagonal arrow mirrors to the
     // other diagonal on each axis alone, so neither axis reads as symmetric.
     if agrees(ih, uh) {
         return (cx, cy);
     }
+    let diagonal = mirrors_about_a_diagonal(&opaque, minx, miny, bw, bh, &agrees);
+    // An axis is DIRECTIONAL when the shape is a pointer plus an edge marker rather than a plain
+    // arrow: the perpendicular axis mirrors (the n/e/s/w resize cursors), or the shape mirrors
+    // about a diagonal (the corner ones). The marker is the end the click point belongs to, and
+    // it is the heavier end, which is the only thing that tells `e-resize` from `w-resize` - they
+    // are the same picture reflected. Everything else keeps the up-left corner.
+    let side = |heavier_is_max: bool, lo: i32, hi: i32| if heavier_is_max { hi } else { lo };
     (
-        if agrees(ix, ux) { cx } else { minx },
-        if agrees(iy, uy) { cy } else { miny },
+        if agrees(ix, ux) {
+            cx
+        } else if agrees(iy, uy) || diagonal {
+            side(right > left, minx, maxx)
+        } else {
+            minx
+        },
+        if agrees(iy, uy) {
+            cy
+        } else if agrees(ix, ux) || diagonal {
+            side(bottom > top, miny, maxy)
+        } else {
+            miny
+        },
     )
+}
+
+/// Whether the opaque box mirrors onto itself about either of its diagonals.
+///
+/// A diagonal reflection of a `bw x bh` box is a `bh x bw` box, so the two can only be compared
+/// inside a square, and where the box is not square the answer depends on where in that square it
+/// is placed: the corner resize cursors are drawn against one corner, and padding away from that
+/// corner moves the shape off the diagonal it is symmetric about. `ne-resize` scores 0.62 anchored
+/// top-left and 0.98 anchored bottom-right; `nw-resize` is the other way round. So both anchorings
+/// are tried and the best answer wins, which is what "the shape is symmetric" means once the
+/// reflection is allowed to be shifted back into place.
+fn mirrors_about_a_diagonal(
+    opaque: &impl Fn(i32, i32) -> bool,
+    minx: i32,
+    miny: i32,
+    bw: i32,
+    bh: i32,
+    agrees: &impl Fn(u64, u64) -> bool,
+) -> bool {
+    let k = bw.max(bh);
+    for (dx, dy) in [(0, 0), (k - bw, k - bh)] {
+        // The box placed at (dx, dy) inside a k x k square, empty everywhere else.
+        let cell = |r: i32, c: i32| {
+            let (x, y) = (c - dx, r - dy);
+            (0..bw).contains(&x) && (0..bh).contains(&y) && opaque(minx + x, miny + y)
+        };
+        let (mut id, mut ud, mut ia, mut ua) = (0u64, 0u64, 0u64, 0u64);
+        for r in 0..k {
+            for c in 0..k {
+                let here = cell(r, c);
+                for (other, (i, u)) in [
+                    (cell(c, r), (&mut id, &mut ud)),
+                    (cell(k - 1 - c, k - 1 - r), (&mut ia, &mut ua)),
+                ] {
+                    *i += u64::from(here && other);
+                    *u += u64::from(here || other);
+                }
+            }
+        }
+        if agrees(id, ud) || agrees(ia, ua) {
+            return true;
+        }
+    }
+    false
 }
 
 /// One enumerated DRM display, physical geometry only (the server overlays the Wayland logical origin/scale where it can match one).
@@ -818,6 +911,54 @@ mod hotspot_guess_tests {
         ]);
         let (hx, hy) = infer_hotspot(&px, w, h);
         assert_eq!((hx, hy), (4, 4), "a half turn maps this shape onto itself");
+    }
+
+    /// A single-direction resize cursor is an arrow plus the bar of the edge it resizes, and the
+    /// theme puts the click point on the BAR. The bar is the heavy end, and it is the only thing
+    /// that separates `e-resize` from `w-resize`: they are the same picture reflected, so a rule
+    /// that always took the up-left corner had to be wrong for one of the two.
+    #[test]
+    fn a_directional_resize_cursor_is_held_by_its_bar() {
+        let (px, w, h) = sprite(&[
+            "......####",
+            "..##..####",
+            ".###..####",
+            "####..####",
+            ".###..####",
+            "..##..####",
+            "......####",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (9, 3));
+        // The mirror image has to answer the other side, or the rule is not reading the shape.
+        let (px, w, h) = sprite(&[
+            "####......",
+            "####..##..",
+            "####..###.",
+            "####..####",
+            "####..###.",
+            "####..##..",
+            "####......",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (0, 3));
+    }
+
+    /// A corner resize cursor is a bracket hugging one corner, and it mirrors onto itself about a
+    /// DIAGONAL rather than about either axis, so neither per-axis test sees it. The click point
+    /// is the inner corner of the bracket, which is the heavy end on both axes.
+    ///
+    /// A real one's box is usually not square, and a diagonal reflection only lines up inside a
+    /// square, so which corner of that square the box is placed against decides the answer:
+    /// `ne-resize` scores 0.62 anchored one way and 0.98 the other, and `nw-resize` is the
+    /// reverse. Both anchorings are therefore tried. That case cannot be built as a small
+    /// picture - a non-square box can never be exactly diagonal-symmetric - so it is covered by
+    /// the theme corpus instead, where dropping the second anchoring sends `ne-resize` back past
+    /// master.
+    #[test]
+    fn a_corner_bracket_is_held_by_its_inner_corner() {
+        let (px, w, h) = sprite(&[
+            ".....##", ".....##", ".....##", ".....##", ".....##", "#######", "#######",
+        ]);
+        assert_eq!(infer_hotspot(&px, w, h), (6, 6));
     }
 
     /// The elongation rule stays ahead of the mirror test, so a bar that is NOT symmetric still
