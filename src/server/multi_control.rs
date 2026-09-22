@@ -2026,11 +2026,19 @@ mod tests {
 
     #[test]
     fn the_mode_is_off_until_the_option_says_otherwise() {
-        // The option is stored in the shared config, so this only checks the default of
-        // an unset option instead of assuming a user configuration.
-        assert_eq!(MODE_PRIMARY_FIRST, "primary-first");
-        let value = Config::get_option(keys::OPTION_MULTI_CONTROL_MODE);
-        assert_eq!(enabled(), value == MODE_PRIMARY_FIRST);
+        // The option lives in the shared config, so the original value is put back.
+        let previous = Config::get_option(keys::OPTION_MULTI_CONTROL_MODE);
+        for (value, expected) in [
+            ("", false),
+            ("primary-first", true),
+            ("Y", false),
+            ("on", false),
+            ("PRIMARY-FIRST", false),
+        ] {
+            Config::set_option(keys::OPTION_MULTI_CONTROL_MODE.to_owned(), value.to_owned());
+            assert_eq!(enabled(), expected, "option value {:?}", value);
+        }
+        Config::set_option(keys::OPTION_MULTI_CONTROL_MODE.to_owned(), previous);
     }
 
     #[test]

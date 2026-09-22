@@ -1585,10 +1585,13 @@ pub mod client {
     /// state, so they travel over the same channel as the input events.
     pub fn handle_multi_control_cursors(markers: &[(i32, i32, i32, bool)]) {
         if RUNNING.lock().unwrap().clone() {
-            ipc_send(Data::DataPortableService(
+            if let Err(err) = ipc_send(Data::DataPortableService(
                 DataPortableService::MultiControlCursors(markers.to_vec()),
-            ))
-            .ok();
+            )) {
+                // The markers are only decoration, but a silently frozen overlay is not
+                // diagnosable, so a failed send is worth a line.
+                log::warn!("failed to send the multi-control cursors: {}", err);
+            }
         } else {
             crate::server::multi_control_overlay::draw_local(markers);
         }

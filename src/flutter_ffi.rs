@@ -650,6 +650,8 @@ pub fn session_input_key(
     command: bool,
 ) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::multi_control_client::touch_local_input();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if crate::multi_control_client::is_operate_key(&name) {
         session_operate_key(&session_id, down);
         return;
@@ -1984,6 +1986,8 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
 /// If these assumptions are violated (e.g., `relative_mouse_mode` is added to normal events),
 /// legitimate mouse events may be silently dropped by the early-return logic below.
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::multi_control_client::touch_local_input();
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         // Relative mouse mode marker validation (Flutter-only).
         // This only validates and filters markers; the server tracks per-connection

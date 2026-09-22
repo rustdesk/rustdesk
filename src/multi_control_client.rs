@@ -23,10 +23,28 @@ use std::time::{Duration, Instant};
 
 /// Heartbeat cadence of an active borrow; the peer revokes it after 5 s of silence.
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
+/// How long a held operate key keeps renewing the borrow without any local input. A window
+/// that loses focus never delivers the release, so without this the borrow would never end.
+pub const HELD_IDLE_LIMIT: Duration = Duration::from_secs(30);
 
 lazy_static::lazy_static! {
     /// Whether the process already has a thread renewing its borrows.
     static ref HEARTBEATING: AtomicBool = AtomicBool::new(false);
+    static ref EPOCH: Instant = Instant::now();
+}
+
+/// When the user last did something on this side, in milliseconds since the module started.
+static LAST_LOCAL_INPUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    EPOCH.elapsed().as_millis() as u64
+}
+
+/// Records that the user did something locally. Cheap enough for the input path: the
+/// heartbeat needs it to tell "still working" from "the window that owned the key is gone".
+pub fn touch_local_input() {
+    // 0 means "nothing recorded yet", so the first input of a process cannot look like it.
+    LAST_LOCAL_INPUT.store(now_ms().max(1), Ordering::Relaxed);
 }
 
 #[derive(Default)]
@@ -128,9 +146,29 @@ pub fn on_operate_key(down: bool) -> Option<(MultiControlBorrowKind, u64)> {
 /// operate key: the peer gives up a borrow that stops speaking, and a click that borrowed
 /// the pointer is a borrow like any other.
 pub fn heartbeat() -> Option<(MultiControlBorrowKind, u64)> {
-    let active = ACTIVE.lock().unwrap();
+    let mut active = ACTIVE.lock().unwrap();
+    heartbeat_in(&mut active, now_ms())
+}
+
+fn heartbeat_in(active: &mut Active, at_ms: u64) -> Option<(MultiControlBorrowKind, u64)> {
     if active.epoch == 0 || (!active.held && !active.borrowed) {
         return None;
+    }
+    if active.held {
+        let last = LAST_LOCAL_INPUT.load(Ordering::Relaxed);
+        let limit = HELD_IDLE_LIMIT.as_millis() as u64;
+        // No local input recorded yet means "just now": the key press that started the
+        // borrow is itself local input, so this can only happen before the input path
+        // starts reporting, and guessing "idle" there would drop a fresh borrow.
+        if last != 0 && at_ms.saturating_sub(last) >= limit {
+            // Nothing happened on this side for a long time: the release of the operate key
+            // was never delivered (a window that lost focus does not get one), so the renewing
+            // stops here and the peer's lease gives the pointer back.
+            active.held = false;
+            active.borrowed = false;
+            active.epoch = 0;
+            return None;
+        }
     }
     Some((MultiControlBorrowKind::Heartbeat, active.epoch))
 }
@@ -200,6 +238,33 @@ mod tests {
         let guard = TESTS.lock().unwrap_or_else(|err| err.into_inner());
         clear();
         guard
+    }
+
+    #[test]
+    fn a_held_key_stops_renewing_when_nothing_happens_locally() {
+        let _guard = exclusive();
+        assert_eq!(
+            on_operate_key(true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        let mut state = MultiControlState::new();
+        state.borrowed_by_me = true;
+        state.epoch = 9;
+        on_state(&state);
+        // The user is working on this side: the borrow is renewed.
+        touch_local_input();
+        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 9)));
+        // The window that owned the key lost focus and never delivered its release: after
+        // the local idle limit the renewal stops, so the peer's lease ends the borrow
+        // instead of leaving the pointer borrowed forever.
+        let idle = HELD_IDLE_LIMIT.as_millis() as u64;
+        let last = LAST_LOCAL_INPUT.load(Ordering::Relaxed);
+        let mut active = ACTIVE.lock().unwrap();
+        assert_eq!(heartbeat_in(&mut active, last + idle), None);
+        assert!(!active.held);
+        assert_eq!(active.epoch, 0);
+        drop(active);
+        LAST_LOCAL_INPUT.store(0, Ordering::Relaxed);
     }
 
     #[test]
