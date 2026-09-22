@@ -910,6 +910,14 @@ pub mod clipboard_listener {
 
     static CLIPBOARD_GENERATION: AtomicUsize = AtomicUsize::new(0);
 
+    pub enum ClipboardEvent {
+        Changed,
+        #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+        InitialSelection,
+        Stop,
+        StopWithError(io::Error),
+    }
+
     pub fn current_generation() -> usize {
         CLIPBOARD_GENERATION.load(Ordering::SeqCst)
     }
@@ -943,7 +951,7 @@ pub mod clipboard_listener {
     }
 
     struct Handler {
-        subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
+        subscribers: Arc<Mutex<HashMap<String, Sender<ClipboardEvent>>>>,
         #[cfg(target_os = "linux")]
         ready: Option<watch::Sender<bool>>,
     }
@@ -965,13 +973,19 @@ pub mod clipboard_listener {
             CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
-                tx.send(CallbackResult::Next).ok();
+                tx.send(ClipboardEvent::Changed).ok();
             }
             CallbackResult::Next
         }
 
         fn on_clipboard_initial_selection(&mut self) -> CallbackResult {
-            // Do not broadcast startup state; sessions handle their own initial sync.
+            // Only client file sync consumes this event; text initial sync is per session.
+            #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+            for tx in self.subscribers.lock().unwrap().values() {
+                if let Err(err) = tx.send(ClipboardEvent::InitialSelection) {
+                    log::debug!("Failed to notify initial clipboard selection: {}", err);
+                }
+            }
             CallbackResult::Next
         }
 
@@ -979,7 +993,7 @@ pub mod clipboard_listener {
             let msg = format!("Clipboard listener error: {}", error);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
-                tx.send(CallbackResult::StopWithError(io::Error::new(
+                tx.send(ClipboardEvent::StopWithError(io::Error::new(
                     io::ErrorKind::Other,
                     msg.clone(),
                 )))
@@ -996,13 +1010,13 @@ pub mod clipboard_listener {
 
     #[derive(Default)]
     pub struct ClipboardListener {
-        subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
+        subscribers: Arc<Mutex<HashMap<String, Sender<ClipboardEvent>>>>,
         handle: Option<(Shutdown, JoinHandle<()>)>,
         #[cfg(target_os = "linux")]
         ready: Option<watch::Receiver<bool>>,
     }
 
-    pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
+    pub fn subscribe(name: String, tx: Sender<ClipboardEvent>) -> ResultType<()> {
         log::info!("Subscribe clipboard listener: {}", &name);
         let mut listener_lock = CLIPBOARD_LISTENER.lock().unwrap();
         listener_lock
@@ -1070,7 +1084,7 @@ pub mod clipboard_listener {
         let is_empty = {
             let mut sub_lock = listener_lock.subscribers.lock().unwrap();
             if let Some(tx) = sub_lock.remove(name) {
-                tx.send(CallbackResult::Stop).ok();
+                tx.send(ClipboardEvent::Stop).ok();
             }
             sub_lock.is_empty()
         };

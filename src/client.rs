@@ -1,9 +1,7 @@
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::clipboard::clipboard_listener;
+use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
 use bytes::Bytes;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use clipboard_master::CallbackResult;
 #[cfg(not(target_os = "linux"))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -1923,14 +1921,19 @@ impl Client {
                     break;
                 }
                 match rx_cb_result.recv_timeout(Duration::from_millis(CLIPBOARD_INTERVAL)) {
-                    Ok(CallbackResult::Next) => {
-                        handler.check_clipboard();
+                    Ok(ClipboardEvent::Changed) => {
+                        handler.check_clipboard(true);
                     }
-                    Ok(CallbackResult::Stop) => {
+                    #[cfg(all(target_os = "linux", feature = "unix-file-copy-paste"))]
+                    Ok(ClipboardEvent::InitialSelection) => {
+                        // Preserve file startup sync without bypassing text initial-sync settings.
+                        handler.check_clipboard(false);
+                    }
+                    Ok(ClipboardEvent::Stop) => {
                         log::debug!("Clipboard listener stopped");
                         break;
                     }
-                    Ok(CallbackResult::StopWithError(err)) => {
+                    Ok(ClipboardEvent::StopWithError(err)) => {
                         log::error!("Clipboard listener stopped with error: {}", err);
                         break;
                     }
@@ -2032,7 +2035,7 @@ impl ClientClipboardHandler {
         }
     }
 
-    fn check_clipboard(&mut self) {
+    fn check_clipboard(&mut self, check_text: bool) {
         if CLIPBOARD_STATE.lock().unwrap().running {
             #[cfg(feature = "unix-file-copy-paste")]
             if self.is_file_required() {
@@ -2058,7 +2061,7 @@ impl ClientClipboardHandler {
                 }
             }
 
-            if self.is_text_required() {
+            if check_text && self.is_text_required() {
                 if let Some(msg) = check_clipboard(&mut self.ctx, ClipboardSide::Client, false) {
                     self.send_msg(msg, false);
                 }
