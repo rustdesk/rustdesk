@@ -892,6 +892,8 @@ pub fn get_clipboards_msg(client: bool) -> Option<Message> {
 #[cfg(not(target_os = "android"))]
 pub mod clipboard_listener {
     use clipboard_master::{CallbackResult, ClipboardHandler, Master, Shutdown};
+    #[cfg(target_os = "linux")]
+    use hbb_common::tokio::sync::watch;
     use hbb_common::{bail, log, ResultType};
     use std::{
         collections::HashMap,
@@ -914,26 +916,45 @@ pub mod clipboard_listener {
 
     #[cfg(target_os = "linux")]
     pub fn is_ready() -> bool {
-        CLIPBOARD_LISTENER
-            .lock()
-            .unwrap()
-            .handle
+        let listener = CLIPBOARD_LISTENER.lock().unwrap();
+        let ready = listener
+            .ready
             .as_ref()
-            .map(|(_, h)| !h.is_finished())
-            .unwrap_or(false)
+            .map(|ready| *ready.borrow())
+            .unwrap_or(false);
+        ready
+            && listener
+                .handle
+                .as_ref()
+                .map(|(_, h)| !h.is_finished())
+                .unwrap_or(false)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn wait_for_ready() -> ResultType<()> {
+        let Some(mut ready) = CLIPBOARD_LISTENER.lock().unwrap().ready.clone() else {
+            bail!("Clipboard listener has not started");
+        };
+        let is_ready = *ready.borrow_and_update();
+        if !is_ready {
+            ready.changed().await?;
+        }
+        Ok(())
     }
 
     struct Handler {
         subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
         #[cfg(target_os = "linux")]
-        ready: Option<Sender<()>>,
+        ready: Option<watch::Sender<bool>>,
     }
 
     impl ClipboardHandler for Handler {
         #[cfg(target_os = "linux")]
         fn on_clipboard_ready(&mut self) {
+            // A restart must invalidate older snapshots, including on X11 or an empty selection.
+            CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             if let Some(tx) = self.ready.take() {
-                if let Err(err) = tx.send(()) {
+                if let Err(err) = tx.send(true) {
                     log::debug!("Failed to report clipboard listener readiness: {}", err);
                 }
             }
@@ -951,17 +972,10 @@ pub mod clipboard_listener {
 
         fn on_clipboard_initial_selection(&mut self) -> CallbackResult {
             // Do not broadcast startup state; sessions handle their own initial sync.
-            // A restarted listener can overlap an existing session's initial snapshot.
-            CLIPBOARD_GENERATION.fetch_add(1, Ordering::SeqCst);
             CallbackResult::Next
         }
 
         fn on_clipboard_error(&mut self, error: io::Error) -> CallbackResult {
-            #[cfg(target_os = "linux")]
-            if self.ready.is_some() {
-                // Stop initialization so the startup waiter receives a failure.
-                return CallbackResult::StopWithError(error);
-            }
             let msg = format!("Clipboard listener error: {}", error);
             let sub_lock = self.subscribers.lock().unwrap();
             for tx in sub_lock.values() {
@@ -971,6 +985,11 @@ pub mod clipboard_listener {
                 )))
                 .ok();
             }
+            #[cfg(target_os = "linux")]
+            if self.ready.is_some() {
+                // Subscribers must receive the error before a failed startup stops.
+                return CallbackResult::StopWithError(error);
+            }
             CallbackResult::Next
         }
     }
@@ -979,6 +998,8 @@ pub mod clipboard_listener {
     pub struct ClipboardListener {
         subscribers: Arc<Mutex<HashMap<String, Sender<CallbackResult>>>>,
         handle: Option<(Shutdown, JoinHandle<()>)>,
+        #[cfg(target_os = "linux")]
+        ready: Option<watch::Receiver<bool>>,
     }
 
     pub fn subscribe(name: String, tx: Sender<CallbackResult>) -> ResultType<()> {
@@ -994,7 +1015,7 @@ pub mod clipboard_listener {
         if listener_lock.handle.is_none() {
             log::info!("Start clipboard listener thread");
             #[cfg(target_os = "linux")]
-            let (tx_ready, rx_ready) = channel();
+            let (tx_ready, rx_ready) = watch::channel(false);
             let handler = Handler {
                 subscribers: listener_lock.subscribers.clone(),
                 #[cfg(target_os = "linux")]
@@ -1012,15 +1033,12 @@ pub mod clipboard_listener {
                     bail!("Failed to create clipboard listener: {}", e);
                 }
             };
-            // Master::new does not subscribe the Linux backend to clipboard changes.
-            // Initial reads must wait for subscription. Without initial sync,
-            // copies made before subscription are not replayed.
-            #[cfg(target_os = "linux")]
-            if let Err(err) = rx_ready.recv() {
-                listener_lock.subscribers.lock().unwrap().remove(&name);
-                bail!("Clipboard listener stopped before becoming ready: {}", err);
-            }
             listener_lock.handle = Some((shutdown, h));
+            #[cfg(target_os = "linux")]
+            {
+                // Initial-sync tasks await backend readiness without blocking the connection loop.
+                listener_lock.ready = Some(rx_ready);
+            }
             log::info!("Clipboard listener thread started");
         }
 

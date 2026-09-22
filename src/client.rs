@@ -4955,7 +4955,7 @@ pub enum Data {
     Login((String, String, String, bool)),
     Message(Message),
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    InitialClipboard(Option<Message>),
+    InitialClipboard(usize, Option<Message>),
     SendFiles((i32, JobType, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),

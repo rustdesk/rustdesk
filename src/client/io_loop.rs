@@ -90,9 +90,6 @@ pub struct Remote<T: InvokeUiSession> {
     // The connection loop clears this when handling its result or a live clipboard update.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     initial_clipboard_pending: bool,
-    // Local changes can supersede the snapshot without producing a clipboard message.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    initial_clipboard_generation: usize,
     first_frame: bool,
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
@@ -142,8 +139,6 @@ impl<T: InvokeUiSession> Remote<T> {
             is_connected: false,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             initial_clipboard_pending: false,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            initial_clipboard_generation: 0,
             first_frame: false,
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
@@ -662,11 +657,12 @@ impl<T: InvokeUiSession> Remote<T> {
         };
 
         self.initial_clipboard_pending = true;
-        self.initial_clipboard_generation = clipboard_listener::current_generation();
         let sender = self.sender.clone();
         let permission_config = self.handler.get_permission_config();
         // Clipboard access and encoding must not block the connection loop.
-        tokio::task::spawn_blocking(move || {
+        let read_clipboard = move || {
+            // Capture after readiness, before reading; later changes invalidate this snapshot.
+            let generation = clipboard_listener::current_generation();
             let msg_out = if permission_config.is_text_clipboard_required() {
                 crate::clipboard::get_current_clipboard_msg(
                     &peer_version,
@@ -678,9 +674,33 @@ impl<T: InvokeUiSession> Remote<T> {
             };
             let msg_out = msg_out.filter(|_| permission_config.is_text_clipboard_required());
             // Empty or failed reads must also finish the pending initial-sync attempt.
-            if let Err(err) = sender.send(Data::InitialClipboard(msg_out)) {
+            if let Err(err) = sender.send(Data::InitialClipboard(generation, msg_out)) {
                 log::debug!("Failed to send initial clipboard result: {}", err);
             }
+        };
+        #[cfg(target_os = "linux")]
+        self.spawn_initial_clipboard_read_after_ready(read_clipboard);
+        #[cfg(not(target_os = "linux"))]
+        tokio::task::spawn_blocking(read_clipboard);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn spawn_initial_clipboard_read_after_ready(&self, read_clipboard: impl FnOnce() + Send + 'static) {
+        let sender = self.sender.clone();
+        tokio::spawn(async move {
+            let ready = tokio::select! {
+                result = clipboard_listener::wait_for_ready() => result,
+                _ = sender.closed() => return,
+            };
+            if let Err(err) = ready {
+                log::error!("Failed to wait for clipboard listener readiness: {}", err);
+                let generation = clipboard_listener::current_generation();
+                if let Err(err) = sender.send(Data::InitialClipboard(generation, None)) {
+                    log::debug!("Failed to send initial clipboard result: {}", err);
+                }
+                return;
+            }
+            tokio::task::spawn_blocking(read_clipboard);
         });
     }
 
@@ -700,7 +720,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.check_clipboard_file_context();
             }
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            Data::InitialClipboard(msg) => {
+            Data::InitialClipboard(generation, msg) => {
                 // A live update supersedes any initial snapshot still being prepared.
                 if !self.initial_clipboard_pending {
                     return true;
@@ -709,7 +729,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 if !self.handler.is_text_clipboard_required() {
                     return true;
                 }
-                if self.initial_clipboard_generation != clipboard_listener::current_generation() {
+                if generation != clipboard_listener::current_generation() {
                     // A clipboard change or listener restart can invalidate the snapshot
                     // without sending a live update that supersedes it.
                     drop(msg);
