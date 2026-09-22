@@ -862,7 +862,9 @@ pub fn handle_remote_mouse(
         handle_mouse(evt, conn, username, argb, simulate, show_cursor);
         return;
     }
-    match independent_mouse::plan_mouse(conn, simulate, evt) {
+    // The decision and the events it plans go out together: another connection must not
+    // move the pointer in between, or this event would land where that one pointed.
+    independent_mouse::with_pointer(|| match independent_mouse::plan_mouse(conn, simulate, evt) {
         // `simulate` is false here: the event must not reach the host, but the
         // cursor UI of the other peers still follows this connection.
         Plan::Track => {
@@ -884,23 +886,46 @@ pub fn handle_remote_mouse(
             handle_mouse(evt, conn, username, argb, true, show_cursor);
         }
         Plan::Inject => handle_mouse(evt, conn, username, argb, true, show_cursor),
-    }
+    })
 }
 
-/// Places the host pointer at the connection's own position before a key press.
-pub fn locate_before_key(conn: i32) {
+/// Entry point for key events of a remote connection.
+///
+/// With the option off this is the legacy key path. With independent mouse positions on,
+/// the pointer is placed at this connection's own position and the key is injected on the
+/// same path, so nothing can move the pointer in between.
+pub fn handle_remote_key(conn: i32, msg: KeyEvent, press: bool) {
     if !independent_mouse::enabled() {
+        handle_key_event(msg, press);
         return;
     }
-    if let Some((x, y)) = independent_mouse::plan_key(conn) {
-        handle_mouse(
-            &independent_mouse::position_event(x, y),
-            conn,
-            String::new(),
-            0,
-            true,
-            false,
-        );
+    independent_mouse::with_pointer(|| {
+        if let Some((x, y)) = independent_mouse::plan_key(conn) {
+            handle_mouse(
+                &independent_mouse::position_event(x, y),
+                conn,
+                String::new(),
+                0,
+                true,
+                false,
+            );
+        }
+        handle_key_event(msg, press);
+    });
+}
+
+/// Injects one key event the way an input thread always did: `press` marks a whole press,
+/// which is expanded into a down and a release, and otherwise the event's own `down` is
+/// what the injector sees.
+pub fn handle_key_event(mut msg: KeyEvent, press: bool) {
+    msg.press = false;
+    if press {
+        msg.down = true;
+    }
+    handle_key(&msg);
+    if press {
+        msg.down = false;
+        handle_key(&msg);
     }
 }
 

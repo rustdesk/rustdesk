@@ -44,6 +44,9 @@ pub const BORROW_LEASE: Duration = Duration::from_secs(5);
 pub const CLICK_GRACE: Duration = Duration::from_millis(500);
 /// Grace after the last wheel step, so a scroll gesture is not cut in half.
 pub const SCROLL_GRACE: Duration = Duration::from_millis(200);
+/// A button held this far from where it went down is a drag, so a shaky click still
+/// counts as the click that confirms where a helper types.
+pub const DRAG_THRESHOLD: i32 = 4;
 /// How often the worker calls [`on_tick`].
 pub const TICK: Duration = Duration::from_millis(50);
 
@@ -77,6 +80,34 @@ pub fn key_release_event(key: KeyId) -> KeyEvent {
     evt
 }
 
+/// A key event as the arbitration needs it.
+///
+/// `Map` mode sends a down and an up as two events, so `down` comes from the event
+/// itself; the connection's atomic-press flag says nothing about it. Text a peer commits
+/// in one step has no identity and can neither be held nor released.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct KeyInput {
+    /// The physical key, `None` for a commit that cannot be held.
+    pub key: Option<KeyId>,
+    /// This event puts input on the host: a down, a one-shot press, or a commit.
+    pub down: bool,
+    /// The key stays down after this event, so only its own release may end it.
+    pub stays_down: bool,
+}
+
+impl KeyInput {
+    /// Derives the input from the peer's event, whose mode decides what it carries.
+    pub fn from_event(evt: &KeyEvent, press: bool) -> Self {
+        let key = key_id(evt);
+        Self {
+            key,
+            // A commit and a one-shot press carry no usable `down` of their own.
+            down: key.is_none() || press || evt.down,
+            stays_down: key.is_some() && evt.down && !press,
+        }
+    }
+}
+
 /// What the caller has to do with the event it just handed in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
@@ -107,6 +138,9 @@ pub enum Reject {
     PrimaryBusy,
     /// Another helper holds the real pointer.
     OtherBusy,
+    /// The peer does not own the real pointer, so an event that can not be arbitrated
+    /// per event (touch, pen) is refused.
+    NotOwner,
     /// Keyboard input needs a confirmed target first.
     KeyboardNeedsTarget,
     /// Arbitration is paused; input stays off until it is resolved.
@@ -181,6 +215,8 @@ struct Borrow {
     last_seen: Instant,
     /// When a borrow without held buttons gives the pointer back.
     grace_until: Option<Instant>,
+    /// Where the button of this borrow went down, to tell a drag from a shaky click.
+    press_pos: Option<(i32, i32)>,
     /// A completed, non-drag click happened inside this borrow.
     clicked: bool,
     /// The borrower moved while holding a button: the gesture is a drag, not a click.
@@ -199,8 +235,6 @@ struct Peer {
     keys: HashSet<KeyId>,
     /// Keys whose down was dropped: repeats stay dropped until the peer releases them.
     quarantined: HashSet<KeyId>,
-    /// The keyboard target of this peer is known to hold its input.
-    focus_confirmed: bool,
     /// Button pressed by this peer's current borrow, used to tell a click from a drag.
     pending_click: Option<i32>,
     last_user_input: Option<Instant>,
@@ -211,10 +245,6 @@ struct Peer {
 pub enum Suspend {
     /// The screen layout changed; positions must be re-established.
     LayoutResync,
-    /// Injection could not be completed or ordered.
-    InjectionFailed,
-    /// The local user paused remote input.
-    LocalPause,
 }
 
 #[derive(Default)]
@@ -273,11 +303,12 @@ fn register_in(st: &mut State, conn: i32, supported: bool, can_inject: bool) -> 
     let entry = st.peers.entry(conn).or_default();
     entry.supported = supported;
     entry.can_inject = can_inject;
-    // A connection that was authorized before the option was turned on still holds a
-    // valid keyboard target until the first borrow invalidates it.
-    entry.focus_confirmed = true;
-    ensure_primary(st);
-    notify_all(st)
+    let mut commands = Vec::new();
+    if let Some(primary) = ensure_primary(st) {
+        commands.extend(hand_over_pointer(st, primary));
+    }
+    commands.extend(notify_all(st));
+    commands
 }
 
 /// Forgets a closed connection and releases what it still holds.
@@ -288,7 +319,6 @@ pub fn unregister(conn: i32) -> Vec<Command> {
 
 fn unregister_in(st: &mut State, conn: i32) -> Vec<Command> {
     st.order.retain(|id| *id != conn);
-    st.notice.remove(&conn);
     let mut commands = if revoking_conn(st, conn) {
         revoke(st, RevokeReason::PeerClosed)
     } else {
@@ -296,10 +326,13 @@ fn unregister_in(st: &mut State, conn: i32) -> Vec<Command> {
     };
     commands.extend(release_peer(st, conn));
     st.peers.remove(&conn);
+    st.notice.remove(&conn);
     if st.primary == Some(conn) {
         st.primary = None;
     }
-    ensure_primary(st);
+    if let Some(primary) = ensure_primary(st) {
+        commands.extend(hand_over_pointer(st, primary));
+    }
     commands.extend(notify_all(st));
     commands
 }
@@ -326,7 +359,9 @@ fn set_can_inject_in(st: &mut State, conn: i32, can_inject: bool) -> Vec<Command
         }
         commands.extend(release_peer(st, conn));
     }
-    ensure_primary(st);
+    if let Some(primary) = ensure_primary(st) {
+        commands.extend(hand_over_pointer(st, primary));
+    }
     commands.extend(notify_all(st));
     commands
 }
@@ -342,20 +377,35 @@ fn set_primary_in(st: &mut State, conn: i32) -> Vec<Command> {
         Some(peer) if peer.can_inject && peer.supported => {}
         _ => return Vec::new(),
     }
-    if st.primary == Some(conn) {
+    let previous = st.primary;
+    if previous == Some(conn) {
         return Vec::new();
     }
     st.primary = Some(conn);
-    if let Some(peer) = st.peers.get_mut(&conn) {
-        peer.focus_confirmed = true;
+    let mut commands = hand_over_pointer(st, conn);
+    if let Some(previous) = previous {
+        // The peer that loses the role holds whatever it pressed as its own, and only the
+        // primary path can release that from now on: nobody else may take the buttons.
+        commands.extend(release_peer(st, previous));
     }
-    let mut commands = if revoking_conn(st, conn) {
-        revoke(st, RevokeReason::PrimaryChanged)
-    } else {
-        Vec::new()
-    };
     commands.extend(notify_all(st));
     commands
+}
+
+/// Gives the pointer to `conn`, which has just become the primary.
+///
+/// A borrow of that same peer is not a borrow anymore: it keeps the buttons and keys it
+/// already holds, and its own releases arrive on the primary path. Any other borrow ends
+/// here, because the new primary is the one that decides when the pointer moves next.
+fn hand_over_pointer(st: &mut State, conn: i32) -> Vec<Command> {
+    match st.borrow {
+        Some(borrow) if borrow.peer == conn => {
+            st.borrow = None;
+            Vec::new()
+        }
+        Some(_) => revoke(st, RevokeReason::PrimaryChanged),
+        None => Vec::new(),
+    }
 }
 
 /// The screen layout, resolution or display count changed.
@@ -381,65 +431,16 @@ fn layout_changed_in(st: &mut State) -> Vec<Command> {
     commands
 }
 
-/// The local user paused or resumed remote input.
-pub fn set_local_pause(paused: bool) -> Vec<Command> {
-    let mut st = STATE.lock().unwrap();
-    set_local_pause_in(&mut st, paused)
-}
-
-fn set_local_pause_in(st: &mut State, paused: bool) -> Vec<Command> {
-    let mut commands = if paused && st.borrow.is_some() {
-        revoke(st, RevokeReason::LocalPause)
-    } else {
-        Vec::new()
-    };
-    st.suspended = if paused {
-        Some(Suspend::LocalPause)
-    } else {
-        None
-    };
-    commands.extend(notify_all(st));
-    commands
-}
-
-/// Reports that injection could not be completed, or that it can be trusted again.
-pub fn set_injection_failed(failed: bool) -> Vec<Command> {
-    let mut st = STATE.lock().unwrap();
-    set_injection_failed_in(&mut st, failed)
-}
-
-fn set_injection_failed_in(st: &mut State, failed: bool) -> Vec<Command> {
-    if failed {
-        if st.suspended == Some(Suspend::InjectionFailed) {
-            return Vec::new();
-        }
-        let mut commands = if st.borrow.is_some() {
-            revoke(st, RevokeReason::InjectionFailed)
-        } else {
-            Vec::new()
-        };
-        st.suspended = Some(Suspend::InjectionFailed);
-        commands.extend(notify_all(st));
-        return commands;
-    }
-    if st.suspended == Some(Suspend::InjectionFailed) {
-        st.suspended = None;
-        return notify_all(st);
-    }
-    Vec::new()
-}
-
 /// Arbitrates a mouse event.
 pub fn on_mouse(conn: i32, evt: &MouseEvent, now: Instant) -> Planned {
     let mut st = STATE.lock().unwrap();
     on_mouse_in(&mut st, conn, evt, now)
 }
 
-/// Arbitrates a key event. `key` is `None` for text/IME commits, which have no
-/// identity and can therefore not be held, quarantined or released.
-pub fn on_key(conn: i32, key: Option<KeyId>, press: bool, now: Instant) -> Planned {
+/// Arbitrates a key event.
+pub fn on_key(conn: i32, input: KeyInput, now: Instant) -> Planned {
     let mut st = STATE.lock().unwrap();
-    on_key_in(&mut st, conn, key, press, now)
+    on_key_in(&mut st, conn, input, now)
 }
 
 /// Handles a borrow request from a peer that speaks this protocol.
@@ -467,7 +468,8 @@ fn tick_in(st: &mut State, now: Instant) -> Vec<Command> {
             }
         }
     }
-    if ensure_primary(st) {
+    if let Some(primary) = ensure_primary(st) {
+        commands.extend(hand_over_pointer(st, primary));
         commands.extend(notify_all(st));
     }
     commands
@@ -482,11 +484,10 @@ pub fn snapshot(conn: i32) -> StateOut {
 fn snapshot_in(st: &State, conn: i32) -> StateOut {
     let is_primary = st.primary == Some(conn);
     let borrowed_by_me = st.borrow.map_or(false, |b| b.peer == conn);
-    let keyboard_target_confirmed = if is_primary {
-        st.peers.get(&conn).map_or(false, |p| p.focus_confirmed)
-    } else {
-        borrowed_by_me && borrow_typing_allowed(&st.borrow)
-    };
+    // The primary types wherever the host focus is; a helper may only type once its own
+    // borrow clicked the place it wants to type into.
+    let keyboard_target_confirmed =
+        is_primary || (borrowed_by_me && borrow_typing_allowed(&st.borrow));
     StateOut {
         enabled: st.suspended.is_none(),
         is_primary,
@@ -637,14 +638,16 @@ fn borrow_typing_allowed(borrow: &Option<Borrow>) -> bool {
     }
 }
 
-fn ensure_primary(st: &mut State) -> bool {
+/// Picks a primary when there is none, so a helper is never left waiting for a peer that
+/// went away. Returns the connection that became the primary.
+fn ensure_primary(st: &mut State) -> Option<i32> {
     if let Some(primary) = st.primary {
         if st
             .peers
             .get(&primary)
             .map_or(false, |p| p.can_inject && p.supported)
         {
-            return false;
+            return None;
         }
         st.primary = None;
     }
@@ -652,12 +655,8 @@ fn ensure_primary(st: &mut State) -> bool {
         let peer = st.peers.get(conn)?;
         (peer.can_inject && peer.supported).then_some(*conn)
     });
-    if candidate.is_some() {
-        st.primary = candidate;
-        true
-    } else {
-        false
-    }
+    st.primary = candidate;
+    candidate
 }
 
 fn notify_all(st: &State) -> Vec<Command> {
@@ -679,12 +678,11 @@ enum RevokeReason {
     PrimaryChanged,
     PermissionLost,
     LayoutChanged,
-    LocalPause,
-    InjectionFailed,
     LeaseExpired,
     Finished,
     BorrowerEnded,
     PeerClosed,
+    ModeOff,
 }
 
 impl RevokeReason {
@@ -694,14 +692,48 @@ impl RevokeReason {
             RevokeReason::PrimaryChanged => "primary-changed",
             RevokeReason::PermissionLost => "permission-lost",
             RevokeReason::LayoutChanged => "layout-changed",
-            RevokeReason::LocalPause => "local-pause",
-            RevokeReason::InjectionFailed => "injection-failed",
             RevokeReason::LeaseExpired => "borrow-expired",
             RevokeReason::Finished => "borrow-finished",
             RevokeReason::BorrowerEnded => "borrow-finished",
             RevokeReason::PeerClosed => "borrow-finished",
+            RevokeReason::ModeOff => "borrow-finished",
         }
     }
+}
+
+/// Whether any connection is registered with the arbitration.
+pub fn is_empty() -> bool {
+    STATE.lock().unwrap().peers.is_empty()
+}
+
+/// Drops the whole state of a mode that is no longer on, releasing what it still holds.
+///
+/// The worker calls this once the option is turned off: without it a button pressed by a
+/// helper of that mode would stay down, and the positions of a layout nobody tracks would
+/// still be there when the mode comes back.
+pub fn reset_if_disabled() -> Vec<Command> {
+    if enabled() {
+        return Vec::new();
+    }
+    let mut st = STATE.lock().unwrap();
+    if st.peers.is_empty() && st.borrow.is_none() {
+        return Vec::new();
+    }
+    let mut commands = if st.borrow.is_some() {
+        revoke(&mut st, RevokeReason::ModeOff)
+    } else {
+        Vec::new()
+    };
+    for conn in st.order.clone() {
+        commands.extend(release_peer(&mut st, conn));
+    }
+    st.peers.clear();
+    st.order.clear();
+    st.notice.clear();
+    st.primary = None;
+    st.borrow = None;
+    st.suspended = None;
+    commands
 }
 
 /// Ends the current borrow, releasing everything the borrower injected.
@@ -711,13 +743,6 @@ fn revoke(st: &mut State, reason: RevokeReason) -> Vec<Command> {
     };
     st.notice.insert(borrow.peer, reason.notice());
     let mut commands = release_peer(st, borrow.peer);
-    // The pointer moved away from the primary, so its keyboard target is not known
-    // anymore: the primary has to confirm it again before it may type.
-    if let Some(primary) = st.primary {
-        if let Some(peer) = st.peers.get_mut(&primary) {
-            peer.focus_confirmed = false;
-        }
-    }
     commands.extend(notify_all(st));
     commands
 }
@@ -752,6 +777,13 @@ fn set_notice(st: &mut State, conn: i32, code: &'static str) {
     st.notice.insert(conn, code);
 }
 
+/// Drops the last refusal of a connection. A notice explains input that did nothing, and
+/// the peer shows a notice only when it changes, so input that works has to clear it or
+/// the same refusal would stay silent the second time.
+fn clear_notice(st: &mut State, conn: i32) {
+    st.notice.remove(&conn);
+}
+
 fn reject_notice(reject: Reject) -> &'static str {
     match reject {
         Reject::NotPermitted => "no-permission",
@@ -760,6 +792,7 @@ fn reject_notice(reject: Reject) -> &'static str {
         Reject::NoPrimary => "no-primary",
         Reject::PrimaryBusy => "primary-busy",
         Reject::OtherBusy => "other-busy",
+        Reject::NotOwner => "not-pointer-owner",
         Reject::KeyboardNeedsTarget => "keyboard-needs-target",
         Reject::Suspended => "suspended",
         Reject::UnsupportedEvent => "unsupported-event",
@@ -777,10 +810,6 @@ fn drop_with_notice(st: &mut State, conn: i32, reject: Reject) -> Action {
 
 fn known_buttons() -> i32 {
     BUTTONS.iter().fold(0, |mask, button| mask | button)
-}
-
-fn is_pointer_button(button: i32) -> bool {
-    button & known_buttons() != 0
 }
 
 /// Whether the primary is idle enough to let a helper borrow the pointer.
@@ -818,6 +847,11 @@ fn can_start_borrow(st: &State, conn: i32, now: Instant) -> Result<(i32, i32), R
     if !peer.supported {
         return Err(Reject::NotSupported);
     }
+    // The primary already owns the pointer: asking for a borrow of it would only make it
+    // take back what it holds, so the request is ignored instead of granted.
+    if st.primary == Some(conn) {
+        return Err(Reject::Suppressed);
+    }
     let (x, y) = peer.pos.ok_or(Reject::NoPosition)?;
     primary_can_yield(st, now)?;
     Ok((x, y))
@@ -826,12 +860,14 @@ fn can_start_borrow(st: &State, conn: i32, now: Instant) -> Result<(i32, i32), R
 fn start_borrow(st: &mut State, conn: i32, kind: BorrowKind, now: Instant) -> u64 {
     st.epoch += 1;
     let epoch = st.epoch;
+    let press_pos = st.peers.get(&conn).and_then(|peer| peer.pos);
     st.borrow = Some(Borrow {
         peer: conn,
         epoch,
         kind,
         last_seen: now,
         grace_until: None,
+        press_pos,
         clicked: false,
         dragged: false,
     });
@@ -924,10 +960,6 @@ fn on_primary_mouse(
                     MOUSE_TYPE_DOWN => peer.buttons |= buttons & known_buttons(),
                     _ => peer.buttons &= !(buttons & known_buttons()),
                 }
-                if evt_type == MOUSE_TYPE_DOWN && is_pointer_button(buttons) {
-                    // A completed click is what confirms this peer's keyboard target.
-                    peer.focus_confirmed = true;
-                }
             }
             Planned::with(commands, Action::Inject)
         }
@@ -951,6 +983,7 @@ fn mark_primary_input(st: &mut State, conn: i32, now: Instant) {
         if let Some(peer) = st.peers.get_mut(&conn) {
             peer.last_user_input = Some(now);
         }
+        clear_notice(st, conn);
     }
 }
 
@@ -992,23 +1025,48 @@ fn on_helper_mouse(
             if let Some(borrow) = st.borrow.as_mut() {
                 borrow.last_seen = now;
                 if held != 0 {
-                    borrow.dragged = true;
-                    if borrow.kind != BorrowKind::Continuous {
-                        borrow.kind = BorrowKind::Drag;
+                    // A shaky click must still count as a click: only a button that left
+                    // the place where it went down is a drag.
+                    let moved = borrow.press_pos.map_or(true, |(px, py)| {
+                        (evt.x - px).abs() > DRAG_THRESHOLD || (evt.y - py).abs() > DRAG_THRESHOLD
+                    });
+                    if moved {
+                        borrow.dragged = true;
+                        if borrow.kind != BorrowKind::Continuous {
+                            borrow.kind = BorrowKind::Drag;
+                        }
                     }
                 }
             }
+            clear_notice(st, conn);
             Planned::with(Vec::new(), Action::Inject)
         }
         MOUSE_TYPE_DOWN => {
             if own.is_some() {
+                let mut fresh = false;
                 if let Some(peer) = st.peers.get_mut(&conn) {
-                    let fresh = peer.buttons == 0;
+                    fresh = peer.buttons == 0;
                     peer.buttons |= buttons & known_buttons();
                     // Only a press that starts with no button held is a click candidate.
                     peer.pending_click = fresh.then_some(buttons & known_buttons());
                 }
+                if fresh {
+                    // A new gesture starts with this press, so an earlier drag does not
+                    // make this click a drag: this is the click that confirms typing.
+                    // The position of the press is the one the peer last reported, which
+                    // is updated by every move; a button event may carry none at all.
+                    let press_pos = st
+                        .peers
+                        .get(&conn)
+                        .and_then(|peer| peer.pos)
+                        .or(Some((evt.x, evt.y)));
+                    if let Some(borrow) = st.borrow.as_mut() {
+                        borrow.press_pos = press_pos;
+                        borrow.dragged = false;
+                    }
+                }
                 renew_borrow(st, conn, now);
+                clear_notice(st, conn);
                 return Planned::with(Vec::new(), Action::Inject);
             }
             if buttons & known_buttons() == 0 {
@@ -1022,7 +1080,9 @@ fn on_helper_mouse(
                         peer.buttons |= buttons & known_buttons();
                         peer.pending_click = Some(buttons & known_buttons());
                     }
-                    Planned::with(Vec::new(), Action::LocateThenInject { x, y })
+                    // The peer has to learn that it holds the pointer: its own status line
+                    // needs it, and so do the heartbeats that keep this borrow alive.
+                    Planned::with(notify_all(st), Action::LocateThenInject { x, y })
                 }
                 Err(reject) => {
                     let action = drop_with_notice(st, conn, reject);
@@ -1078,12 +1138,13 @@ fn on_helper_mouse(
         MOUSE_TYPE_WHEEL | MOUSE_TYPE_TRACKPAD => {
             if own.is_some() {
                 renew_borrow(st, conn, now);
+                clear_notice(st, conn);
                 return Planned::with(Vec::new(), Action::Inject);
             }
             match can_start_borrow(st, conn, now) {
                 Ok((x, y)) => {
                     start_borrow(st, conn, BorrowKind::Scroll, now);
-                    Planned::with(Vec::new(), Action::LocateThenInject { x, y })
+                    Planned::with(notify_all(st), Action::LocateThenInject { x, y })
                 }
                 Err(reject) => {
                     let action = drop_with_notice(st, conn, reject);
@@ -1111,7 +1172,7 @@ fn renew_borrow(st: &mut State, conn: i32, now: Instant) {
     }
 }
 
-fn on_key_in(st: &mut State, conn: i32, key: Option<KeyId>, press: bool, now: Instant) -> Planned {
+fn on_key_in(st: &mut State, conn: i32, input: KeyInput, now: Instant) -> Planned {
     let Some(peer) = st.peers.get(&conn) else {
         return Planned::drop_with(Vec::new(), Reject::NotSupported);
     };
@@ -1121,45 +1182,56 @@ fn on_key_in(st: &mut State, conn: i32, key: Option<KeyId>, press: bool, now: In
         } else {
             Reject::NotPermitted
         };
+        quarantine_dropped(st, conn, input);
         let action = drop_with_notice(st, conn, reject);
         return Planned::with(Vec::new(), action);
     }
     if st.suspended.is_some() {
+        quarantine_dropped(st, conn, input);
         let action = drop_with_notice(st, conn, Reject::Suspended);
         return Planned::with(Vec::new(), action);
     }
     if st.primary == Some(conn) {
-        return on_primary_key(st, conn, key, press, now);
+        return on_primary_key(st, conn, input, now);
     }
-    on_helper_key(st, conn, key, press, now)
+    on_helper_key(st, conn, input, now)
 }
 
-fn on_primary_key(
-    st: &mut State,
-    conn: i32,
-    key: Option<KeyId>,
-    press: bool,
-    now: Instant,
-) -> Planned {
+/// Bookkeeping for a key this module did not inject: repeats of a dropped press stay
+/// dropped until the peer releases it, and that release is swallowed instead of releasing
+/// a key this module never pressed.
+fn quarantine_dropped(st: &mut State, conn: i32, input: KeyInput) {
+    let Some(key) = input.key else {
+        return;
+    };
+    let Some(peer) = st.peers.get_mut(&conn) else {
+        return;
+    };
+    if input.stays_down {
+        peer.quarantined.insert(key);
+    } else if !input.down {
+        peer.quarantined.remove(&key);
+    }
+}
+
+/// The primary owns the pointer, so its keyboard is never gated: its keys go where the
+/// host focus is, exactly as they did before this mode existed. A borrow may have moved
+/// the pointer away and clicked somewhere else, so it is revoked first.
+fn on_primary_key(st: &mut State, conn: i32, input: KeyInput, now: Instant) -> Planned {
     let mut commands = Vec::new();
     if st.borrow.is_some() {
         commands.extend(revoke(st, RevokeReason::PrimaryInput));
     }
-    let confirmed = st
-        .peers
-        .get(&conn)
-        .map_or(false, |peer| peer.focus_confirmed);
-    if !press {
-        let injected = match key {
+    let Some(peer) = st.peers.get_mut(&conn) else {
+        return Planned::with(commands, Action::Drop(Reject::NotSupported));
+    };
+    if !input.down {
+        let injected = match input.key {
             Some(key) => {
-                let peer = st.peers.get_mut(&conn);
-                match peer {
-                    Some(peer) => {
-                        peer.quarantined.remove(&key);
-                        peer.keys.remove(&key)
-                    }
-                    None => false,
-                }
+                peer.quarantined.remove(&key);
+                // Only a key this module injected as down may be released here: a
+                // release of a dropped press would release a key it does not own.
+                peer.keys.remove(&key)
             }
             None => false,
         };
@@ -1167,29 +1239,14 @@ fn on_primary_key(
             mark_primary_input(st, conn, now);
             Planned::with(commands, Action::Inject)
         } else {
-            // Either the press was dropped, or the key was never held down: releasing it
-            // again would release a key this module does not own.
             Planned::with(commands, Action::Drop(Reject::Suppressed))
         };
     }
-    if !confirmed {
-        if let Some(key) = key {
-            if let Some(peer) = st.peers.get_mut(&conn) {
-                peer.quarantined.insert(key);
-            }
-        }
-        let action = drop_with_notice(st, conn, Reject::KeyboardNeedsTarget);
-        return Planned::with(commands, action);
-    }
-    if let Some(key) = key {
-        let quarantined = st
-            .peers
-            .get(&conn)
-            .map_or(false, |peer| peer.quarantined.contains(&key));
-        if quarantined {
+    if let Some(key) = input.key {
+        if peer.quarantined.contains(&key) {
             return Planned::with(commands, Action::Drop(Reject::Suppressed));
         }
-        if let Some(peer) = st.peers.get_mut(&conn) {
+        if input.stays_down {
             peer.keys.insert(key);
         }
     }
@@ -1197,29 +1254,13 @@ fn on_primary_key(
     Planned::with(commands, Action::Inject)
 }
 
-fn on_helper_key(
-    st: &mut State,
-    conn: i32,
-    key: Option<KeyId>,
-    press: bool,
-    now: Instant,
-) -> Planned {
+fn on_helper_key(st: &mut State, conn: i32, input: KeyInput, now: Instant) -> Planned {
     let allowed = st.borrow.map_or(false, |b| b.peer == conn) && borrow_typing_allowed(&st.borrow);
     if !allowed {
-        if let Some(key) = key {
-            if let Some(peer) = st.peers.get_mut(&conn) {
-                if press {
-                    peer.quarantined.insert(key);
-                } else {
-                    // The release of a dropped press ends its quarantine and is
-                    // swallowed: no key of that gesture was ever injected.
-                    peer.quarantined.remove(&key);
-                }
-            }
-        }
-        // A held-down key of a peer that may not type is a real, tellable refusal; a
-        // release of it is only cleanup.
-        let reject = if press {
+        quarantine_dropped(st, conn, input);
+        // Input a helper sent that did nothing is worth telling it about; the release of
+        // a dropped press is only cleanup.
+        let reject = if input.down {
             Reject::KeyboardNeedsTarget
         } else {
             Reject::Suppressed
@@ -1227,15 +1268,16 @@ fn on_helper_key(
         let action = drop_with_notice(st, conn, reject);
         return Planned::with(Vec::new(), action);
     }
-    if let Some(key) = key {
+    if let Some(key) = input.key {
         if let Some(peer) = st.peers.get_mut(&conn) {
-            if press {
+            if input.stays_down {
                 peer.keys.insert(key);
-            } else {
+            } else if !input.down {
                 peer.keys.remove(&key);
             }
         }
     }
+    clear_notice(st, conn);
     renew_borrow(st, conn, now);
     Planned::with(Vec::new(), Action::Inject)
 }
@@ -1264,7 +1306,9 @@ fn on_borrow_in(
             match can_start_borrow(st, conn, now) {
                 Ok((x, y)) => {
                     start_borrow(st, conn, BorrowKind::Continuous, now);
-                    Planned::with(Vec::new(), Action::Locate { x, y })
+                    // The peer has to learn its epoch, or it can neither heartbeat the
+                    // borrow nor end it.
+                    Planned::with(notify_all(st), Action::Locate { x, y })
                 }
                 Err(reject) => {
                     let action = drop_with_notice(st, conn, reject);
@@ -1276,8 +1320,11 @@ fn on_borrow_in(
             let Some(borrow) = own else {
                 return Planned::with(Vec::new(), Action::Drop(Reject::Suppressed));
             };
-            if epoch != 0 && epoch != borrow.epoch {
-                // A late end of an older borrow must not end the current one.
+            // An end that carries no epoch can only be the release of the borrow its own
+            // begin just started, which is the operate-key borrow. Anything else - a newer
+            // click borrow of the same peer, or a late end of an older borrow - is not
+            // this message's to end.
+            if epoch != borrow.epoch && !(epoch == 0 && borrow.kind == BorrowKind::Continuous) {
                 return Planned::with(Vec::new(), Action::Drop(Reject::Suppressed));
             }
             let commands = revoke(st, RevokeReason::BorrowerEnded);
@@ -1313,7 +1360,6 @@ fn borrow_peer_pos_y(st: &State, conn: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base::message_proto::KeyboardMode;
 
     const LEFT: i32 = MOUSE_BUTTON_LEFT;
     const RIGHT: i32 = MOUSE_BUTTON_RIGHT;
@@ -1347,6 +1393,33 @@ mod tests {
         KeyId(code)
     }
 
+    /// A `Map` mode key down, which stays pressed until its own release arrives.
+    fn kd(code: i32) -> KeyInput {
+        KeyInput {
+            key: Some(key(code)),
+            down: true,
+            stays_down: true,
+        }
+    }
+
+    /// Its release.
+    fn ku(code: i32) -> KeyInput {
+        KeyInput {
+            key: Some(key(code)),
+            down: false,
+            stays_down: false,
+        }
+    }
+
+    /// Text a peer commits in one step: no identity, so it can only be injected.
+    fn committed() -> KeyInput {
+        KeyInput {
+            key: None,
+            down: true,
+            stays_down: false,
+        }
+    }
+
     /// A host with a primary (`1`) and one helper (`2`), both able to inject.
     fn host(now: Instant) -> State {
         let mut st = State::default();
@@ -1372,6 +1445,29 @@ mod tests {
             planned.action,
             Action::Inject | Action::LocateThenInject { .. } | Action::Locate { .. }
         )
+    }
+
+    /// Whether the plan tells the peers about a state change.
+    fn notifies(commands: &[Command]) -> bool {
+        commands
+            .iter()
+            .any(|command| matches!(command, Command::Notify { .. }))
+    }
+
+    /// Whether the plan releases a button of `conn`.
+    fn releases_button(commands: &[Command], conn: i32) -> bool {
+        commands.iter().any(|command| match command {
+            Command::Mouse {
+                conn: button_conn,
+                evt,
+                ..
+            } => *button_conn == conn && evt.mask & MOUSE_TYPE_MASK == MOUSE_TYPE_UP,
+            _ => false,
+        })
+    }
+
+    fn notice_code(st: &State, conn: i32) -> &'static str {
+        st.notice.get(&conn).copied().unwrap_or("")
     }
 
     #[test]
@@ -1504,7 +1600,7 @@ mod tests {
     }
 
     #[test]
-    fn the_primary_has_to_confirm_its_keyboard_target_after_a_borrow() {
+    fn the_primary_types_without_confirming_anything() {
         let now = Instant::now();
         let mut st = host(now);
         assert!(injected(&on_mouse_in(
@@ -1519,39 +1615,18 @@ mod tests {
             &button(LEFT, MOUSE_TYPE_UP),
             now
         )));
+        // The helper holds the pointer until the primary acts; the primary then takes it
+        // back and its keyboard keeps working exactly as it did before the mode existed.
         assert!(injected(&on_mouse_in(&mut st, 1, &moved(13, 13), now)));
-        let dropped = on_key_in(&mut st, 1, Some(key(30)), true, now);
-        assert_eq!(dropped.action, Action::Drop(Reject::KeyboardNeedsTarget));
-        // Repeats of the dropped gesture stay dropped even after the target is confirmed.
-        assert!(injected(&on_mouse_in(
-            &mut st,
-            1,
-            &button(LEFT, MOUSE_TYPE_DOWN),
-            now
-        )));
-        assert!(injected(&on_mouse_in(
-            &mut st,
-            1,
-            &button(LEFT, MOUSE_TYPE_UP),
-            now
-        )));
-        let repeat = on_key_in(&mut st, 1, Some(key(30)), true, now);
-        assert_eq!(repeat.action, Action::Drop(Reject::Suppressed));
-        // Its release is swallowed instead of releasing a key nobody pressed.
-        let release = on_key_in(&mut st, 1, Some(key(30)), false, now);
-        assert_eq!(release.action, Action::Drop(Reject::Suppressed));
-        // A new gesture is accepted once the target is confirmed again.
-        let fresh = on_key_in(&mut st, 1, Some(key(31)), true, now);
-        assert_eq!(fresh.action, Action::Inject);
-        let release = on_key_in(&mut st, 1, Some(key(31)), false, now);
-        assert_eq!(release.action, Action::Inject);
+        assert_eq!(on_key_in(&mut st, 1, kd(30), now).action, Action::Inject);
+        assert_eq!(on_key_in(&mut st, 1, ku(30), now).action, Action::Inject);
     }
 
     #[test]
     fn a_fresh_session_can_type_without_clicking_first() {
         let now = Instant::now();
         let mut st = host(now);
-        let planned = on_key_in(&mut st, 1, Some(key(30)), true, now);
+        let planned = on_key_in(&mut st, 1, kd(30), now);
         assert_eq!(planned.action, Action::Inject);
     }
 
@@ -1559,12 +1634,12 @@ mod tests {
     fn a_helper_may_only_type_inside_a_continuous_borrow_after_a_click() {
         let now = Instant::now();
         let mut st = host(now);
-        let denied = on_key_in(&mut st, 2, Some(key(30)), true, now);
+        let denied = on_key_in(&mut st, 2, kd(30), now);
         assert_eq!(denied.action, Action::Drop(Reject::KeyboardNeedsTarget));
         let begin = on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
         assert_eq!(begin.action, Action::Locate { x: 20, y: 20 });
         // Continuous borrow, but no click yet.
-        let denied = on_key_in(&mut st, 2, Some(key(30)), true, now);
+        let denied = on_key_in(&mut st, 2, kd(30), now);
         assert_eq!(denied.action, Action::Drop(Reject::KeyboardNeedsTarget));
         assert!(injected(&on_mouse_in(
             &mut st,
@@ -1578,7 +1653,7 @@ mod tests {
             &button(LEFT, MOUSE_TYPE_UP),
             now
         )));
-        let allowed = on_key_in(&mut st, 2, Some(key(30)), true, now);
+        let allowed = on_key_in(&mut st, 2, kd(30), now);
         assert_eq!(allowed.action, Action::Inject);
     }
 
@@ -1817,7 +1892,7 @@ mod tests {
             Action::Drop(Reject::NotSupported)
         );
         assert_eq!(
-            on_key_in(&mut st, 3, Some(key(30)), true, now).action,
+            on_key_in(&mut st, 3, kd(30), now).action,
             Action::Drop(Reject::NotSupported)
         );
         // A borrowed pointer can not be requested by a peer that does not speak the
@@ -1892,7 +1967,7 @@ mod tests {
     }
 
     #[test]
-    fn host_pause_and_injection_failure_stop_the_pointer() {
+    fn a_layout_change_stops_the_pointer_until_the_primary_moves_again() {
         let now = Instant::now();
         let mut st = host(now);
         assert!(injected(&on_mouse_in(
@@ -1901,27 +1976,20 @@ mod tests {
             &button(LEFT, MOUSE_TYPE_DOWN),
             now
         )));
-        let commands = set_local_pause_in(&mut st, true);
+        let commands = layout_changed_in(&mut st);
         assert!(commands
             .iter()
             .any(|cmd| matches!(cmd, Command::Mouse { conn: 2, .. })));
         assert_eq!(
-            on_mouse_in(&mut st, 1, &moved(16, 16), now).action,
-            Action::Drop(Reject::Suspended)
+            on_key_in(&mut st, 2, kd(30), now).action,
+            Action::Drop(Reject::Suspended),
+            "nobody else may act until the layout is settled"
         );
         assert_eq!(
-            on_key_in(&mut st, 1, Some(key(30)), true, now).action,
-            Action::Drop(Reject::Suspended)
+            on_mouse_in(&mut st, 1, &moved(16, 16), now).action,
+            Action::Inject,
+            "the primary re-establishes the position after a layout change"
         );
-        set_local_pause_in(&mut st, false);
-        assert!(injected(&on_mouse_in(&mut st, 1, &moved(16, 16), now)));
-        let commands = set_injection_failed_in(&mut st, true);
-        assert!(commands
-            .iter()
-            .any(|cmd| matches!(cmd, Command::Notify { .. })));
-        assert!(!snapshot_in(&st, 1).enabled);
-        set_injection_failed_in(&mut st, false);
-        assert!(snapshot_in(&st, 1).enabled);
     }
 
     #[test]
@@ -1982,7 +2050,7 @@ mod tests {
             &button(RIGHT, MOUSE_TYPE_UP),
             now
         )));
-        assert!(injected(&on_key_in(&mut st, 2, Some(key(29)), true, now)));
+        assert!(injected(&on_key_in(&mut st, 2, kd(29), now)));
         assert!(injected(&on_mouse_in(
             &mut st,
             2,
@@ -2071,10 +2139,10 @@ mod tests {
         register_in(&mut st, 4, false, true);
         on_mouse_in(&mut st, 4, &moved(50, 50), now);
         assert!(!can_inject_pointer_in(&st, 4));
-        // While arbitration is paused nothing may enter the desktop.
-        set_local_pause_in(&mut st, true);
+        // While the layout is being re-established nothing may enter the desktop.
+        layout_changed_in(&mut st);
         assert!(!can_inject_pointer_in(&st, 1));
-        set_local_pause_in(&mut st, false);
+        on_mouse_in(&mut st, 1, &moved(51, 51), now);
         assert!(can_inject_pointer_in(&st, 1));
     }
     #[test]
@@ -2192,6 +2260,25 @@ mod tests {
             }
         }
 
+        /// The same for a key event: a `Map` down that stays pressed is what the host
+        /// holds after it, and a release of a key nobody pressed is accounted as stray.
+        fn apply_key(&mut self, conn: i32, input: KeyInput, planned: &Planned) {
+            self.apply(&planned.commands);
+            if !matches!(
+                planned.action,
+                Action::Inject | Action::LocateThenInject { .. } | Action::Locate { .. }
+            ) {
+                return;
+            }
+            if let Some(key) = input.key {
+                if input.stays_down {
+                    self.keys.insert((conn, key));
+                } else if !input.down && !self.keys.remove(&(conn, key)) {
+                    self.stray_releases += 1;
+                }
+            }
+        }
+
         fn apply_event(&mut self, conn: i32, evt: &MouseEvent) {
             if evt.mask & MOUSE_TYPE_MASK == MOUSE_TYPE_MOVE {
                 return;
@@ -2237,74 +2324,73 @@ mod tests {
             }
             let conn = conns[rng.below(3) as usize];
             let evt = |rng: &mut Rng| moved(rng.below(500) as i32, rng.below(500) as i32);
-            let (event, planned) = match rng.below(12) {
+            let (event, planned, input) = match rng.below(12) {
                 0 => {
                     st.primary = None;
                     ensure_primary(&mut st);
                     (
                         MouseEvent::new(),
                         Planned::with(notify_all(&st), Action::Track),
+                        None,
                     )
                 }
                 1 => {
                     let ev = evt(&mut rng);
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
                 2 => {
                     let ev = button(LEFT, MOUSE_TYPE_DOWN);
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
                 3 => {
                     let ev = button(LEFT, MOUSE_TYPE_UP);
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
                 4 => {
                     let ev = button(RIGHT, MOUSE_TYPE_DOWN);
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
                 5 => {
                     let ev = button(RIGHT, MOUSE_TYPE_UP);
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
                 6 => {
                     let ev = wheel();
                     let planned = on_mouse_in(&mut st, conn, &ev, now);
-                    (ev, planned)
+                    (ev, planned, None)
                 }
-                7 => (
-                    MouseEvent::new(),
-                    on_key_in(
-                        &mut st,
-                        conn,
-                        Some(key(30 + rng.below(4) as i32)),
-                        true,
-                        now,
-                    ),
-                ),
-                8 => (
-                    MouseEvent::new(),
-                    on_key_in(
-                        &mut st,
-                        conn,
-                        Some(key(30 + rng.below(4) as i32)),
-                        false,
-                        now,
-                    ),
-                ),
+                7 => {
+                    let input = kd(30 + rng.below(4) as i32);
+                    (
+                        MouseEvent::new(),
+                        on_key_in(&mut st, conn, input, now),
+                        Some(input),
+                    )
+                }
+                8 => {
+                    let input = ku(30 + rng.below(4) as i32);
+                    (
+                        MouseEvent::new(),
+                        on_key_in(&mut st, conn, input, now),
+                        Some(input),
+                    )
+                }
                 9 => (
                     MouseEvent::new(),
                     on_borrow_in(&mut st, conn, BorrowRequest::Begin, 0, now),
+                    None,
                 ),
                 10 => {
                     let epoch = st.borrow.map_or(0, |borrow| borrow.epoch);
                     (
                         MouseEvent::new(),
                         on_borrow_in(&mut st, conn, BorrowRequest::Heartbeat, epoch, now),
+                        None,
                     )
                 }
                 _ => {
@@ -2315,10 +2401,17 @@ mod tests {
                         let primary = st.primary.unwrap_or(1);
                         commands.extend(on_mouse_in(&mut st, primary, &moved(1, 1), now).commands);
                     }
-                    (MouseEvent::new(), Planned::with(commands, Action::Track))
+                    (
+                        MouseEvent::new(),
+                        Planned::with(commands, Action::Track),
+                        None,
+                    )
                 }
             };
-            screen.apply_planned(conn, &event, &planned);
+            match input {
+                Some(input) => screen.apply_key(conn, input, &planned),
+                None => screen.apply_planned(conn, &event, &planned),
+            }
             // Invariants after every single event.
             let borrow_owner = st.borrow.map(|borrow| borrow.peer);
             if let Some(owner) = borrow_owner {
@@ -2345,6 +2438,18 @@ mod tests {
                     step,
                     conn
                 );
+                // The same for the keys that stay down.
+                let held: HashSet<KeyId> = screen
+                    .keys
+                    .iter()
+                    .filter(|(key_conn, _)| key_conn == conn)
+                    .map(|(_, key)| *key)
+                    .collect();
+                assert_eq!(
+                    held, peer.keys,
+                    "step {}: #{} and the injected keys disagree",
+                    step, conn
+                );
             }
         }
         // A clean shutdown must release everything and leave no borrow behind.
@@ -2352,6 +2457,7 @@ mod tests {
             screen.apply(&unregister_in(&mut st, conn));
         }
         assert_eq!(screen.held_buttons(), 0, "a button stayed down");
+        assert!(screen.keys.is_empty(), "a key stayed down");
         assert!(st.borrow.is_none());
         assert!(st.peers.is_empty());
     }
@@ -2421,5 +2527,268 @@ mod tests {
             assert!(late_up.commands.is_empty());
             assert_eq!(screen.held_buttons(), 0);
         }
+    }
+
+    #[test]
+    fn a_map_key_takes_its_down_from_the_event_not_from_the_press_flag() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The connection's atomic-press flag is clear for `Map` mode, and it is clear for
+        // the key down as well: the event itself has to say which of the two it is.
+        let mut evt = KeyEvent::new();
+        evt.mode = KeyboardMode::Map.into();
+        evt.set_chr(30);
+        evt.down = true;
+        let input = KeyInput::from_event(&evt, false);
+        assert!(input.down && input.stays_down && input.key.is_some());
+        assert_eq!(on_key_in(&mut st, 1, input, now).action, Action::Inject);
+        assert!(st
+            .peers
+            .get(&1)
+            .map_or(false, |p| p.keys.contains(&key(30))));
+
+        evt.down = false;
+        let input = KeyInput::from_event(&evt, false);
+        assert!(!input.down && !input.stays_down);
+        assert_eq!(on_key_in(&mut st, 1, input, now).action, Action::Inject);
+        assert!(st.peers.get(&1).map_or(false, |p| p.keys.is_empty()));
+    }
+
+    #[test]
+    fn a_one_shot_press_is_not_kept_as_a_held_key() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The legacy and translate paths send a whole press in one event with the event's
+        // `down` clear, so nothing may stay recorded as held.
+        let evt = KeyEvent::new();
+        let input = KeyInput::from_event(&evt, true);
+        assert!(input.down && !input.stays_down && input.key.is_none());
+        assert_eq!(on_key_in(&mut st, 1, input, now).action, Action::Inject);
+        assert!(st.peers.get(&1).map_or(false, |p| p.keys.is_empty()));
+    }
+
+    #[test]
+    fn committed_text_reaches_the_host_for_the_primary() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // Text committed in one step - a soft keyboard, an IME, the OS password payload -
+        // has no key identity, and it still has to be injected.
+        assert_eq!(
+            on_key_in(&mut st, 1, committed(), now).action,
+            Action::Inject
+        );
+        // A helper may only type inside a borrow whose click confirmed the target.
+        assert_eq!(
+            on_key_in(&mut st, 2, committed(), now).action,
+            Action::Drop(Reject::KeyboardNeedsTarget)
+        );
+    }
+
+    #[test]
+    fn a_granted_borrow_is_announced_to_the_peers() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The controlling side learns its epoch and its role from this message: without
+        // it, it can neither heartbeat the borrow nor end it, and the window that lists
+        // the connections would never show who operates.
+        let begin = on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
+        assert!(notifies(&begin.commands));
+        let epoch = st.borrow.expect("borrow").epoch;
+        assert!(st.borrow.is_some());
+        on_borrow_in(&mut st, 2, BorrowRequest::End, epoch, now);
+        assert!(st.borrow.is_none());
+
+        let mut st = host(now);
+        assert!(notifies(
+            &on_mouse_in(&mut st, 2, &button(LEFT, MOUSE_TYPE_DOWN), now).commands
+        ));
+
+        let mut st = host(now);
+        assert!(notifies(&on_mouse_in(&mut st, 2, &wheel(), now).commands));
+    }
+
+    #[test]
+    fn the_primary_never_borrows_the_pointer_it_already_owns() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The controlling side does not know its own role when its operate key goes down,
+        // so the host has to ignore the request instead of borrowing from itself.
+        let begin = on_borrow_in(&mut st, 1, BorrowRequest::Begin, 0, now);
+        assert_eq!(begin.action, Action::Drop(Reject::Suppressed));
+        assert!(st.borrow.is_none());
+        // Its own input keeps working, and a helper can still borrow once it is idle.
+        assert_eq!(on_key_in(&mut st, 1, kd(30), now).action, Action::Inject);
+        assert_eq!(on_key_in(&mut st, 1, ku(30), now).action, Action::Inject);
+        let later = now + PRIMARY_IDLE_GRACE + Duration::from_millis(1);
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            later
+        )));
+    }
+
+    #[test]
+    fn a_borrower_promoted_to_primary_keeps_what_it_pressed() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The helper is dragging something when the primary disappears.
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(injected(&on_mouse_in(&mut st, 2, &moved(24, 24), now)));
+        assert!(st.borrow.is_some());
+        let commands = unregister_in(&mut st, 1);
+        assert_eq!(st.primary, Some(2));
+        // It now owns the pointer, so it no longer borrows it, and nobody released the
+        // button under its finger: its own release ends the drag from here on.
+        assert!(st.borrow.is_none());
+        assert!(!releases_button(&commands, 2));
+        assert_eq!(st.peers.get(&2).map(|p| p.buttons), Some(LEFT));
+        let up = on_mouse_in(&mut st, 2, &button(LEFT, MOUSE_TYPE_UP), now);
+        assert_eq!(up.action, Action::Inject);
+        assert_eq!(st.peers.get(&2).map(|p| p.buttons), Some(0));
+    }
+
+    #[test]
+    fn designating_another_primary_releases_what_the_demoted_peer_held() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The primary is dragging something when the local user hands the pointer away.
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            1,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(injected(&on_mouse_in(&mut st, 1, &moved(12, 12), now)));
+        assert_eq!(st.peers.get(&1).map(|p| p.buttons), Some(LEFT));
+        let commands = set_primary_in(&mut st, 2);
+        assert_eq!(st.primary, Some(2));
+        // The demoted peer may not release its button anymore, so the host has to.
+        assert_eq!(st.peers.get(&1).map(|p| p.buttons), Some(0));
+        assert!(releases_button(&commands, 1));
+        let late = on_mouse_in(&mut st, 1, &button(LEFT, MOUSE_TYPE_UP), now);
+        assert_eq!(late.action, Action::Drop(Reject::Suppressed));
+    }
+
+    #[test]
+    fn a_shaky_click_confirms_typing_but_a_drag_does_not() {
+        let now = Instant::now();
+        let mut st = host(now);
+        on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
+        // A press that jitters by the threshold is still the click that confirms typing.
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &moved(20 + DRAG_THRESHOLD, 20),
+            now
+        )));
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_UP),
+            now
+        )));
+        assert_eq!(on_key_in(&mut st, 2, kd(30), now).action, Action::Inject);
+        on_key_in(&mut st, 2, ku(30), now);
+
+        // A real drag confirms nothing, so typing stays refused for the rest of it.
+        let mut st = host(now);
+        on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &moved(20 + DRAG_THRESHOLD + 20, 20),
+            now
+        )));
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_UP),
+            now
+        )));
+        assert_eq!(
+            on_key_in(&mut st, 2, kd(30), now).action,
+            Action::Drop(Reject::KeyboardNeedsTarget)
+        );
+        // The next press is a new gesture, so a still click confirms typing again.
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_UP),
+            now
+        )));
+        assert_eq!(on_key_in(&mut st, 2, kd(31), now).action, Action::Inject);
+    }
+
+    #[test]
+    fn an_end_without_an_epoch_only_ends_the_operate_key_borrow() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // A click borrow is not ended by a late end that names no epoch.
+        on_mouse_in(&mut st, 2, &button(LEFT, MOUSE_TYPE_DOWN), now);
+        on_mouse_in(&mut st, 2, &button(LEFT, MOUSE_TYPE_UP), now);
+        assert!(st.borrow.is_some());
+        let late = on_borrow_in(&mut st, 2, BorrowRequest::End, 0, now);
+        assert_eq!(late.action, Action::Drop(Reject::Suppressed));
+        assert!(st.borrow.is_some());
+
+        // The operate-key borrow is the one whose begin and end can race, so its release
+        // is honoured before the granted epoch is known.
+        let mut st = host(now);
+        on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
+        assert!(injected(&on_mouse_in(&mut st, 2, &moved(21, 21), now)));
+        on_borrow_in(&mut st, 2, BorrowRequest::End, 0, now);
+        assert!(st.borrow.is_none());
+    }
+
+    #[test]
+    fn accepted_input_clears_the_last_refusal() {
+        let now = Instant::now();
+        let mut st = host(now);
+        // The peer shows a notice only when it changes, so a refusal that happens again
+        // after input that worked has to be told again.
+        on_borrow_in(&mut st, 2, BorrowRequest::Begin, 0, now);
+        assert_eq!(
+            on_key_in(&mut st, 2, kd(30), now).action,
+            Action::Drop(Reject::KeyboardNeedsTarget)
+        );
+        assert_eq!(notice_code(&st, 2), "keyboard-needs-target");
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_DOWN),
+            now
+        )));
+        assert_eq!(notice_code(&st, 2), "");
+        assert!(injected(&on_mouse_in(
+            &mut st,
+            2,
+            &button(LEFT, MOUSE_TYPE_UP),
+            now
+        )));
+        assert_eq!(notice_code(&st, 2), "");
     }
 }

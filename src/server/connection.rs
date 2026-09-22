@@ -706,19 +706,6 @@ impl Connection {
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if multi_control_worker::enabled() && conn.is_remote() {
-            // Arbitration state of this connection, so remote input can be routed to the
-            // single worker thread instead of being injected here.
-            multi_control_worker::register(
-                id,
-                conn.lr.multi_control,
-                conn.keyboard && !conn.disable_keyboard,
-                tx_cloned.clone(),
-                conn.tx_to_cm.clone(),
-                conn.lr.my_name.clone(),
-            );
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned, id));
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
@@ -1284,7 +1271,7 @@ impl Connection {
                             mouse_input.show_cursor,
                         );
                     }
-                    MessageInput::Key((mut msg, press)) => {
+                    MessageInput::Key((msg, press)) => {
                         // Primary-first arbitration routes the whole key event through the
                         // single worker thread, which decides and injects it in order.
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1293,29 +1280,17 @@ impl Connection {
                             continue;
                         }
                         // Independent mouse positions: place the pointer at this
-                        // connection's own position before the key goes out, on the
-                        // same injection path so the order is kept.
-                        locate_before_key(conn_id);
-                        // Set the press state to false, use `down` only in `handle_key()`.
-                        msg.press = false;
-                        if press {
-                            msg.down = true;
-                        }
-                        handle_key(&msg);
-                        if press {
-                            msg.down = false;
-                            handle_key(&msg);
-                        }
+                        // connection's own position before the key goes out, on one path,
+                        // so nothing can move it in between.
+                        handle_remote_key(conn_id, msg, press);
                     }
                     MessageInput::Pointer((msg, id)) => {
-                        // Touch and pen events do not go through the per-event arbitration,
-                        // so in the primary-first mode only the connection that owns the
-                        // real pointer may send them.
+                        // Touch and pen are not arbitrated per event, so the worker decides
+                        // under the same lock as everything else whether the connection
+                        // owns the pointer right now.
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                        if multi_control_worker::enabled() && !multi_control::can_inject_pointer(id)
-                        {
-                            log::debug!("#{} pointer device input refused", id);
-                            multi_control_worker::refuse(id, multi_control::Reject::UnsupportedEvent);
+                        if multi_control_worker::enabled() {
+                            multi_control_worker::send_pointer(id, msg);
                             continue;
                         }
                         handle_pointer(&msg, id);
@@ -2273,6 +2248,30 @@ impl Connection {
         self.port_forward_socket.is_some() || self.port_forward_mux.is_some()
     }
 
+    /// Hands this connection to the multi-controller arbitration.
+    ///
+    /// Both the negotiated capability and the connection type come from the login request,
+    /// so this may only run once it has been handled; registering earlier would declare
+    /// every peer unsupported and make the mode inert. Input that arrives in between is
+    /// dropped for an unknown connection, which is safe.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn register_multi_control_peer(&self) {
+        if !multi_control_worker::enabled() || !self.is_remote() {
+            return;
+        }
+        let Some(tx) = self.inner.tx.clone() else {
+            return;
+        };
+        multi_control_worker::register(
+            self.inner.id(),
+            self.lr.multi_control,
+            self.peer_keyboard_enabled(),
+            tx,
+            self.tx_to_cm.clone(),
+            self.lr.my_name.clone(),
+        );
+    }
+
     fn try_sub_monitor_services(&mut self) {
         let is_remote = self.is_remote();
         if is_remote && !self.services_subed {
@@ -2989,6 +2988,12 @@ impl Connection {
                     SEND_TIMEOUT_VIDEO
                 },
             );
+
+            // The connection type and what the peer can do are only known now, and the
+            // arbitration needs both: registering earlier would declare every peer
+            // unsupported. Remote input that arrives before this is dropped safely.
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            self.register_multi_control_peer();
 
             if !crate::common::is_direct_ip_access(&lr.username) && lr.username != Config::get_id()
             {

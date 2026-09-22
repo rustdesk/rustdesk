@@ -23,7 +23,9 @@ use super::{
     multi_control_overlay,
 };
 use crate::input::MOUSE_TYPE_MASK;
-use base::message_proto::{KeyEvent, Message, Misc, MouseEvent, MultiControlState};
+use base::message_proto::{
+    KeyEvent, Message, Misc, MouseEvent, MultiControlState, PointerDeviceEvent,
+};
 use hbb_common::log;
 use std::{
     collections::HashMap,
@@ -36,6 +38,8 @@ use std::{
 const MAX_BATCH: usize = 16;
 /// How often the display layout is compared, to notice a resolution or display change.
 const LAYOUT_CHECK: Duration = Duration::from_secs(1);
+/// How long the worker keeps waking up after the mode is turned off before it stops.
+const IDLE_SHUTDOWN: Duration = Duration::from_secs(1);
 
 /// One piece of work for the worker, in arrival order.
 enum Job {
@@ -51,6 +55,12 @@ enum Job {
         conn: i32,
         evt: KeyEvent,
         press: bool,
+    },
+    /// Touch and pen: no per-event arbitration of their own, so the worker decides here
+    /// whether this connection may send them at all.
+    Pointer {
+        conn: i32,
+        evt: PointerDeviceEvent,
     },
     Borrow {
         conn: i32,
@@ -83,6 +93,13 @@ struct Peer {
     username: String,
     argb: u32,
     show_cursor: bool,
+    /// Kept here, not only in the arbitration state, so a mode that is turned on after the
+    /// connection was established can be told about it without reconnecting.
+    supported: bool,
+    can_inject: bool,
+    /// The last state sent to this peer, so a refusal that repeats does not send the same
+    /// message again.
+    last_out: Option<multi_control::StateOut>,
 }
 
 struct Queues {
@@ -96,25 +113,44 @@ lazy_static::lazy_static! {
 }
 
 /// Starts the worker on first use and returns both queues.
+///
+/// A start also tells the arbitration about every connection that is already known, so a
+/// mode turned on after the connections were established sees them without a reconnect.
 fn queues() -> Option<(mpsc::Sender<Job>, mpsc::Sender<Job>)> {
-    let mut guard = QUEUES.lock().unwrap();
-    if let Some(queues) = guard.as_ref() {
-        return Some((queues.primary.clone(), queues.helper.clone()));
+    let queues = {
+        let mut guard = QUEUES.lock().unwrap();
+        if let Some(queues) = guard.as_ref() {
+            return Some((queues.primary.clone(), queues.helper.clone()));
+        }
+        let (tx_primary, rx_primary) = mpsc::channel::<Job>();
+        let (tx_helper, rx_helper) = mpsc::channel::<Job>();
+        if let Err(err) = std::thread::Builder::new()
+            .name("multi-control".to_owned())
+            .spawn(move || run(rx_primary, rx_helper))
+        {
+            log::error!("failed to start the multi-control worker: {}", err);
+            return None;
+        }
+        *guard = Some(Queues {
+            primary: tx_primary.clone(),
+            helper: tx_helper.clone(),
+        });
+        (tx_primary, tx_helper)
+    };
+    let seeds: Vec<(i32, bool, bool)> = PEERS
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(conn, peer)| (*conn, peer.supported, peer.can_inject))
+        .collect();
+    for (conn, supported, can_inject) in seeds {
+        let _ = queues.0.send(Job::Register {
+            conn,
+            supported,
+            can_inject,
+        });
     }
-    let (tx_primary, rx_primary) = mpsc::channel::<Job>();
-    let (tx_helper, rx_helper) = mpsc::channel::<Job>();
-    if let Err(err) = std::thread::Builder::new()
-        .name("multi-control".to_owned())
-        .spawn(move || run(rx_primary, rx_helper))
-    {
-        log::error!("failed to start the multi-control worker: {}", err);
-        return None;
-    }
-    *guard = Some(Queues {
-        primary: tx_primary.clone(),
-        helper: tx_helper.clone(),
-    });
-    Some((tx_primary, tx_helper))
+    Some(queues)
 }
 
 /// Queues a job; the primary's events and every control job jump the helper queue.
@@ -150,27 +186,46 @@ pub fn register(
             username,
             argb: 0,
             show_cursor: false,
-        },
-    );
-    enqueue(
-        Job::Register {
-            conn,
             supported,
             can_inject,
+            last_out: None,
         },
-        true,
     );
+    // While the mode is off nothing has to arbitrate, so this only records the connection:
+    // the worker starts with the mode, seeded from here.
+    if multi_control::enabled() {
+        enqueue(
+            Job::Register {
+                conn,
+                supported,
+                can_inject,
+            },
+            true,
+        );
+    }
 }
 
 /// Forgets a connection and releases everything it still held.
 pub fn unregister(conn: i32) {
-    PEERS.lock().unwrap().remove(&conn);
-    enqueue(Job::Unregister { conn }, true);
+    let known = PEERS.lock().unwrap().remove(&conn).is_some();
+    // A connection that never took part may not start the worker just to tell it so.
+    if known && QUEUES.lock().unwrap().is_some() {
+        enqueue(Job::Unregister { conn }, true);
+    }
 }
 
 /// Applies a keyboard/mouse permission change of a connection.
 pub fn set_can_inject(conn: i32, can_inject: bool) {
-    enqueue(Job::CanInject { conn, can_inject }, true);
+    let known = match PEERS.lock().unwrap().get_mut(&conn) {
+        Some(peer) => {
+            peer.can_inject = can_inject;
+            true
+        }
+        None => false,
+    };
+    if known && QUEUES.lock().unwrap().is_some() {
+        enqueue(Job::CanInject { conn, can_inject }, true);
+    }
 }
 
 /// Makes `conn` the primary controller, as asked by the local user.
@@ -212,6 +267,11 @@ pub fn send_key(conn: i32, evt: KeyEvent, press: bool) {
     enqueue(Job::Key { conn, evt, press }, priority);
 }
 
+/// Forwards a touch or pen event; the worker decides whether this connection may send it.
+pub fn send_pointer(conn: i32, evt: PointerDeviceEvent) {
+    enqueue(Job::Pointer { conn, evt }, true);
+}
+
 /// Forwards a borrow request of a peer that speaks this protocol.
 pub fn send_borrow(conn: i32, request: BorrowRequest, epoch: u64) {
     enqueue(
@@ -232,6 +292,7 @@ pub fn enabled() -> bool {
 fn run(rx_primary: mpsc::Receiver<Job>, rx_helper: mpsc::Receiver<Job>) {
     let mut last_layout = layout_signature();
     let mut last_layout_check = Instant::now();
+    let mut idle_since: Option<Instant> = None;
     loop {
         while let Ok(job) = rx_primary.try_recv() {
             handle(job);
@@ -243,6 +304,13 @@ fn run(rx_primary: mpsc::Receiver<Job>, rx_helper: mpsc::Receiver<Job>) {
             // disconnect means the process is going down.
             Err(mpsc::RecvTimeoutError::Disconnected) => return,
         }
+        if !multi_control::enabled() {
+            if !idle_tick(&mut idle_since) {
+                return;
+            }
+            continue;
+        }
+        idle_since = None;
         execute(multi_control::on_tick(Instant::now()));
         if last_layout_check.elapsed() >= LAYOUT_CHECK {
             last_layout_check = Instant::now();
@@ -254,6 +322,18 @@ fn run(rx_primary: mpsc::Receiver<Job>, rx_helper: mpsc::Receiver<Job>) {
         }
         publish_overlay();
     }
+}
+
+/// The loop body of a mode that is off: forget what the arbitration still held once, and
+/// stop the thread when nothing needs it, so a disabled feature costs nothing.
+fn idle_tick(idle_since: &mut Option<Instant>) -> bool {
+    execute(multi_control::reset_if_disabled());
+    let since = idle_since.get_or_insert_with(Instant::now);
+    if since.elapsed() < IDLE_SHUTDOWN {
+        return true;
+    }
+    *QUEUES.lock().unwrap() = None;
+    false
 }
 
 /// Keeps the overlay of the local desktop in step with where the controllers are. Cheap
@@ -318,6 +398,16 @@ fn handle(job: Job) {
             show_cursor,
         } => handle_mouse(conn, evt, username, argb, simulate, show_cursor),
         Job::Key { conn, evt, press } => handle_key(conn, evt, press),
+        Job::Pointer { conn, evt } => {
+            // Touch and pen have no per-event arbitration, so the only question is whether
+            // this connection owns the pointer right now. Asking here keeps the answer in
+            // the same order as the pointer it depends on.
+            if multi_control::can_inject_pointer(conn) {
+                input_service::handle_pointer(&evt, conn);
+            } else {
+                refuse(conn, Reject::NotOwner);
+            }
+        }
         Job::Borrow {
             conn,
             request,
@@ -377,32 +467,22 @@ fn handle_mouse(
 }
 
 fn handle_key(conn: i32, evt: KeyEvent, press: bool) {
-    let key = multi_control::key_id(&evt);
-    let planned = multi_control::on_key(conn, key, press, Instant::now());
+    // `press` is the connection's atomic-press flag, so it can not stand in for `down`:
+    // in `Map` mode a key down and its release arrive with the flag clear.
+    let input = multi_control::KeyInput::from_event(&evt, press);
+    let planned = multi_control::on_key(conn, input, Instant::now());
     execute(planned.commands);
     match planned.action {
         Action::Inject | Action::LocateThenInject { .. } | Action::Locate { .. } => {
-            send_key_like_a_connection(evt, press);
+            input_service::handle_key_event(evt, press);
         }
         Action::Track => {}
         Action::Drop(reject) => note_reject(conn, reject),
     }
 }
 
-/// The event path of a connection, reused as it is: `down` carries the press and the
-/// release follows only for a real press.
-fn send_key_like_a_connection(mut msg: KeyEvent, press: bool) {
-    msg.press = false;
-    if press {
-        msg.down = true;
-    }
-    input_service::handle_key(&msg);
-    if press {
-        msg.down = false;
-        input_service::handle_key(&msg);
-    }
-}
-
+/// The event path of a connection stays the one `input_service` uses for keys, so a key
+/// injected by the arbitration behaves exactly like one injected by the input thread.
 fn locate(conn: i32, x: i32, y: i32) {
     let evt = MouseEvent {
         mask: crate::input::MOUSE_TYPE_MOVE,
@@ -474,16 +554,23 @@ fn peer_name(conn: i32) -> String {
 fn notify_cm() {
     let primary = multi_control::primary_conn();
     let borrower = multi_control::borrower_conn();
-    let senders: Vec<_> = PEERS
+    let mut sent: Vec<hbb_common::tokio::sync::mpsc::UnboundedSender<crate::ipc::Data>> =
+        Vec::new();
+    for sender in PEERS
         .lock()
         .unwrap()
         .values()
         .filter_map(|peer| peer.cm.clone())
-        .collect();
-    for sender in senders {
+    {
+        // The window and the server are different processes; several connections of the
+        // same window share one channel, and it only has to be told once.
+        if sent.iter().any(|sent| sent.same_channel(&sender)) {
+            continue;
+        }
         sender
             .send(crate::ipc::Data::MultiControlRole { primary, borrower })
             .ok();
+        sent.push(sender);
     }
 }
 
@@ -499,6 +586,17 @@ fn notify(conn: i32) {
         return;
     };
     let out = multi_control::snapshot(conn);
+    // A refusal that repeats is the same state: sending it again would only add IPC
+    // traffic for a flood of refused events, and the peer shows a notice only when it
+    // changes anyway.
+    if PEERS
+        .lock()
+        .unwrap()
+        .get(&conn)
+        .map_or(false, |peer| peer.last_out.as_ref() == Some(&out))
+    {
+        return;
+    }
     let mut state = MultiControlState::new();
     state.enabled = out.enabled;
     state.is_primary = out.is_primary;
@@ -507,14 +605,19 @@ fn notify(conn: i32) {
     state.borrower_name = out.borrower.map(peer_name).unwrap_or_default();
     state.keyboard_target_confirmed = out.keyboard_target_confirmed;
     state.epoch = out.epoch;
-    state.notice = out.notice;
+    state.notice = out.notice.clone();
     let mut misc = Misc::new();
     misc.set_multi_control_state(state);
     let mut msg = Message::new();
     msg.set_misc(misc);
-    sender
+    if sender
         .send((hbb_common::tokio::time::Instant::now(), Arc::new(msg)))
-        .ok();
+        .is_ok()
+    {
+        if let Some(peer) = PEERS.lock().unwrap().get_mut(&conn) {
+            peer.last_out = Some(out);
+        }
+    }
 }
 
 /// A signature of the current display layout, used to notice a resolution or display
