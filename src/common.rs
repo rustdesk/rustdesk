@@ -2139,7 +2139,6 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                         } else {
                             conn.set_key(key);
                         }
-                        conn.check_kx_advertised(ex.version);
                         if log_on_success {
                             log::info!("Connection secured");
                         }
@@ -3426,10 +3425,10 @@ mod tests {
         assert!(conn.is_secured());
     }
 
-    // The stand-in does what hbbs does at version 1: advertises it, splits the exchanged key
-    // over the same transcript, and tags every frame it sends with what it advertised. Neither
-    // side's unit tests can catch a client that puts a different byte string into the
-    // transcript than the server does; only a frame crossing between the two can.
+    // The stand-in does what hbbs does at version 1: advertises it and splits the exchanged key
+    // over the same transcript. Neither side's unit tests can catch a client that puts a
+    // different byte string into the transcript than the server does; only a frame crossing
+    // between the two can.
     #[tokio::test]
     async fn test_secure_tcp_version_1_keys_match_the_server_both_ways() {
         let (key, sk) = server_key();
@@ -3472,7 +3471,6 @@ mod tests {
                 port: nat.serial,
                 ..Default::default()
             });
-            msg.kx_advertised = 1;
             s.send(&msg).await.unwrap();
         })
         .await;
@@ -3486,40 +3484,10 @@ mod tests {
         conn.send(&msg).await.unwrap();
         let reply = conn.next_timeout(3000).await.unwrap().unwrap();
         let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-        assert_eq!(reply.kx_advertised, 1);
         let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
             panic!("expected the server's nat response");
         };
         assert_eq!(nat.port, 7);
-    }
-
-    #[tokio::test]
-    async fn test_secure_tcp_refuses_an_advertisement_lowered_in_transit() {
-        let (key, sk) = server_key();
-        let host = rendezvous_stub(move |mut s| async move {
-            let (eph_pk, eph_sk) = box_::gen_keypair();
-            let mut msg = RendezvousMessage::new();
-            msg.set_key_exchange(KeyExchange {
-                keys: vec![sign::sign(&eph_pk.0, &sk).into()],
-                ..Default::default()
-            });
-            s.send(&msg).await.unwrap();
-            let reply = s.next_timeout(3000).await.unwrap().unwrap();
-            let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-            let Some(rendezvous_message::Union::KeyExchange(ex)) = reply.union else {
-                panic!("expected the client's key exchange");
-            };
-            assert_eq!(ex.version, 0);
-            s.set_key(hbb_common::tcp::Encrypt::decode(&ex.keys[1], &ex.keys[0], &eph_sk).unwrap());
-            let mut msg = RendezvousMessage::new();
-            msg.set_test_nat_response(TestNatResponse::default());
-            msg.kx_advertised = 1;
-            s.send(&msg).await.unwrap();
-        })
-        .await;
-        let mut conn = connect(&host).await;
-        secure_tcp_required(&mut conn, &key).await.unwrap();
-        assert!(matches!(conn.next_timeout(3000).await, Some(Err(_))));
     }
 
     #[tokio::test]
@@ -3576,7 +3544,6 @@ mod tests {
                         port: nat.serial,
                         ..Default::default()
                     });
-                    msg.kx_advertised = advertised;
                     s.send(&msg).await.unwrap();
                 })
                 .await;
@@ -3595,7 +3562,6 @@ mod tests {
                 conn.send(&msg).await.unwrap();
                 let reply = conn.next_timeout(3000).await.unwrap().unwrap();
                 let reply = RendezvousMessage::parse_from_bytes(&reply).unwrap();
-                assert_eq!(reply.kx_advertised, advertised);
                 let Some(rendezvous_message::Union::TestNatResponse(nat)) = reply.union else {
                     panic!("expected the server's nat response");
                 };
