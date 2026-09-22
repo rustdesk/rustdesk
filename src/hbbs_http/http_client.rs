@@ -11,6 +11,13 @@ use hbb_common::{
     ResultType,
 };
 use reqwest::{blocking::Client as SyncClient, Client as AsyncClient};
+use std::sync::Mutex;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref ASYNC_CLIENT_CACHE: Mutex<Option<((TlsType, bool, Option<Socks5Server>), AsyncClient)>> = Mutex::new(None);
+    static ref SYNC_CLIENT_CACHE: Mutex<Option<((TlsType, bool, Option<Socks5Server>), SyncClient)>> = Mutex::new(None);
+}
 
 macro_rules! configure_http_client {
     ($builder:expr, $tls_type:expr, $danger_accept_invalid_cert:expr, $Client: ty) => {{
@@ -99,16 +106,44 @@ macro_rules! configure_http_client {
 }
 
 pub fn create_http_client(tls_type: TlsType, danger_accept_invalid_cert: bool) -> SyncClient {
+    let proxy_conf = Config::get_socks();
+    if let Ok(mut cache) = SYNC_CLIENT_CACHE.lock() {
+        if let Some((key, client)) = cache.as_ref() {
+            if *key == (tls_type, danger_accept_invalid_cert, proxy_conf.clone()) {
+                return client.clone();
+            }
+        }
+    }
+
     let builder = SyncClient::builder();
-    configure_http_client!(builder, tls_type, danger_accept_invalid_cert, SyncClient)
+    let client = configure_http_client!(builder, tls_type, danger_accept_invalid_cert, SyncClient);
+
+    if let Ok(mut cache) = SYNC_CLIENT_CACHE.lock() {
+        *cache = Some(((tls_type, danger_accept_invalid_cert, proxy_conf), client.clone()));
+    }
+    client
 }
 
 pub fn create_http_client_async(
     tls_type: TlsType,
     danger_accept_invalid_cert: bool,
 ) -> AsyncClient {
+    let proxy_conf = Config::get_socks();
+    if let Ok(mut cache) = ASYNC_CLIENT_CACHE.lock() {
+        if let Some((key, client)) = cache.as_ref() {
+            if *key == (tls_type, danger_accept_invalid_cert, proxy_conf.clone()) {
+                return client.clone();
+            }
+        }
+    }
+
     let builder = AsyncClient::builder();
-    configure_http_client!(builder, tls_type, danger_accept_invalid_cert, AsyncClient)
+    let client = configure_http_client!(builder, tls_type, danger_accept_invalid_cert, AsyncClient);
+
+    if let Ok(mut cache) = ASYNC_CLIENT_CACHE.lock() {
+        *cache = Some(((tls_type, danger_accept_invalid_cert, proxy_conf), client.clone()));
+    }
+    client
 }
 
 pub fn get_url_for_tls<'a>(url: &'a str, proxy_conf: &'a Option<Socks5Server>) -> &'a str {
