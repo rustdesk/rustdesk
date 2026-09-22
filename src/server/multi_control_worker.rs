@@ -103,39 +103,60 @@ struct Peer {
 }
 
 struct Queues {
-    primary: mpsc::Sender<Job>,
-    helper: mpsc::Sender<Job>,
+    /// Jobs that must not be lost: registration, permissions, borrow requests, pointer
+    /// devices. They are rare and bounded by the number of connections.
+    control: mpsc::Sender<Job>,
+    /// Input of the primary and of everybody else. Bounded, so a controller that floods
+    /// the host cannot grow the process without limit.
+    primary: mpsc::SyncSender<Job>,
+    helper: mpsc::SyncSender<Job>,
 }
+
+/// How many input events may wait for the worker in each queue. A person cannot outrun the
+/// injector by this much, and a peer that tries only fills its own queue.
+const MAX_PENDING: usize = 256;
 
 lazy_static::lazy_static! {
     static ref QUEUES: Mutex<Option<Queues>> = Mutex::new(None);
     static ref PEERS: Mutex<HashMap<i32, Peer>> = Mutex::new(HashMap::new());
 }
 
-/// Starts the worker on first use and returns both queues.
+type QueuesRef = (
+    mpsc::Sender<Job>,
+    mpsc::SyncSender<Job>,
+    mpsc::SyncSender<Job>,
+);
+
+/// Starts the worker on first use and returns the queues.
 ///
 /// A start also tells the arbitration about every connection that is already known, so a
 /// mode turned on after the connections were established sees them without a reconnect.
-fn queues() -> Option<(mpsc::Sender<Job>, mpsc::Sender<Job>)> {
+fn queues() -> Option<QueuesRef> {
     let queues = {
         let mut guard = QUEUES.lock().unwrap();
         if let Some(queues) = guard.as_ref() {
-            return Some((queues.primary.clone(), queues.helper.clone()));
+            return Some((
+                queues.control.clone(),
+                queues.primary.clone(),
+                queues.helper.clone(),
+            ));
         }
-        let (tx_primary, rx_primary) = mpsc::channel::<Job>();
-        let (tx_helper, rx_helper) = mpsc::channel::<Job>();
+        let (tx_control, rx_control) = mpsc::channel::<Job>();
+        let (tx_primary, rx_primary) = mpsc::sync_channel::<Job>(MAX_PENDING);
+        let (tx_helper, rx_helper) = mpsc::sync_channel::<Job>(MAX_PENDING);
         if let Err(err) = std::thread::Builder::new()
             .name("multi-control".to_owned())
-            .spawn(move || run(rx_primary, rx_helper))
+            .spawn(move || run(rx_control, rx_primary, rx_helper))
         {
             log::error!("failed to start the multi-control worker: {}", err);
             return None;
         }
         *guard = Some(Queues {
+            control: tx_control.clone(),
             primary: tx_primary.clone(),
             helper: tx_helper.clone(),
         });
-        (tx_primary, tx_helper)
+        (tx_control, tx_primary, tx_helper)
     };
     let seeds: Vec<(i32, bool, bool)> = PEERS
         .lock()
@@ -153,18 +174,44 @@ fn queues() -> Option<(mpsc::Sender<Job>, mpsc::Sender<Job>)> {
     Some(queues)
 }
 
-/// Queues a job; the primary's events and every control job jump the helper queue.
-fn enqueue(job: Job, priority: bool) {
-    let Some((primary, helper)) = queues() else {
+/// Whether this job is an absolute move that a later move of the same connection replaces,
+/// which is the only kind that may be dropped when a queue is full.
+fn is_superseded_move(job: &Job) -> bool {
+    matches!(job, Job::Mouse { evt, .. } if evt.mask & MOUSE_TYPE_MASK == crate::input::MOUSE_TYPE_MOVE)
+}
+
+/// Queues a job that must not be lost.
+fn enqueue_control(job: Job) {
+    let Some((control, _, _)) = queues() else {
         return;
     };
-    let result = if priority {
-        primary.send(job)
-    } else {
-        helper.send(job)
-    };
-    if let Err(err) = result {
+    if let Err(err) = control.send(job) {
         log::error!("failed to queue a multi-control job: {}", err);
+    }
+}
+
+/// Queues input; the primary's events and the control jobs jump the helper queue.
+///
+/// A full queue drops the move it no longer needs - a later move of that connection carries
+/// the position, and that is all a move is - and waits for room for everything else, so a
+/// button or a key is never lost no matter how fast a peer sends.
+fn enqueue_input(job: Job, priority: bool) {
+    let Some((_, primary, helper)) = queues() else {
+        return;
+    };
+    let queue = if priority { primary } else { helper };
+    match queue.try_send(job) {
+        Ok(()) => {}
+        Err(mpsc::TrySendError::Full(job)) => {
+            if is_superseded_move(&job) {
+                log::debug!("dropping a superseded move: the multi-control queue is full");
+            } else if let Err(err) = queue.send(job) {
+                log::error!("failed to queue a multi-control job: {}", err);
+            }
+        }
+        Err(mpsc::TrySendError::Disconnected(_)) => {
+            log::error!("the multi-control worker is gone");
+        }
     }
 }
 
@@ -194,14 +241,11 @@ pub fn register(
     // While the mode is off nothing has to arbitrate, so this only records the connection:
     // the worker starts with the mode, seeded from here.
     if multi_control::enabled() {
-        enqueue(
-            Job::Register {
-                conn,
-                supported,
-                can_inject,
-            },
-            true,
-        );
+        enqueue_control(Job::Register {
+            conn,
+            supported,
+            can_inject,
+        });
     }
 }
 
@@ -210,7 +254,7 @@ pub fn unregister(conn: i32) {
     let known = PEERS.lock().unwrap().remove(&conn).is_some();
     // A connection that never took part may not start the worker just to tell it so.
     if known && QUEUES.lock().unwrap().is_some() {
-        enqueue(Job::Unregister { conn }, true);
+        enqueue_control(Job::Unregister { conn });
     }
 }
 
@@ -224,13 +268,13 @@ pub fn set_can_inject(conn: i32, can_inject: bool) {
         None => false,
     };
     if known && QUEUES.lock().unwrap().is_some() {
-        enqueue(Job::CanInject { conn, can_inject }, true);
+        enqueue_control(Job::CanInject { conn, can_inject });
     }
 }
 
 /// Makes `conn` the primary controller, as asked by the local user.
 pub fn designate_primary(conn: i32) {
-    enqueue(Job::Designate { conn }, true);
+    enqueue_control(Job::Designate { conn });
 }
 
 /// Forwards a remote mouse event to the arbitration worker.
@@ -248,7 +292,7 @@ pub fn send_mouse(
         peer.show_cursor = show_cursor;
     }
     let priority = multi_control::is_primary(conn);
-    enqueue(
+    enqueue_input(
         Job::Mouse {
             conn,
             evt,
@@ -264,24 +308,21 @@ pub fn send_mouse(
 /// Forwards a remote key event to the arbitration worker.
 pub fn send_key(conn: i32, evt: KeyEvent, press: bool) {
     let priority = multi_control::is_primary(conn);
-    enqueue(Job::Key { conn, evt, press }, priority);
+    enqueue_input(Job::Key { conn, evt, press }, priority);
 }
 
 /// Forwards a touch or pen event; the worker decides whether this connection may send it.
 pub fn send_pointer(conn: i32, evt: PointerDeviceEvent) {
-    enqueue(Job::Pointer { conn, evt }, true);
+    enqueue_control(Job::Pointer { conn, evt });
 }
 
 /// Forwards a borrow request of a peer that speaks this protocol.
 pub fn send_borrow(conn: i32, request: BorrowRequest, epoch: u64) {
-    enqueue(
-        Job::Borrow {
-            conn,
-            request,
-            epoch,
-        },
-        true,
-    );
+    enqueue_control(Job::Borrow {
+        conn,
+        request,
+        epoch,
+    });
 }
 
 /// The host option, so the connection code has a single entry point.
@@ -289,16 +330,23 @@ pub fn enabled() -> bool {
     multi_control::enabled()
 }
 
-fn run(rx_primary: mpsc::Receiver<Job>, rx_helper: mpsc::Receiver<Job>) {
+fn run(
+    rx_control: mpsc::Receiver<Job>,
+    rx_primary: mpsc::Receiver<Job>,
+    rx_helper: mpsc::Receiver<Job>,
+) {
     let mut last_layout = layout_signature();
     let mut last_layout_check = Instant::now();
     let mut idle_since: Option<Instant> = None;
     loop {
+        while let Ok(job) = rx_control.try_recv() {
+            handle(job);
+        }
         while let Ok(job) = rx_primary.try_recv() {
             handle(job);
         }
         match rx_helper.recv_timeout(multi_control::TICK) {
-            Ok(job) => handle_batch(job, &rx_helper),
+            Ok(job) => handle_batch(job, &rx_control, &rx_helper),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             // The queue senders live in `QUEUES`, which this thread keeps alive, so a
             // disconnect means the process is going down.
@@ -355,8 +403,12 @@ fn publish_overlay() {
     multi_control_overlay::update(&cursors);
 }
 
-fn handle_batch(first: Job, rx_helper: &mpsc::Receiver<Job>) {
+fn handle_batch(first: Job, rx_control: &mpsc::Receiver<Job>, rx_helper: &mpsc::Receiver<Job>) {
     let mut batch = vec![first];
+    // Control jobs never wait behind a batch of input.
+    while let Ok(job) = rx_control.try_recv() {
+        handle(job);
+    }
     while batch.len() < MAX_BATCH {
         match rx_helper.try_recv() {
             Ok(job) => batch.push(job),

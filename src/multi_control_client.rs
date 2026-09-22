@@ -15,11 +15,19 @@
 
 use base::{config::keys, message_proto::MultiControlState};
 use hbb_common::config::Config;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex,
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    time::{Duration, Instant},
 };
-use std::time::{Duration, Instant};
+
+/// The key of one controlling session: what a window borrows belongs to that window, and a
+/// process can hold several of them. Kept as text so this module does not depend on the
+/// types of a build that has no session layer of its own.
+pub type SessionKey = String;
 
 /// Heartbeat cadence of an active borrow; the peer revokes it after 5 s of silence.
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(1);
@@ -31,20 +39,32 @@ lazy_static::lazy_static! {
     /// Whether the process already has a thread renewing its borrows.
     static ref HEARTBEATING: AtomicBool = AtomicBool::new(false);
     static ref EPOCH: Instant = Instant::now();
+    /// When the user last did something locally, per session, in milliseconds since the
+    /// module started. Two windows can hold the operate key for two different peers at
+    /// once, so what one of them does is not liveness for the other.
+    static ref LAST_LOCAL_INPUT: Mutex<HashMap<SessionKey, u64>> = Mutex::new(HashMap::new());
 }
-
-/// When the user last did something on this side, in milliseconds since the module started.
-static LAST_LOCAL_INPUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn now_ms() -> u64 {
     EPOCH.elapsed().as_millis() as u64
 }
 
-/// Records that the user did something locally. Cheap enough for the input path: the
-/// heartbeat needs it to tell "still working" from "the window that owned the key is gone".
-pub fn touch_local_input() {
-    // 0 means "nothing recorded yet", so the first input of a process cannot look like it.
-    LAST_LOCAL_INPUT.store(now_ms().max(1), Ordering::Relaxed);
+/// Records that the user did something in this session. Cheap enough for the input path:
+/// the heartbeat needs it to tell "still working" from "the window that owned the key is
+/// gone", which is what happens when a window loses focus while the key is held.
+pub fn touch_local_input(session: &SessionKey) {
+    if let Ok(mut last) = LAST_LOCAL_INPUT.lock() {
+        // 0 means "nothing recorded yet", so the first input of a process cannot look like it.
+        last.insert(session.clone(), now_ms().max(1));
+    }
+}
+
+fn last_local_input_in(session: &SessionKey) -> u64 {
+    LAST_LOCAL_INPUT
+        .lock()
+        .ok()
+        .and_then(|last| last.get(session).copied())
+        .unwrap_or(0)
 }
 
 #[derive(Default)]
@@ -65,7 +85,15 @@ struct Active {
 }
 
 lazy_static::lazy_static! {
-    static ref ACTIVE: Mutex<Active> = Mutex::new(Active::default());
+    /// One entry per controlling session: a process can hold several windows, each with its
+    /// own peer, and what one of them borrowed is not what the other one holds.
+    static ref ACTIVE: Mutex<HashMap<SessionKey, Active>> = Mutex::new(HashMap::new());
+}
+
+/// Runs `f` on the state of one session, creating it on first use.
+fn with_active<T>(session: &SessionKey, f: impl FnOnce(&mut Active) -> T) -> T {
+    let mut all = ACTIVE.lock().unwrap();
+    f(all.entry(session.clone()).or_default())
 }
 
 /// The key name that starts a borrow, empty when the feature is not configured.
@@ -92,85 +120,93 @@ pub struct Status {
 }
 
 /// Applies a state message of the controlled side.
-pub fn on_state(state: &MultiControlState) -> Status {
-    let mut active = ACTIVE.lock().unwrap();
-    active.enabled = state.enabled;
-    active.primary = state.is_primary;
-    active.borrowed = state.borrowed_by_me;
-    active.keyboard_ok = state.keyboard_target_confirmed;
-    active.epoch = state.epoch;
-    active.notice = state.notice.clone();
-    active.last_state = Some(Instant::now());
-    if !state.borrowed_by_me {
-        // The peer took the pointer back: a still held operate key has to ask again
-        // instead of reporting the end of a borrow that no longer exists.
-        active.held = false;
-    }
-    Status {
-        enabled: state.enabled,
-        primary: state.is_primary,
-        borrowed_by_me: state.borrowed_by_me,
-        borrowed_by_other: state.borrowed_by_other,
-        keyboard_ok: state.keyboard_target_confirmed,
-        epoch: state.epoch,
-        notice: state.notice.clone(),
-    }
+pub fn on_state(session: &SessionKey, state: &MultiControlState) -> Status {
+    with_active(session, |active| {
+        active.enabled = state.enabled;
+        active.primary = state.is_primary;
+        active.borrowed = state.borrowed_by_me;
+        active.keyboard_ok = state.keyboard_target_confirmed;
+        active.epoch = state.epoch;
+        active.notice = state.notice.clone();
+        active.last_state = Some(Instant::now());
+        if !state.borrowed_by_me {
+            // The peer took the pointer back: a still held operate key has to ask again
+            // instead of reporting the end of a borrow that no longer exists.
+            active.held = false;
+        }
+        Status {
+            enabled: state.enabled,
+            primary: state.is_primary,
+            borrowed_by_me: state.borrowed_by_me,
+            borrowed_by_other: state.borrowed_by_other,
+            keyboard_ok: state.keyboard_target_confirmed,
+            epoch: state.epoch,
+            notice: state.notice.clone(),
+        }
+    })
 }
 
 /// Marks the borrow as started or stopped; returns what has to be sent.
-pub fn on_operate_key(down: bool) -> Option<(MultiControlBorrowKind, u64)> {
-    let mut active = ACTIVE.lock().unwrap();
-    if down {
-        if active.held {
-            // Auto-repeat of a held key must not start a second borrow.
+pub fn on_operate_key(session: &SessionKey, down: bool) -> Option<(MultiControlBorrowKind, u64)> {
+    with_active(session, |active| {
+        if down {
+            if active.held {
+                // Auto-repeat of a held key must not start a second borrow.
+                return None;
+            }
+            active.held = true;
+            return Some((MultiControlBorrowKind::Begin, 0));
+        }
+        if !active.held {
             return None;
         }
-        active.held = true;
-        return Some((MultiControlBorrowKind::Begin, 0));
-    }
-    if !active.held {
-        return None;
-    }
-    active.held = false;
-    // The pointer is handed back right here, so nothing is left to renew until the peer
-    // reports a borrow again.
-    active.borrowed = false;
-    let epoch = active.epoch;
-    active.epoch = 0;
-    Some((MultiControlBorrowKind::End, epoch))
+        active.held = false;
+        // The pointer is handed back right here, so nothing is left to renew until the peer
+        // reports a borrow again.
+        active.borrowed = false;
+        let epoch = active.epoch;
+        active.epoch = 0;
+        Some((MultiControlBorrowKind::End, epoch))
+    })
 }
 
-/// The message that keeps a borrow alive, or `None` when there is nothing to renew.
+/// What each session still has to renew: the message that keeps its borrow alive.
 ///
-/// Every borrow this session still holds has to be renewed, not only the one begun by the
-/// operate key: the peer gives up a borrow that stops speaking, and a click that borrowed
-/// the pointer is a borrow like any other.
-pub fn heartbeat() -> Option<(MultiControlBorrowKind, u64)> {
-    let mut active = ACTIVE.lock().unwrap();
-    heartbeat_in(&mut active, now_ms())
+/// Every borrow a session holds has to be renewed, not only the one begun by the operate
+/// key: the peer gives up a borrow that stops speaking, and a click that borrowed the
+/// pointer is a borrow like any other.
+pub fn heartbeat_due() -> Vec<(SessionKey, MultiControlBorrowKind, u64)> {
+    let at_ms = now_ms();
+    let mut all = ACTIVE.lock().unwrap();
+    let mut due = Vec::new();
+    for (session, active) in all.iter_mut() {
+        if let Some(epoch) = heartbeat_in(active, at_ms, last_local_input_in(session)) {
+            due.push((session.clone(), MultiControlBorrowKind::Heartbeat, epoch));
+        }
+    }
+    due
 }
 
-fn heartbeat_in(active: &mut Active, at_ms: u64) -> Option<(MultiControlBorrowKind, u64)> {
+fn heartbeat_in(active: &mut Active, at_ms: u64, last_input_ms: u64) -> Option<u64> {
     if active.epoch == 0 || (!active.held && !active.borrowed) {
         return None;
     }
     if active.held {
-        let last = LAST_LOCAL_INPUT.load(Ordering::Relaxed);
         let limit = HELD_IDLE_LIMIT.as_millis() as u64;
         // No local input recorded yet means "just now": the key press that started the
         // borrow is itself local input, so this can only happen before the input path
         // starts reporting, and guessing "idle" there would drop a fresh borrow.
-        if last != 0 && at_ms.saturating_sub(last) >= limit {
-            // Nothing happened on this side for a long time: the release of the operate key
-            // was never delivered (a window that lost focus does not get one), so the renewing
-            // stops here and the peer's lease gives the pointer back.
+        if last_input_ms != 0 && at_ms.saturating_sub(last_input_ms) >= limit {
+            // Nothing happened in this window for a long time: the release of the operate
+            // key was never delivered (a window that lost focus does not get one), so the
+            // renewing stops here and the peer's lease gives the pointer back.
             active.held = false;
             active.borrowed = false;
             active.epoch = 0;
             return None;
         }
     }
-    Some((MultiControlBorrowKind::Heartbeat, active.epoch))
+    Some(active.epoch)
 }
 
 /// Claims the one heartbeat thread of this process; false when it is already running.
@@ -183,21 +219,36 @@ pub fn release_heartbeat() {
     HEARTBEATING.store(false, Ordering::SeqCst);
 }
 
-/// The end message for the borrow this side still holds, if any; the state is cleared, so a
-/// session that ends does not hand back a borrow twice.
-pub fn end_for_close() -> Option<(MultiControlBorrowKind, u64)> {
-    let mut active = ACTIVE.lock().unwrap();
-    let pending = active.held || active.borrowed;
-    let epoch = active.epoch;
-    *active = Active::default();
-    pending.then_some((MultiControlBorrowKind::End, epoch))
+/// The end message for the borrow this session still holds, if any; the state is cleared, so
+/// a session that ends does not hand back a borrow twice.
+pub fn end_for_close(session: &SessionKey) -> Option<(MultiControlBorrowKind, u64)> {
+    with_active(session, |active| {
+        let pending = active.held || active.borrowed;
+        let epoch = active.epoch;
+        *active = Active::default();
+        pending.then_some((MultiControlBorrowKind::End, epoch))
+    })
 }
 
 /// Starts a session with no borrowed pointer and the operate key not held: a session that
 /// ended while the key was down must not swallow the next press, and must not hand back a
 /// borrow the peer no longer knows about.
-pub fn reset() {
-    *ACTIVE.lock().unwrap() = Active::default();
+pub fn reset(session: &SessionKey) {
+    with_active(session, |active| *active = Active::default());
+    if let Ok(mut last) = LAST_LOCAL_INPUT.lock() {
+        last.remove(session);
+    }
+}
+
+/// Forgets a session that is gone, so a process that opens many of them does not keep
+/// collecting their state.
+pub fn forget(session: &SessionKey) {
+    if let Ok(mut all) = ACTIVE.lock() {
+        all.remove(session);
+    }
+    if let Ok(mut last) = LAST_LOCAL_INPUT.lock() {
+        last.remove(session);
+    }
 }
 
 /// The borrow kind to send, kept independent of the generated protobuf enum.
@@ -224,9 +275,23 @@ impl MultiControlBorrowKind {
 mod tests {
     use super::*;
 
+    fn sk() -> SessionKey {
+        "session".to_owned()
+    }
+
+    /// The renewals of the test's session, as `(kind, epoch)`.
+    fn renewals() -> Vec<(MultiControlBorrowKind, u64)> {
+        heartbeat_due()
+            .into_iter()
+            .filter(|(session, _, _)| session == &sk())
+            .map(|(_, kind, epoch)| (kind, epoch))
+            .collect()
+    }
+
     fn clear() {
         let mut active = ACTIVE.lock().unwrap();
-        *active = Active::default();
+        active.clear();
+        LAST_LOCAL_INPUT.lock().unwrap().clear();
     }
 
     /// The state of this module is process-global, so its tests take turns and start from
@@ -244,27 +309,60 @@ mod tests {
     fn a_held_key_stops_renewing_when_nothing_happens_locally() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         let mut state = MultiControlState::new();
         state.borrowed_by_me = true;
         state.epoch = 9;
-        on_state(&state);
+        on_state(&sk(), &state);
         // The user is working on this side: the borrow is renewed.
-        touch_local_input();
-        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 9)));
+        touch_local_input(&sk());
+        assert_eq!(renewals(), vec![(MultiControlBorrowKind::Heartbeat, 9)]);
         // The window that owned the key lost focus and never delivered its release: after
         // the local idle limit the renewal stops, so the peer's lease ends the borrow
         // instead of leaving the pointer borrowed forever.
-        let idle = HELD_IDLE_LIMIT.as_millis() as u64;
-        let last = LAST_LOCAL_INPUT.load(Ordering::Relaxed);
-        let mut active = ACTIVE.lock().unwrap();
-        assert_eq!(heartbeat_in(&mut active, last + idle), None);
+        let limit = HELD_IDLE_LIMIT.as_millis() as u64;
+        let last = last_local_input_in(&sk());
+        let mut all = ACTIVE.lock().unwrap();
+        let active = all.get_mut(&sk()).expect("the session state");
+        assert_eq!(heartbeat_in(active, last + limit, last), None);
         assert!(!active.held);
         assert_eq!(active.epoch, 0);
-        drop(active);
-        LAST_LOCAL_INPUT.store(0, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn two_windows_do_not_share_a_borrow() {
+        let _guard = exclusive();
+        let (one, two) = ("one".to_owned(), "two".to_owned());
+        // Both windows hold the operate key for their own peer.
+        assert_eq!(
+            on_operate_key(&one, true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        assert_eq!(
+            on_operate_key(&two, true),
+            Some((MultiControlBorrowKind::Begin, 0))
+        );
+        let mut state = MultiControlState::new();
+        state.borrowed_by_me = true;
+        state.epoch = 4;
+        on_state(&one, &state);
+        // Only the window whose peer granted the borrow has something to renew.
+        let due = heartbeat_due();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].0, one);
+        assert_eq!(due[0].2, 4);
+        // Ending the borrow of one window leaves the other one alone.
+        assert_eq!(
+            on_operate_key(&one, false),
+            Some((MultiControlBorrowKind::End, 4))
+        );
+        // Its own liveness is not the other window's liveness either.
+        assert_eq!(last_local_input_in(&two), 0);
+        touch_local_input(&one);
+        assert_ne!(last_local_input_in(&one), 0);
+        assert_eq!(last_local_input_in(&two), 0);
     }
 
     #[test]
@@ -287,39 +385,39 @@ mod tests {
     fn the_borrow_is_begun_once_and_ended_once() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         // Auto-repeat while the key is held.
-        assert_eq!(on_operate_key(true), None);
+        assert_eq!(on_operate_key(&sk(), true), None);
         assert_eq!(
-            on_operate_key(false),
+            on_operate_key(&sk(), false),
             Some((MultiControlBorrowKind::End, 0))
         );
         // A release without a press must not talk to the peer.
-        assert_eq!(on_operate_key(false), None);
+        assert_eq!(on_operate_key(&sk(), false), None);
     }
 
     #[test]
     fn the_granted_epoch_is_used_for_end_and_heartbeat() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
-        assert_eq!(heartbeat(), None);
+        assert!(renewals().is_empty());
         let mut state = MultiControlState::new();
         state.enabled = true;
         state.borrowed_by_me = true;
         state.epoch = 7;
-        on_state(&state);
-        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 7)));
+        on_state(&sk(), &state);
+        assert_eq!(renewals(), vec![(MultiControlBorrowKind::Heartbeat, 7)]);
         assert_eq!(
-            on_operate_key(false),
+            on_operate_key(&sk(), false),
             Some((MultiControlBorrowKind::End, 7))
         );
         // The borrow is over, so there is nothing left to renew.
-        assert_eq!(heartbeat(), None);
+        assert!(renewals().is_empty());
     }
 
     #[test]
@@ -330,42 +428,42 @@ mod tests {
         let mut state = MultiControlState::new();
         state.borrowed_by_me = true;
         state.epoch = 4;
-        on_state(&state);
-        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 4)));
+        on_state(&sk(), &state);
+        assert_eq!(renewals(), vec![(MultiControlBorrowKind::Heartbeat, 4)]);
         // A borrow the peer has not granted yet has no epoch to renew.
         clear();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
-        assert_eq!(heartbeat(), None);
+        assert!(renewals().is_empty());
     }
 
     #[test]
     fn losing_the_borrow_stops_the_heartbeat_and_drops_the_epoch() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         let mut state = MultiControlState::new();
         state.borrowed_by_me = true;
         state.epoch = 3;
-        on_state(&state);
+        on_state(&sk(), &state);
         // The primary took the pointer back; the peer stops reporting a borrow, so the
         // epoch is not ours to keep and a still held operate key has to ask again.
         let mut revoked = MultiControlState::new();
         revoked.borrowed_by_other = true;
         revoked.notice = "borrow-preempted".to_owned();
-        let status = on_state(&revoked);
+        let status = on_state(&sk(), &revoked);
         assert_eq!(status.notice, "borrow-preempted");
         assert!(status.epoch == 0);
-        assert_eq!(heartbeat(), None);
+        assert!(renewals().is_empty());
         // The key is still down, but the peer already took the pointer back: asking again
         // is a fresh begin and never a late release of a borrow that is gone.
-        assert_eq!(on_operate_key(false), None);
+        assert_eq!(on_operate_key(&sk(), false), None);
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
     }
@@ -374,47 +472,49 @@ mod tests {
     fn closing_a_session_hands_a_borrow_back_once() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         let mut state = MultiControlState::new();
         state.borrowed_by_me = true;
         state.epoch = 5;
-        on_state(&state);
+        on_state(&sk(), &state);
         assert_eq!(
-            end_for_close(),
+            end_for_close(&sk()),
             Some((MultiControlBorrowKind::End, 5)),
             "the peer must be told, or it keeps the pointer for a session that is gone"
         );
-        // Nothing is left to hand back.
-        assert_eq!(end_for_close(), None);
-        assert_eq!(heartbeat(), None);
+        // Nothing is left to hand back, and nothing of that session is left behind.
+        assert_eq!(end_for_close(&sk()), None);
+        forget(&sk());
+        assert!(ACTIVE.lock().unwrap().is_empty());
+        assert!(LAST_LOCAL_INPUT.lock().unwrap().is_empty());
     }
 
     #[test]
     fn a_new_session_does_not_inherit_a_held_operate_key() {
         let _guard = exclusive();
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         let mut state = MultiControlState::new();
         state.borrowed_by_me = true;
         state.epoch = 5;
-        on_state(&state);
-        assert_eq!(heartbeat(), Some((MultiControlBorrowKind::Heartbeat, 5)));
+        on_state(&sk(), &state);
+        assert_eq!(renewals(), vec![(MultiControlBorrowKind::Heartbeat, 5)]);
         // The session ends while the key is still down.
-        reset();
-        assert_eq!(heartbeat(), None);
-        assert_eq!(end_for_close(), None);
+        reset(&sk());
+        assert!(renewals().is_empty());
+        assert_eq!(end_for_close(&sk()), None);
         // The next press of the new session starts its own borrow instead of being
         // swallowed by the stale state.
         assert_eq!(
-            on_operate_key(true),
+            on_operate_key(&sk(), true),
             Some((MultiControlBorrowKind::Begin, 0))
         );
         assert_eq!(
-            on_operate_key(false),
+            on_operate_key(&sk(), false),
             Some((MultiControlBorrowKind::End, 0))
         );
     }

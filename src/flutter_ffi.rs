@@ -650,7 +650,7 @@ pub fn session_input_key(
     command: bool,
 ) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::multi_control_client::touch_local_input();
+    crate::multi_control_client::touch_local_input(&session_id.to_string());
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if crate::multi_control_client::is_operate_key(&name) {
         session_operate_key(&session_id, down);
@@ -668,7 +668,7 @@ pub fn session_input_key(
 fn session_operate_key(session_id: &SessionID, down: bool) {
     use crate::multi_control_client::{self, MultiControlBorrowKind};
 
-    let Some((kind, epoch)) = multi_control_client::on_operate_key(down) else {
+    let Some((kind, epoch)) = multi_control_client::on_operate_key(&session_id.to_string(), down) else {
         return;
     };
     if let Some(session) = sessions::get_session_by_session_id(session_id) {
@@ -676,15 +676,14 @@ fn session_operate_key(session_id: &SessionID, down: bool) {
     }
     if kind == MultiControlBorrowKind::Begin {
         // The borrow may be granted later, so the renewal has to be running by then.
-        session_multi_control_heartbeat(session_id.clone());
+        session_start_multi_control_heartbeat();
     }
 }
 
-/// Renews whatever borrow this session holds until none is left, so the peer does not give
-/// the pointer up in the middle of an operation. One thread per process is enough, and it
-/// ends by itself when there is nothing left to renew.
+/// Renews every borrow this process still holds, until none is left. One thread is enough
+/// for all the windows, and it ends by itself when there is nothing left to renew.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub fn session_multi_control_heartbeat(session_id: SessionID) {
+pub(crate) fn session_start_multi_control_heartbeat() {
     use crate::multi_control_client;
     if !multi_control_client::claim_heartbeat() {
         return;
@@ -692,12 +691,15 @@ pub fn session_multi_control_heartbeat(session_id: SessionID) {
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(multi_control_client::HEARTBEAT_INTERVAL);
-            let Some((kind, epoch)) = multi_control_client::heartbeat() else {
+            let due = multi_control_client::heartbeat_due();
+            if due.is_empty() {
                 break;
-            };
-            match sessions::get_session_by_session_id(&session_id) {
-                Some(session) => session.send_multi_control_borrow(kind, epoch),
-                None => break,
+            }
+            for (session_id, kind, epoch) in due {
+                match sessions::get_session_by_session_id(&session_id) {
+                    Some(session) => session.send_multi_control_borrow(kind, epoch),
+                    None => multi_control_client::forget(&session_id),
+                }
             }
         }
         multi_control_client::release_heartbeat();
@@ -710,12 +712,12 @@ pub fn session_multi_control_heartbeat(session_id: SessionID) {
 fn session_end_multi_control_borrow(session_id: &SessionID) {
     use crate::multi_control_client;
 
-    if let Some((kind, epoch)) = multi_control_client::end_for_close() {
+    if let Some((kind, epoch)) = multi_control_client::end_for_close(&session_id.to_string()) {
         if let Some(session) = sessions::get_session_by_session_id(session_id) {
             session.send_multi_control_borrow(kind, epoch);
         }
     }
-    multi_control_client::release_heartbeat();
+    multi_control_client::forget(&session_id.to_string());
 }
 
 /// Makes the given incoming connection the primary controller of the real pointer. The
@@ -1986,7 +1988,7 @@ pub fn session_send_pointer(session_id: SessionID, msg: String) {
 /// legitimate mouse events may be silently dropped by the early-return logic below.
 pub fn session_send_mouse(session_id: SessionID, msg: String) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::multi_control_client::touch_local_input();
+    crate::multi_control_client::touch_local_input(&session_id.to_string());
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         // Relative mouse mode marker validation (Flutter-only).
         // This only validates and filters markers; the server tracks per-connection

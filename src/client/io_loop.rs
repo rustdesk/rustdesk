@@ -153,7 +153,8 @@ impl<T: InvokeUiSession> Remote<T> {
         // while the local operate key was still held.
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if round == 0 {
-            crate::multi_control_client::reset();
+            let session_key = self.handler.lc.read().unwrap().session_id.to_string();
+            crate::multi_control_client::reset(&session_key);
         }
         #[cfg(target_os = "windows")]
         let _file_clip_context_holder = {
@@ -2096,14 +2097,17 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::MultiControlState(state)) => {
-                        let status = crate::multi_control_client::on_state(&state);
+                        let session_id = self.handler.lc.read().unwrap().session_id.clone();
+                        let status = crate::multi_control_client::on_state(
+                            &session_id.to_string(),
+                            &state,
+                        );
                         log::debug!("multi-control state: {:?}", status);
                         // The session UI shows why an input was refused, and the peer only
                         // shows a notice when it changes, so this goes to the window that
                         // owns this session, not to the main one.
                         #[cfg(feature = "flutter")]
                         {
-                            let session_id = self.handler.lc.read().unwrap().session_id.clone();
                             crate::flutter::push_session_event(
                                 &session_id,
                                 "multi_control",
@@ -2113,7 +2117,7 @@ impl<T: InvokeUiSession> Remote<T> {
                             // side still holds it, whatever started it: a click that
                             // borrows the pointer is as much a borrow as the operate key.
                             if status.borrowed_by_me {
-                                crate::flutter_ffi::session_multi_control_heartbeat(session_id);
+                                crate::flutter_ffi::session_start_multi_control_heartbeat();
                             }
                         }
                     }
