@@ -695,10 +695,10 @@ pub(crate) fn session_start_multi_control_heartbeat() {
             if due.is_empty() {
                 break;
             }
-            for (session_id, kind, epoch) in due {
-                match sessions::get_session_by_session_id(&session_id) {
+            for (session_key, kind, epoch) in due {
+                match crate::flutter::sessions::get_session_by_key(&session_key) {
                     Some(session) => session.send_multi_control_borrow(kind, epoch),
-                    None => multi_control_client::forget(&session_id),
+                    None => multi_control_client::forget(&session_key),
                 }
             }
         }

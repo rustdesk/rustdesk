@@ -2097,22 +2097,24 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     Some(misc::Union::MultiControlState(state)) => {
-                        let session_id = self.handler.lc.read().unwrap().session_id.clone();
-                        let status = crate::multi_control_client::on_state(
-                            &session_id.to_string(),
-                            &state,
-                        );
+                        let local_id = self.handler.lc.read().unwrap().session_id;
+                        let status =
+                            crate::multi_control_client::on_state(&local_id.to_string(), &state);
                         log::debug!("multi-control state: {:?}", status);
                         // The session UI shows why an input was refused, and the peer only
                         // shows a notice when it changes, so this goes to the window that
                         // owns this session, not to the main one.
                         #[cfg(feature = "flutter")]
                         {
-                            crate::flutter::push_session_event(
-                                &session_id,
-                                "multi_control",
-                                vec![("notice", status.notice.as_str())],
-                            );
+                            if let Some(session_id) =
+                                crate::flutter::sessions::get_session_id_by_local_session(local_id)
+                            {
+                                crate::flutter::push_session_event(
+                                    &session_id,
+                                    "multi_control",
+                                    vec![("notice", status.notice.as_str())],
+                                );
+                            }
                             // A borrow that was just granted has to be renewed while this
                             // side still holds it, whatever started it: a click that
                             // borrows the pointer is as much a borrow as the operate key.

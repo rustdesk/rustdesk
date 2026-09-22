@@ -2071,6 +2071,44 @@ pub mod sessions {
             .cloned()
     }
 
+    /// The window that belongs to a connection session, from the id the connection layer
+    /// knows: a connection carries only its own local session id, while the UI layer keys
+    /// everything by the session id of the window, so this is the bridge between the two.
+    #[inline]
+    pub fn get_session_id_by_local_session(local_id: u64) -> Option<SessionID> {
+        SESSIONS.read().unwrap().values().find_map(|s| {
+            if s.lc.read().unwrap().session_id != local_id {
+                return None;
+            }
+            s.ui_handler
+                .session_handlers
+                .read()
+                .unwrap()
+                .keys()
+                .next()
+                .cloned()
+        })
+    }
+
+    /// The window a controlling-side key belongs to, where the key is the text form of a
+    /// session id.
+    #[inline]
+    pub fn get_session_by_key(key: &str) -> Option<FlutterSession> {
+        SESSIONS
+            .read()
+            .unwrap()
+            .values()
+            .find(|s| {
+                s.ui_handler
+                    .session_handlers
+                    .read()
+                    .unwrap()
+                    .keys()
+                    .any(|id| id.to_string() == key)
+            })
+            .cloned()
+    }
+
     #[inline]
     pub fn get_session_by_peer_id(peer_id: String, conn_type: ConnType) -> Option<FlutterSession> {
         SESSIONS.read().unwrap().get(&(peer_id, conn_type)).cloned()
