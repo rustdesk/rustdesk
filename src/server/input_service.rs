@@ -449,6 +449,8 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                     if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
                         state.cached_cursor_data.clear();
                         CURSOR_SHAPES.lock().unwrap().clear();
+                        // The shape being sent was kept above; keep it past the clear.
+                        shared_cursor_shape(msg.clone());
                     }
                 }
                 state.cached_cursor_data.insert(cache_key, msg.clone());
