@@ -312,19 +312,22 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
 
 #[cfg(feature = "flutter")]
 lazy_static::lazy_static! {
-    /// Physical keys whose press fired a shortcut and whose release has not
-    /// arrived yet. Every event of such a key belongs to RustDesk until its
-    /// release, whatever the modifiers do meanwhile: auto repeats and the
-    /// release are consumed and never reach the remote.
-    static ref FIRED_KEYS: std::sync::Mutex<std::collections::HashSet<rdev::Key>> =
-        Default::default();
+    /// Per session, the physical keys whose press fired a shortcut and whose
+    /// release has not arrived yet. Every event of such a key belongs to
+    /// RustDesk until its release, whatever the modifiers do meanwhile: auto
+    /// repeats and the release are consumed and never reach the remote.
+    static ref FIRED_KEYS: std::sync::Mutex<
+        std::collections::HashMap<hbb_common::SessionID, std::collections::HashSet<rdev::Key>>,
+    > = Default::default();
 }
 
-/// Forget the fired keys whose release will never arrive, e.g. because focus
-/// left the session while they were held.
+/// Forget the fired keys of a session that is going away.
+///
+/// A key whose release is missed in other ways stays recorded: its next press
+/// is consumed as a repeat and its release then removes it.
 #[cfg(feature = "flutter")]
-pub fn clear_fired_keys() {
-    FIRED_KEYS.lock().unwrap().clear();
+pub fn clear_fired_keys(session_id: &hbb_common::SessionID) {
+    FIRED_KEYS.lock().unwrap().remove(session_id);
 }
 
 /// Match `event` against the cached bindings; if it matched, push a
@@ -350,17 +353,6 @@ pub fn try_dispatch(
     send: impl Fn(&base::message_proto::KeyEvent),
 ) -> bool {
     use rdev::EventType;
-    {
-        let mut fired = FIRED_KEYS.lock().unwrap();
-        match event.event_type {
-            EventType::KeyPress(k) if fired.contains(&k) => return true,
-            EventType::KeyRelease(k) if fired.remove(&k) => return true,
-            _ => {}
-        }
-    }
-    let Some(action_id) = match_event(event) else {
-        return false;
-    };
     let resolved;
     let sid = match session_id {
         Some(id) => id,
@@ -369,9 +361,27 @@ pub fn try_dispatch(
             &resolved
         }
     };
+    {
+        let mut all = FIRED_KEYS.lock().unwrap();
+        if let Some(fired) = all.get_mut(sid) {
+            match event.event_type {
+                EventType::KeyPress(k) if fired.contains(&k) => return true,
+                EventType::KeyRelease(k) if fired.remove(&k) => {
+                    if fired.is_empty() {
+                        all.remove(sid);
+                    }
+                    return true;
+                }
+                _ => {}
+            }
+        }
+    }
+    let Some(action_id) = match_event(event) else {
+        return false;
+    };
     release_remote_keys(keyboard_mode, &peer(), &send);
     if let EventType::KeyPress(k) = event.event_type {
-        FIRED_KEYS.lock().unwrap().insert(k);
+        FIRED_KEYS.lock().unwrap().entry(*sid).or_default().insert(k);
     }
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
@@ -816,9 +826,9 @@ mod tests {
         // was not already fired before the call.
         let fired = std::cell::RefCell::new(Vec::new());
         let dispatch = |e: &rdev::Event| {
-            let before = FIRED_KEYS.lock().unwrap().clone();
+            let before = fired_keys_of(&SID_A);
             let action = match_event(e);
-            let hit = try_dispatch(None, e, "map", || "windows".into(), |_| {});
+            let hit = try_dispatch(Some(&SID_A), e, "map", || "windows".into(), |_| {});
             if let rdev::EventType::KeyPress(k) = e.event_type {
                 if hit && !before.contains(&k) {
                     fired.borrow_mut().push(action.unwrap_or_default());
@@ -839,7 +849,7 @@ mod tests {
         assert!(dispatch(&make_press(Key::KeyP)), "P repeat is consumed");
         assert!(dispatch(&make_release(Key::KeyP)), "P release is consumed");
         assert!(dispatch(&make_release(Key::KeyC)), "C release is consumed");
-        assert!(FIRED_KEYS.lock().unwrap().is_empty());
+        assert!(fired_keys_of(&SID_A).is_empty());
         assert_eq!(
             *fired.borrow(),
             vec![action_id::SCREENSHOT.to_owned(), action_id::TOGGLE_CHAT.to_owned()]
@@ -856,7 +866,8 @@ mod tests {
 
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let chord = enable_defaults_and_hold_chord();
-        let dispatch = |e: &rdev::Event| try_dispatch(None, e, "map", || "windows".into(), |_| {});
+        let dispatch =
+            |e: &rdev::Event| try_dispatch(Some(&SID_A), e, "map", || "windows".into(), |_| {});
 
         assert!(dispatch(&make_press(Key::KeyP)));
         release_chord(chord);
@@ -864,6 +875,48 @@ mod tests {
         assert!(dispatch(&make_release(Key::KeyP)), "release without modifiers is consumed");
         assert!(!dispatch(&make_press(Key::KeyP)), "a new press without the chord passes");
         assert!(!dispatch(&make_release(Key::KeyP)));
+    }
+
+    /// Fired keys are owned per session: closing another session keeps them,
+    /// and the same physical key in another session is not taken as a repeat.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_keeps_fired_keys_per_session() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let dispatch = |sid: &hbb_common::SessionID, e: &rdev::Event| {
+            try_dispatch(Some(sid), e, "map", || "windows".into(), |_| {})
+        };
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)));
+        release_chord(chord);
+        assert!(
+            !dispatch(&SID_B, &make_press(Key::KeyP)),
+            "P in session B is not a repeat of session A's P"
+        );
+        assert!(!dispatch(&SID_B, &make_release(Key::KeyP)));
+        clear_fired_keys(&SID_B);
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)), "A's repeat survives B's close");
+        assert!(dispatch(&SID_A, &make_release(Key::KeyP)), "A's release survives B's close");
+        assert!(fired_keys_of(&SID_A).is_empty());
+
+        let chord = enable_defaults_and_hold_chord();
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)));
+        release_chord(chord);
+        clear_fired_keys(&SID_A);
+        assert!(!dispatch(&SID_A, &make_release(Key::KeyP)), "closing A drops its keys");
+    }
+
+    #[cfg(feature = "flutter")]
+    const SID_A: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xA);
+    #[cfg(feature = "flutter")]
+    const SID_B: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xB);
+
+    #[cfg(feature = "flutter")]
+    fn fired_keys_of(sid: &hbb_common::SessionID) -> std::collections::HashSet<rdev::Key> {
+        FIRED_KEYS.lock().unwrap().get(sid).cloned().unwrap_or_default()
     }
 
     #[cfg(feature = "flutter")]
@@ -876,7 +929,8 @@ mod tests {
             pass_through: false,
             bindings: default_bindings(),
         });
-        clear_fired_keys();
+        clear_fired_keys(&SID_A);
+        clear_fired_keys(&SID_B);
         let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
             Key::MetaLeft
         } else {
