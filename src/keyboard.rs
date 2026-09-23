@@ -323,9 +323,9 @@ pub mod client {
 
     pub fn process_event(keyboard_mode: &str, event: &Event, lock_modes: Option<i32>) {
         // Shortcut intercept — must come before any wire encoding.
-        // Only fires on KeyPress (event_to_key_name in shortcuts.rs returns None
-        // for KeyRelease and other non-press events), so flushed releases from
-        // release_remote_keys pass straight through to the encode/forward path.
+        // A press that fires a shortcut is consumed, and so are its auto repeats
+        // and its release; every other event passes through to the
+        // encode/forward path.
         //
         // NOTE: Shortcut matching intentionally happens BEFORE any key swapping
         // (swap_modifier_key) so that shortcuts bind to the physical keys pressed,
@@ -344,7 +344,13 @@ pub mod client {
         // `flutter::get_cur_session_id()` — the rdev grab loop is process-wide
         // and has no per-event session context to thread.
         #[cfg(feature = "flutter")]
-        if crate::keyboard::shortcuts::try_dispatch(None, event, keyboard_mode) {
+        if crate::keyboard::shortcuts::try_dispatch(
+            None,
+            event,
+            keyboard_mode,
+            || get_peer_platform().to_lowercase(),
+            send_key_event,
+        ) {
             return;
         }
 
@@ -366,12 +372,18 @@ pub mod client {
         session_id: SessionID,
     ) {
         // Shortcut intercept — see the long comment in `process_event` above
-        // for the KeyPress-only / feature-gate rationale. The only difference
+        // for the consume / feature-gate rationale. The only difference
         // here is that the Flutter FFI path threads an explicit SessionID
         // through, so dispatch targets the exact tab the keystroke originated
         // from — no dependency on the global focus tracker.
         #[cfg(feature = "flutter")]
-        if crate::keyboard::shortcuts::try_dispatch(Some(&session_id), event, keyboard_mode) {
+        if crate::keyboard::shortcuts::try_dispatch(
+            Some(&session_id),
+            event,
+            keyboard_mode,
+            || session.peer_platform().to_lowercase(),
+            |key_event| session.send_key_event(key_event),
+        ) {
             return;
         }
         #[cfg(not(feature = "flutter"))]

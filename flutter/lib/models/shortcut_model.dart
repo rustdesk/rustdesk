@@ -62,6 +62,11 @@ class ShortcutModel {
 
   /// Called by the session event listener when a `shortcut_triggered` event
   /// arrives for this session.
+  ///
+  /// The matcher has already consumed the chord. With no handler the action
+  /// is unavailable in this session (e.g. screenshot on a peer without
+  /// support), and the chord is a deliberate no-op: a bound chord always
+  /// belongs to RustDesk and is never forwarded to the remote.
   void onTriggered(String actionId) {
     final cb = _callbacks[actionId];
     if (cb != null) {

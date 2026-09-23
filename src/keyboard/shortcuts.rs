@@ -288,51 +288,13 @@ pub fn current() -> Arc<Bindings> {
 }
 
 /// Match an `rdev::Event` against the cached bindings. Returns the matched
-/// action id, or `None` if no binding fires. The Flutter side ignores unknown
-/// action ids (logged as "no handler"), so no whitelist check is needed here.
+/// action id, or `None` if no binding fires.
 ///
-/// ── Two known minor warts. DO NOT add global state to "fix" either: ──
-///
-/// 1. Orphan KeyRelease forwarded to peer.
-///    When a shortcut matches we eat the KeyPress, but the matching
-///    KeyRelease (whose `event_type` returns None from `event_to_key_name`)
-///    still flows through to the peer. The remote sees a release for a
-///    press it never received. Every input server we forward to ignores
-///    releases for unpressed keys, so user-visible impact is nil — the
-///    pre-existing hard-coded screenshot-shortcut path had the same shape
-///    for years without a single bug report.
-///
-/// 2. OS auto-repeat re-dispatches a held shortcut.
-///    rdev does not expose an `is_repeat` flag, so a held combo
-///    (Cmd+Alt+Shift+P) would dispatch every ~30-50ms while the keys are
-///    down — toggle actions oscillate, screenshot fires many times. In
-///    practice the OS initial auto-repeat delay is ~250ms and a normal
-///    shortcut press is 50-100ms, so the user has to *deliberately* hold
-///    the combo to hit this. The Web side gets a free fix via the
-///    browser's `KeyboardEvent.repeat`; on native we accept the wart.
-///
-/// The "fix" for either would be a process-global `HashSet<rdev::Key>` (or
-/// equivalent) with paired insert-on-press / remove-on-release logic in
-/// both `process_event*` paths plus a clear-on-leave hook. The cost:
-///
-///   * Lock contention on the hot keystroke path.
-///   * Three input sources (rdev grab, Flutter raw key, Flutter USB HID)
-///     all converge to `rdev::Key`, so correctness depends on
-///     `rdev::key_from_code` / `rdev::usb_hid_key_from_code` /
-///     `rdev::get_win_key` agreeing on the same physical key — the project
-///     already has scattered swap_modifier_key / ControlLeft↔MetaLeft
-///     fixups for places where they historically *didn't* agree. Any new
-///     mismatch silently leaks the set; "shortcut stopped responding"
-///     after a stuck entry is a worse failure mode than "shortcut fired
-///     twice."
-///   * Leak risk on focus loss / disconnect, requiring a clear hook the
-///     callers must remember to invoke.
-///   * Two new code paths to keep in lockstep with two existing keyboard
-///     pipelines.
-///
-/// For two warts whose user-visible impact is nil-to-marginal, that
-/// trade-off goes the wrong way. Leave it. If a real user bug shows up
-/// here, revisit then with concrete repro — not pre-emptively.
+/// A bound chord belongs to RustDesk: it is consumed even when the action is
+/// unavailable in the current session (e.g. screenshot on a peer that does not
+/// support it), and the Flutter side then does nothing. It is never forwarded
+/// to the remote, so what a chord does depends on the binding alone, not on
+/// session state the user cannot see.
 pub fn match_event(event: &rdev::Event) -> Option<String> {
     let bindings = current();
     if !bindings.enabled || bindings.pass_through {
@@ -348,6 +310,11 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
     match_normalized(&key_name, &mods, &bindings).map(str::to_owned)
 }
 
+/// The physical key whose press fired a shortcut, until its release. Its auto
+/// repeats and its release are consumed so none of them reach the remote.
+#[cfg(feature = "flutter")]
+static FIRED_KEY: std::sync::Mutex<Option<rdev::Key>> = std::sync::Mutex::new(None);
+
 /// Match `event` against the cached bindings; if it matched, push a
 /// `shortcut_triggered` Flutter session event and return `true` so the caller
 /// can `return` early. Returns `false` when no shortcut fired (caller should
@@ -359,12 +326,35 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
 /// * `None` — rdev grab loop: the loop is process-wide and has no way to know
 ///   which Flutter session id the keystroke was meant for, so route to the
 ///   globally-current session via `flutter::get_cur_session_id()`.
+///
+/// `peer` and `send` must belong to the same session as `session_id`, so the
+/// remote key releases go to the session the chord was typed into.
 #[cfg(feature = "flutter")]
 pub fn try_dispatch(
     session_id: Option<&hbb_common::SessionID>,
     event: &rdev::Event,
     keyboard_mode: &str,
+    peer: impl FnOnce() -> String,
+    send: impl Fn(&base::message_proto::KeyEvent),
 ) -> bool {
+    use rdev::EventType;
+    {
+        let mut fired = FIRED_KEY.lock().unwrap();
+        match (event.event_type, *fired) {
+            (EventType::KeyRelease(k), Some(f)) if k == f => {
+                *fired = None;
+                return true;
+            }
+            (EventType::KeyPress(k), Some(f)) if k == f => {
+                if match_event(event).is_some() {
+                    return true;
+                }
+                // The chord is gone, so this is a new press, not a repeat.
+                *fired = None;
+            }
+            _ => {}
+        }
+    }
     let Some(action_id) = match_event(event) else {
         return false;
     };
@@ -376,9 +366,59 @@ pub fn try_dispatch(
             &resolved
         }
     };
-    crate::keyboard::release_remote_keys(keyboard_mode);
+    release_remote_keys(keyboard_mode, &peer(), &send);
+    if let EventType::KeyPress(k) = event.event_type {
+        *FIRED_KEY.lock().unwrap() = Some(k);
+    }
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
+}
+
+/// Release on the remote every key it still holds, the chord's modifiers
+/// included, so the action does not run with them held down there.
+///
+/// Unlike `keyboard::release_remote_keys` this keeps the local modifier state:
+/// the user is still physically holding the modifiers, and the next key of
+/// the chord (or an auto repeat) must still see them. It also sends through
+/// `send` instead of the globally current session.
+#[cfg(feature = "flutter")]
+fn release_remote_keys(
+    keyboard_mode: &str,
+    peer: &str,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
+    use super::{event_to_key_events, get_keyboard_mode_enum, take_remote_keys, MODIFIERS_STATE};
+    use rdev::{EventType, Key};
+
+    let mode = get_keyboard_mode_enum(keyboard_mode);
+    let to_release = take_remote_keys();
+    let held: Vec<Key> = {
+        let state = MODIFIERS_STATE.lock().unwrap();
+        to_release
+            .keys()
+            .filter(|k| state.get(k).copied().unwrap_or(false))
+            .copied()
+            .collect()
+    };
+    for (key, mut event) in to_release {
+        let mut types = vec![EventType::KeyRelease(key)];
+        // Same as `keyboard::release_remote_keys_for_events`: a lone Alt
+        // release can leave Alt held on the controlled side.
+        if key == Key::Alt || key == Key::AltGr {
+            types.push(EventType::KeyPress(key));
+            types.push(EventType::KeyRelease(key));
+        }
+        for t in types {
+            event.event_type = t;
+            for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
+                send(&key_event);
+            }
+        }
+    }
+    let mut state = MODIFIERS_STATE.lock().unwrap();
+    for key in held {
+        state.insert(key, true);
+    }
 }
 
 fn mods_bits(m: &[Modifier]) -> u8 {
@@ -710,8 +750,12 @@ mod tests {
         );
     }
 
+    /// Serializes the tests that write the global `CACHE`.
+    static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn reload_handles_missing_and_invalid_json() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // empty (no value set) → defaults
         hbb_common::config::LocalConfig::set_option(LOCAL_CONFIG_KEY.into(), String::new());
         reload_from_config();
@@ -724,5 +768,61 @@ mod tests {
         reload_from_config();
         let b = current();
         assert!(!b.enabled);
+    }
+
+    #[cfg(feature = "flutter")]
+    fn make_release(k: rdev::Key) -> rdev::Event {
+        let mut e = make_press(k);
+        e.event_type = rdev::EventType::KeyRelease(k);
+        e
+    }
+
+    /// Holding the chord modifiers and pressing two bound keys in a row must
+    /// fire both actions: releasing the modifiers on the remote must not
+    /// clear them locally. Repeats and the release of a fired key are consumed.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_keeps_local_modifiers_and_consumes_fired_key() {
+        use super::super::{event_to_key_events, MODIFIERS_STATE, TO_RELEASE};
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: default_bindings(),
+        });
+        let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            Key::MetaLeft
+        } else {
+            Key::ControlLeft
+        };
+        let chord = [primary, Key::Alt, Key::ShiftLeft];
+        for k in chord {
+            event_to_key_events("windows".into(), &make_press(k), KeyboardMode::Map, None);
+        }
+        let dispatch = |e: &rdev::Event| try_dispatch(None, e, "map", || "windows".into(), |_| {});
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        assert!(TO_RELEASE.lock().unwrap().is_empty());
+        {
+            let state = MODIFIERS_STATE.lock().unwrap();
+            for k in chord {
+                assert_eq!(state.get(&k), Some(&true), "{k:?} must stay held locally");
+            }
+        }
+        assert!(dispatch(&make_press(Key::KeyP)), "auto repeat is consumed");
+        assert!(dispatch(&make_release(Key::KeyP)), "release is consumed");
+        assert!(dispatch(&make_press(Key::KeyC)), "second chord key still fires");
+        assert!(dispatch(&make_release(Key::KeyC)));
+        assert!(!dispatch(&make_release(Key::KeyC)), "only the first release is consumed");
+
+        for k in chord {
+            event_to_key_events("windows".into(), &make_release(k), KeyboardMode::Map, None);
+        }
+        assert!(!dispatch(&make_press(Key::KeyP)), "no chord, no shortcut");
+        *FIRED_KEY.lock().unwrap() = None;
+        *CACHE.write().unwrap() = Arc::new(Bindings::default());
     }
 }
