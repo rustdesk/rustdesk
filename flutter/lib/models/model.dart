@@ -3511,6 +3511,7 @@ class CursorModel with ChangeNotifier {
 
   updateCursorData(String id, int hotxInt, int hotyInt, int width, int height,
       Uint8List rgba) async {
+    final generation = _generation;
     _unavailable.remove(id);
     final hotx = hotxInt.toDouble();
     final hoty = hotyInt.toDouble();
@@ -3519,10 +3520,14 @@ class CursorModel with ChangeNotifier {
     if (image == null) {
       return;
     }
-    if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
-      _images[id]?.item1.dispose();
-      _images[id] = Tuple3(image, hotx, hoty);
+    if (!await _updateCache(
+        generation, rgba, image, id, hotx, hoty, width, height)) {
+      // Not kept, or the session was cleared while it decoded.
+      image.dispose();
+      return;
     }
+    _images[id]?.item1.dispose();
+    _images[id] = Tuple3(image, hotx, hoty);
 
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
@@ -3530,6 +3535,7 @@ class CursorModel with ChangeNotifier {
   }
 
   Future<bool> _updateCache(
+    int generation,
     Uint8List rgba,
     ui.Image image,
     String id,
@@ -3573,6 +3579,9 @@ class CursorModel with ChangeNotifier {
       width: w,
       height: h,
     );
+    if (generation != _generation) {
+      return false;
+    }
     _cacheMap[id] = cache;
     return true;
   }
@@ -3639,20 +3648,29 @@ class CursorModel with ChangeNotifier {
 
   // Shapes the core could not give, not asked for again until the peer sends them.
   final _unavailable = <String>{};
+  // Counts session clears, so that a decode finishing after one keeps nothing.
+  int _generation = 0;
 
   /// Decodes the shape in use again from the core, for a raster its native cursor lacks, for
   /// painting it, or for a window a tab moved to.
   void restorePixels(String id) {
     if (id != _id || _unavailable.contains(id) || !_restoring.add(id)) return;
+    final generation = _generation;
     () async {
       try {
         final shape = await fetchCursorShape(id);
-        if (shape == null) {
+        if (generation != _generation) {
+          return;
+        } else if (shape == null) {
           _unavailable.add(id);
           debugPrint('Cursor $id is not kept by the core');
         } else if (id == _id) {
           await updateCursorData(id, shape.hotx, shape.hoty, shape.width,
               shape.height, shape.colors);
+          if (generation == _generation && !_images.containsKey(id)) {
+            // It did not decode; painting must not ask for it on every frame.
+            _unavailable.add(id);
+          }
         }
       } catch (e) {
         _unavailable.add(id);
@@ -3747,6 +3765,7 @@ class CursorModel with ChangeNotifier {
     _cache = null;
     _cacheMap.clear();
     _unavailable.clear();
+    _generation++;
   }
 
   _clearCache() {

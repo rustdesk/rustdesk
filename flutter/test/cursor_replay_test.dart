@@ -134,6 +134,31 @@ void main() {
     expect(ffi.cursorModel.shapeIds, ['1']);
   });
 
+  test('a shape the core gives but that does not decode is asked for once',
+      () async {
+    await _feed(ffi, '1');
+    await _feed(ffi, '2');
+    ffi.cursor.core['1'] = CursorShape(
+        hotx: 0, hoty: 0, width: 8, height: 8, colors: Uint8List(3));
+    _select(ffi, '1');
+    for (var i = 0; i < 5; i++) {
+      ffi.cursorModel.image;
+      await _settle();
+    }
+    expect(ffi.cursor.fetched, ['1']);
+  });
+
+  test('a shape decoded after the session was cleared is not kept', () async {
+    await _feed(ffi, '1', size: 16);
+    await _feed(ffi, '2');
+    _select(ffi, '1');
+    ffi.cursorModel.image; // asks the core
+    ffi.cursorModel.clear();
+    await _settle();
+    expect(ffi.cursorModel.shapeIds, isEmpty);
+    expect(ffi.cursorModel.cache, isNull);
+  });
+
   test('a shape the core does not have is asked for once', () async {
     await _feed(ffi, '1');
     await _feed(ffi, '2');
