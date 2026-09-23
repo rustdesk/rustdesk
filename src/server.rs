@@ -71,6 +71,12 @@ pub mod input_service {
 mod connection;
 mod login_failure_check;
 pub(crate) mod port_forward_mux;
+#[cfg(target_os = "linux")]
+pub(crate) mod usbip_mux;
+#[cfg(target_os = "linux")]
+pub(crate) mod usbip_pull;
+#[cfg(target_os = "linux")]
+pub(crate) mod usbip_session;
 pub mod display_service;
 #[cfg(windows)]
 pub mod portable_service;
