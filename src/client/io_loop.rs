@@ -684,16 +684,31 @@ impl<T: InvokeUiSession> Remote<T> {
         tokio::task::spawn_blocking(read_clipboard);
     }
 
+    // Linux listener creation returns before X11/Wayland has subscribed to changes.
+    // Capture after readiness so changes during the read can invalidate the snapshot.
+    // A separate task keeps a stalled backend from blocking the connection loop.
     #[cfg(target_os = "linux")]
     fn spawn_initial_clipboard_read_after_ready(&self, read_clipboard: impl FnOnce() + Send + 'static) {
+        // Initial-sync wait budget, not a protocol-defined startup deadline.
+        const CLIPBOARD_READY_TIMEOUT: Duration = Duration::from_secs(5);
+
         let sender = self.sender.clone();
         tokio::spawn(async move {
             let ready = tokio::select! {
-                result = clipboard_listener::wait_for_ready() => result,
+                result = time::timeout(CLIPBOARD_READY_TIMEOUT, clipboard_listener::wait_for_ready()) => {
+                    match result {
+                        Ok(ready) => ready,
+                        Err(err) => Err(err.into()),
+                    }
+                }
                 _ = sender.closed() => return,
             };
             if let Err(err) = ready {
-                log::error!("Failed to wait for clipboard listener readiness: {}", err);
+                log::error!(
+                    "Failed to wait for clipboard listener readiness (limit {:?}): {}",
+                    CLIPBOARD_READY_TIMEOUT,
+                    err,
+                );
                 let generation = clipboard_listener::current_generation();
                 if let Err(err) = sender.send(Data::InitialClipboard(generation, None)) {
                     log::debug!("Failed to send initial clipboard result: {}", err);
