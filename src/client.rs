@@ -109,6 +109,8 @@ pub mod usbip_attach;
 pub mod usbip_channel;
 #[cfg(all(target_os = "linux", feature = "flutter"))]
 pub mod usbip_share;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub mod usbip_state;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);

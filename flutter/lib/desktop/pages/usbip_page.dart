@@ -49,7 +49,7 @@ class _UsbipPageState extends State<UsbipPage> {
   @override
   void dispose() {
     // Closing the session detaches and unshares exactly what this session
-    // attached or shared itself (see `close_usb_state` on the Rust side and
+    // attached or shared itself (`UsbClientState::close` on the Rust side,
     // `UsbipMux::close_all` on the peer); `UsbDeviceInfo.shared` is
     // machine-wide and may belong to the CLI or another session.
     _ffi.close();

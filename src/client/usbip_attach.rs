@@ -4,7 +4,7 @@
 // that plays the role of the (otherwise unreachable) remote `usbipd`, and
 // relay everything it sees through `UsbChannel` frames.
 use crate::{
-    client::{Data, Interface},
+    client::{usbip_state::UsbClientState, Data, Interface},
     flutter::FlutterHandler,
     ui_session_interface::Session,
     usbip_flow::{self, Flow},
@@ -68,7 +68,7 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
         }
     };
     match local_port {
-        Some(local_port) if !session.ui_handler.usb_attached_port_add(local_port) => {
+        Some(local_port) if !session.ui_handler.usb.attached_port_add(local_port) => {
             log::info!(
                 "usb attach: session closed while attaching {}, detaching port {}",
                 bus_id, local_port
@@ -274,10 +274,10 @@ pub(crate) fn detach_blocking(port: i32) {
 }
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
-    let id = FlutterHandler::next_usb_channel_id();
+    let id = UsbClientState::next_channel_id();
     let (tx, mut rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
     let flow = Flow::new();
-    session.ui_handler.register_usb_forward_channel(id, tx, flow.clone());
+    session.ui_handler.usb.register_forward_channel(id, tx, flow.clone());
     session.usb_open_forward(id, bus_id.clone());
 
     let success = loop {
@@ -290,13 +290,13 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
             }
             Some(_) => continue,
             None => {
-                session.ui_handler.unregister_usb_forward_channel(id);
+                session.ui_handler.usb.unregister_forward_channel(id);
                 return;
             }
         }
     };
     if !success {
-        session.ui_handler.unregister_usb_forward_channel(id);
+        session.ui_handler.usb.unregister_forward_channel(id);
         return;
     }
 
@@ -316,14 +316,14 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
         match timeout(IMPORT_REQUEST_TIMEOUT_MS, reader.read(&mut buf)).await {
             Ok(Ok(0)) | Ok(Err(_)) => {
                 log::warn!("usb attach: local connection on channel {} closed before import request", id);
-                session.ui_handler.unregister_usb_forward_channel(id);
+                session.ui_handler.usb.unregister_forward_channel(id);
                 session.usb_close_forward(id);
                 return;
             }
             Ok(Ok(n)) => prefix.extend_from_slice(&buf[..n]),
             Err(_) => {
                 log::warn!("usb attach: local connection on channel {} import request timed out", id);
-                session.ui_handler.unregister_usb_forward_channel(id);
+                session.ui_handler.usb.unregister_forward_channel(id);
                 session.usb_close_forward(id);
                 return;
             }
@@ -336,7 +336,7 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
                 "usb attach: local connection on channel {} sent an import request for {:?}, not the authorized {:?} -- refusing (possible loopback hijack attempt)",
                 id, other, bus_id
             );
-            session.ui_handler.unregister_usb_forward_channel(id);
+            session.ui_handler.usb.unregister_forward_channel(id);
             session.usb_close_forward(id);
             return;
         }
@@ -371,7 +371,26 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
         }
     }
     to_tunnel.abort();
-    session.ui_handler.unregister_usb_forward_channel(id);
+    session.ui_handler.usb.unregister_forward_channel(id);
+}
+
+impl Session<FlutterHandler> {
+    pub fn usb_attach(&self, bus_id: String) {
+        let session = self.clone();
+        if let Some(rt) = self.ui_handler.usb.session_runtime() {
+            rt.spawn(attach(session, bus_id));
+        }
+    }
+
+    pub fn usb_detach(&self, port: i32) {
+        if !self.ui_handler.usb.attached_port_take(port) {
+            log::warn!("usb detach: port {} was not attached by this session", port);
+            return;
+        }
+        if let Some(rt) = self.ui_handler.usb.session_runtime() {
+            detach(&rt, port);
+        }
+    }
 }
 
 #[cfg(test)]

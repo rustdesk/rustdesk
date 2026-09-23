@@ -4,7 +4,7 @@
 // every message type the session receives, so the actual routing/
 // authorization/task-spawning logic belongs here instead of inline there,
 // per AGENTS.md's "shared files carry thin one-line hooks" rule.
-use crate::{flutter::FlutterHandler, ui_session_interface::InvokeUiSession};
+use crate::flutter::FlutterHandler;
 use base::message_proto::usb_channel::Union;
 use hbb_common::{log, tokio};
 
@@ -19,7 +19,7 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             // once, so an unsolicited or repeated one can't trigger a
             // privileged unbind.
             if !crate::client::usbip_attach::is_valid_bus_id(&r.bus_id)
-                || !handler.usb_share_owned(&r.bus_id)
+                || !handler.usb.share_owned(&r.bus_id)
             {
                 log::warn!(
                     "usb push: ignoring result for {:?}: not pushed by this session",
@@ -34,11 +34,11 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                     "usb push: peer failed to attach {}: {}, rolling back share",
                     r.bus_id, r.error
                 );
-                handler.usb_share_pending_remove(&r.bus_id);
-                if !handler.usb_share_owned_take(&r.bus_id) {
+                handler.usb.share_pending_remove(&r.bus_id);
+                if !handler.usb.share_owned_take(&r.bus_id) {
                     return;
                 }
-                if let Some(rt) = handler.session_runtime() {
+                if let Some(rt) = handler.usb.session_runtime() {
                     let bus_id = r.bus_id.clone();
                     rt.spawn_blocking(move || {
                         if crate::client::usbip_share::bind_device(&bus_id, false) {
@@ -59,22 +59,33 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
         // `client::usbip_attach`); `< 0` is the local usbip-share relay
         // (push, `client::usbip_share`) -- see `usbip_pull.rs`'s doc
         // comment on the controlled side for the sign convention.
-        Some(Union::Opened(o)) if o.channel_id >= 0 => handler.usb_forward_send(
+        Some(Union::Opened(o)) if o.channel_id >= 0 => forward(
+            handler,
             o.channel_id,
             crate::client::usbip_attach::Inbound::Opened {
                 success: o.success,
                 message: o.message,
             },
         ),
-        Some(Union::Data(d)) if d.channel_id >= 0 => handler
-            .usb_forward_send(d.channel_id, crate::client::usbip_attach::Inbound::Data(d.data)),
-        Some(Union::Close(c)) if c.channel_id >= 0 => handler
-            .usb_forward_send(c.channel_id, crate::client::usbip_attach::Inbound::Closed),
-        Some(Union::Data(d)) => handler.usb_share_send(d.channel_id, d.data),
-        Some(Union::WindowUpdate(w)) => handler.usb_window_update(w.channel_id, w.add),
+        Some(Union::Data(d)) if d.channel_id >= 0 => forward(
+            handler,
+            d.channel_id,
+            crate::client::usbip_attach::Inbound::Data(d.data),
+        ),
+        Some(Union::Close(c)) if c.channel_id >= 0 => forward(
+            handler,
+            c.channel_id,
+            crate::client::usbip_attach::Inbound::Closed,
+        ),
+        Some(Union::Data(d)) => {
+            if handler.usb.share_send(d.channel_id, d.data) {
+                notify_closed(handler, d.channel_id);
+            }
+        }
+        Some(Union::WindowUpdate(w)) => handler.usb.window_update(w.channel_id, w.add),
         Some(Union::Close(c)) => {
             log::info!("usb push: peer closed channel {}", c.channel_id);
-            handler.unregister_usb_share_channel(c.channel_id);
+            handler.usb.unregister_share_channel(c.channel_id);
         }
         // The peer pulling one of the devices we're sharing. Only ever
         // valid for a negative id (see the sign convention above) and
@@ -86,24 +97,24 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
         // not just the one they were offered.
         Some(Union::Open(open)) if open.channel_id < 0 => {
             let id = open.channel_id;
-            if handler.usb_share_channel_live(id) {
-                return;
-            }
-            if !handler.usb_share_pending_take(&open.bus_id) {
-                log::warn!(
-                    "usb push: rejecting open for {} (channel {}): not pending",
-                    open.bus_id, id
-                );
+            if handler.usb.share_channel_live(id) {
                 return;
             }
             let Some(session) = handler.any_session() else {
                 log::error!("usb push: peer opened channel {} but no session to relay it", id);
                 return;
             };
+            if !handler.usb.share_pending_take(&open.bus_id) {
+                log::warn!(
+                    "usb push: rejecting open for {} (channel {}): not pending",
+                    open.bus_id, id
+                );
+                return;
+            }
             log::info!("usb push: peer opened channel {} for {}", id, open.bus_id);
             let (tx, rx) = tokio::sync::mpsc::channel(crate::usbip_flow::QUEUE_FRAMES);
             let flow = crate::usbip_flow::Flow::new();
-            handler.register_usb_share_channel(id, open.bus_id.clone(), tx, flow.clone());
+            handler.usb.register_share_channel(id, open.bus_id.clone(), tx, flow.clone());
             tokio::spawn(crate::client::usbip_share::run_channel(
                 id,
                 open.bus_id,
@@ -113,6 +124,25 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             ));
         }
         _ => {}
+    }
+}
+
+fn forward(handler: &FlutterHandler, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
+    if handler.usb.forward_send(channel_id, msg) {
+        notify_closed(handler, channel_id);
+    }
+}
+
+/// Tells the peer we've abandoned a channel it doesn't yet know is dead --
+/// without this its own side keeps the relay task/entry alive until the
+/// whole session ends.
+fn notify_closed(handler: &FlutterHandler, channel_id: i32) {
+    match handler.any_session() {
+        Some(session) => session.usb_close_forward(channel_id),
+        None => log::warn!(
+            "usb: dropped channel {} but no session to notify the peer",
+            channel_id
+        ),
     }
 }
 
@@ -132,18 +162,18 @@ mod tests {
     #[test]
     fn failed_push_result_ignored_unless_pushed_by_this_session() {
         let handler = FlutterHandler::default();
-        handler.usb_share_owned_add("1-3".to_string());
+        handler.usb.share_owned_add("1-3".to_string());
         handle(&handler, failed_push("1-2"));
         handle(&handler, failed_push("1-3; touch /tmp/x"));
-        assert!(handler.usb_share_owned("1-3"));
+        assert!(handler.usb.share_owned("1-3"));
     }
 
     #[test]
     fn failed_push_result_rolls_back_only_once() {
         let handler = FlutterHandler::default();
-        handler.usb_share_owned_add("1-2".to_string());
+        handler.usb.share_owned_add("1-2".to_string());
         handle(&handler, failed_push("1-2"));
-        assert!(!handler.usb_share_owned("1-2"));
-        assert!(!handler.usb_share_owned_take("1-2"));
+        assert!(!handler.usb.share_owned("1-2"));
+        assert!(!handler.usb.share_owned_take("1-2"));
     }
 }
