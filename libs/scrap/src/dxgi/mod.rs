@@ -264,7 +264,9 @@ impl Capturer {
         }
         hbb_common::log::error!("HDR tone-map failed, re-duplicating without it: {err}");
         self.hdr = None;
-        (*self.duplication.0).ReleaseFrame();
+        if let Err(release_err) = self.release_frame() {
+            hbb_common::log::warn!("DXGI frame cleanup failed while disabling HDR: {release_err}");
+        }
         self.duplication = ComPtr(ptr::null_mut());
         let mut duplication = ptr::null_mut();
         let result = wrap_hresult(
