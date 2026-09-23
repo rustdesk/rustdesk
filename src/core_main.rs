@@ -30,6 +30,16 @@ macro_rules! my_println{
 /// If it returns [`Some`], then the process will continue, and flutter gui will be started.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use hbb_common::libc;
+
+        // Flutter's native runners bypass Rust's startup, which normally ignores SIGPIPE.
+        if unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) } == libc::SIG_ERR {
+            eprintln!("Failed to ignore SIGPIPE: {}", std::io::Error::last_os_error());
+            std::process::exit(1);
+        }
+    }
     if !crate::common::global_init() {
         return None;
     }
