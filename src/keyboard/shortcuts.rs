@@ -676,11 +676,11 @@ mod tests {
     /// names (not just the defaults). The fixture lists every name the
     /// matcher accepts; this test verifies the (rdev::Key → name) round-trip
     /// covers exactly that set. Dart has a mirror test against the same
-    /// fixture (`logicalKeyName covers the supported-keys fixture` in
+    /// fixture (`physicalKeyName covers the supported-keys fixture` in
     /// `flutter/test/keyboard_shortcuts_test.dart`).
     ///
     /// Adding a key requires updates in three places: the fixture, this
-    /// table, and the Dart `logicalKeyName` — that's the price of the
+    /// table, and the Dart `physicalKeyName` — that's the price of the
     /// parity guarantee. Drift on any side breaks one of the two tests.
     #[test]
     fn supported_keys_match_fixture() {
@@ -746,8 +746,29 @@ mod tests {
             actual, expected,
             "event_to_key_name vocabulary drifted from \
              flutter/test/fixtures/supported_shortcut_keys.json — update \
-             shortcuts.rs, the fixture, and Dart logicalKeyName together"
+             shortcuts.rs, the fixture, and Dart physicalKeyName together"
         );
+    }
+
+    /// The native Flutter path turns a key into a name through its USB HID
+    /// usage (`rdev::usb_hid_key_from_code` -> `event_to_key_name`); the Dart
+    /// recorder does the same through `physicalKeyName`. Both are checked
+    /// against the same fixture, so a binding recorded on any keyboard layout
+    /// matches the key that was pressed.
+    #[test]
+    fn usb_hid_keys_match_fixture() {
+        let pairs: Vec<(String, u32)> = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/shortcut_key_usb_hid.json"
+        ))
+        .expect("parse fixture");
+        for (name, usage) in pairs {
+            let key = rdev::usb_hid_key_from_code(usage);
+            assert_eq!(
+                event_to_key_name(&make_press(key)).as_deref(),
+                Some(name.as_str()),
+                "USB HID {usage:#04x}"
+            );
+        }
     }
 
     /// Serializes the tests that write the global `CACHE`.

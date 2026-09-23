@@ -367,74 +367,56 @@ void main() {
     }
   });
 
-  test('logicalKeyName covers the supported-keys fixture', () {
-    // The fixture is the cross-language source of truth for the full set of
-    // shortcut-bindable key names. Rust has a mirror test against the same
-    // file (`supported_keys_match_fixture` in src/keyboard/shortcuts.rs).
-    // Drift on either side breaks one of the two tests.
-    final fixturePath = 'test/fixtures/supported_shortcut_keys.json';
-    final fixture =
-        (jsonDecode(File(fixturePath).readAsStringSync()) as List<dynamic>)
-            .cast<String>()
-            .toSet();
+  test('physicalKeyName covers the supported-keys fixture', () {
+    // `shortcut_key_usb_hid.json` pins every key name to the USB HID usage
+    // it is recorded and matched from. Rust has a mirror test against the
+    // same file (`usb_hid_keys_match_fixture` in src/keyboard/shortcuts.rs),
+    // and the set of names must equal `supported_shortcut_keys.json`.
+    final supported = (jsonDecode(
+                File('test/fixtures/supported_shortcut_keys.json')
+                    .readAsStringSync()) as List<dynamic>)
+        .cast<String>()
+        .toSet();
+    final pairs = (jsonDecode(File('test/fixtures/shortcut_key_usb_hid.json')
+            .readAsStringSync()) as List<dynamic>)
+        .cast<List<dynamic>>();
 
-    // Hand-rolled (LogicalKeyboardKey, name) round-trip table. Adding a key
-    // requires updates in three places: the fixture, this table, and Rust's
-    // matching table — that's the price of the parity guarantee.
-    final mappings = <(LogicalKeyboardKey, String)>[
-      for (var c = 0; c < 26; c++)
-        (
-          LogicalKeyboardKey(0x00000000061 + c),
-          String.fromCharCode(0x61 + c),
-        ),
-      for (var d = 0; d < 10; d++)
-        (LogicalKeyboardKey(0x00000000030 + d), 'digit$d'),
-      (LogicalKeyboardKey.f1, 'f1'),
-      (LogicalKeyboardKey.f2, 'f2'),
-      (LogicalKeyboardKey.f3, 'f3'),
-      (LogicalKeyboardKey.f4, 'f4'),
-      (LogicalKeyboardKey.f5, 'f5'),
-      (LogicalKeyboardKey.f6, 'f6'),
-      (LogicalKeyboardKey.f7, 'f7'),
-      (LogicalKeyboardKey.f8, 'f8'),
-      (LogicalKeyboardKey.f9, 'f9'),
-      (LogicalKeyboardKey.f10, 'f10'),
-      (LogicalKeyboardKey.f11, 'f11'),
-      (LogicalKeyboardKey.f12, 'f12'),
-      (LogicalKeyboardKey.delete, 'delete'),
-      (LogicalKeyboardKey.backspace, 'backspace'),
-      (LogicalKeyboardKey.tab, 'tab'),
-      (LogicalKeyboardKey.space, 'space'),
-      (LogicalKeyboardKey.enter, 'enter'),
-      (LogicalKeyboardKey.numpadEnter, 'enter'),
-      (LogicalKeyboardKey.arrowLeft, 'arrow_left'),
-      (LogicalKeyboardKey.arrowRight, 'arrow_right'),
-      (LogicalKeyboardKey.arrowUp, 'arrow_up'),
-      (LogicalKeyboardKey.arrowDown, 'arrow_down'),
-      (LogicalKeyboardKey.home, 'home'),
-      (LogicalKeyboardKey.end, 'end'),
-      (LogicalKeyboardKey.pageUp, 'page_up'),
-      (LogicalKeyboardKey.pageDown, 'page_down'),
-      (LogicalKeyboardKey.insert, 'insert'),
-    ];
-
-    // Round-trip: every (key, name) pair must agree with logicalKeyName.
-    for (final (key, name) in mappings) {
-      expect(logicalKeyName(key), equals(name),
-          reason: 'logicalKeyName($key) should be "$name"');
+    for (final pair in pairs) {
+      final name = pair[0] as String;
+      final usage = pair[1] as int;
+      expect(physicalKeyName(PhysicalKeyboardKey(0x00070000 | usage)),
+          equals(name),
+          reason: 'USB HID 0x${usage.toRadixString(16)} should be "$name"');
     }
-
-    // The set of names produced by the table must equal the fixture.
-    final namesFromTable = mappings.map((e) => e.$2).toSet();
-    expect(namesFromTable, equals(fixture),
-        reason: 'logicalKeyName vocabulary drifted from $fixturePath — update '
-            'shortcut_utils.dart::logicalKeyName, the fixture, and Rust '
-            'event_to_key_name together');
+    expect(pairs.map((p) => p[0] as String).toSet(), equals(supported));
 
     // Modifier-only / unsupported keys must return null.
-    expect(logicalKeyName(LogicalKeyboardKey.shift), isNull);
-    expect(logicalKeyName(LogicalKeyboardKey.escape), isNull);
-    expect(logicalKeyName(LogicalKeyboardKey.f13), isNull);
+    expect(physicalKeyName(PhysicalKeyboardKey.shiftLeft), isNull);
+    expect(physicalKeyName(PhysicalKeyboardKey.escape), isNull);
+    expect(physicalKeyName(PhysicalKeyboardKey.f13), isNull);
+    expect(physicalKeyName(PhysicalKeyboardKey.numpad1), isNull);
+  });
+
+  test('non-US layouts record and match the physical key', () {
+    // AZERTY: the key labelled "A" sits where US QWERTY has Q. The native
+    // matcher only sees the physical position (USB HID usage), so the
+    // binding must name that position too.
+    const azertyA = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.keyQ,
+      logicalKey: LogicalKeyboardKey.keyA,
+      character: 'a',
+      timeStamp: Duration.zero,
+    );
+    expect(shortcutKeyNameForEvent(azertyA), 'q');
+
+    // QWERTZ: the key labelled "Z" sits where US QWERTY has Y.
+    const qwertzZ = KeyDownEvent(
+      physicalKey: PhysicalKeyboardKey.keyY,
+      logicalKey: LogicalKeyboardKey.keyZ,
+      character: 'z',
+      timeStamp: Duration.zero,
+    );
+    expect(shortcutKeyNameForEvent(qwertzZ), 'y');
   });
 
   test('configurable shortcut list does not include known-removed action IDs',

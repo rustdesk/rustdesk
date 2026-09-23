@@ -167,7 +167,7 @@ class _RecordingDialogState extends State<_RecordingDialog> {
 
     // Ignore modifier-only KeyDowns: don't lock in a partial combo.
     final logical = event.logicalKey;
-    final keyName = logicalKeyName(logical);
+    final keyName = shortcutKeyNameForEvent(event);
 
     // Mirror of `normalize_modifiers` in src/keyboard/shortcuts.rs:
     //   * macOS: Cmd → primary, Ctrl → ctrl (distinct).

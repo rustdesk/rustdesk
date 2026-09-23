@@ -40,87 +40,46 @@ bool isSwitchTabShortcutAction(String? actionId) {
       actionId == kShortcutActionSwitchTabPrev;
 }
 
-/// Map a [LogicalKeyboardKey] to the canonical key name used in saved
+/// USB HID usage (keyboard page 0x07) of every key accepted as a shortcut,
+/// mapped to the canonical key name used in saved bindings.
+const Map<int, String> _kUsbHidKeyNames = {
+  0x04: 'a', 0x05: 'b', 0x06: 'c', 0x07: 'd', 0x08: 'e', 0x09: 'f',
+  0x0A: 'g', 0x0B: 'h', 0x0C: 'i', 0x0D: 'j', 0x0E: 'k', 0x0F: 'l',
+  0x10: 'm', 0x11: 'n', 0x12: 'o', 0x13: 'p', 0x14: 'q', 0x15: 'r',
+  0x16: 's', 0x17: 't', 0x18: 'u', 0x19: 'v', 0x1A: 'w', 0x1B: 'x',
+  0x1C: 'y', 0x1D: 'z',
+  0x1E: 'digit1', 0x1F: 'digit2', 0x20: 'digit3', 0x21: 'digit4',
+  0x22: 'digit5', 0x23: 'digit6', 0x24: 'digit7', 0x25: 'digit8',
+  0x26: 'digit9', 0x27: 'digit0',
+  0x28: 'enter', 0x2A: 'backspace', 0x2B: 'tab', 0x2C: 'space',
+  0x3A: 'f1', 0x3B: 'f2', 0x3C: 'f3', 0x3D: 'f4', 0x3E: 'f5', 0x3F: 'f6',
+  0x40: 'f7', 0x41: 'f8', 0x42: 'f9', 0x43: 'f10', 0x44: 'f11', 0x45: 'f12',
+  0x49: 'insert', 0x4A: 'home', 0x4B: 'page_up', 0x4C: 'delete',
+  0x4D: 'end', 0x4E: 'page_down', 0x4F: 'arrow_right', 0x50: 'arrow_left',
+  0x51: 'arrow_down', 0x52: 'arrow_up',
+  // Numpad Enter shares the "enter" name with the main Return key, as in the
+  // Rust matcher (`Return | KpReturn`) and the Web matcher (`NumpadEnter`).
+  0x58: 'enter',
+};
+
+/// Map a [PhysicalKeyboardKey] to the canonical key name used in saved
 /// bindings, or `null` for keys we don't accept as shortcuts.
 ///
-/// Mirror of `event_to_key_name` in `src/keyboard/shortcuts.rs` and
-/// `logicalToKeyName` in `flutter/web/js/src/shortcut_matcher.ts` — keep
-/// the three in lockstep. Cross-language parity is enforced by:
-///   * `flutter/test/fixtures/supported_shortcut_keys.json` — the
-///     authoritative list of names this function must produce.
-///   * Dart `supported keys` test in `keyboard_shortcuts_test.dart` —
-///     asserts the (LogicalKeyboardKey → name) mapping covers the fixture.
-///   * Rust `supported_keys_match_fixture` test in `shortcuts.rs` — the
-///     Rust-side mirror against the same fixture.
-/// A drift in any of the three breaks one of the two tests.
-String? logicalKeyName(LogicalKeyboardKey k) {
-  // Singletons that map 1:1.
-  if (k == LogicalKeyboardKey.delete) return 'delete';
-  if (k == LogicalKeyboardKey.backspace) return 'backspace';
-  // Numpad Enter shares the "enter" name with the main Return key — matches
-  // the Rust matcher (`Return | KpReturn` → "enter") and matches user
-  // expectation that the two physical Enters are interchangeable.
-  if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
-    return 'enter';
-  }
-  if (k == LogicalKeyboardKey.tab) return 'tab';
-  if (k == LogicalKeyboardKey.space) return 'space';
-  if (k == LogicalKeyboardKey.arrowLeft) return 'arrow_left';
-  if (k == LogicalKeyboardKey.arrowRight) return 'arrow_right';
-  if (k == LogicalKeyboardKey.arrowUp) return 'arrow_up';
-  if (k == LogicalKeyboardKey.arrowDown) return 'arrow_down';
-  if (k == LogicalKeyboardKey.home) return 'home';
-  if (k == LogicalKeyboardKey.end) return 'end';
-  if (k == LogicalKeyboardKey.pageUp) return 'page_up';
-  if (k == LogicalKeyboardKey.pageDown) return 'page_down';
-  if (k == LogicalKeyboardKey.insert) return 'insert';
-
-  // Letter / digit / F-key tables. `LogicalKeyboardKey` constants are
-  // `static final` (not `const`), so the maps can't be `const` — but they
-  // initialize once per process and the lookup is O(1).
-  final letters = <LogicalKeyboardKey, String>{
-    LogicalKeyboardKey.keyA: 'a', LogicalKeyboardKey.keyB: 'b',
-    LogicalKeyboardKey.keyC: 'c', LogicalKeyboardKey.keyD: 'd',
-    LogicalKeyboardKey.keyE: 'e', LogicalKeyboardKey.keyF: 'f',
-    LogicalKeyboardKey.keyG: 'g', LogicalKeyboardKey.keyH: 'h',
-    LogicalKeyboardKey.keyI: 'i', LogicalKeyboardKey.keyJ: 'j',
-    LogicalKeyboardKey.keyK: 'k', LogicalKeyboardKey.keyL: 'l',
-    LogicalKeyboardKey.keyM: 'm', LogicalKeyboardKey.keyN: 'n',
-    LogicalKeyboardKey.keyO: 'o', LogicalKeyboardKey.keyP: 'p',
-    LogicalKeyboardKey.keyQ: 'q', LogicalKeyboardKey.keyR: 'r',
-    LogicalKeyboardKey.keyS: 's', LogicalKeyboardKey.keyT: 't',
-    LogicalKeyboardKey.keyU: 'u', LogicalKeyboardKey.keyV: 'v',
-    LogicalKeyboardKey.keyW: 'w', LogicalKeyboardKey.keyX: 'x',
-    LogicalKeyboardKey.keyY: 'y', LogicalKeyboardKey.keyZ: 'z',
-  };
-  final letter = letters[k];
-  if (letter != null) return letter;
-
-  final digits = <LogicalKeyboardKey, String>{
-    LogicalKeyboardKey.digit0: 'digit0',
-    LogicalKeyboardKey.digit1: 'digit1',
-    LogicalKeyboardKey.digit2: 'digit2',
-    LogicalKeyboardKey.digit3: 'digit3',
-    LogicalKeyboardKey.digit4: 'digit4',
-    LogicalKeyboardKey.digit5: 'digit5',
-    LogicalKeyboardKey.digit6: 'digit6',
-    LogicalKeyboardKey.digit7: 'digit7',
-    LogicalKeyboardKey.digit8: 'digit8',
-    LogicalKeyboardKey.digit9: 'digit9',
-  };
-  final digit = digits[k];
-  if (digit != null) return digit;
-
-  final fkeys = <LogicalKeyboardKey, String>{
-    LogicalKeyboardKey.f1: 'f1', LogicalKeyboardKey.f2: 'f2',
-    LogicalKeyboardKey.f3: 'f3', LogicalKeyboardKey.f4: 'f4',
-    LogicalKeyboardKey.f5: 'f5', LogicalKeyboardKey.f6: 'f6',
-    LogicalKeyboardKey.f7: 'f7', LogicalKeyboardKey.f8: 'f8',
-    LogicalKeyboardKey.f9: 'f9', LogicalKeyboardKey.f10: 'f10',
-    LogicalKeyboardKey.f11: 'f11', LogicalKeyboardKey.f12: 'f12',
-  };
-  return fkeys[k];
+/// Bindings name physical key positions (US layout names), whatever the
+/// active keyboard layout: the native matcher sees the key through its USB
+/// HID usage (`rdev::usb_hid_key_from_code` -> `event_to_key_name` in
+/// `src/keyboard/shortcuts.rs`) and the Web matcher through
+/// `KeyboardEvent.code` (`flutter/web/js/src/shortcut_matcher.ts`). Parity
+/// is enforced against `flutter/test/fixtures/shortcut_key_usb_hid.json` by
+/// a Dart test and the Rust `usb_hid_keys_match_fixture` test.
+String? physicalKeyName(PhysicalKeyboardKey k) {
+  final usage = k.usbHidUsage;
+  if (usage >> 16 != 0x07) return null;
+  return _kUsbHidKeyNames[usage & 0xFFFF];
 }
+
+/// The key name a [KeyEvent] records or matches as.
+String? shortcutKeyNameForEvent(KeyEvent e) => physicalKeyName(e.physicalKey);
 
 /// Bundle of "is this shortcut available on the current platform" flags.
 ///

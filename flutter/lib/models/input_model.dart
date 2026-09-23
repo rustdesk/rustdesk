@@ -935,7 +935,7 @@ class InputModel {
     if (!ShortcutModel.isEnabled() || ShortcutModel.isPassThrough()) {
       return false;
     }
-    final keyName = logicalKeyName(e.logicalKey);
+    final keyName = shortcutKeyNameForEvent(e);
     if (keyName == null) return false;
     final mods = canonicalShortcutModsForSave(_webFlutterShortcutMods());
     final action = _matchWebFlutterShortcut(keyName, mods);
