@@ -167,80 +167,16 @@ pub(crate) fn is_valid_bus_id(bus_id: &str) -> bool {
     is_number(bus) && ports.split('.').all(is_number)
 }
 
-/// A per-call random value with no dependency on the `rand` crate: each
-/// `RandomState` is seeded from the OS RNG, so hashing anything through it
-/// yields an unpredictable `u64`. Used to make the temp file name in
-/// `usb_attach_privileged` unguessable.
-fn random_nonce() -> u64 {
-    use std::hash::{BuildHasher, Hasher};
-    std::collections::hash_map::RandomState::new()
-        .build_hasher()
-        .finish()
-}
-
-/// Blocking; call via `spawn_blocking`. Two problems in one: `usbip attach`
-/// needs root and writes its attach record (`/var/run/vhci_hcd/...`) as
-/// root too, so a follow-up unprivileged `usbip port` can't `fopen`/read
-/// that record back to report the remote bus id -- query it as part of the
-/// *same* privileged command instead (via a temp file `chmod`ed readable
-/// afterwards) rather than a second sudo prompt. Separately, even run right
-/// after as root, the kernel's vhci state can lag a moment behind `usbip
-/// attach` returning success, so the retry loop is shell-side too (same
-/// privileged session) rather than a second `run_cmds_privileged` call.
+/// Blocking; call via `spawn_blocking`. Attaches through
+/// `platform::run_usbip_attach_privileged` and finds the resulting vhci port.
 fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
     if !is_valid_bus_id(bus_id) {
         log::error!("usb attach: rejected malformed bus id {:?}", bus_id);
         return None;
     }
-    // Unguessable suffix plus `set -C` (noclobber) on the first write below:
-    // a world-writable /tmp lets another local user pre-plant a symlink at a
-    // predictable path, which a root `>` redirect would otherwise follow and
-    // overwrite. Noclobber makes that first redirect fail instead of
-    // following an existing path (symlink or not); once it has created the
-    // file itself, /tmp's sticky bit stops anyone else from swapping it out
-    // from under the retry loop's later overwrites.
-    let tmp_path = std::env::temp_dir().join(format!(
-        "rustdesk-usbip-port-{}-{}-{:016x}.txt",
-        std::process::id(),
-        bus_id,
-        random_nonce()
-    ));
-    let ok = crate::platform::run_cmds_privileged(&format!(
-        "set -C && : > {0} && set +C && \
-         usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
-         for i in 1 2 3 4 5 6 7 8 9 10; do \
-           usbip port > {0} 2>&1; \
-           grep -q -- '127.0.0.1:{port}/{bus_id}$' {0} && break; \
-           sleep 0.2; \
-         done && chmod 644 {0}",
-        tmp_path.display()
-    ));
-    log::info!(
-        "usb attach: privileged attach+port command for {} ok={} tmp={}",
-        bus_id,
-        ok,
-        tmp_path.display()
-    );
-    let local_port = if ok {
-        match std::fs::read_to_string(&tmp_path) {
-            Ok(output) => {
-                log::info!("usb attach: `usbip port` output for {}:\n{}", bus_id, output);
-                parse_attached_port(&output, port, bus_id)
-            }
-            Err(err) => {
-                log::error!(
-                    "usb attach: failed to read {}: {}",
-                    tmp_path.display(),
-                    err
-                );
-                None
-            }
-        }
-    } else {
-        None
-    };
-    let _ = std::fs::remove_file(&tmp_path);
-    local_port
+    let output = crate::platform::run_usbip_attach_privileged(port, bus_id)?;
+    log::info!("usb attach: `usbip port` output for {}:\n{}", bus_id, output);
+    parse_attached_port(&output, port, bus_id)
 }
 
 /// The vhci port importing `bus_id` through our listener on `listener_port`.
