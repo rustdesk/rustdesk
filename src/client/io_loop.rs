@@ -2594,8 +2594,8 @@ impl<T: InvokeUiSession> Remote<T> {
     fn set_cursor_data_by_content(&mut self, cd: CursorData) {
         let peer_id = cd.id;
         let id = CursorDedupe::name(&cd);
-        if self.cursor_dedupe.is_shown(id) {
-            self.cursor_dedupe.shown(peer_id, id);
+        if self.cursor_dedupe.has_decoded(id) {
+            self.cursor_dedupe.record(peer_id, id);
             self.handler.set_cursor_id(id.to_string());
             return;
         }
@@ -2604,7 +2604,7 @@ impl<T: InvokeUiSession> Remote<T> {
         match decode_cursor_data(cd) {
             Ok(mut cd) => {
                 cd.id = id;
-                self.cursor_dedupe.shown(peer_id, id);
+                self.cursor_dedupe.record(peer_id, id);
                 #[cfg(feature = "flutter")]
                 self.keep_cursor_shape(cursor_shape(id, &cd, &compressed));
                 self.handler.set_cursor_data(cd);
@@ -2683,7 +2683,8 @@ fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
 #[derive(Default)]
 struct CursorDedupe {
     ids: HashMap<u64, u64>,
-    shown: HashSet<u64>,
+    // The shapes given to the UI, by content id: whether one that arrives needs decoding.
+    decoded: HashSet<u64>,
 }
 
 impl CursorDedupe {
@@ -2697,15 +2698,15 @@ impl CursorDedupe {
         self.ids.get(&peer_id).copied().unwrap_or(peer_id)
     }
 
-    fn is_shown(&self, id: u64) -> bool {
-        self.shown.contains(&id)
+    fn has_decoded(&self, id: u64) -> bool {
+        self.decoded.contains(&id)
     }
 
-    /// Names the handle once its shape decoded, or was shown before: a shape that did not
-    /// decode leaves nothing, and takes no handle from one that did.
-    fn shown(&mut self, peer_id: u64, id: u64) {
+    /// Names the handle once its shape decoded, now or before: a shape that did not decode
+    /// leaves nothing, and takes no handle from one that did.
+    fn record(&mut self, peer_id: u64, id: u64) {
         self.ids.insert(peer_id, id);
-        self.shown.insert(id);
+        self.decoded.insert(id);
     }
 }
 
@@ -2851,13 +2852,13 @@ mod cursor_dedupe_tests {
     fn a_shape_sent_under_a_new_handle_keeps_its_id() {
         let mut dedupe = CursorDedupe::default();
         let first = CursorDedupe::name(&shape(1, 0, b"arrow"));
-        assert!(!dedupe.is_shown(first));
-        dedupe.shown(1, first);
+        assert!(!dedupe.has_decoded(first));
+        dedupe.record(1, first);
 
         let again = CursorDedupe::name(&shape(2, 0, b"arrow"));
         assert_eq!(again, first);
-        assert!(dedupe.is_shown(again));
-        dedupe.shown(2, again);
+        assert!(dedupe.has_decoded(again));
+        dedupe.record(2, again);
         assert_eq!(dedupe.id(2), first);
         assert_eq!(dedupe.id(1), first);
     }
@@ -2872,9 +2873,9 @@ mod cursor_dedupe_tests {
     #[test]
     fn a_reused_handle_names_its_latest_shape() {
         let mut dedupe = CursorDedupe::default();
-        dedupe.shown(1, CursorDedupe::name(&shape(1, 0, b"arrow")));
+        dedupe.record(1, CursorDedupe::name(&shape(1, 0, b"arrow")));
         let beam = CursorDedupe::name(&shape(1, 0, b"beam"));
-        dedupe.shown(1, beam);
+        dedupe.record(1, beam);
         assert_eq!(dedupe.id(1), beam);
     }
 
