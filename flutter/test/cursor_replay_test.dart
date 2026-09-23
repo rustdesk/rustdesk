@@ -317,6 +317,17 @@ void main() {
     expect(other.cursorModel.cachedKeys.single, isNot(isIn(deleted)));
   });
 
+  test('a shape given as a view into a larger buffer is read from the view',
+      () async {
+    final pixels = _pixels(8, 3);
+    final padded = Uint8List(16 + pixels.length)
+      ..setRange(16, 16 + pixels.length, pixels);
+    await ffi.ffiModel
+        .handleCursorData('1', 0, 0, 8, 8, Uint8List.sublistView(padded, 16));
+    final p = ffi.cursorModel.cache!.image.getPixel(0, 0);
+    expect([p.r, p.g, p.b, p.a], [3, 4, 5, 6]);
+  });
+
   test('a shape is decoded from its pixels as they arrive', () async {
     await _feed(ffi, '5');
     expect(ffi.cursorModel.cache?.id, '5');

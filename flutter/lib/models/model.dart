@@ -3549,7 +3549,11 @@ class CursorModel with ChangeNotifier {
   ) async {
     Uint8List? data;
     img2.Image imgOrigin = img2.Image.fromBytes(
-        width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
+        width: w,
+        height: h,
+        bytes: rgba.buffer,
+        bytesOffset: rgba.offsetInBytes,
+        order: img2.ChannelOrder.rgba);
     if (isWindows) {
       data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
