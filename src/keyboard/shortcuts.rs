@@ -68,7 +68,6 @@ pub mod action_id {
     pub const IMAGE_QUALITY_BALANCED: &str    = "image_quality_balanced";
     pub const IMAGE_QUALITY_LOW: &str         = "image_quality_low";
     pub const SEND_CLIPBOARD_KEYSTROKES: &str = "send_clipboard_keystrokes";
-    pub const TOGGLE_INPUT_SOURCE: &str       = "toggle_input_source";
     pub const SWITCH_TAB_NEXT: &str           = "switch_tab_next";
     pub const SWITCH_TAB_PREV: &str           = "switch_tab_prev";
     pub const TOGGLE_VOICE_CALL: &str         = "toggle_voice_call";

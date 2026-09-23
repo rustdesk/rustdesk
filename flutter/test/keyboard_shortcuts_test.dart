@@ -18,7 +18,6 @@ ShortcutPlatformCapabilities capabilities({
   bool includeResetCanvasShortcut = true,
   bool includePinToolbarShortcut = true,
   bool includeViewModeShortcut = true,
-  bool includeInputSourceShortcut = true,
   bool includeVoiceCallShortcut = true,
 }) {
   return ShortcutPlatformCapabilities(
@@ -32,7 +31,6 @@ ShortcutPlatformCapabilities capabilities({
     includeResetCanvasShortcut: includeResetCanvasShortcut,
     includePinToolbarShortcut: includePinToolbarShortcut,
     includeViewModeShortcut: includeViewModeShortcut,
-    includeInputSourceShortcut: includeInputSourceShortcut,
     includeVoiceCallShortcut: includeVoiceCallShortcut,
   );
 }
@@ -197,7 +195,6 @@ void main() {
         includeResetCanvasShortcut: false,
         includePinToolbarShortcut: false,
         includeViewModeShortcut: false,
-        includeInputSourceShortcut: false,
         includeVoiceCallShortcut: false,
       ),
     );
@@ -248,7 +245,6 @@ void main() {
         includeResetCanvasShortcut: true,
         includePinToolbarShortcut: false,
         includeViewModeShortcut: false,
-        includeInputSourceShortcut: false,
         includeVoiceCallShortcut: false,
       ),
     );
@@ -358,7 +354,6 @@ void main() {
       '  $kShortcutActionKeyboardModeLegacy',
       '  $kShortcutActionKeyboardModeMap',
       '  $kShortcutActionKeyboardModeTranslate',
-      kShortcutActionToggleInputSource,
       kShortcutActionToggleViewOnly,
       kShortcutActionToggleShowMyCursor,
       kShortcutActionToggleSwapCtrlCmd,
@@ -394,7 +389,6 @@ void main() {
         includeResetCanvasShortcut: false,
         includePinToolbarShortcut: false,
         includeViewModeShortcut: false,
-        includeInputSourceShortcut: false,
         includeVoiceCallShortcut: false,
       ),
     );
@@ -503,8 +497,13 @@ void main() {
     // legacy IDs (toggle_audio, view_mode_shrink/stretch, view_mode_1_to_1)
     // were renamed: their replacements are kShortcutActionToggleMute and
     // kShortcutActionViewModeOriginal/Adaptive/Custom.
+    //
+    // `toggle_input_source` was removed on purpose: it switches the key
+    // capture backend between key down and key up, so the matcher that
+    // consumed the press never sees the repeats and the release.
     const knownRemoved = [
       'toggle_audio',
+      'toggle_input_source',
       'view_mode_1_to_1',
       'view_mode_shrink',
       'view_mode_stretch',

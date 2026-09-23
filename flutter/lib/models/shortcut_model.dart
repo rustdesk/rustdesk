@@ -203,9 +203,6 @@ class ShortcutModel {
   ///     `recordingModel.toggle()`; Web has no implementation.
   ///   * Reset Canvas: only the mobile toolbar builds the menu entry
   ///     (`isDefaultConn && isMobile` in `toolbarControls`).
-  ///   * Input Source: Web only ships a single source so toggling is a
-  ///     no-op; the toolbar menu hides itself when fewer than 2 sources are
-  ///     advertised.
   ///   * Voice Call: Web bridge throws `UnimplementedError` for both
   ///     `sessionRequestVoiceCall` and `sessionCloseVoiceCall`.
   static ShortcutPlatformCapabilities currentPlatformCapabilities() {
@@ -221,7 +218,6 @@ class ShortcutModel {
       includeResetCanvasShortcut: isMobile,
       includePinToolbarShortcut: desktopLayout,
       includeViewModeShortcut: desktopLayout,
-      includeInputSourceShortcut: !isWeb,
       includeVoiceCallShortcut: !isWeb,
     );
   }
@@ -603,38 +599,6 @@ void registerSessionShortcutActions(
   if (isDesktop && !isWeb) {
     ffi.shortcutModel.register(kShortcutActionToggleRelativeMouseMode, () {
       ffi.inputModel.toggleRelativeMouseMode();
-    });
-  }
-
-  // Toggle Input Source — flips between the available keyboard-event capture
-  // backends (e.g. JS vs Flutter on desktop). Mirrors the radio menu in
-  // remote_toolbar.dart::inputSource(); when fewer than 2 sources are
-  // available the menu hides itself, so this handler is a no-op too.
-  // Useful for accessibility: screen-reader users sometimes need to swap
-  // sources to regain control of the local keyboard (discussion #1933).
-  // Web only ships a single source, so we don't register on web.
-  if (!isWeb) {
-    ffi.shortcutModel.register(kShortcutActionToggleInputSource, () async {
-      final raw = bind.mainSupportedInputSource();
-      if (raw.isEmpty) return;
-      final List<dynamic> list;
-      try {
-        list = jsonDecode(raw) as List<dynamic>;
-      } catch (_) {
-        return;
-      }
-      if (list.length < 2) return;
-      final ids = list
-          .map((e) => (e is List && e.isNotEmpty) ? e[0] as String : '')
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (ids.length < 2) return;
-      final current = stateGlobal.getInputSource();
-      final idx = ids.indexOf(current);
-      final next = ids[(idx < 0 ? 0 : idx + 1) % ids.length];
-      await stateGlobal.setInputSource(sessionId, next);
-      await ffi.ffiModel.checkDesktopKeyboardMode();
-      await ffi.inputModel.updateKeyboardMode();
     });
   }
 }

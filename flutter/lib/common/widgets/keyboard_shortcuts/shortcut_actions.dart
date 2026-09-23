@@ -148,8 +148,6 @@ final List<KeyboardShortcutActionGroup> kKeyboardShortcutActionGroups = [
       KeyboardShortcutActionEntry(
           kShortcutActionKeyboardModeTranslate, 'Translate mode'),
     ]),
-    KeyboardShortcutActionEntry(
-        kShortcutActionToggleInputSource, 'Toggle input source'),
     KeyboardShortcutActionEntry(kShortcutActionToggleViewOnly, 'View Mode'),
     KeyboardShortcutActionEntry(
         kShortcutActionToggleShowMyCursor, 'Show my cursor'),
@@ -256,10 +254,6 @@ List<KeyboardShortcutActionGroup> filterKeyboardShortcutActionGroupsForPlatform(
         (id == kShortcutActionViewModeOriginal ||
             id == kShortcutActionViewModeAdaptive ||
             id == kShortcutActionViewModeCustom)) {
-      return false;
-    }
-    if (!cap.includeInputSourceShortcut &&
-        id == kShortcutActionToggleInputSource) {
       return false;
     }
     if (!cap.includeVoiceCallShortcut && id == kShortcutActionToggleVoiceCall) {

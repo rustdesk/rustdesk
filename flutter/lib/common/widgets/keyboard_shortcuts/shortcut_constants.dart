@@ -61,7 +61,6 @@ const kShortcutActionImageQualityBest = 'image_quality_best';
 const kShortcutActionImageQualityBalanced = 'image_quality_balanced';
 const kShortcutActionImageQualityLow = 'image_quality_low';
 const kShortcutActionSendClipboardKeystrokes = 'send_clipboard_keystrokes';
-const kShortcutActionToggleInputSource = 'toggle_input_source';
 const kShortcutActionToggleVoiceCall = 'toggle_voice_call';
 const kShortcutActionToggleViewOnly = 'toggle_view_only';
 
