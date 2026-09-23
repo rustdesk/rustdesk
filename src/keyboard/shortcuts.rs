@@ -343,12 +343,16 @@ lazy_static::lazy_static! {
 /// that consumed the press also sees its repeats and its release. The next
 /// session may route its keys through the other matcher (Flutter's legacy
 /// path on Linux), which never saw the press. Mirrors
-/// `kShortcutActionsRunOnKeyUp` in `shortcut_constants.dart`.
+/// `kShortcutActionsRunOnKeyUp` in `shortcut_constants.dart`; both are
+/// checked against `flutter/test/fixtures/key_up_shortcut_actions.json`.
+const RELEASE_ACTION_IDS: &[&str] = &[
+    action_id::CLOSE_TAB,
+    action_id::SWITCH_TAB_NEXT,
+    action_id::SWITCH_TAB_PREV,
+];
+
 pub fn runs_on_release(action_id: &str) -> bool {
-    matches!(
-        action_id,
-        action_id::CLOSE_TAB | action_id::SWITCH_TAB_NEXT | action_id::SWITCH_TAB_PREV
-    )
+    RELEASE_ACTION_IDS.contains(&action_id)
 }
 
 /// Forget the modifiers a session released on its remote and the actions it
@@ -1235,6 +1239,29 @@ mod tests {
             |_| panic!("view-only reset must not replay old modifiers")
         ));
         release_chord(chord);
+    }
+
+    /// The Dart matcher keeps the same list (`kShortcutActionsRunOnKeyUp`);
+    /// the fixture is the shared source of truth.
+    #[test]
+    fn key_up_actions_match_fixture() {
+        use std::collections::BTreeSet;
+
+        let fixture: Vec<String> = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/key_up_shortcut_actions.json"
+        ))
+        .expect("parse fixture");
+        let expected: BTreeSet<&str> = fixture.iter().map(String::as_str).collect();
+        let actual: BTreeSet<&str> = RELEASE_ACTION_IDS.iter().copied().collect();
+        assert_eq!(
+            actual, expected,
+            "runs_on_release drifted from key_up_shortcut_actions.json — update \
+             shortcuts.rs, the fixture, and Dart kShortcutActionsRunOnKeyUp together"
+        );
+        for id in &fixture {
+            assert!(runs_on_release(id));
+        }
+        assert!(!runs_on_release(action_id::SCREENSHOT));
     }
 
     /// Close tab and tab switching move focus away before the key is

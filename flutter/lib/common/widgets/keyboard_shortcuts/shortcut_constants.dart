@@ -23,7 +23,8 @@ const kShortcutActionSwitchTabPrev = 'switch_tab_prev';
 /// that consumed the press also sees its repeats and its release. On Linux a
 /// legacy-mode session matches in Dart while a map-mode session matches in
 /// Rust, and neither knows the other's fired keys. Mirrors `runs_on_release`
-/// in `src/keyboard/shortcuts.rs`.
+/// in `src/keyboard/shortcuts.rs`; both are checked against
+/// `flutter/test/fixtures/key_up_shortcut_actions.json`.
 const kShortcutActionsRunOnKeyUp = {
   kShortcutActionCloseTab,
   kShortcutActionSwitchTabNext,

@@ -509,6 +509,25 @@ void main() {
     expect(shortcutKeyNameForEvent(qwertzZ), 'y');
   });
 
+  test('kShortcutActionsRunOnKeyUp matches the fixture and names real actions',
+      () {
+    // Rust has a mirror test against the same file
+    // (`key_up_actions_match_fixture` in src/keyboard/shortcuts.rs).
+    final fixture = (jsonDecode(
+                File('test/fixtures/key_up_shortcut_actions.json')
+                    .readAsStringSync()) as List<dynamic>)
+        .cast<String>()
+        .toSet();
+    expect(kShortcutActionsRunOnKeyUp, equals(fixture),
+        reason: 'kShortcutActionsRunOnKeyUp drifted from the fixture — update '
+            'shortcut_constants.dart, the fixture, and Rust runs_on_release '
+            'together');
+    final actions = idSet(kKeyboardShortcutActionGroups);
+    for (final id in kShortcutActionsRunOnKeyUp) {
+      expect(actions, contains(id), reason: '"$id" is not a configurable action');
+    }
+  });
+
   test('configurable shortcut list does not include known-removed action IDs',
       () {
     // These IDs were briefly defined without handlers (a "ghost action"
