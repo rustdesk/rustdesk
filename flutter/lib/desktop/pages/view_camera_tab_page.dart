@@ -481,7 +481,7 @@ class _ViewCameraTabPageState extends State<ViewCameraTabPage> {
         final viewCameraPage = tabController.state.value.tabs
             .firstWhere((tab) => tab.key == id)
             .page as ViewCameraPage;
-        returnValue = await viewCameraPage.ffi.ffiModel.cachedPeerDataString();
+        returnValue = viewCameraPage.ffi.ffiModel.cachedPeerData.toString();
       } catch (e) {
         debugPrint('Failed to get cached session data: $e');
       }

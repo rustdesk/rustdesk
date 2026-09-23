@@ -75,7 +75,43 @@ class EventToUI_Cursor implements EventToUI {
   final Uint8List colors;
 }
 
+class CursorShape {
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+
+  const CursorShape({
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+}
+
 class RustdeskImpl {
+  // Each request carries its own callback, since several may be in flight.
+  Future<CursorShape?> sessionGetCursorShape(
+      {required UuidValue sessionId, required String id, dynamic hint}) {
+    final completer = Completer<CursorShape?>();
+    js.context.callMethod('getCursorShape', [
+      id,
+      (int hotx, int hoty, int width, int height, Uint8List? colors) {
+        completer.complete(colors == null
+            ? null
+            : CursorShape(
+                hotx: hotx,
+                hoty: hoty,
+                width: width,
+                height: height,
+                colors: colors));
+      }
+    ]);
+    return completer.future;
+  }
+
   Future<void> stopGlobalEventStream({required String appType, dynamic hint}) {
     throw UnimplementedError("stopGlobalEventStream");
   }

@@ -55,37 +55,11 @@ final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
 const _restartReconnectSilentDelaySecs = 5;
 
-/// A cursor shape as the core delivered it, kept to replay in a window a tab moves to.
-class CachedCursor {
-  final int hotx;
-  final int hoty;
-  final int width;
-  final int height;
-  final Uint8List colors;
-
-  CachedCursor(this.hotx, this.hoty, this.width, this.height, this.colors);
-
-  Map<String, dynamic> toJson() => {
-        'hotx': hotx,
-        'hoty': hoty,
-        'width': width,
-        'height': height,
-        'colors': base64Encode(colors),
-      };
-
-  static CachedCursor fromJson(Map<String, dynamic> map) => CachedCursor(
-      map['hotx'],
-      map['hoty'],
-      map['width'],
-      map['height'],
-      base64Decode(map['colors']));
-}
-
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
-  // Filled only while a tab moves: the shapes live in CursorModel as ui.Images.
-  Map<String, CachedCursor> cursors = {};
+  // No shapes: the core keeps them for the session, and the window a tab moves to asks it
+  // for the one in use.
   Map<String, dynamic> lastCursorId = {};
   Map<String, bool> permissions = {};
 
@@ -100,7 +74,6 @@ class CachedPeerData {
     return jsonEncode({
       'updatePrivacyMode': updatePrivacyMode,
       'peerInfo': peerInfo,
-      'cursors': cursors,
       'lastCursorId': lastCursorId,
       'permissions': permissions,
       'secure': secure,
@@ -115,9 +88,6 @@ class CachedPeerData {
       final data = CachedPeerData();
       data.updatePrivacyMode = map['updatePrivacyMode'];
       data.peerInfo = map['peerInfo'];
-      map['cursors'].forEach((id, cursor) {
-        data.cursors[id] = CachedCursor.fromJson(cursor);
-      });
       data.lastCursorId = map['lastCursorId'];
       map['permissions'].forEach((key, value) {
         data.permissions[key] = value;
@@ -350,11 +320,6 @@ class FfiModel with ChangeNotifier {
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
-    for (final e in data.cursors.entries) {
-      final c = e.value;
-      await handleCursorData(
-          e.key, c.hotx, c.hoty, c.width, c.height, c.colors);
-    }
     if (data.lastCursorId.isNotEmpty) {
       updateLastCursorId(data.lastCursorId);
       handleCursorId(data.lastCursorId);
@@ -1685,18 +1650,6 @@ class FfiModel with ChangeNotifier {
   handleCursorId(Map<String, dynamic> evt) {
     cachedPeerData.lastCursorId = evt;
     parent.target?.cursorModel.updateCursorId(evt);
-  }
-
-  /// The session state a moved tab rebuilds from, with every cursor shape's pixels.
-  Future<String> cachedPeerDataString() async {
-    final cursorModel = parent.target?.cursorModel;
-    cachedPeerData.cursors =
-        cursorModel == null ? {} : await cursorModel.shapesToReplay();
-    try {
-      return cachedPeerData.toString();
-    } finally {
-      cachedPeerData.cursors = {};
-    }
   }
 
   /// A shape arriving is the shape in use, as a cursor_id is.
@@ -3222,7 +3175,14 @@ class CursorModel with ChangeNotifier {
 
   get lastIsBlocked => _lastIsBlocked;
 
-  ui.Image? get image => _image;
+  /// Asks the core for the shape in use when it has to be painted and was let go.
+  ui.Image? get image {
+    if (_image == null && _cache != null) {
+      restorePixels(_id);
+    }
+    return _image;
+  }
+
   CursorData? get cache => _cache;
 
   double get x => _x - _displayOriginX;
@@ -3551,6 +3511,7 @@ class CursorModel with ChangeNotifier {
 
   updateCursorData(String id, int hotxInt, int hotyInt, int width, int height,
       Uint8List rgba) async {
+    _unavailable.remove(id);
     final hotx = hotxInt.toDouble();
     final hoty = hotyInt.toDouble();
     final image = await img.decodeImageFromPixels(
@@ -3668,49 +3629,38 @@ class CursorModel with ChangeNotifier {
     _replacedKeys.clear();
   }
 
-  /// Reads a shape's pixels back from its ui.Image, for a raster its native cursors lack.
+  /// The core keeps every shape the peer sent, compressed; see `Session::cursor_shapes`.
+  @protected
+  Future<CursorShape?> fetchCursorShape(String id) {
+    final ffi = parent.target;
+    if (ffi == null) return Future.value(null);
+    return bind.sessionGetCursorShape(sessionId: ffi.sessionId, id: id);
+  }
+
+  // Shapes the core could not give, not asked for again until the peer sends them.
+  final _unavailable = <String>{};
+
+  /// Decodes the shape in use again from the core, for a raster its native cursor lacks, for
+  /// painting it, or for a window a tab moved to.
   void restorePixels(String id) {
-    final shape = _images[id];
-    if (shape == null || !_restoring.add(id)) return;
+    if (id != _id || _unavailable.contains(id) || !_restoring.add(id)) return;
     () async {
       try {
-        final bytes =
-            await shape.item1.toByteData(format: ui.ImageByteFormat.rawRgba);
-        final cache = _cacheMap[id];
-        if (bytes == null ||
-            cache == null ||
-            cache.hasPixels ||
-            _images[id] != shape) {
-          return;
-        }
-        if (await _updateCache(bytes.buffer.asUint8List(), shape.item1, id,
-            shape.item2, shape.item3, cache.width, cache.height)) {
-          _updateCurData();
+        final shape = await fetchCursorShape(id);
+        if (shape == null) {
+          _unavailable.add(id);
+          debugPrint('Cursor $id is not kept by the core');
+        } else if (id == _id) {
+          await updateCursorData(id, shape.hotx, shape.hoty, shape.width,
+              shape.height, shape.colors);
         }
       } catch (e) {
-        debugPrint('Failed to read cursor $id back: $e');
+        _unavailable.add(id);
+        debugPrint('Failed to fetch cursor $id: $e');
       } finally {
         _restoring.remove(id);
       }
     }();
-  }
-
-  /// Every shape's pixels, read back from its ui.Image for the window a tab moves to.
-  Future<Map<String, CachedCursor>> shapesToReplay() async {
-    final shapes = <String, CachedCursor>{};
-    for (final e in [..._images.entries]) {
-      final image = e.value.item1;
-      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      if (bytes != null) {
-        shapes[e.key] = CachedCursor(
-            e.value.item2.toInt(),
-            e.value.item3.toInt(),
-            image.width,
-            image.height,
-            bytes.buffer.asUint8List());
-      }
-    }
-    return shapes;
   }
 
   bool _updateCurData() {
@@ -3721,27 +3671,29 @@ class CursorModel with ChangeNotifier {
       }
     }
     final tmp = _images[_id];
+    _image = tmp?.item1;
     if (tmp != null) {
-      _image = tmp.item1;
       _hotx = tmp.item2;
       _hoty = tmp.item3;
-      try {
-        // may throw exception, because the listener maybe already dispose
-        notifyListeners();
-      } catch (e) {
-        debugPrint(
-            'WARNING: updateCursorId $_id, without notifyListeners(). $e');
-      }
-      return true;
-    } else {
-      return false;
     }
+    // Only the shape in use keeps an image; the core has the others.
+    _images.removeWhere((id, shape) {
+      if (id == _id) return false;
+      shape.item1.dispose();
+      return true;
+    });
+    try {
+      // may throw exception, because the listener maybe already dispose
+      notifyListeners();
+    } catch (e) {
+      debugPrint('WARNING: updateCursorId $_id, without notifyListeners(). $e');
+    }
+    return tmp != null || _cache != null;
   }
 
   updateCursorId(Map<String, dynamic> evt) {
     if (!_updateCurData()) {
-      debugPrint(
-          'WARNING: updateCursorId $_id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
+      restorePixels(_id);
     }
   }
 
@@ -3794,6 +3746,7 @@ class CursorModel with ChangeNotifier {
     _clearCache();
     _cache = null;
     _cacheMap.clear();
+    _unavailable.clear();
   }
 
   _clearCache() {

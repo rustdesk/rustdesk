@@ -518,7 +518,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         remotePage = tabController.state.value.tabs
             .firstWhere((tab) => tab.key == id)
             .page as RemotePage;
-        returnValue = await remotePage.ffi.ffiModel.cachedPeerDataString();
+        returnValue = remotePage.ffi.ffiModel.cachedPeerData.toString();
       } catch (e) {
         debugPrint('Failed to get cached session data: $e');
       }

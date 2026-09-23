@@ -1,18 +1,29 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/generated_bridge.dart' show CursorShape;
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/native/custom_cursor.dart';
-import 'package:flutter_hbb/utils/image.dart' as img;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
+
+/// Stands in for the core, which keeps every shape the peer sent.
+class _Cursor extends CursorModel {
+  _Cursor(FFI ffi) : super(WeakReference(ffi));
+  final core = <String, CursorShape>{};
+  final fetched = <String>[];
+  @override
+  Future<CursorShape?> fetchCursorShape(String id) async {
+    fetched.add(id);
+    return core[id];
+  }
+}
 
 class _FFI extends Fake implements FFI {
   _FFI() {
     ffiModel = FfiModel(WeakReference(this));
-    cursorModel = CursorModel(WeakReference(this));
+    cursorModel = _Cursor(this);
   }
   @override
   final SessionID sessionId = const Uuid().v4obj();
@@ -20,13 +31,19 @@ class _FFI extends Fake implements FFI {
   late final FfiModel ffiModel;
   @override
   late final CursorModel cursorModel;
+  _Cursor get cursor => cursorModel as _Cursor;
 }
 
 Uint8List _pixels(int size, int seed) =>
     Uint8List.fromList(List.generate(size * size * 4, (i) => (i + seed) % 256));
 
-Future<void> _feed(_FFI ffi, String id, {int size = 8, int seed = 0}) =>
-    ffi.ffiModel.handleCursorData(id, 0, 0, size, size, _pixels(size, seed));
+/// A shape as the core delivers it, and keeps it.
+Future<void> _feed(_FFI ffi, String id, {int size = 8, int seed = 0}) {
+  final pixels = _pixels(size, seed);
+  ffi.cursor.core[id] =
+      CursorShape(hotx: 0, hoty: 0, width: size, height: size, colors: pixels);
+  return ffi.ffiModel.handleCursorData(id, 0, 0, size, size, pixels);
+}
 
 void _select(_FFI ffi, String id) {
   final evt = {'id': id};
@@ -70,23 +87,19 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
-  test('a shape sent again after a reconnect is kept once', () async {
+  test('only the shape in use keeps an image, and nothing else keeps pixels',
+      () async {
     for (var round = 0; round < 3; round++) {
       await _feed(ffi, '1', seed: 1);
       await _feed(ffi, '2', seed: 2);
+      await _feed(ffi, '3', seed: 3);
     }
-    expect(ffi.cursorModel.shapeIds, ['1', '2']);
-  });
-
-  test('only the shape in use keeps its pixels besides its image', () async {
-    await _feed(ffi, '1');
-    await _feed(ffi, '2');
-    await _feed(ffi, '3');
+    expect(ffi.cursorModel.shapeIds, ['3']);
     for (final id in ['1', '2']) {
       expect(ffi.cursorModel.cachedShape(id)!.hasPixels, isFalse);
       expect(ffi.cursorModel.cachedShape(id)!.data, isNull);
     }
-    expect(ffi.cursorModel.cachedShape('3')!.hasPixels, isTrue);
+    expect(ffi.cursor.fetched, isEmpty);
   });
 
   test('a shape shown before is shown again without its pixels', () async {
@@ -107,10 +120,33 @@ void main() {
         isNot(MouseCursor.defer));
     await _settle();
     expect(registered.length, 2, reason: 'its native cursor is still there');
+    expect(ffi.cursor.fetched, isEmpty, reason: 'nothing had to be decoded');
   });
 
-  test('a shape shown at a new scale gets its pixels back from its image',
-      () async {
+  test('a shape painted again is decoded again from the core', () async {
+    await _feed(ffi, '1', size: 16);
+    await _feed(ffi, '2');
+    _select(ffi, '1');
+    expect(ffi.cursorModel.image, isNull);
+    await _settle();
+    expect(ffi.cursor.fetched, ['1']);
+    expect(ffi.cursorModel.image?.width, 16);
+    expect(ffi.cursorModel.shapeIds, ['1']);
+  });
+
+  test('a shape the core does not have is asked for once', () async {
+    await _feed(ffi, '1');
+    await _feed(ffi, '2');
+    ffi.cursor.core.remove('1');
+    _select(ffi, '1');
+    for (var i = 0; i < 5; i++) {
+      ffi.cursorModel.image;
+      await _settle();
+    }
+    expect(ffi.cursor.fetched, ['1']);
+  });
+
+  test('a shape shown at a new scale is decoded again from the core', () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
     await _feed(ffi, '2', size: 32);
@@ -125,39 +161,24 @@ void main() {
     expect((cursor.cache!.rasterWidth, cursor.cache!.rasterHeight), (16, 16));
   });
 
-  test('a shape read back from its image is the pixels it came as', () async {
-    // Includes channels above alpha, as a straight-alpha peer sends them.
-    final pixels = _pixels(16, 3);
-    final image = (await img.decodeImageFromPixels(
-        pixels, 16, 16, ui.PixelFormat.rgba8888))!;
-    final back = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    image.dispose();
-    expect(back!.buffer.asUint8List(), pixels);
-  });
+  test('a moved tab carries the id in use, and its window asks the core',
+      () async {
+    await _feed(ffi, '1', size: 16);
+    await _feed(ffi, '2');
+    await _feed(ffi, '1', size: 16);
+    final carried = ffi.ffiModel.cachedPeerData.toString();
+    expect(carried, isNot(contains('colors')));
+    expect(CachedPeerData.fromString(carried)!.lastCursorId['id'], '1',
+        reason: 'a shape arriving is the shape in use');
 
-  test('a moved tab carries the pixels as they are', () async {
-    final pixels = _pixels(16, 7);
-    await ffi.ffiModel.handleCursorData('9', 3, 4, 16, 16, pixels);
-    final carried = await ffi.ffiModel.cachedPeerDataString();
-    expect(ffi.ffiModel.cachedPeerData.cursors, isEmpty,
-        reason: 'the pixels read back for the move are not kept');
-    expect(carried.length, lessThan(pixels.length * 2),
-        reason: 'the pixels travel as base64, not as a list of numbers');
-
-    final cursor = CachedPeerData.fromString(carried)!.cursors['9']!;
-    expect(cursor.colors, pixels);
-    expect([cursor.hotx, cursor.hoty, cursor.width, cursor.height],
-        [3, 4, 16, 16]);
-  });
-
-  test('a moved tab shows the shape that arrived last', () async {
-    await _feed(ffi, '1', seed: 1);
-    await _feed(ffi, '2', seed: 2);
-    await _feed(ffi, '1', seed: 1);
-    final carried =
-        CachedPeerData.fromString(await ffi.ffiModel.cachedPeerDataString())!;
-    expect(carried.lastCursorId['id'], '1',
-        reason: 'the replay goes in first-seen order and ends on this');
+    final moved = _FFI();
+    addTearDown(moved.cursorModel.disposeImages);
+    moved.cursor.core.addAll(ffi.cursor.core);
+    _select(moved, '1');
+    await _settle();
+    expect(moved.cursor.fetched, ['1']);
+    expect(moved.cursorModel.cache?.id, '1');
+    expect(moved.cursorModel.image?.width, 16);
   });
 
   test('a shape keeps one native cursor, the one at its raster', () async {

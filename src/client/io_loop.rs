@@ -1534,8 +1534,14 @@ impl<T: InvokeUiSession> Remote<T> {
                 }
                 Some(message::Union::CursorData(cd)) => {
                     let id = cd.id;
+                    #[cfg(feature = "flutter")]
+                    let shape = cursor_shape(id, &cd);
                     match decode_cursor_data(cd) {
-                        Ok(cd) => self.handler.set_cursor_data(cd),
+                        Ok(cd) => {
+                            #[cfg(feature = "flutter")]
+                            self.keep_cursor_shape(shape);
+                            self.handler.set_cursor_data(cd)
+                        }
                         Err(err) => log::warn!("Rejected cursor {id}: {err}"),
                     }
                 }
@@ -2570,6 +2576,16 @@ impl<T: InvokeUiSession> Remote<T> {
         self.sender.send(Data::Message(msg)).ok();
     }
 
+    /// A shape that decoded, for the UI to ask for again; see `Session::cursor_shapes`.
+    #[cfg(feature = "flutter")]
+    fn keep_cursor_shape(&self, shape: CursorData) {
+        self.handler
+            .cursor_shapes
+            .write()
+            .unwrap()
+            .insert(shape.id, shape);
+    }
+
     fn dedupes_cursors(&self) -> bool {
         !crate::is_peer_naming_cursors_by_content(self.handler.lc.read().unwrap().version)
     }
@@ -2582,15 +2598,40 @@ impl<T: InvokeUiSession> Remote<T> {
             self.handler.set_cursor_id(id.to_string());
             return;
         }
+        #[cfg(feature = "flutter")]
+        let shape = cursor_shape(id, &cd);
         match decode_cursor_data(cd) {
             Ok(mut cd) => {
                 cd.id = id;
                 self.cursor_dedupe.shown(id);
+                #[cfg(feature = "flutter")]
+                self.keep_cursor_shape(shape);
                 self.handler.set_cursor_data(cd);
             }
             Err(err) => log::warn!("Rejected cursor {peer_id}: {err}"),
         }
     }
+}
+
+/// The shape's own fields, still compressed, under the id the UI knows it by. Copied: the
+/// message's colors may be a slice of a larger received buffer, which a clone would keep alive.
+#[cfg(feature = "flutter")]
+fn cursor_shape(id: u64, cd: &CursorData) -> CursorData {
+    CursorData {
+        id,
+        hotx: cd.hotx,
+        hoty: cd.hoty,
+        width: cd.width,
+        height: cd.height,
+        colors: cd.colors.to_vec().into(),
+        ..Default::default()
+    }
+}
+
+/// The RGBA of a shape kept by `Session::cursor_shapes`, for the UI to draw it again.
+#[cfg(feature = "flutter")]
+pub(crate) fn kept_cursor_rgba(shape: CursorData) -> hbb_common::ResultType<CursorData> {
+    decode_cursor_data(shape)
 }
 
 // Both UI handlers receive validated, uncompressed RGBA from the receive loop.
@@ -2855,5 +2896,45 @@ mod cursor_dedupe_tests {
         assert!(!crate::is_peer_naming_cursors_by_content(v("1.4.9")));
         assert!(crate::is_peer_naming_cursors_by_content(v("1.5.0")));
         assert!(crate::is_peer_naming_cursors_by_content(v("1.5.1")));
+    }
+}
+
+#[cfg(all(test, feature = "flutter"))]
+mod kept_cursor_tests {
+    use super::*;
+
+    fn compressed(width: i32, height: i32) -> CursorData {
+        let rgba = vec![7u8; (width * height * 4) as usize];
+        CursorData {
+            id: 1,
+            width,
+            height,
+            colors: hbb_common::compress::compress(&rgba).into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_kept_shape_is_the_shape_under_the_ui_id_and_nothing_else() {
+        let mut cd = compressed(4, 4);
+        cd.hotx = 1;
+        cd.mut_unknown_fields().add_varint(99, 1);
+        let kept = cursor_shape(42, &cd);
+        assert_eq!(kept.id, 42);
+        assert_eq!((kept.hotx, kept.width, kept.height), (1, 4, 4));
+        assert_eq!(kept.colors, cd.colors);
+        assert_eq!(kept.special_fields.unknown_fields().iter().count(), 0);
+    }
+
+    #[test]
+    fn a_kept_shape_is_checked_again_when_it_is_read() {
+        assert_eq!(kept_cursor_rgba(compressed(4, 4)).unwrap().colors.len(), 64);
+        assert!(
+            kept_cursor_rgba(compressed(513, 1)).is_err(),
+            "over the size cap"
+        );
+        let mut bomb = compressed(4, 4);
+        bomb.colors = hbb_common::compress::compress(&vec![0u8; 1 << 20]).into();
+        assert!(kept_cursor_rgba(bomb).is_err(), "more pixels than its size");
     }
 }
