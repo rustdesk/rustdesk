@@ -328,15 +328,35 @@ lazy_static::lazy_static! {
     /// removes it.
     static ref FIRED_KEYS: std::sync::Mutex<std::collections::HashSet<rdev::Key>> =
         Default::default();
+    /// Actions waiting for the release of the key that fired them, with the
+    /// session that fired them. See `runs_on_release`.
+    static ref RELEASE_ACTIONS: std::sync::Mutex<
+        std::collections::HashMap<rdev::Key, (hbb_common::SessionID, String)>,
+    > = Default::default();
     static ref RELEASED_MODIFIERS: std::sync::Mutex<
         std::collections::HashMap<hbb_common::SessionID, std::collections::HashMap<rdev::Key, rdev::Event>>,
     > = Default::default();
 }
 
-/// Forget the modifiers a session released on its remote. Fired keys are
-/// physical and stay owned until their release, whichever session gets it.
+/// Actions that move keyboard focus to another session. They run when the
+/// key that fired them is released, not when it is pressed, so the matcher
+/// that consumed the press also sees its repeats and its release. The next
+/// session may route its keys through the other matcher (Flutter's legacy
+/// path on Linux), which never saw the press. Mirrors
+/// `kShortcutActionsRunOnKeyUp` in `shortcut_constants.dart`.
+pub fn runs_on_release(action_id: &str) -> bool {
+    matches!(
+        action_id,
+        action_id::CLOSE_TAB | action_id::SWITCH_TAB_NEXT | action_id::SWITCH_TAB_PREV
+    )
+}
+
+/// Forget the modifiers a session released on its remote and the actions it
+/// still owes on key release. Fired keys are physical and stay owned until
+/// their release, whichever session gets it.
 #[cfg(feature = "flutter")]
 pub fn clear_session_state(session_id: &hbb_common::SessionID) {
+    RELEASE_ACTIONS.lock().unwrap().retain(|_, (sid, _)| sid != session_id);
     let held = RELEASED_MODIFIERS.lock().unwrap().remove(session_id);
     if let Some(held) = held {
         {
@@ -361,6 +381,7 @@ pub fn enter_view_only(session_id: &hbb_common::SessionID) {
     // The Flutter input source stops routing key events here, so the release
     // of a fired key can no longer reach this matcher.
     FIRED_KEYS.lock().unwrap().clear();
+    RELEASE_ACTIONS.lock().unwrap().clear();
     clear_session_state(session_id);
 }
 
@@ -419,7 +440,18 @@ pub fn try_dispatch(
         let mut fired = FIRED_KEYS.lock().unwrap();
         match event.event_type {
             EventType::KeyPress(k) if fired.contains(&k) => return true,
-            EventType::KeyRelease(k) if fired.remove(&k) => return true,
+            EventType::KeyRelease(k) if fired.remove(&k) => {
+                drop(fired);
+                let pending = RELEASE_ACTIONS.lock().unwrap().remove(&k);
+                if let Some((sid, action_id)) = pending {
+                    crate::flutter::push_session_event(
+                        &sid,
+                        "shortcut_triggered",
+                        vec![("action", &action_id)],
+                    );
+                }
+                return true;
+            }
             _ => {}
         }
     }
@@ -430,6 +462,12 @@ pub fn try_dispatch(
     release_remote_keys(sid, keyboard_mode, &peer(), &send);
     if let EventType::KeyPress(k) = event.event_type {
         FIRED_KEYS.lock().unwrap().insert(k);
+        let mut pending = RELEASE_ACTIONS.lock().unwrap();
+        if runs_on_release(&action_id) {
+            pending.insert(k, (*sid, action_id));
+            return true;
+        }
+        pending.remove(&k);
     }
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
@@ -1199,6 +1237,48 @@ mod tests {
         release_chord(chord);
     }
 
+    /// Close tab and tab switching move focus away before the key is
+    /// released; they run on the release so the same matcher sees the whole
+    /// press.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn focus_changing_actions_run_on_release() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let prefix = || vec![Modifier::Primary, Modifier::Alt, Modifier::Shift];
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![
+                Binding { action: action_id::CLOSE_TAB.into(), mods: prefix(), key: "w".into() },
+                Binding { action: action_id::SCREENSHOT.into(), mods: prefix(), key: "p".into() },
+            ],
+        });
+        let dispatch = |sid: &hbb_common::SessionID, e: &rdev::Event| {
+            try_dispatch(Some(sid), e, "map", || "windows".into(), |_| {})
+        };
+        let pending_for = |k: Key| RELEASE_ACTIONS.lock().unwrap().get(&k).cloned();
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)));
+        assert_eq!(pending_for(Key::KeyW), Some((SID_A, action_id::CLOSE_TAB.to_owned())));
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)), "repeat is consumed");
+        assert_eq!(pending_for(Key::KeyW), Some((SID_A, action_id::CLOSE_TAB.to_owned())));
+        assert!(dispatch(&SID_B, &make_release(Key::KeyW)), "release is consumed wherever it lands");
+        assert_eq!(pending_for(Key::KeyW), None, "the action ran on the release");
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)));
+        assert_eq!(pending_for(Key::KeyP), None, "other actions still run on the press");
+        assert!(dispatch(&SID_A, &make_release(Key::KeyP)));
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)));
+        clear_session_state(&SID_A);
+        assert_eq!(pending_for(Key::KeyW), None, "a closed session owes nothing");
+        assert!(dispatch(&SID_A, &make_release(Key::KeyW)), "but its key stays owned");
+        release_chord(chord);
+    }
+
     #[cfg(feature = "flutter")]
     const SID_A: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xA);
     #[cfg(feature = "flutter")]
@@ -1212,6 +1292,7 @@ mod tests {
     #[cfg(feature = "flutter")]
     fn reset_fired_keys() {
         FIRED_KEYS.lock().unwrap().clear();
+        RELEASE_ACTIONS.lock().unwrap().clear();
     }
 
     #[cfg(feature = "flutter")]

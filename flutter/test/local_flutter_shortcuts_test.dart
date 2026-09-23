@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_constants.dart';
 import 'package:flutter_hbb/models/local_flutter_shortcuts.dart';
 
 LocalFlutterShortcutDispatcher dispatcherFor(
@@ -220,6 +221,47 @@ void main() {
     enabled = false;
     expect(next.tryDispatch(down(PhysicalKeyboardKey.keyP)), isFalse);
     expect(next.tryDispatch(up(PhysicalKeyboardKey.keyP)), isFalse);
+    await Future<void>.value();
+    expect(actions, isEmpty);
+  });
+
+  test('focus-changing actions run when the key is released', () async {
+    // Close tab moves focus before the key is released; the release may then
+    // land in a session whose keys go through the other matcher.
+    var releases = 0;
+    final actions = <String>[];
+    final dispatcher = _ShortcutHarness(
+      match: (_) => kShortcutActionCloseTab,
+      releaseModifiers: () async => releases++,
+      onTriggered: actions.add,
+    );
+
+    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyW)), isTrue);
+    expect(dispatcher.tryDispatch(repeat(PhysicalKeyboardKey.keyW)), isTrue);
+    await Future<void>.value();
+    expect(releases, 1, reason: 'remote modifiers are released on the press');
+    expect(actions, isEmpty, reason: 'the action waits for the release');
+
+    final other = dispatcherFor(actions.add);
+    expect(other.tryDispatch(up(PhysicalKeyboardKey.keyW)), isTrue);
+    await Future<void>.value();
+    expect(actions, [kShortcutActionCloseTab]);
+    expect(other.tryDispatch(up(PhysicalKeyboardKey.keyW)), isFalse);
+  });
+
+  test('closing the session drops its action pending on key release',
+      () async {
+    final actions = <String>[];
+    final dispatcher = _ShortcutHarness(
+      match: (_) => kShortcutActionSwitchTabNext,
+      releaseModifiers: () async {},
+      onTriggered: actions.add,
+    );
+
+    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyW)), isTrue);
+    dispatcher.clear();
+    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyW)), isTrue,
+        reason: 'the key stays owned');
     await Future<void>.value();
     expect(actions, isEmpty);
   });
