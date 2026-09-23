@@ -182,6 +182,23 @@ void main() {
     expect(ffi.cursor.fetched, ['1']);
   });
 
+  test('a shape switched away from while it decoded is asked for again',
+      () async {
+    await _feed(ffi, '1', size: 16);
+    await _feed(ffi, '2');
+    _select(ffi, '1');
+    ffi.cursorModel.image; // asks the core
+    // The core has answered and the shape is decoding when the peer moves on.
+    await Future<void>.delayed(Duration.zero);
+    _select(ffi, '2');
+    await _settle();
+    _select(ffi, '1');
+    ffi.cursorModel.image;
+    await _settle();
+    expect(ffi.cursor.fetched, ['1', '1']);
+    expect(ffi.cursorModel.image?.width, 16);
+  });
+
   test('a shape decoded after the session was cleared is not kept', () async {
     await _feed(ffi, '1', size: 16);
     await _feed(ffi, '2');

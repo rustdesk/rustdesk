@@ -3510,8 +3510,9 @@ class CursorModel with ChangeNotifier {
     _images.clear();
   }
 
-  updateCursorData(String id, int hotxInt, int hotyInt, int width, int height,
-      Uint8List rgba) async {
+  /// Whether the shape decoded; it is kept only while it is the one in use.
+  Future<bool> updateCursorData(String id, int hotxInt, int hotyInt, int width,
+      int height, Uint8List rgba) async {
     final generation = _generation;
     _unavailable.remove(id);
     final hotx = hotxInt.toDouble();
@@ -3519,13 +3520,13 @@ class CursorModel with ChangeNotifier {
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
     if (image == null) {
-      return;
+      return false;
     }
     if (!await _updateCache(
         generation, rgba, image, id, hotx, hoty, width, height)) {
       // Not kept, or the session was cleared while it decoded.
       image.dispose();
-      return;
+      return false;
     }
     _images[id]?.item1.dispose();
     _images[id] = Tuple3(image, hotx, hoty);
@@ -3533,6 +3534,7 @@ class CursorModel with ChangeNotifier {
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
     _updateCurData();
+    return true;
   }
 
   Future<bool> _updateCache(
@@ -3683,9 +3685,10 @@ class CursorModel with ChangeNotifier {
           _unavailable.add(id);
           debugPrint('Cursor $id is not kept by the core');
         } else if (id == _id) {
-          await updateCursorData(id, shape.hotx, shape.hoty, shape.width,
-              shape.height, shape.colors);
-          if (generation == _generation && !_images.containsKey(id)) {
+          final decoded = await updateCursorData(id, shape.hotx, shape.hoty,
+              shape.width, shape.height, shape.colors);
+          // A shape switched away from while it decoded is let go, not lost.
+          if (!decoded && generation == _generation) {
             // It did not decode; painting must not ask for it on every frame.
             _unavailable.add(id);
           }
