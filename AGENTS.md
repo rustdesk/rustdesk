@@ -127,6 +127,20 @@ Before considering any implementation complete, perform a minimization pass over
 * Before finalizing, explicitly report the regression surface: list the existing files and existing runtime paths whose behavior changed, and explain why each change is unavoidable.
 * During review, treat an unnecessarily modified legacy path as a review finding even if tests pass and the rewritten behavior appears equivalent.
 
+## Tests
+
+* Dart tests go in `flutter/test/*_test.dart`, nowhere else: CI runs `flutter test` over that
+  directory and nothing outside it.
+* Rust unit tests go in a `#[cfg(test)]` module beside the code. CI runs `cargo test --workspace`
+  with the default features on x86_64 Linux, `cargo test --lib` with the release feature set on
+  macOS and Windows, and the `drm` and `unix-file-copy-paste` tests by name on Linux. Gate a test
+  module on a feature or `target_os` only when the code under test is gated; a pure helper that
+  only a gated path calls gets `#[cfg(any(feature = "...", test))]`, so its tests run everywhere.
+* A test behind a new feature needs a `cargo test` line in `.github/workflows/flutter-build.yml`
+  that names it, wrapped in `run_drm_tests` so a filter that matches nothing fails instead of
+  passing.
+* Web core tests are `flutter/web/js/src/*.test.ts`, run by jest in that repository's own CI.
+
 ## Reviewing a PR
 
 * Review only what the diff introduces. Verify ownership with `gh pr diff` before reporting a finding — if the offending lines are untouched context, it is a pre-existing problem, not this PR's.

@@ -323,6 +323,16 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
+      - name: Run the Rust tests
+        # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
+        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
+        shell: bash
+        run: |
+          # The build's own features, so its release artifacts are reused and only the crate
+          # itself is compiled again, as a test binary.
+          FEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)
+          cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
         # Runner.rc does not contain actual version, but Runner.res does
@@ -871,10 +881,10 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Test cursor sizing
+      - name: Run the Dart tests
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
         working-directory: flutter
-        run: flutter test --timeout 60s test/cursor_size_test.dart
+        run: flutter test --timeout 60s
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -918,6 +928,19 @@ jobs:
             sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
           fi
           ./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }}
+
+      - name: Run the Rust tests
+        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
+        run: |
+          # The build's own features and deployment target (build.py carries the target after
+          # the sed above), so its release artifacts are reused and only the crate itself is
+          # compiled again, as a test binary.
+          FEATURES=$(./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
+          TARGET=$(sed -n 's/.*MACOSX_DEPLOYMENT_TARGET=\([0-9.]*\) cargo build.*/\1/p' build.py)
+          : "${TARGET:?no MACOSX_DEPLOYMENT_TARGET in build.py}"
+          MACOSX_DEPLOYMENT_TARGET="$TARGET" cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+          # Opt-in, and its macOS tests run nowhere else.
+          MACOSX_DEPLOYMENT_TARGET="$TARGET" cargo test --locked --release -p clipboard --features unix-file-copy-paste
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -2084,6 +2107,11 @@ jobs:
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
             run_drm_tests "scrap hotspot_guess_tests" \
               cargo test --locked -p scrap --features drm hotspot_guess_tests
+            run_drm_tests "scrap drmtap_dl::tests" \
+              cargo test --locked -p scrap --features drm drmtap_dl::tests
+            # Opt-in like drm, and this container already builds with it.
+            run_drm_tests "clipboard unix-file-copy-paste" \
+              cargo test --locked -p clipboard --features unix-file-copy-paste
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo
