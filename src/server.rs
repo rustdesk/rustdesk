@@ -276,12 +276,21 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
         if stream.is_webrtc() && dtls_fingerprint.is_empty() {
             bail!("WebRTC local DTLS fingerprint unavailable");
         }
+        // A WebRTC stream is encrypted by DTLS and takes no stream key of its own, split or
+        // not, so what it advertises is what it runs: 0. Saying 1 there would have a future
+        // controller that splits keys on WebRTC agree on a version this side never applies.
+        let advertised = if stream.is_webrtc() {
+            0
+        } else {
+            tcp::KX_VERSION_LATEST
+        };
         msg_out.set_signed_id(SignedId {
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
                     pk: Bytes::from(our_pk_b.0.to_vec()),
                     dtls_fingerprint,
+                    kx_version: advertised,
                     ..Default::default()
                 }
                 .write_to_bytes()
@@ -298,11 +307,28 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
-                            stream.set_key(tcp::Encrypt::decode(
+                            let key = tcp::Encrypt::decode(
                                 &pk.symmetric_value,
                                 &pk.asymmetric_value,
                                 &our_sk_b,
-                            )?);
+                            )?;
+                            if pk.kx_version > advertised {
+                                bail!(
+                                    "Handshake failed: key exchange version {} not offered, {} was",
+                                    pk.kx_version,
+                                    advertised
+                                );
+                            }
+                            stream.set_negotiated_key(
+                                key,
+                                false,
+                                &tcp::KxTranscript {
+                                    initiator_pk: &pk.asymmetric_value,
+                                    responder_pk: &our_pk_b.0,
+                                    advertised,
+                                    picked: pk.kx_version,
+                                },
+                            )?;
                         } else if pk.asymmetric_value.is_empty() {
                             Config::set_key_confirmed(false);
                             log::info!("Force to update pk");
