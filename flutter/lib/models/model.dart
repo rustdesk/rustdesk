@@ -3642,8 +3642,9 @@ class CursorModel with ChangeNotifier {
   }
 
   /// Native cursors of the peer's shapes kept, the ones used last; the core rebuilds the
-  /// others. Covers the everyday set: arrow, text, hand, four resize arrows, wait and a few.
-  static const kMaxNativeCursors = 16;
+  /// others. An animated cursor is a shape per frame, 18 for the Windows busy cursor and 23
+  /// for KDE's, and a cycle longer than this limit would rebuild every frame.
+  static const kMaxNativeCursors = 64;
 
   // `_nativeKeys` is in order of use. The predefined cursors are not the peer's and stay.
   void _evictNativeKeys() {

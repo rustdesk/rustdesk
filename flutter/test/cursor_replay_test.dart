@@ -52,7 +52,7 @@ void _select(_FFI ffi, String id) {
 }
 
 Future<void> _settle() async {
-  for (var i = 0; i < 20; i++) {
+  for (var i = 0; i < 2; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
@@ -172,6 +172,28 @@ void main() {
     buildCursorOfCache(cursor, 1.0, cursor.cache);
     await _settle();
     expect(registered.length - deleted.length, max);
+  });
+
+  test('an animated cursor cycles without decoding a frame again', () async {
+    // Each frame is a shape of its own: 18 for the Windows busy cursor, 23 for
+    // KDE Breeze's wait cursor on X11.
+    const frames = 23;
+    final cursor = ffi.cursorModel;
+    for (var i = 0; i < frames; i++) {
+      await _feed(ffi, '$i', seed: i);
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
+    ffi.cursor.fetched.clear();
+    for (var i = 0; i < frames; i++) {
+      _select(ffi, '$i');
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
+    expect(ffi.cursor.fetched, isEmpty,
+        reason: 'every frame kept its native cursor');
+    expect(registered.length, frames);
+    expect(deleted, isEmpty);
   });
 
   test('a shape painted again is decoded again from the core', () async {
