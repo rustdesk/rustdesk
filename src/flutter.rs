@@ -237,6 +237,35 @@ pub struct FlutterHandler {
     display_rgbas: Arc<RwLock<HashMap<usize, RgbaData>>>,
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
+    // Local usbip-attach relay channels, keyed by the id chosen when the
+    // channel opened. Bounded (`USB_RELAY_CHANNEL_CAPACITY`) so a peer that
+    // keeps sending faster than the local socket drains can't grow this
+    // without bound; see the identical comment in `server/usbip_mux.rs`.
+    #[cfg(target_os = "linux")]
+    usb_forward_channels:
+        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::Sender<crate::client::usbip_attach::Inbound>>>>,
+    // Local usbip-share relay channels (push direction), keyed by the
+    // negative channel_id the peer's usbip_pull chose. Bounded, same reason.
+    #[cfg(target_os = "linux")]
+    usb_share_channels:
+        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::Sender<hbb_common::bytes::Bytes>>>>,
+    // bus_id -> the channel_id above, so "unpush" (given only a bus_id) can
+    // find the channel to close.
+    #[cfg(target_os = "linux")]
+    usb_share_bus_ids: Arc<RwLock<HashMap<String, i32>>>,
+    // bus_ids this side has asked the peer to attach (`usb_push_request`
+    // sent, no `Open` seen yet) -- gates the `Open` handler below so a peer
+    // can't pull an arbitrary locally-shared device it was never offered.
+    #[cfg(target_os = "linux")]
+    usb_share_pending: Arc<RwLock<HashSet<String>>>,
+    // This session's own `io_loop` runtime, registered by
+    // `register_session_runtime` once `io_loop` starts running on it --
+    // lets `usb_attach`/`usb_push`/etc, called from Flutter's FFI thread
+    // pool, `spawn`/`spawn_blocking` onto it instead of a separate runtime.
+    // Tagged with the registering round so a stale round's unregister can't
+    // clear a newer round's handle out from under it on reconnect.
+    #[cfg(target_os = "linux")]
+    usb_session_runtime: Arc<RwLock<Option<(u32, hbb_common::tokio::runtime::Handle)>>>,
 }
 
 impl Default for FlutterHandler {
@@ -248,7 +277,336 @@ impl Default for FlutterHandler {
             use_texture_render: Arc::new(
                 AtomicBool::new(crate::ui_interface::use_texture_render()),
             ),
+            #[cfg(target_os = "linux")]
+            usb_forward_channels: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_channels: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_bus_ids: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_pending: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_session_runtime: Default::default(),
         }
+    }
+}
+
+// See the identical constant/comment in `server/usbip_mux.rs`.
+#[cfg(target_os = "linux")]
+const USB_MAX_DATA_LEN: usize = 64 * 1024;
+
+#[cfg(target_os = "linux")]
+impl FlutterHandler {
+    pub(crate) fn next_usb_channel_id() -> i32 {
+        use std::sync::atomic::{AtomicI32, Ordering};
+        static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub(crate) fn register_usb_forward_channel(
+        &self,
+        channel_id: i32,
+        tx: hbb_common::tokio::sync::mpsc::Sender<crate::client::usbip_attach::Inbound>,
+    ) {
+        self.usb_forward_channels
+            .write()
+            .unwrap()
+            .insert(channel_id, tx);
+    }
+
+    pub(crate) fn unregister_usb_forward_channel(&self, channel_id: i32) {
+        self.usb_forward_channels.write().unwrap().remove(&channel_id);
+    }
+
+    pub(crate) fn usb_forward_send(&self, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
+        if let crate::client::usbip_attach::Inbound::Data(data) = &msg {
+            if data.len() > USB_MAX_DATA_LEN {
+                log::warn!(
+                    "usb forward: oversized data frame ({} bytes) on channel {}, closing",
+                    data.len(), channel_id
+                );
+                self.unregister_usb_forward_channel(channel_id);
+                self.notify_usb_channel_closed(channel_id);
+                return;
+            }
+        }
+        let full = match self.usb_forward_channels.read().unwrap().get(&channel_id) {
+            Some(tx) => tx.try_send(msg).is_err(),
+            None => return,
+        };
+        // Full or closed -- either way this channel can't keep relaying
+        // faithfully, so drop it instead of growing the queue or silently
+        // losing bytes out of the stream.
+        if full {
+            self.unregister_usb_forward_channel(channel_id);
+            self.notify_usb_channel_closed(channel_id);
+        }
+    }
+
+    /// Tells the peer we've abandoned a channel it doesn't yet know is dead
+    /// (overflow on our end) -- without this its own side keeps the
+    /// relay task/entry alive until the whole session ends.
+    fn notify_usb_channel_closed(&self, channel_id: i32) {
+        match self.any_session() {
+            Some(session) => session.usb_close_forward(channel_id),
+            None => log::warn!(
+                "usb: overflow on channel {} but no session to notify the peer",
+                channel_id
+            ),
+        }
+    }
+
+    pub(crate) fn register_usb_share_channel(
+        &self,
+        channel_id: i32,
+        bus_id: String,
+        tx: hbb_common::tokio::sync::mpsc::Sender<hbb_common::bytes::Bytes>,
+    ) {
+        self.usb_share_channels.write().unwrap().insert(channel_id, tx);
+        self.usb_share_bus_ids.write().unwrap().insert(bus_id, channel_id);
+    }
+
+    pub(crate) fn unregister_usb_share_channel(&self, channel_id: i32) {
+        self.usb_share_channels.write().unwrap().remove(&channel_id);
+        self.usb_share_bus_ids
+            .write()
+            .unwrap()
+            .retain(|_, id| *id != channel_id);
+    }
+
+    fn usb_share_channel_for_bus_id(&self, bus_id: &str) -> Option<i32> {
+        self.usb_share_bus_ids.read().unwrap().get(bus_id).copied()
+    }
+
+    pub(crate) fn usb_share_channel_live(&self, channel_id: i32) -> bool {
+        self.usb_share_channels.read().unwrap().contains_key(&channel_id)
+    }
+
+    pub(crate) fn usb_share_send(&self, channel_id: i32, data: hbb_common::bytes::Bytes) {
+        if data.len() > USB_MAX_DATA_LEN {
+            log::warn!(
+                "usb push: oversized data frame ({} bytes) on channel {}, closing",
+                data.len(), channel_id
+            );
+            self.unregister_usb_share_channel(channel_id);
+            self.notify_usb_channel_closed(channel_id);
+            return;
+        }
+        let full = match self.usb_share_channels.read().unwrap().get(&channel_id) {
+            Some(tx) => tx.try_send(data).is_err(),
+            None => return,
+        };
+        if full {
+            self.unregister_usb_share_channel(channel_id);
+            self.notify_usb_channel_closed(channel_id);
+        }
+    }
+
+    fn usb_share_pending_add(&self, bus_id: String) {
+        self.usb_share_pending.write().unwrap().insert(bus_id);
+    }
+
+    /// Removes and reports whether `bus_id` was pending -- used to gate the
+    /// `Open` handler so it only accepts a channel for a device this side
+    /// actually asked the peer to attach.
+    pub(crate) fn usb_share_pending_take(&self, bus_id: &str) -> bool {
+        self.usb_share_pending.write().unwrap().remove(bus_id)
+    }
+
+    pub(crate) fn usb_share_pending_remove(&self, bus_id: &str) {
+        self.usb_share_pending.write().unwrap().remove(bus_id);
+    }
+
+    /// Any one of this handler's registered UI sessions works -- a RemoteUsb
+    /// `FlutterHandler` only ever has the one.
+    pub(crate) fn any_session(&self) -> Option<FlutterSession> {
+        let sid = self.session_handlers.read().unwrap().keys().next().copied()?;
+        sessions::get_session_by_session_id(&sid)
+    }
+
+    /// The runtime `register_session_runtime` recorded once `io_loop`
+    /// started running on it, for `usb_attach`/`usb_push`/etc (called from
+    /// Flutter's FFI thread pool, which has none of its own) to `spawn`/
+    /// `spawn_blocking` onto instead of creating a separate one. `None`
+    /// only if called before the session's `io_loop` has started or after
+    /// it's already torn down.
+    pub(crate) fn session_runtime(&self) -> Option<hbb_common::tokio::runtime::Handle> {
+        self.usb_session_runtime
+            .read()
+            .unwrap()
+            .as_ref()
+            .map(|(_, handle)| handle.clone())
+    }
+
+    /// Called once this handler's last UI session closes. A relay task
+    /// (`client::usbip_attach`/`usbip_share`'s `run_channel`) holds its own
+    /// clone of `Session<FlutterHandler>`, so it keeps running -- and, for
+    /// the push direction, keeps its local `usbipd` connection to the
+    /// shared device open -- even after nothing else can reach this
+    /// handler to ask it to stop. Dropping every registered sender here
+    /// makes each task's next `recv()` return `None`, so it notices and
+    /// cleans itself up instead of running orphaned indefinitely.
+    pub(crate) fn close_usb_state(&self) {
+        self.usb_forward_channels.write().unwrap().clear();
+        self.usb_share_channels.write().unwrap().clear();
+        self.usb_share_bus_ids.write().unwrap().clear();
+        self.usb_share_pending.write().unwrap().clear();
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Session<FlutterHandler> {
+    pub fn usb_attach(&self, bus_id: String) {
+        let session = self.clone();
+        if let Some(rt) = self.ui_handler.session_runtime() {
+            rt.spawn(crate::client::usbip_attach::attach(session, bus_id));
+        }
+    }
+
+    pub fn usb_detach(&self, port: i32) {
+        if let Some(rt) = self.ui_handler.session_runtime() {
+            crate::client::usbip_attach::detach(&rt, port);
+        }
+    }
+
+    /// Purely local (no network): what's shareable on this machine, for the
+    /// "My local devices" push section.
+    pub fn usb_local_devices(&self) {
+        let devices = crate::client::usbip_share::list_local_devices();
+        let devices: Vec<serde_json::Value> = devices
+            .iter()
+            .map(|d| {
+                json!({
+                    "bus_id": d.bus_id,
+                    "vendor": d.vendor,
+                    "product": d.product,
+                    "shared": d.shared,
+                })
+            })
+            .collect();
+        self.push_event_("usb_local_device_list", &[("devices", json!(devices))], &[], &[]);
+    }
+
+    /// Also local -- `usbip bind`/`unbind` needs root, so run it off the FFI
+    /// thread the same way `usb_attach` does.
+    pub fn usb_local_bind(&self, bus_id: String, bind: bool) {
+        let Some(rt) = self.ui_handler.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let ok = crate::client::usbip_share::bind_device(&bus_id, bind);
+            let error = if ok {
+                String::new()
+            } else {
+                format!("Failed to {} {}", if bind { "share" } else { "unshare" }, bus_id)
+            };
+            session.push_event_(
+                "usb_local_bind_result",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("bind", json!(bind)),
+                    ("error", json!(error)),
+                ],
+                &[],
+                &[],
+            );
+        });
+    }
+
+    /// Push direction "Push": one user action instead of two ("share" then
+    /// "push" separately) -- share the device locally first, then ask the
+    /// peer to attach it. Keeping "shared" and "pushed" from being two
+    /// independently-toggleable states means there's only one thing to
+    /// track and show in the UI, and it can't drift out of sync with the
+    /// button label the way share-then-separately-push could.
+    pub fn usb_push(&self, bus_id: String) {
+        let Some(rt) = self.ui_handler.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            log::info!("usb push: sharing {} before push", bus_id);
+            if !crate::client::usbip_share::bind_device(&bus_id, true) {
+                log::error!("usb push: failed to share {} locally, not pushing", bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!(format!("Failed to share {}", bus_id))),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
+            log::info!("usb push: shared {}, asking peer to attach", bus_id);
+            session.ui_handler.usb_share_pending_add(bus_id.clone());
+            session.usb_push_request(bus_id);
+        });
+    }
+
+    /// Push direction "Unpush": tell the peer to detach and free our own
+    /// relay slot immediately, then unshare. The peer's own read loop
+    /// aborts as soon as it sees our channel entry gone
+    /// (`usbip_pull.rs::handle_close`), so it never echoes a Close back to
+    /// confirm -- freeing the entry here (not just sending the close
+    /// request and waiting) matters, because our relay's TCP connection to
+    /// the local usbipd is exactly what keeps the device "in use" and
+    /// `usbip unbind` failing. That connection closes asynchronously a
+    /// moment after the entry is dropped, not synchronously with this call,
+    /// so the unshare below retries briefly rather than racing it.
+    pub fn usb_unpush(&self, bus_id: String) {
+        // Revoke the authorization to open a channel for this device in case
+        // the peer never did (e.g. unpushed before its `Open` arrived).
+        self.ui_handler.usb_share_pending_remove(&bus_id);
+        // No live channel happens whenever this app instance never saw the
+        // push complete -- e.g. restarted after sharing, with the peer
+        // still gone. The device can still genuinely be locally bound
+        // though (`usbip bind` is a kernel fact, not app state), so the
+        // actual unshare below must not depend on a channel existing.
+        if let Some(channel_id) = self.ui_handler.usb_share_channel_for_bus_id(&bus_id) {
+            log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
+            self.usb_close_forward(channel_id);
+            self.ui_handler.unregister_usb_share_channel(channel_id);
+        } else {
+            log::info!(
+                "usb push: unpushing {} with no live channel (peer gone or app restarted since sharing)",
+                bus_id
+            );
+        }
+
+        let Some(rt) = self.ui_handler.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let mut ok = false;
+            for attempt in 1..=10 {
+                if crate::client::usbip_share::bind_device(&bus_id, false) {
+                    ok = true;
+                    break;
+                }
+                log::debug!("usb push: {} still busy unsharing, retry {}/10", bus_id, attempt);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            let error = if ok {
+                log::info!("usb push: unshared {} after unpush", bus_id);
+                String::new()
+            } else {
+                log::error!(
+                    "usb push: failed to unshare {} after unpush (still busy after retries)",
+                    bus_id
+                );
+                format!("Failed to unshare {}", bus_id)
+            };
+            session.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!(error))],
+                &[],
+                &[],
+            );
+        });
     }
 }
 
@@ -1170,6 +1528,63 @@ impl InvokeUiSession for FlutterHandler {
             }
         }
     }
+
+    fn handle_usb_channel(&self, ch: UsbChannel) {
+        use base::message_proto::usb_channel::Union;
+
+        match ch.union {
+            Some(Union::DeviceList(list)) => {
+                let devices: Vec<serde_json::Value> = list
+                    .devices
+                    .iter()
+                    .map(|d| {
+                        json!({
+                            "bus_id": d.bus_id,
+                            "vendor": d.vendor,
+                            "product": d.product,
+                            "shared": d.shared,
+                            "attached_port": d.attached_port,
+                        })
+                    })
+                    .collect();
+                self.push_event_("usb_device_list", &[("devices", json!(devices))], &[], &[]);
+            }
+            Some(Union::BindResult(r)) => {
+                let event_data: Vec<(&str, serde_json::Value)> = vec![
+                    ("bus_id", json!(&r.bus_id)),
+                    ("bind", json!(r.bind)),
+                    ("error", json!(&r.error)),
+                ];
+                self.push_event_("usb_bind_result", &event_data, &[], &[]);
+            }
+            // Everything else (PushResult, Opened/Data/Close forwarding,
+            // push-side Open authorization) is RemoteUsb-specific
+            // routing/auth/task-spawning, not shared plumbing -- lives in
+            // its own module instead of inline in this shared trait impl.
+            #[cfg(target_os = "linux")]
+            other => crate::client::usbip_channel::handle(self, other),
+            #[cfg(not(target_os = "linux"))]
+            _ => {}
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn register_session_runtime(&self, round: u32, handle: hbb_common::tokio::runtime::Handle) {
+        *self.usb_session_runtime.write().unwrap() = Some((round, handle));
+    }
+
+    /// Only clears the slot if `round` is still the one registered --
+    /// otherwise a newer round already overwrote it (reconnect started a
+    /// new `io_loop` before this one finished tearing down), and clearing
+    /// unconditionally would drop that newer, still-live handle instead of
+    /// this stale one.
+    #[cfg(target_os = "linux")]
+    fn unregister_session_runtime(&self, round: u32) {
+        let mut guard = self.usb_session_runtime.write().unwrap();
+        if guard.as_ref().map(|(r, _)| *r) == Some(round) {
+            *guard = None;
+        }
+    }
 }
 
 impl FlutterHandler {
@@ -1278,6 +1693,7 @@ pub fn session_add(
     is_port_forward: bool,
     is_rdp: bool,
     is_terminal: bool,
+    is_remote_usb: bool,
     switch_uuid: &str,
     force_relay: bool,
     password: String,
@@ -1290,6 +1706,8 @@ pub fn session_add(
         ConnType::VIEW_CAMERA
     } else if is_terminal {
         ConnType::TERMINAL
+    } else if is_remote_usb {
+        ConnType::REMOTE_USB
     } else if is_port_forward {
         if is_rdp {
             ConnType::RDP
@@ -2085,6 +2503,8 @@ pub mod sessions {
                 Some(_) => {
                     if write_lock.is_empty() {
                         remove_peer_key = Some(peer_key.clone());
+                        #[cfg(target_os = "linux")]
+                        s.ui_handler.close_usb_state();
                     } else {
                         check_remove_unused_displays(None, id, s, &write_lock);
                     }
@@ -2389,5 +2809,36 @@ pub(super) mod async_tasks {
             super::APP_TYPE_MAIN,
             serde_json::ser::to_string(&data).unwrap_or("".to_owned()),
         );
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod usb_channel_id_tests {
+    use super::FlutterHandler;
+
+    #[test]
+    fn channel_ids_are_positive_and_increasing() {
+        // Non-negative, so the controller's own channel ids can never
+        // collide with `usbip_pull.rs`'s negative, controlled-side ones --
+        // see the sign dispatch in `connection.rs::handle_usb_channel`.
+        let first = FlutterHandler::next_usb_channel_id();
+        let second = FlutterHandler::next_usb_channel_id();
+        assert!(first >= 0);
+        assert!(second > first);
+    }
+
+    #[test]
+    fn open_for_unpushed_bus_id_is_not_authorized() {
+        // `usb_share_pending_take` gates the `Open` handler: a peer that was
+        // never offered a device via `usb_push` must not get a channel just
+        // by naming its bus_id.
+        let handler = FlutterHandler::default();
+        assert!(!handler.usb_share_pending_take("1-1"));
+
+        handler.usb_share_pending_add("1-1".into());
+        assert!(handler.usb_share_pending_take("1-1"));
+        // Consumed by the first take -- a second `Open` for the same bus_id
+        // must not be authorized by the same push.
+        assert!(!handler.usb_share_pending_take("1-1"));
     }
 }
