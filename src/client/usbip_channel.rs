@@ -19,6 +19,19 @@ const USB_RELAY_CHANNEL_CAPACITY: usize = 256;
 pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
     match union {
         Some(Union::PushResult(r)) => {
+            // `r.bus_id` is peer-supplied: only a device this session pushed
+            // itself may be touched, and a failed result is honored at most
+            // once, so an unsolicited or repeated one can't trigger a
+            // privileged unbind.
+            if !crate::client::usbip_attach::is_valid_bus_id(&r.bus_id)
+                || !handler.usb_share_owned(&r.bus_id)
+            {
+                log::warn!(
+                    "usb push: ignoring result for {:?}: not pushed by this session",
+                    r.bus_id
+                );
+                return;
+            }
             if r.error.is_empty() {
                 log::info!("usb push: peer confirmed attach of {}", r.bus_id);
             } else {
@@ -27,6 +40,9 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                     r.bus_id, r.error
                 );
                 handler.usb_share_pending_remove(&r.bus_id);
+                if !handler.usb_share_owned_take(&r.bus_id) {
+                    return;
+                }
                 if let Some(rt) = handler.session_runtime() {
                     let bus_id = r.bus_id.clone();
                     rt.spawn_blocking(move || {
@@ -99,5 +115,37 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
             ));
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base::message_proto::UsbPushResult;
+
+    fn failed_push(bus_id: &str) -> Option<Union> {
+        Some(Union::PushResult(UsbPushResult {
+            bus_id: bus_id.to_string(),
+            error: "attach failed".to_string(),
+            ..Default::default()
+        }))
+    }
+
+    #[test]
+    fn failed_push_result_ignored_unless_pushed_by_this_session() {
+        let handler = FlutterHandler::default();
+        handler.usb_share_owned_add("1-3".to_string());
+        handle(&handler, failed_push("1-2"));
+        handle(&handler, failed_push("1-3; touch /tmp/x"));
+        assert!(handler.usb_share_owned("1-3"));
+    }
+
+    #[test]
+    fn failed_push_result_rolls_back_only_once() {
+        let handler = FlutterHandler::default();
+        handler.usb_share_owned_add("1-2".to_string());
+        handle(&handler, failed_push("1-2"));
+        assert!(!handler.usb_share_owned("1-2"));
+        assert!(!handler.usb_share_owned_take("1-2"));
     }
 }
