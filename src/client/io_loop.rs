@@ -2617,7 +2617,7 @@ impl<T: InvokeUiSession> Remote<T> {
 /// A shape that decoded, still compressed, under the id the UI knows it by. Copied once it
 /// decoded: the message's colors may be a slice of a larger received buffer, which a clone
 /// would keep alive.
-#[cfg(feature = "flutter")]
+#[cfg(any(feature = "flutter", test))]
 fn cursor_shape(id: u64, cd: &CursorData, compressed: &[u8]) -> CursorData {
     CursorData {
         id,
@@ -2631,7 +2631,7 @@ fn cursor_shape(id: u64, cd: &CursorData, compressed: &[u8]) -> CursorData {
 }
 
 /// The RGBA of a shape kept by `Session::cursor_shapes`, for the UI to draw it again.
-#[cfg(feature = "flutter")]
+#[cfg(any(feature = "flutter", test))]
 pub(crate) fn kept_cursor_rgba(shape: CursorData) -> hbb_common::ResultType<CursorData> {
     decode_cursor_data(shape)
 }
@@ -2892,7 +2892,7 @@ mod cursor_dedupe_tests {
     }
 }
 
-#[cfg(all(test, feature = "flutter"))]
+#[cfg(test)]
 mod kept_cursor_tests {
     use super::*;
 
