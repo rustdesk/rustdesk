@@ -22,7 +22,7 @@ use hbb_common::{
 use std::{
     collections::{HashMap, HashSet},
     process::Command,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, Mutex},
 };
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
@@ -326,11 +326,12 @@ fn send_result(tx: &Sender, msg: Message) -> bool {
 
 // `Option`, not `Regex` directly -- see the identical comment in
 // `client/usbip_attach.rs`.
-static USB_DEVICE_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
-        .map_err(|err| log::error!("usbip: invalid USB_DEVICE_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_DEVICE_RE: Option<Regex> =
+        Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
+            .map_err(|err| log::error!("usbip: invalid USB_DEVICE_RE: {}", err))
+            .ok();
+}
 
 /// Debian/Ubuntu install `usbip` under `/usr/sbin`, which is on root's PATH
 /// but not a regular desktop user's -- widen it so a plain `Command::new`
