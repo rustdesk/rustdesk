@@ -859,7 +859,11 @@ message Misc {
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
     int32 follow_current_display = 38;
-    // Since 1.5.0: send the CursorData of this id again, if the shape was sent.
+    // Since 1.5.0: send the CursorData of this id again. No controller sends this yet; it is
+    // here so a controller can one day bound its own shape store and ask for the shape the
+    // peer just selected. The peer answers with what it holds then: a shape its cache dropped
+    // is rebuilt, and held again, the next time it is shown, before any connection names it
+    // by id again, so the shape just selected is always there to give.
     uint64 request_cursor_data = 39;
   }
 }

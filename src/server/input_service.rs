@@ -514,7 +514,10 @@ lazy_static::lazy_static! {
 
 lazy_static::lazy_static! {
     // Every shape the service has sent, by content id, for a controller that asks for one
-    // again. A shape under several handles is one message here, shared with `cached_cursor_data`.
+    // again. A shape under several handles is one message here, shared with `cached_cursor_data`,
+    // so this holds no more than that cache and is cleared with it. A shape dropped from both is
+    // rebuilt here the next time it is shown, in `run_cursor`, before any connection sends its
+    // `cursor_id`: whatever a controller has just been told to show, it can ask for.
     static ref CURSOR_SHAPES: Mutex<HashMap<u64, Arc<Message>>> = Default::default();
 }
 
