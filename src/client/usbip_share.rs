@@ -107,6 +107,20 @@ pub fn bind_device(bus_id: &str, bind: bool) -> bool {
     crate::platform::run_usbip_privileged(&[sub_cmd, "-b", bus_id])
 }
 
+/// Blocking. The relay's `usbipd` connection closes asynchronously after its
+/// channel is dropped, and `usbip unbind` fails while the device is still in
+/// use, so retry briefly.
+pub fn unbind_device_retrying(bus_id: &str) -> bool {
+    for attempt in 1..=10 {
+        if bind_device(bus_id, false) {
+            return true;
+        }
+        log::debug!("usb push: {} still busy unsharing, retry {}/10", bus_id, attempt);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    false
+}
+
 // USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
 // 4-byte status, followed by a 32-byte NUL-padded busid -- see the Linux
 // kernel's `drivers/usb/usbip/usbip_common.h` (`op_common`) and userspace

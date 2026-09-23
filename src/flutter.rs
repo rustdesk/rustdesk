@@ -262,6 +262,14 @@ pub struct FlutterHandler {
     // yet -- the only devices a failed `PushResult` may roll back.
     #[cfg(target_os = "linux")]
     usb_share_owned: Arc<RwLock<HashSet<String>>>,
+    // Local vhci ports this session attached (pull direction) and has not
+    // detached yet.
+    #[cfg(target_os = "linux")]
+    usb_attached_ports: Arc<RwLock<HashSet<i32>>>,
+    // Set once `close_usb_state` has run: an attach or bind finishing after
+    // that must be undone by whoever finished it.
+    #[cfg(target_os = "linux")]
+    usb_closed: Arc<AtomicBool>,
     // This session's own `io_loop` runtime, registered by
     // `register_session_runtime` once `io_loop` starts running on it --
     // lets `usb_attach`/`usb_push`/etc, called from Flutter's FFI thread
@@ -291,6 +299,10 @@ impl Default for FlutterHandler {
             usb_share_pending: Default::default(),
             #[cfg(target_os = "linux")]
             usb_share_owned: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_attached_ports: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_closed: Default::default(),
             #[cfg(target_os = "linux")]
             usb_session_runtime: Default::default(),
         }
@@ -423,8 +435,15 @@ impl FlutterHandler {
         self.usb_share_pending.write().unwrap().remove(bus_id);
     }
 
-    pub(crate) fn usb_share_owned_add(&self, bus_id: String) {
-        self.usb_share_owned.write().unwrap().insert(bus_id);
+    /// `false` once the session is closing; the caller must then unbind
+    /// `bus_id` itself, since teardown has already run.
+    pub(crate) fn usb_share_owned_add(&self, bus_id: String) -> bool {
+        let mut owned = self.usb_share_owned.write().unwrap();
+        if self.usb_closed.load(Ordering::SeqCst) {
+            return false;
+        }
+        owned.insert(bus_id);
+        true
     }
 
     pub(crate) fn usb_share_owned(&self, bus_id: &str) -> bool {
@@ -435,6 +454,21 @@ impl FlutterHandler {
     /// so at most one caller undoes that binding.
     pub(crate) fn usb_share_owned_take(&self, bus_id: &str) -> bool {
         self.usb_share_owned.write().unwrap().remove(bus_id)
+    }
+
+    /// `false` once the session is closing; the caller must then detach
+    /// `port` itself, since teardown has already run.
+    pub(crate) fn usb_attached_port_add(&self, port: i32) -> bool {
+        let mut ports = self.usb_attached_ports.write().unwrap();
+        if self.usb_closed.load(Ordering::SeqCst) {
+            return false;
+        }
+        ports.insert(port);
+        true
+    }
+
+    pub(crate) fn usb_attached_port_take(&self, port: i32) -> bool {
+        self.usb_attached_ports.write().unwrap().remove(&port)
     }
 
     /// Any one of this handler's registered UI sessions works -- a RemoteUsb
@@ -471,7 +505,26 @@ impl FlutterHandler {
         self.usb_share_channels.write().unwrap().clear();
         self.usb_share_bus_ids.write().unwrap().clear();
         self.usb_share_pending.write().unwrap().clear();
-        self.usb_share_owned.write().unwrap().clear();
+        // Only what this session attached or bound itself is released: a
+        // device shared by the CLI or another session is left alone.
+        let ports = {
+            let mut ports = self.usb_attached_ports.write().unwrap();
+            self.usb_closed.store(true, Ordering::SeqCst);
+            std::mem::take(&mut *ports)
+        };
+        let owned = std::mem::take(&mut *self.usb_share_owned.write().unwrap());
+        if ports.is_empty() && owned.is_empty() {
+            return;
+        }
+        // The session's runtime is going away with it, so a plain thread.
+        std::thread::spawn(move || {
+            for port in ports {
+                crate::client::usbip_attach::detach_blocking(port);
+            }
+            for bus_id in owned {
+                crate::client::usbip_share::unbind_device_retrying(&bus_id);
+            }
+        });
     }
 }
 
@@ -485,6 +538,10 @@ impl Session<FlutterHandler> {
     }
 
     pub fn usb_detach(&self, port: i32) {
+        if !self.ui_handler.usb_attached_port_take(port) {
+            log::warn!("usb detach: port {} was not attached by this session", port);
+            return;
+        }
         if let Some(rt) = self.ui_handler.session_runtime() {
             crate::client::usbip_attach::detach(&rt, port);
         }
@@ -562,7 +619,11 @@ impl Session<FlutterHandler> {
                 return;
             }
             log::info!("usb push: shared {}, asking peer to attach", bus_id);
-            session.ui_handler.usb_share_owned_add(bus_id.clone());
+            if !session.ui_handler.usb_share_owned_add(bus_id.clone()) {
+                log::info!("usb push: session closed while sharing {}, unsharing", bus_id);
+                crate::client::usbip_share::unbind_device_retrying(&bus_id);
+                return;
+            }
             session.ui_handler.usb_share_pending_add(bus_id.clone());
             session.usb_push_request(bus_id);
         });
@@ -604,15 +665,7 @@ impl Session<FlutterHandler> {
         };
         let session = self.clone();
         rt.spawn_blocking(move || {
-            let mut ok = false;
-            for attempt in 1..=10 {
-                if crate::client::usbip_share::bind_device(&bus_id, false) {
-                    ok = true;
-                    break;
-                }
-                log::debug!("usb push: {} still busy unsharing, retry {}/10", bus_id, attempt);
-                std::thread::sleep(std::time::Duration::from_millis(200));
-            }
+            let ok = crate::client::usbip_share::unbind_device_retrying(&bus_id);
             let error = if ok {
                 log::info!("usb push: unshared {} after unpush", bus_id);
                 String::new()
