@@ -276,6 +276,12 @@ pub(crate) async fn run_channel(
     session.ui_handler.usb.unregister_share_channel(id);
 }
 
+fn usbipd_listening() -> bool {
+    USBIPD_ADDR.parse().map_or(false, |addr| {
+        std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(CONNECT_TIMEOUT_MS)).is_ok()
+    })
+}
+
 impl Session<FlutterHandler> {
     /// Purely local (no network): what's shareable on this machine, for the
     /// "My local devices" push section.
@@ -334,6 +340,21 @@ impl Session<FlutterHandler> {
         };
         let session = self.clone();
         rt.spawn_blocking(move || {
+            // Without usbipd the peer's attach can only fail, and only after
+            // its user has typed a password for it.
+            if !usbipd_listening() {
+                log::error!("usb push: usbipd is not listening on {}, not pushing {}", USBIPD_ADDR, bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!(format!("usbipd is not running on this computer ({})", USBIPD_ADDR))),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
             log::info!("usb push: sharing {} before push", bus_id);
             if !bind_device(&bus_id, true) {
                 log::error!("usb push: failed to share {} locally, not pushing", bus_id);
