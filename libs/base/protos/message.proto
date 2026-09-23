@@ -859,6 +859,8 @@ message Misc {
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
     int32 follow_current_display = 38;
+    // Since 1.5.0: send the CursorData of this id again, if the shape was sent.
+    uint64 request_cursor_data = 39;
   }
 }
 

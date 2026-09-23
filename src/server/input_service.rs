@@ -42,6 +42,7 @@ struct StateCursor {
 impl super::service::Reset for StateCursor {
     fn reset(&mut self) {
         *self = Default::default();
+        CURSOR_SHAPES.lock().unwrap().clear();
         crate::platform::reset_input_cache();
         fix_key_down_timeout(true);
     }
@@ -433,7 +434,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
-                msg = Arc::new(tmp);
+                msg = shared_cursor_shape(Arc::new(tmp));
                 // A DRM cursor id is derived from the shape's pixels plus geometry, so an animated
                 // pointer mints a new id on every shape change and this map would grow for the life
                 // of the service, each entry pinning a compressed cursor message. (Upstream's X11
@@ -447,6 +448,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                     const CURSOR_CACHE_MAX: usize = 64;
                     if state.cached_cursor_data.len() >= CURSOR_CACHE_MAX {
                         state.cached_cursor_data.clear();
+                        CURSOR_SHAPES.lock().unwrap().clear();
                     }
                 }
                 state.cached_cursor_data.insert(cache_key, msg.clone());
@@ -506,6 +508,30 @@ lazy_static::lazy_static! {
     // Track connections that are currently using relative mouse movement.
     // Used to disable whiteboard/cursor display for all events while in relative mode.
     static ref RELATIVE_MOUSE_CONNS: Arc<Mutex<std::collections::HashSet<i32>>> = Default::default();
+}
+
+lazy_static::lazy_static! {
+    // Every shape the service has sent, by content id, for a controller that asks for one
+    // again. A shape under several handles is one message here, shared with `cached_cursor_data`.
+    static ref CURSOR_SHAPES: Mutex<HashMap<u64, Arc<Message>>> = Default::default();
+}
+
+/// The message already kept for this shape if there is one, so every handle for it shares it.
+fn shared_cursor_shape(msg: Arc<Message>) -> Arc<Message> {
+    let Some(message::Union::CursorData(cd)) = &msg.union else {
+        return msg;
+    };
+    CURSOR_SHAPES
+        .lock()
+        .unwrap()
+        .entry(cd.id)
+        .or_insert_with(|| msg.clone())
+        .clone()
+}
+
+/// The CursorData message of a shape the service has sent, for `Misc::request_cursor_data`.
+pub fn cursor_data_message(id: u64) -> Option<Arc<Message>> {
+    CURSOR_SHAPES.lock().unwrap().get(&id).cloned()
 }
 
 #[cfg(target_os = "linux")]
@@ -2541,4 +2567,35 @@ lazy_static::lazy_static! {
         (ControlKey::Insert, true),
         (ControlKey::Delete, true),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
+}
+
+#[cfg(test)]
+mod cursor_shape_tests {
+    use super::*;
+
+    fn shape(id: u64) -> Arc<Message> {
+        let mut msg = Message::new();
+        msg.set_cursor_data(CursorData {
+            id,
+            ..Default::default()
+        });
+        Arc::new(msg)
+    }
+
+    // One test, since the shapes are kept process-wide.
+    #[test]
+    fn a_shape_is_kept_once_and_can_be_asked_for_again() {
+        let first = shared_cursor_shape(shape(u64::MAX - 1));
+        let again = shared_cursor_shape(shape(u64::MAX - 1));
+        assert!(Arc::ptr_eq(&first, &again), "a second handle shares it");
+        let asked = cursor_data_message(u64::MAX - 1).expect("a sent shape is kept");
+        assert!(Arc::ptr_eq(&asked, &first));
+        assert!(cursor_data_message(u64::MAX - 2).is_none());
+
+        super::super::service::Reset::reset(&mut StateCursor::default());
+        assert!(
+            cursor_data_message(u64::MAX - 1).is_none(),
+            "a reset forgets them"
+        );
+    }
 }
