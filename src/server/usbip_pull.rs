@@ -5,7 +5,7 @@
 // instead of `push_event_`, and with its own negative `channel_id` space so
 // it can't collide with `usbip_mux.rs`'s (see `channel_id` sign convention
 // in `connection.rs::handle_usb_channel`).
-use super::connection::Sender;
+use super::{connection::Sender, usbip_mux::is_valid_bus_id};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes, log,
@@ -253,7 +253,7 @@ impl UsbPullState {
 /// already be inside one.
 fn detach_port(port: i32) {
     tokio::task::spawn_blocking(move || {
-        if crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
+        if crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
             log::info!("usb push: detached port {}", port);
         } else {
             log::error!("usb push: failed to detach port {}", port);
@@ -368,17 +368,6 @@ static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
         .map_err(|err| log::error!("usb push: invalid USB_PORT_BUS_ID_RE: {}", err))
         .ok()
 });
-
-/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
-/// here comes straight from the peer's `PushRequest` and is interpolated
-/// into a root-privileged shell command below, so anything else must be
-/// rejected before it gets near the shell.
-fn is_valid_bus_id(bus_id: &str) -> bool {
-    !bus_id.is_empty()
-        && bus_id
-            .chars()
-            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
-}
 
 /// A per-call random value with no dependency on the `rand` crate: each
 /// `RandomState` is seeded from the OS RNG, so hashing anything through it
@@ -635,21 +624,6 @@ Port 00: <Port in Use> at High Speed(480Mbps)
     #[test]
     fn parse_attached_port_no_match_for_unrelated_bus_id() {
         assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
-    }
-
-    #[test]
-    fn is_valid_bus_id_accepts_normal_bus_ids() {
-        assert!(is_valid_bus_id("18-1"));
-        assert!(is_valid_bus_id("1-2.3"));
-    }
-
-    #[test]
-    fn is_valid_bus_id_rejects_shell_metacharacters() {
-        assert!(!is_valid_bus_id(""));
-        assert!(!is_valid_bus_id("1-1; touch /etc/x"));
-        assert!(!is_valid_bus_id("1-1 && rm -rf /"));
-        assert!(!is_valid_bus_id("$(id)"));
-        assert!(!is_valid_bus_id("../etc/passwd"));
     }
 
     #[test]

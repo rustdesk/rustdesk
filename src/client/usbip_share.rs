@@ -99,8 +99,12 @@ fn shared_bus_ids() -> std::collections::HashSet<String> {
 /// through the same on-demand privilege-elevation prompt the service
 /// install/uninstall path already uses.
 pub fn bind_device(bus_id: &str, bind: bool) -> bool {
+    if !crate::client::usbip_attach::is_valid_bus_id(bus_id) {
+        log::error!("usb share: rejected malformed bus id {:?}", bus_id);
+        return false;
+    }
     let sub_cmd = if bind { "bind" } else { "unbind" };
-    crate::platform::run_cmds_privileged(&format!("usbip {} -b {}", sub_cmd, bus_id))
+    crate::platform::run_usbip_privileged(&[sub_cmd, "-b", bus_id])
 }
 
 // USB/IP `OP_REQ_IMPORT`: 2-byte version + 2-byte command code (0x8003) +
@@ -174,11 +178,13 @@ pub(crate) async fn run_channel(
             Ok(Some(chunk)) => prefix.extend_from_slice(&chunk),
             Ok(None) => {
                 log::info!("usb share: channel {} closed before import request", id);
+                session.usb_close_forward(id);
                 session.ui_handler.unregister_usb_share_channel(id);
                 return;
             }
             Err(_) => {
                 log::warn!("usb share: channel {} import request timed out, closing", id);
+                session.usb_close_forward(id);
                 session.ui_handler.unregister_usb_share_channel(id);
                 return;
             }
@@ -191,6 +197,7 @@ pub(crate) async fn run_channel(
                 "usb share: channel {} import request for {:?} does not match authorized {:?}, refusing",
                 id, requested, bus_id
             );
+            session.usb_close_forward(id);
             session.ui_handler.unregister_usb_share_channel(id);
             return;
         }
@@ -199,11 +206,13 @@ pub(crate) async fn run_channel(
                 "usb share: channel {} sent a malformed USB/IP import request, refusing",
                 id
             );
+            session.usb_close_forward(id);
             session.ui_handler.unregister_usb_share_channel(id);
             return;
         }
     }
     if writer.write_all(&prefix).await.is_err() {
+        session.usb_close_forward(id);
         session.ui_handler.unregister_usb_share_channel(id);
         return;
     }

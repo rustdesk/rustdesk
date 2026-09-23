@@ -136,15 +136,19 @@ static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
         .ok()
 });
 
-/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
-/// here comes from the peer's device list and is interpolated into a
-/// root-privileged shell command below, so anything else must be rejected
-/// before it gets near the shell.
-fn is_valid_bus_id(bus_id: &str) -> bool {
-    !bus_id.is_empty()
-        && bus_id
-            .chars()
-            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+/// Linux USB bus ids are `<bus>-<port>[.<port>...]` (e.g. "1-2.3"), shorter
+/// than the kernel's 32-byte `SYSFS_BUS_ID_SIZE`. Every bus id this side
+/// passes to a privileged `usbip` command either comes from the peer or can
+/// be named by it, so it must pass this check first.
+pub(crate) fn is_valid_bus_id(bus_id: &str) -> bool {
+    if bus_id.len() >= 32 {
+        return false;
+    }
+    let Some((bus, ports)) = bus_id.split_once('-') else {
+        return false;
+    };
+    let is_number = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    is_number(bus) && ports.split('.').all(is_number)
 }
 
 /// A per-call random value with no dependency on the `rand` crate: each
@@ -243,7 +247,7 @@ fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
 
 pub fn detach(rt: &Handle, port: i32) {
     rt.spawn_blocking(move || {
-        if !crate::platform::run_cmds_privileged(&format!("usbip detach -p {port}")) {
+        if !crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
             log::error!("usb detach: failed to detach port {}", port);
         }
     });
@@ -441,6 +445,18 @@ Port 01: <Port in Use> at High Speed(480Mbps)
         assert!(!is_valid_bus_id("1-1 && rm -rf /"));
         assert!(!is_valid_bus_id("$(id)"));
         assert!(!is_valid_bus_id("../etc/passwd"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_malformed_and_overlong() {
+        assert!(!is_valid_bus_id("1"));
+        assert!(!is_valid_bus_id("1-"));
+        assert!(!is_valid_bus_id("-1"));
+        assert!(!is_valid_bus_id("1-2..3"));
+        assert!(!is_valid_bus_id("1-2."));
+        assert!(!is_valid_bus_id("1.2-3"));
+        assert!(!is_valid_bus_id("1-2-3"));
+        assert!(!is_valid_bus_id(&format!("1-{}", "1.".repeat(15) + "1")));
     }
 
     #[test]
