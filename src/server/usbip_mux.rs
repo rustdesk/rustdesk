@@ -23,9 +23,9 @@ use hbb_common::{
     },
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     process::Command,
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
@@ -101,6 +101,9 @@ struct Entry {
 pub struct UsbipMux {
     channels: HashMap<i32, Entry>,
     tx: Sender,
+    /// Bus ids this connection's `Bind` requests shared and have not been
+    /// unshared yet; `None` once `close_all` has released them.
+    bound: Arc<Mutex<Option<HashSet<String>>>>,
 }
 
 impl UsbipMux {
@@ -108,6 +111,7 @@ impl UsbipMux {
         Self {
             channels: HashMap::new(),
             tx,
+            bound: Arc::new(Mutex::new(Some(HashSet::new()))),
         }
     }
 
@@ -141,12 +145,29 @@ impl UsbipMux {
                     ));
                     return;
                 }
+                // A device this connection didn't share stays as it is: it
+                // belongs to the CLI or to another session.
+                if !b.bind && !is_bound(&self.bound, &b.bus_id) {
+                    self.reply(bind_result_msg(
+                        b.bus_id,
+                        b.bind,
+                        "Not shared by this session".into(),
+                    ));
+                    return;
+                }
                 let tx = self.tx.clone();
+                let bound = self.bound.clone();
                 tokio::spawn(async move {
                     let bus_id = b.bus_id.clone();
                     let bind = b.bind;
                     let ok = match tokio::task::spawn_blocking(move || {
-                        bind_device_retrying(&b.bus_id, b.bind)
+                        let ok = bind_device_retrying(&b.bus_id, b.bind);
+                        if ok && !record_binding(&bound, &b.bus_id, b.bind) {
+                            log::info!("usbip: session closed while sharing {}, unsharing", b.bus_id);
+                            bind_device_retrying(&b.bus_id, false);
+                            return false;
+                        }
+                        ok
                     })
                     .await
                     {
@@ -239,9 +260,21 @@ impl UsbipMux {
         send(&self.tx, msg);
     }
 
-    /// Drops every channel's inbound sender, ending its relay task.
+    /// Drops every channel's inbound sender, ending its relay task, and
+    /// unshares the devices this connection shared.
     pub fn close_all(&mut self) {
         self.channels.clear();
+        let bound = self.bound.lock().unwrap().take().unwrap_or_default();
+        if bound.is_empty() {
+            return;
+        }
+        tokio::task::spawn_blocking(move || {
+            for bus_id in bound {
+                if !bind_device_retrying(&bus_id, false) {
+                    log::error!("usbip: failed to unshare {} on session close", bus_id);
+                }
+            }
+        });
     }
 }
 
@@ -423,6 +456,29 @@ fn bind_device_retrying(bus_id: &str, bind: bool) -> bool {
     false
 }
 
+fn is_bound(bound: &Mutex<Option<HashSet<String>>>, bus_id: &str) -> bool {
+    bound
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_some_and(|set| set.contains(bus_id))
+}
+
+/// Records a successful bind/unbind. `false` if the session already closed,
+/// in which case a new binding must be undone by the caller.
+fn record_binding(bound: &Mutex<Option<HashSet<String>>>, bus_id: &str, bind: bool) -> bool {
+    let mut bound = bound.lock().unwrap();
+    let Some(set) = bound.as_mut() else {
+        return !bind;
+    };
+    if bind {
+        set.insert(bus_id.to_string());
+    } else {
+        set.remove(bus_id);
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,6 +543,39 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         assert!(!is_valid_bus_id("1.2-3"));
         assert!(!is_valid_bus_id("1-2-3"));
         assert!(!is_valid_bus_id(&format!("1-{}", "1.".repeat(15) + "1")));
+    }
+
+    #[test]
+    fn unbind_of_device_not_shared_here_is_refused() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut mux = UsbipMux::new(tx);
+        let mut frame = UsbChannel::new();
+        frame.union = Some(usb_channel::Union::Bind(UsbBind {
+            bus_id: "1-2".into(),
+            bind: false,
+            ..Default::default()
+        }));
+        mux.handle(frame, || true);
+        let (_, msg) = rx.try_recv().unwrap();
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::BindResult(r)) => assert!(!r.error.is_empty()),
+                _ => panic!("expected a BindResult"),
+            },
+            _ => panic!("expected a UsbChannel message"),
+        }
+    }
+
+    #[test]
+    fn record_binding_after_close_asks_caller_to_undo_a_bind() {
+        let bound = Mutex::new(Some(HashSet::new()));
+        assert!(record_binding(&bound, "1-2", true));
+        assert!(is_bound(&bound, "1-2"));
+        assert!(record_binding(&bound, "1-2", false));
+        assert!(!is_bound(&bound, "1-2"));
+        bound.lock().unwrap().take();
+        assert!(!record_binding(&bound, "1-2", true));
+        assert!(record_binding(&bound, "1-2", false));
     }
 
     #[test]
