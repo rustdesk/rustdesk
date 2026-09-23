@@ -314,8 +314,9 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                             )?;
                             if pk.kx_version > advertised {
                                 bail!(
-                                    "Handshake failed: key exchange version {} not offered",
-                                    pk.kx_version
+                                    "Handshake failed: key exchange version {} not offered, {} was",
+                                    pk.kx_version,
+                                    advertised
                                 );
                             }
                             stream.set_negotiated_key(

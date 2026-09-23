@@ -2103,6 +2103,8 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                         let their_pk_b = get_pk(&their_pk_b)
                             .context("Wrong their public length in key exchange")?;
                         // The signed X25519 high bit marks servers that sign their parameters.
+                        // X25519 ignores that bit, so old clients use the key unchanged; keep
+                        // the bytes as signed, since the transcript and KxParams carry them so.
                         if their_pk_b[31] & 0x80 != 0 || !ex.signed_params.is_empty() {
                             let params = sign::verify(&ex.signed_params, &rs_pk)
                                 .ok()
@@ -2120,11 +2122,11 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                         }
                         let (asymmetric_value, symmetric_value, key) =
                             create_symmetric_key_msg(their_pk_b);
-                        let version = hbb_common::tcp::kx_version_for(ex.version);
+                        let picked = hbb_common::tcp::kx_version_for(ex.version);
                         let mut msg_out = RendezvousMessage::new();
                         msg_out.set_key_exchange(KeyExchange {
                             keys: vec![asymmetric_value.clone(), symmetric_value],
-                            version,
+                            version: picked,
                             ..Default::default()
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
@@ -2135,7 +2137,7 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                                 initiator_pk: &asymmetric_value,
                                 responder_pk: &their_pk_b,
                                 advertised: ex.version,
-                                picked: version,
+                                picked,
                             },
                         )?;
                         if log_on_success {
