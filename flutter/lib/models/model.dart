@@ -3622,11 +3622,28 @@ class CursorModel with ChangeNotifier {
   }
 
   void _useNativeKey(CursorData cache, String key) {
-    final old = _nativeKeys[cache.id];
+    final old = _nativeKeys.remove(cache.id);
     _nativeKeys[cache.id] = key;
     if (old != null && old != key && _cacheKeys.remove(old)) {
       _replacedKeys.add(old);
     }
+    _evictNativeKeys();
+  }
+
+  /// Native cursors of the peer's shapes kept, the ones used last; the core rebuilds the
+  /// others. Covers the everyday set: arrow, text, hand, four resize arrows, wait and a few.
+  static const kMaxNativeCursors = 16;
+
+  // `_nativeKeys` is in order of use. The predefined cursors are not the peer's and stay.
+  void _evictNativeKeys() {
+    var excess = _nativeKeys.keys.where(_cacheMap.containsKey).length -
+        kMaxNativeCursors;
+    _nativeKeys.removeWhere((id, key) {
+      if (excess <= 0 || id == _id || !_cacheMap.containsKey(id)) return false;
+      excess--;
+      if (_cacheKeys.remove(key)) _replacedKeys.add(key);
+      return true;
+    });
   }
 
   /// Called when a cursor already registered is built again: whatever replaced a cursor was
@@ -3688,13 +3705,11 @@ class CursorModel with ChangeNotifier {
         cache.releasePixels();
       }
     }
-    // Only the shape in use keeps a native cursor too; the core rebuilds the others. The
-    // predefined cursors are not the peer's shapes and stay.
-    _nativeKeys.removeWhere((id, key) {
-      if (id == _id || !_cacheMap.containsKey(id)) return false;
-      if (_cacheKeys.remove(key)) _replacedKeys.add(key);
-      return true;
-    });
+    final key = _nativeKeys.remove(_id);
+    if (key != null) {
+      _nativeKeys[_id] = key;
+    }
+    _evictNativeKeys();
     final tmp = _images[_id];
     _image = tmp?.item1;
     if (tmp != null) {

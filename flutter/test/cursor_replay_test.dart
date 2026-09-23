@@ -123,28 +123,38 @@ void main() {
     expect(ffi.cursor.fetched, isEmpty, reason: 'nothing had to be decoded');
   });
 
-  test('only the shape in use keeps a native cursor', () async {
+  test('the shapes used last keep their native cursors, the others go',
+      () async {
+    const max = CursorModel.kMaxNativeCursors;
     final cursor = ffi.cursorModel;
-    await _feed(ffi, '1');
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    await _settle();
-    final first = registered.single;
-    await _feed(ffi, '2');
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    await _settle();
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    await _settle();
-    expect(deleted, [first], reason: 'gone once the next one was shown');
-    expect(cursor.cachedKeys, {registered.last});
+    Future<void> show() async {
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
 
+    for (var i = 0; i < max; i++) {
+      await _feed(ffi, '$i');
+      await show();
+    }
+    _select(ffi, '0');
+    await show();
+    expect(deleted, isEmpty, reason: '$max fit');
+    expect(ffi.cursor.fetched, isEmpty);
+
+    await _feed(ffi, '$max');
+    await show();
+    expect(deleted, [registered[1]], reason: 'shape 1 was used longest ago');
+    expect(cursor.cachedKeys.length, max);
+
+    _select(ffi, '2');
+    await show();
+    expect(ffi.cursor.fetched, isEmpty, reason: 'shape 2 kept its cursor');
     _select(ffi, '1');
     expect(buildCursorOfCache(cursor, 1.0, cursor.cache), MouseCursor.defer);
     await _settle();
     expect(ffi.cursor.fetched, ['1'], reason: 'rebuilt from the core');
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    await _settle();
-    expect(registered.length, 3);
-    expect(cursor.cachedKeys, {registered.last});
   });
 
   test('a shape painted again is decoded again from the core', () async {
