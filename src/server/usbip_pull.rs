@@ -475,7 +475,7 @@ async fn run_channel(
     if !success {
         // Otherwise the controller's UI never learns the push failed and
         // stays stuck showing it as pushed -- the pending-authorization
-        // bookkeeping it cleans up on this reply (`flutter.rs`'s
+        // bookkeeping it cleans up on this reply (`usbip_channel.rs`'s
         // `PushResult` handler) would then never run either.
         send(&tx, push_result_msg(bus_id, message));
         return;
