@@ -3623,6 +3623,7 @@ class CursorModel with ChangeNotifier {
   /// A raster returned to before its native cursor was deleted takes it back.
   bool reviveNativeKey(CursorData cache, String key) {
     if (!_replacedKeys.remove(key)) return false;
+    deleteReplacedKeys();
     _cacheKeys.add(key);
     _useNativeKey(cache, key);
     return true;
@@ -3653,8 +3654,9 @@ class CursorModel with ChangeNotifier {
     });
   }
 
-  /// Called when a cursor already registered is built again: whatever replaced a cursor was
-  /// activated in an earlier frame, so the replaced ones are off screen.
+  /// Called by a build that shows a cursor, before it registers or takes one back: whatever
+  /// replaced a cursor before this build was activated in an earlier frame, so the replaced
+  /// ones are off screen.
   void deleteReplacedKeys() {
     for (final key in _replacedKeys) {
       deleteCustomCursor(key);

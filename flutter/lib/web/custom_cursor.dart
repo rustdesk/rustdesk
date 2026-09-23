@@ -114,6 +114,7 @@ MouseCursor buildCursorOfCache(
         cursor.restorePixels(cache.id);
         return MouseCursor.defer;
       }
+      cursor.deleteReplacedKeys();
       debugPrint(
           "Register custom cursor with key $key (${cache.hotx},${cache.hoty})");
       CursorManager.instance.registerCursor(CursorData(

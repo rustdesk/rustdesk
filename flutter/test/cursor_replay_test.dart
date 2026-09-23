@@ -157,6 +157,23 @@ void main() {
     expect(ffi.cursor.fetched, ['1'], reason: 'rebuilt from the core');
   });
 
+  test('shapes each shown once leave no more native cursors than the limit',
+      () async {
+    const max = CursorModel.kMaxNativeCursors;
+    final cursor = ffi.cursorModel;
+    for (var i = 0; i < max + 4; i++) {
+      await _feed(ffi, '$i');
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
+    expect(registered.length, max + 4);
+    expect(registered.length - deleted.length, lessThanOrEqualTo(max + 1),
+        reason: 'the one replaced last waits for the next build');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    expect(registered.length - deleted.length, max);
+  });
+
   test('a shape painted again is decoded again from the core', () async {
     await _feed(ffi, '1', size: 16);
     await _feed(ffi, '2');

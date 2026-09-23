@@ -28,6 +28,7 @@ MouseCursor buildCursorOfCache(
         cursor.restorePixels(cache.id);
         return MouseCursor.defer;
       }
+      cursor.deleteReplacedKeys();
       // Square canvases avoid clipping or stray edge pixels on Linux.
       final width = isLinux && cache.rasterWidth < cache.rasterHeight
           ? cache.rasterHeight
