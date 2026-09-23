@@ -1048,6 +1048,14 @@ message UsbForwardClose {
   int32 channel_id = 1;
 }
 
+// Each side starts every channel with a fixed receive window
+// (usbip_flow::CHANNEL_WINDOW) and returns credit as it drains data to the
+// local socket.
+message UsbForwardWindowUpdate {
+  int32 channel_id = 1;
+  uint32 add = 2;
+}
+
 // Controller -> controlled: "attach the device I just bound locally." The
 // controlled side then opens a channel back (UsbForwardOpen, with a negative
 // channel_id) to pull it, mirroring the controller's own pull flow in
@@ -1075,6 +1083,7 @@ message UsbChannel {
     UsbForwardClose close = 8;
     UsbPushRequest push_request = 9;
     UsbPushResult push_result = 10;
+    UsbForwardWindowUpdate window_update = 11;
   }
 }
 

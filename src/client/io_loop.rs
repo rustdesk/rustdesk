@@ -1636,6 +1636,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 self.handler.lc.write().unwrap().handle_peer_info(&pi);
                                 return false;
                             }
+                            crate::usbip_flow::cap_packet_size(peer);
                         }
                         self.handler.handle_peer_info(pi);
                         #[cfg(all(target_os = "windows", not(feature = "flutter")))]
