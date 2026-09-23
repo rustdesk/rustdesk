@@ -2069,14 +2069,16 @@ pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>, round: u32) {
     // RemoteUsb's FFI-thread entry points can borrow it instead of creating
     // a separate background one -- see `register_session_runtime`'s doc
     // comment. Unregistered on every exit path via the guard's `Drop`.
-    handler.register_session_runtime(round, tokio::runtime::Handle::current());
     struct RuntimeUnregisterGuard<T: InvokeUiSession>(Session<T>, u32);
     impl<T: InvokeUiSession> Drop for RuntimeUnregisterGuard<T> {
         fn drop(&mut self) {
             self.0.unregister_session_runtime(self.1);
         }
     }
-    let _runtime_guard = RuntimeUnregisterGuard(handler.clone(), round);
+    let _runtime_guard = handler.is_remote_usb().then(|| {
+        handler.register_session_runtime(round, tokio::runtime::Handle::current());
+        RuntimeUnregisterGuard(handler.clone(), round)
+    });
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (sender, receiver) = mpsc::unbounded_channel::<Data>();
