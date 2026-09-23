@@ -252,26 +252,36 @@ pub(crate) async fn run_channel(
 
     let session_read = session.clone();
     let flow_read = flow.clone();
-    let to_tunnel = hbb_common::tokio::spawn(async move {
+    let mut to_tunnel = hbb_common::tokio::spawn(async move {
         flow_read
             .socket_to_peer(reader, |chunk| {
                 session_read.usb_forward_data(id, chunk);
                 true
             })
             .await;
-        log::info!("usb share: channel {} local usbipd connection ended", id);
-        session_read.usb_close_forward(id);
     });
 
-    while let Some(chunk) = inbound.recv().await {
-        if writer.write_all(&chunk).await.is_err() {
-            break;
+    // Whichever half ends first ends the other; only an end on our side
+    // (local EOF or write error) needs a Close, the peer knows about its own.
+    let local_ended = loop {
+        hbb_common::tokio::select! {
+            _ = &mut to_tunnel => break true,
+            chunk = inbound.recv() => {
+                let Some(chunk) = chunk else { break false };
+                if writer.write_all(&chunk).await.is_err() {
+                    break true;
+                }
+                if let Some(add) = flow.drained(chunk.len()) {
+                    session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
+                }
+            }
         }
-        if let Some(add) = flow.drained(chunk.len()) {
-            session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
-        }
-    }
+    };
     to_tunnel.abort();
+    if local_ended {
+        log::info!("usb share: channel {} local usbipd connection ended", id);
+        session.usb_close_forward(id);
+    }
     log::info!("usb share: channel {} relay closed", id);
     session.ui_handler.usb.unregister_share_channel(id);
 }
