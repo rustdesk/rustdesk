@@ -263,6 +263,7 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        crate::keyboard::shortcuts::clear_fired_keys();
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
         #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -622,6 +623,7 @@ pub fn session_enter_or_leave(_session_id: SessionID, _enter: bool) -> SyncRetur
         // so that two windows viewing the same peer get distinct grab owners.
         let window_id = _session_id.as_u128();
         if _enter {
+            crate::keyboard::shortcuts::clear_fired_keys();
             set_cur_session_id_(_session_id, &keyboard_mode);
             crate::keyboard::client::change_grab_status(
                 crate::common::GrabState::Run,

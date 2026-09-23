@@ -310,10 +310,22 @@ pub fn match_event(event: &rdev::Event) -> Option<String> {
     match_normalized(&key_name, &mods, &bindings).map(str::to_owned)
 }
 
-/// The physical key whose press fired a shortcut, until its release. Its auto
-/// repeats and its release are consumed so none of them reach the remote.
 #[cfg(feature = "flutter")]
-static FIRED_KEY: std::sync::Mutex<Option<rdev::Key>> = std::sync::Mutex::new(None);
+lazy_static::lazy_static! {
+    /// Physical keys whose press fired a shortcut and whose release has not
+    /// arrived yet. Every event of such a key belongs to RustDesk until its
+    /// release, whatever the modifiers do meanwhile: auto repeats and the
+    /// release are consumed and never reach the remote.
+    static ref FIRED_KEYS: std::sync::Mutex<std::collections::HashSet<rdev::Key>> =
+        Default::default();
+}
+
+/// Forget the fired keys whose release will never arrive, e.g. because focus
+/// left the session while they were held.
+#[cfg(feature = "flutter")]
+pub fn clear_fired_keys() {
+    FIRED_KEYS.lock().unwrap().clear();
+}
 
 /// Match `event` against the cached bindings; if it matched, push a
 /// `shortcut_triggered` Flutter session event and return `true` so the caller
@@ -339,19 +351,10 @@ pub fn try_dispatch(
 ) -> bool {
     use rdev::EventType;
     {
-        let mut fired = FIRED_KEY.lock().unwrap();
-        match (event.event_type, *fired) {
-            (EventType::KeyRelease(k), Some(f)) if k == f => {
-                *fired = None;
-                return true;
-            }
-            (EventType::KeyPress(k), Some(f)) if k == f => {
-                if match_event(event).is_some() {
-                    return true;
-                }
-                // The chord is gone, so this is a new press, not a repeat.
-                *fired = None;
-            }
+        let mut fired = FIRED_KEYS.lock().unwrap();
+        match event.event_type {
+            EventType::KeyPress(k) if fired.contains(&k) => return true,
+            EventType::KeyRelease(k) if fired.remove(&k) => return true,
             _ => {}
         }
     }
@@ -368,7 +371,7 @@ pub fn try_dispatch(
     };
     release_remote_keys(keyboard_mode, &peer(), &send);
     if let EventType::KeyPress(k) = event.event_type {
-        *FIRED_KEY.lock().unwrap() = Some(k);
+        FIRED_KEYS.lock().unwrap().insert(k);
     }
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
@@ -798,22 +801,82 @@ mod tests {
         e
     }
 
-    /// Holding the chord modifiers and pressing two bound keys in a row must
-    /// fire both actions: releasing the modifiers on the remote must not
-    /// clear them locally. Repeats and the release of a fired key are consumed.
+    /// Holding the chord modifiers and pressing two bound keys must fire both
+    /// actions once each: releasing the modifiers on the remote must not clear
+    /// them locally, and overlapping fired keys each own their repeats and
+    /// release.
     #[cfg(feature = "flutter")]
     #[test]
-    fn dispatch_keeps_local_modifiers_and_consumes_fired_key() {
-        use super::super::{event_to_key_events, MODIFIERS_STATE, TO_RELEASE};
-        use base::message_proto::KeyboardMode;
+    fn dispatch_consumes_overlapping_fired_keys() {
         use rdev::Key;
 
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        // Records the action of every press that dispatched: a press whose key
+        // was not already fired before the call.
+        let fired = std::cell::RefCell::new(Vec::new());
+        let dispatch = |e: &rdev::Event| {
+            let before = FIRED_KEYS.lock().unwrap().clone();
+            let action = match_event(e);
+            let hit = try_dispatch(None, e, "map", || "windows".into(), |_| {});
+            if let rdev::EventType::KeyPress(k) = e.event_type {
+                if hit && !before.contains(&k) {
+                    fired.borrow_mut().push(action.unwrap_or_default());
+                }
+            }
+            hit
+        };
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        assert!(super::super::TO_RELEASE.lock().unwrap().is_empty());
+        {
+            let state = super::super::MODIFIERS_STATE.lock().unwrap();
+            for k in chord {
+                assert_eq!(state.get(&k), Some(&true), "{k:?} must stay held locally");
+            }
+        }
+        assert!(dispatch(&make_press(Key::KeyC)), "second chord key fires");
+        assert!(dispatch(&make_press(Key::KeyP)), "P repeat is consumed");
+        assert!(dispatch(&make_release(Key::KeyP)), "P release is consumed");
+        assert!(dispatch(&make_release(Key::KeyC)), "C release is consumed");
+        assert!(FIRED_KEYS.lock().unwrap().is_empty());
+        assert_eq!(
+            *fired.borrow(),
+            vec![action_id::SCREENSHOT.to_owned(), action_id::TOGGLE_CHAT.to_owned()]
+        );
+
+        release_chord(chord);
+    }
+
+    /// A fired key stays owned until its release even after the modifiers go.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_consumes_fired_key_after_modifiers_release() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let dispatch = |e: &rdev::Event| try_dispatch(None, e, "map", || "windows".into(), |_| {});
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        release_chord(chord);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat without modifiers is consumed");
+        assert!(dispatch(&make_release(Key::KeyP)), "release without modifiers is consumed");
+        assert!(!dispatch(&make_press(Key::KeyP)), "a new press without the chord passes");
+        assert!(!dispatch(&make_release(Key::KeyP)));
+    }
+
+    #[cfg(feature = "flutter")]
+    fn enable_defaults_and_hold_chord() -> [rdev::Key; 3] {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
         *CACHE.write().unwrap() = Arc::new(Bindings {
             enabled: true,
             pass_through: false,
             bindings: default_bindings(),
         });
+        clear_fired_keys();
         let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
             Key::MetaLeft
         } else {
@@ -821,29 +884,16 @@ mod tests {
         };
         let chord = [primary, Key::Alt, Key::ShiftLeft];
         for k in chord {
-            event_to_key_events("windows".into(), &make_press(k), KeyboardMode::Map, None);
+            super::super::event_to_key_events("windows".into(), &make_press(k), KeyboardMode::Map, None);
         }
-        let dispatch = |e: &rdev::Event| try_dispatch(None, e, "map", || "windows".into(), |_| {});
+        chord
+    }
 
-        assert!(dispatch(&make_press(Key::KeyP)));
-        assert!(TO_RELEASE.lock().unwrap().is_empty());
-        {
-            let state = MODIFIERS_STATE.lock().unwrap();
-            for k in chord {
-                assert_eq!(state.get(&k), Some(&true), "{k:?} must stay held locally");
-            }
-        }
-        assert!(dispatch(&make_press(Key::KeyP)), "auto repeat is consumed");
-        assert!(dispatch(&make_release(Key::KeyP)), "release is consumed");
-        assert!(dispatch(&make_press(Key::KeyC)), "second chord key still fires");
-        assert!(dispatch(&make_release(Key::KeyC)));
-        assert!(!dispatch(&make_release(Key::KeyC)), "only the first release is consumed");
-
+    #[cfg(feature = "flutter")]
+    fn release_chord(chord: [rdev::Key; 3]) {
+        use base::message_proto::KeyboardMode;
         for k in chord {
-            event_to_key_events("windows".into(), &make_release(k), KeyboardMode::Map, None);
+            super::super::event_to_key_events("windows".into(), &make_release(k), KeyboardMode::Map, None);
         }
-        assert!(!dispatch(&make_press(Key::KeyP)), "no chord, no shortcut");
-        *FIRED_KEY.lock().unwrap() = None;
-        *CACHE.write().unwrap() = Arc::new(Bindings::default());
     }
 }
