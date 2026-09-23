@@ -397,6 +397,19 @@ void main() {
     expect(physicalKeyName(PhysicalKeyboardKey.numpad1), isNull);
   });
 
+  test('enable seeds defaults only for a config without bindings', () {
+    expect(shouldSeedDefaultShortcutBindings(<String, dynamic>{}), isTrue);
+    expect(
+        shouldSeedDefaultShortcutBindings(
+            <String, dynamic>{'enabled': false, 'pass_through': true}),
+        isTrue);
+    // The user cleared every binding: re-enabling must not bring defaults back.
+    expect(
+        shouldSeedDefaultShortcutBindings(
+            <String, dynamic>{'enabled': false, 'bindings': <dynamic>[]}),
+        isFalse);
+  });
+
   test('non-US layouts record and match the physical key', () {
     // AZERTY: the key labelled "A" sits where US QWERTY has Q. The native
     // matcher only sees the physical position (USB HID usage), so the

@@ -135,7 +135,7 @@ class ShortcutModel {
 
   /// Flip the master `enabled` flag and persist. On the first enable we seed
   /// the default bindings so common combos work out of the box; otherwise we
-  /// preserve whatever the user already has. Refreshes the matcher cache so
+  /// preserve whatever the user already has, an empty list included. Refreshes the matcher cache so
   /// the change takes effect immediately (Rust on native, JS via the bridge
   /// on Web).
   static Future<void> setEnabled(bool v) async {
@@ -149,14 +149,13 @@ class ShortcutModel {
       }
     }
     json['enabled'] = v;
-    final list = shortcutBindingMapsFrom(json['bindings']);
-    if (v && list.isEmpty) {
+    if (v && shouldSeedDefaultShortcutBindings(json)) {
       json['bindings'] = filterDefaultBindingsForPlatform(
         jsonDecode(bind.mainGetDefaultKeyboardShortcuts()) as List,
         currentPlatformCapabilities(),
       );
-    } else {
-      json['bindings'] = list;
+    } else if (json.containsKey('bindings')) {
+      json['bindings'] = shortcutBindingMapsFrom(json['bindings']);
     }
     await bind.mainSetLocalOption(
         key: kShortcutLocalConfigKey, value: jsonEncode(json));

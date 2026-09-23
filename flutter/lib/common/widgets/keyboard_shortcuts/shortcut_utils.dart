@@ -35,6 +35,12 @@ Set<String> shortcutModSetFrom(dynamic rawMods) {
   return rawMods.whereType<String>().toSet();
 }
 
+/// Whether enabling shortcuts should seed the default bindings. Only a config
+/// that has never held a bindings list is seeded; an empty list means the
+/// user cleared every binding and must stay empty.
+bool shouldSeedDefaultShortcutBindings(Map<String, dynamic> config) =>
+    !config.containsKey('bindings');
+
 bool isSwitchTabShortcutAction(String? actionId) {
   return actionId == kShortcutActionSwitchTabNext ||
       actionId == kShortcutActionSwitchTabPrev;
