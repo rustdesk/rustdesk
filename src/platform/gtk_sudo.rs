@@ -55,6 +55,24 @@ pub fn run(cmds: Vec<&str>) -> ResultType<()> {
     }
 }
 
+/// Like `run`, but always asks for the password in the GTK dialog. `run`
+/// picks terminal mode for any `rustdesk --...` process, and the `--server`
+/// the service launches has no terminal to read a password from, so the
+/// call would fail at once. RemoteUsb needs root on the controlled side,
+/// where the dialog is answered by the controlling user over the remote
+/// session.
+pub fn run_gui(cmds: Vec<&str>) -> ResultType<()> {
+    let mut args = vec!["-gtk-sudo", "gui"];
+    args.extend(cmds);
+    let mut child = crate::run_me(args)?;
+    let exit_status = child.wait()?;
+    if exit_status.success() {
+        Ok(())
+    } else {
+        bail!("child exited with status: {:?}", exit_status);
+    }
+}
+
 pub fn exec() {
     let mut args = vec![];
     for arg in std::env::args().skip(3) {
