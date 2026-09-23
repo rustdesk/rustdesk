@@ -1097,6 +1097,11 @@ pub fn start_os_service() {
         );
     }
 
+    // Off unless the operator turned it on; the watcher checks that itself, every poll, so a toggle
+    // takes effect without a service restart.
+    #[cfg(feature = "headless-display")]
+    crate::virtual_display_manager::linux::start_watcher();
+
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let (mut display, mut xauth): (String, String) = ("".to_owned(), "".to_owned());

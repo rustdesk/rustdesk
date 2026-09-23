@@ -580,6 +580,18 @@ async fn recv_thread(
             {
                 Some(i) => i,
                 None => {
+                    // Publish what the service DOES have before failing, or the promise in the
+                    // message below is one the caller cannot keep. `DrmDisplaysChanged` only
+                    // travels inside a live stream (`ipc/drm.rs`, after DrmStart), so once this
+                    // stream is gone the only other publishers are the POSITIVE_TTL refresh --
+                    // which is not even spawned while the verdict is young -- and the one-shot
+                    // empty-topology recheck. Without this a rebuild would keep asking for the
+                    // connector the stale cache names, which is exactly what a transition that
+                    // comes back on a DIFFERENT connector produces: the headless force prefers
+                    // HDMI, so a pulled DP-1 returns as HDMI-A-1 and every retry fails on a
+                    // topology that is perfectly fine. An EMPTY list goes through too: that is
+                    // what arms the settle clock when there is no stream left to push it.
+                    adopt_handshake_topology(displays.clone());
                     let _ = tx.send(Err(anyhow!(
                         "display {display} ({}) is no longer in the service's list; \
                          the video service will rebuild against the fresh topology",
@@ -1063,6 +1075,91 @@ static DRM_STATE: Mutex<ProbeState> = Mutex::new(ProbeState::Unknown);
 const NEGATIVE_TTL: Duration = Duration::from_secs(30);
 const POSITIVE_TTL: Duration = Duration::from_secs(15);
 
+/// First moment a hotplug refresh reported an empty topology; None while displays exist.
+static EMPTY_TOPOLOGY_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+/// A monitor unplug opens a zero-display gap before the headless force (or the compositor) restores
+/// scanout; demoting inside it hands a live session to the PipeWire portal, whose consent wait is
+/// three minutes on an fd and which a headless box can never answer.
+///
+/// Sized against the headless transition, which is the longest gap we produce ourselves. Its sysfs
+/// half is bounded by constants and comes to 9.5 s (see
+/// `virtual_display_manager::linux`'s `the_force_lands_before_the_capture_side_gives_up_on_drm`);
+/// the other half, the compositor committing a mode on the forced connector and the producer then
+/// listing it as CRTC-bound, is not bounded by anything we own. Was 10 s, which the sysfs half
+/// alone came within half a second of. Ten seconds of retrying DRM on a topology that really is
+/// dead is a far smaller price than three minutes in front of a dialog with nobody to answer it.
+pub(crate) const EMPTY_TOPOLOGY_DEMOTE_AFTER: Duration = Duration::from_secs(20);
+/// What the sum above leaves out: the modeset and the enumeration that follow the sysfs force.
+/// Not measurable from a constant, so it is an allowance, of the order of the 9 s end-to-end
+/// transition measured on a 2018 MacBook Pro.
+#[cfg(feature = "headless-display")]
+pub(crate) const MODESET_ALLOWANCE: Duration = Duration::from_secs(10);
+
+/// True once the empty topology has outlived the settle window; records the first sighting.
+fn empty_topology_ready(since: &mut Option<Instant>, window: Duration) -> bool {
+    match *since {
+        Some(t) => t.elapsed() >= window,
+        None => {
+            *since = Some(Instant::now());
+            false
+        }
+    }
+}
+
+/// A non-empty observation retires the debounce clock. Callers must hold no `DRM_STATE` guard:
+/// `swap_available_displays` takes that lock first, so the two must never nest.
+fn clear_empty_topology_clock() {
+    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+}
+
+/// Whether the last enumeration found no outputs and the settle window has not run out yet, i.e.
+/// the cached `Available` verdict is being held over a topology that currently has nothing in it.
+///
+/// This is the difference between "DRM cannot capture this display" and "there is momentarily no
+/// display to capture", which a capture-build failure alone cannot tell apart: the handshake
+/// re-enumerates and simply finds our connector gone.
+///
+/// Takes the clock lock, so the rule `swap_available_displays` documents applies to it too: never
+/// call it while holding `DRM_STATE`. The one caller, the capture-build failure arm in
+/// `wayland::get_capturer_for_display`, holds no guard at all.
+pub(super) fn topology_settling() -> bool {
+    match *EMPTY_TOPOLOGY_SINCE.lock().unwrap() {
+        Some(t) => t.elapsed() < EMPTY_TOPOLOGY_DEMOTE_AFTER,
+        None => false,
+    }
+}
+
+/// What a handshake does when the service's fresh list does not carry the connector the cached list
+/// named: install what the service DOES have, so the next rebuild asks for something that exists
+/// and `build_failure_is_transient` can tell the caller this failure was the topology moving.
+/// An empty list goes through unchanged, which is what arms the settle clock when no stream is
+/// left to push one.
+fn adopt_handshake_topology(displays: Vec<DrmDisplayInfo>) {
+    swap_available_displays(displays);
+}
+
+/// The verdict generation, for sampling either side of an operation that can race it.
+pub(super) fn state_generation() -> u64 {
+    DRM_STATE_GEN.load(Ordering::Acquire)
+}
+
+/// Whether a capture-build failure says the topology MOVED under the build rather than saying
+/// anything about DRM. Two ways, and both are needed:
+///
+/// - the empty-topology clock is armed and its window still open: there is momentarily nothing to
+///   capture, which the debounce is already holding the verdict across;
+/// - the verdict changed while the build was in flight. A build that finds its connector gone
+///   publishes what the service DOES have (see `recv_thread`), and a NON-EMPTY publish retires the
+///   clock -- so without this second arm the very build that discovered the new topology would be
+///   the one to fall into the portal, one retry short of succeeding against it. The same holds for
+///   a TTL refresh landing mid-build.
+///
+/// `gen_at_build_start` must be sampled BEFORE the build: `HANDSHAKE_WAIT_MS` alone outlasts the
+/// settle window.
+pub(super) fn build_failure_is_transient(gen_at_build_start: u64) -> bool {
+    topology_settling() || state_generation() != gen_at_build_start
+}
+
 /// Runs on a throwaway thread: a nested `#[tokio::main]` panics if called from inside a runtime.
 fn query_displays() -> ResultType<Vec<DrmDisplayInfo>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -1271,6 +1368,10 @@ fn probe_and_publish() -> Availability {
         }
     };
     drop(st);
+    // A successful probe is a non-empty observation, so it retires any pending debounce clock.
+    if answer == Availability::Available {
+        clear_empty_topology_clock();
+    }
     answer
 }
 
@@ -1314,6 +1415,7 @@ fn refresh_unavailable_async() {
                     DRM_PROBE_FAILURES.store(0, Ordering::Relaxed);
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
                     drop(st);
+                    clear_empty_topology_clock();
                     scrap::wayland::display::clear_wayland_displays_cache();
                 }
                 _ => {
@@ -1364,14 +1466,23 @@ fn refresh_available_async() {
                         _ => true,
                     };
                     publish_probe_state(&mut st, ProbeState::Available(Instant::now(), fresh));
+                    drop(st);
+                    // A restored list must also clear the empty-debounce clock, or the NEXT
+                    // empty push demotes instantly off a stale first-sighting. Racing a hotplug
+                    // empty push in the gap is benign (its recheck re-arms within a TTL) and the
+                    // gap is what keeps the two locks un-nested - do not move this under st.
+                    *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
                     if changed {
-                        drop(st);
                         scrap::wayland::display::clear_wayland_displays_cache();
                     }
                 }
                 RefreshOutcome::Unavailable => {
-                    log::info!("drm: refresh -> 0 displays, marking DRM unavailable");
-                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    // Through the shared debounce, DRM_STATE dropped first (the two locks never
+                    // nest): the refresh path must not demote faster than the hotplug path does.
+                    // A publish landing in the gap is re-read by swap under its own lock and the
+                    // worst case is one spurious first-sighting - benign, so no gen re-check.
+                    drop(st);
+                    swap_available_displays(Vec::new());
                 }
                 // Only the TTL stamp moves, so this does NOT go through publish_probe_state.
                 RefreshOutcome::Restamp => {
@@ -1416,6 +1527,11 @@ pub(super) fn warm_availability() {
             Ok(list) if !list.is_empty() => {
                 log::info!("drm: consumer cache warmed ({} displays) at startup", list.len());
                 publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Available(Instant::now(), list));
+                // Warm-up runs detached, so an empty probe can have armed the clock while it was
+                // querying. Retiring it AFTER the publish is what covers that: an empty observation
+                // from before this Available cannot be allowed to time out against it. The guard
+                // above is a temporary, so no lock is held here.
+                clear_empty_topology_clock();
                 return;
             }
             _ => std::thread::sleep(Duration::from_millis(300)),
@@ -1459,6 +1575,7 @@ pub(super) async fn refresh_displays_for_login() {
                     _ => return,
                 }
             };
+            clear_empty_topology_clock();
             if changed {
                 scrap::wayland::display::clear_wayland_displays_cache();
             }
@@ -1745,16 +1862,106 @@ fn normalize_connector(name: &str) -> String {
     }
 }
 
+/// A debounce clock armed before the verdict it would demote belongs to a topology that has since
+/// been proven non-empty. Every publisher of a non-empty topology retires the clock, but that is
+/// four call sites remembering; this makes a missed one cost a settle window rather than an
+/// immediate demote.
+fn clock_predates_verdict(armed_at: Option<Instant>, available_since: Option<Instant>) -> bool {
+    match (armed_at, available_since) {
+        (Some(armed), Some(available)) => armed < available,
+        _ => false,
+    }
+}
+
 fn swap_available_displays(list: Vec<DrmDisplayInfo>) {
+    // Read and released before the clock lock is taken: the two must never nest, and the order
+    // everywhere else is clock first.
+    let available_since = match &*DRM_STATE.lock().unwrap() {
+        ProbeState::Available(at, _) => Some(*at),
+        _ => None,
+    };
+    // The empty debounce is resolved before DRM_STATE is taken so the two locks never nest.
+    let empty_outlived_window = if list.is_empty() {
+        let mut since = EMPTY_TOPOLOGY_SINCE.lock().unwrap();
+        if clock_predates_verdict(*since, available_since) {
+            *since = None;
+        }
+        let was_first = since.is_none();
+        let ready = empty_topology_ready(&mut *since, EMPTY_TOPOLOGY_DEMOTE_AFTER);
+        if was_first {
+            // A single empty push may be the last event a dead topology ever sends, so re-ask
+            // after the window instead of waiting for a hotplug that may never come.
+            schedule_empty_topology_recheck();
+        }
+        ready
+    } else {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+        false
+    };
     let mut st = DRM_STATE.lock().unwrap();
-    if matches!(&*st, ProbeState::Available(..)) {
-        if list.is_empty() {
-            log::info!("drm: hotplug refresh -> 0 displays, marking DRM unavailable");
-            publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
-        } else {
-            log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+    let mut demoted = false;
+    match &*st {
+        ProbeState::Available(at, _) => {
+            // The verdict sampled above can have been replaced while the clock was being
+            // resolved: a non-empty publisher can install a newer Available in between, and an
+            // empty push that then acted on the OLD verdict's clock would demote the new one and
+            // clearing the clock afterwards would not bring it back. Only the verdict that was
+            // sampled may be demoted.
+            let same_verdict = available_since == Some(*at);
+            if list.is_empty() {
+                if empty_outlived_window && same_verdict {
+                    log::info!("drm: topology empty past the settle window, marking DRM unavailable");
+                    publish_probe_state(&mut st, ProbeState::Unavailable(Instant::now()));
+                    demoted = true;
+                } else if !same_verdict {
+                    log::info!("drm: hotplug refresh -> 0 displays; a newer verdict landed meanwhile, keeping it");
+                } else {
+                    log::info!("drm: hotplug refresh -> 0 displays; keeping the last list while the topology settles");
+                }
+            } else {
+                log::info!("drm: hotplug refresh -> {} display(s)", list.len());
+                publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
+            }
+        }
+        // A hotplug that finds displays lifts a negative verdict, which is the rule
+        // `refresh_unavailable_async` already documents: only a non-empty list flips it. Without this
+        // arm the verdict could only be revised by that TTL re-probe, so a topology that went empty
+        // for an instant and came back cost the session the whole NEGATIVE_TTL on the portal even
+        // though the correct list had already arrived. A modeset takes long enough after a connector
+        // reports itself that the enumeration in between genuinely sees nothing.
+        ProbeState::Unavailable(..) if !list.is_empty() => {
+            log::info!(
+                "drm: hotplug refresh -> {} display(s), DRM is available again",
+                list.len()
+            );
             publish_probe_state(&mut st, ProbeState::Available(Instant::now(), list));
         }
+        _ => {}
+    }
+    drop(st);
+    // A landed demote retires its clock (locks never nest, so after DRM_STATE drops): recovery
+    // can arrive through publishers that know nothing of the debounce, and a stale first-sighting
+    // would make the NEXT transient empty demote instantly.
+    if demoted {
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = None;
+    }
+}
+
+fn schedule_empty_topology_recheck() {
+    let spawned = std::thread::Builder::new()
+        .name("drm-empty-recheck".into())
+        .spawn(|| {
+            std::thread::sleep(EMPTY_TOPOLOGY_DEMOTE_AFTER + Duration::from_millis(200));
+            if EMPTY_TOPOLOGY_SINCE.lock().unwrap().is_none() {
+                return;
+            }
+            match query_displays() {
+                Ok(list) => swap_available_displays(list),
+                Err(err) => log::debug!("drm: empty-topology recheck failed: {err}"),
+            }
+        });
+    if let Err(err) = spawned {
+        log::warn!("drm: could not spawn the empty-topology recheck: {err}");
     }
 }
 
@@ -2805,6 +3012,161 @@ mod drm_capturer_tests {
         assert!(!h.demoted(), "past the cooldown the display must be retried");
         h.demotes = 4;
         assert!(h.demoted(), "the backoff must still be holding it at demotion 4");
+    }
+
+    #[test]
+    fn a_clock_armed_before_the_current_verdict_cannot_demote_it() {
+        let armed = Instant::now();
+        let available = armed + Duration::from_millis(1);
+        assert!(clock_predates_verdict(Some(armed), Some(available)));
+        // Armed while this verdict already stood: it is about the current topology.
+        assert!(!clock_predates_verdict(Some(available), Some(armed)));
+        assert!(!clock_predates_verdict(None, Some(available)));
+        // Nothing to be stale against.
+        assert!(!clock_predates_verdict(Some(armed), None));
+    }
+
+    #[test]
+    fn an_empty_topology_blip_does_not_demote() {
+        // The unplug-to-force gap, measured at 5-7 s on the RPi5: the first empty sighting only
+        // starts the clock, and inside the window the verdict must hold.
+        let mut since = None;
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        assert!(since.is_some(), "the first sighting must start the clock");
+        assert!(!empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+        // Past the window the same state demotes.
+        since = Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(empty_topology_ready(&mut since, EMPTY_TOPOLOGY_DEMOTE_AFTER));
+    }
+
+    /// DRM_STATE is process-wide and tests run in parallel: every test that DRIVES it takes this,
+    /// so two of them cannot interleave a publish with another's assertion. Taken through
+    /// `into_inner`, because a test that fails INSIDE the lock poisons it and every other test
+    /// then dies on the lock rather than on its own assertion -- which turns one broken decision
+    /// into a screenful of unrelated failures and hides which one actually moved.
+    static DRM_STATE_TESTS: Mutex<()> = Mutex::new(());
+    fn serial_drm_state() -> std::sync::MutexGuard<'static, ()> {
+        DRM_STATE_TESTS.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Every door from the video service into the portal, and what decides each one. The test below
+    /// asserts on these rather than on `check_init` itself, which needs a compositor and a user
+    /// session: they are the conditions under which it is reached at all.
+    ///
+    /// - `wayland::ensure_inited` (start of every video-service run) -> `is_available_cached()`
+    /// - `wayland::get_displays` (client enumeration) -> the same cached `Available`, via
+    ///   `get_display_infos_and_primary`, whose `None` is what falls through to `check_init`;
+    ///   `refresh_displays_for_login` cannot disturb it, it only publishes a NON-empty list
+    /// - `wayland::get_capturer_for_display`, on a build failure -> `topology_settling()`
+    fn portal_gates() -> (bool, bool) {
+        (is_available_cached(), topology_settling())
+    }
+
+    #[test]
+    fn a_settling_topology_keeps_every_portal_door_shut_and_the_control_still_opens_them() {
+        let _serial = serial_drm_state();
+        // A display that has been streaming for a while: the verdict is older than the window, which
+        // is the ordering the clock is compared against below.
+        let was_available_at = Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER * 2;
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(was_available_at, vec![drm_display("TEST-settle", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+
+        // The gap: the topology change the headless transition makes, as the service pushes it.
+        swap_available_displays(Vec::new());
+        assert_eq!(
+            portal_gates(),
+            (true, true),
+            "while the topology settles NO door into the portal may open: the cached verdict holds \
+             for ensure_inited and the client enumeration, and a build failure is retryable"
+        );
+        // And the display is still the one a rebuild would ask for, which is what makes the
+        // handshake fail rather than the build being skipped.
+        assert!(
+            display_info_of(0).is_some(),
+            "the kept list is what get_capturer_info re-asks for"
+        );
+
+        // The control: the topology stays empty past the window. Backdated rather than slept, and
+        // to a time AFTER the verdict so `clock_predates_verdict` does not retire it as stale.
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() =
+            Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        swap_available_displays(Vec::new());
+        assert_eq!(
+            portal_gates(),
+            (false, false),
+            "past the window the normal fallback must work: DRM is demoted, so the DRM branch is \
+             skipped entirely and ensure_inited runs check_init as it does on a PipeWire host"
+        );
+
+        // Leave nothing behind for whatever runs next.
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    /// The hole the first version of this fix had: the clock alone cannot carry the transition,
+    /// because the headless force PREFERS HDMI and a pulled DP-1 therefore comes back as
+    /// HDMI-A-1. Every rebuild asks for the connector the cached list names, the handshake matches
+    /// on (device, name), and `DrmDisplaysChanged` only travels inside a live stream -- which this
+    /// one no longer has. So without adopting the handshake's own list nothing would ever update
+    /// the identity, and the retries would fail against a topology that is perfectly healthy until
+    /// the window ran out and dropped the session into the portal.
+    #[test]
+    fn a_transition_that_lands_on_another_connector_converges_instead_of_looping() {
+        let _serial = serial_drm_state();
+        publish_probe_state(
+            &mut DRM_STATE.lock().unwrap(),
+            ProbeState::Available(Instant::now(), vec![drm_display("TEST-DP-1", 1920, 1080)]),
+        );
+        clear_empty_topology_clock();
+
+        // A rebuild starts here, so this is the generation it is judged against.
+        let gen_at_build_start = state_generation();
+        assert!(
+            !build_failure_is_transient(gen_at_build_start),
+            "nothing has moved yet: a failure now is a verdict about DRM, not a transition"
+        );
+
+        // The handshake finds TEST-DP-1 gone and the service holding another connector.
+        adopt_handshake_topology(vec![drm_display("TEST-HDMI-A-1", 1920, 1080)]);
+        assert_eq!(
+            display_info_of(0).map(|d| d.name),
+            Some("TEST-HDMI-A-1".to_owned()),
+            "the next rebuild must ask for the connector that exists, not the one that went away"
+        );
+        assert!(
+            build_failure_is_transient(gen_at_build_start),
+            "and THIS build must be retried, not sent to the portal one attempt short of \
+             succeeding -- a non-empty publish retires the clock, so the clock cannot say this"
+        );
+        assert!(
+            !build_failure_is_transient(state_generation()),
+            "a build that starts after the move, and still fails, is a verdict about DRM"
+        );
+
+        publish_probe_state(&mut DRM_STATE.lock().unwrap(), ProbeState::Unknown);
+        clear_empty_topology_clock();
+    }
+
+    #[test]
+    fn an_expired_clock_stops_holding_the_fallback_back() {
+        let _serial = serial_drm_state();
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() = Some(Instant::now());
+        assert!(topology_settling(), "a fresh empty sighting is a settling topology");
+        // The bound has to hold on the clock ALONE, because nothing is guaranteed to retire it:
+        // a demote does, but the recheck that would produce one can fail to spawn or fail to
+        // reach the service, and the hotplug push that armed it may be the last event a dead
+        // topology ever sends. Without this the PipeWire fallback would stay held off for the
+        // rest of the boot.
+        *EMPTY_TOPOLOGY_SINCE.lock().unwrap() =
+            Some(Instant::now() - EMPTY_TOPOLOGY_DEMOTE_AFTER - Duration::from_secs(1));
+        assert!(
+            !topology_settling(),
+            "past the window the topology is not settling any more, whatever the clock still says"
+        );
+        clear_empty_topology_clock();
     }
 
     #[test]

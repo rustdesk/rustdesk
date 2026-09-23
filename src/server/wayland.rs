@@ -650,6 +650,59 @@ async fn ensure_pipewire_inited() -> ResultType<()> {
     check_init().await
 }
 
+/// The DRM half of `get_capturer_for_display`, split out because the decision it makes is the whole
+/// of rustdesk#15908's P2 and the function around it needs a compositor to run at all. `None` means
+/// "fall through to the PipeWire path below".
+///
+/// `settling` is the ONE thing that separates a temporarily empty topology from a verdict about
+/// DRM. A build does a FRESH handshake, so while an output is between modesets -- a monitor pulled,
+/// or the headless output not yet forced -- it can only report our connector gone. Starting the
+/// portal there outlives the gap by minutes: the consent wait watches an fd, and DRM coming back
+/// does not interrupt it. So inside the debounce's settle window the failure is RETRYABLE, handed
+/// back for the video service to rebuild on, which it does on its own backoff: 30 ms, doubling per
+/// consecutive error, capped at 1 s. Once the window runs out the topology is demoted, `is_available()`
+/// goes false and this is not even reached; a genuine failure falls back on the first try, because
+/// nothing but an empty enumeration ever arms the clock.
+///
+/// It is asked AFTER the build and not before, deliberately: `HANDSHAKE_WAIT_MS` alone is longer
+/// than the settle window, so a topology that empties while the build is in flight -- the ordering
+/// this whole path exists for -- would be read as no gap at all if the answer were sampled up front.
+#[cfg(feature = "drm")]
+fn drm_capturer_or_portal<B, S, P>(
+    display_idx: usize,
+    settling: S,
+    build: B,
+    start_portal: P,
+) -> Option<ResultType<super::video_service::CapturerInfo>>
+where
+    B: FnOnce(usize) -> ResultType<super::video_service::CapturerInfo>,
+    S: FnOnce() -> bool,
+    P: FnOnce() -> ResultType<()>,
+{
+    let e = match build(display_idx) {
+        Ok(info) => return Some(Ok(info)),
+        Err(e) => e,
+    };
+    if settling() {
+        log::info!(
+            "drm: display {} is absent while the topology settles; retrying DRM instead of \
+             starting PipeWire ({:#})",
+            display_idx,
+            e
+        );
+        return Some(Err(e));
+    }
+    log::warn!(
+        "drm capturer for display {} unavailable ({:#}); falling back to PipeWire",
+        display_idx,
+        e
+    );
+    match start_portal() {
+        Ok(()) => None,
+        Err(e) => Some(Err(e)),
+    }
+}
+
 pub(super) fn get_capturer_for_display(
     display_idx: usize,
 ) -> ResultType<super::video_service::CapturerInfo> {
@@ -661,7 +714,10 @@ pub(super) fn get_capturer_for_display(
     // per-display DRM failure (an ungrabbable/demoted CRTC, or — after the phase-2 split — a
     // render-node-absent seat or a convert failure on the unprivileged side) must NOT propagate out
     // and restart-loop this per-display video service. Instead fall THROUGH to PipeWire for just this
-    // display; the other DRM outputs keep streaming over DRM.
+    // display; the other DRM outputs keep streaming over DRM. The ONE exception, and it is not a
+    // per-display failure at all, is a build that failed because the topology moved under it: that
+    // one propagates on purpose, because the restart loop IS the retry (see
+    // `drm_capturer_or_portal`), and it is bounded by the settle window.
     // The ONE gate that keeps the probing form on purpose: this runs on the plain video thread,
     // not an async executor, and it is the capture-build path, so a definitive verdict is worth
     // seconds here. It is also what makes a cold cache recoverable at all -- warm_availability
@@ -669,16 +725,16 @@ pub(super) fn get_capturer_for_display(
     // before the root service would never see DRM again for the rest of its life.
     #[cfg(feature = "drm")]
     if super::drm_capturer::is_available() {
-        match super::drm_capturer::get_capturer_info(display_idx) {
-            Ok(info) => return Ok(info),
-            Err(e) => {
-                log::warn!(
-                    "drm capturer for display {} unavailable ({:#}); falling back to PipeWire",
-                    display_idx,
-                    e
-                );
-                ensure_pipewire_inited()?;
-            }
+        // Sampled before the build, read after it: the two together are what tell a topology that
+        // moved from a DRM that cannot serve this display.
+        let gen_before = super::drm_capturer::state_generation();
+        if let Some(res) = drm_capturer_or_portal(
+            display_idx,
+            move || super::drm_capturer::build_failure_is_transient(gen_before),
+            super::drm_capturer::get_capturer_info,
+            ensure_pipewire_inited,
+        ) {
+            return res;
         }
     }
     // Resolved BEFORE the read guard below, deliberately. `get_display_infos` runs
@@ -817,4 +873,80 @@ pub fn common_get_error() -> String {
         // to-do: check other distros
     }
     return "".to_owned();
+}
+
+#[cfg(all(test, feature = "drm"))]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// rustdesk#15908 P2. While the headless output is being forced the topology is empty for
+    /// several seconds, and every capture rebuild in that gap must retry DRM instead of starting
+    /// the portal: its consent wait is minutes long, watches an fd, and DRM coming back does not
+    /// interrupt it -- on the machine this feature is for, nobody can answer the dialog either.
+    /// The portal start is COUNTED rather than asserted on a log line, so deleting the settle
+    /// check fails this test.
+    #[test]
+    fn no_portal_is_started_while_the_topology_settles() {
+        let portal_starts = Cell::new(0);
+        let start_portal = || {
+            portal_starts.set(portal_starts.get() + 1);
+            Ok(())
+        };
+        // Verbatim shape of the error the handshake produces in the gap: the fresh enumeration
+        // simply does not carry the connector the cached list still advertises.
+        let absent = |idx: usize| -> ResultType<crate::server::video_service::CapturerInfo> {
+            bail!("display {idx} (DP-1) is no longer in the service's list")
+        };
+
+        let out = drm_capturer_or_portal(0, || true, absent, start_portal);
+        assert!(
+            matches!(out, Some(Err(_))),
+            "inside the window the failure must be handed back, so the video service rebuilds \
+             against DRM instead of the caller falling through"
+        );
+        assert_eq!(
+            portal_starts.get(),
+            0,
+            "no portal may be started while the topology settles"
+        );
+
+        // The control: the same failure once the window has run out. Nothing else changes.
+        let out = drm_capturer_or_portal(0, || false, absent, start_portal);
+        assert!(
+            out.is_none(),
+            "past the window the call must fall through to the PipeWire path below it"
+        );
+        assert_eq!(
+            portal_starts.get(),
+            1,
+            "and the pre-existing fallback must still start the portal exactly once"
+        );
+    }
+
+    /// The gap does not politely open between builds. `HANDSHAKE_WAIT_MS` on its own is longer
+    /// than the settle window, so the topology emptying WHILE a build is in flight is the ordinary
+    /// case, not a corner one: asking before the build would read it as no gap and start the
+    /// portal anyway. The build here is what empties the topology.
+    #[test]
+    fn a_topology_that_empties_during_the_build_is_still_seen() {
+        let portal_starts = Cell::new(0);
+        let emptied = Cell::new(false);
+        let start_portal = || {
+            portal_starts.set(portal_starts.get() + 1);
+            Ok(())
+        };
+        let build = |idx: usize| -> ResultType<crate::server::video_service::CapturerInfo> {
+            emptied.set(true);
+            bail!("display {idx} (DP-1) is no longer in the service's list")
+        };
+
+        let out = drm_capturer_or_portal(0, || emptied.get(), build, start_portal);
+        assert!(matches!(out, Some(Err(_))), "the failure must still be retryable");
+        assert_eq!(
+            portal_starts.get(),
+            0,
+            "the settle question must be asked after the build, not sampled before it"
+        );
+    }
 }
