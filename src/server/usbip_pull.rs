@@ -21,7 +21,7 @@ use hbb_common::{
 };
 use std::{
     collections::HashMap,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, Mutex},
 };
 
 // Each live channel here is a privileged `usbip attach` plus its own local
@@ -360,19 +360,21 @@ async fn pull(
 
 // `Option`, not `Regex` directly -- see the identical comment in
 // `client/usbip_attach.rs`.
-static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"^Port (\d+):")
-        .map_err(|err| log::error!("usb push: invalid USB_PORT_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_PORT_RE: Option<Regex> =
+        Regex::new(r"^Port (\d+):")
+            .map_err(|err| log::error!("usb push: invalid USB_PORT_RE: {}", err))
+            .ok();
+}
 // The `usbip://host:port/busid` URL: its bus id is the remote one, not the
 // token before the arrow (that's some other local identifier, e.g. "5-1" for
 // a remote busid of "18-1"), and host:port is our own loopback listener.
-static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
-        .map_err(|err| log::error!("usb push: invalid USB_PORT_BUS_ID_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_PORT_BUS_ID_RE: Option<Regex> =
+        Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
+            .map_err(|err| log::error!("usb push: invalid USB_PORT_BUS_ID_RE: {}", err))
+            .ok();
+}
 
 /// Blocking; call via `spawn_blocking`. Attaches through
 /// `platform::run_usbip_attach_privileged` and finds the resulting vhci port.
