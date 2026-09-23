@@ -871,10 +871,10 @@ jobs:
           name: bridge-artifact
           path: ./
 
-      - name: Test cursor sizing
+      - name: Run the Dart tests
         if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
         working-directory: flutter
-        run: flutter test --timeout 60s test/cursor_size_test.dart
+        run: flutter test --timeout 60s
 
       - name: Setup vcpkg with Github Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
