@@ -20,7 +20,6 @@ use hbb_common::{
     },
 };
 use serde_json::json;
-use std::sync::LazyLock;
 
 pub enum Inbound {
     Opened { success: bool, message: String },
@@ -138,19 +137,21 @@ fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
 // that can never actually fail to compile, but `Regex::new(...).unwrap()`
 // would still be an unwrap on a production path -- log and fall back to "no
 // match" instead.
-static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"^Port (\d+):")
-        .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_PORT_RE: Option<Regex> =
+        Regex::new(r"^Port (\d+):")
+            .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
+            .ok();
+}
 // The `usbip://host:port/busid` URL: its bus id is the remote one, not the
 // token before the arrow (that's some other local identifier, e.g. "5-1" for
 // a remote busid of "18-1"), and host:port is our own loopback listener.
-static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
-        .map_err(|err| log::error!("usb attach: invalid USB_PORT_BUS_ID_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_PORT_BUS_ID_RE: Option<Regex> =
+        Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
+            .map_err(|err| log::error!("usb attach: invalid USB_PORT_BUS_ID_RE: {}", err))
+            .ok();
+}
 
 /// Linux USB bus ids are `<bus>-<port>[.<port>...]` (e.g. "1-2.3"), shorter
 /// than the kernel's 32-byte `SYSFS_BUS_ID_SIZE`. Every bus id this side
