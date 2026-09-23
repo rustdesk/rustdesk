@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/generated_bridge.dart' show CursorShape;
 import 'package:flutter_hbb/models/model.dart';
@@ -18,7 +19,14 @@ class _Cursor extends CursorModel {
     fetched.add(id);
     return core[id];
   }
+
+  bool showRemoteCursor = false;
+  @override
+  bool get showsRemoteCursor => showRemoteCursor;
 }
+
+String? _key(MouseCursor cursor) =>
+    cursor is FlutterCustomMemoryImageCursor ? cursor.key : null;
 
 class _FFI extends Fake implements FFI {
   _FFI() {
@@ -129,7 +137,7 @@ void main() {
 
   test('the shapes used last keep their native cursors, the others go',
       () async {
-    const max = CursorModel.kMaxNativeCursors;
+    const max = CursorModel.kRecentShapes;
     final cursor = ffi.cursorModel;
     Future<void> show() async {
       buildCursorOfCache(cursor, 1.0, cursor.cache);
@@ -155,15 +163,19 @@ void main() {
     _select(ffi, '2');
     await show();
     expect(ffi.cursor.fetched, isEmpty, reason: 'shape 2 kept its cursor');
+    final shown = cursor.nativeKey(cursor.cache!, 1.0);
     _select(ffi, '1');
-    expect(buildCursorOfCache(cursor, 1.0, cursor.cache), MouseCursor.defer);
+    expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)), shown,
+        reason: 'the cursor shown stays while shape 1 is made again');
     await _settle();
     expect(ffi.cursor.fetched, ['1'], reason: 'rebuilt from the core');
+    expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)),
+        cursor.nativeKey(cursor.cache!, 1.0));
   });
 
   test('shapes each shown once leave no more native cursors than the limit',
       () async {
-    const max = CursorModel.kMaxNativeCursors;
+    const max = CursorModel.kRecentShapes;
     final cursor = ffi.cursorModel;
     for (var i = 0; i < max + 4; i++) {
       await _feed(ffi, '$i');
@@ -207,11 +219,12 @@ void main() {
     expect(deleted, isEmpty);
   });
 
-  test('a shape painted again is decoded again from the core', () async {
+  test('a shape painted again is decoded again, the last one shown meanwhile',
+      () async {
     await _feed(ffi, '1', size: 16);
     await _feed(ffi, '2');
     _select(ffi, '1');
-    expect(ffi.cursorModel.image, isNull);
+    expect(ffi.cursorModel.image?.width, 8, reason: 'shape 2 until 1 is back');
     await _settle();
     expect(ffi.cursor.fetched, ['1']);
     expect(ffi.cursorModel.image?.width, 16);
@@ -389,5 +402,91 @@ void main() {
         .handleCursorData('1', 0, 0, 8, 8, Uint8List.sublistView(padded, 16));
     final p = ffi.cursorModel.cache!.image.getPixel(0, 0);
     expect([p.r, p.g, p.b, p.a], [3, 4, 5, 6]);
+  });
+
+  test('a shape still decoding leaves the one shown before in place', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1');
+    final shown = _key(buildCursorOfCache(cursor, 1.0, cursor.cache));
+    await _settle();
+    _select(ffi, '2'); // its shape has not decoded yet
+    expect(cursor.cache?.id, '1');
+    expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)), shown);
+    expect(cursor.image, isNotNull);
+    await _feed(ffi, '2');
+    expect(cursor.cache?.id, '2');
+  });
+
+  group('a painted cursor', () {
+    void painted(String how) {
+      if (how == 'mobile') {
+        final was = isMobile;
+        isMobile = true;
+        addTearDown(() => isMobile = was);
+      } else {
+        ffi.cursor.showRemoteCursor = true;
+      }
+    }
+
+    for (final how in ['mobile', 'remote cursor shown']) {
+      test('keeps the images of two animations and the everyday set ($how)',
+          () async {
+        painted(how);
+        final cursor = ffi.cursorModel;
+        final shapes = [
+          for (var i = 0; i < 12; i++) 's$i',
+          for (var i = 0; i < 23; i++) 'wait$i',
+          for (var i = 0; i < 23; i++) 'progress$i',
+        ];
+        for (var i = 0; i < shapes.length; i++) {
+          await _feed(ffi, shapes[i], seed: i);
+        }
+        for (final id in shapes) {
+          _select(ffi, id);
+          expect(cursor.shapeIds.last, id, reason: 'its image is at hand');
+        }
+        await _settle();
+        expect(ffi.cursor.fetched, isEmpty);
+      });
+    }
+
+    test('keeps the images used last, and decodes the others again', () async {
+      painted('mobile');
+      const max = CursorModel.kRecentShapes;
+      final cursor = ffi.cursorModel;
+      for (var i = 0; i <= max; i++) {
+        await _feed(ffi, '$i');
+      }
+      expect(cursor.shapeIds.length, max);
+      _select(ffi, '$max');
+      _select(ffi, '1');
+      await _settle();
+      expect(ffi.cursor.fetched, isEmpty, reason: 'shape 1 was used lately');
+      _select(ffi, '0');
+      expect(cursor.image, isNotNull, reason: 'shape 1 until 0 is back');
+      await _settle();
+      expect(ffi.cursor.fetched, ['0']);
+      expect(cursor.shapeIds.length, max);
+    });
+
+    test('keeps a shape that finished decoding after the peer moved on',
+        () async {
+      painted('mobile');
+      const max = CursorModel.kRecentShapes;
+      final cursor = ffi.cursorModel;
+      for (var i = 0; i <= max; i++) {
+        await _feed(ffi, '$i');
+      }
+      _select(ffi, '0');
+      cursor.image; // let go, so it is asked for
+      await Future<void>.delayed(Duration.zero);
+      _select(ffi, '1');
+      await _settle();
+      _select(ffi, '0');
+      cursor.image;
+      await _settle();
+      expect(ffi.cursor.fetched, ['0'], reason: 'the late one was kept');
+      expect(cursor.shapeIds.last, '0');
+    });
   });
 }

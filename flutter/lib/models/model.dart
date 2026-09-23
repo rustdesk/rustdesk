@@ -3175,9 +3175,10 @@ class CursorModel with ChangeNotifier {
 
   get lastIsBlocked => _lastIsBlocked;
 
-  /// Asks the core for the shape in use when it has to be painted and was let go.
+  /// The image of the shape in use, or the one shown before until it is back: a switch never
+  /// falls back to the default cursor. Asks the core for the shape in use when it was let go.
   ui.Image? get image {
-    if (_image == null && _cache != null) {
+    if (_images[_id] == null && _cacheMap.containsKey(_id)) {
       restorePixels(_id);
     }
     return _image;
@@ -3512,7 +3513,7 @@ class CursorModel with ChangeNotifier {
     _images.clear();
   }
 
-  /// Whether the shape decoded; it is kept only while it is the one in use.
+  /// Whether the shape decoded; its image is kept with the ones used last, see [_imageLimit].
   Future<bool> updateCursorData(String id, int hotxInt, int hotyInt, int width,
       int height, Uint8List rgba) async {
     final generation = _generation;
@@ -3530,8 +3531,12 @@ class CursorModel with ChangeNotifier {
       image.dispose();
       return false;
     }
-    _images[id]?.item1.dispose();
+    final old = _images.remove(id);
     _images[id] = Tuple3(image, hotx, hoty);
+    if (old != null) {
+      if (identical(old.item1, _image)) _image = image;
+      old.item1.dispose();
+    }
 
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
@@ -3641,15 +3646,42 @@ class CursorModel with ChangeNotifier {
     _evictNativeKeys();
   }
 
-  /// Native cursors of the peer's shapes kept, the ones used last; the core rebuilds the
-  /// others. An animated cursor is a shape per frame, 18 for the Windows busy cursor and 23
-  /// for KDE's, and a cycle longer than this limit would rebuild every frame.
-  static const kMaxNativeCursors = 64;
+  /// The peer's shapes used last that keep a native cursor, and a painted image; the core
+  /// rebuilds the others. An animated cursor is a shape per frame, 18 for the Windows busy
+  /// cursor and 23 for KDE's, and a cycle longer than this limit would rebuild every frame.
+  static const kRecentShapes = 64;
+
+  /// The native cursor shown last, shown on while the shape in use is made.
+  String? shownKey;
+
+  /// Whether the desktop paints the peer's cursor over the remote image.
+  @protected
+  bool get showsRemoteCursor {
+    final tag = ShowRemoteCursorState.tag(parent.target?.id ?? '');
+    return Get.isRegistered<RxBool>(tag: tag) && Get.find<RxBool>(tag: tag).value;
+  }
+
+  // Painted images kept: mobile always paints the cursor, a desktop only when it shows the
+  // remote cursor, and otherwise the native cursors show the shapes.
+  int get _imageLimit => isMobile || showsRemoteCursor ? kRecentShapes : 1;
+
+  // `_images` is in order of use. The image painted is kept, whoever's it is.
+  void _evictImages() {
+    var excess = _images.length - _imageLimit;
+    _images.removeWhere((id, shape) {
+      if (excess <= 0 || id == _id || identical(shape.item1, _image)) {
+        return false;
+      }
+      excess--;
+      shape.item1.dispose();
+      return true;
+    });
+  }
 
   // `_nativeKeys` is in order of use. The predefined cursors are not the peer's and stay.
   void _evictNativeKeys() {
     var excess = _nativeKeys.keys.where(_cacheMap.containsKey).length -
-        kMaxNativeCursors;
+        kRecentShapes;
     _nativeKeys.removeWhere((id, key) {
       if (excess <= 0 || id == _id || !_cacheMap.containsKey(id)) return false;
       excess--;
@@ -3691,16 +3723,16 @@ class CursorModel with ChangeNotifier {
     () async {
       try {
         final shape = await fetchCursorShape(id);
-        if (generation != _generation || id != _id) {
+        if (generation != _generation) {
           return;
         } else if (shape == null) {
-          _unavailable = id;
+          if (id == _id) _unavailable = id;
           debugPrint('Cursor $id is not kept by the core');
         } else {
+          // Decoded even if the peer moved on: an animation comes back to it.
           final decoded = await updateCursorData(id, shape.hotx, shape.hoty,
               shape.width, shape.height, shape.colors);
-          // A shape switched away from while it decoded is let go, not lost.
-          if (!decoded && generation == _generation) {
+          if (!decoded && generation == _generation && id == _id) {
             // It did not decode; painting must not ask for it on every frame.
             _unavailable = id;
           }
@@ -3716,7 +3748,9 @@ class CursorModel with ChangeNotifier {
 
   bool _updateCurData() {
     final previous = _cache;
-    _cache = _cacheMap[_id];
+    final cache = _cacheMap[_id];
+    // A shape not decoded yet leaves the one shown before in place until it is.
+    if (cache != null) _cache = cache;
     if (previous != null && !identical(previous, _cache)) {
       previous.releasePixels();
     }
@@ -3725,25 +3759,21 @@ class CursorModel with ChangeNotifier {
       _nativeKeys[_id] = key;
     }
     _evictNativeKeys();
-    final tmp = _images[_id];
-    _image = tmp?.item1;
+    final tmp = _images.remove(_id);
     if (tmp != null) {
+      _images[_id] = tmp;
+      _image = tmp.item1;
       _hotx = tmp.item2;
       _hoty = tmp.item3;
     }
-    // Only the shape in use keeps an image; the core has the others.
-    _images.removeWhere((id, shape) {
-      if (id == _id) return false;
-      shape.item1.dispose();
-      return true;
-    });
+    _evictImages();
     try {
       // may throw exception, because the listener maybe already dispose
       notifyListeners();
     } catch (e) {
       debugPrint('WARNING: updateCursorId $_id, without notifyListeners(). $e');
     }
-    return tmp != null || _cache != null;
+    return tmp != null || cache != null;
   }
 
   updateCursorId(Map<String, dynamic> evt) {
@@ -3814,6 +3844,7 @@ class CursorModel with ChangeNotifier {
       deleteCustomCursor(k);
     }
     _cacheKeys.clear();
+    shownKey = null;
     resetSystemCursor();
   }
 

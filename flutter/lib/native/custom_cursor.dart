@@ -16,7 +16,7 @@ resetSystemCursor() {}
 MouseCursor buildCursorOfCache(
     CursorModel cursor, double scale, CursorData? cache) {
   if (cache == null) {
-    return MouseCursor.defer;
+    return _shownCursor(cursor);
   } else {
     final key = cursor.nativeKey(cache, scale);
     if (cursor.cachedKeys.contains(key)) {
@@ -26,7 +26,7 @@ MouseCursor buildCursorOfCache(
       final data = cache.data;
       if (data == null) {
         cursor.restorePixels(cache.id);
-        return MouseCursor.defer;
+        return _shownCursor(cursor);
       }
       cursor.deleteReplacedKeys();
       // Square canvases avoid clipping or stray edge pixels on Linux.
@@ -54,8 +54,17 @@ MouseCursor buildCursorOfCache(
       cursor.addKey(key);
       cursor.registered(cache, key);
     }
+    cursor.shownKey = key;
     return FlutterCustomMemoryImageCursor(key: key);
   }
+}
+
+// The cursor shown last stays while the one in use is made, rather than the system one.
+MouseCursor _shownCursor(CursorModel cursor) {
+  final key = cursor.shownKey;
+  return key == null
+      ? MouseCursor.defer
+      : FlutterCustomMemoryImageCursor(key: key);
 }
 
 Uint8List _padCursor(Uint8List data, int size) {

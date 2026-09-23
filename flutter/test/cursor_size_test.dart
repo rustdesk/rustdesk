@@ -78,6 +78,8 @@ class _FFI extends Fake implements FFI {
   final ffiModel = _Peer();
   @override
   final inputModel = _Input();
+  @override
+  var id = '';
 }
 
 class _Cursor extends CursorModel {

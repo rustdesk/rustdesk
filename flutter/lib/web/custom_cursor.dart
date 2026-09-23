@@ -102,7 +102,7 @@ resetSystemCursor() => CursorManager.instance.resetSystemCursor();
 MouseCursor buildCursorOfCache(
     model.CursorModel cursor, double scale, model.CursorData? cache) {
   if (cache == null) {
-    return MouseCursor.defer;
+    return _shownCursor(cursor);
   } else {
     final key = cursor.nativeKey(cache, scale);
     if (cursor.cachedKeys.contains(key)) {
@@ -112,7 +112,7 @@ MouseCursor buildCursorOfCache(
       final data = cache.data;
       if (data == null) {
         cursor.restorePixels(cache.id);
-        return MouseCursor.defer;
+        return _shownCursor(cursor);
       }
       cursor.deleteReplacedKeys();
       debugPrint(
@@ -127,6 +127,15 @@ MouseCursor buildCursorOfCache(
       cursor.addKey(key);
       cursor.registered(cache, key);
     }
+    cursor.shownKey = key;
     return FlutterCustomMemoryImageCursor(key: key);
   }
+}
+
+// The cursor shown last stays while the one in use is made, rather than the system one.
+MouseCursor _shownCursor(model.CursorModel cursor) {
+  final key = cursor.shownKey;
+  return key == null
+      ? MouseCursor.defer
+      : FlutterCustomMemoryImageCursor(key: key);
 }
