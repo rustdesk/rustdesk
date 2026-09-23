@@ -3612,43 +3612,34 @@ class CursorModel with ChangeNotifier {
   // Tabs in a window share its engine's native cursors, predefined ones included.
   static int _nextKeyScope = 0;
   final int _keyScope = _nextKeyScope++;
-  // Each shape's one native cursor, and the ones replaced but maybe still on screen.
-  final _nativeKeys = <String, String>{};
-  final _replacedKeys = <String>{};
 
   String nativeKey(CursorData cache, double scale) =>
       '${_keyScope}_${cache.updateGetKey(scale)}';
 
-  /// A shape keeps one native cursor, the one at its raster. The shape in use keeps its
-  /// pixels too, so a new raster is made from them at once; the others keep none.
+  // Native cursors stay for the session, one per raster of each shape, and only [clear]
+  // deletes them, as before. They are not bounded because a delete frees nothing on Windows:
+  // the engine's `deleteCustomCursor/windows` releases the HCURSOR with `DeleteObject`, which
+  // does not take a cursor, so the handle leaks, and making the cursor again for a raster or a
+  // shape shown once more leaks another. Evicting would leak more than keeping.
+  //
+  // Fixing the engine is not cheap. x64 runs our fork, rustdesk/engine, on Flutter 3.24; the
+  // fix is one more patch to rebuild, publish, and carry across every Flutter upgrade. arm64
+  // runs the stock engine of a newer Flutter, which has the same code: fixing it means
+  // porting the fork to that version and building and publishing an arm64 engine as well, or
+  // an upstream fix and waiting for it to reach stable. Content ids keep the count to the
+  // shapes the peer really shows, a few dozen to a couple of hundred.
+
+  /// The shape in use keeps its pixels, so a new raster is made from them at once; the others
+  /// keep none once their native cursor holds them.
   void registered(CursorData cache, String key) {
-    _useNativeKey(cache, key);
     if (cache.id != _id && identical(_cacheMap[cache.id], cache)) {
       cache.releasePixels();
     }
   }
 
-  /// A raster returned to before its native cursor was deleted takes it back.
-  bool reviveNativeKey(CursorData cache, String key) {
-    if (!_replacedKeys.remove(key)) return false;
-    deleteReplacedKeys();
-    _cacheKeys.add(key);
-    _useNativeKey(cache, key);
-    return true;
-  }
-
-  void _useNativeKey(CursorData cache, String key) {
-    final old = _nativeKeys.remove(cache.id);
-    _nativeKeys[cache.id] = key;
-    if (old != null && old != key && _cacheKeys.remove(old)) {
-      _replacedKeys.add(old);
-    }
-    _evictNativeKeys();
-  }
-
-  /// The peer's shapes used last that keep a native cursor, and a painted image; the core
-  /// rebuilds the others. An animated cursor is a shape per frame, 18 for the Windows busy
-  /// cursor and 23 for KDE's, and a cycle longer than this limit would rebuild every frame.
+  /// The peer's shapes used last that keep a painted image; the core rebuilds the others. An
+  /// animated cursor is a shape per frame, 18 for the Windows busy cursor and 23 for KDE's, and
+  /// a cycle longer than this limit would rebuild every frame.
   static const kRecentShapes = 64;
 
   /// The native cursor shown last, shown on while the shape in use is made.
@@ -3658,7 +3649,8 @@ class CursorModel with ChangeNotifier {
   @protected
   bool get showsRemoteCursor {
     final tag = ShowRemoteCursorState.tag(parent.target?.id ?? '');
-    return Get.isRegistered<RxBool>(tag: tag) && Get.find<RxBool>(tag: tag).value;
+    return Get.isRegistered<RxBool>(tag: tag) &&
+        Get.find<RxBool>(tag: tag).value;
   }
 
   // Painted images kept: mobile always paints the cursor, a desktop only when it shows the
@@ -3676,28 +3668,6 @@ class CursorModel with ChangeNotifier {
       shape.item1.dispose();
       return true;
     });
-  }
-
-  // `_nativeKeys` is in order of use. The predefined cursors are not the peer's and stay.
-  void _evictNativeKeys() {
-    var excess = _nativeKeys.keys.where(_cacheMap.containsKey).length -
-        kRecentShapes;
-    _nativeKeys.removeWhere((id, key) {
-      if (excess <= 0 || id == _id || !_cacheMap.containsKey(id)) return false;
-      excess--;
-      if (_cacheKeys.remove(key)) _replacedKeys.add(key);
-      return true;
-    });
-  }
-
-  /// Called by a build that shows a cursor, before it registers or takes one back: whatever
-  /// replaced a cursor before this build was activated in an earlier frame, so the replaced
-  /// ones are off screen.
-  void deleteReplacedKeys() {
-    for (final key in _replacedKeys) {
-      deleteCustomCursor(key);
-    }
-    _replacedKeys.clear();
   }
 
   /// The core keeps every shape the peer sent, compressed; see `Session::cursor_shapes`.
@@ -3754,11 +3724,6 @@ class CursorModel with ChangeNotifier {
     if (previous != null && !identical(previous, _cache)) {
       previous.releasePixels();
     }
-    final key = _nativeKeys.remove(_id);
-    if (key != null) {
-      _nativeKeys[_id] = key;
-    }
-    _evictNativeKeys();
     final tmp = _images.remove(_id);
     if (tmp != null) {
       _images[_id] = tmp;
@@ -3836,8 +3801,6 @@ class CursorModel with ChangeNotifier {
   }
 
   _clearCache() {
-    deleteReplacedKeys();
-    _nativeKeys.clear();
     final keys = {...cachedKeys};
     for (var k in keys) {
       debugPrint("deleting cursor with key $k");

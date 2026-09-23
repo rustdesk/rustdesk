@@ -19,16 +19,13 @@ MouseCursor buildCursorOfCache(
     return _shownCursor(cursor);
   } else {
     final key = cursor.nativeKey(cache, scale);
-    if (cursor.cachedKeys.contains(key)) {
-      cursor.deleteReplacedKeys();
-    } else if (!cursor.reviveNativeKey(cache, key)) {
+    if (!cursor.cachedKeys.contains(key)) {
       // data should be checked here, because it may be changed after `updateGetKey()`
       final data = cache.data;
       if (data == null) {
         cursor.restorePixels(cache.id);
         return _shownCursor(cursor);
       }
-      cursor.deleteReplacedKeys();
       // Square canvases avoid clipping or stray edge pixels on Linux.
       final width = isLinux && cache.rasterWidth < cache.rasterHeight
           ? cache.rasterHeight

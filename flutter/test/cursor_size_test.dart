@@ -261,12 +261,9 @@ Future<void> _checkRasterTransitions(
     await Future<void>.delayed(Duration.zero);
     final key = cursor.nativeKey(cursor.cache, scale);
     _expectSize(
-        registrations.lastWhere((args) => args['name'] == key), expected);
-    expect(cursor.cachedKeys, {key}, reason: 'one native cursor per shape');
+        registrations.singleWhere((args) => args['name'] == key), expected);
   }
-  // A raster returned to right after it was replaced takes its cursor back (the last step);
-  // one returned to after other cursors were shown finds it deleted (the step before).
-  expect(registrations.length, 5);
+  expect(registrations.length, 4);
 }
 
 Future<void> _checkResizeLimits(

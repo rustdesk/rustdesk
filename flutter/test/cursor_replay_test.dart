@@ -135,59 +135,39 @@ void main() {
     expect(ffi.cursor.fetched, isEmpty);
   });
 
-  test('the shapes used last keep their native cursors, the others go',
+  test('native cursors stay for the session, every raster of every shape',
       () async {
-    const max = CursorModel.kRecentShapes;
+    // A delete frees nothing on Windows, so none is deleted before the session ends.
     final cursor = ffi.cursorModel;
-    Future<void> show() async {
-      buildCursorOfCache(cursor, 1.0, cursor.cache);
-      await _settle();
+    for (var i = 0; i < 100; i++) {
+      await _feed(ffi, '$i', size: 32);
       buildCursorOfCache(cursor, 1.0, cursor.cache);
       await _settle();
     }
+    expect(deleted, isEmpty);
+    expect(cursor.cachedKeys.length, 100);
 
-    for (var i = 0; i < max; i++) {
-      await _feed(ffi, '$i');
-      await show();
-    }
     _select(ffi, '0');
-    await show();
-    expect(deleted, isEmpty, reason: '$max fit');
-    expect(ffi.cursor.fetched, isEmpty);
-
-    await _feed(ffi, '$max');
-    await show();
-    expect(deleted, [registered[1]], reason: 'shape 1 was used longest ago');
-    expect(cursor.cachedKeys.length, max);
-
-    _select(ffi, '2');
-    await show();
-    expect(ffi.cursor.fetched, isEmpty, reason: 'shape 2 kept its cursor');
-    final shown = cursor.nativeKey(cursor.cache!, 1.0);
-    _select(ffi, '1');
-    expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)), shown,
-        reason: 'the cursor shown stays while shape 1 is made again');
-    await _settle();
-    expect(ffi.cursor.fetched, ['1'], reason: 'rebuilt from the core');
     expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)),
         cursor.nativeKey(cursor.cache!, 1.0));
+    await _settle();
+    expect(ffi.cursor.fetched, isEmpty, reason: 'its cursor is still there');
+    expect(registered.length, 100);
   });
 
-  test('shapes each shown once leave no more native cursors than the limit',
+  test('a new raster of a shape without pixels keeps the cursor shown before',
       () async {
-    const max = CursorModel.kRecentShapes;
     final cursor = ffi.cursorModel;
-    for (var i = 0; i < max + 4; i++) {
-      await _feed(ffi, '$i');
-      buildCursorOfCache(cursor, 1.0, cursor.cache);
-      await _settle();
-    }
-    expect(registered.length, max + 4);
-    expect(registered.length - deleted.length, lessThanOrEqualTo(max + 1),
-        reason: 'the one replaced last waits for the next build');
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _feed(ffi, '1', size: 32);
+    await _feed(ffi, '2', size: 32);
+    final shown = _key(buildCursorOfCache(cursor, 1.0, cursor.cache));
     await _settle();
-    expect(registered.length - deleted.length, max);
+    _select(ffi, '1'); // its pixels went when it was switched away from
+    expect(_key(buildCursorOfCache(cursor, 0.5, cursor.cache)), shown);
+    await _settle();
+    expect(ffi.cursor.fetched, ['1']);
+    expect(_key(buildCursorOfCache(cursor, 0.5, cursor.cache)),
+        cursor.nativeKey(cursor.cache!, 0.5));
   });
 
   test('two animated cursors and the everyday set keep their native cursors',
@@ -333,37 +313,17 @@ void main() {
     expect(moved.cursorModel.image?.width, 16);
   });
 
-  test('a shape keeps one native cursor, the one at its raster', () async {
+  test('a shape keeps a native cursor for each raster it was shown at',
+      () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    await _settle();
-    final first = registered.single;
-
-    // Registers the new raster, then is shown again.
-    for (var i = 0; i < 3; i++) {
-      buildCursorOfCache(cursor, 0.5, cursor.cache);
-      await _settle();
-    }
-    expect(registered.length, 2);
-    expect(deleted, [first],
-        reason: 'the replaced one goes once its successor has been shown');
-    expect(cursor.cachedKeys, {registered.last});
-  });
-
-  test('a raster returned to before its cursor was dropped is kept', () async {
-    final cursor = ffi.cursorModel;
-    await _feed(ffi, '1', size: 32);
-    for (final scale in [1.0, 0.5, 1.0]) {
+    for (final scale in [1.0, 0.5, 1.0, 0.5]) {
       buildCursorOfCache(cursor, scale, cursor.cache);
       await _settle();
     }
-    final shown = cursor.nativeKey(cursor.cache!, 1.0);
-    expect(buildCursorOfCache(cursor, 1.0, cursor.cache),
-        isNot(MouseCursor.defer));
-    await _settle();
-    expect(deleted, isNot(contains(shown)), reason: 'it is the one on screen');
-    expect(cursor.cachedKeys, {shown});
+    expect(registered.length, 2, reason: 'a raster returned to is reused');
+    expect(deleted, isEmpty);
+    expect(cursor.cachedKeys, registered.toSet());
   });
 
   test('a cleared session forgets the native cursors it deleted', () async {
