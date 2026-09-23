@@ -10,6 +10,7 @@ use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 enum Outcome {
     Frame,
     Empty,
+    Dropped,
     Error,
 }
 
@@ -35,6 +36,7 @@ impl EncoderApi for ScriptedEncoder {
                 Ok(vf)
             }
             Outcome::Empty => Ok(VideoFrame::new()),
+            Outcome::Dropped => bail!("no valid frame"),
             Outcome::Error => bail!("injected encoding error"),
         }
     }
@@ -182,6 +184,50 @@ fn empty_outputs_exhaust_the_budget_without_disabling_the_encoder() {
     assert_eq!(state.borrow().calls, 100);
     assert_eq!(state.borrow().disabled, 0);
     assert_eq!(refresh.repeat_failures, 0);
+}
+
+#[test]
+fn vpx_drops_exhaust_the_budget_without_pausing_refresh() {
+    let sp = GenericService::new("repeat-vpx-drops-test".to_owned(), false);
+    let recorder = Arc::new(Mutex::new(None));
+    for codec in [CodecFormat::VP8, CodecFormat::VP9] {
+        let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
+        let limit = max_repeat_attempts(codec, BR_BALANCED);
+        let (mut encoder, state) = encoder(&vec![Outcome::Dropped; limit]);
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        for _ in 0..=limit {
+            attempt(&mut refresh, &mut encoder);
+        }
+        assert_eq!(state.borrow().calls, limit, "{codec:?}");
+        assert_eq!(refresh.repeat_failures, limit);
+        assert_eq!(state.borrow().disabled, 0);
+    }
+}
+
+#[test]
+fn repeat_error_limits_are_codec_specific() {
+    let sp = GenericService::new("repeat-codec-errors-test".to_owned(), false);
+    let recorder = Arc::new(Mutex::new(None));
+    for (codec, expected_calls) in [
+        (CodecFormat::VP8, 100),
+        (CodecFormat::VP9, 100),
+        (CodecFormat::AV1, 0),
+        (CodecFormat::H264, 3),
+        (CodecFormat::H265, 3),
+    ] {
+        let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
+        let limit = max_repeat_attempts(codec, BR_BALANCED);
+        let (mut encoder, state) = encoder(&vec![Outcome::Error; limit]);
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        for _ in 0..=limit {
+            attempt(&mut refresh, &mut encoder);
+        }
+        assert_eq!(state.borrow().calls, expected_calls, "{codec:?}");
+        assert_eq!(refresh.repeat_failures, expected_calls);
+        assert_eq!(state.borrow().disabled, 0);
+    }
 }
 
 #[test]

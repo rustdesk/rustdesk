@@ -114,7 +114,11 @@ impl<'a> StaticRefresh<'a> {
         if !self.source.is_monitor()
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
-            || self.repeat_failures >= MAX_REPEAT_FAILURES
+            || (self.repeat_failures >= MAX_REPEAT_FAILURES
+                && !matches!(
+                    self.codec_format,
+                    CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1
+                ))
             // Count attempts so network backpressure preserves the refinement budget.
             || self.repeat_counter >= max_repeat_attempts(self.codec_format, quality)
             || {
@@ -155,7 +159,7 @@ impl<'a> StaticRefresh<'a> {
                 Err(error) => {
                     self.repeat_failures += 1;
                     log::debug!(
-                        "static refresh failed ({}/{MAX_REPEAT_FAILURES}): {error:?}",
+                        "static refresh failed ({}): {error:?}",
                         self.repeat_failures
                     );
                     return Ok(());
