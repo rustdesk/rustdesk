@@ -2046,6 +2046,44 @@ jobs:
                 *) echo "::error::build.py returned no '$want' feature: $FEATURES"; exit 1 ;;
               esac
             done
+            # Run the drm-gated unit tests HERE, because nowhere else does. The ordinary linux CI
+            # runs the suite, but `drm` is opt-in, so every test behind that feature -- the cursor
+            # rotation and hotspot ones especially -- has no continuous coverage at all otherwise.
+            # Debug rather than --release: these are pure logic tests and the release build is
+            # already the slow part of this job.
+            # A MINIMAL feature set, not the production $FEATURES: these are pure logic tests of
+            # the drm paths, and pulling hwcodec in makes the test binary fail to link at all
+            # (undefined reference to fcntl64 in this container), so the tests never run.
+            #
+            # Two packages, because `cargo test --lib` at the root builds the ROOT package only:
+            # the provenance tests live in libs/scrap and would never be selected from here. The
+            # ordinary linux CI runs --workspace but without the drm feature, so these are not
+            # covered there either.
+            #
+            # awk sums the counts rather than bc, which this container does not install.
+            #
+            # A cargo test FILTER that matches nothing exits 0, so a rename would turn this into a
+            # green no-op. Assert each command actually ran something.
+            run_drm_tests() {
+              local desc="$1"; shift
+              local out
+              out=$("$@" 2>&1) || { echo "$out"; echo "::error::drm tests failed: $desc"; exit 1; }
+              local ran
+              ran=$(echo "$out" | awk '/^running [0-9]+ tests?$/ { n += $2 } END { print n+0 }')
+              echo "$desc ran $ran tests"
+              if [ "$ran" -lt 1 ]; then
+                echo "::error::$desc selected no tests; it was renamed or removed"
+                exit 1
+              fi
+            }
+            run_drm_tests "rustdesk drm_capturer_tests" \
+              cargo test --locked --lib --features drm drm_capturer_tests
+            run_drm_tests "rustdesk ipc::test" \
+              cargo test --locked --lib --features drm ipc::test
+            run_drm_tests "scrap hotspot_provenance_tests" \
+              cargo test --locked -p scrap --features drm hotspot_provenance_tests
+            run_drm_tests "scrap hotspot_guess_tests" \
+              cargo test --locked -p scrap --features drm hotspot_guess_tests
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo

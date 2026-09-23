@@ -390,9 +390,9 @@ def ffi_bindgen_function_refactor():
 # The commit is fetched directly by sha, so no branch or tag name takes part in the build: see
 # build_libdrmtap_so(). This is the SINGLE source of truth for the pin, deliberately not duplicated in
 # any workflow, so a bump is one edit here (plus the informational version comment in
-# libs/scrap/Cargo.toml). This commit is libdrmtap v0.5.4.
+# libs/scrap/Cargo.toml). This commit is libdrmtap v0.5.6.
 LIBDRMTAP_REPO_PINNED = 'https://github.com/rustdesk-org/libdrmtap'
-LIBDRMTAP_SHA_PINNED = '5da68a3a368db569716d0d0f11cefacbb11b2290'
+LIBDRMTAP_SHA_PINNED = '49b204f275af1a2d6dfead94effb4036c7d50a3a'
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', LIBDRMTAP_REPO_PINNED)
 LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
 # Every way of getting a different .so than the pin needs the same explicit opt-in. Otherwise the
@@ -489,8 +489,10 @@ def build_libdrmtap_so():
         # override of the three -- no fetch, no sha verification, an object built by something this
         # script cannot see -- so it is the likeliest to hand over a CPU-only build, and skipping the
         # assertion on exactly this path would leave the check guarding only the case that was
-        # already trustworthy.
+        # already trustworthy. The helper check rides along for the same reason, and it matters
+        # more here than anywhere: this is the branch the packaging workflow takes.
         _assert_so_has_egl(so)
+        _assert_so_has_no_helper(so)
         return so
     # Fetch the pinned source if it is not already present. third_party/libdrmtap is not a submodule
     # anymore; it is git-ignored. The commit is fetched BY SHA rather than by cloning a branch:
@@ -521,8 +523,22 @@ def build_libdrmtap_so():
                 f'libdrmtap at {src} is {got_sha}, expected {LIBDRMTAP_SHA} '
                 f'(stale checkout from a different pin; removed, re-run to re-fetch)')
     build_dir = os.path.join(src, 'build-pkg')
+    # Configure a fresh dir, or RE-configure one an earlier build left behind. Without the second
+    # branch a build-pkg created before this option was added keeps its old configuration, meson
+    # skips setup, and the compile produces a helper-enabled .so. The assertion below then fails
+    # the build rather than shipping it, so this is a developer-build correctness fix and not a
+    # security one -- but it turns a confusing failure into no failure at all.
     if not os.path.exists(os.path.join(build_dir, 'build.ninja')):
-        system2(f'meson setup "{build_dir}" "{src}" --buildtype=release')
+        # -Dhelper=disabled: rustdesk never uses the privileged helper. The capture context is
+        # opened only in the root service (every drmtap_open lives in src/ipc/drm.rs), which
+        # already has CAP_SYS_ADMIN, and the unprivileged side opens a render node instead. Without
+        # this the library still carries the fallback: a fork/exec that walks six hardcoded paths,
+        # two of them under /usr/local, and execs the first that passes access(X_OK) with no check
+        # of its owner or mode -- inside the ROOT process. The option compiles that path out
+        # entirely. Requested by the maintainer on rustdesk#16242.
+        system2(f'meson setup "{build_dir}" "{src}" --buildtype=release -Dhelper=disabled')
+    else:
+        system2(f'meson configure "{build_dir}" -Dhelper=disabled')
     # Build only the shared library, not the bundled helper binary or the static archive. Since
     # libdrmtap 0.4.11 the project is `both_libraries` (a version-scripted .so + a static .a), so the
     # bare `drmtap` target is ambiguous ("drmtap:shared_library" vs "drmtap:static_library"); ask for
@@ -533,7 +549,29 @@ def build_libdrmtap_so():
     # require exactly one so a stale object from an earlier build is never silently picked.
     so = _single_real_so(sos, f'the libdrmtap meson build dir {build_dir}')
     _assert_so_has_egl(so)
+    _assert_so_has_no_helper(so)
     return so
+
+
+def _assert_so_has_no_helper(so_path):
+    # Asserted on the ARTIFACT for the same reason the EGL check is: a build flag cannot notice a
+    # stale object left by an earlier build, or one substituted by hand, and `-Dhelper=disabled` is
+    # silently accepted by meson versions that predate the option. What the option removes is the
+    # whole fork/exec path, so the produced .so imports no socketpair and carries none of the
+    # helper search paths; both go to zero, measured on libdrmtap 0.5.6 (4 -> 0 and 3 -> 0).
+    #
+    # This matters because the object is loaded by the ROOT service. With the path compiled in, a
+    # caller that ever lost CAP_SYS_ADMIN would exec whatever sits at the first of six hardcoded
+    # locations that passes access(X_OK), without checking its owner or its mode.
+    with open(so_path, 'rb') as f:
+        blob = f.read()
+    found = [m.decode() for m in (b'socketpair', b'/usr/libexec/drmtap-helper') if m in blob]
+    if found:
+        raise Exception(
+            f'{so_path} still carries the privileged-helper fallback ({", ".join(found)}). '
+            f'It must be built with -Dhelper=disabled: rustdesk captures as root and never uses '
+            f'the helper, so this is a fork/exec path in the privileged process that nothing '
+            f'reaches. Delete third_party/libdrmtap/build-pkg and rebuild.')
 
 
 def _assert_so_has_egl(so_path):
@@ -863,8 +901,10 @@ def build_deb_from_folder(version, binary_folder, want_drm=False):
             # takes the .so straight out of a bundle somebody else produced, so it has the same
             # exposure as DRMTAP_PREBUILT_DIR (see the comment on that branch). A CPU-only stub
             # would ship, the loader would accept it, and capture would degrade to PipeWire
-            # without a word.
+            # without a word. A bundle produced before the helper was disabled is caught here too,
+            # which is the point: it must not be repackaged into a deb.
             _assert_so_has_egl(so)
+            _assert_so_has_no_helper(so)
             stage_libdrmtap_into_deb(so)
             system2(f'rm -f "{so}"')
             system2('rm -f tmpdeb/usr/share/rustdesk/libdrmtap.so tmpdeb/usr/share/rustdesk/libdrmtap.so.0')

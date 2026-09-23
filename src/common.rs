@@ -59,6 +59,7 @@ pub const PLATFORM_MACOS: &str = "Mac OS";
 pub const PLATFORM_ANDROID: &str = "Android";
 
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
+pub(crate) const API_LOG_INTERVAL: Duration = Duration::from_secs(600);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
@@ -1196,6 +1197,9 @@ pub fn get_local_option(key: &str) -> String {
             }
         }
     }
+    if key == "lang" && (v == "pt" || v == "br") {
+        return "pt-br".to_owned();
+    }
     v
 }
 
@@ -1242,6 +1246,23 @@ fn should_use_tcp_proxy_for_api_url(url: &str, api_url: &str) -> bool {
 #[inline]
 fn is_tcp_proxy_api_target(url: &str) -> bool {
     should_use_tcp_proxy_for_api_url(url, &ui_get_api_server())
+}
+
+#[inline]
+fn should_throttle_log(url: &str) -> bool {
+    url::Url::parse(url)
+        .map(|parsed| parsed.path().ends_with("/api/heartbeat"))
+        .unwrap_or(false)
+}
+
+macro_rules! api_log {
+    ($level:ident, $url:expr, $interval:expr, $($arg:tt)+) => {{
+        if should_throttle_log($url) {
+            hbb_common::throttled_log!($interval, $level, $($arg)+);
+        } else {
+            log::$level!($($arg)+);
+        }
+    }};
 }
 
 fn tcp_proxy_log_target(url: &str) -> String {
@@ -1293,7 +1314,10 @@ async fn tcp_proxy_request(
         parsed.path().to_string()
     };
 
-    log::debug!(
+    api_log!(
+        debug,
+        url,
+        API_LOG_INTERVAL,
         "Sending {} {} via TCP proxy to {}",
         method,
         parsed.path(),
@@ -1453,7 +1477,10 @@ where
     };
 
     if should_fallback && can_fallback_to_raw_tcp(url) {
-        log::warn!(
+        api_log!(
+            warn,
+            url,
+            API_LOG_INTERVAL,
             "HTTP {} to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
             method,
             tcp_proxy_log_target(url),
@@ -1465,7 +1492,13 @@ where
         match tcp_fn.await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                api_log!(
+                    warn,
+                    url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
             }
         }
     }
@@ -1523,7 +1556,10 @@ pub async fn post_request_with_status(
         Ok((status, _)) => *status >= 500,
     };
     if should_fallback && can_fallback_to_raw_tcp(&url) {
-        log::warn!(
+        api_log!(
+            warn,
+            &url,
+            API_LOG_INTERVAL,
             "HTTP POST to {} failed or 5xx (result: {:?}), trying TCP proxy fallback",
             tcp_proxy_log_target(&url),
             http_result
@@ -1534,7 +1570,13 @@ pub async fn post_request_with_status(
         match post_request_via_tcp_proxy_status(&url, &body, header).await {
             Ok(resp) => return Ok(resp),
             Err(tcp_err) => {
-                log::warn!("TCP proxy fallback also failed: {:?}", tcp_err);
+                api_log!(
+                    warn,
+                    &url,
+                    API_LOG_INTERVAL,
+                    "TCP proxy fallback also failed: {:?}",
+                    tcp_err
+                );
             }
         }
     }
@@ -1591,7 +1633,10 @@ async fn post_request_(
             Err(e) => {
                 if (tls_type.is_none() || danger_accept_invalid_cert.is_none()) && e.is_request() {
                     if danger_accept_invalid_cert.is_none() {
-                        log::warn!(
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
                             "HTTP request failed: {:?}, try again, danger accept invalid cert",
                             e
                         );
@@ -1606,7 +1651,13 @@ async fn post_request_(
                         )
                         .await
                     } else {
-                        log::warn!("HTTP request failed: {:?}, try again with native-tls", e);
+                        api_log!(
+                            warn,
+                            url,
+                            API_LOG_INTERVAL,
+                            "HTTP request failed: {:?}, try again with native-tls",
+                            e
+                        );
                         post_request_(
                             url,
                             tls_url,
@@ -3102,6 +3153,21 @@ mod tests {
             "not a url",
             "https://admin.example.com"
         ));
+    }
+
+    #[test]
+    fn test_should_throttle_log() {
+        assert!(should_throttle_log("https://example.com/api/heartbeat"));
+        assert!(should_throttle_log(
+            "https://example.com/api/heartbeat?token=secret"
+        ));
+        assert!(should_throttle_log("https://example.com/prefix/api/heartbeat"));
+        assert!(!should_throttle_log("https://example.com/api/heartbeat2"));
+        assert!(!should_throttle_log("https://example.com/api/sysinfo"));
+        assert!(!should_throttle_log(
+            "https://example.com/api/sysinfo?next=/api/heartbeat"
+        ));
+        assert!(!should_throttle_log("not a url"));
     }
 
     #[test]
