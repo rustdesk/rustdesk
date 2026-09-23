@@ -8,11 +8,6 @@ use crate::{flutter::FlutterHandler, ui_session_interface::InvokeUiSession};
 use base::message_proto::usb_channel::Union;
 use hbb_common::{log, tokio};
 
-// Each queued chunk is up to 64KiB (the relay tasks' read buffer size), so
-// this bounds one relay channel to a few MiB, not unbounded process memory --
-// see the identical comment in `server/usbip_mux.rs`.
-const USB_RELAY_CHANNEL_CAPACITY: usize = 256;
-
 /// Everything except `DeviceList`/`BindResult`, which `flutter.rs` handles
 /// itself (plain event translation shared by every message type, not
 /// RemoteUsb-specific routing).
@@ -76,6 +71,7 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
         Some(Union::Close(c)) if c.channel_id >= 0 => handler
             .usb_forward_send(c.channel_id, crate::client::usbip_attach::Inbound::Closed),
         Some(Union::Data(d)) => handler.usb_share_send(d.channel_id, d.data),
+        Some(Union::WindowUpdate(w)) => handler.usb_window_update(w.channel_id, w.add),
         Some(Union::Close(c)) => {
             log::info!("usb push: peer closed channel {}", c.channel_id);
             handler.unregister_usb_share_channel(c.channel_id);
@@ -105,13 +101,15 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                 return;
             };
             log::info!("usb push: peer opened channel {} for {}", id, open.bus_id);
-            let (tx, rx) = tokio::sync::mpsc::channel(USB_RELAY_CHANNEL_CAPACITY);
-            handler.register_usb_share_channel(id, open.bus_id.clone(), tx);
+            let (tx, rx) = tokio::sync::mpsc::channel(crate::usbip_flow::QUEUE_FRAMES);
+            let flow = crate::usbip_flow::Flow::new();
+            handler.register_usb_share_channel(id, open.bus_id.clone(), tx, flow.clone());
             tokio::spawn(crate::client::usbip_share::run_channel(
                 id,
                 open.bus_id,
                 session,
                 rx,
+                flow,
             ));
         }
         _ => {}

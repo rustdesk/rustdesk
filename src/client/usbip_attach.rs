@@ -3,7 +3,12 @@
 // connection that has to land somewhere -- so we stand up a local listener
 // that plays the role of the (otherwise unreachable) remote `usbipd`, and
 // relay everything it sees through `UsbChannel` frames.
-use crate::{flutter::FlutterHandler, ui_session_interface::Session};
+use crate::{
+    client::{Data, Interface},
+    flutter::FlutterHandler,
+    ui_session_interface::Session,
+    usbip_flow::{self, Flow},
+};
 use hbb_common::{
     bytes::Bytes, log, regex::Regex, timeout,
     tokio::{
@@ -270,11 +275,9 @@ pub(crate) fn detach_blocking(port: i32) {
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
     let id = FlutterHandler::next_usb_channel_id();
-    // Bounded so a peer that keeps sending faster than the local socket
-    // drains can't grow this without bound -- see the identical comment in
-    // `server/usbip_mux.rs`.
-    let (tx, mut rx) = mpsc::channel::<Inbound>(256);
-    session.ui_handler.register_usb_forward_channel(id, tx);
+    let (tx, mut rx) = mpsc::channel::<Inbound>(usbip_flow::QUEUE_FRAMES);
+    let flow = Flow::new();
+    session.ui_handler.register_usb_forward_channel(id, tx, flow.clone());
     session.usb_open_forward(id, bus_id.clone());
 
     let success = loop {
@@ -338,20 +341,20 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
             return;
         }
     }
-    session.usb_forward_data(id, Bytes::from(prefix));
 
     let session_read = session.clone();
+    let flow_read = flow.clone();
     let to_tunnel = tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            match reader.read(&mut buf).await {
-                Ok(0) | Err(_) => {
-                    session_read.usb_close_forward(id);
-                    return;
-                }
-                Ok(n) => session_read.usb_forward_data(id, Bytes::copy_from_slice(&buf[..n])),
-            }
-        }
+        // The validated prefix is the head of the stream and costs credit
+        // like the rest of it.
+        let reader = std::io::Cursor::new(prefix).chain(reader);
+        flow_read
+            .socket_to_peer(reader, |chunk| {
+                session_read.usb_forward_data(id, chunk);
+                true
+            })
+            .await;
+        session_read.usb_close_forward(id);
     });
 
     while let Some(msg) = rx.recv().await {
@@ -359,6 +362,9 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
             Inbound::Data(data) => {
                 if writer.write_all(&data).await.is_err() {
                     break;
+                }
+                if let Some(add) = flow.drained(data.len()) {
+                    session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
                 }
             }
             Inbound::Closed | Inbound::Opened { .. } => break,
