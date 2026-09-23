@@ -360,11 +360,11 @@ static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
         .map_err(|err| log::error!("usb push: invalid USB_PORT_RE: {}", err))
         .ok()
 });
-// The remote bus id is the last path segment of the `usbip://host:port/busid`
-// URL, not the token before the arrow (that's some other local identifier,
-// e.g. "5-1" for a remote busid of "18-1").
+// The `usbip://host:port/busid` URL: its bus id is the remote one, not the
+// token before the arrow (that's some other local identifier, e.g. "5-1" for
+// a remote busid of "18-1"), and host:port is our own loopback listener.
 static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"->\s+usbip://[^/]+/(\S+)")
+    Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
         .map_err(|err| log::error!("usb push: invalid USB_PORT_BUS_ID_RE: {}", err))
         .ok()
 });
@@ -408,7 +408,7 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
          usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
          for i in 1 2 3 4 5 6 7 8 9 10; do \
            usbip port > {0} 2>&1; \
-           grep -q -- '/{bus_id}$' {0} && break; \
+           grep -q -- '127.0.0.1:{port}/{bus_id}$' {0} && break; \
            sleep 0.2; \
          done && chmod 644 {0}",
         tmp_path.display()
@@ -416,7 +416,7 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
     let local_port = if ok {
         std::fs::read_to_string(&tmp_path)
             .ok()
-            .and_then(|output| parse_attached_port(&output, bus_id))
+            .and_then(|output| parse_attached_port(&output, port, bus_id))
     } else {
         None
     };
@@ -424,7 +424,9 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
     local_port
 }
 
-fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
+/// The vhci port importing `bus_id` through our listener on `listener_port`.
+/// The bus id alone is ambiguous: two peers can both export e.g. "1-2".
+fn parse_attached_port(output: &str, listener_port: u16, bus_id: &str) -> Option<i32> {
     let port_re = USB_PORT_RE.as_ref()?;
     let bus_id_re = USB_PORT_BUS_ID_RE.as_ref()?;
     let mut current_port: Option<i32> = None;
@@ -434,7 +436,7 @@ fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
             continue;
         }
         if let Some(caps) = bus_id_re.captures(line) {
-            if &caps[1] == bus_id {
+            if caps[1] == format!("127.0.0.1:{listener_port}") && &caps[2] == bus_id {
                 return current_port;
             }
         }
@@ -618,12 +620,31 @@ Port 00: <Port in Use> at High Speed(480Mbps)
 
     #[test]
     fn parse_attached_port_matches_by_trailing_url_segment() {
-        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "18-1"), Some(0));
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "18-1"), Some(0));
     }
 
     #[test]
     fn parse_attached_port_no_match_for_unrelated_bus_id() {
-        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "3-2"), None);
+    }
+
+    #[test]
+    fn parse_attached_port_tells_apart_same_bus_id_on_different_listeners() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (0bda:8153)
+       5-1 -> usbip://127.0.0.1:30001/1-2
+           -> remote bus/dev 001/002
+Port 01: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (1a86:7523)
+       3-1 -> usbip://127.0.0.1:30002/1-2
+           -> remote bus/dev 001/002
+";
+        assert_eq!(parse_attached_port(output, 30001, "1-2"), Some(0));
+        assert_eq!(parse_attached_port(output, 30002, "1-2"), Some(1));
+        assert_eq!(parse_attached_port(output, 30003, "1-2"), None);
     }
 
     #[test]
@@ -636,6 +657,6 @@ Port 00: <Port in Use> at High Speed(480Mbps)
        5-1 -> unknown host, remote port and remote busid
            -> remote bus/dev 018/002
 ";
-        assert_eq!(parse_attached_port(output, "18-1"), None);
+        assert_eq!(parse_attached_port(output, 38963, "18-1"), None);
     }
 }
