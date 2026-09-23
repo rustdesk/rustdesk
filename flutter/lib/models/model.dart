@@ -84,7 +84,7 @@ class CachedCursor {
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
-  // By id: the peer sends every shape again after a reconnect.
+  // Filled only while a tab moves: the shapes live in CursorModel as ui.Images.
   Map<String, CachedCursor> cursors = {};
   Map<String, dynamic> lastCursorId = {};
   Map<String, bool> permissions = {};
@@ -1687,11 +1687,21 @@ class FfiModel with ChangeNotifier {
     parent.target?.cursorModel.updateCursorId(evt);
   }
 
+  /// The session state a moved tab rebuilds from, with every cursor shape's pixels.
+  Future<String> cachedPeerDataString() async {
+    final cursorModel = parent.target?.cursorModel;
+    cachedPeerData.cursors =
+        cursorModel == null ? {} : await cursorModel.shapesToReplay();
+    try {
+      return cachedPeerData.toString();
+    } finally {
+      cachedPeerData.cursors = {};
+    }
+  }
+
   /// A shape arriving is the shape in use, as a cursor_id is.
   handleCursorData(String id, int hotx, int hoty, int width, int height,
       Uint8List colors) async {
-    cachedPeerData.cursors[id] =
-        CachedCursor(hotx, hoty, width, height, colors);
     // The replay selects this last, whatever the order the shapes are replayed in.
     cachedPeerData.lastCursorId = {'id': id};
     parent.target?.cursorModel.id = id;
@@ -2895,7 +2905,7 @@ class CursorData {
 
   final String peerId;
   final String id;
-  final img2.Image image;
+  img2.Image? _image;
   double scale;
   Uint8List? data;
   final double hotxOrigin;
@@ -2911,17 +2921,29 @@ class CursorData {
   int get rasterWidth => _rasterWidth;
   int get rasterHeight => _rasterHeight;
 
+  img2.Image get image => _image!;
+
+  /// False for a shape not in use: its ui.Image in [CursorModel] holds its pixels, and its
+  /// registered native cursors show it. Pixels are needed again only for a new raster.
+  bool get hasPixels => _image != null;
+
+  void releasePixels() {
+    _image = null;
+    data = null;
+  }
+
   CursorData({
     required this.peerId,
     required this.id,
-    required this.image,
+    required img2.Image image,
     required this.scale,
     required this.data,
     required this.hotxOrigin,
     required this.hotyOrigin,
     required this.width,
     required this.height,
-  })  : _rasterWidth = (width * scale).ceil(),
+  })  : _image = image,
+        _rasterWidth = (width * scale).ceil(),
         _rasterHeight = (height * scale).ceil(),
         hotx = hotxOrigin * scale,
         hoty = hotyOrigin * scale;
@@ -2953,6 +2975,12 @@ class CursorData {
 
     final targetWidth = (width * scale).ceil();
     final targetHeight = (height * scale).ceil();
+    if ((_rasterWidth != targetWidth || _rasterHeight != targetHeight) &&
+        !hasPixels) {
+      // No native cursor at this size yet; buildCursorOfCache asks for the pixels.
+      data = null;
+      return scale;
+    }
     if (_rasterWidth != targetWidth || _rasterHeight != targetHeight) {
       if (isWindows) {
         data = img2
@@ -3588,8 +3616,73 @@ class CursorModel with ChangeNotifier {
     return true;
   }
 
+  @visibleForTesting
+  Iterable<String> get shapeIds => _images.keys;
+
+  @visibleForTesting
+  CursorData? cachedShape(String id) => _cacheMap[id];
+
+  final _restoring = <String>{};
+
+  /// Once its native cursor holds a raster, a shape keeps no pixels besides its ui.Image.
+  void registered(CursorData cache) {
+    if (identical(_cacheMap[cache.id], cache)) {
+      cache.releasePixels();
+    }
+  }
+
+  /// Reads a shape's pixels back from its ui.Image, for a raster its native cursors lack.
+  void restorePixels(String id) {
+    final shape = _images[id];
+    if (shape == null || !_restoring.add(id)) return;
+    () async {
+      try {
+        final bytes =
+            await shape.item1.toByteData(format: ui.ImageByteFormat.rawRgba);
+        final cache = _cacheMap[id];
+        if (bytes == null ||
+            cache == null ||
+            cache.hasPixels ||
+            _images[id] != shape) {
+          return;
+        }
+        if (await _updateCache(bytes.buffer.asUint8List(), shape.item1, id,
+            shape.item2, shape.item3, cache.width, cache.height)) {
+          _updateCurData();
+        }
+      } catch (e) {
+        debugPrint('Failed to read cursor $id back: $e');
+      } finally {
+        _restoring.remove(id);
+      }
+    }();
+  }
+
+  /// Every shape's pixels, read back from its ui.Image for the window a tab moves to.
+  Future<Map<String, CachedCursor>> shapesToReplay() async {
+    final shapes = <String, CachedCursor>{};
+    for (final e in [..._images.entries]) {
+      final image = e.value.item1;
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bytes != null) {
+        shapes[e.key] = CachedCursor(
+            e.value.item2.toInt(),
+            e.value.item3.toInt(),
+            image.width,
+            image.height,
+            bytes.buffer.asUint8List());
+      }
+    }
+    return shapes;
+  }
+
   bool _updateCurData() {
     _cache = _cacheMap[_id];
+    for (final cache in _cacheMap.values) {
+      if (cache.id != _id && cache.hasPixels) {
+        cache.releasePixels();
+      }
+    }
     final tmp = _images[_id];
     if (tmp != null) {
       _image = tmp.item1;

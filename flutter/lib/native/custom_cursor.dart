@@ -23,6 +23,7 @@ MouseCursor buildCursorOfCache(
       // data should be checked here, because it may be changed after `updateGetKey()`
       final data = cache.data;
       if (data == null) {
+        cursor.restorePixels(cache.id);
         return MouseCursor.defer;
       }
       // Square canvases avoid clipping or stray edge pixels on Linux.
@@ -48,6 +49,7 @@ MouseCursor buildCursorOfCache(
             ..hotX = cache.hotx
             ..hotY = cache.hoty);
       cursor.addKey(key);
+      cursor.registered(cache);
     }
     return FlutterCustomMemoryImageCursor(key: key);
   }
