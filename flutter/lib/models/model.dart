@@ -2853,8 +2853,9 @@ class CanvasModel with ChangeNotifier {
 
 // data for cursor
 class CursorData {
-  // At most 4 MiB of RGBA, including Linux's square cursor padding.
-  static const _maxRasterSize = 1024;
+  // At most 1 MiB of RGBA, including Linux's square cursor padding: twice the largest
+  // accessibility cursor, beyond which a cursor is shown smaller rather than larger.
+  static const _maxRasterSize = 512;
 
   final String peerId;
   final String id;

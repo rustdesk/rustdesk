@@ -110,7 +110,7 @@ void main() {
     ((1, 64), 0.25, (1, 16)),
     ((8, 8), 0.5, (12, 12)),
     ((4, 64), 1.0, (4, 64)),
-    ((1, 512), 10.0, (2, 1024)),
+    ((1, 512), 10.0, (1, 512)),
   ]) {
     test('native cursor size $scenario',
         () => _checkSize(scenario, registrations));
@@ -268,7 +268,7 @@ Future<void> _checkRasterTransitions(
 
 Future<void> _checkResizeLimits(
     (int, int) size, List<Map<dynamic, dynamic>> registrations) async {
-  const maxSide = 1024;
+  const maxSide = 512;
   const sourceLongEdge = 30;
   const validScale = maxSide / sourceLongEdge;
   final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
