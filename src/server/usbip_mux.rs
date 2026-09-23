@@ -1,15 +1,12 @@
 // Controlled side of a `RemoteUsb` session: device listing/bind (via the
 // system `usbip` CLI) and the byte relay for the actual USB/IP TCP stream,
 // tunneled through `UsbChannel` frames. Mirrors the shape of
-// `port_forward_mux.rs`'s `PortForwardMux`, but without its protocol-level
-// flow-control windowing -- USB/IP traffic here is bursty control + bulk
-// transfers, not a generic proxied protocol that needs backpressure tuning.
-// The per-channel relay queue is still capacity-bounded (`RELAY_CHANNEL_CAPACITY`
-// below), so a peer that keeps sending faster than the local socket drains
-// can't grow it without bound; once full, the channel is torn down rather
-// than silently dropping frames mid-stream (which would corrupt the byte
-// stream a USB/IP connection actually is).
+// `port_forward_mux.rs`'s `PortForwardMux`, with per-channel windows in both
+// directions (`crate::usbip_flow`). A peer that overruns its window is
+// closed rather than having frames dropped mid-stream, which would corrupt
+// the byte stream a USB/IP connection actually is.
 use super::connection::Sender;
+use crate::usbip_flow::{self, Flow};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes,
@@ -17,7 +14,7 @@ use hbb_common::{
     regex::Regex,
     tokio::{
         self,
-        io::{AsyncReadExt, AsyncWriteExt},
+        io::AsyncWriteExt,
         net::TcpStream,
         sync::mpsc,
     },
@@ -31,17 +28,10 @@ use std::{
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
 const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
-// Each queued chunk is up to 64KiB (`run_channel`'s read buffer size), so
-// this bounds one relay channel to a few MiB, not unbounded process memory.
-const RELAY_CHANNEL_CAPACITY: usize = 256;
-// `run_channel` never reads more than this per frame; a larger `Data.data`
-// is a protocol violation (the generic message framing allows up to ~1GiB,
-// which would otherwise let a peer balloon a single queued chunk far past
-// what `RELAY_CHANNEL_CAPACITY` alone bounds).
-const MAX_USB_DATA_LEN: usize = 64 * 1024;
-// Mirrors `port_forward_mux::MAX_CHANNELS` -- caps how many relay tasks (and
-// their `usbipd` TCP connections) a single permitted peer can make us spawn.
-const MAX_LIVE_CHANNELS: usize = 256;
+// Caps how many relay tasks (and their `usbipd` TCP connections) a single
+// permitted peer can make us spawn; with `usbip_flow::CHANNEL_WINDOW` per
+// channel it also bounds what one connection can make us buffer.
+const MAX_LIVE_CHANNELS: usize = 32;
 
 fn usb_channel_msg(union: usb_channel::Union) -> Message {
     let mut ch = UsbChannel::new();
@@ -93,6 +83,7 @@ fn close_msg(channel_id: i32) -> Message {
 
 struct Entry {
     inbound: mpsc::Sender<Bytes>,
+    flow: Flow,
 }
 
 /// The controlled side of one `RemoteUsb` session. The connection's main loop
@@ -194,9 +185,9 @@ impl UsbipMux {
                     log::debug!("usb forward data for unknown channel {}", d.channel_id);
                     return;
                 };
-                if d.data.len() > MAX_USB_DATA_LEN {
+                if !entry.flow.admit(d.data.len()) {
                     log::warn!(
-                        "usb forward: oversized data frame ({} bytes) on channel {}, closing",
+                        "usb forward: data frame ({} bytes) over the window on channel {}, closing",
                         d.data.len(),
                         d.channel_id
                     );
@@ -208,12 +199,15 @@ impl UsbipMux {
                     return;
                 }
                 if entry.inbound.try_send(d.data).is_err() {
-                    // Full (peer outrunning the local socket) or closed --
-                    // either way this channel can't keep relaying faithfully,
-                    // so drop it instead of growing the queue or silently
-                    // losing bytes out of the stream.
+                    // Only a relay task that already ended: an admitted frame
+                    // always fits (`usbip_flow::QUEUE_FRAMES`).
                     self.channels.remove(&d.channel_id);
                     self.reply(close_msg(d.channel_id));
+                }
+            }
+            Some(usb_channel::Union::WindowUpdate(w)) => {
+                if let Some(entry) = self.channels.get(&w.channel_id) {
+                    entry.flow.grant(w.add);
                 }
             }
             Some(usb_channel::Union::Close(c)) => {
@@ -251,9 +245,16 @@ impl UsbipMux {
             self.reply(opened_msg(id, false, "Too many open USB channels".into()));
             return;
         }
-        let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);
-        self.channels.insert(id, Entry { inbound: inbound_tx });
-        tokio::spawn(run_channel(id, inbound_rx, self.tx.clone()));
+        let (inbound_tx, inbound_rx) = mpsc::channel(usbip_flow::QUEUE_FRAMES);
+        let flow = Flow::new();
+        self.channels.insert(
+            id,
+            Entry {
+                inbound: inbound_tx,
+                flow: flow.clone(),
+            },
+        );
+        tokio::spawn(run_channel(id, inbound_rx, self.tx.clone(), flow));
     }
 
     fn reply(&self, msg: Message) {
@@ -284,7 +285,7 @@ fn send(tx: &Sender, msg: Message) {
 
 /// One forwarded USB/IP TCP connection: dial the local `usbipd`, relay bytes
 /// both ways until either side closes.
-async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender) {
+async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender, flow: Flow) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
         Ok(Err(e)) => {
@@ -299,27 +300,21 @@ async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender) {
     if !send_result(&tx, opened_msg(id, true, String::new())) {
         return;
     }
-    let (mut reader, mut writer) = socket.into_split();
+    let (reader, mut writer) = socket.into_split();
     let tx_read = tx.clone();
+    let flow_read = flow.clone();
     let to_tunnel = tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            match reader.read(&mut buf).await {
-                Ok(0) | Err(_) => {
-                    send(&tx_read, close_msg(id));
-                    return;
-                }
-                Ok(n) => {
-                    if !send_result(&tx_read, data_msg(id, Bytes::copy_from_slice(&buf[..n]))) {
-                        return;
-                    }
-                }
-            }
-        }
+        flow_read
+            .socket_to_peer(reader, |chunk| send_result(&tx_read, data_msg(id, chunk)))
+            .await;
+        send(&tx_read, close_msg(id));
     });
     while let Some(chunk) = inbound.recv().await {
         if writer.write_all(&chunk).await.is_err() {
             break;
+        }
+        if let Some(add) = flow.drained(chunk.len()) {
+            send(&tx, usbip_flow::window_update_msg(id, add));
         }
     }
     to_tunnel.abort();

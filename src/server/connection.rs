@@ -1797,6 +1797,7 @@ impl Connection {
 
     #[cfg(target_os = "linux")]
     fn init_usbip(&mut self) {
+        crate::usbip_flow::cap_packet_size(&mut self.stream);
         // `inner.tx` is set for the connection's whole life; `None` here is unreachable.
         self.usbip = self.inner.tx.clone().map(super::usbip_session::UsbSession::new);
     }

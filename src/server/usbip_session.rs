@@ -30,6 +30,7 @@ impl UsbSession {
             Some(usb_channel::Union::Opened(o)) => o.channel_id < 0,
             Some(usb_channel::Union::Data(d)) => d.channel_id < 0,
             Some(usb_channel::Union::Close(c)) => c.channel_id < 0,
+            Some(usb_channel::Union::WindowUpdate(w)) => w.channel_id < 0,
             _ => false,
         };
 
@@ -49,6 +50,7 @@ impl UsbSession {
             Some(usb_channel::Union::Opened(o)) => self.pull.handle_opened(o),
             Some(usb_channel::Union::Data(d)) => self.pull.handle_data(d),
             Some(usb_channel::Union::Close(c)) => self.pull.handle_close(c),
+            Some(usb_channel::Union::WindowUpdate(w)) => self.pull.handle_window_update(w),
             _ => {}
         }
     }
