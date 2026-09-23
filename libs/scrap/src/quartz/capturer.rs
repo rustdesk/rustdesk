@@ -61,6 +61,7 @@ impl NativeStream {
                 }
                 dispatch_release(native.queue);
             }
+            log::info!("Released stopped display stream {:p}", native.stream);
         }
 
         let queue = self.queue;
@@ -100,6 +101,7 @@ impl Shutdown {
             .changed
             .wait_timeout_while(self.state.lock().unwrap(), timeout, |state| !state.stopped)
             .unwrap();
+        log::info!("Retiring display stream {:p}", native.stream);
         if state.stopped {
             drop(state);
             native.release_later();
@@ -223,8 +225,9 @@ impl Drop for Capturer {
         let result = unsafe { CGDisplayStreamStop(self.stream) };
         if result != CGError::Success {
             log::warn!(
-                "Failed to stop display stream {}: {:?}",
+                "Failed to stop display {} stream {:p}: {:?}",
                 self.display.id(),
+                self.stream,
                 result
             );
         }
@@ -236,7 +239,7 @@ impl Drop for Capturer {
                 _permit: permit,
             };
             if !self.shutdown.finish(native, STOP_TIMEOUT) {
-                log::warn!("Timed out waiting for display stream {} to stop; retaining native resources until Stopped", self.display.id());
+                log::warn!("Timed out waiting for display {} stream {:p} to stop; retaining native resources until Stopped", self.display.id(), self.stream);
             }
         }
     }
