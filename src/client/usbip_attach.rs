@@ -281,7 +281,7 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
 
     let session_read = session.clone();
     let flow_read = flow.clone();
-    let to_tunnel = tokio::spawn(async move {
+    let mut to_tunnel = tokio::spawn(async move {
         // The validated prefix is the head of the stream and costs credit
         // like the rest of it.
         let reader = std::io::Cursor::new(prefix).chain(reader);
@@ -291,23 +291,30 @@ async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: T
                 true
             })
             .await;
-        session_read.usb_close_forward(id);
     });
 
-    while let Some(msg) = rx.recv().await {
-        match msg {
-            Inbound::Data(data) => {
-                if writer.write_all(&data).await.is_err() {
-                    break;
+    // Whichever half ends first ends the other; only an end on our side
+    // (local EOF or write error) needs a Close, the peer knows about its own.
+    let local_ended = loop {
+        tokio::select! {
+            _ = &mut to_tunnel => break true,
+            msg = rx.recv() => match msg {
+                Some(Inbound::Data(data)) => {
+                    if writer.write_all(&data).await.is_err() {
+                        break true;
+                    }
+                    if let Some(add) = flow.drained(data.len()) {
+                        session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
+                    }
                 }
-                if let Some(add) = flow.drained(data.len()) {
-                    session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
-                }
-            }
-            Inbound::Closed | Inbound::Opened { .. } => break,
+                Some(Inbound::Closed) | Some(Inbound::Opened { .. }) | None => break false,
+            },
         }
-    }
+    };
     to_tunnel.abort();
+    if local_ended {
+        session.usb_close_forward(id);
+    }
     session.ui_handler.usb.unregister_forward_channel(id);
 }
 
