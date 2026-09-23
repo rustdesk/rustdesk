@@ -55,10 +55,37 @@ final _constSessionId = Uuid().v4obj();
 // Empirical restart reconnect cadence: keep the last frame briefly and retry quickly.
 const _restartReconnectSilentDelaySecs = 5;
 
+/// A cursor shape as the core delivered it, kept to replay in a window a tab moves to.
+class CachedCursor {
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
+
+  CachedCursor(this.hotx, this.hoty, this.width, this.height, this.colors);
+
+  Map<String, dynamic> toJson() => {
+        'hotx': hotx,
+        'hoty': hoty,
+        'width': width,
+        'height': height,
+        'colors': base64Encode(colors),
+      };
+
+  static CachedCursor fromJson(Map<String, dynamic> map) => CachedCursor(
+      map['hotx'],
+      map['hoty'],
+      map['width'],
+      map['height'],
+      base64Decode(map['colors']));
+}
+
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
-  List<Map<String, dynamic>> cursorDataList = [];
+  // By id: the peer sends every shape again after a reconnect.
+  Map<String, CachedCursor> cursors = {};
   Map<String, dynamic> lastCursorId = {};
   Map<String, bool> permissions = {};
 
@@ -73,7 +100,7 @@ class CachedPeerData {
     return jsonEncode({
       'updatePrivacyMode': updatePrivacyMode,
       'peerInfo': peerInfo,
-      'cursorDataList': cursorDataList,
+      'cursors': cursors,
       'lastCursorId': lastCursorId,
       'permissions': permissions,
       'secure': secure,
@@ -88,9 +115,9 @@ class CachedPeerData {
       final data = CachedPeerData();
       data.updatePrivacyMode = map['updatePrivacyMode'];
       data.peerInfo = map['peerInfo'];
-      for (final cursorData in map['cursorDataList']) {
-        data.cursorDataList.add(cursorData);
-      }
+      map['cursors'].forEach((id, cursor) {
+        data.cursors[id] = CachedCursor.fromJson(cursor);
+      });
       data.lastCursorId = map['lastCursorId'];
       map['permissions'].forEach((key, value) {
         data.permissions[key] = value;
@@ -323,9 +350,10 @@ class FfiModel with ChangeNotifier {
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
-    for (final element in data.cursorDataList) {
-      updateLastCursorId(element);
-      await handleCursorData(element);
+    for (final e in data.cursors.entries) {
+      final c = e.value;
+      await handleCursorData(
+          e.key, c.hotx, c.hoty, c.width, c.height, c.colors);
     }
     if (data.lastCursorId.isNotEmpty) {
       updateLastCursorId(data.lastCursorId);
@@ -356,9 +384,6 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
-      } else if (name == 'cursor_data') {
-        updateLastCursorId(evt);
-        await handleCursorData(evt);
       } else if (name == 'cursor_id') {
         updateLastCursorId(evt);
         handleCursorId(evt);
@@ -1662,9 +1687,16 @@ class FfiModel with ChangeNotifier {
     parent.target?.cursorModel.updateCursorId(evt);
   }
 
-  handleCursorData(Map<String, dynamic> evt) async {
-    cachedPeerData.cursorDataList.add(evt);
-    await parent.target?.cursorModel.updateCursorData(evt);
+  /// A shape arriving is the shape in use, as a cursor_id is.
+  handleCursorData(String id, int hotx, int hoty, int width, int height,
+      Uint8List colors) async {
+    cachedPeerData.cursors[id] =
+        CachedCursor(hotx, hoty, width, height, colors);
+    // The replay selects this last, whatever the order the shapes are replayed in.
+    cachedPeerData.lastCursorId = {'id': id};
+    parent.target?.cursorModel.id = id;
+    await parent.target?.cursorModel
+        .updateCursorData(id, hotx, hoty, width, height, colors);
   }
 
   /// Handle the peer info synchronization event based on [evt].
@@ -3489,14 +3521,10 @@ class CursorModel with ChangeNotifier {
     _images.clear();
   }
 
-  updateCursorData(Map<String, dynamic> evt) async {
-    final id = evt['id'];
-    final hotx = double.parse(evt['hotx']);
-    final hoty = double.parse(evt['hoty']);
-    final width = int.parse(evt['width']);
-    final height = int.parse(evt['height']);
-    List<dynamic> colors = json.decode(evt['colors']);
-    final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
+  updateCursorData(String id, int hotxInt, int hotyInt, int width, int height,
+      Uint8List rgba) async {
+    final hotx = hotxInt.toDouble();
+    final hoty = hotyInt.toDouble();
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
     if (image == null) {
@@ -3983,6 +4011,7 @@ class FFI {
     }
 
     if (isWeb) {
+      platformFFI.setCursorDataCallback(ffiModel.handleCursorData);
       platformFFI.setRgbaCallback((int display, Uint8List data) {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
@@ -4065,6 +4094,9 @@ class FFI {
           } else {
             platformFFI.nextRgba(sessionId, display);
           }
+        } else if (message is EventToUI_Cursor) {
+          await ffiModel.handleCursorData(message.id, message.hotx,
+              message.hoty, message.width, message.height, message.colors);
         } else if (message is EventToUI_Texture) {
           final display = message.field0;
           final gpuTexture = message.field1;

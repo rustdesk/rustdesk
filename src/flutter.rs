@@ -651,23 +651,21 @@ impl FlutterHandler {
 }
 
 impl InvokeUiSession for FlutterHandler {
+    // On the event stream, so that it keeps its order with the cursor_id events around it.
     fn set_cursor_data(&self, cd: CursorData) {
-        let colors = &cd.colors;
-        self.push_event(
-            "cursor_data",
-            &[
-                ("id", &cd.id.to_string()),
-                ("hotx", &cd.hotx.to_string()),
-                ("hoty", &cd.hoty.to_string()),
-                ("width", &cd.width.to_string()),
-                ("height", &cd.height.to_string()),
-                (
-                    "colors",
-                    &serde_json::ser::to_string(&colors).unwrap_or("".to_owned()),
-                ),
-            ],
-            &[],
-        );
+        let colors = cd.colors.to_vec();
+        for session in self.session_handlers.read().unwrap().values() {
+            if let Some(stream) = &session.event_stream {
+                stream.add(EventToUI::Cursor {
+                    id: cd.id.to_string(),
+                    hotx: cd.hotx,
+                    hoty: cd.hoty,
+                    width: cd.width,
+                    height: cd.height,
+                    colors: colors.clone(),
+                });
+            }
+        }
     }
 
     fn set_cursor_id(&self, id: String) {

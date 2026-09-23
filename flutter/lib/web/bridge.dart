@@ -26,6 +26,14 @@ sealed class EventToUI {
     int field0,
     bool field1,
   ) = EventToUI_Texture;
+  const factory EventToUI.cursor({
+    required String id,
+    required int hotx,
+    required int hoty,
+    required int width,
+    required int height,
+    required Uint8List colors,
+  }) = EventToUI_Cursor;
 }
 
 class EventToUI_Event implements EventToUI {
@@ -48,6 +56,23 @@ class EventToUI_Texture implements EventToUI {
   final bool f1;
   int get field0 => f0;
   bool get field1 => f1;
+}
+
+class EventToUI_Cursor implements EventToUI {
+  const EventToUI_Cursor({
+    required this.id,
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+    required this.colors,
+  });
+  final String id;
+  final int hotx;
+  final int hoty;
+  final int width;
+  final int height;
+  final Uint8List colors;
 }
 
 class RustdeskImpl {
@@ -1847,12 +1872,15 @@ class RustdeskImpl {
   }
 
   Future<void> sessionSetCommon(
-      {required UuidValue sessionId, required String key, required String value, dynamic hint}) {
-      js.context.callMethod('setByName', [
-        'common',
-        jsonEncode({'name': key, 'value': value})
-      ]);
-      return Future.value();
+      {required UuidValue sessionId,
+      required String key,
+      required String value,
+      dynamic hint}) {
+    js.context.callMethod('setByName', [
+      'common',
+      jsonEncode({'name': key, 'value': value})
+    ]);
+    return Future.value();
   }
 
   String? sessionGetCommonSync(

@@ -77,7 +77,8 @@ class PlatformFFI {
   }
 
   bool registerEventHandler(
-      String eventName, String handlerName, HandleEvent handler, {bool replace = false}) {
+      String eventName, String handlerName, HandleEvent handler,
+      {bool replace = false}) {
     debugPrint('registerEventHandler $eventName $handlerName');
     var handlers = _eventHandlers[eventName];
     if (handlers == null) {
@@ -284,6 +285,10 @@ class PlatformFFI {
   }
 
   void setRgbaCallback(void Function(int, Uint8List) fun) async {}
+
+  // web only
+  void setCursorDataCallback(
+      void Function(String, int, int, int, int, Uint8List) fun) async {}
 
   // web only, decoded WebCodecs frames arriving as ready-made images
   void setVideoFrameCallback(

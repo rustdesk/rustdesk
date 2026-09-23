@@ -97,6 +97,16 @@ pub enum EventToUI {
     Event(String),
     Rgba(usize),
     Texture(usize, bool), // (display, gpu_texture)
+    // A shape's RGBA as bytes: as text it was four times the size and parsed on the UI thread.
+    // The id stays text, since the peer's ids can exceed Dart's int.
+    Cursor {
+        id: String,
+        hotx: i32,
+        hoty: i32,
+        width: i32,
+        height: i32,
+        colors: Vec<u8>,
+    },
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {

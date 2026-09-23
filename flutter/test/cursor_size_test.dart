@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -181,15 +180,14 @@ Future<void> _checkWindowsPeerAlpha(
   addTearDown(() => _dispose(cursor));
   addTearDown(cursor.disposeImages);
   addTearDown(ffi.canvasModel.dispose);
-  await cursor.updateCursorData({
-    'id': 'alpha',
-    'hotx': '0',
-    'hoty': '0',
-    'width': '$sourceSize',
-    'height': '$sourceSize',
-    'colors': jsonEncode(List.generate(sourceSize * sourceSize * channels,
-        (i) => pattern.$1[i % pattern.$1.length])),
-  });
+  await cursor.updateCursorData(
+      'alpha',
+      0,
+      0,
+      sourceSize,
+      sourceSize,
+      Uint8List.fromList(List.generate(sourceSize * sourceSize * channels,
+          (i) => pattern.$1[i % pattern.$1.length])));
   buildCursorOfCache(cursor, 1.0 / dpr, cursor.cache);
   await Future<void>.delayed(Duration.zero);
   final args = registrations.single;
