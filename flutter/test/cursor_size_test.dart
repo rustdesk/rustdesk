@@ -139,6 +139,10 @@ void main() {
     for (final zoom in [false, true]) {
       testWidgets('$style zoom=$zoom follows the live DPR and peer scale',
           (tester) => _checkView(tester, (style, zoom), registrations));
+      testWidgets(
+          '$style zoom=$zoom with one remaining display in all-displays',
+          (tester) => _checkView(tester, (style, zoom), registrations,
+              allDisplays: true));
     }
   }
 }
@@ -308,27 +312,27 @@ Future<void> _checkResizeLimits(
 }
 
 const _viewCases = [
-  (1.0, kPeerPlatformMacOS, 2.0, false),
-  (1.25, kPeerPlatformLinux, 2.0, false),
-  (2.0, kPeerPlatformMacOS, 1.0, false),
-  (1.25, kPeerPlatformLinux, 2.0, true),
+  (1.0, kPeerPlatformMacOS, 2.0),
+  (1.25, kPeerPlatformLinux, 2.0),
+  (2.0, kPeerPlatformMacOS, 1.0),
+  (2.0, kPeerPlatformMacOS, 2.0),
 ];
 
 Future<void> _checkView(WidgetTester tester, (String, bool) mode,
-    List<Map<dynamic, dynamic>> registrations) async {
+    List<Map<dynamic, dynamic>> registrations,
+    {bool allDisplays = false}) async {
   const sourceSize = 64, customScale = 4.0;
   final canvas = _Canvas(mode.$1);
   final ffi = _FFI(canvas);
   final display = _Display();
+  ffi.ffiModel.pi.displays.addAll([if (!allDisplays) Display(), display]);
+  ffi.ffiModel.pi.currentDisplay = allDisplays ? kAllDisplayValue : 1;
   final cursor = _Cursor(_data((sourceSize, sourceSize)), ffi);
   addTearDown(() => _dispose(cursor));
   addTearDown(canvas.dispose);
   addTearDown(tester.view.resetDevicePixelRatio);
-  for (final (dpr, peer, peerScale, allDisplays) in _viewCases) {
+  for (final (dpr, peer, peerScale) in _viewCases) {
     ffi.ffiModel.pi.platform = peer;
-    ffi.ffiModel.pi.displays.value =
-        allDisplays ? [display] : [Display(), display];
-    ffi.ffiModel.pi.currentDisplay = allDisplays ? kAllDisplayValue : 1;
     display.scale = peerScale;
     canvas.scale = mode.$1 == kRemoteViewStyleCustom
         ? customScale / dpr

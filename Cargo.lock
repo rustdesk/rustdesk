@@ -8609,8 +8609,8 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.26.2"
-source = "git+https://github.com/rustdesk-org/tokio-tungstenite?rev=9c320de8e7c546cb654b017b7f4cbb4a5cc09cd9#9c320de8e7c546cb654b017b7f4cbb4a5cc09cd9"
+version = "0.29.0"
+source = "git+https://github.com/rustdesk-org/tokio-tungstenite?rev=c241b11b03de4881faf1ecd2fe6e867c92f3013b#c241b11b03de4881faf1ecd2fe6e867c92f3013b"
 dependencies = [
  "futures-util",
  "log",
@@ -8893,9 +8893,8 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.26.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4793cb5e56680ecbb1d843515b23b6de9a75eb04b66643e256a396d43be33c13"
+version = "0.29.0"
+source = "git+https://github.com/rustdesk-org/tungstenite-rs?rev=efce47e5364f00a63302cf07ab1fb13ded478914#efce47e5364f00a63302cf07ab1fb13ded478914"
 dependencies = [
  "bytes",
  "data-encoding",
@@ -8909,7 +8908,6 @@ dependencies = [
  "rustls-pki-types",
  "sha1",
  "thiserror 2.0.17",
- "utf-8",
  "webpki-roots 0.26.11",
 ]
 
@@ -9138,12 +9136,6 @@ dependencies = [
  "libc",
  "log",
 ]
-
-[[package]]
-name = "utf-8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf16string"

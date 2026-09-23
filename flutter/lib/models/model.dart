@@ -825,6 +825,16 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _invalidatePendingFramesForDisplayChange(
+      Display previous, Display current) {
+    if (_pi.currentDisplay != kAllDisplayValue || _pi.displays.length != 1) {
+      return;
+    }
+    if (previous != current || previous.scale != current.scale) {
+      parent.target!.imageModel.invalidatePendingFrames();
+    }
+  }
+
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final display = int.parse(evt['display']);
@@ -857,7 +867,16 @@ class FfiModel with ChangeNotifier {
             evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
         kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
+    final previousDisplay = _pi.displays[display];
+    _invalidatePendingFramesForDisplayChange(previousDisplay, newDisplay);
     _pi.displays[display] = newDisplay;
+
+    // A later sync_peer_info may already see these updated dimensions.
+    if (_pi.currentDisplay == kAllDisplayValue &&
+        (previousDisplay.width != newDisplay.width ||
+            previousDisplay.height != newDisplay.height)) {
+      _updateSessionWidthHeight(sessionId);
+    }
 
     if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
       updateCurDisplay(sessionId);
@@ -1692,15 +1711,26 @@ class FfiModel with ChangeNotifier {
         cachedPeerData.peerInfo['platform_additions'] =
             json.encode(_pi.platformAdditions);
       }
+      final displaySizesChanged = _pi.currentDisplay == kAllDisplayValue &&
+          (previousDisplayCount != newDisplays.length ||
+              newDisplays.asMap().entries.any((entry) =>
+                  _pi.displays[entry.key].width != entry.value.width ||
+                  _pi.displays[entry.key].height != entry.value.height));
+      if (previousDisplayCount == 1 && newDisplays.length == 1) {
+        _invalidatePendingFramesForDisplayChange(
+            _pi.displays.first, newDisplays.first);
+      }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
+        if (displaySizesChanged && displaysRect() == _rect) {
+          _updateSessionWidthHeight(sessionId);
+        }
         updateCurDisplay(sessionId);
         if (previousDisplayCount != _pi.displays.length) {
-          if (!_pi.forceTextureRender) {
-            parent.target!.imageModel.disposeImage();
-          }
+          parent.target!.imageModel.clearImage(
+              notify: true, invalidatePending: true, updateCursorPos: false);
           try {
             bind.sessionRefreshDisplayCapture(sessionId: sessionId);
           } catch (e) {
@@ -1959,6 +1989,8 @@ class VirtualMouseMode with ChangeNotifier {
 
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
+  int _imageGeneration = 0;
+  bool _updateCursorPosOnNextImage = true;
 
   ui.Image? get image => _image;
 
@@ -1980,7 +2012,27 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
-  clearImage() => _image = null;
+  void invalidatePendingFrames() {
+    _imageGeneration++;
+  }
+
+  clearImage(
+      {bool notify = false,
+      bool invalidatePending = false,
+      bool updateCursorPos = true}) {
+    if (invalidatePending) {
+      invalidatePendingFrames();
+    }
+    if (notify && invalidatePending) {
+      disposeImage();
+    } else {
+      _image = null;
+    }
+    _updateCursorPosOnNextImage = updateCursorPos;
+    if (notify) {
+      notifyListeners();
+    }
+  }
 
   bool _webDecodingRgba = false;
   final List<Uint8List> _webRgbaList = List.empty(growable: true);
@@ -2019,6 +2071,7 @@ class ImageModel with ChangeNotifier {
   }
 
   decodeAndUpdate(int display, Uint8List rgba) async {
+    final imageGeneration = _imageGeneration;
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
     final image = await img.decodeImageFromPixels(
@@ -2033,32 +2086,40 @@ class ImageModel with ChangeNotifier {
       image?.dispose();
       return;
     }
-    await update(image);
+    await update(image,
+        isCurrentSession: () => imageGeneration == _imageGeneration);
   }
 
   Future<void> update(ui.Image? image,
       {bool Function()? isCurrentSession}) async {
     if (_disposeIfStale(image, isCurrentSession)) return;
+    final updateCursorPos = _updateCursorPosOnNextImage;
     if (_image == null && image != null) {
       if (isDesktop || isWebDesktop) {
-        await parent.target?.canvasModel.updateViewStyle();
+        await parent.target?.canvasModel
+            .updateViewStyle(refreshMousePos: updateCursorPos);
         await parent.target?.canvasModel.updateScrollStyle();
         await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
-        await initializeCursorAndCanvas(parent.target!);
+        await initializeCursorAndCanvas(parent.target!,
+            updateCursorPos: updateCursorPos,
+            isCurrentSession: isCurrentSession);
       }
     }
     if (_disposeIfStale(image, isCurrentSession)) return;
     _image?.dispose();
     _image = image;
+    // A failed decode must not consume the pending cursor-preservation request.
+    if (image != null || isCurrentSession == null) {
+      _updateCursorPosOnNextImage = true;
+    }
     if (image != null) notifyListeners();
   }
 
   bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
-    if (image == null || isCurrentSession == null) return false;
-    if (isCurrentSession()) return false;
-    image.dispose();
+    if (isCurrentSession == null || isCurrentSession()) return false;
+    image?.dispose();
     return true;
   }
 
@@ -2096,6 +2157,7 @@ class ImageModel with ChangeNotifier {
   void disposeImage() {
     _image?.dispose();
     _image = null;
+    _updateCursorPosOnNextImage = true;
   }
 }
 
@@ -4440,15 +4502,20 @@ Future<Map<String, dynamic>?> getCanvasConfig(SessionID sessionId) async {
   }
 }
 
-Future<void> initializeCursorAndCanvas(FFI ffi) async {
+Future<void> initializeCursorAndCanvas(FFI ffi,
+    {bool updateCursorPos = true, bool Function()? isCurrentSession}) async {
   var p = await getCanvasConfig(ffi.sessionId);
+  if (isCurrentSession != null && !isCurrentSession()) return;
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];
   }
-  if (p == null || currentDisplay != ffi.ffiModel.pi.currentDisplay) {
+  if (!updateCursorPos ||
+      p == null ||
+      currentDisplay != ffi.ffiModel.pi.currentDisplay) {
     ffi.cursorModel.updateDisplayOrigin(
-        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0);
+        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0,
+        updateCursorPos: updateCursorPos);
     return;
   }
   double xCursor = p['xCursor'];

@@ -107,6 +107,7 @@ enum DrmProducerMsg {
         height: u32,
         hotx: i32,
         hoty: i32,
+        hot_measured: bool,
         colors: Vec<u8>,
     },
 }
@@ -915,6 +916,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                     height,
                     hotx,
                     hoty,
+                    hot_measured,
                     colors,
                 } => {
                     conn.send_msg(
@@ -924,6 +926,7 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                             height,
                             hotx,
                             hoty,
+                            hot_measured,
                         },
                         None,
                     )
@@ -1115,6 +1118,7 @@ fn drm_capture_worker(
                         height: c.height,
                         hotx: c.hotx,
                         hoty: c.hoty,
+                        hot_measured: c.hot_measured,
                         colors: c.colors,
                     })
                     .is_err()
