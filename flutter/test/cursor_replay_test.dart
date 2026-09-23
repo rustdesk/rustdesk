@@ -77,8 +77,10 @@ void main() {
     await _feed(ffi, '1');
     await _feed(ffi, '2');
     await _feed(ffi, '3');
-    expect(ffi.cursorModel.cachedShape('1')!.hasPixels, isFalse);
-    expect(ffi.cursorModel.cachedShape('2')!.hasPixels, isFalse);
+    for (final id in ['1', '2']) {
+      expect(ffi.cursorModel.cachedShape(id)!.hasPixels, isFalse);
+      expect(ffi.cursorModel.cachedShape(id)!.data, isNull);
+    }
     expect(ffi.cursorModel.cachedShape('3')!.hasPixels, isTrue);
   });
 
@@ -88,6 +90,7 @@ void main() {
     buildCursorOfCache(cursor, 1.0, cursor.cache);
     expect(cursor.cache!.hasPixels, isFalse,
         reason: 'once registered, even the shape in use keeps only its image');
+    expect(cursor.cache!.data, isNull, reason: 'nor the bytes it was given');
     await _feed(ffi, '2');
     buildCursorOfCache(cursor, 1.0, cursor.cache);
     await _settle();
@@ -131,6 +134,8 @@ void main() {
     final pixels = _pixels(16, 7);
     await ffi.ffiModel.handleCursorData('9', 3, 4, 16, 16, pixels);
     final carried = await ffi.ffiModel.cachedPeerDataString();
+    expect(ffi.ffiModel.cachedPeerData.cursors, isEmpty,
+        reason: 'the pixels read back for the move are not kept');
     expect(carried.length, lessThan(pixels.length * 2),
         reason: 'the pixels travel as base64, not as a list of numbers');
 
