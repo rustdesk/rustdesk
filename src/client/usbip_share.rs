@@ -6,13 +6,17 @@
 // mirrors `usbip_mux.rs`'s `on_open`/`run_channel`, replying through the
 // session's own `usb_reply_opened`/`usb_forward_data`/`usb_close_forward`
 // instead of a raw `Sender`.
-use crate::flutter::FlutterSession;
+use crate::{
+    client::{Data, Interface},
+    flutter::FlutterSession,
+    usbip_flow::{self, Flow},
+};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes, log, timeout,
     regex::Regex,
     tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
+        io::AsyncWriteExt,
         net::TcpStream,
         sync::mpsc,
     },
@@ -162,6 +166,7 @@ pub(crate) async fn run_channel(
     bus_id: String,
     session: FlutterSession,
     mut inbound: mpsc::Receiver<Bytes>,
+    flow: Flow,
 ) {
     let socket = match timeout(CONNECT_TIMEOUT_MS, TcpStream::connect(USBIPD_ADDR)).await {
         Ok(Ok(s)) => s,
@@ -181,15 +186,21 @@ pub(crate) async fn run_channel(
     log::info!("usb share: channel {} connected to local usbipd, peer pulling", id);
     session.usb_reply_opened(id, true, String::new());
 
-    let (mut reader, mut writer) = socket.into_split();
+    let (reader, mut writer) = socket.into_split();
 
     let mut prefix = Vec::with_capacity(USBIP_OP_REQ_IMPORT_LEN);
+    // Each frame was charged separately against the peer's window, so its
+    // credit is returned per frame too.
+    let mut prefix_frames = Vec::new();
     loop {
         if prefix.len() >= USBIP_OP_REQ_IMPORT_LEN {
             break;
         }
         match timeout(IMPORT_REQUEST_TIMEOUT_MS, inbound.recv()).await {
-            Ok(Some(chunk)) => prefix.extend_from_slice(&chunk),
+            Ok(Some(chunk)) => {
+                prefix_frames.push(chunk.len());
+                prefix.extend_from_slice(&chunk);
+            }
             Ok(None) => {
                 log::info!("usb share: channel {} closed before import request", id);
                 session.usb_close_forward(id);
@@ -230,25 +241,31 @@ pub(crate) async fn run_channel(
         session.ui_handler.unregister_usb_share_channel(id);
         return;
     }
+    for len in prefix_frames {
+        if let Some(add) = flow.drained(len) {
+            session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
+        }
+    }
 
     let session_read = session.clone();
+    let flow_read = flow.clone();
     let to_tunnel = hbb_common::tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            match reader.read(&mut buf).await {
-                Ok(0) | Err(_) => {
-                    log::info!("usb share: channel {} local usbipd connection ended", id);
-                    session_read.usb_close_forward(id);
-                    return;
-                }
-                Ok(n) => session_read.usb_forward_data(id, Bytes::copy_from_slice(&buf[..n])),
-            }
-        }
+        flow_read
+            .socket_to_peer(reader, |chunk| {
+                session_read.usb_forward_data(id, chunk);
+                true
+            })
+            .await;
+        log::info!("usb share: channel {} local usbipd connection ended", id);
+        session_read.usb_close_forward(id);
     });
 
     while let Some(chunk) = inbound.recv().await {
         if writer.write_all(&chunk).await.is_err() {
             break;
+        }
+        if let Some(add) = flow.drained(chunk.len()) {
+            session.send(Data::Message(usbip_flow::window_update_msg(id, add)));
         }
     }
     to_tunnel.abort();

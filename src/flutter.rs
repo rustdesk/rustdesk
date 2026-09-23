@@ -238,17 +238,33 @@ pub struct FlutterHandler {
     peer_info: Arc<RwLock<PeerInfo>>,
     use_texture_render: Arc<AtomicBool>,
     // Local usbip-attach relay channels, keyed by the id chosen when the
-    // channel opened. Bounded (`USB_RELAY_CHANNEL_CAPACITY`) so a peer that
-    // keeps sending faster than the local socket drains can't grow this
-    // without bound; see the identical comment in `server/usbip_mux.rs`.
+    // channel opened, each with its flow-control state (`crate::usbip_flow`).
     #[cfg(target_os = "linux")]
-    usb_forward_channels:
-        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::Sender<crate::client::usbip_attach::Inbound>>>>,
+    usb_forward_channels: Arc<
+        RwLock<
+            HashMap<
+                i32,
+                (
+                    hbb_common::tokio::sync::mpsc::Sender<crate::client::usbip_attach::Inbound>,
+                    crate::usbip_flow::Flow,
+                ),
+            >,
+        >,
+    >,
     // Local usbip-share relay channels (push direction), keyed by the
-    // negative channel_id the peer's usbip_pull chose. Bounded, same reason.
+    // negative channel_id the peer's usbip_pull chose.
     #[cfg(target_os = "linux")]
-    usb_share_channels:
-        Arc<RwLock<HashMap<i32, hbb_common::tokio::sync::mpsc::Sender<hbb_common::bytes::Bytes>>>>,
+    usb_share_channels: Arc<
+        RwLock<
+            HashMap<
+                i32,
+                (
+                    hbb_common::tokio::sync::mpsc::Sender<hbb_common::bytes::Bytes>,
+                    crate::usbip_flow::Flow,
+                ),
+            >,
+        >,
+    >,
     // bus_id -> the channel_id above, so "unpush" (given only a bus_id) can
     // find the channel to close.
     #[cfg(target_os = "linux")]
@@ -309,10 +325,6 @@ impl Default for FlutterHandler {
     }
 }
 
-// See the identical constant/comment in `server/usbip_mux.rs`.
-#[cfg(target_os = "linux")]
-const USB_MAX_DATA_LEN: usize = 64 * 1024;
-
 #[cfg(target_os = "linux")]
 impl FlutterHandler {
     pub(crate) fn next_usb_channel_id() -> i32 {
@@ -325,11 +337,12 @@ impl FlutterHandler {
         &self,
         channel_id: i32,
         tx: hbb_common::tokio::sync::mpsc::Sender<crate::client::usbip_attach::Inbound>,
+        flow: crate::usbip_flow::Flow,
     ) {
         self.usb_forward_channels
             .write()
             .unwrap()
-            .insert(channel_id, tx);
+            .insert(channel_id, (tx, flow));
     }
 
     pub(crate) fn unregister_usb_forward_channel(&self, channel_id: i32) {
@@ -337,25 +350,20 @@ impl FlutterHandler {
     }
 
     pub(crate) fn usb_forward_send(&self, channel_id: i32, msg: crate::client::usbip_attach::Inbound) {
-        if let crate::client::usbip_attach::Inbound::Data(data) = &msg {
-            if data.len() > USB_MAX_DATA_LEN {
-                log::warn!(
-                    "usb forward: oversized data frame ({} bytes) on channel {}, closing",
-                    data.len(), channel_id
-                );
-                self.unregister_usb_forward_channel(channel_id);
-                self.notify_usb_channel_closed(channel_id);
-                return;
+        let failed = match self.usb_forward_channels.read().unwrap().get(&channel_id) {
+            Some((tx, flow)) => {
+                let admitted = match &msg {
+                    crate::client::usbip_attach::Inbound::Data(data) => flow.admit(data.len()),
+                    _ => true,
+                };
+                // Over the window, or the relay task already ended: an
+                // admitted frame always fits (`usbip_flow::QUEUE_FRAMES`).
+                !admitted || tx.try_send(msg).is_err()
             }
-        }
-        let full = match self.usb_forward_channels.read().unwrap().get(&channel_id) {
-            Some(tx) => tx.try_send(msg).is_err(),
             None => return,
         };
-        // Full or closed -- either way this channel can't keep relaying
-        // faithfully, so drop it instead of growing the queue or silently
-        // losing bytes out of the stream.
-        if full {
+        if failed {
+            log::warn!("usb forward: closing channel {} (window overrun or relay gone)", channel_id);
             self.unregister_usb_forward_channel(channel_id);
             self.notify_usb_channel_closed(channel_id);
         }
@@ -379,8 +387,9 @@ impl FlutterHandler {
         channel_id: i32,
         bus_id: String,
         tx: hbb_common::tokio::sync::mpsc::Sender<hbb_common::bytes::Bytes>,
+        flow: crate::usbip_flow::Flow,
     ) {
-        self.usb_share_channels.write().unwrap().insert(channel_id, tx);
+        self.usb_share_channels.write().unwrap().insert(channel_id, (tx, flow));
         self.usb_share_bus_ids.write().unwrap().insert(bus_id, channel_id);
     }
 
@@ -401,22 +410,35 @@ impl FlutterHandler {
     }
 
     pub(crate) fn usb_share_send(&self, channel_id: i32, data: hbb_common::bytes::Bytes) {
-        if data.len() > USB_MAX_DATA_LEN {
-            log::warn!(
-                "usb push: oversized data frame ({} bytes) on channel {}, closing",
-                data.len(), channel_id
-            );
-            self.unregister_usb_share_channel(channel_id);
-            self.notify_usb_channel_closed(channel_id);
-            return;
-        }
-        let full = match self.usb_share_channels.read().unwrap().get(&channel_id) {
-            Some(tx) => tx.try_send(data).is_err(),
+        let failed = match self.usb_share_channels.read().unwrap().get(&channel_id) {
+            Some((tx, flow)) => !flow.admit(data.len()) || tx.try_send(data).is_err(),
             None => return,
         };
-        if full {
+        if failed {
+            log::warn!("usb push: closing channel {} (window overrun or relay gone)", channel_id);
             self.unregister_usb_share_channel(channel_id);
             self.notify_usb_channel_closed(channel_id);
+        }
+    }
+
+    /// Credit the peer returned on channel `channel_id`, whichever direction
+    /// it belongs to (see the sign convention in `client::usbip_channel`).
+    pub(crate) fn usb_window_update(&self, channel_id: i32, add: u32) {
+        let flow = if channel_id >= 0 {
+            self.usb_forward_channels
+                .read()
+                .unwrap()
+                .get(&channel_id)
+                .map(|(_, flow)| flow.clone())
+        } else {
+            self.usb_share_channels
+                .read()
+                .unwrap()
+                .get(&channel_id)
+                .map(|(_, flow)| flow.clone())
+        };
+        if let Some(flow) = flow {
+            flow.grant(add);
         }
     }
 
