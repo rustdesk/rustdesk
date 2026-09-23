@@ -2634,6 +2634,20 @@ pub fn run_cmds_privileged(cmds: &str) -> bool {
     crate::platform::gtk_sudo::run(vec![cmds]).is_ok()
 }
 
+/// Runs `usbip` as root with each argument passed separately, so no argument
+/// is ever parsed by a shell as part of a larger command string.
+pub fn run_usbip_privileged(args: &[&str]) -> bool {
+    let mut cmds = vec!["usbip"];
+    cmds.extend_from_slice(args);
+    match crate::platform::gtk_sudo::run(cmds) {
+        Ok(()) => true,
+        Err(err) => {
+            log::error!("usbip {:?} failed: {}", args, err);
+            false
+        }
+    }
+}
+
 /// Spawn the current executable after a delay.
 ///
 /// # Security

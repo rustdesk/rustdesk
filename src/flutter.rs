@@ -258,6 +258,10 @@ pub struct FlutterHandler {
     // can't pull an arbitrary locally-shared device it was never offered.
     #[cfg(target_os = "linux")]
     usb_share_pending: Arc<RwLock<HashSet<String>>>,
+    // bus_ids this session bound itself in `usb_push` and has not unbound
+    // yet -- the only devices a failed `PushResult` may roll back.
+    #[cfg(target_os = "linux")]
+    usb_share_owned: Arc<RwLock<HashSet<String>>>,
     // This session's own `io_loop` runtime, registered by
     // `register_session_runtime` once `io_loop` starts running on it --
     // lets `usb_attach`/`usb_push`/etc, called from Flutter's FFI thread
@@ -285,6 +289,8 @@ impl Default for FlutterHandler {
             usb_share_bus_ids: Default::default(),
             #[cfg(target_os = "linux")]
             usb_share_pending: Default::default(),
+            #[cfg(target_os = "linux")]
+            usb_share_owned: Default::default(),
             #[cfg(target_os = "linux")]
             usb_session_runtime: Default::default(),
         }
@@ -417,6 +423,20 @@ impl FlutterHandler {
         self.usb_share_pending.write().unwrap().remove(bus_id);
     }
 
+    pub(crate) fn usb_share_owned_add(&self, bus_id: String) {
+        self.usb_share_owned.write().unwrap().insert(bus_id);
+    }
+
+    pub(crate) fn usb_share_owned(&self, bus_id: &str) -> bool {
+        self.usb_share_owned.read().unwrap().contains(bus_id)
+    }
+
+    /// Removes and reports whether this session had bound `bus_id` itself,
+    /// so at most one caller undoes that binding.
+    pub(crate) fn usb_share_owned_take(&self, bus_id: &str) -> bool {
+        self.usb_share_owned.write().unwrap().remove(bus_id)
+    }
+
     /// Any one of this handler's registered UI sessions works -- a RemoteUsb
     /// `FlutterHandler` only ever has the one.
     pub(crate) fn any_session(&self) -> Option<FlutterSession> {
@@ -451,6 +471,7 @@ impl FlutterHandler {
         self.usb_share_channels.write().unwrap().clear();
         self.usb_share_bus_ids.write().unwrap().clear();
         self.usb_share_pending.write().unwrap().clear();
+        self.usb_share_owned.write().unwrap().clear();
     }
 }
 
@@ -541,6 +562,7 @@ impl Session<FlutterHandler> {
                 return;
             }
             log::info!("usb push: shared {}, asking peer to attach", bus_id);
+            session.ui_handler.usb_share_owned_add(bus_id.clone());
             session.ui_handler.usb_share_pending_add(bus_id.clone());
             session.usb_push_request(bus_id);
         });
@@ -560,6 +582,7 @@ impl Session<FlutterHandler> {
         // Revoke the authorization to open a channel for this device in case
         // the peer never did (e.g. unpushed before its `Open` arrived).
         self.ui_handler.usb_share_pending_remove(&bus_id);
+        self.ui_handler.usb_share_owned_take(&bus_id);
         // No live channel happens whenever this app instance never saw the
         // push complete -- e.g. restarted after sharing, with the peer
         // still gone. The device can still genuinely be locally bound
