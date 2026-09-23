@@ -373,15 +373,19 @@ fn shared_bus_ids() -> std::collections::HashSet<String> {
         .collect()
 }
 
-/// `usbip` bus ids are digits, `-`, and `.` only (e.g. "1-2.3"). `bus_id`
-/// here comes straight from the peer's `Bind` request and is interpolated
-/// into a root-privileged shell command below, so anything else must be
-/// rejected before it gets near the shell.
-fn is_valid_bus_id(bus_id: &str) -> bool {
-    !bus_id.is_empty()
-        && bus_id
-            .chars()
-            .all(|c| c.is_ascii_digit() || c == '-' || c == '.')
+/// Linux USB bus ids are `<bus>-<port>[.<port>...]` (e.g. "1-2.3"), shorter
+/// than the kernel's 32-byte `SYSFS_BUS_ID_SIZE`. Bus ids reaching this side
+/// come from the peer (`Bind`, `PushRequest`) and end up in privileged
+/// `usbip` commands, so every one must pass this check first.
+pub(super) fn is_valid_bus_id(bus_id: &str) -> bool {
+    if bus_id.len() >= 32 {
+        return false;
+    }
+    let Some((bus, ports)) = bus_id.split_once('-') else {
+        return false;
+    };
+    let is_number = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    is_number(bus) && ports.split('.').all(is_number)
 }
 
 /// Blocking; call via `spawn_blocking`. Bind/unbind needs root, so it goes
@@ -393,7 +397,7 @@ fn bind_device(bus_id: &str, bind: bool) -> bool {
         return false;
     }
     let sub_cmd = if bind { "bind" } else { "unbind" };
-    crate::platform::run_cmds_privileged(&format!("usbip {} -b {}", sub_cmd, bus_id))
+    crate::platform::run_usbip_privileged(&[sub_cmd, "-b", bus_id])
 }
 
 /// Blocking; call via `spawn_blocking`. The puller's combined "detach and
@@ -472,6 +476,17 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         assert!(!is_valid_bus_id("1-1 && rm -rf /"));
         assert!(!is_valid_bus_id("$(id)"));
         assert!(!is_valid_bus_id("../etc/passwd"));
+    }
+
+    #[test]
+    fn is_valid_bus_id_rejects_malformed_and_overlong() {
+        assert!(!is_valid_bus_id("1"));
+        assert!(!is_valid_bus_id("1-"));
+        assert!(!is_valid_bus_id("-1"));
+        assert!(!is_valid_bus_id("1-2..3"));
+        assert!(!is_valid_bus_id("1.2-3"));
+        assert!(!is_valid_bus_id("1-2-3"));
+        assert!(!is_valid_bus_id(&format!("1-{}", "1.".repeat(15) + "1")));
     }
 
     #[test]
