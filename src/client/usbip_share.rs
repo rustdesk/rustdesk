@@ -8,7 +8,8 @@
 // instead of a raw `Sender`.
 use crate::{
     client::{Data, Interface},
-    flutter::FlutterSession,
+    flutter::{FlutterHandler, FlutterSession},
+    ui_session_interface::Session,
     usbip_flow::{self, Flow},
 };
 use base::message_proto::*;
@@ -21,6 +22,7 @@ use hbb_common::{
         sync::mpsc,
     },
 };
+use serde_json::json;
 use std::{process::Command, sync::LazyLock};
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
@@ -153,7 +155,7 @@ fn parse_import_request_busid(prefix: &[u8]) -> Option<String> {
 /// `server/usbip_mux.rs`'s `on_open`/`run_channel`.
 ///
 /// `bus_id` is the one authorized for this channel (checked against the
-/// pending-push set in `flutter.rs`'s `Open` handler before this is even
+/// pending-push set in `usbip_channel`'s `Open` handler before this is even
 /// called) -- but that's only the peer's self-reported metadata for the
 /// `Open` message. Nothing stops it from opening a channel claiming one
 /// bus_id while actually sending a USB/IP import request for a different
@@ -173,13 +175,13 @@ pub(crate) async fn run_channel(
         Ok(Err(e)) => {
             log::error!("usb share: channel {} usbipd connect failed: {}", id, e);
             session.usb_reply_opened(id, false, format!("usbipd connect failed: {}", e));
-            session.ui_handler.unregister_usb_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel(id);
             return;
         }
         Err(e) => {
             log::error!("usb share: channel {} usbipd connect timed out: {}", id, e);
             session.usb_reply_opened(id, false, format!("usbipd connect timed out: {}", e));
-            session.ui_handler.unregister_usb_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel(id);
             return;
         }
     };
@@ -204,13 +206,13 @@ pub(crate) async fn run_channel(
             Ok(None) => {
                 log::info!("usb share: channel {} closed before import request", id);
                 session.usb_close_forward(id);
-                session.ui_handler.unregister_usb_share_channel(id);
+                session.ui_handler.usb.unregister_share_channel(id);
                 return;
             }
             Err(_) => {
                 log::warn!("usb share: channel {} import request timed out, closing", id);
                 session.usb_close_forward(id);
-                session.ui_handler.unregister_usb_share_channel(id);
+                session.ui_handler.usb.unregister_share_channel(id);
                 return;
             }
         }
@@ -223,7 +225,7 @@ pub(crate) async fn run_channel(
                 id, requested, bus_id
             );
             session.usb_close_forward(id);
-            session.ui_handler.unregister_usb_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel(id);
             return;
         }
         None => {
@@ -232,13 +234,13 @@ pub(crate) async fn run_channel(
                 id
             );
             session.usb_close_forward(id);
-            session.ui_handler.unregister_usb_share_channel(id);
+            session.ui_handler.usb.unregister_share_channel(id);
             return;
         }
     }
     if writer.write_all(&prefix).await.is_err() {
         session.usb_close_forward(id);
-        session.ui_handler.unregister_usb_share_channel(id);
+        session.ui_handler.usb.unregister_share_channel(id);
         return;
     }
     for len in prefix_frames {
@@ -270,7 +272,147 @@ pub(crate) async fn run_channel(
     }
     to_tunnel.abort();
     log::info!("usb share: channel {} relay closed", id);
-    session.ui_handler.unregister_usb_share_channel(id);
+    session.ui_handler.usb.unregister_share_channel(id);
+}
+
+impl Session<FlutterHandler> {
+    /// Purely local (no network): what's shareable on this machine, for the
+    /// "My local devices" push section.
+    pub fn usb_local_devices(&self) {
+        let devices = list_local_devices();
+        let devices: Vec<serde_json::Value> = devices
+            .iter()
+            .map(|d| {
+                json!({
+                    "bus_id": d.bus_id,
+                    "vendor": d.vendor,
+                    "product": d.product,
+                    "shared": d.shared,
+                })
+            })
+            .collect();
+        self.push_event_("usb_local_device_list", &[("devices", json!(devices))], &[], &[]);
+    }
+
+    /// Also local -- `usbip bind`/`unbind` needs root, so run it off the FFI
+    /// thread the same way `usb_attach` does.
+    pub fn usb_local_bind(&self, bus_id: String, bind: bool) {
+        let Some(rt) = self.ui_handler.usb.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let ok = bind_device(&bus_id, bind);
+            let error = if ok {
+                String::new()
+            } else {
+                format!("Failed to {} {}", if bind { "share" } else { "unshare" }, bus_id)
+            };
+            session.push_event_(
+                "usb_local_bind_result",
+                &[
+                    ("bus_id", json!(bus_id)),
+                    ("bind", json!(bind)),
+                    ("error", json!(error)),
+                ],
+                &[],
+                &[],
+            );
+        });
+    }
+
+    /// Push direction "Push": one user action instead of two ("share" then
+    /// "push" separately) -- share the device locally first, then ask the
+    /// peer to attach it. Keeping "shared" and "pushed" from being two
+    /// independently-toggleable states means there's only one thing to
+    /// track and show in the UI, and it can't drift out of sync with the
+    /// button label the way share-then-separately-push could.
+    pub fn usb_push(&self, bus_id: String) {
+        let Some(rt) = self.ui_handler.usb.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            log::info!("usb push: sharing {} before push", bus_id);
+            if !bind_device(&bus_id, true) {
+                log::error!("usb push: failed to share {} locally, not pushing", bus_id);
+                session.push_event_(
+                    "usb_push_result",
+                    &[
+                        ("bus_id", json!(&bus_id)),
+                        ("error", json!(format!("Failed to share {}", bus_id))),
+                    ],
+                    &[],
+                    &[],
+                );
+                return;
+            }
+            log::info!("usb push: shared {}, asking peer to attach", bus_id);
+            if !session.ui_handler.usb.share_owned_add(bus_id.clone()) {
+                log::info!("usb push: session closed while sharing {}, unsharing", bus_id);
+                unbind_device_retrying(&bus_id);
+                return;
+            }
+            session.ui_handler.usb.share_pending_add(bus_id.clone());
+            session.usb_push_request(bus_id);
+        });
+    }
+
+    /// Push direction "Unpush": tell the peer to detach and free our own
+    /// relay slot immediately, then unshare. The peer's own read loop
+    /// aborts as soon as it sees our channel entry gone
+    /// (`usbip_pull.rs::handle_close`), so it never echoes a Close back to
+    /// confirm -- freeing the entry here (not just sending the close
+    /// request and waiting) matters, because our relay's TCP connection to
+    /// the local usbipd is exactly what keeps the device "in use" and
+    /// `usbip unbind` failing. That connection closes asynchronously a
+    /// moment after the entry is dropped, not synchronously with this call,
+    /// so the unshare below retries briefly rather than racing it.
+    pub fn usb_unpush(&self, bus_id: String) {
+        // Revoke the authorization to open a channel for this device in case
+        // the peer never did (e.g. unpushed before its `Open` arrived).
+        self.ui_handler.usb.share_pending_remove(&bus_id);
+        self.ui_handler.usb.share_owned_take(&bus_id);
+        // No live channel happens whenever this app instance never saw the
+        // push complete -- e.g. restarted after sharing, with the peer
+        // still gone. The device can still genuinely be locally bound
+        // though (`usbip bind` is a kernel fact, not app state), so the
+        // actual unshare below must not depend on a channel existing.
+        if let Some(channel_id) = self.ui_handler.usb.share_channel_for_bus_id(&bus_id) {
+            log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
+            self.usb_close_forward(channel_id);
+            self.ui_handler.usb.unregister_share_channel(channel_id);
+        } else {
+            log::info!(
+                "usb push: unpushing {} with no live channel (peer gone or app restarted since sharing)",
+                bus_id
+            );
+        }
+
+        let Some(rt) = self.ui_handler.usb.session_runtime() else {
+            return;
+        };
+        let session = self.clone();
+        rt.spawn_blocking(move || {
+            let ok = unbind_device_retrying(&bus_id);
+            let error = if ok {
+                log::info!("usb push: unshared {} after unpush", bus_id);
+                String::new()
+            } else {
+                log::error!(
+                    "usb push: failed to unshare {} after unpush (still busy after retries)",
+                    bus_id
+                );
+                format!("Failed to unshare {}", bus_id)
+            };
+            session.push_event_(
+                "usb_push_result",
+                &[("bus_id", json!(&bus_id)), ("error", json!(error))],
+                &[],
+                &[],
+            );
+        });
+    }
 }
 
 #[cfg(test)]

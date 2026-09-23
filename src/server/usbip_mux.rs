@@ -223,7 +223,7 @@ impl UsbipMux {
             // Negative ids are the push direction's own id space
             // (`usbip_pull.rs`); an `Open` here only ever means a peer
             // pulling one of our shared devices, which always uses
-            // non-negative ids (`FlutterHandler::next_usb_channel_id`).
+            // non-negative ids (`UsbClientState::next_channel_id`).
             // Reject before creating any channel/task: `connection.rs`'s
             // sign dispatch would route this id's later Data/Close frames to
             // `usbip_pull` instead of back here, orphaning the relay task
