@@ -102,25 +102,29 @@ void main() {
     expect(ffi.cursor.fetched, isEmpty);
   });
 
-  test('a shape shown before is shown again without its pixels', () async {
+  test('the shape in use keeps its pixels, and a new raster is made at once',
+      () async {
     final cursor = ffi.cursorModel;
-    await _feed(ffi, '1');
-    buildCursorOfCache(cursor, 1.0, cursor.cache);
-    expect(cursor.cache!.hasPixels, isFalse,
-        reason: 'once registered, even the shape in use keeps only its image');
-    expect(cursor.cache!.data, isNull, reason: 'nor the bytes it was given');
-    await _feed(ffi, '2');
+    await _feed(ffi, '1', size: 32);
     buildCursorOfCache(cursor, 1.0, cursor.cache);
     await _settle();
+    expect(cursor.cache!.hasPixels, isTrue);
+    expect(buildCursorOfCache(cursor, 0.5, cursor.cache),
+        isNot(MouseCursor.defer));
+    await _settle();
+    expect(ffi.cursor.fetched, isEmpty, reason: 'nothing had to be decoded');
     expect(registered.length, 2);
+    expect((cursor.cache!.rasterWidth, cursor.cache!.rasterHeight), (16, 16));
 
+    await _feed(ffi, '2');
+    expect(cursor.cachedShape('1')!.hasPixels, isFalse,
+        reason: 'switched away from, a shape keeps no pixels');
     _select(ffi, '1');
-    expect(cursor.cache!.hasPixels, isFalse);
-    expect(buildCursorOfCache(cursor, 1.0, cursor.cache),
+    expect(buildCursorOfCache(cursor, 0.5, cursor.cache),
         isNot(MouseCursor.defer));
     await _settle();
     expect(registered.length, 2, reason: 'its native cursor is still there');
-    expect(ffi.cursor.fetched, isEmpty, reason: 'nothing had to be decoded');
+    expect(ffi.cursor.fetched, isEmpty);
   });
 
   test('the shapes used last keep their native cursors, the others go',
@@ -296,21 +300,6 @@ void main() {
     expect(ffi.cursor.fetched, ['missing0', 'missing0']);
   });
 
-  test('a shape shown at a new scale is decoded again from the core', () async {
-    final cursor = ffi.cursorModel;
-    await _feed(ffi, '1', size: 32);
-    await _feed(ffi, '2', size: 32);
-    _select(ffi, '1');
-    expect(buildCursorOfCache(cursor, 0.5, cursor.cache), MouseCursor.defer);
-    await _settle();
-
-    expect(cursor.cache!.hasPixels, isTrue);
-    buildCursorOfCache(cursor, 0.5, cursor.cache);
-    await _settle();
-    expect(registered.length, 1);
-    expect((cursor.cache!.rasterWidth, cursor.cache!.rasterHeight), (16, 16));
-  });
-
   test('a moved tab carries the id in use, and its window asks the core',
       () async {
     await _feed(ffi, '1', size: 16);
@@ -338,7 +327,7 @@ void main() {
     await _settle();
     final first = registered.single;
 
-    // Asks for its pixels back, registers the new raster, then is shown again.
+    // Registers the new raster, then is shown again.
     for (var i = 0; i < 3; i++) {
       buildCursorOfCache(cursor, 0.5, cursor.cache);
       await _settle();
@@ -352,7 +341,7 @@ void main() {
   test('a raster returned to before its cursor was dropped is kept', () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
-    for (final scale in [1.0, 0.5, 0.5, 1.0, 1.0]) {
+    for (final scale in [1.0, 0.5, 1.0]) {
       buildCursorOfCache(cursor, scale, cursor.cache);
       await _settle();
     }

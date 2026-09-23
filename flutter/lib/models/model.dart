@@ -2877,8 +2877,7 @@ class CursorData {
 
   img2.Image get image => _image!;
 
-  /// False for a shape not in use: its ui.Image in [CursorModel] holds its pixels, and its
-  /// registered native cursors show it. Pixels are needed again only for a new raster.
+  /// False for a shape not in use; only the shape in use keeps pixels, for a new raster.
   bool get hasPixels => _image != null;
 
   void releasePixels() {
@@ -3615,11 +3614,11 @@ class CursorModel with ChangeNotifier {
   String nativeKey(CursorData cache, double scale) =>
       '${_keyScope}_${cache.updateGetKey(scale)}';
 
-  /// Once its native cursor holds a raster, a shape keeps no pixels besides its ui.Image, and
-  /// no native cursor at another raster.
+  /// A shape keeps one native cursor, the one at its raster. The shape in use keeps its
+  /// pixels too, so a new raster is made from them at once; the others keep none.
   void registered(CursorData cache, String key) {
     _useNativeKey(cache, key);
-    if (identical(_cacheMap[cache.id], cache)) {
+    if (cache.id != _id && identical(_cacheMap[cache.id], cache)) {
       cache.releasePixels();
     }
   }
