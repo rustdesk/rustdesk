@@ -3196,7 +3196,10 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  set id(String id) => _id = id;
+  set id(String id) {
+    if (_id != id) _unavailable = null;
+    _id = id;
+  }
 
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <

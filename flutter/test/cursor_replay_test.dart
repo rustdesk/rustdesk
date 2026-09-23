@@ -254,6 +254,17 @@ void main() {
         reason: 'nothing is kept for a shape no longer in use');
   });
 
+  test('a shape the core lacks is asked for again after another was in use',
+      () async {
+    await _feed(ffi, '1');
+    _select(ffi, 'missing0');
+    await _settle();
+    _select(ffi, '1');
+    _select(ffi, 'missing0');
+    await _settle();
+    expect(ffi.cursor.fetched, ['missing0', 'missing0']);
+  });
+
   test('a shape shown at a new scale is decoded again from the core', () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
