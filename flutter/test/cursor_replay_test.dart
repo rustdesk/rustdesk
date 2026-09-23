@@ -231,6 +231,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     _select(ffi, '2');
     await _settle();
+    expect(ffi.cursorModel.cachedShape('1')!.hasPixels, isFalse,
+        reason: 'decoded after the peer moved on, it is let go');
     _select(ffi, '1');
     ffi.cursorModel.image;
     await _settle();

@@ -3537,6 +3537,7 @@ class CursorModel with ChangeNotifier {
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
     _updateCurData();
+    if (id != _id) _cacheMap[id]?.releasePixels();
     return true;
   }
 
@@ -3715,11 +3716,10 @@ class CursorModel with ChangeNotifier {
   }
 
   bool _updateCurData() {
+    final previous = _cache;
     _cache = _cacheMap[_id];
-    for (final cache in _cacheMap.values) {
-      if (cache.id != _id && cache.hasPixels) {
-        cache.releasePixels();
-      }
+    if (previous != null && !identical(previous, _cache)) {
+      previous.releasePixels();
     }
     final key = _nativeKeys.remove(_id);
     if (key != null) {
