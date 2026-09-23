@@ -366,6 +366,17 @@ jobs:
               Write-Host "Ingore the printer driver error."
           }
 
+      - name: Run the Rust tests
+        # x86_64 only: the tests are the same code on arm64, and that runner is the slow one.
+        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'x86_64' }}
+        shell: bash
+        run: |
+          # The build's own features, so the tests see the code that ships.
+          FEATURES=$(python3 ./build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }} --print-features)
+          cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+          # Its Windows tests run nowhere else.
+          cargo test --locked --release -p clipboard
+
       - name: find Runner.res
         # Windows: find Runner.res (compiled from ./flutter/windows/runner/Runner.rc), copy to ./Runner.res
         # Runner.rc does not contain actual version, but Runner.res does
@@ -1021,6 +1032,16 @@ jobs:
           cargo test --locked --release --lib platform::macos::update_tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
           cargo test --locked --release --lib verified_dmg_tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
           cargo test --locked --release --lib update_metadata::tests --features "flutter,hwcodec,unix-file-copy-paste${{ matrix.job.extra-cargo-features }}"
+
+      - name: Run the Rust tests
+        if: ${{ !inputs.upload-artifact && matrix.job.arch == 'aarch64' }}
+        run: |
+          # The build's own features, so the tests see the code that ships. MACOSX_DEPLOYMENT_TARGET
+          # comes from the build step's export.
+          FEATURES=$(./build.py --flutter --hwcodec --unix-file-copy-paste ${{ matrix.job.extra-build-args }} --print-features)
+          cargo test --locked --release --lib --features "$FEATURES" -- --skip test_get_cursor_pos --skip test_get_key_state
+          # Opt-in, and its macOS tests run nowhere else.
+          cargo test --locked --release -p clipboard --features unix-file-copy-paste
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
@@ -2354,6 +2375,11 @@ jobs:
               cargo test --locked -p scrap --features drm crtc_refresh_tests
             run_drm_tests "scrap plane_rotation_tests" \
               cargo test --locked -p scrap --features drm plane_rotation_tests
+            run_drm_tests "scrap drmtap_dl::tests" \
+              cargo test --locked -p scrap --features drm drmtap_dl::tests
+            # Opt-in like drm, and this container already builds with it.
+            run_drm_tests "clipboard unix-file-copy-paste" \
+              cargo test --locked -p clipboard --features unix-file-copy-paste
             cargo build --locked --lib --features "$FEATURES" --release
             rm -rf target/release/deps target/release/build
             rm -rf ~/.cargo

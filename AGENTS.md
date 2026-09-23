@@ -186,6 +186,10 @@ A refactor added to cover a corner case rarely converges. Each new counter, time
 * Do not add test infrastructure (browser runners, golden/screenshot harnesses, new mock layers, test-only hooks in production code) for a bug fix unless the maintainer asks.
 * If the test diff is more than twice the fix, cut it back to the tests that pin the reported behavior. A state that needs long setup to reach is usually too rare to fix.
 * When the number of tests needed to describe the behavior keeps growing, the implementation is too complex: simplify it instead of adding tests.
+* Dart tests go in `flutter/test/*_test.dart`, nowhere else: CI runs `flutter test` over that directory and nothing outside it. It runs on the VM, so a `@TestOn('browser')` suite runs in no CI job.
+* Rust unit tests go in a `#[cfg(test)]` module beside the code. CI runs `cargo test --workspace` with the default features on x86_64 Linux, `cargo test --lib` on the root package with the release feature set on macOS and Windows plus `-p clipboard` there, and on Linux the `drm` test modules by name plus the `clipboard` package with `unix-file-copy-paste`. A platform-gated test in another workspace crate runs on that platform only if a job names the crate with `-p`. Gate a test module on a feature or `target_os` only when the code under test is gated; a pure helper that only a gated path calls gets `#[cfg(any(feature = "...", test))]`, so its tests run everywhere.
+* A test behind a feature that no CI build enables needs a `cargo test` line in `.github/workflows/flutter-build.yml` that names it. In the Linux drm job, wrap it in `run_drm_tests` so a filter that matches nothing fails instead of passing.
+* Web core tests are `flutter/web/js/src/*.test.ts`, run by jest in that repository's own CI.
 
 ## Reviewing a PR
 
