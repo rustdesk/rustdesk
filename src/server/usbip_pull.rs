@@ -442,15 +442,37 @@ async fn run_channel(
     let (reader, mut writer) = socket.into_split();
     let tx_read = tx.clone();
     let flow_read = flow.clone();
-    let to_tunnel = tokio::spawn(async move {
+    let mut to_tunnel = tokio::spawn(async move {
         flow_read
             .socket_to_peer(reader, |chunk| {
                 send(&tx_read, data_msg(id, chunk));
                 true
             })
             .await;
-        send(&tx_read, close_msg(id));
-        // Otherwise a push whose remote transport just closes on its own (not
+    });
+
+    // Whichever half ends first ends the other; only an end on our side
+    // (local EOF or write error) needs a Close, the peer knows about its own.
+    let local_ended = loop {
+        tokio::select! {
+            _ = &mut to_tunnel => break true,
+            msg = inbound.recv() => match msg {
+                Some(Inbound::Data(data)) => {
+                    if writer.write_all(&data).await.is_err() {
+                        break true;
+                    }
+                    if let Some(add) = flow.drained(data.len()) {
+                        send(&tx, usbip_flow::window_update_msg(id, add));
+                    }
+                }
+                Some(Inbound::Opened { .. }) | None => break false,
+            },
+        }
+    };
+    to_tunnel.abort();
+    if local_ended {
+        send(&tx, close_msg(id));
+        // Otherwise a push whose local transport just closes on its own (not
         // via an explicit unpush) leaves this port attached to the controlled
         // machine's vhci driver indefinitely -- nothing else ever detaches it
         // once this task returns.
@@ -458,22 +480,7 @@ async fn run_channel(
             log::info!("usb push: channel {} relay ended, detaching port {}", id, port);
             detach_port(port);
         }
-    });
-
-    while let Some(msg) = inbound.recv().await {
-        match msg {
-            Inbound::Data(data) => {
-                if writer.write_all(&data).await.is_err() {
-                    break;
-                }
-                if let Some(add) = flow.drained(data.len()) {
-                    send(&tx, usbip_flow::window_update_msg(id, add));
-                }
-            }
-            Inbound::Opened { .. } => break,
-        }
     }
-    to_tunnel.abort();
 }
 
 #[cfg(test)]
@@ -620,5 +627,75 @@ Port 00: <Port in Use> at High Speed(480Mbps)
            -> remote bus/dev 018/002
 ";
         assert_eq!(parse_attached_port(output, 38963, "18-1"), None);
+    }
+
+    async fn socket_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (ours, theirs) = tokio::join!(TcpStream::connect(addr), listener.accept());
+        (ours.unwrap(), theirs.unwrap().0)
+    }
+
+    fn close_count(rx: &mut mpsc::UnboundedReceiver<(tokio::time::Instant, Arc<Message>)>) -> usize {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter(|(_, msg)| match &msg.union {
+                Some(message::Union::UsbChannel(ch)) => {
+                    matches!(ch.union, Some(usb_channel::Union::Close(_)))
+                }
+                _ => false,
+            })
+            .count()
+    }
+
+    async fn run_opened_relay(
+        socket: TcpStream,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        mpsc::Sender<Inbound>,
+        mpsc::UnboundedReceiver<(tokio::time::Instant, Arc<Message>)>,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (inbound_tx, inbound_rx) = mpsc::channel(4);
+        inbound_tx
+            .send(Inbound::Opened {
+                success: true,
+                message: String::new(),
+            })
+            .await
+            .unwrap();
+        let relay = tokio::spawn(run_channel(
+            -1,
+            "1-1".to_string(),
+            socket,
+            tx,
+            inbound_rx,
+            Arc::new(Mutex::new(None)),
+            Flow::new(),
+        ));
+        (relay, inbound_tx, rx)
+    }
+
+    #[tokio::test]
+    async fn local_eof_ends_both_halves_and_closes_the_peer_once() {
+        let (ours, theirs) = socket_pair().await;
+        let (relay, _inbound_tx, mut rx) = run_opened_relay(ours).await;
+        drop(theirs);
+        tokio::time::timeout(std::time::Duration::from_secs(5), relay)
+            .await
+            .expect("relay must end on local EOF while the peer side stays open")
+            .unwrap();
+        assert_eq!(close_count(&mut rx), 1);
+    }
+
+    #[tokio::test]
+    async fn peer_close_ends_both_halves_without_echoing_close() {
+        let (ours, _theirs) = socket_pair().await;
+        let (relay, inbound_tx, mut rx) = run_opened_relay(ours).await;
+        drop(inbound_tx);
+        tokio::time::timeout(std::time::Duration::from_secs(5), relay)
+            .await
+            .expect("relay must end once the peer's side is gone")
+            .unwrap();
+        assert_eq!(close_count(&mut rx), 0);
     }
 }

@@ -303,21 +303,31 @@ async fn run_channel(id: i32, mut inbound: mpsc::Receiver<Bytes>, tx: Sender, fl
     let (reader, mut writer) = socket.into_split();
     let tx_read = tx.clone();
     let flow_read = flow.clone();
-    let to_tunnel = tokio::spawn(async move {
+    let mut to_tunnel = tokio::spawn(async move {
         flow_read
             .socket_to_peer(reader, |chunk| send_result(&tx_read, data_msg(id, chunk)))
             .await;
-        send(&tx_read, close_msg(id));
     });
-    while let Some(chunk) = inbound.recv().await {
-        if writer.write_all(&chunk).await.is_err() {
-            break;
+    // Whichever half ends first ends the other; only an end on our side
+    // (local EOF or write error) needs a Close, the peer knows about its own.
+    let local_ended = loop {
+        tokio::select! {
+            _ = &mut to_tunnel => break true,
+            chunk = inbound.recv() => {
+                let Some(chunk) = chunk else { break false };
+                if writer.write_all(&chunk).await.is_err() {
+                    break true;
+                }
+                if let Some(add) = flow.drained(chunk.len()) {
+                    send(&tx, usbip_flow::window_update_msg(id, add));
+                }
+            }
         }
-        if let Some(add) = flow.drained(chunk.len()) {
-            send(&tx, usbip_flow::window_update_msg(id, add));
-        }
-    }
+    };
     to_tunnel.abort();
+    if local_ended {
+        send(&tx, close_msg(id));
+    }
 }
 
 fn send_result(tx: &Sender, msg: Message) -> bool {
