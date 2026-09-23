@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Atjaunot uzticēšanos"),
         ("install-directory-not-empty-tip", "Izvēlētā mape nav tukša. Instalēšana var izdzēst esošos datus. Apsveriet iespēju izvēlēties citu mapi."),
         ("Request approval", "Pieprasīt apstiprinājumu"),
+        ("Enable USB forwarding", "Iespējot USB pāradresāciju"),
+        ("USB forwarding", "USB pāradresācija"),
+        ("Loading...", "Ielādē..."),
+        ("No USB devices", "Nav USB ierīču"),
+        ("Share", "Kopīgot"),
+        ("Unshare", "Pārtraukt kopīgošanu"),
+        ("Attach", "Pievienot"),
+        ("Detach", "Atvienot"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

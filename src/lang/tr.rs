@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Güveni yenile"),
         ("install-directory-not-empty-tip", "Seçilen klasör boş değil. Kurulum mevcut verileri silebilir. Farklı bir klasör seçmeyi düşünün."),
         ("Request approval", "Onay iste"),
+        ("Enable USB forwarding", "USB yönlendirmeyi etkinleştir"),
+        ("USB forwarding", "USB yönlendirme"),
+        ("Loading...", "Yükleniyor..."),
+        ("No USB devices", "USB aygıtı yok"),
+        ("Share", "Paylaş"),
+        ("Unshare", "Paylaşımı kaldır"),
+        ("Attach", "Bağla"),
+        ("Detach", "Ayır"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

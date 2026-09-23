@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", ""),
         ("install-directory-not-empty-tip", ""),
         ("Request approval", ""),
+        ("Enable USB forwarding", ""),
+        ("USB forwarding", ""),
+        ("Loading...", ""),
+        ("No USB devices", ""),
+        ("Share", ""),
+        ("Unshare", ""),
+        ("Attach", ""),
+        ("Detach", ""),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

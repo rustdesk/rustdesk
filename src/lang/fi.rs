@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Jatka luottamusta"),
         ("install-directory-not-empty-tip", "Valittu kansio ei ole tyhjä. Asennus voi poistaa olemassa olevia tietoja. Harkitse toisen kansion valitsemista."),
         ("Request approval", "Pyydä hyväksyntää"),
+        ("Enable USB forwarding", "Ota käyttöön USB-välitys"),
+        ("USB forwarding", "USB-välitys"),
+        ("Loading...", "Ladataan..."),
+        ("No USB devices", "Ei USB-laitteita"),
+        ("Share", "Jaa"),
+        ("Unshare", "Lopeta jakaminen"),
+        ("Attach", "Liitä"),
+        ("Detach", "Irrota"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

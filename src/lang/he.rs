@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "חידוש אמון"),
         ("install-directory-not-empty-tip", "התיקייה שנבחרה אינה ריקה. ההתקנה עלולה למחוק נתונים קיימים. מומלץ לבחור תיקייה אחרת."),
         ("Request approval", "בקש אישור"),
+        ("Enable USB forwarding", "הפעל העברת USB"),
+        ("USB forwarding", "העברת USB"),
+        ("Loading...", "טוען..."),
+        ("No USB devices", "אין התקני USB"),
+        ("Share", "שתף"),
+        ("Unshare", "בטל שיתוף"),
+        ("Attach", "צרף"),
+        ("Detach", "נתק"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "ნდობის განახლება"),
         ("install-directory-not-empty-tip", "არჩეული საქაღალდე ცარიელი არ არის. ინსტალაციამ შეიძლება წაშალოს არსებული მონაცემები. რეკომენდებულია სხვა საქაღალდის არჩევა."),
         ("Request approval", "დამტკიცების მოთხოვნა"),
+        ("Enable USB forwarding", "USB გადამისამართების ჩართვა"),
+        ("USB forwarding", "USB გადამისამართება"),
+        ("Loading...", "იტვირთება..."),
+        ("No USB devices", "USB მოწყობილობები არ არის"),
+        ("Share", "გაზიარება"),
+        ("Unshare", "გაზიარების გაუქმება"),
+        ("Attach", "მიმაგრება"),
+        ("Detach", "მოხსნა"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

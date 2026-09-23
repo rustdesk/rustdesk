@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Förnya förtroende"),
         ("install-directory-not-empty-tip", "Den valda mappen är inte tom. Installationen kan radera befintliga data. Överväg att välja en annan mapp."),
         ("Request approval", "Begär godkännande"),
+        ("Enable USB forwarding", "Aktivera USB-vidarebefordran"),
+        ("USB forwarding", "USB-vidarebefordran"),
+        ("Loading...", "Läser in..."),
+        ("No USB devices", "Inga USB-enheter"),
+        ("Share", "Dela"),
+        ("Unshare", "Sluta dela"),
+        ("Attach", "Anslut"),
+        ("Detach", "Koppla från"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Atnaujinti pasitikėjimą"),
         ("install-directory-not-empty-tip", "Pasirinktas aplankas nėra tuščias. Diegimas gali ištrinti esamus duomenis. Apsvarstykite galimybę pasirinkti kitą aplanką."),
         ("Request approval", "Prašyti patvirtinimo"),
+        ("Enable USB forwarding", "Įjungti USB persiuntimą"),
+        ("USB forwarding", "USB persiuntimas"),
+        ("Loading...", "Įkeliama..."),
+        ("No USB devices", "Nėra USB įrenginių"),
+        ("Share", "Bendrinti"),
+        ("Unshare", "Nutraukti bendrinimą"),
+        ("Attach", "Prijungti"),
+        ("Detach", "Atjungti"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

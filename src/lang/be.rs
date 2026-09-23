@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Падоўжыць давер"),
         ("install-directory-not-empty-tip", "Выбраная папка не пустая. Усталёўванне можа выдаліць наяўныя даныя. Лепш выберыце іншую папку."),
         ("Request approval", "Запытаць дазвол"),
+        ("Enable USB forwarding", "Уключыць пераадрасацыю USB"),
+        ("USB forwarding", "Пераадрасацыя USB"),
+        ("Loading...", "Загрузка..."),
+        ("No USB devices", "Няма прылад USB"),
+        ("Share", "Абагуліць"),
+        ("Unshare", "Спыніць абагульванне"),
+        ("Attach", "Далучыць"),
+        ("Detach", "Адлучыць"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "ต่ออายุการเชื่อถือ"),
         ("install-directory-not-empty-tip", "โฟลเดอร์ที่เลือกไม่ว่างเปล่า การติดตั้งอาจลบข้อมูลที่มีอยู่ ควรพิจารณาเลือกโฟลเดอร์อื่น"),
         ("Request approval", "ขออนุมัติ"),
+        ("Enable USB forwarding", "เปิดใช้งานการส่งต่อ USB"),
+        ("USB forwarding", "การส่งต่อ USB"),
+        ("Loading...", "กำลังโหลด..."),
+        ("No USB devices", "ไม่มีอุปกรณ์ USB"),
+        ("Share", "แชร์"),
+        ("Unshare", "ยกเลิกการแชร์"),
+        ("Attach", "เชื่อมต่อ"),
+        ("Detach", "ยกเลิกการเชื่อมต่อ"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Vertrouwen hernieuwen"),
         ("install-directory-not-empty-tip", "De geselecteerde map is niet leeg. De installatie kan bestaande gegevens verwijderen. Overweeg een andere map te kiezen."),
         ("Request approval", "Goedkeuring aanvragen"),
+        ("Enable USB forwarding", "USB-doorsturen inschakelen"),
+        ("USB forwarding", "USB-doorsturen"),
+        ("Loading...", "Laden..."),
+        ("No USB devices", "Geen USB-apparaten"),
+        ("Share", "Delen"),
+        ("Unshare", "Delen opheffen"),
+        ("Attach", "Koppelen"),
+        ("Detach", "Loskoppelen"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

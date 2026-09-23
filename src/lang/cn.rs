@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "延长信任有效期"),
         ("install-directory-not-empty-tip", "所选文件夹不为空。安装可能删除现有数据。建议选择其他文件夹。"),
         ("Request approval", "请求批准"),
+        ("Enable USB forwarding", "启用 USB 转发"),
+        ("USB forwarding", "USB 转发"),
+        ("Loading...", "加载中..."),
+        ("No USB devices", "没有 USB 设备"),
+        ("Share", "共享"),
+        ("Unshare", "取消共享"),
+        ("Attach", "挂载"),
+        ("Detach", "卸载"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

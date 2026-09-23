@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Obnovi poverenje"),
         ("install-directory-not-empty-tip", "Izabrani direktorijum nije prazan. Instalacija može da obriše postojeće podatke. Razmislite o izboru drugog direktorijuma."),
         ("Request approval", "Zatraži odobrenje"),
+        ("Enable USB forwarding", "Omogući USB prosleđivanje"),
+        ("USB forwarding", "USB prosleđivanje"),
+        ("Loading...", "Učitavanje..."),
+        ("No USB devices", "Nema USB uređaja"),
+        ("Share", "Deli"),
+        ("Unshare", "Prekini deljenje"),
+        ("Attach", "Priključi"),
+        ("Detach", "Otkači"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

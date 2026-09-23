@@ -108,6 +108,7 @@ enum DesktopType {
   terminal,
   cm,
   portForward,
+  remoteUsb,
 }
 
 bool isDoubleEqual(double a, double b) {
@@ -2550,6 +2551,7 @@ connectMainDesktop(String id,
     {required bool isFileTransfer,
     required bool isViewCamera,
     required bool isTerminal,
+    required bool isRemoteUsb,
     required bool isTcpTunneling,
     required bool isRDP,
     bool? forceRelay,
@@ -2585,6 +2587,12 @@ connectMainDesktop(String id,
         isSharedPassword: isSharedPassword,
         connToken: connToken,
         forceRelay: forceRelay);
+  } else if (isRemoteUsb) {
+    await rustDeskWinManager.newRemoteUsb(id,
+        password: password,
+        isSharedPassword: isSharedPassword,
+        connToken: connToken,
+        forceRelay: forceRelay);
   } else {
     await rustDeskWinManager.newRemoteDesktop(id,
         loginMethod: loginMethod,
@@ -2603,6 +2611,7 @@ connect(BuildContext context, String id,
     {bool isFileTransfer = false,
     bool isViewCamera = false,
     bool isTerminal = false,
+    bool isRemoteUsb = false,
     bool isTcpTunneling = false,
     bool isRDP = false,
     bool forceRelay = false,
@@ -2638,6 +2647,7 @@ connect(BuildContext context, String id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
         isTerminal: isTerminal,
+        isRemoteUsb: isRemoteUsb,
         isTcpTunneling: isTcpTunneling,
         isRDP: isRDP,
         password: password,
@@ -2650,6 +2660,7 @@ connect(BuildContext context, String id,
         'isFileTransfer': isFileTransfer,
         'isViewCamera': isViewCamera,
         'isTerminal': isTerminal,
+        'isRemoteUsb': isRemoteUsb,
         'isTcpTunneling': isTcpTunneling,
         'isRDP': isRDP,
         'password': password,
@@ -3073,6 +3084,8 @@ String getWindowName({WindowType? overrideType}) {
       return "Port Forward - $name";
     case WindowType.RemoteDesktop:
       return "Remote Desktop - $name";
+    case WindowType.RemoteUsb:
+      return "USB Forwarding - $name";
     default:
       break;
   }

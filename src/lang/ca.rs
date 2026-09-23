@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Renova la confiança"),
         ("install-directory-not-empty-tip", "La carpeta seleccionada no és buida. La instal·lació pot suprimir les dades existents. Considereu triar una altra carpeta."),
         ("Request approval", "Sol·licita aprovació"),
+        ("Enable USB forwarding", "Habilita el reenviament USB"),
+        ("USB forwarding", "Reenviament USB"),
+        ("Loading...", "Carregant..."),
+        ("No USB devices", "Cap dispositiu USB"),
+        ("Share", "Comparteix"),
+        ("Unshare", "Deixa de compartir"),
+        ("Attach", "Adjunta"),
+        ("Detach", "Separa"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

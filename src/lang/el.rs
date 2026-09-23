@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Ανανέωση εμπιστοσύνης"),
         ("install-directory-not-empty-tip", "Ο επιλεγμένος φάκελος δεν είναι κενός. Η εγκατάσταση ενδέχεται να διαγράψει υπάρχοντα δεδομένα. Εξετάστε το ενδεχόμενο να επιλέξετε διαφορετικό φάκελο."),
         ("Request approval", "Αίτημα έγκρισης"),
+        ("Enable USB forwarding", "Ενεργοποίηση προώθησης USB"),
+        ("USB forwarding", "Προώθηση USB"),
+        ("Loading...", "Φόρτωση..."),
+        ("No USB devices", "Δεν υπάρχουν συσκευές USB"),
+        ("Share", "Κοινή χρήση"),
+        ("Unshare", "Κατάργηση κοινής χρήσης"),
+        ("Attach", "Σύνδεση"),
+        ("Detach", "Αποσύνδεση"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

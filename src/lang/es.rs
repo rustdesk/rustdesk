@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Renovar confianza"),
         ("install-directory-not-empty-tip", "La carpeta seleccionada no está vacía. La instalación puede eliminar los datos existentes. Considera elegir otra carpeta."),
         ("Request approval", "Solicitar aprobación"),
+        ("Enable USB forwarding", "Habilitar reenvío USB"),
+        ("USB forwarding", "Reenvío USB"),
+        ("Loading...", "Cargando..."),
+        ("No USB devices", "No hay dispositivos USB"),
+        ("Share", "Compartir"),
+        ("Unshare", "Dejar de compartir"),
+        ("Attach", "Adjuntar"),
+        ("Detach", "Separar"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

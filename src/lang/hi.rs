@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "विश्वास नवीनीकृत करें"),
         ("install-directory-not-empty-tip", "चयनित फ़ोल्डर खाली नहीं है। इंस्टॉलेशन से मौजूदा डेटा हट सकता है। कोई दूसरा फ़ोल्डर चुनने पर विचार करें।"),
         ("Request approval", "स्वीकृति का अनुरोध करें"),
+        ("Enable USB forwarding", "USB अग्रेषण सक्षम करें"),
+        ("USB forwarding", "USB अग्रेषण"),
+        ("Loading...", "लोड हो रहा है..."),
+        ("No USB devices", "कोई USB डिवाइस नहीं"),
+        ("Share", "साझा करें"),
+        ("Unshare", "साझाकरण रद्द करें"),
+        ("Attach", "संलग्न करें"),
+        ("Detach", "अलग करें"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

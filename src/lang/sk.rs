@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Obnoviť dôveru"),
         ("install-directory-not-empty-tip", "Vybraný priečinok nie je prázdny. Inštalácia môže odstrániť existujúce údaje. Zvážte výber iného priečinka."),
         ("Request approval", "Požiadať o schválenie"),
+        ("Enable USB forwarding", "Povoliť presmerovanie USB"),
+        ("USB forwarding", "Presmerovanie USB"),
+        ("Loading...", "Načítava sa..."),
+        ("No USB devices", "Žiadne USB zariadenia"),
+        ("Share", "Zdieľať"),
+        ("Unshare", "Zrušiť zdieľanie"),
+        ("Attach", "Pripojiť"),
+        ("Detach", "Odpojiť"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

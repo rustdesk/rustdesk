@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Reînnoiește încrederea"),
         ("install-directory-not-empty-tip", "Folderul selectat nu este gol. Instalarea poate șterge datele existente. Ia în considerare alegerea altui folder."),
         ("Request approval", "Solicită aprobarea"),
+        ("Enable USB forwarding", "Activează redirecționarea USB"),
+        ("USB forwarding", "Redirecționare USB"),
+        ("Loading...", "Se încarcă..."),
+        ("No USB devices", "Niciun dispozitiv USB"),
+        ("Share", "Partajează"),
+        ("Unshare", "Anulează partajarea"),
+        ("Attach", "Atașează"),
+        ("Detach", "Detașează"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

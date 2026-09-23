@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "تمدید اعتماد"),
         ("install-directory-not-empty-tip", "پوشه انتخاب‌شده خالی نیست. نصب ممکن است داده‌های موجود را حذف کند. بهتر است پوشه دیگری انتخاب کنید."),
         ("Request approval", "درخواست تأیید"),
+        ("Enable USB forwarding", "فعال‌سازی هدایت USB"),
+        ("USB forwarding", "هدایت USB"),
+        ("Loading...", "در حال بارگذاری..."),
+        ("No USB devices", "هیچ دستگاه USB وجود ندارد"),
+        ("Share", "اشتراک‌گذاری"),
+        ("Unshare", "لغو اشتراک‌گذاری"),
+        ("Attach", "اتصال"),
+        ("Detach", "قطع اتصال"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

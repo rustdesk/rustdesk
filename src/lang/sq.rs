@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Rinovo besimin"),
         ("install-directory-not-empty-tip", "Dosja e zgjedhur nuk është bosh. Instalimi mund të fshijë të dhënat ekzistuese. Konsideroni të zgjidhni një dosje tjetër."),
         ("Request approval", "Kërko miratim"),
+        ("Enable USB forwarding", "Aktivizo përcjelljen USB"),
+        ("USB forwarding", "Përcjellje USB"),
+        ("Loading...", "Duke ngarkuar..."),
+        ("No USB devices", "Asnjë pajisje USB"),
+        ("Share", "Ndaj"),
+        ("Unshare", "Anulo ndarjen"),
+        ("Attach", "Bashkangjit"),
+        ("Detach", "Shkëput"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

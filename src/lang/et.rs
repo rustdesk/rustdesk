@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Uuenda usaldust"),
         ("install-directory-not-empty-tip", "Valitud kaust ei ole tühi. Paigaldamine võib olemasolevad andmed kustutada. Kaalu teise kausta valimist."),
         ("Request approval", "Küsi heakskiitu"),
+        ("Enable USB forwarding", "Luba USB edastamine"),
+        ("USB forwarding", "USB edastamine"),
+        ("Loading...", "Laadimine..."),
+        ("No USB devices", "USB-seadmeid pole"),
+        ("Share", "Jaga"),
+        ("Unshare", "Lõpeta jagamine"),
+        ("Attach", "Ühenda"),
+        ("Detach", "Ühenda lahti"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }

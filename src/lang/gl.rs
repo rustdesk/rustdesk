@@ -825,5 +825,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Renew trust", "Renovar a confianza"),
         ("install-directory-not-empty-tip", "O cartafol seleccionado non está baleiro. A instalación pode eliminar os datos existentes. Considera escoller outro cartafol."),
         ("Request approval", "Solicitar aprobación"),
+        ("Enable USB forwarding", "Activar o reenvío USB"),
+        ("USB forwarding", "Reenvío USB"),
+        ("Loading...", "Cargando..."),
+        ("No USB devices", "Non hai dispositivos USB"),
+        ("Share", "Compartir"),
+        ("Unshare", "Deixar de compartir"),
+        ("Attach", "Anexar"),
+        ("Detach", "Desconectar"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", ""),
     ].iter().cloned().collect();
 }
