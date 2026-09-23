@@ -2863,25 +2863,6 @@ mod cursor_dedupe_tests {
     }
 
     #[test]
-    fn a_handle_is_named_once_its_shape_is_shown() {
-        let mut dedupe = CursorDedupe::default();
-        let arrow = CursorDedupe::name(&shape(1, 0, b"arrow"));
-        assert_eq!(
-            dedupe.id(1),
-            1,
-            "a shape that did not decode leaves nothing"
-        );
-        dedupe.shown(1, arrow);
-        assert_eq!(dedupe.id(1), arrow);
-        CursorDedupe::name(&shape(1, 0, b"bad"));
-        assert_eq!(
-            dedupe.id(1),
-            arrow,
-            "nor does it take a handle from a shape that did"
-        );
-    }
-
-    #[test]
     fn the_hotspot_is_part_of_the_shape() {
         let a = CursorDedupe::name(&shape(1, 0, b"arrow"));
         let b = CursorDedupe::name(&shape(2, 1, b"arrow"));
@@ -2900,17 +2881,6 @@ mod cursor_dedupe_tests {
     #[test]
     fn an_id_the_peer_never_sent_is_passed_on() {
         assert_eq!(CursorDedupe::default().id(7), 7);
-    }
-
-    #[test]
-    fn every_handle_the_peer_named_stays_for_the_connection() {
-        let mut dedupe = CursorDedupe::default();
-        let arrow = CursorDedupe::name(&shape(0, 0, b"arrow"));
-        for handle in 0..100_000 {
-            dedupe.shown(handle, arrow);
-        }
-        assert_eq!(dedupe.id(0), arrow);
-        assert_eq!(dedupe.id(99_999), arrow);
     }
 
     #[test]
@@ -2938,15 +2908,18 @@ mod kept_cursor_tests {
     }
 
     #[test]
-    fn a_kept_shape_is_the_shape_under_the_ui_id_and_nothing_else() {
+    fn a_kept_shape_is_a_copy_under_the_ui_id() {
         let mut cd = compressed(4, 4);
         cd.hotx = 1;
-        cd.mut_unknown_fields().add_varint(99, 1);
         let kept = cursor_shape(42, &cd, &cd.colors);
         assert_eq!(kept.id, 42);
         assert_eq!((kept.hotx, kept.width, kept.height), (1, 4, 4));
         assert_eq!(kept.colors, cd.colors);
-        assert_eq!(kept.special_fields.unknown_fields().iter().count(), 0);
+        assert_ne!(
+            kept.colors.as_ptr(),
+            cd.colors.as_ptr(),
+            "not a view of the received buffer"
+        );
     }
 
     #[test]

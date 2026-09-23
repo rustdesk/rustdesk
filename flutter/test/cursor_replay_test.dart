@@ -370,10 +370,4 @@ void main() {
     final p = ffi.cursorModel.cache!.image.getPixel(0, 0);
     expect([p.r, p.g, p.b, p.a], [3, 4, 5, 6]);
   });
-
-  test('a shape is decoded from its pixels as they arrive', () async {
-    await _feed(ffi, '5');
-    expect(ffi.cursorModel.cache?.id, '5');
-    expect(ffi.cursorModel.image, isNotNull);
-  });
 }

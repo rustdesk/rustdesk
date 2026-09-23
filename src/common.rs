@@ -2952,6 +2952,7 @@ mod tests {
         self,
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
+    use std::collections::HashSet;
 
     #[test]
     fn a_cursor_content_id_fits_a_web_client_number() {
@@ -2962,7 +2963,6 @@ mod tests {
             }
         }
     }
-    use std::collections::HashSet;
 
     #[inline]
     fn get_timestamp_secs() -> u128 {
