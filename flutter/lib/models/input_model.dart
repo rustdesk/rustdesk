@@ -1070,11 +1070,11 @@ class InputModel {
       required bool altPressed,
       required bool shiftPressed,
       required bool commandPressed}) {
-    if (isViewCamera ||
-        !ShortcutModel.isEnabled() ||
-        ShortcutModel.isPassThrough()) return null;
+    if (isViewCamera) return null;
     final keyName = physicalKeyName(key);
     if (keyName == null) return null;
+    final config = ShortcutModel.config();
+    if (!config.enabled || config.passThrough) return null;
     final mods = <String>[];
     if (isMacOS || isIOS || isWebOnMacOs) {
       if (commandPressed) mods.add('primary');
@@ -1084,7 +1084,7 @@ class InputModel {
     }
     if (altPressed) mods.add('alt');
     if (shiftPressed) mods.add('shift');
-    for (final binding in ShortcutModel.readBindings()) {
+    for (final binding in config.bindings) {
       final action = binding['action'];
       final key = binding['key'];
       final bindingMods =

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_actions.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_constants.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/shortcut_utils.dart';
+import 'package:flutter_hbb/models/shortcut_model.dart';
 
 ShortcutPlatformCapabilities capabilities({
   bool includeFullscreenShortcut = true,
@@ -461,6 +462,29 @@ void main() {
         shouldSeedDefaultShortcutBindings(
             <String, dynamic>{'enabled': false, 'bindings': <dynamic>[]}),
         isFalse);
+  });
+
+  test('ShortcutConfig.parse reads the flags and bindings once', () {
+    final config = ShortcutConfig.parse(jsonEncode({
+      'enabled': true,
+      'pass_through': false,
+      'bindings': [
+        {'action': 'screenshot', 'mods': ['primary'], 'key': 'p'},
+        'not a binding',
+      ],
+    }));
+    expect(config.enabled, isTrue);
+    expect(config.passThrough, isFalse);
+    expect(config.bindings, [
+      {'action': 'screenshot', 'mods': ['primary'], 'key': 'p'},
+    ]);
+
+    for (final raw in ['', 'not json', '[]', '{"bindings": "x"}']) {
+      final broken = ShortcutConfig.parse(raw);
+      expect(broken.enabled, isFalse, reason: raw);
+      expect(broken.passThrough, isFalse, reason: raw);
+      expect(broken.bindings, isEmpty, reason: raw);
+    }
   });
 
   test('non-US layouts record and match the physical key', () {

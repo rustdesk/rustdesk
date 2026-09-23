@@ -99,39 +99,31 @@ class ShortcutModel {
     }));
   }
 
-  /// Read the bindings JSON from LocalConfig.
-  static List<Map<String, dynamic>> readBindings() {
+  static String _configRaw = '';
+  static ShortcutConfig _config = ShortcutConfig.parse('');
+
+  /// The stored config, parsed once per distinct stored value. The Flutter
+  /// matcher reads it on every key press, so a key press costs one config
+  /// read and no JSON parsing while the config is unchanged.
+  static ShortcutConfig config() {
     final raw = bind.mainGetLocalOption(key: kShortcutLocalConfigKey);
-    if (raw.isEmpty) return [];
-    try {
-      final parsed = jsonDecode(raw) as Map<String, dynamic>;
-      return shortcutBindingMapsFrom(parsed['bindings']);
-    } catch (_) {
-      return [];
+    if (raw != _configRaw) {
+      _config = ShortcutConfig.parse(raw);
+      _configRaw = raw;
     }
+    return _config;
   }
 
-  static bool isEnabled() {
-    final raw = bind.mainGetLocalOption(key: kShortcutLocalConfigKey);
-    if (raw.isEmpty) return false;
-    try {
-      final parsed = jsonDecode(raw) as Map<String, dynamic>;
-      return parsed['enabled'] == true;
-    } catch (_) {
-      return false;
-    }
-  }
+  /// Read the bindings JSON from LocalConfig. Returns a copy the caller may
+  /// edit.
+  static List<Map<String, dynamic>> readBindings() => [
+        for (final binding in config().bindings)
+          Map<String, dynamic>.of(binding)
+      ];
 
-  static bool isPassThrough() {
-    final raw = bind.mainGetLocalOption(key: kShortcutLocalConfigKey);
-    if (raw.isEmpty) return false;
-    try {
-      final parsed = jsonDecode(raw) as Map<String, dynamic>;
-      return parsed['pass_through'] == true;
-    } catch (_) {
-      return false;
-    }
-  }
+  static bool isEnabled() => config().enabled;
+
+  static bool isPassThrough() => config().passThrough;
 
   /// Persistent companion to [isEnabled]: when on, the matchers return early
   /// and every keystroke flows through to the remote (i.e. all bindings are
@@ -220,6 +212,30 @@ class ShortcutModel {
       includeViewModeShortcut: desktopLayout,
       includeVoiceCallShortcut: !isWeb,
     );
+  }
+}
+
+/// One parsed view of the `keyboard-shortcuts` LocalConfig value. Malformed
+/// or missing input parses as disabled with no bindings.
+class ShortcutConfig {
+  final bool enabled;
+  final bool passThrough;
+  final List<Map<String, dynamic>> bindings;
+
+  const ShortcutConfig._(this.enabled, this.passThrough, this.bindings);
+
+  static ShortcutConfig parse(String raw) {
+    if (raw.isEmpty) return const ShortcutConfig._(false, false, []);
+    try {
+      final parsed = jsonDecode(raw) as Map<String, dynamic>;
+      return ShortcutConfig._(
+        parsed['enabled'] == true,
+        parsed['pass_through'] == true,
+        List.unmodifiable(shortcutBindingMapsFrom(parsed['bindings'])),
+      );
+    } catch (_) {
+      return const ShortcutConfig._(false, false, []);
+    }
   }
 }
 
