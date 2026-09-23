@@ -763,8 +763,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Lock canvas", "Bloca sa tela"),
         ("Sync clipboard between sessions", "Sincroniza sa punta de billete intre is sessiones"),
         ("sync-clipboard-between-sessions-tip", "Su testu o is immàgines copiadas in una sessione remota sunt imbiadas fintzas a sa punta de billete de is àteras sessiones connètidas."),
-        ("terminal-clipboard-write-tip", ""),
-        ("Allow terminal apps to copy to clipboard", ""),
+        ("terminal-clipboard-write-tip", "Un’aplicatzione in su terminale bolet copiare testu in sa punta de billete de custu dispositivu. Si benit frunidu, custu permissu s’àplicat a sas aplicatziones de terminale in totu sas connessiones finas a cando non nche l’istudas in sas Impostatziones. Sas operatziones de còpia e incolla manuales non benint influentzadas."),
+        ("Allow terminal apps to copy to clipboard", "Permite a sas aplicatziones de terminale de copiare in punta de billete"),
         ("Enable", "Abìlita"),
         ("Reuse one connection for port forwarding", "Torra a impreare una connessione pro s'imbiu de is portas"),
         ("port-forward-mux-tip", "Totu is connessiones de un'imbiu de portas passant in una connessione ebbia a s'àteru computadore, in logu de si connètere e intrare torra pro dontzi una."),
@@ -780,6 +780,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("RustDesk could not load a GStreamer component needed for screen capture ({})", "RustDesk no at pòdidu carrigare unu cumponente de GStreamer netzessàriu pro registrare sa schermada ({})"),
         ("Relay fallback delay in seconds", "Tardu prima de impreare su relè in segundos"),
         ("relay-fallback-delay-tip", "Cantu tempus una connessione de relè giai istabilida abetat sa connessione direta WebRTC prima de èssere impreada in su postu suo. Aumenta pro dare prus tempus a una connessione direta lenta; diminuì pro colare prima a su relè in sas retes in ue non si podet fàghere una connessione direta. Lassa bòidu pro su valore predefinidu de 2.5 segundos."),
-        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "")
+        ("To start a voice call, enable \"Audio capture\" on the \"Screen share\" page.", "Pro aviare una mutida de boghe, ativa in sa pàgina \"Cumpartzidura de ischermu\" s’elementu \"Catura de s’àudio\".")
     ].iter().cloned().collect();
 }
