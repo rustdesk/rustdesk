@@ -103,6 +103,12 @@ pub mod file_trait;
 pub mod helper;
 pub mod io_loop;
 pub mod screenshot;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub mod usbip_attach;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub mod usbip_channel;
+#[cfg(all(target_os = "linux", feature = "flutter"))]
+pub mod usbip_share;
 
 pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
@@ -3381,6 +3387,7 @@ impl LoginConfigHandler {
         if self.conn_type.eq(&ConnType::PORT_FORWARD)
             || self.conn_type.eq(&ConnType::RDP)
             || self.conn_type.eq(&ConnType::FILE_TRANSFER)
+            || self.conn_type.eq(&ConnType::REMOTE_USB)
         {
             return None;
         }
@@ -3901,6 +3908,7 @@ impl LoginConfigHandler {
                 terminal.service_id = self.get_option(self.get_key_terminal_service_id());
                 lr.set_terminal(terminal);
             }
+            ConnType::REMOTE_USB => lr.set_remote_usb(RemoteUsb::new()),
             _ => {}
         }
 
