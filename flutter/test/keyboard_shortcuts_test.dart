@@ -83,6 +83,65 @@ void main() {
     ]);
   });
 
+  test('shortcutBindingMapsFrom ignores malformed binding fields', () {
+    final valid = {
+      'action': kShortcutActionScreenshot,
+      'mods': ['primary', 'ctrl', 'alt', 'shift'],
+      'key': 'p',
+    };
+    final malformed = [
+      for (final field in ['action', 'mods', 'key'])
+        {...valid}..remove(field),
+      for (final fields in [
+        {'action': 1},
+        {'action': null},
+        {'key': 1},
+        {'key': null},
+        {'mods': null},
+        {'mods': 'primary'},
+        {'mods': ['primary', 1]},
+        {'mods': ['primary', null]},
+        {'mods': ['primary', 'unknown']},
+      ])
+        {...valid, ...fields},
+    ];
+
+    for (final binding in malformed) {
+      expect(shortcutBindingMapsFrom([binding, valid]), [valid],
+          reason: 'malformed binding should be ignored: $binding');
+    }
+  });
+
+  test('shortcutBindingMapsFrom preserves unbound and unknown bindings', () {
+    expect(
+      shortcutBindingMapsFrom([
+        {'action': kShortcutActionScreenshot, 'mods': [], 'key': ''},
+        {'action': 'future_action', 'mods': ['ctrl'], 'key': 'future_key'},
+      ]),
+      [
+        {'action': kShortcutActionScreenshot, 'mods': [], 'key': ''},
+        {'action': 'future_action', 'mods': ['ctrl'], 'key': 'future_key'},
+      ],
+    );
+  });
+
+  test('platform filtering ignores malformed binding fields', () {
+    final filtered = filterDefaultBindingsForPlatform([
+      {'action': 1, 'mods': ['primary'], 'key': 'p'},
+      {'action': kShortcutActionScreenshot, 'mods': ['primary'], 'key': 1},
+      {'action': kShortcutActionToggleMute, 'mods': ['alt'], 'key': 's'},
+      {
+        'action': kShortcutActionToggleFullscreen,
+        'mods': ['primary'],
+        'key': 'enter',
+      },
+    ], capabilities(includeFullscreenShortcut: false));
+
+    expect(filtered, [
+      {'action': kShortcutActionToggleMute, 'mods': ['alt'], 'key': 's'},
+    ]);
+  });
+
   test('shortcutModSetFrom ignores malformed modifiers', () {
     expect(shortcutModSetFrom('not a list'), isEmpty);
     expect(shortcutModSetFrom(['primary', 1, 'alt', null, 'primary']), {

@@ -1424,6 +1424,31 @@ List<TToggleMenu> toolbarKeyboardToggles(FFI ffi) {
 /// `toolbarDisplayToggle`'s `isMobile` branch — calling it explicitly there
 /// would double-register.
 void registerToolbarShortcuts(BuildContext context, String id, FFI ffi) {
+  // Rebuild only the triggered action's menu, so permission/capability changes
+  // and temporary disabled states take effect without opening the toolbar.
+  void register(List<String> actions, FutureOr<Object> Function() refresh) {
+    ffi.shortcutModel.registerRefresher(actions, () async {
+      if (!context.mounted || ffi.closed) {
+        ffi.shortcutModel.clear();
+        return;
+      }
+      await refresh();
+    });
+  }
+
+  register([
+    ..._kToolbarOwnedActionIds,
+    if (!(isDesktop || isWeb)) kShortcutActionToggleRecording,
+  ], () => toolbarControls(context, id, ffi));
+  register(_kToolbarKeyboardToggleActionIds, () => toolbarKeyboardToggles(ffi));
+  register(_kToolbarCursorActionIds, () => toolbarCursor(context, id, ffi));
+  register(_kToolbarDisplayToggleActionIds,
+      () => toolbarDisplayToggle(context, id, ffi));
+  register(_kToolbarViewStyleActionIds, () => toolbarViewStyle(context, id, ffi));
+  register(_kToolbarImageQualityActionIds,
+      () => toolbarImageQuality(context, id, ffi));
+  register(_kToolbarCodecActionIds, () => toolbarCodec(context, id, ffi));
+
   if (isDesktop) toolbarKeyboardToggles(ffi);
   unawaited(toolbarCursor(context, id, ffi));
   unawaited(toolbarDisplayToggle(context, id, ffi));

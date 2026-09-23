@@ -1651,8 +1651,10 @@ pub fn get_cur_peer_id() -> String {
 }
 
 pub fn set_cur_session_id(session_id: SessionID) {
-    if get_cur_session_id() != session_id {
-        *CUR_SESSION_ID.write().unwrap() = session_id;
+    let mut current = CUR_SESSION_ID.write().unwrap();
+    if *current != session_id {
+        crate::keyboard::shortcuts::transfer_fired_keys(&current, &session_id);
+        *current = session_id;
     }
 }
 

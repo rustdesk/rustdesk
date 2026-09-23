@@ -16,6 +16,14 @@ List<Map<String, dynamic>> shortcutBindingMapsFrom(dynamic rawBindings) {
   final bindings = <Map<String, dynamic>>[];
   for (final raw in rawBindings) {
     if (raw is! Map) continue;
+    final mods = raw['mods'];
+    if (raw['action'] is! String ||
+        raw['key'] is! String ||
+        mods is! List ||
+        mods.any((mod) =>
+            !const {'primary', 'ctrl', 'alt', 'shift'}.contains(mod))) {
+      continue;
+    }
     final binding = <String, dynamic>{};
     for (final entry in raw.entries) {
       final key = entry.key;

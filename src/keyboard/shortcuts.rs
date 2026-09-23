@@ -253,6 +253,10 @@ pub fn event_to_key_name(event: &rdev::Event) -> Option<String> {
 /// written.
 pub fn reload_from_config() {
     let raw = hbb_common::config::LocalConfig::get_option(LOCAL_CONFIG_KEY);
+    reload_from_raw(&raw);
+}
+
+fn reload_from_raw(raw: &str) {
     let parsed = if raw.is_empty() {
         Bindings::default()
     } else {
@@ -319,6 +323,9 @@ lazy_static::lazy_static! {
     static ref FIRED_KEYS: std::sync::Mutex<
         std::collections::HashMap<hbb_common::SessionID, std::collections::HashSet<rdev::Key>>,
     > = Default::default();
+    static ref RELEASED_MODIFIERS: std::sync::Mutex<
+        std::collections::HashMap<hbb_common::SessionID, std::collections::HashMap<rdev::Key, rdev::Event>>,
+    > = Default::default();
 }
 
 /// Forget the fired keys of a session that is going away.
@@ -328,6 +335,50 @@ lazy_static::lazy_static! {
 #[cfg(feature = "flutter")]
 pub fn clear_fired_keys(session_id: &hbb_common::SessionID) {
     FIRED_KEYS.lock().unwrap().remove(session_id);
+}
+
+#[cfg(feature = "flutter")]
+pub fn clear_session_state(session_id: &hbb_common::SessionID) {
+    clear_fired_keys(session_id);
+    let held = RELEASED_MODIFIERS.lock().unwrap().remove(session_id);
+    if let Some(held) = held {
+        {
+            let mut state = super::MODIFIERS_STATE.lock().unwrap();
+            for key in held.keys() {
+                state.insert(*key, false);
+            }
+        }
+        let mut to_release = super::TO_RELEASE.lock().unwrap();
+        for key in held.keys() {
+            to_release.remove(key);
+        }
+    }
+}
+
+#[cfg(feature = "flutter")]
+pub fn enter_view_only(session_id: &hbb_common::SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if super::IS_RDEV_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    clear_session_state(session_id);
+}
+
+#[cfg(feature = "flutter")]
+pub fn transfer_fired_keys(from: &hbb_common::SessionID, to: &hbb_common::SessionID) {
+    if from == to {
+        return;
+    }
+    let mut all = FIRED_KEYS.lock().unwrap();
+    if let Some(fired) = all.remove(from) {
+        // A held shortcut key's repeats and release follow the newly focused tab.
+        all.entry(*to).or_default().extend(fired);
+    }
+    drop(all);
+    let mut released = RELEASED_MODIFIERS.lock().unwrap();
+    if let Some(held) = released.remove(from) {
+        released.entry(*to).or_default().extend(held);
+    }
 }
 
 /// Match `event` against the cached bindings; if it matched, push a
@@ -361,6 +412,15 @@ pub fn try_dispatch(
             &resolved
         }
     };
+    if let EventType::KeyRelease(key) = event.event_type {
+        let mut released = RELEASED_MODIFIERS.lock().unwrap();
+        if let Some(held) = released.get_mut(sid) {
+            held.remove(&key);
+            if held.is_empty() {
+                released.remove(sid);
+            }
+        }
+    }
     {
         let mut all = FIRED_KEYS.lock().unwrap();
         if let Some(fired) = all.get_mut(sid) {
@@ -377,14 +437,47 @@ pub fn try_dispatch(
         }
     }
     let Some(action_id) = match_event(event) else {
+        restore_remote_modifiers(sid, event, keyboard_mode, peer, &send);
         return false;
     };
-    release_remote_keys(keyboard_mode, &peer(), &send);
+    release_remote_keys(sid, keyboard_mode, &peer(), &send);
     if let EventType::KeyPress(k) = event.event_type {
         FIRED_KEYS.lock().unwrap().entry(*sid).or_default().insert(k);
     }
     crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
     true
+}
+
+#[cfg(feature = "flutter")]
+fn restore_remote_modifiers(
+    session_id: &hbb_common::SessionID,
+    event: &rdev::Event,
+    keyboard_mode: &str,
+    peer: impl FnOnce() -> String,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
+    use super::{event_to_key_events, get_keyboard_mode_enum, is_modifier, MODIFIERS_STATE};
+
+    let rdev::EventType::KeyPress(key) = event.event_type else { return };
+    if is_modifier(&key) {
+        return;
+    }
+    let held = RELEASED_MODIFIERS.lock().unwrap().remove(session_id);
+    let Some(mut held) = held else { return };
+    {
+        let state = MODIFIERS_STATE.lock().unwrap();
+        held.retain(|key, _| state.get(key).copied().unwrap_or(false));
+    }
+    if held.is_empty() {
+        return;
+    }
+    let peer = peer();
+    let mode = get_keyboard_mode_enum(keyboard_mode);
+    for event in held.into_values() {
+        for key_event in event_to_key_events(peer.clone(), &event, mode, None) {
+            send(&key_event);
+        }
+    }
 }
 
 /// Release on the remote every key it still holds, the chord's modifiers
@@ -396,21 +489,22 @@ pub fn try_dispatch(
 /// `send` instead of the globally current session.
 #[cfg(feature = "flutter")]
 fn release_remote_keys(
+    session_id: &hbb_common::SessionID,
     keyboard_mode: &str,
     peer: &str,
     send: &impl Fn(&base::message_proto::KeyEvent),
 ) {
-    use super::{event_to_key_events, get_keyboard_mode_enum, take_remote_keys, MODIFIERS_STATE};
+    use super::{event_to_key_events, get_keyboard_mode_enum, take_remote_keys, MODIFIERS_STATE, TO_RELEASE};
     use rdev::{EventType, Key};
 
     let mode = get_keyboard_mode_enum(keyboard_mode);
     let to_release = take_remote_keys();
-    let held: Vec<Key> = {
+    let held: Vec<(Key, rdev::Event)> = {
         let state = MODIFIERS_STATE.lock().unwrap();
         to_release
-            .keys()
-            .filter(|k| state.get(k).copied().unwrap_or(false))
-            .copied()
+            .iter()
+            .filter(|(k, _)| state.get(k).copied().unwrap_or(false))
+            .map(|(key, event)| (*key, event.clone()))
             .collect()
     };
     for (key, mut event) in to_release {
@@ -428,10 +522,17 @@ fn release_remote_keys(
             }
         }
     }
-    let mut state = MODIFIERS_STATE.lock().unwrap();
-    for key in held {
-        state.insert(key, true);
+    {
+        let mut state = MODIFIERS_STATE.lock().unwrap();
+        for (key, _) in &held {
+            state.insert(*key, true);
+        }
     }
+    RELEASED_MODIFIERS.lock().unwrap().insert(
+        *session_id, held.iter().cloned().collect()
+    );
+    // Focus-loss cleanup must still reset modifiers released outside the grab.
+    TO_RELEASE.lock().unwrap().extend(held);
 }
 
 fn mods_bits(m: &[Modifier]) -> u8 {
@@ -461,7 +562,7 @@ mod tests {
     use super::*;
 
     fn make_press(k: rdev::Key) -> rdev::Event {
-        rdev::Event {
+        let mut event = rdev::Event {
             time: std::time::SystemTime::now(),
             unicode: None,
             platform_code: 0,
@@ -470,7 +571,27 @@ mod tests {
             usb_hid: 0,
             #[cfg(any(target_os = "windows", target_os = "macos"))]
             extra_data: 0,
+        };
+        #[cfg(target_os = "windows")]
+        {
+            event.platform_code = rdev::win_code_from_key(k).unwrap_or_default();
+            event.position_code = rdev::win_scancode_from_key(k).unwrap_or_default();
         }
+        #[cfg(target_os = "macos")]
+        {
+            event.platform_code = rdev::macos_keycode_from_key(k).unwrap_or_default() as _;
+            event.position_code = event.platform_code;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            event.position_code = rdev::linux_keycode_from_key(k).unwrap_or_default();
+            event.platform_code = event.position_code;
+        }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            event.usb_hid = rdev::usb_hid_keycode_from_key(k).unwrap_or_default();
+        }
+        event
     }
 
     #[test]
@@ -791,15 +912,13 @@ mod tests {
     fn reload_handles_missing_and_invalid_json() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // empty (no value set) → defaults
-        hbb_common::config::LocalConfig::set_option(LOCAL_CONFIG_KEY.into(), String::new());
-        reload_from_config();
+        reload_from_raw("");
         let b = current();
         assert!(!b.enabled);
         assert!(b.bindings.is_empty());
 
         // invalid JSON → defaults (no panic)
-        hbb_common::config::LocalConfig::set_option(LOCAL_CONFIG_KEY.into(), "not json".into());
-        reload_from_config();
+        reload_from_raw("not json");
         let b = current();
         assert!(!b.enabled);
     }
@@ -838,7 +957,6 @@ mod tests {
         };
 
         assert!(dispatch(&make_press(Key::KeyP)));
-        assert!(super::super::TO_RELEASE.lock().unwrap().is_empty());
         {
             let state = super::super::MODIFIERS_STATE.lock().unwrap();
             for k in chord {
@@ -910,6 +1028,198 @@ mod tests {
     }
 
     #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_consumes_fired_key_after_session_switch() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let previous_session = crate::flutter::get_cur_session_id();
+        crate::flutter::set_cur_session_id(SID_A);
+        let dispatch = |e: &rdev::Event| {
+            try_dispatch(None, e, "map", || "windows".into(), |_| {})
+        };
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        crate::flutter::set_cur_session_id(SID_B);
+        release_chord(chord);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat stays consumed in the new tab");
+        clear_fired_keys(&SID_A);
+        crate::flutter::set_cur_session_id(SID_A);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat stays consumed after switching back");
+        crate::flutter::set_cur_session_id(SID_B);
+        assert!(dispatch(&make_release(Key::KeyP)), "release stays consumed in the new tab");
+        crate::flutter::set_cur_session_id(SID_A);
+        assert!(!dispatch(&make_press(Key::KeyP)), "new press is not a stale repeat");
+        crate::flutter::set_cur_session_id(previous_session);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_preserves_modifier_cleanup_on_leave() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        super::super::release_remote_keys("map");
+        assert_eq!(
+            super::super::client::get_modifiers_state(false, false, false, false),
+            (false, false, false, false),
+            "leaving the remote image must clear modifiers even after a shortcut"
+        );
+        release_chord(chord);
+        clear_fired_keys(&SID_A);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn repeated_shortcuts_leave_remote_modifiers_released() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let remote_held = std::cell::RefCell::new(
+            chord.into_iter().collect::<std::collections::HashSet<_>>()
+        );
+        for key in [Key::KeyP, Key::KeyC] {
+            assert!(try_dispatch(
+                Some(&SID_A),
+                &make_press(key),
+                "map",
+                || "windows".into(),
+                |event| {
+                    let key = rdev::win_key_from_scancode(event.chr());
+                    assert!(chord.contains(&key), "only held modifiers are released");
+                    if event.down {
+                        remote_held.borrow_mut().insert(key);
+                    } else {
+                        remote_held.borrow_mut().remove(&key);
+                    }
+                },
+            ));
+            assert!(remote_held.borrow().is_empty());
+        }
+        release_chord(chord);
+        clear_fired_keys(&SID_A);
+    }
+
+    #[cfg(feature = "flutter")]
+    fn shortcut_followed_by_c(release_primary: bool) -> (rdev::Key, Vec<(rdev::Key, bool)>) {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_fired_keys(&SID_A);
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![Binding {
+                action: action_id::SCREENSHOT.into(),
+                mods: vec![Modifier::Primary],
+                key: "p".into(),
+            }],
+        });
+        let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            Key::MetaLeft
+        } else {
+            Key::ControlLeft
+        };
+        let sent = std::cell::RefCell::new(Vec::new());
+        let send = |event: &base::message_proto::KeyEvent| {
+            sent.borrow_mut().push((rdev::win_key_from_scancode(event.chr()), event.down));
+        };
+        let handle = |event: &rdev::Event| {
+            if !try_dispatch(Some(&SID_A), event, "map", || "windows".into(), &send) {
+                for key_event in super::super::event_to_key_events(
+                    "windows".into(), event, KeyboardMode::Map, Some(0)
+                ) {
+                    send(&key_event);
+                }
+            }
+        };
+        handle(&make_press(primary));
+        handle(&make_press(Key::KeyP));
+        handle(&make_release(Key::KeyP));
+        if release_primary {
+            handle(&make_release(primary));
+        }
+        sent.borrow_mut().clear();
+        handle(&make_press(Key::KeyC));
+        let result = sent.borrow().clone();
+        handle(&make_release(Key::KeyC));
+        handle(&make_release(primary));
+        clear_fired_keys(&SID_A);
+        (primary, result)
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn unbound_key_restores_modifiers_held_after_shortcut() {
+        let (primary, sent) = shortcut_followed_by_c(false);
+        assert_eq!(sent, vec![(primary, true), (rdev::Key::KeyC, true)]);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn unbound_key_does_not_restore_released_modifiers() {
+        let (_, sent) = shortcut_followed_by_c(true);
+        assert_eq!(sent, vec![(rdev::Key::KeyC, true)]);
+    }
+
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    #[test]
+    fn view_only_preserves_rdev_shortcut_keys() {
+        use rdev::Key;
+        use std::sync::atomic::Ordering;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = super::super::IS_RDEV_ENABLED.swap(true, Ordering::SeqCst);
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        enter_view_only(&SID_A);
+        let action = match_event(&make_press(Key::KeyC));
+        let fired = fired_keys_of(&SID_A).contains(&Key::KeyP);
+        super::super::IS_RDEV_ENABLED.store(previous, Ordering::SeqCst);
+        release_chord(chord);
+        clear_session_state(&SID_A);
+        assert_eq!(action.as_deref(), Some(action_id::TOGGLE_CHAT));
+        assert!(fired, "rdev still receives the held shortcut key's release");
+    }
+
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    #[test]
+    fn view_only_clears_flutter_shortcut_keys_and_modifiers() {
+        use rdev::Key;
+        use std::sync::atomic::Ordering;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = super::super::IS_RDEV_ENABLED.swap(false, Ordering::SeqCst);
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        clear_session_state(&SID_B);
+        assert_eq!(match_event(&make_press(Key::KeyC)).as_deref(), Some(action_id::TOGGLE_CHAT));
+        enter_view_only(&SID_A);
+        super::super::IS_RDEV_ENABLED.store(previous, Ordering::SeqCst);
+        assert!(fired_keys_of(&SID_A).is_empty());
+        assert_eq!(
+            super::super::client::get_modifiers_state(false, false, false, false),
+            (false, false, false, false)
+        );
+        assert!(!try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(),
+            |_| panic!("view-only reset must not replay old modifiers")
+        ));
+        release_chord(chord);
+    }
+
+    #[cfg(feature = "flutter")]
     const SID_A: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xA);
     #[cfg(feature = "flutter")]
     const SID_B: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xB);
@@ -929,8 +1239,8 @@ mod tests {
             pass_through: false,
             bindings: default_bindings(),
         });
-        clear_fired_keys(&SID_A);
-        clear_fired_keys(&SID_B);
+        clear_session_state(&SID_A);
+        clear_session_state(&SID_B);
         let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
             Key::MetaLeft
         } else {

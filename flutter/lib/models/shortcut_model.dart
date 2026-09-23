@@ -8,6 +8,8 @@ import '../common/shared_state.dart' show PrivacyModeState;
 import '../common/widgets/dialog.dart'
     show desktopTryShowTabAuditDialogCloseCancelled;
 import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
+import '../common/widgets/toolbar.dart'
+    show allowDisplaySwitchInPrivacyMode, showVirtualDisplayMenu;
 import '../consts.dart';
 import '../desktop/widgets/remote_toolbar.dart' show ToolbarState;
 import 'chat_model.dart' show VoiceCallStatus;
@@ -30,12 +32,14 @@ class ShortcutModel {
 
   final WeakReference<FFI> parent;
   final Map<String, ShortcutCallback> _callbacks = {};
+  final Map<String, ShortcutCallback> _refreshers = {};
 
   ShortcutModel(this.parent);
 
   /// Called by toolbar / menu builders to register what to do when the
   /// matched shortcut fires.
   void register(String actionId, ShortcutCallback callback) {
+    if (parent.target?.closed != false) return;
     _callbacks[actionId] = callback;
     _activeWebModel = WeakReference(this);
   }
@@ -44,8 +48,16 @@ class ShortcutModel {
     _callbacks.remove(actionId);
   }
 
+  void registerRefresher(List<String> actionIds, ShortcutCallback refresh) {
+    if (parent.target?.closed != false) return;
+    for (final actionId in actionIds) {
+      _refreshers[actionId] = refresh;
+    }
+  }
+
   void clear() {
     _callbacks.clear();
+    _refreshers.clear();
     if (identical(_activeWebModel?.target, this)) {
       _activeWebModel = null;
     }
@@ -68,15 +80,23 @@ class ShortcutModel {
   /// support), and the chord is a deliberate no-op: a bound chord always
   /// belongs to RustDesk and is never forwarded to the remote.
   void onTriggered(String actionId) {
-    final cb = _callbacks[actionId];
-    if (cb != null) {
-      unawaited(Future.sync(cb).catchError((e, st) {
-        debugPrint(
-            'shortcut_triggered: handler failed for $actionId: $e\n$st');
-      }));
-    } else {
-      debugPrint('shortcut_triggered: no handler for $actionId');
-    }
+    if (parent.target?.closed != false) return;
+    unawaited(Future.sync(() async {
+      final refresh = _refreshers[actionId];
+      if (refresh != null) {
+        await refresh();
+        if (!identical(_refreshers[actionId], refresh)) return;
+      }
+      if (parent.target?.closed != false) return;
+      final cb = _callbacks[actionId];
+      if (cb != null) {
+        await cb();
+      } else {
+        debugPrint('shortcut_triggered: no handler for $actionId');
+      }
+    }).catchError((e, st) {
+      debugPrint('shortcut_triggered: handler failed for $actionId: $e\n$st');
+    }));
   }
 
   /// Read the bindings JSON from LocalConfig.
@@ -272,6 +292,11 @@ void registerSessionShortcutActions(
   // view via these shortcuts.
   void switchDisplayBy(int delta) {
     final pi = ffi.ffiModel.pi;
+    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    if (privacyMode.isNotEmpty &&
+        !allowDisplaySwitchInPrivacyMode(pi, privacyMode)) {
+      return;
+    }
     final count = pi.displays.length;
     if (count <= 1) return;
     final current = pi.currentDisplay;
@@ -315,6 +340,11 @@ void registerSessionShortcutActions(
   // view never engages.
   ffi.shortcutModel.register(kShortcutActionSwitchDisplayAll, () {
     final pi = ffi.ffiModel.pi;
+    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    if (privacyMode.isNotEmpty &&
+        !allowDisplaySwitchInPrivacyMode(pi, privacyMode)) {
+      return;
+    }
     if (pi.displays.length <= 1) return;
     if (pi.currentDisplay == kAllDisplayValue) return;
     openMonitorInTheSameTab(kAllDisplayValue, ffi, pi);
@@ -432,6 +462,20 @@ void registerSessionShortcutActions(
   // `_KeyboardMenu.keyboardMode()` (built as RdoMenuButton, not TRadioMenu).
   void registerKeyboardMode(String actionId, String mode) {
     ffi.shortcutModel.register(actionId, () async {
+      if (!ffi.ffiModel.keyboard ||
+          ffi.ffiModel.viewOnly ||
+          !bind.sessionIsKeyboardModeSupported(
+              sessionId: sessionId, mode: mode) ||
+          (ffi.ffiModel.pi.isWayland && mode != kKeyMapMode)) {
+        return;
+      }
+      if (isInputSourceFlutter && isDesktop) {
+        final modeOnly = bind.sessionIsKeyboardModeSupported(
+                sessionId: sessionId, mode: kKeyMapMode)
+            ? kKeyMapMode
+            : kKeyLegacyMode;
+        if (mode != modeOnly) return;
+      }
       await bind.sessionSetKeyboardMode(sessionId: sessionId, value: mode);
       await ffi.inputModel.updateKeyboardMode();
     });
@@ -445,6 +489,13 @@ void registerSessionShortcutActions(
   // "Plug out all" button — present in both IDD modes (RustDesk + Amyuni),
   // built as a MenuButton inside `getVirtualDisplayMenuChildren`.
   ffi.shortcutModel.register(kShortcutActionPlugOutAllVirtualDisplays, () {
+    if (ffi.connType != ConnType.defaultConn ||
+        !showVirtualDisplayMenu(ffi) ||
+        PrivacyModeState.find(ffi.id).value.isNotEmpty ||
+        (ffi.ffiModel.pi.isAmyuniIdd &&
+            ffi.ffiModel.pi.amyuniVirtualDisplayCount == 0)) {
+      return;
+    }
     bind.sessionToggleVirtualDisplay(
       sessionId: sessionId,
       index: kAllVirtualDisplay,
@@ -471,6 +522,28 @@ void registerSessionShortcutActions(
     return null;
   }
 
+  bool checkPrivacyModeAllowed(String implKey) {
+    final ffiModel = ffi.ffiModel;
+    final pi = ffiModel.pi;
+    final privacyMode = PrivacyModeState.find(ffi.id).value;
+    if (ffi.connType != ConnType.defaultConn ||
+        ffiModel.viewOnly ||
+        (privacyMode.isEmpty &&
+            (!pi.features.privacyMode || !ffiModel.keyboard))) {
+      return false;
+    }
+    if (privacyMode == implKey) return true;
+    if (ffiModel.permissions['privacy_mode'] == false) return false;
+    if (allowDisplaySwitchInPrivacyMode(pi, implKey) ||
+        (pi.currentDisplay == 0 &&
+            !bind.sessionIsMultiUiSession(sessionId: sessionId))) {
+      return true;
+    }
+    msgBox(sessionId, 'custom-nook-nocancel-hasclose', 'info',
+        'Please switch to Display 1 first', '', ffi.dialogManager);
+    return false;
+  }
+
   // Match the multi-impl branch of `toolbarPrivacyMode`: turn this impl on iff
   // the active impl isn't already this one. Comparing `.value == implKey`
   // (rather than `.value.isEmpty`) means pressing the mode-1 shortcut while
@@ -479,6 +552,7 @@ void registerSessionShortcutActions(
   ffi.shortcutModel.register(kShortcutActionPrivacyMode1, () {
     final implKey = findPrivacyImpl('privacy_mode_impl_mag_tip');
     if (implKey == null) return;
+    if (!checkPrivacyModeAllowed(implKey)) return;
     bind.sessionTogglePrivacyMode(
       sessionId: sessionId,
       implKey: implKey,
@@ -488,6 +562,7 @@ void registerSessionShortcutActions(
   ffi.shortcutModel.register(kShortcutActionPrivacyMode2, () {
     final implKey = findPrivacyImpl('privacy_mode_impl_virtual_display_tip');
     if (implKey == null) return;
+    if (!checkPrivacyModeAllowed(implKey)) return;
     bind.sessionTogglePrivacyMode(
       sessionId: sessionId,
       implKey: implKey,
@@ -515,6 +590,7 @@ void registerSessionShortcutActions(
   // Toggle Reverse mouse wheel — read current 'Y'/'N' (falling back to user
   // default), flip, write back.
   ffi.shortcutModel.register(kShortcutActionToggleReverseMouseWheel, () async {
+    if (!ffi.ffiModel.keyboard || ffi.ffiModel.viewOnly) return;
     var cur = bind.sessionGetReverseMouseWheelSync(sessionId: sessionId) ?? '';
     if (cur == '') {
       cur = bind.mainGetUserDefaultOption(key: kKeyReverseMouseWheel);
