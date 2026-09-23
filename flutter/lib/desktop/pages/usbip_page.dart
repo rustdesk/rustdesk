@@ -48,16 +48,10 @@ class _UsbipPageState extends State<UsbipPage> {
 
   @override
   void dispose() {
-    // Detach locally-attached devices, and unpush devices pushed into the
-    // peer, before the session (and its ability to resolve session_id ->
-    // session) goes away, or they'd be orphaned with no way to
-    // detach/unpush them from the UI anymore.
-    for (final busId in _ffi.usbipModel.attachedPorts.keys.toList()) {
-      _ffi.usbipModel.toggleAttach(busId, false);
-    }
-    for (final device in _ffi.usbipModel.localDevices.where((d) => d.shared)) {
-      _ffi.usbipModel.togglePush(device.busId, false);
-    }
+    // Closing the session detaches and unshares exactly what this session
+    // attached or shared itself (see `close_usb_state` on the Rust side and
+    // `UsbipMux::close_all` on the peer); `UsbDeviceInfo.shared` is
+    // machine-wide and may belong to the CLI or another session.
     _ffi.close();
     _ffi.dialogManager.dismissAll();
     Get.delete<FFI>(tag: 'usbip_${widget.id}');

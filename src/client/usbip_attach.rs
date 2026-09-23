@@ -41,7 +41,9 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
 
     let relay_session = session.clone();
     let relay_bus_id = bus_id.clone();
-    tokio::spawn(async move {
+    // Kept so a failed attach can abort it instead of leaving it parked on
+    // an `accept()` that no `usbip attach` process will ever make.
+    let accept_task = tokio::spawn(async move {
         match listener.accept().await {
             Ok((socket, _)) => run_channel(relay_session, relay_bus_id, socket).await,
             Err(err) => log::error!("usb attach: accept failed: {}", err),
@@ -61,6 +63,14 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
         }
     };
     match local_port {
+        Some(local_port) if !session.ui_handler.usb_attached_port_add(local_port) => {
+            log::info!(
+                "usb attach: session closed while attaching {}, detaching port {}",
+                bus_id, local_port
+            );
+            accept_task.abort();
+            tokio::task::spawn_blocking(move || detach_blocking(local_port));
+        }
         Some(local_port) => {
             session.ui_handler.push_event_(
                 "usb_attached",
@@ -75,6 +85,7 @@ pub async fn attach(session: Session<FlutterHandler>, bus_id: String) {
             );
         }
         None => {
+            accept_task.abort();
             let message = format!("Failed to attach {}", bus_id);
             log::error!("usb attach: `usbip attach` failed: {}", message);
             session.ui_handler.push_event_(
@@ -127,11 +138,11 @@ static USB_PORT_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
         .map_err(|err| log::error!("usb attach: invalid USB_PORT_RE: {}", err))
         .ok()
 });
-// The remote bus id is the last path segment of the `usbip://host:port/busid`
-// URL, not the token before the arrow (that's some other local identifier,
-// e.g. "5-1" for a remote busid of "18-1").
+// The `usbip://host:port/busid` URL: its bus id is the remote one, not the
+// token before the arrow (that's some other local identifier, e.g. "5-1" for
+// a remote busid of "18-1"), and host:port is our own loopback listener.
 static USB_PORT_BUS_ID_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"->\s+usbip://[^/]+/(\S+)")
+    Regex::new(r"->\s+usbip://([^/\s]+)/(\S+)")
         .map_err(|err| log::error!("usb attach: invalid USB_PORT_BUS_ID_RE: {}", err))
         .ok()
 });
@@ -194,7 +205,7 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
          usbip -t {port} attach -r 127.0.0.1 -b {bus_id} && \
          for i in 1 2 3 4 5 6 7 8 9 10; do \
            usbip port > {0} 2>&1; \
-           grep -q -- '/{bus_id}$' {0} && break; \
+           grep -q -- '127.0.0.1:{port}/{bus_id}$' {0} && break; \
            sleep 0.2; \
          done && chmod 644 {0}",
         tmp_path.display()
@@ -209,7 +220,7 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
         match std::fs::read_to_string(&tmp_path) {
             Ok(output) => {
                 log::info!("usb attach: `usbip port` output for {}:\n{}", bus_id, output);
-                parse_attached_port(&output, bus_id)
+                parse_attached_port(&output, port, bus_id)
             }
             Err(err) => {
                 log::error!(
@@ -227,7 +238,9 @@ fn usb_attach_privileged(port: u16, bus_id: &str) -> Option<i32> {
     local_port
 }
 
-fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
+/// The vhci port importing `bus_id` through our listener on `listener_port`.
+/// The bus id alone is ambiguous: two peers can both export e.g. "1-2".
+fn parse_attached_port(output: &str, listener_port: u16, bus_id: &str) -> Option<i32> {
     let port_re = USB_PORT_RE.as_ref()?;
     let bus_id_re = USB_PORT_BUS_ID_RE.as_ref()?;
     let mut current_port: Option<i32> = None;
@@ -237,7 +250,7 @@ fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
             continue;
         }
         if let Some(caps) = bus_id_re.captures(line) {
-            if &caps[1] == bus_id {
+            if caps[1] == format!("127.0.0.1:{listener_port}") && &caps[2] == bus_id {
                 return current_port;
             }
         }
@@ -246,11 +259,13 @@ fn parse_attached_port(output: &str, bus_id: &str) -> Option<i32> {
 }
 
 pub fn detach(rt: &Handle, port: i32) {
-    rt.spawn_blocking(move || {
-        if !crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
-            log::error!("usb detach: failed to detach port {}", port);
-        }
-    });
+    rt.spawn_blocking(move || detach_blocking(port));
+}
+
+pub(crate) fn detach_blocking(port: i32) {
+    if !crate::platform::run_usbip_privileged(&["detach", "-p", &port.to_string()]) {
+        log::error!("usb detach: failed to detach port {}", port);
+    }
 }
 
 async fn run_channel(session: Session<FlutterHandler>, bus_id: String, socket: TcpStream) {
@@ -401,17 +416,17 @@ Port 00: <Port in Use> at High Speed(480Mbps)
         // The token right after "Port NN:" before the arrow ("5-1" here) is
         // some other local identifier, not the remote bus id -- only the
         // last path segment of the usbip:// URL ("18-1") is.
-        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "18-1"), Some(0));
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "18-1"), Some(0));
     }
 
     #[test]
     fn parse_attached_port_no_match_for_unrelated_bus_id() {
-        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, "3-2"), None);
+        assert_eq!(parse_attached_port(USBIP_PORT_OUTPUT, 38963, "3-2"), None);
     }
 
     #[test]
     fn parse_attached_port_empty_output() {
-        assert_eq!(parse_attached_port("", "18-1"), None);
+        assert_eq!(parse_attached_port("", 38963, "18-1"), None);
     }
 
     #[test]
@@ -428,8 +443,8 @@ Port 01: <Port in Use> at High Speed(480Mbps)
        3-1 -> usbip://127.0.0.1:38963/18-1
            -> remote bus/dev 003/007
 ";
-        assert_eq!(parse_attached_port(output, "18-1"), Some(1));
-        assert_eq!(parse_attached_port(output, "2-2"), Some(0));
+        assert_eq!(parse_attached_port(output, 38963, "18-1"), Some(1));
+        assert_eq!(parse_attached_port(output, 38963, "2-2"), Some(0));
     }
 
     #[test]
@@ -460,6 +475,25 @@ Port 01: <Port in Use> at High Speed(480Mbps)
     }
 
     #[test]
+    fn parse_attached_port_tells_apart_same_bus_id_on_different_listeners() {
+        let output = "\
+Imported USB devices
+====================
+Port 00: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (0bda:8153)
+       5-1 -> usbip://127.0.0.1:30001/1-2
+           -> remote bus/dev 001/002
+Port 01: <Port in Use> at High Speed(480Mbps)
+       unknown vendor : unknown product (1a86:7523)
+       3-1 -> usbip://127.0.0.1:30002/1-2
+           -> remote bus/dev 001/002
+";
+        assert_eq!(parse_attached_port(output, 30001, "1-2"), Some(0));
+        assert_eq!(parse_attached_port(output, 30002, "1-2"), Some(1));
+        assert_eq!(parse_attached_port(output, 30003, "1-2"), None);
+    }
+
+    #[test]
     fn parse_attached_port_ignores_unreadable_record_fallback_line() {
         // When the attach record can't be read (permissions, or queried too
         // soon after attach), `usbip port` falls back to a line with no
@@ -472,6 +506,6 @@ Port 00: <Port in Use> at High Speed(480Mbps)
        5-1 -> unknown host, remote port and remote busid
            -> remote bus/dev 018/002
 ";
-        assert_eq!(parse_attached_port(output, "18-1"), None);
+        assert_eq!(parse_attached_port(output, 38963, "18-1"), None);
     }
 }
