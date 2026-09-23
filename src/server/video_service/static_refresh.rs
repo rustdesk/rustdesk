@@ -1,11 +1,36 @@
 use super::{GenericService, VideoFrameController, VideoSource};
 use base::message_proto::Message;
 use hbb_common::{bail, log, ResultType};
-use scrap::{codec::Encoder, record::Recorder, CodecFormat, EncodeInput};
+use scrap::{
+    codec::{Encoder, BR_BEST, BR_SPEED},
+    record::Recorder,
+    CodecFormat, EncodeInput,
+};
 use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+const REPEAT_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_REPEAT_FAILURES: usize = 3;
+
+fn max_repeat_attempts(codec: CodecFormat, quality: f32) -> usize {
+    let (low, balanced, best) = match codec {
+        CodecFormat::VP8 => (100, 100, 100),
+        CodecFormat::VP9 => (100, 100, 100),
+        CodecFormat::H264 => (100, 100, 100),
+        CodecFormat::H265 => (100, 100, 100),
+        CodecFormat::AV1 => return 0,
+        CodecFormat::Unknown => return 0,
+    };
+    if quality <= BR_SPEED {
+        low
+    } else if quality >= BR_BEST {
+        best
+    } else {
+        balanced
+    }
+}
 
 pub(super) struct StaticRefresh<'a> {
     source: VideoSource,
@@ -80,6 +105,7 @@ impl<'a> StaticRefresh<'a> {
         &mut self,
         yuv: &[u8],
         spf: Duration,
+        quality: f32,
         now: Instant,
         ms: i64,
         encoder: &mut Encoder,
@@ -88,16 +114,15 @@ impl<'a> StaticRefresh<'a> {
         if !self.source.is_monitor()
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
-            || self.repeat_failures >= 3
+            || self.repeat_failures >= MAX_REPEAT_FAILURES
             // Count attempts so network backpressure preserves the refinement budget.
-            // The 100 attempts can take longer than 10 seconds.
-            || self.repeat_counter >= 100
+            || self.repeat_counter >= max_repeat_attempts(self.codec_format, quality)
             || {
                 #[cfg(not(test))]
                 let elapsed = self.last_encode.elapsed();
                 #[cfg(test)]
                 let elapsed = self.elapsed_since_encode;
-                elapsed < Duration::from_millis(100).max(spf)
+                elapsed < REPEAT_INTERVAL.max(spf)
             }
         {
             return Ok(());
@@ -130,7 +155,7 @@ impl<'a> StaticRefresh<'a> {
                 Err(error) => {
                     self.repeat_failures += 1;
                     log::debug!(
-                        "static refresh failed ({}/3): {error:?}",
+                        "static refresh failed ({}/{MAX_REPEAT_FAILURES}): {error:?}",
                         self.repeat_failures
                     );
                     return Ok(());
@@ -158,7 +183,7 @@ mod tests {
     use super::*;
     use base::message_proto::VideoFrame;
     use scrap::{
-        codec::{EncoderApi, EncoderCfg},
+        codec::{EncoderApi, EncoderCfg, BR_BALANCED},
         EncodeYuvFormat,
     };
     use std::{cell::Cell, rc::Rc};
@@ -228,6 +253,7 @@ mod tests {
             .try_encode(
                 yuv,
                 spf,
+                BR_BALANCED,
                 Instant::now(),
                 0,
                 &mut encoder,

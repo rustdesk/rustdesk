@@ -1,7 +1,7 @@
 use super::*;
 use base::message_proto::VideoFrame;
 use scrap::{
-    codec::{EncoderApi, EncoderCfg},
+    codec::{EncoderApi, EncoderCfg, BR_BALANCED},
     EncodeYuvFormat,
 };
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
@@ -85,6 +85,7 @@ fn attempt(refresh: &mut StaticRefresh<'_>, encoder: &mut Encoder) {
         .try_encode(
             &[1],
             Duration::from_millis(100),
+            BR_BALANCED,
             Instant::now(),
             0,
             encoder,
@@ -115,6 +116,7 @@ fn failures_pause_refresh_until_a_real_frame_succeeds() {
         .try_encode(
             &[1],
             Duration::from_millis(100),
+            BR_BALANCED,
             Instant::now(),
             0,
             &mut encoder,

@@ -954,6 +954,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                 static_refresh.try_encode(
                     &yuv,
                     spf,
+                    quality,
                     now,
                     ms,
                     &mut encoder,
