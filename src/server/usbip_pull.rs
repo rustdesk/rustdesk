@@ -6,13 +6,14 @@
 // it can't collide with `usbip_mux.rs`'s (see `channel_id` sign convention
 // in `connection.rs::handle_usb_channel`).
 use super::{connection::Sender, usbip_mux::is_valid_bus_id};
+use crate::usbip_flow::{self, Flow};
 use base::message_proto::*;
 use hbb_common::{
     bytes::Bytes, log,
     regex::Regex,
     tokio::{
         self,
-        io::{AsyncReadExt, AsyncWriteExt},
+        io::AsyncWriteExt,
         net::{TcpListener, TcpStream},
         sync::mpsc,
     },
@@ -23,12 +24,6 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-// Each queued chunk is up to 64KiB (`run_channel`'s read buffer size), so
-// this bounds one relay channel to a few MiB, not unbounded process memory --
-// see the identical comment in `server/usbip_mux.rs`.
-const RELAY_CHANNEL_CAPACITY: usize = 256;
-// See the identical constant/comment in `server/usbip_mux.rs`.
-const MAX_USB_DATA_LEN: usize = 64 * 1024;
 // Each live channel here is a privileged `usbip attach` plus its own local
 // vhci port, a much heavier resource than a plain relay task -- kept far
 // below `usbip_mux::MAX_LIVE_CHANNELS`.
@@ -84,6 +79,7 @@ enum Inbound {
 
 struct Entry {
     inbound: mpsc::Sender<Inbound>,
+    flow: Flow,
     /// Local vhci port, once `usbip attach` reports it -- needed to run
     /// `usbip detach -p <port>` when the controller unpushes. Set from the
     /// spawned `pull()` task, which has no `&mut self` access back here.
@@ -132,25 +128,33 @@ impl UsbPullState {
         let id = self.next_channel_id();
         log::info!("usb push: peer offered {} on channel {}", bus_id, id);
 
-        let (inbound_tx, inbound_rx) = mpsc::channel(RELAY_CHANNEL_CAPACITY);
+        let (inbound_tx, inbound_rx) = mpsc::channel(usbip_flow::QUEUE_FRAMES);
         let attached_port = Arc::new(Mutex::new(None));
         let cancel = CancellationToken::new();
+        let flow = Flow::new();
         self.channels.insert(
             id,
             Entry {
                 inbound: inbound_tx,
+                flow: flow.clone(),
                 attached_port: attached_port.clone(),
                 cancel: cancel.clone(),
             },
         );
 
-        tokio::spawn(pull(id, bus_id, tx, inbound_rx, attached_port, cancel));
+        tokio::spawn(pull(id, bus_id, tx, inbound_rx, attached_port, cancel, flow));
     }
 
     /// Routes `Opened`/`Data`/`Close` frames whose `channel_id` belongs to
     /// this side (negative ids only -- non-negative ones are `usbip_mux`'s).
     pub fn handle_data(&mut self, d: UsbForwardData) {
         self.forward(d.channel_id, Inbound::Data(d.data));
+    }
+
+    pub fn handle_window_update(&mut self, w: UsbForwardWindowUpdate) {
+        if let Some(entry) = self.channels.get(&w.channel_id) {
+            entry.flow.grant(w.add);
+        }
     }
 
     pub fn handle_opened(&mut self, o: UsbForwardOpened) {
@@ -200,9 +204,9 @@ impl UsbPullState {
             return;
         };
         if let Inbound::Data(data) = &msg {
-            if data.len() > MAX_USB_DATA_LEN {
+            if !entry.flow.admit(data.len()) {
                 log::warn!(
-                    "usb push: oversized data frame ({} bytes) on channel {}, closing",
+                    "usb push: data frame ({} bytes) over the window on channel {}, closing",
                     data.len(),
                     channel_id
                 );
@@ -211,9 +215,8 @@ impl UsbPullState {
             }
         }
         if entry.inbound.try_send(msg).is_err() {
-            // Full or closed -- either way this channel can't keep relaying
-            // faithfully, so drop it instead of growing the queue or
-            // silently losing bytes out of the stream.
+            // Only a relay task that already ended: an admitted frame always
+            // fits (`usbip_flow::QUEUE_FRAMES`).
             self.close_overflowed_channel(channel_id);
         }
     }
@@ -272,6 +275,7 @@ async fn pull(
     inbound: mpsc::Receiver<Inbound>,
     attached_port: Arc<Mutex<Option<i32>>>,
     cancel: CancellationToken,
+    flow: Flow,
 ) {
     let listener = match TcpListener::bind("127.0.0.1:0").await {
         Ok(l) => l,
@@ -300,7 +304,8 @@ async fn pull(
     let accept_task = tokio::spawn(async move {
         match listener.accept().await {
             Ok((socket, _)) => {
-                run_channel(id, relay_bus_id, socket, relay_tx, inbound, relay_attached_port).await
+                run_channel(id, relay_bus_id, socket, relay_tx, inbound, relay_attached_port, flow)
+                    .await
             }
             Err(err) => log::error!("usb push: accept failed: {}", err),
         }
@@ -451,6 +456,7 @@ async fn run_channel(
     tx: Sender,
     mut inbound: mpsc::Receiver<Inbound>,
     attached_port: Arc<Mutex<Option<i32>>>,
+    flow: Flow,
 ) {
     send(&tx, open_msg(id, bus_id.clone()));
 
@@ -475,30 +481,24 @@ async fn run_channel(
         return;
     }
 
-    let (mut reader, mut writer) = socket.into_split();
+    let (reader, mut writer) = socket.into_split();
     let tx_read = tx.clone();
+    let flow_read = flow.clone();
     let to_tunnel = tokio::spawn(async move {
-        let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            match reader.read(&mut buf).await {
-                Ok(0) | Err(_) => {
-                    send(&tx_read, close_msg(id));
-                    // Otherwise a push whose remote transport just closes on
-                    // its own (not via an explicit unpush) leaves this port
-                    // attached to the controlled machine's vhci driver
-                    // indefinitely -- nothing else ever detaches it once
-                    // this task returns.
-                    if let Some(port) = attached_port.lock().unwrap().take() {
-                        log::info!(
-                            "usb push: channel {} relay ended, detaching port {}",
-                            id, port
-                        );
-                        detach_port(port);
-                    }
-                    return;
-                }
-                Ok(n) => send(&tx_read, data_msg(id, Bytes::copy_from_slice(&buf[..n]))),
-            }
+        flow_read
+            .socket_to_peer(reader, |chunk| {
+                send(&tx_read, data_msg(id, chunk));
+                true
+            })
+            .await;
+        send(&tx_read, close_msg(id));
+        // Otherwise a push whose remote transport just closes on its own (not
+        // via an explicit unpush) leaves this port attached to the controlled
+        // machine's vhci driver indefinitely -- nothing else ever detaches it
+        // once this task returns.
+        if let Some(port) = attached_port.lock().unwrap().take() {
+            log::info!("usb push: channel {} relay ended, detaching port {}", id, port);
+            detach_port(port);
         }
     });
 
@@ -507,6 +507,9 @@ async fn run_channel(
             Inbound::Data(data) => {
                 if writer.write_all(&data).await.is_err() {
                     break;
+                }
+                if let Some(add) = flow.drained(data.len()) {
+                    send(&tx, usbip_flow::window_update_msg(id, add));
                 }
             }
             Inbound::Opened { .. } => break,
@@ -530,6 +533,7 @@ mod tests {
         (
             Entry {
                 inbound,
+                flow: Flow::new(),
                 attached_port: Arc::new(Mutex::new(None)),
                 cancel: cancel.clone(),
             },
