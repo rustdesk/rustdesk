@@ -104,8 +104,10 @@ MouseCursor buildCursorOfCache(
   if (cache == null) {
     return MouseCursor.defer;
   } else {
-    final key = cache.updateGetKey(scale);
-    if (!cursor.cachedKeys.contains(key)) {
+    final key = cursor.nativeKey(cache, scale);
+    if (cursor.cachedKeys.contains(key)) {
+      cursor.deleteReplacedKeys();
+    } else if (!cursor.reviveNativeKey(cache, key)) {
       // data should be checked here, because it may be changed after `updateGetKey()`
       final data = cache.data;
       if (data == null) {
@@ -122,7 +124,7 @@ MouseCursor buildCursorOfCache(
           hotX: cache.hotx,
           hotY: cache.hoty));
       cursor.addKey(key);
-      cursor.registered(cache);
+      cursor.registered(cache, key);
     }
     return FlutterCustomMemoryImageCursor(key: key);
   }

@@ -3624,11 +3624,48 @@ class CursorModel with ChangeNotifier {
 
   final _restoring = <String>{};
 
-  /// Once its native cursor holds a raster, a shape keeps no pixels besides its ui.Image.
-  void registered(CursorData cache) {
+  // Tabs in a window share its engine's native cursors, predefined ones included.
+  static int _nextKeyScope = 0;
+  final int _keyScope = _nextKeyScope++;
+  // Each shape's one native cursor, and the ones replaced but maybe still on screen.
+  final _nativeKeys = <String, String>{};
+  final _replacedKeys = <String>{};
+
+  String nativeKey(CursorData cache, double scale) =>
+      '${_keyScope}_${cache.updateGetKey(scale)}';
+
+  /// Once its native cursor holds a raster, a shape keeps no pixels besides its ui.Image, and
+  /// no native cursor at another raster.
+  void registered(CursorData cache, String key) {
+    _useNativeKey(cache, key);
     if (identical(_cacheMap[cache.id], cache)) {
       cache.releasePixels();
     }
+  }
+
+  /// A raster returned to before its native cursor was deleted takes it back.
+  bool reviveNativeKey(CursorData cache, String key) {
+    if (!_replacedKeys.remove(key)) return false;
+    _cacheKeys.add(key);
+    _useNativeKey(cache, key);
+    return true;
+  }
+
+  void _useNativeKey(CursorData cache, String key) {
+    final old = _nativeKeys[cache.id];
+    _nativeKeys[cache.id] = key;
+    if (old != null && old != key && _cacheKeys.remove(old)) {
+      _replacedKeys.add(old);
+    }
+  }
+
+  /// Called when a cursor already registered is built again: whatever replaced a cursor was
+  /// activated in an earlier frame, so the replaced ones are off screen.
+  void deleteReplacedKeys() {
+    for (final key in _replacedKeys) {
+      deleteCustomCursor(key);
+    }
+    _replacedKeys.clear();
   }
 
   /// Reads a shape's pixels back from its ui.Image, for a raster its native cursors lack.
@@ -3760,6 +3797,8 @@ class CursorModel with ChangeNotifier {
   }
 
   _clearCache() {
+    deleteReplacedKeys();
+    _nativeKeys.clear();
     final keys = {...cachedKeys};
     for (var k in keys) {
       debugPrint("deleting cursor with key $k");

@@ -46,15 +46,20 @@ void main() {
       ? SystemChannels.mouseCursor
       : const MethodChannel('flutter_custom_cursor');
   final registered = <String>[];
+  final deleted = <String>[];
   late _FFI ffi;
   setUp(() {
     registered.clear();
+    deleted.clear();
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
         (call) async {
       final args = call.arguments as Map<dynamic, dynamic>;
       if (call.method.startsWith('createCustomCursor')) {
         registered.add(args['name'] as String);
         return args['name'];
+      }
+      if (call.method.startsWith('deleteCustomCursor')) {
+        deleted.add(args['name'] as String);
       }
       return null;
     });
@@ -153,6 +158,55 @@ void main() {
         CachedPeerData.fromString(await ffi.ffiModel.cachedPeerDataString())!;
     expect(carried.lastCursorId['id'], '1',
         reason: 'the replay goes in first-seen order and ends on this');
+  });
+
+  test('a shape keeps one native cursor, the one at its raster', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1', size: 32);
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    final first = registered.single;
+
+    // Asks for its pixels back, registers the new raster, then is shown again.
+    for (var i = 0; i < 3; i++) {
+      buildCursorOfCache(cursor, 0.5, cursor.cache);
+      await _settle();
+    }
+    expect(registered.length, 2);
+    expect(deleted, [first],
+        reason: 'the replaced one goes once its successor has been shown');
+    expect(cursor.cachedKeys, {registered.last});
+  });
+
+  test('a raster returned to before its cursor was dropped is kept', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1', size: 32);
+    for (final scale in [1.0, 0.5, 0.5, 1.0, 1.0]) {
+      buildCursorOfCache(cursor, scale, cursor.cache);
+      await _settle();
+    }
+    final shown = cursor.nativeKey(cursor.cache!, 1.0);
+    expect(buildCursorOfCache(cursor, 1.0, cursor.cache),
+        isNot(MouseCursor.defer));
+    await _settle();
+    expect(deleted, isNot(contains(shown)), reason: 'it is the one on screen');
+    expect(cursor.cachedKeys, {shown});
+  });
+
+  test('a tab closing does not delete the cursors of another tab', () async {
+    final other = _FFI();
+    addTearDown(other.cursorModel.disposeImages);
+    while (preDefaultCursor.cache == null) {
+      await _settle();
+    }
+    buildCursorOfCache(ffi.cursorModel, 1.0, preDefaultCursor.cache);
+    buildCursorOfCache(other.cursorModel, 1.0, preDefaultCursor.cache);
+    await _settle();
+    expect(registered.toSet().length, 2, reason: 'each tab has its own');
+
+    ffi.cursorModel.clear();
+    await _settle();
+    expect(other.cursorModel.cachedKeys.single, isNot(isIn(deleted)));
   });
 
   test('a shape is decoded from its pixels as they arrive', () async {

@@ -257,10 +257,12 @@ Future<void> _checkRasterTransitions(
   ]) {
     buildCursorOfCache(cursor, scale, cursor.cache);
     await Future<void>.delayed(Duration.zero);
-    final key = cursor.cache.updateGetKey(scale);
+    final key = cursor.nativeKey(cursor.cache, scale);
     _expectSize(
-        registrations.singleWhere((args) => args['name'] == key), expected);
+        registrations.lastWhere((args) => args['name'] == key), expected);
+    expect(cursor.cachedKeys, {key}, reason: 'one native cursor per shape');
   }
+  // A raster returned to before its cursor was deleted takes that cursor back.
   expect(registrations.length, 4);
 }
 
@@ -359,8 +361,8 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
             mode.$1 != kRemoteViewStyleOriginal
         ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
         : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
-    final key = cursor.cache.updateGetKey(cursor.cache.scale);
-    _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
+    final key = cursor.nativeKey(cursor.cache, cursor.cache.scale);
+    _expectSize(registrations.lastWhere((v) => v['name'] == key), (w, w));
   }
   await tester.pumpWidget(const SizedBox.shrink());
 }
