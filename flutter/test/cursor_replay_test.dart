@@ -174,25 +174,32 @@ void main() {
     expect(registered.length - deleted.length, max);
   });
 
-  test('an animated cursor cycles without decoding a frame again', () async {
+  test('two animated cursors and the everyday set keep their native cursors',
+      () async {
     // Each frame is a shape of its own: 18 for the Windows busy cursor, 23 for
-    // KDE Breeze's wait cursor on X11.
+    // KDE Breeze's wait and progress cursors on X11.
     const frames = 23;
+    const statics = 12;
     final cursor = ffi.cursorModel;
-    for (var i = 0; i < frames; i++) {
-      await _feed(ffi, '$i', seed: i);
+    final shapes = [
+      for (var i = 0; i < statics; i++) 's$i',
+      for (var i = 0; i < frames; i++) 'wait$i',
+      for (var i = 0; i < frames; i++) 'progress$i',
+    ];
+    for (var i = 0; i < shapes.length; i++) {
+      await _feed(ffi, shapes[i], seed: i);
       buildCursorOfCache(cursor, 1.0, cursor.cache);
       await _settle();
     }
     ffi.cursor.fetched.clear();
-    for (var i = 0; i < frames; i++) {
-      _select(ffi, '$i');
+    for (final id in shapes) {
+      _select(ffi, id);
       buildCursorOfCache(cursor, 1.0, cursor.cache);
       await _settle();
     }
     expect(ffi.cursor.fetched, isEmpty,
-        reason: 'every frame kept its native cursor');
-    expect(registered.length, frames);
+        reason: 'every shape kept its native cursor');
+    expect(registered.length, shapes.length);
     expect(deleted, isEmpty);
   });
 
