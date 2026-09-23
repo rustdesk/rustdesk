@@ -3514,7 +3514,7 @@ class CursorModel with ChangeNotifier {
   Future<bool> updateCursorData(String id, int hotxInt, int hotyInt, int width,
       int height, Uint8List rgba) async {
     final generation = _generation;
-    _unavailable.remove(id);
+    if (_unavailable == id) _unavailable = null;
     final hotx = hotxInt.toDouble();
     final hoty = hotyInt.toDouble();
     final image = await img.decodeImageFromPixels(
@@ -3672,35 +3672,37 @@ class CursorModel with ChangeNotifier {
     return bind.sessionGetCursorShape(sessionId: ffi.sessionId, id: id);
   }
 
-  // Shapes the core could not give, not asked for again until the peer sends them.
-  final _unavailable = <String>{};
+  // The shape the core could not give, not asked for again while it is the one in use. One
+  // is enough: only the shape in use is asked for on every frame, and the peer's ids must not
+  // accumulate here.
+  String? _unavailable;
   // Counts session clears, so that a decode finishing after one keeps nothing.
   int _generation = 0;
 
   /// Decodes the shape in use again from the core, for a raster its native cursor lacks, for
   /// painting it, or for a window a tab moved to.
   void restorePixels(String id) {
-    if (id != _id || _unavailable.contains(id) || !_restoring.add(id)) return;
+    if (id != _id || _unavailable == id || !_restoring.add(id)) return;
     final generation = _generation;
     () async {
       try {
         final shape = await fetchCursorShape(id);
-        if (generation != _generation) {
+        if (generation != _generation || id != _id) {
           return;
         } else if (shape == null) {
-          _unavailable.add(id);
+          _unavailable = id;
           debugPrint('Cursor $id is not kept by the core');
-        } else if (id == _id) {
+        } else {
           final decoded = await updateCursorData(id, shape.hotx, shape.hoty,
               shape.width, shape.height, shape.colors);
           // A shape switched away from while it decoded is let go, not lost.
           if (!decoded && generation == _generation) {
             // It did not decode; painting must not ask for it on every frame.
-            _unavailable.add(id);
+            _unavailable = id;
           }
         }
       } catch (e) {
-        _unavailable.add(id);
+        if (id == _id) _unavailable = id;
         debugPrint('Failed to fetch cursor $id: $e');
       } finally {
         _restoring.remove(id);
@@ -3796,7 +3798,7 @@ class CursorModel with ChangeNotifier {
     _clearCache();
     _cache = null;
     _cacheMap.clear();
-    _unavailable.clear();
+    _unavailable = null;
     _generation++;
   }
 

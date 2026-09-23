@@ -239,6 +239,21 @@ void main() {
     expect(ffi.cursor.fetched, ['1']);
   });
 
+  test('a shape the core lacks is remembered only while it is in use',
+      () async {
+    await _feed(ffi, '1');
+    for (var i = 0; i < 1000; i++) {
+      _select(ffi, 'missing$i');
+      ffi.cursorModel.image;
+    }
+    await _settle();
+    expect(ffi.cursor.fetched.length, 1000, reason: 'each is asked for once');
+    _select(ffi, 'missing0');
+    await _settle();
+    expect(ffi.cursor.fetched.length, 1001,
+        reason: 'nothing is kept for a shape no longer in use');
+  });
+
   test('a shape shown at a new scale is decoded again from the core', () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
