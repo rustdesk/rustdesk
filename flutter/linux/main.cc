@@ -1,5 +1,6 @@
 #include <dlfcn.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -66,6 +67,12 @@ bool flutter_rustdesk_core_main() {
 }
 
 int main(int argc, char** argv) {
+  // This C++ entry point bypasses Rust's SIGPIPE initialization. A closed IPC
+  // peer must produce EPIPE, not terminate the server before Rust handles it.
+  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+    perror("Failed to ignore SIGPIPE");
+    return 1;
+  }
   if (!flutter_rustdesk_core_main()) {
       return 0;
   }
