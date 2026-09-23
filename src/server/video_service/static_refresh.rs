@@ -13,8 +13,9 @@ use std::{
 
 const REPEAT_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_REPEAT_FAILURES: usize = 3;
+const MAX_REPEAT_NO_OUTPUTS: usize = 100;
 
-fn max_repeat_attempts(codec: CodecFormat, quality: f32) -> usize {
+fn max_repeat_frames(codec: CodecFormat, quality: f32) -> usize {
     let (low, balanced, best) = match codec {
         CodecFormat::VP8 => (100, 100, 100),
         CodecFormat::VP9 => (100, 100, 100),
@@ -43,7 +44,8 @@ pub(super) struct StaticRefresh<'a> {
     last_encode: Instant,
     #[cfg(test)]
     elapsed_since_encode: Duration,
-    repeat_counter: usize,
+    repeat_output_counter: usize,
+    repeat_no_outputs: usize,
     repeat_failures: usize,
     source_ready: bool,
     #[cfg(all(windows, feature = "vram"))]
@@ -71,7 +73,8 @@ impl<'a> StaticRefresh<'a> {
             last_encode: Instant::now(),
             #[cfg(test)]
             elapsed_since_encode: Duration::ZERO,
-            repeat_counter: 0,
+            repeat_output_counter: 0,
+            repeat_no_outputs: 0,
             repeat_failures: 0,
             source_ready: false,
             #[cfg(all(windows, feature = "vram"))]
@@ -80,7 +83,8 @@ impl<'a> StaticRefresh<'a> {
     }
 
     pub(super) fn on_frame(&mut self, _frame: &EncodeInput) {
-        self.repeat_counter = 0;
+        self.repeat_output_counter = 0;
+        self.repeat_no_outputs = 0;
         self.source_ready = false;
         #[cfg(all(windows, feature = "vram"))]
         {
@@ -119,8 +123,8 @@ impl<'a> StaticRefresh<'a> {
                     self.codec_format,
                     CodecFormat::VP8 | CodecFormat::VP9 | CodecFormat::AV1
                 ))
-            // Count attempts so network backpressure preserves the refinement budget.
-            || self.repeat_counter >= max_repeat_attempts(self.codec_format, quality)
+            || self.repeat_no_outputs >= MAX_REPEAT_NO_OUTPUTS
+            || self.repeat_output_counter >= max_repeat_frames(self.codec_format, quality)
             || {
                 #[cfg(not(test))]
                 let elapsed = self.last_encode.elapsed();
@@ -146,7 +150,6 @@ impl<'a> StaticRefresh<'a> {
                 Ok(())
             })?;
 
-            self.repeat_counter += 1;
             let result = encoder.encode_to_message(frame, ms);
             self.last_encode = Instant::now();
             #[cfg(test)]
@@ -154,9 +157,13 @@ impl<'a> StaticRefresh<'a> {
                 self.elapsed_since_encode = Duration::ZERO;
             }
             let mut vf = match result {
-                Ok(vf) if vf.union.is_none() => return Ok(()),
+                Ok(vf) if vf.union.is_none() => {
+                    self.repeat_no_outputs += 1;
+                    return Ok(());
+                }
                 Ok(vf) => vf,
                 Err(error) => {
+                    self.repeat_no_outputs += 1;
                     self.repeat_failures += 1;
                     log::debug!(
                         "static refresh failed ({}): {error:?}",
@@ -165,6 +172,7 @@ impl<'a> StaticRefresh<'a> {
                     return Ok(());
                 }
             };
+            self.repeat_output_counter += 1;
             self.repeat_failures = 0;
             vf.display = self.display_idx as _;
             let mut msg = Message::new();
@@ -207,7 +215,9 @@ mod tests {
                 _ => panic!("unexpected encoder input"),
             }
             self.0.set(self.0.get() + 1);
-            Ok(VideoFrame::new())
+            let mut vf = VideoFrame::new();
+            vf.set_h264s(Default::default());
+            Ok(vf)
         }
 
         fn yuvfmt(&self) -> EncodeYuvFormat {

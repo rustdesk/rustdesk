@@ -163,7 +163,7 @@ fn failures_pause_refresh_until_a_real_frame_succeeds() {
 }
 
 #[test]
-fn empty_outputs_exhaust_the_budget_without_disabling_the_encoder() {
+fn empty_outputs_exhaust_the_no_output_budget_without_disabling_the_encoder() {
     let sp = GenericService::new("repeat-empty-test".to_owned(), false);
     let recorder = Arc::new(Mutex::new(None));
     let mut refresh = StaticRefresh::new(
@@ -184,15 +184,16 @@ fn empty_outputs_exhaust_the_budget_without_disabling_the_encoder() {
     assert_eq!(state.borrow().calls, 100);
     assert_eq!(state.borrow().disabled, 0);
     assert_eq!(refresh.repeat_failures, 0);
+    assert_eq!(refresh.repeat_output_counter, 0);
 }
 
 #[test]
-fn vpx_drops_exhaust_the_budget_without_pausing_refresh() {
+fn vpx_drops_exhaust_the_no_output_budget_without_disabling_the_encoder() {
     let sp = GenericService::new("repeat-vpx-drops-test".to_owned(), false);
     let recorder = Arc::new(Mutex::new(None));
     for codec in [CodecFormat::VP8, CodecFormat::VP9] {
         let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
-        let limit = max_repeat_attempts(codec, BR_BALANCED);
+        let limit = MAX_REPEAT_NO_OUTPUTS;
         let (mut encoder, state) = encoder(&vec![Outcome::Dropped; limit]);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
@@ -202,6 +203,69 @@ fn vpx_drops_exhaust_the_budget_without_pausing_refresh() {
         assert_eq!(state.borrow().calls, limit, "{codec:?}");
         assert_eq!(refresh.repeat_failures, limit);
         assert_eq!(state.borrow().disabled, 0);
+        assert_eq!(refresh.repeat_output_counter, 0);
+    }
+}
+
+#[test]
+fn unsuccessful_repeats_preserve_the_frame_budget() {
+    let sp = GenericService::new("repeat-frame-budget-test".to_owned(), false);
+    let recorder = Arc::new(Mutex::new(None));
+    for codec in [CodecFormat::VP8, CodecFormat::VP9] {
+        let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
+        let mut outcomes = vec![Outcome::Dropped; 40];
+        outcomes.extend(vec![Outcome::Empty; 40]);
+        outcomes.extend(vec![Outcome::Frame; 100]);
+        let (mut encoder, state) = encoder(&outcomes);
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        for _ in 0..80 {
+            attempt(&mut refresh, &mut encoder);
+        }
+        assert_eq!(refresh.repeat_output_counter, 0, "{codec:?}");
+        for _ in 0..101 {
+            attempt(&mut refresh, &mut encoder);
+        }
+        assert_eq!(state.borrow().calls, 180, "{codec:?}");
+        assert_eq!(refresh.repeat_output_counter, 100);
+        assert_eq!(refresh.repeat_failures, 0);
+        assert_eq!(state.borrow().disabled, 0);
+    }
+}
+
+#[test]
+fn no_output_budget_is_cumulative_and_restarts_with_a_new_frame() {
+    let sp = GenericService::new("repeat-no-output-budget-test".to_owned(), false);
+    let recorder = Arc::new(Mutex::new(None));
+    for codec in [CodecFormat::VP8, CodecFormat::VP9] {
+        let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
+        let mut outcomes = Vec::new();
+        for _ in 0..50 {
+            outcomes.extend([Outcome::Frame, Outcome::Empty, Outcome::Dropped]);
+        }
+        outcomes.push(Outcome::Empty);
+        outcomes.push(Outcome::Frame);
+        let (mut encoder, state) = encoder(&outcomes);
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(true);
+        for _ in 0..151 {
+            attempt(&mut refresh, &mut encoder);
+        }
+        assert_eq!(state.borrow().calls, 150, "{codec:?}");
+        assert_eq!(refresh.repeat_output_counter, 50);
+        assert_eq!(state.borrow().disabled, 0);
+
+        refresh.on_frame(&EncodeInput::YUV(&[1]));
+        refresh.on_encoded(false);
+        attempt(&mut refresh, &mut encoder);
+        assert_eq!(state.borrow().calls, 150);
+        refresh.on_encoded(true);
+        attempt(&mut refresh, &mut encoder);
+        assert_eq!(state.borrow().calls, 151);
+        assert_eq!(refresh.repeat_output_counter, 0);
+        attempt(&mut refresh, &mut encoder);
+        assert_eq!(state.borrow().calls, 152);
+        assert_eq!(refresh.repeat_output_counter, 1);
     }
 }
 
@@ -217,7 +281,7 @@ fn repeat_error_limits_are_codec_specific() {
         (CodecFormat::H265, 3),
     ] {
         let mut refresh = StaticRefresh::new(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
-        let limit = max_repeat_attempts(codec, BR_BALANCED);
+        let limit = MAX_REPEAT_NO_OUTPUTS;
         let (mut encoder, state) = encoder(&vec![Outcome::Error; limit]);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
