@@ -815,5 +815,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("Enable USB forwarding", "Aktivera USB-vidarebefordran"),
+        ("USB forwarding", "USB-vidarebefordran"),
+        ("Loading...", "Läser in..."),
+        ("No USB devices", "Inga USB-enheter"),
+        ("Share", "Dela"),
+        ("Unshare", "Sluta dela"),
+        ("Attach", "Anslut"),
+        ("Detach", "Koppla från"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", "")
     ].iter().cloned().collect();
 }

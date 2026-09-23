@@ -815,5 +815,17 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "关"),
         ("api_server_connection_tip", "自定义服务器正在使用未加密的 HTTP。请联系管理员启用 HTTPS。"),
         ("api_server_empty_tip", "API 服务器留空时，自定义服务器默认使用 HTTP。请联系管理员启用 HTTPS。"),
+        ("Enable USB forwarding", "启用 USB 转发"),
+        ("USB forwarding", "USB 转发"),
+        ("Loading...", "加载中..."),
+        ("No USB devices", "没有 USB 设备"),
+        ("Share", "共享"),
+        ("Unshare", "取消共享"),
+        ("Attach", "挂载"),
+        ("Detach", "卸载"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", "")
     ].iter().cloned().collect();
 }

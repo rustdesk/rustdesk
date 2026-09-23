@@ -815,5 +815,18 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Desativado"),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
+        ("To start a voice call, enable \"Audio capture\" on the \"Share screen\" page.", "Para iniciar uma chamada de voz, ative \"Captura de áudio\" na página \"Compartilhar Tela\"."),
+        ("Enable USB forwarding", "Ativar encaminhamento USB"),
+        ("USB forwarding", "Encaminhamento USB"),
+        ("Loading...", "Carregando..."),
+        ("No USB devices", "Nenhum dispositivo USB"),
+        ("Share", "Compartilhar"),
+        ("Unshare", "Cancelar compartilhamento"),
+        ("Attach", "Anexar"),
+        ("Detach", "Desanexar"),
+        ("My local devices", ""),
+        ("Peer's devices", ""),
+        ("Push", ""),
+        ("Unpush", "")
     ].iter().cloned().collect();
 }
