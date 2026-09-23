@@ -50,18 +50,18 @@ pub struct CursorSnapshot {
 /// unchanged but whose provenance flipped is a different cursor as far as the client is concerned,
 /// and without this it would be deduped away and never sent.
 fn cursor_id(hash: u64, width: u32, height: u32, hotx: i32, hoty: i32, hot_measured: bool) -> u64 {
-    let mut id = hash;
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
     for v in [
+        hash,
         width as u64,
         height as u64,
         hotx as u32 as u64,
         hoty as u32 as u64,
         hot_measured as u64,
     ] {
-        id ^= v;
-        id = id.wrapping_mul(1099511628211);
+        hasher.update(&v.to_le_bytes());
     }
-    id
+    hasher.digest()
 }
 
 /// Encodes a provenance answer for the one-shot log below. -1 is "nothing reported yet".
@@ -649,16 +649,14 @@ impl DrmReader {
                 let ch = c.height as i32;
                 let n = (cw * ch) as usize;
                 let src = std::slice::from_raw_parts(c.pixels, n);
-                let mut hash: u64 = 1469598103934665603;
                 let mut colors = Vec::with_capacity(n * 4);
                 for &p in src.iter() {
                     colors.push(((p >> 16) & 0xff) as u8);
                     colors.push(((p >> 8) & 0xff) as u8);
                     colors.push((p & 0xff) as u8);
                     colors.push(((p >> 24) & 0xff) as u8);
-                    hash ^= p as u64;
-                    hash = hash.wrapping_mul(1099511628211);
                 }
+                let hash = xxhash_rust::xxh3::xxh3_64(&colors);
                 // Ask the library where the hotspot came from instead of guessing from the
                 // coordinates. `hot_x/hot_y == (0, 0)` means two opposite things - the plane
                 // exposes no HOTSPOT_X/Y (every bare-metal driver), or it exposes them and the

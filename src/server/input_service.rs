@@ -421,6 +421,15 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 let cache_key = served_id;
                 #[cfg(not(all(target_os = "linux", feature = "drm")))]
                 let cache_key = hcursor;
+                // Named by content, so the per-connection send below sends a shape once however
+                // many handles the platform gives it; see `is_peer_naming_cursors_by_content`.
+                data.id = crate::cursor_content_id(
+                    data.width,
+                    data.height,
+                    data.hotx,
+                    data.hoty,
+                    &data.colors,
+                );
                 data.colors = hbb_common::compress::compress(&data.colors[..]).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);

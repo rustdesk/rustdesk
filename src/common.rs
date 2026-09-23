@@ -149,6 +149,23 @@ pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
 }
 
+/// Peers from 1.5.0 name a cursor by `cursor_content_id`; older ones by the platform handle,
+/// which apps mint anew for the same shape.
+#[inline]
+pub fn is_peer_naming_cursors_by_content(ver: i64) -> bool {
+    ver >= hbb_common::get_version_number("1.5.0")
+}
+
+/// One id per cursor look, however many handles a platform gives it.
+pub fn cursor_content_id(width: i32, height: i32, hotx: i32, hoty: i32, colors: &[u8]) -> u64 {
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+    for v in [width, height, hotx, hoty] {
+        hasher.update(&v.to_le_bytes());
+    }
+    hasher.update(colors);
+    hasher.digest()
+}
+
 #[inline]
 #[cfg(feature = "unix-file-copy-paste")]
 pub fn is_support_file_copy_paste(ver: &str) -> bool {

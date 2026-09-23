@@ -61,7 +61,7 @@ use hbb_common::{
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     num::NonZeroI64,
     path::PathBuf,
@@ -96,6 +96,7 @@ pub struct Remote<T: InvokeUiSession> {
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
+    cursor_dedupe: CursorDedupe,
 }
 
 #[derive(Default)]
@@ -145,6 +146,7 @@ impl<T: InvokeUiSession> Remote<T> {
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
+            cursor_dedupe: Default::default(),
         }
     }
 
@@ -1523,6 +1525,13 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     _ => {}
                 },
+                Some(message::Union::CursorData(cd)) if self.dedupes_cursors() => {
+                    self.set_cursor_data_by_content(cd);
+                }
+                Some(message::Union::CursorId(id)) if self.dedupes_cursors() => {
+                    self.handler
+                        .set_cursor_id(self.cursor_dedupe.id(id).to_string());
+                }
                 Some(message::Union::CursorData(cd)) => {
                     let id = cd.id;
                     match decode_cursor_data(cd) {
@@ -2560,6 +2569,28 @@ impl<T: InvokeUiSession> Remote<T> {
         msg.set_misc(misc);
         self.sender.send(Data::Message(msg)).ok();
     }
+
+    fn dedupes_cursors(&self) -> bool {
+        !crate::is_peer_naming_cursors_by_content(self.handler.lc.read().unwrap().version)
+    }
+
+    /// A shape the UI already has, under whatever handle, is only selected.
+    fn set_cursor_data_by_content(&mut self, cd: CursorData) {
+        let peer_id = cd.id;
+        let id = self.cursor_dedupe.name(&cd);
+        if self.cursor_dedupe.is_shown(id) {
+            self.handler.set_cursor_id(id.to_string());
+            return;
+        }
+        match decode_cursor_data(cd) {
+            Ok(mut cd) => {
+                cd.id = id;
+                self.cursor_dedupe.shown(id);
+                self.handler.set_cursor_data(cd);
+            }
+            Err(err) => log::warn!("Rejected cursor {peer_id}: {err}"),
+        }
+    }
 }
 
 // Both UI handlers receive validated, uncompressed RGBA from the receive loop.
@@ -2601,6 +2632,37 @@ fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
     }
     cd.colors = colors.into();
     Ok(cd)
+}
+
+/// Gives the UI one id per shape for a peer that names shapes by handle, so the UI decodes and
+/// keeps a shape once however many handles it arrives under. Nothing is dropped for the
+/// connection: the peer sends a shape once and may select any handle it named again.
+#[derive(Default)]
+struct CursorDedupe {
+    ids: HashMap<u64, u64>,
+    shown: HashSet<u64>,
+}
+
+impl CursorDedupe {
+    /// Hashes the compressed colors: one peer compresses the same pixels to the same bytes, and
+    /// a shape seen before is then never decompressed again.
+    fn name(&mut self, cd: &CursorData) -> u64 {
+        let id = crate::cursor_content_id(cd.width, cd.height, cd.hotx, cd.hoty, &cd.colors);
+        self.ids.insert(cd.id, id);
+        id
+    }
+
+    fn id(&self, peer_id: u64) -> u64 {
+        self.ids.get(&peer_id).copied().unwrap_or(peer_id)
+    }
+
+    fn is_shown(&self, id: u64) -> bool {
+        self.shown.contains(&id)
+    }
+
+    fn shown(&mut self, id: u64) {
+        self.shown.insert(id);
+    }
 }
 
 struct RemoveJob {
@@ -2723,5 +2785,75 @@ mod tests {
             arrives(&mut far).await,
             "a clipboard after the login was held back"
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_dedupe_tests {
+    use super::*;
+
+    fn shape(id: u64, hotx: i32, colors: &[u8]) -> CursorData {
+        CursorData {
+            id,
+            hotx,
+            width: 2,
+            height: 2,
+            colors: colors.to_vec().into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_shape_sent_under_a_new_handle_keeps_its_id() {
+        let mut dedupe = CursorDedupe::default();
+        let first = dedupe.name(&shape(1, 0, b"arrow"));
+        assert!(!dedupe.is_shown(first));
+        dedupe.shown(first);
+
+        let again = dedupe.name(&shape(2, 0, b"arrow"));
+        assert_eq!(again, first);
+        assert!(dedupe.is_shown(again));
+        assert_eq!(dedupe.id(2), first);
+        assert_eq!(dedupe.id(1), first);
+    }
+
+    #[test]
+    fn the_hotspot_is_part_of_the_shape() {
+        let mut dedupe = CursorDedupe::default();
+        let a = dedupe.name(&shape(1, 0, b"arrow"));
+        let b = dedupe.name(&shape(2, 1, b"arrow"));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn a_reused_handle_names_its_latest_shape() {
+        let mut dedupe = CursorDedupe::default();
+        dedupe.name(&shape(1, 0, b"arrow"));
+        let beam = dedupe.name(&shape(1, 0, b"beam"));
+        assert_eq!(dedupe.id(1), beam);
+    }
+
+    #[test]
+    fn an_id_the_peer_never_sent_is_passed_on() {
+        assert_eq!(CursorDedupe::default().id(7), 7);
+    }
+
+    #[test]
+    fn every_handle_the_peer_named_stays_for_the_connection() {
+        let mut dedupe = CursorDedupe::default();
+        let arrow = dedupe.name(&shape(0, 0, b"arrow"));
+        for handle in 1..100_000 {
+            dedupe.name(&shape(handle, 0, b"arrow"));
+        }
+        assert_eq!(dedupe.id(0), arrow);
+        assert_eq!(dedupe.id(99_999), arrow);
+    }
+
+    #[test]
+    fn peers_from_1_5_0_name_cursors_by_content() {
+        use hbb_common::get_version_number as v;
+        assert!(!crate::is_peer_naming_cursors_by_content(v("1.4.9")));
+        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.0")));
+        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.1")));
     }
 }
