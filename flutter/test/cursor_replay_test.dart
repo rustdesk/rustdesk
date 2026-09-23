@@ -273,6 +273,17 @@ void main() {
     expect(cursor.cachedKeys, {shown});
   });
 
+  test('a cleared session forgets the native cursors it deleted', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    cursor.clear();
+    await _settle();
+    expect(deleted, registered);
+    expect(cursor.cachedKeys, isEmpty);
+  });
+
   test('a tab closing does not delete the cursors of another tab', () async {
     final other = _FFI();
     addTearDown(other.cursorModel.disposeImages);
