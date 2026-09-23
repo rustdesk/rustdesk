@@ -3688,6 +3688,13 @@ class CursorModel with ChangeNotifier {
         cache.releasePixels();
       }
     }
+    // Only the shape in use keeps a native cursor too; the core rebuilds the others. The
+    // predefined cursors are not the peer's shapes and stay.
+    _nativeKeys.removeWhere((id, key) {
+      if (id == _id || !_cacheMap.containsKey(id)) return false;
+      if (_cacheKeys.remove(key)) _replacedKeys.add(key);
+      return true;
+    });
     final tmp = _images[_id];
     _image = tmp?.item1;
     if (tmp != null) {

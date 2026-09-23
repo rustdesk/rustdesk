@@ -123,6 +123,30 @@ void main() {
     expect(ffi.cursor.fetched, isEmpty, reason: 'nothing had to be decoded');
   });
 
+  test('only the shape in use keeps a native cursor', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    final first = registered.single;
+    await _feed(ffi, '2');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    expect(deleted, [first], reason: 'gone once the next one was shown');
+    expect(cursor.cachedKeys, {registered.last});
+
+    _select(ffi, '1');
+    expect(buildCursorOfCache(cursor, 1.0, cursor.cache), MouseCursor.defer);
+    await _settle();
+    expect(ffi.cursor.fetched, ['1'], reason: 'rebuilt from the core');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    expect(registered.length, 3);
+    expect(cursor.cachedKeys, {registered.last});
+  });
+
   test('a shape painted again is decoded again from the core', () async {
     await _feed(ffi, '1', size: 16);
     await _feed(ffi, '2');
