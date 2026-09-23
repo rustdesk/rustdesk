@@ -318,20 +318,16 @@ async fn identity_handshake(stream: &mut Stream, secure: bool) -> ResultType<()>
                                     pk.kx_version
                                 );
                             }
-                            if pk.kx_version >= 1 {
-                                stream.set_key_split(
-                                    key,
-                                    false,
-                                    &tcp::KxTranscript {
-                                        initiator_pk: &pk.asymmetric_value,
-                                        responder_pk: &our_pk_b.0,
-                                        advertised,
-                                        picked: pk.kx_version,
-                                    },
-                                )?;
-                            } else {
-                                stream.set_key(key);
-                            }
+                            stream.set_negotiated_key(
+                                key,
+                                false,
+                                &tcp::KxTranscript {
+                                    initiator_pk: &pk.asymmetric_value,
+                                    responder_pk: &our_pk_b.0,
+                                    advertised,
+                                    picked: pk.kx_version,
+                                },
+                            )?;
                         } else if pk.asymmetric_value.is_empty() {
                             Config::set_key_confirmed(false);
                             log::info!("Force to update pk");

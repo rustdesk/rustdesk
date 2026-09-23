@@ -1727,20 +1727,16 @@ impl Client {
                                     ..Default::default()
                                 });
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                                if picked >= 1 {
-                                    conn.set_key_split(
-                                        key,
-                                        true,
-                                        &hbb_common::tcp::KxTranscript {
-                                            initiator_pk: &asymmetric_value,
-                                            responder_pk: &their_pk_b,
-                                            advertised: kx_version,
-                                            picked,
-                                        },
-                                    )?;
-                                } else {
-                                    conn.set_key(key);
-                                }
+                                conn.set_negotiated_key(
+                                    key,
+                                    true,
+                                    &hbb_common::tcp::KxTranscript {
+                                        initiator_pk: &asymmetric_value,
+                                        responder_pk: &their_pk_b,
+                                        advertised: kx_version,
+                                        picked,
+                                    },
+                                )?;
                             } else {
                                 if is_webrtc {
                                     bail!("WebRTC handshake id mismatch (possible MITM)");

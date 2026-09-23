@@ -2128,20 +2128,16 @@ async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> Res
                             ..Default::default()
                         });
                         timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
-                        if version >= 1 {
-                            conn.set_key_split(
-                                key,
-                                true,
-                                &hbb_common::tcp::KxTranscript {
-                                    initiator_pk: &asymmetric_value,
-                                    responder_pk: &their_pk_b,
-                                    advertised: ex.version,
-                                    picked: version,
-                                },
-                            )?;
-                        } else {
-                            conn.set_key(key);
-                        }
+                        conn.set_negotiated_key(
+                            key,
+                            true,
+                            &hbb_common::tcp::KxTranscript {
+                                initiator_pk: &asymmetric_value,
+                                responder_pk: &their_pk_b,
+                                advertised: ex.version,
+                                picked: version,
+                            },
+                        )?;
                         if log_on_success {
                             log::info!("Connection secured");
                         }
