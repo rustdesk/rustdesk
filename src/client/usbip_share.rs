@@ -23,7 +23,7 @@ use hbb_common::{
     },
 };
 use serde_json::json;
-use std::{process::Command, sync::LazyLock};
+use std::process::Command;
 
 const USBIPD_ADDR: &str = "127.0.0.1:3240";
 const CONNECT_TIMEOUT_MS: u64 = 3000;
@@ -35,11 +35,12 @@ const USBIP_HOST_DRIVER_DIR: &str = "/sys/bus/usb/drivers/usbip-host";
 
 // `Option`, not `Regex` directly -- see the identical comment in
 // `client/usbip_attach.rs`.
-static USB_DEVICE_RE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
-        .map_err(|err| log::error!("usb share: invalid USB_DEVICE_RE: {}", err))
-        .ok()
-});
+lazy_static::lazy_static! {
+    static ref USB_DEVICE_RE: Option<Regex> =
+        Regex::new(r"busid=([0-9]+-[0-9.]+)#usbid=([0-9a-fA-F]{4}):([0-9a-fA-F]{4})#")
+            .map_err(|err| log::error!("usb share: invalid USB_DEVICE_RE: {}", err))
+            .ok();
+}
 
 fn usbip_command() -> Command {
     let mut cmd = Command::new("usbip");
