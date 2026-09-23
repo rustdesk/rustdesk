@@ -149,7 +149,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Click to upgrade", "Clique para atualizar"),
         ("Configure", "Configurar"),
         ("config_acc", "Para controlar o seu Ambiente de Trabalho remotamente, é preciso conceder ao RustDesk permissões de \"Acessibilidade\"."),
-        ("config_screen", "Para aceder ao seu Ambiente de Trabalho remotamente, é preciso conceder ao RustDesk permissões de \"Gravar o Ecrã\"/"),
+        ("config_screen", "Para aceder ao seu Ambiente de Trabalho remotamente, é preciso conceder ao RustDesk permissões de \"Gravar o Ecrã\"."),
         ("Installing ...", "A Instalar ..."),
         ("Install", "Instalar"),
         ("Installation", "Instalação"),
