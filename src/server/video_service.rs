@@ -64,6 +64,8 @@ use std::{
 
 pub const OPTION_REFRESH: &'static str = "refresh";
 
+mod static_refresh;
+
 #[cfg(windows)]
 const DXGI_RECOVERY_LIMIT: usize = 3;
 #[cfg(windows)]
@@ -729,6 +731,15 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut first_frame = true;
     let capture_width = c.width;
     let capture_height = c.height;
+    let mut static_refresh = static_refresh::StaticRefresh::new(
+        vs.source,
+        codec_format,
+        &sp,
+        &recorder,
+        display_idx,
+        capture_width,
+        capture_height,
+    );
     let (mut second_instant, mut send_counter) = (Instant::now(), 0);
 
     while sp.ok() {
@@ -848,6 +859,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                     }
 
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
+                    static_refresh.on_frame(&frame);
                     let send_conn_ids = handle_one_frame(
                         display_idx,
                         &sp,
@@ -860,6 +872,7 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
+                    static_refresh.on_encoded(!send_conn_ids.is_empty());
                     frame_controller.set_send(now, send_conn_ids);
                     send_counter += 1;
                 }
@@ -924,10 +937,20 @@ fn run(vs: VideoService) -> ResultType<()> {
                             capture_width,
                             capture_height,
                         )?;
+                        static_refresh.on_encoded(!send_conn_ids.is_empty());
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
                     }
                 }
+                static_refresh.try_encode(
+                    &yuv,
+                    spf,
+                    quality,
+                    now,
+                    ms,
+                    &mut encoder,
+                    &mut frame_controller,
+                )?;
             }
             Err(err) => {
                 #[cfg(windows)]
