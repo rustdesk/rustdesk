@@ -8,6 +8,7 @@ LocalFlutterShortcutDispatcher dispatcherFor(
     void Function(String) onTriggered) {
   final dispatcher = LocalFlutterShortcutDispatcher(onTriggered: onTriggered);
   addTearDown(dispatcher.clear);
+  addTearDown(LocalFlutterShortcutDispatcher.resetFiredKeys);
   return dispatcher;
 }
 
@@ -190,29 +191,37 @@ void main() {
     expect(actions, ['screenshot']);
   });
 
-  test('closing the session clears owned keys and pending actions', () async {
+  test('closing the session drops its pending action but keeps the fired key',
+      () async {
+    // Close tab is itself a shortcut: the session that matched the key is
+    // gone before the key is released, and the next session gets the rest.
     final released = Completer<void>();
     final actions = <String>[];
     var enabled = true;
-    final dispatcher = _ShortcutHarness(
-      match: (_) => enabled ? 'screenshot' : null,
+    final closing = _ShortcutHarness(
+      match: (_) => enabled ? 'close_tab' : null,
       releaseModifiers: () => released.future,
       onTriggered: actions.add,
     );
+    final next = _ShortcutHarness(
+      match: (_) => enabled ? 'close_tab' : null,
+      releaseModifiers: () async {},
+      onTriggered: actions.add,
+    );
 
-    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP)), isTrue);
-    dispatcher.clear();
-    enabled = false;
-    expect(dispatcher.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isFalse);
-    expect(dispatcher.tryDispatch(up(PhysicalKeyboardKey.keyP)), isFalse);
+    expect(closing.tryDispatch(down(PhysicalKeyboardKey.keyP)), isTrue);
+    closing.clear();
     released.complete();
     await Future<void>.value();
-    expect(actions, isEmpty);
+    expect(actions, isEmpty, reason: 'a closed session runs nothing');
 
-    enabled = true;
-    expect(dispatcher.tryDispatch(down(PhysicalKeyboardKey.keyP)), isTrue);
+    expect(next.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isTrue);
+    expect(next.tryDispatch(up(PhysicalKeyboardKey.keyP)), isTrue);
+    enabled = false;
+    expect(next.tryDispatch(down(PhysicalKeyboardKey.keyP)), isFalse);
+    expect(next.tryDispatch(up(PhysicalKeyboardKey.keyP)), isFalse);
     await Future<void>.value();
-    expect(actions, ['screenshot']);
+    expect(actions, isEmpty);
   });
 
   test('raw legacy shortcuts own repeats and release after modifiers change',
@@ -294,7 +303,7 @@ void main() {
     expect(actions, ['next_tab', 'next_tab']);
   });
 
-  test('closing another session preserves the original session owned key', () {
+  test('closing another session keeps every fired key owned', () {
     final first = dispatcherFor((_) {});
     final second = dispatcherFor((_) {});
     first.tryDispatch(down(PhysicalKeyboardKey.keyP),
@@ -303,9 +312,11 @@ void main() {
 
     second.clear();
     expect(second.tryDispatch(repeat(PhysicalKeyboardKey.keyP)), isTrue);
-    expect(first.tryDispatch(repeat(PhysicalKeyboardKey.keyC)), isFalse);
+    expect(first.tryDispatch(repeat(PhysicalKeyboardKey.keyC)), isTrue);
     expect(second.tryDispatch(up(PhysicalKeyboardKey.keyP)), isTrue);
+    expect(first.tryDispatch(up(PhysicalKeyboardKey.keyC)), isTrue);
     expect(first.tryDispatch(up(PhysicalKeyboardKey.keyP)), isFalse);
+    expect(first.tryDispatch(down(PhysicalKeyboardKey.keyC)), isFalse);
   });
 
   test('restores released modifiers before the next ordinary map key', () {

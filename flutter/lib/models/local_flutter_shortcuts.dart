@@ -5,21 +5,28 @@ import 'package:flutter/services.dart';
 
 class LocalFlutterShortcutDispatcher {
   final void Function(String) onTriggered;
-  // A shortcut can switch focus before its physical key is released.
-  static final _firedKeys =
-      <PhysicalKeyboardKey, LocalFlutterShortcutDispatcher>{};
+  // Keys whose press fired a shortcut and whose release has not arrived yet.
+  // Ownership is physical: it is shared by every session, because a shortcut
+  // can switch focus or close its own session before the key is released, and
+  // it is never dropped with a session. A key whose release is missed heals
+  // itself: its next press is consumed as a repeat and that release removes it.
+  static final _firedKeys = <PhysicalKeyboardKey>{};
   final _releasedModifiers = <PhysicalKeyboardKey>{};
   bool _viewOnlyShortcutPending = false;
   int _generation = 0;
 
   LocalFlutterShortcutDispatcher({required this.onTriggered});
 
+  /// Drops this session's pending action and modifier replay. Fired keys
+  /// stay owned until their release, whichever session receives it.
   void clear() {
-    _firedKeys.removeWhere((_, owner) => identical(owner, this));
     _releasedModifiers.clear();
     _viewOnlyShortcutPending = false;
     _generation++;
   }
+
+  @visibleForTesting
+  static void resetFiredKeys() => _firedKeys.clear();
 
   void recordReleasedModifiers(Iterable<PhysicalKeyboardKey> keys) {
     _releasedModifiers.addAll(keys);
@@ -99,12 +106,12 @@ class LocalFlutterShortcutDispatcher {
     String? Function()? match,
     Future<void> Function()? releaseModifiers,
   }) {
-    if (up) return _firedKeys.remove(key) != null;
-    if (_firedKeys.containsKey(key)) return true;
+    if (up) return _firedKeys.remove(key);
+    if (_firedKeys.contains(key)) return true;
     if (!down) return false;
     final action = match?.call();
     if (action == null) return false;
-    _firedKeys[key] = this;
+    _firedKeys.add(key);
     if (viewOnly) _viewOnlyShortcutPending = true;
     unawaited(_trigger(action, releaseModifiers));
     return true;
