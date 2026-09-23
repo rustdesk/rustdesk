@@ -149,8 +149,8 @@ pub fn is_support_multi_ui_session_num(ver: i64) -> bool {
     ver >= hbb_common::get_version_number(MIN_VER_MULTI_UI_SESSION)
 }
 
-/// Peers from 1.5.0 name a cursor by `cursor_content_id`; older ones by the platform handle,
-/// which apps mint anew for the same shape.
+/// Peers from the 1.5.0 release name a cursor by `cursor_content_id`; older ones by the
+/// platform handle, which apps mint anew for the same shape.
 #[inline]
 pub fn is_peer_naming_cursors_by_content(ver: i64) -> bool {
     ver >= hbb_common::get_version_number("1.5.0")
