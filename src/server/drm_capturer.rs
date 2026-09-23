@@ -928,7 +928,7 @@ fn remove_drm_cursor(display: i32, epoch: u64) {
 /// cursor alone would stay turned and its hotspot transposed (review finding 11 on
 /// rustdesk#15889). The wire id hashes only the plane pixels and geometry, so a stream rebuilt
 /// under a new transform resends the SAME id and the client's by-id cursor cache would keep the
-/// old orientation: fold the transform in (with the producer's own hash) so id and orientation
+/// old orientation: fold the transform in (the producer's own FNV step) so id and orientation
 /// can never disagree. The hidden sentinel must survive untouched.
 #[allow(clippy::too_many_arguments)]
 fn deliver_drm_cursor(
@@ -1030,7 +1030,7 @@ fn fold_cursor_id(id: u64, t: i32) -> u64 {
     if id == scrap::drm_reader::HIDDEN_CURSOR_ID {
         id
     } else {
-        xxhash_rust::xxh3::xxh3_64_with_seed(&id.to_le_bytes(), t as u32 as u64)
+        (id ^ t as u32 as u64).wrapping_mul(1099511628211)
     }
 }
 

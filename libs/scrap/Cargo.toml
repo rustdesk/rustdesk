@@ -20,7 +20,7 @@ wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing", "
 # Depends on `wayland`: the three drm modules live inside the `#[cfg(feature = "wayland")]` arm of
 # common/mod.rs, so `scrap/drm` on its own would compile nothing. The root crate happens to always
 # enable `scrap/wayland`, which is what hid this.
-drm = ["wayland", "base/wayland_probe", "dep:xxhash-rust"]
+drm = ["wayland", "base/wayland_probe"]
 mediacodec = ["ndk"]
 linux-pkg-config = ["dep:pkg-config"]
 hwcodec = ["dep:hwcodec"]
@@ -69,7 +69,6 @@ gstreamer = { version = "0.16", optional = true }
 gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
 zbus = { version = "3.15", optional = true }
-xxhash-rust = { version = "0.8", features = ["xxh3"], optional = true }
 
 [dependencies.hwcodec]
 git = "https://github.com/rustdesk-org/hwcodec"
