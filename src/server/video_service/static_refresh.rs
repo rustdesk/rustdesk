@@ -13,6 +13,7 @@ use std::{
 };
 
 const INITIAL_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_REPEAT_FPS: u32 = 30;
 const MAX_REPEAT_FAILURES: usize = 3;
 const MAX_REPEAT_NO_OUTPUTS: usize = 100;
 
@@ -21,29 +22,35 @@ enum HardwareBackend {
     Nvenc,
     Qsv,
     Amf,
+    VideoToolbox,
     Other,
 }
 
 fn max_repeat_frames(codec: CodecFormat, quality: f32, backend: HardwareBackend) -> usize {
     use HardwareBackend::*;
+    // Measured entries sample quality 0.1, BR_SPEED, BR_BALANCED, and BR_BEST.
+    // For measured entries, Original values come from AI-run tests. Active values
+    // were adjusted by comparing 1080p screenshots captured every 10 repeat outputs.
     let (low, low_to_balanced, balanced_to_best, best) = match (codec, backend) {
-        (CodecFormat::VP8, _) => (20, 20, 20, 30),
-        (CodecFormat::VP9, _) => (20, 20, 20, 20),
-        (CodecFormat::H264, Nvenc) => (50, 50, 60, 30),
-        (CodecFormat::H264, Qsv) => (70, 70, 130, 110),
-        (CodecFormat::H264, Amf) => (150, 150, 170, 110),
-        (CodecFormat::H265, Nvenc) => (90, 90, 60, 30),
-        (CodecFormat::H265, Qsv) => (30, 30, 30, 30),
-        (CodecFormat::H265, Amf) => (200, 200, 200, 120),
-        (CodecFormat::H264, Other) => (90, 60, 60, 30),
-        (CodecFormat::H265, Other) => (150, 120, 90, 30),
+        (CodecFormat::VP8, _) => (20, 20, 20, 30), // Original: (20, 20, 20, 30)
+        (CodecFormat::VP9, _) => (40, 20, 20, 20), // Original: (40, 20, 20, 20)
+        (CodecFormat::H264, Nvenc) => (80, 50, 60, 30), // Original: (270, 50, 60, 30)
+        (CodecFormat::H264, Qsv) => (80, 70, 130, 110), // Original: (80, 70, 130, 110)
+        (CodecFormat::H264, Amf) => (150, 150, 170, 110), // Original: (560, 150, 170, 110)
+        (CodecFormat::H265, Nvenc) => (160, 90, 60, 30), // Original: (160, 90, 60, 30)
+        (CodecFormat::H265, Qsv) => (150, 30, 30, 30), // Original: (150, 30, 30, 30)
+        (CodecFormat::H265, Amf) => (200, 200, 200, 120), // Original: (580, 200, 200, 120)
+        // The capture loop already repeats ten frames to drain VideoToolbox latency.
+        (CodecFormat::H265, VideoToolbox) => (90, 90, 50, 90), // Original: (230, 90, 50, 90)
+        (CodecFormat::H264, _) => (90, 60, 60, 30),
+        (CodecFormat::H265, _) => (90, 60, 60, 30),
         (CodecFormat::AV1 | CodecFormat::Unknown, _) => return 0,
     };
     if quality >= BR_BEST {
         best
     } else if quality >= BR_BALANCED {
         balanced_to_best
-    } else if quality > BR_SPEED {
+    } else if quality >= BR_SPEED {
         low_to_balanced
     } else {
         low
@@ -93,6 +100,7 @@ impl<'a> StaticRefresh<'a> {
                 "h264_nvenc" | "hevc_nvenc" => HardwareBackend::Nvenc,
                 "h264_qsv" | "hevc_qsv" => HardwareBackend::Qsv,
                 "h264_amf" | "hevc_amf" => HardwareBackend::Amf,
+                "hevc_videotoolbox" => HardwareBackend::VideoToolbox,
                 _ => HardwareBackend::Other,
             },
             #[cfg(feature = "vram")]
@@ -170,6 +178,7 @@ impl<'a> StaticRefresh<'a> {
         encoder: &mut Encoder,
         frame_controller: &mut VideoFrameController,
     ) -> ResultType<()> {
+        let spf = spf.max(Duration::from_secs(1) / MAX_REPEAT_FPS);
         if !self.source.is_monitor()
             || self.codec_format == CodecFormat::AV1
             || !self.source_ready
@@ -436,11 +445,11 @@ mod tests {
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.elapsed_since_encode = Duration::from_millis(9);
+        refresh.elapsed_since_encode = Duration::from_millis(33);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.elapsed_since_encode = Duration::from_millis(10);
+        refresh.elapsed_since_encode = Duration::from_secs(1) / 30;
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 2);
 
@@ -545,6 +554,7 @@ mod tests {
                 HardwareBackend::Nvenc,
                 HardwareBackend::Qsv,
                 HardwareBackend::Amf,
+                HardwareBackend::VideoToolbox,
                 HardwareBackend::Other,
             ] {
                 let mut refresh = new_refresh(VideoSource::Monitor, codec, &sp, &recorder, 0, 1, 1);
@@ -556,6 +566,7 @@ mod tests {
                 refresh.on_frame(&EncodeInput::YUV(&[1]));
                 refresh.on_encoded(true);
                 for quality in [
+                    0.1,
                     BR_BEST,
                     BR_SPEED,
                     BR_BALANCED,
@@ -587,6 +598,30 @@ mod tests {
     }
 
     #[test]
+    fn speed_boundary_uses_the_speed_preset_for_all_backends() {
+        for codec in [
+            CodecFormat::VP8,
+            CodecFormat::VP9,
+            CodecFormat::H264,
+            CodecFormat::H265,
+        ] {
+            for backend in [
+                HardwareBackend::Nvenc,
+                HardwareBackend::Qsv,
+                HardwareBackend::Amf,
+                HardwareBackend::VideoToolbox,
+                HardwareBackend::Other,
+            ] {
+                assert_eq!(
+                    max_repeat_frames(codec, BR_SPEED, backend),
+                    max_repeat_frames(codec, BR_SPEED + 0.01, backend),
+                    "{codec:?} {backend:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     #[cfg(feature = "hwcodec")]
     fn ram_config_selects_the_actual_backend_and_preserves_other_encoders() {
         let sp = GenericService::new("repeat-backend-test".to_owned(), false);
@@ -598,6 +633,7 @@ mod tests {
             ("hevc_qsv", HardwareBackend::Qsv),
             ("h264_amf", HardwareBackend::Amf),
             ("hevc_amf", HardwareBackend::Amf),
+            ("hevc_videotoolbox", HardwareBackend::VideoToolbox),
             ("h264_videotoolbox", HardwareBackend::Other),
         ] {
             let config = EncoderCfg::HWRAM(scrap::hwcodec::HwRamEncoderConfig {
