@@ -3400,6 +3400,28 @@ fn get_directory_size_kb(path: &str) -> u64 {
     total_size / 1024
 }
 
+/// Batch lines that block until `service` has actually stopped, for at most a
+/// minute, then give the killed processes a moment to release their handles.
+///
+/// `sc stop` only requests the stop and returns immediately, and the `XCOPY` in
+/// `update_me()` runs with `/C`, which skips files it cannot open instead of
+/// failing. While the service is still shutting down it holds files such as
+/// `librustdesk.dll`, which carries `crate::VERSION`, so those are silently left
+/// at the old version while the update reports success. The restarted service
+/// then still sees the release as newer and runs the update again, and again.
+///
+/// `WaitForStatus` is used rather than parsing `sc query`, whose output is
+/// localized. `ping` is the delay because `timeout` needs a console, which this
+/// script does not have. The wait is bounded, so a service that never stops
+/// delays the update by a minute and the script then carries on as before.
+fn wait_for_service_stop_cmd(service: &str) -> String {
+    // PowerShell single-quoted string: a quote is escaped by doubling it.
+    let service = service.replace('\'', "''");
+    format!(
+        "powershell -NoProfile -NonInteractive -Command \"(Get-Service -Name '{service}' -ErrorAction SilentlyContinue).WaitForStatus('Stopped','00:01:00')\"\nping -n 3 127.0.0.1 >nul"
+    )
+}
+
 pub fn update_me(debug: bool) -> ResultType<()> {
     let app_name = crate::get_app_name();
     let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
@@ -3546,11 +3568,20 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // while I cannot find them by `tasklist` or the methods above.
     // There's should be 4 processes running: service, server, tray and main window.
     // But only 2 processes are shown in the tasklist.
+    //
+    // `sc stop` does not wait for the service to exit, see
+    // `wait_for_service_stop_cmd`.
+    let wait_stopped_cmd = if is_service_running {
+        wait_for_service_stop_cmd(&app_name)
+    } else {
+        "".to_owned()
+    };
     let cmds = format!(
         "
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
+{wait_stopped_cmd}
 {reg_cmd}
 {copy_exe}
 {rename_exe}
@@ -4782,6 +4813,24 @@ mod tests {
     #[test]
     fn test_is_process_running_as_system_invalid_pid_errors() {
         assert!(is_process_running_as_system(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn test_wait_for_service_stop_cmd_is_bounded_and_locale_independent() {
+        let cmd = wait_for_service_stop_cmd("RustDesk");
+        assert!(cmd.contains("Get-Service -Name 'RustDesk'"));
+        // Bounded, so a service that never stops cannot hang the update.
+        assert!(cmd.contains("WaitForStatus('Stopped','00:01:00')"));
+        // `sc query` output is localized; the service controller API is not.
+        assert!(!cmd.contains("STOPPED"));
+        // `timeout` refuses to run without a console.
+        assert!(!cmd.contains("timeout "));
+    }
+
+    #[test]
+    fn test_wait_for_service_stop_cmd_escapes_quotes() {
+        let cmd = wait_for_service_stop_cmd("It's");
+        assert!(cmd.contains("Get-Service -Name 'It''s'"));
     }
 
     #[test]
