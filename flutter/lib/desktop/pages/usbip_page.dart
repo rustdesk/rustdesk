@@ -173,7 +173,7 @@ class _UsbipPageState extends State<UsbipPage> {
   Widget _buildLocalDeviceRow(
       BuildContext context, UsbipModel model, UsbDeviceInfo device) {
     final pending = model.localPendingBusIds.contains(device.busId);
-    final pushed = device.shared;
+    final pushed = device.pushed;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
