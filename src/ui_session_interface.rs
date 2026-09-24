@@ -52,7 +52,7 @@ use crate::keyboard;
 use crate::{client::Data, client::Interface};
 
 #[cfg(any(target_os = "android", target_os = "ios", test))]
-#[path = "mobile_wheel.rs"]
+#[path = "platform/mobile_wheel.rs"]
 mod mobile_wheel;
 
 const CHANGE_RESOLUTION_VALID_TIMEOUT_SECS: u64 = 15;
