@@ -224,7 +224,6 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipboardFile> {
     }
 }
 
-/// The peer asks for this side's clipboard file list or file contents.
 pub fn is_file_data_request(msg: &Cliprdr) -> bool {
     matches!(
         msg.union,
