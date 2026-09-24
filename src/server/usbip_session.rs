@@ -43,6 +43,7 @@ impl UsbSession {
             Some(usb_channel::Union::PushRequest(r)) => {
                 if !permitted() {
                     log::debug!("usb push denied: no permission");
+                    self.pull.refuse_push_request(r.bus_id);
                     return;
                 }
                 self.pull.handle_push_request(r.bus_id);
@@ -58,5 +59,35 @@ impl UsbSession {
     pub fn close_all(&mut self) {
         self.mux.close_all();
         self.pull.close_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hbb_common::tokio::sync::mpsc;
+
+    #[test]
+    fn denied_push_request_is_answered_with_an_error() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = UsbSession::new(tx);
+        let mut ch = UsbChannel::new();
+        ch.set_push_request(UsbPushRequest {
+            bus_id: "1-2".to_string(),
+            ..Default::default()
+        });
+        session.handle(ch, || false);
+        let (_, msg) = rx.try_recv().expect("the controller must get a reply");
+        match &msg.union {
+            Some(message::Union::UsbChannel(ch)) => match &ch.union {
+                Some(usb_channel::Union::PushResult(r)) => {
+                    assert_eq!(r.bus_id, "1-2");
+                    assert!(!r.error.is_empty());
+                }
+                other => panic!("expected a PushResult, got {:?}", other),
+            },
+            other => panic!("expected a UsbChannel message, got {:?}", other),
+        }
+        assert!(rx.try_recv().is_err());
     }
 }
