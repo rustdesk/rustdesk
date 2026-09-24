@@ -76,28 +76,33 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
     if (!virtualMouseMode.showVirtualMouse) {
       return const Offstage();
     }
-    return Stack(
-      children: [
-        FloatingWheel(
-          inputModel: _inputModel,
-          cursorModel: _cursorModel,
-        ),
-        if (virtualMouseMode.showVirtualJoystick)
-          VirtualJoystick(
-            cursorModel: _cursorModel,
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        children: [
+          FloatingWheel(
             inputModel: _inputModel,
+            cursorModel: _cursorModel,
+            viewportSize: constraints.biggest,
           ),
-        FloatingLeftRightButton(
-          isLeft: true,
-          inputModel: _inputModel,
-          cursorModel: _cursorModel,
-        ),
-        FloatingLeftRightButton(
-          isLeft: false,
-          inputModel: _inputModel,
-          cursorModel: _cursorModel,
-        ),
-      ],
+          if (virtualMouseMode.showVirtualJoystick)
+            VirtualJoystick(
+              cursorModel: _cursorModel,
+              inputModel: _inputModel,
+            ),
+          FloatingLeftRightButton(
+            isLeft: true,
+            inputModel: _inputModel,
+            cursorModel: _cursorModel,
+            viewportSize: constraints.biggest,
+          ),
+          FloatingLeftRightButton(
+            isLeft: false,
+            inputModel: _inputModel,
+            cursorModel: _cursorModel,
+            viewportSize: constraints.biggest,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -105,8 +110,12 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
 class FloatingWheel extends StatefulWidget {
   final InputModel inputModel;
   final CursorModel cursorModel;
+  final Size viewportSize;
   const FloatingWheel(
-      {super.key, required this.inputModel, required this.cursorModel});
+      {super.key,
+      required this.inputModel,
+      required this.cursorModel,
+      required this.viewportSize});
 
   @override
   State<FloatingWheel> createState() => _FloatingWheelState();
@@ -137,11 +146,11 @@ class _FloatingWheelState extends State<FloatingWheel> {
   }
 
   void _resetPosition() {
-    final size = MediaQuery.of(context).size;
+    final size = widget.viewportSize;
     setState(() {
       _position = Offset(
-        size.width - _wheelWidth - _kSpaceToHorizontalEdge,
-        (size.height - _wheelHeight) / 2,
+        max(0.0, size.width - _wheelWidth - _kSpaceToHorizontalEdge),
+        max(0.0, (size.height - _wheelHeight) / 2),
       );
       _isInitialized = true;
     });
@@ -178,6 +187,14 @@ class _FloatingWheelState extends State<FloatingWheel> {
       _resetPosition();
     }
     _previousOrientation = currentOrientation;
+  }
+
+  @override
+  void didUpdateWidget(FloatingWheel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewportSize != widget.viewportSize) {
+      _resetPosition();
+    }
   }
 
   Widget _buildUpDownButton(
@@ -357,11 +374,13 @@ class FloatingLeftRightButton extends StatefulWidget {
   final bool isLeft;
   final InputModel inputModel;
   final CursorModel cursorModel;
+  final Size viewportSize;
   const FloatingLeftRightButton(
       {super.key,
       required this.isLeft,
       required this.inputModel,
-      required this.cursorModel});
+      required this.cursorModel,
+      required this.viewportSize});
 
   @override
   State<FloatingLeftRightButton> createState() =>
@@ -417,6 +436,14 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     _previousOrientation = currentOrientation;
   }
 
+  @override
+  void didUpdateWidget(FloatingLeftRightButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewportSize != widget.viewportSize) {
+      _resetPosition(MediaQuery.of(context).orientation);
+    }
+  }
+
   double _getOffsetX(double w) {
     if (_isLeft) {
       return (w - _kLeftRightButtonWidth * 2 - _kSpaceBetweenLeftRightButtons) *
@@ -461,13 +488,26 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     final ps = bind.getLocalFlutterOption(k: _getPositionKey(ori));
     final pos = _loadPositionFromString(ps);
     if (pos == null) {
-      final size = MediaQuery.of(context).size;
+      final size = widget.viewportSize;
       _position = Offset(_getOffsetX(size.width),
           size.height - _kSpaceToVerticalEdge - _kLeftRightButtonHeight);
     } else {
       _position = pos;
-      _preSavedPos = pos;
     }
+    _position = _clampPosition(_position);
+    _preSavedPos = _position;
+  }
+
+  Offset _clampPosition(Offset position) {
+    final size = widget.viewportSize;
+    final maxX =
+        max(0.0, size.width - _kLeftRightButtonWidth - _kSpaceToHorizontalEdge);
+    final maxY =
+        max(0.0, size.height - _kLeftRightButtonHeight - _kSpaceToVerticalEdge);
+    return Offset(
+      position.dx.clamp(min(_kSpaceToHorizontalEdge, maxX), maxX),
+      position.dy.clamp(min(_kSpaceToVerticalEdge, maxY), maxY),
+    );
   }
 
   void _resetPosition(Orientation ori) {
@@ -491,17 +531,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   }
 
   void _onMoveUpdateDelta(Offset delta) {
-    final context = this.context;
-    final size = MediaQuery.of(context).size;
-    Offset newPosition = _position + delta;
-    double minX = _kSpaceToHorizontalEdge;
-    double minY = _kSpaceToVerticalEdge;
-    double maxX = size.width - _kLeftRightButtonWidth - _kSpaceToHorizontalEdge;
-    double maxY = size.height - _kLeftRightButtonHeight - _kSpaceToVerticalEdge;
-    newPosition = Offset(
-      newPosition.dx.clamp(minX, maxX),
-      newPosition.dy.clamp(minY, maxY),
-    );
+    final newPosition = _clampPosition(_position + delta);
     final isPositionChanged = !(isDoubleEqual(newPosition.dx, _position.dx) &&
         isDoubleEqual(newPosition.dy, _position.dy));
     setState(() {

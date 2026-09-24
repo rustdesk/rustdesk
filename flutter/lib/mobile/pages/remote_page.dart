@@ -22,6 +22,7 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../utils/image.dart';
+import '../soft_keyboard_input.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 
@@ -335,15 +336,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       // clipboard
       oldValue = '';
     }
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
-      inputModel.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
+    final edit = getNonIOSSoftKeyboardEdit(oldValue, newValue);
+    for (var i = 0; i < edit.backspaces; i++) {
+      inputModel.inputKey('VK_BACK');
+    }
+    if (edit.text.isNotEmpty) {
+      final content = edit.text;
       if (content.length > 1) {
         if (oldValue != '' &&
+            edit.backspaces == 0 &&
             content.length == 2 &&
             (content == '""' ||
                 content == '()' ||
