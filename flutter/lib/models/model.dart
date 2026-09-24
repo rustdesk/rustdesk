@@ -3617,8 +3617,12 @@ class CursorModel with ChangeNotifier {
   static int _nextKeyScope = 0;
   final int _keyScope = _nextKeyScope++;
 
-  String nativeKey(CursorData cache, double scale) =>
-      '${_keyScope}_${cache.updateGetKey(scale)}';
+  String nativeKey(CursorData cache, double scale) {
+    final key = '${_keyScope}_${cache.updateGetKey(scale)}';
+    // A native cursor at another raster does not hold the pixels this one is made from.
+    if (!_cacheKeys.contains(key)) _nativeIds.remove(cache.id);
+    return key;
+  }
 
   // Native cursors stay for the session, one per raster of each shape, and only [clear]
   // deletes them, as before; unlike the painted images they have no LRU, for now. A delete

@@ -239,6 +239,34 @@ void main() {
     expect(registered.where((key) => key.contains('_B_')), isNotEmpty);
   });
 
+  test('a zoom still gets native cursors for shapes that keep decoding late',
+      () async {
+    final cursor = ffi.cursorModel;
+    // An animation whose frames have native cursors at 1.0 only.
+    for (final (id, seed) in [('A', 1), ('B', 2)]) {
+      await _feed(ffi, id, size: 32, seed: seed);
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
+    // At 0.5 each frame is fetched again, and each fetch answers after the next switch.
+    ffi.cursor.holdFetches = true;
+    for (var i = 0; i < 6; i++) {
+      _select(ffi, i.isEven ? 'A' : 'B');
+      ffi.cursor.answerFetches();
+      await _settle();
+      buildCursorOfCache(cursor, 0.5, cursor.cache);
+      await _settle();
+    }
+    expect(
+        registered
+            .where((key) => key.contains('_A_') && key.endsWith('_16_16')),
+        isNotEmpty);
+    expect(
+        registered
+            .where((key) => key.contains('_B_') && key.endsWith('_16_16')),
+        isNotEmpty);
+  });
+
   test('shapes waiting for a native cursor keep their pixels, within the limit',
       () async {
     const max = CursorModel.kRecentShapes;
