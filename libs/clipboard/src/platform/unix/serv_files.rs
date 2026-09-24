@@ -157,11 +157,14 @@ impl ClipFiles {
             && a[LIST_NONCE.end..] == b[LIST_NONCE.end..]
     }
 
-    // Close open files and their read buffers; `read_exact_at` reopens on the next read.
+    // Close files that are not being read, such as the preloaded next file; `read_exact_at`
+    // reopens them on the next read. A file part-way through keeps its handle and offset, so
+    // its remaining bytes come from the same file even if its path is replaced meanwhile.
     fn release_handles(&mut self) {
         for file in self.file_list.iter_mut() {
-            file.offset.store(0, Ordering::Relaxed);
-            file.handle = None;
+            if file.offset.load(Ordering::Relaxed) == 0 {
+                file.handle = None;
+            }
         }
     }
 
@@ -791,30 +794,82 @@ mod sig_test {
         clear_files();
     }
 
+    fn file_index(path: &PathBuf) -> i32 {
+        let files = CLIP_FILES.lock();
+        files
+            .file_list
+            .iter()
+            .position(|f| &f.path == path)
+            .unwrap() as i32
+    }
+
+    // Replaces `path` the way editors save: write aside, then rename over it.
+    fn replace_atomically(path: &PathBuf, data: &[u8]) {
+        let aside = path.with_extension("new");
+        fs::write(&aside, data).unwrap();
+        fs::rename(&aside, path).unwrap();
+    }
+
     #[test]
-    fn retired_list_closes_its_files_and_reads_on() {
+    fn retired_list_closes_only_files_not_being_read() {
         let tmp = TmpDir::new("retired_handles");
         let first = tmp.join("first.bin");
         fs::write(&first, b"AAAABBBB").unwrap();
-        let second = tmp.join("second.bin");
-        fs::write(&second, b"CCCCCCCC").unwrap();
+        let next = tmp.join("next.bin");
+        fs::write(&next, b"CCCCDDDD").unwrap();
+        let other = tmp.join("other.bin");
+        fs::write(&other, b"EEEEEEEE").unwrap();
 
         let _guard = lock_clip_files();
         clear_files();
-        sync_files(&[path_str(&first)]).unwrap();
+        sync_files(&[path_str(&first), path_str(&next)]).unwrap();
         let id = file_list_id(&get_file_list_pdu(1));
-        let idx = CLIP_FILES.lock().first_file_index as i32;
-        let read = |offset| range_data(read_file_contents(1, 7, idx, 0x2, offset, 0, 4, Some(id)));
-        // Leaves the file open at offset 4.
-        assert_eq!(read(0), b"AAAA");
+        let (first_idx, next_idx) = (file_index(&first), file_index(&next));
+        let read =
+            |idx, offset| range_data(read_file_contents(1, 7, idx, 0x2, offset, 0, 4, Some(id)));
+        // Leaves `first` open at offset 4, and preloads `next`.
+        assert_eq!(read(first_idx, 0), b"AAAA");
 
-        sync_files(&[path_str(&second)]).unwrap();
-        assert!(RETIRED_CLIP_FILES.lock()[0]
-            .file_list
-            .iter()
-            .all(|file| file.handle.is_none()));
-        // The file reopens at its start, so continuing at offset 4 must seek.
-        assert_eq!(read(4), b"BBBB");
+        sync_files(&[path_str(&other)]).unwrap();
+        {
+            let retired = RETIRED_CLIP_FILES.lock();
+            let open = |idx: i32| retired[0].file_list[idx as usize].handle.is_some();
+            assert!(open(first_idx));
+            assert!(!open(next_idx));
+        }
+        assert_eq!(read(first_idx, 4), b"BBBB");
+        assert_eq!(read(next_idx, 0), b"CCCC");
+
+        clear_files();
+    }
+
+    #[test]
+    fn files_being_read_keep_their_content_when_their_paths_are_replaced() {
+        let tmp = TmpDir::new("replaced_paths");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"1111aaaa").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"2222bbbb").unwrap();
+        let other = tmp.join("other.bin");
+        fs::write(&other, b"EEEEEEEE").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first), path_str(&second)]).unwrap();
+        let id = file_list_id(&get_file_list_pdu(1));
+        let (first_idx, second_idx) = (file_index(&first), file_index(&second));
+        let read =
+            |idx, offset| range_data(read_file_contents(1, 7, idx, 0x2, offset, 0, 4, Some(id)));
+        // Two files part-way through at once.
+        assert_eq!(read(first_idx, 0), b"1111");
+        assert_eq!(read(second_idx, 0), b"2222");
+
+        sync_files(&[path_str(&other)]).unwrap();
+        replace_atomically(&first, b"3333cccc");
+        replace_atomically(&second, b"4444dddd");
+
+        assert_eq!(read(first_idx, 4), b"aaaa");
+        assert_eq!(read(second_idx, 4), b"bbbb");
 
         clear_files();
     }
