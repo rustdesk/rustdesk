@@ -1,11 +1,11 @@
-use super::local_file::LocalFile;
+use super::{filetype::file_list_id, local_file::LocalFile};
 use crate::{platform::unix::local_file::construct_file_list, ClipboardFile, CliprdrError};
 use hbb_common::{
     bytes::{BufMut, BytesMut},
     log,
 };
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc, time::SystemTime, usize};
+use std::{collections::VecDeque, path::PathBuf, sync::Arc, time::SystemTime, usize};
 
 lazy_static::lazy_static! {
     // local files are cached, this value should not be changed when copying files
@@ -13,7 +13,12 @@ lazy_static::lazy_static! {
     // We need to keep the file list in the same order as the remote side.
     // We may add a `FileId` field to `CliprdrFileContentsRequest` in the future.
     static ref CLIP_FILES: Arc<Mutex<ClipFiles>> = Default::default();
+    // Lists replaced by a newer copy after a peer was sent them, oldest first. The peer's
+    // streams keep reading the list they came from. Lock after `CLIP_FILES`.
+    static ref RETIRED_CLIP_FILES: Mutex<VecDeque<ClipFiles>> = Default::default();
 }
+
+const MAX_RETIRED_CLIP_FILES: usize = 4;
 
 #[derive(Debug)]
 enum FileContentsRequest {
@@ -62,6 +67,10 @@ struct ClipFiles {
     file_list: Vec<LocalFile>,
     first_file_index: usize,
     files_pdu: Vec<u8>,
+    // `file_list_id(files_pdu)`, which peers send back as `clip_data_id`.
+    id: i32,
+    // Connections that were sent `files_pdu`.
+    served_to: Vec<i32>,
 }
 
 impl ClipFiles {
@@ -71,6 +80,8 @@ impl ClipFiles {
         self.file_list.clear();
         self.first_file_index = usize::MAX;
         self.files_pdu.clear();
+        self.id = 0;
+        self.served_to.clear();
     }
 
     fn sync_files(
@@ -100,6 +111,7 @@ impl ClipFiles {
             data.put(file.as_bin()?.as_slice());
         }
         self.files_pdu = data.to_vec();
+        self.id = file_list_id(&self.files_pdu);
         Ok(())
     }
 
@@ -263,6 +275,43 @@ impl ClipFiles {
 #[inline]
 pub fn clear_files() {
     CLIP_FILES.lock().clear();
+    RETIRED_CLIP_FILES.lock().clear();
+}
+
+// The list a request reads from: the one its `clip_data_id` names, else the one last sent to
+// the connection. A named list that is gone yields `None`. A peer that sends no id and was
+// never sent a list reads the current one, as before.
+fn select_clip_files<'a>(
+    current: &'a mut ClipFiles,
+    retired: &'a mut VecDeque<ClipFiles>,
+    conn_id: i32,
+    clip_data_id: Option<i32>,
+) -> Option<&'a mut ClipFiles> {
+    match clip_data_id {
+        Some(id) if current.id == id => Some(current),
+        Some(id) => retired
+            .iter_mut()
+            .rev()
+            .find(|files| files.id == id && files.served_to.contains(&conn_id)),
+        None if current.served_to.contains(&conn_id) => Some(current),
+        None => retired
+            .iter_mut()
+            .rev()
+            .find(|files| files.served_to.contains(&conn_id))
+            .or(Some(current)),
+    }
+}
+
+// Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
+fn retire_if_served(clip_files: &mut ClipFiles) {
+    if clip_files.served_to.is_empty() {
+        return;
+    }
+    let mut retired = RETIRED_CLIP_FILES.lock();
+    if retired.len() == MAX_RETIRED_CLIP_FILES {
+        retired.pop_front();
+    }
+    retired.push_back(std::mem::take(clip_files));
 }
 
 pub fn read_file_contents(
@@ -273,6 +322,7 @@ pub fn read_file_contents(
     n_position_low: i32,
     n_position_high: i32,
     cb_requested: i32,
+    clip_data_id: Option<i32>,
 ) -> Vec<Result<ClipboardFile, CliprdrError>> {
     let fcr = if dw_flags == 0x1 {
         FileContentsRequest::Size {
@@ -298,7 +348,17 @@ pub fn read_file_contents(
         })];
     };
 
-    let mut clip_files = CLIP_FILES.lock();
+    let mut current = CLIP_FILES.lock();
+    let mut retired = RETIRED_CLIP_FILES.lock();
+    let Some(clip_files) = select_clip_files(&mut current, &mut retired, conn_id, clip_data_id)
+    else {
+        return vec![Err(CliprdrError::InvalidRequest {
+            description: format!(
+                "file list {:?} is not available to conn: {}",
+                clip_data_id, conn_id
+            ),
+        })];
+    };
     let mut res = vec![];
     if let Some(files_res) = clip_files.get_files_for_audit(&fcr) {
         res.push(Ok(files_res));
@@ -318,12 +378,17 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     {
         return Ok(());
     }
+    retire_if_served(&mut files_lock);
     files_lock.sync_files(files, current)?;
     files_lock.build_file_list_pdu()
 }
 
-pub fn get_file_list_pdu() -> Vec<u8> {
-    CLIP_FILES.lock().files_pdu.clone()
+pub fn get_file_list_pdu(conn_id: i32) -> Vec<u8> {
+    let mut clip_files = CLIP_FILES.lock();
+    if !clip_files.files_pdu.is_empty() && !clip_files.served_to.contains(&conn_id) {
+        clip_files.served_to.push(conn_id);
+    }
+    clip_files.files_pdu.clone()
 }
 
 #[cfg(test)]
@@ -504,11 +569,11 @@ mod sig_test {
         let large_idx = small_idx + 1;
 
         // A negative cbRequested is a UINT32 length, clamped to the rest of the file.
-        let res = read_file_contents(0, 0, small_idx, 0x2, 1, 0, -1);
+        let res = read_file_contents(0, 0, small_idx, 0x2, 1, 0, -1, None);
         assert_eq!(range_data(res), b"123456789");
 
         // An nPositionLow with bit 31 set is an offset past 2 GiB, not a huge one.
-        let res = read_file_contents(0, 0, large_idx, 0x2, 0x8000_0000u32 as i32, 0, 4);
+        let res = read_file_contents(0, 0, large_idx, 0x2, 0x8000_0000u32 as i32, 0, 4, None);
         assert_eq!(range_data(res), b"tail");
 
         clear_files();
@@ -536,5 +601,84 @@ mod sig_test {
             },
         );
         assert!(matches!(res, Err(CliprdrError::InvalidRequest { .. })));
+    }
+
+    #[test]
+    fn host_copy_during_transfer_keeps_serving_the_sent_list() {
+        let tmp = TmpDir::new("recopy_in_flight");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"BBBBBBBB").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        get_file_list_pdu(1);
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        let read = |offset| range_data(read_file_contents(1, 7, idx, 0x2, offset, 0, 4, None));
+        assert_eq!(read(0), b"AAAA");
+
+        // Copying another file on this side must not redirect the peer's stream.
+        sync_files(&[path_str(&second)]).unwrap();
+        assert_eq!(read(4), b"AAAA");
+
+        clear_files();
+    }
+
+    #[test]
+    fn stream_keeps_its_list_after_a_second_paste() {
+        let tmp = TmpDir::new("repaste_in_flight");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"BBBBBBBB").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let first_id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+
+        // The peer copies the second file on this side and pastes it while the first
+        // transfer is still reading.
+        sync_files(&[path_str(&second)]).unwrap();
+        let second_id = file_list_id(&get_file_list_pdu(1));
+        assert_ne!(first_id, second_id);
+
+        let read = |id| range_data(read_file_contents(1, 7, idx, 0x2, 4, 0, 4, Some(id)));
+        assert_eq!(read(first_id), b"AAAA");
+        assert_eq!(read(second_id), b"BBBB");
+
+        clear_files();
+    }
+
+    #[test]
+    fn named_list_must_have_been_sent_to_the_conn() {
+        let tmp = TmpDir::new("foreign_list");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"BBBBBBBB").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let first_id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        sync_files(&[path_str(&second)]).unwrap();
+
+        let refused = |conn_id, id| {
+            matches!(
+                read_file_contents(conn_id, 7, idx, 0x2, 0, 0, 4, Some(id)).last(),
+                Some(Err(CliprdrError::InvalidRequest { .. }))
+            )
+        };
+        // Retired list, asked for by a connection it was never sent to.
+        assert!(refused(2, first_id));
+        // A list id this side never sent.
+        assert!(refused(1, first_id ^ 1));
+
+        clear_files();
     }
 }

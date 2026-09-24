@@ -314,7 +314,7 @@ pub mod unix_file_clip {
                 requested_format_id: _requested_format_id,
             } => {
                 log::debug!("requested format id: {}", _requested_format_id);
-                let format_data = serv_files::get_file_list_pdu();
+                let format_data = serv_files::get_file_list_pdu(conn_id);
                 if !format_data.is_empty() {
                     return vec![clip_2_msg(ClipboardFile::FormatDataResponse {
                         msg_flags: 1,
@@ -365,7 +365,8 @@ pub mod unix_file_clip {
                 n_position_low,
                 n_position_high,
                 cb_requested,
-                ..
+                have_clip_data_id,
+                clip_data_id,
             } => {
                 log::debug!("file contents request: stream_id: {}, list_index: {}, dw_flags: {}, n_position_low: {}, n_position_high: {}, cb_requested: {}", stream_id, list_index, dw_flags, n_position_low, n_position_high, cb_requested);
                 return serv_files::read_file_contents(
@@ -376,6 +377,7 @@ pub mod unix_file_clip {
                     n_position_low,
                     n_position_high,
                     cb_requested,
+                    have_clip_data_id.then_some(clip_data_id),
                 )
                 .into_iter()
                 .map(|res| match res {

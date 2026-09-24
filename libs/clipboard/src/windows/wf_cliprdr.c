@@ -54,6 +54,9 @@
 /* File clipboard redirection always advertises the descriptor and contents formats. */
 #define WF_CLIPRDR_FILE_FORMAT_COUNT 2u
 #define WF_CLIPRDR_COM_LPT_PREFIX_LENGTH 3u
+/* File lists kept after they were sent, so a transfer still in flight keeps reading its own
+ * files after a later copy or paste replaces them. */
+#define WF_CLIPRDR_SERVED_FILE_LISTS 4u
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
 
@@ -213,6 +216,21 @@ static BOOL wf_cliprdr_bounded_strlen(const char *value, size_t max_len, size_t 
 	return FALSE;
 }
 
+/* Identifies a file list by its FILEGROUPDESCRIPTORW bytes, which both peers hold, and is
+ * carried as FileContentsRequest.clipDataId. FNV-1a, same as `file_list_id()` on unix. */
+static UINT32 wf_cliprdr_file_list_id(const BYTE *data, SIZE_T size)
+{
+	UINT32 id = 2166136261u;
+	SIZE_T i;
+
+	for (i = 0; i < size; i++)
+	{
+		id ^= data[i];
+		id *= 16777619u;
+	}
+	return id;
+}
+
 /**
  * Clipboard Formats
  */
@@ -358,6 +376,7 @@ struct _CliprdrStream
 	void *m_pData;
 	UINT32 m_connID;
 	UINT32 m_streamId;   // unique CLIPRDR streamId; avoids leaking a heap pointer
+	UINT32 m_clipDataId; // id of the file list this stream was created from
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -376,6 +395,17 @@ struct _CliprdrDataObject
 	UINT32 m_connID;
 };
 typedef struct _CliprdrDataObject CliprdrDataObject;
+
+struct wf_served_file_list
+{
+	UINT32 connID;
+	UINT32 id;
+	size_t nFiles;
+	size_t first_file_index;
+	WCHAR **file_names;
+	UINT64 *file_sizes;
+};
+typedef struct wf_served_file_list wfServedFileList;
 
 struct wf_clipboard
 {
@@ -424,6 +454,10 @@ struct wf_clipboard
 	WCHAR **file_names;
 	size_t first_file_index;
 	FILEDESCRIPTORW **fileDescriptor;
+	DWORD file_list_seq;   // clipboard sequence number the file list was read at
+	UINT32 file_list_id;   // wf_cliprdr_file_list_id() of the file list, 0 while none is valid
+	wfServedFileList served_file_lists[WF_CLIPRDR_SERVED_FILE_LISTS];
+	size_t next_served_file_list;
 
 	BOOL legacyApi;
 	HMODULE hUser32;
@@ -451,8 +485,8 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
 static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
-											  ULONG index, UINT32 flag, DWORD positionhigh,
-											  DWORD positionlow, ULONG request);
+											  UINT32 clipDataId, ULONG index, UINT32 flag,
+											  DWORD positionhigh, DWORD positionlow, ULONG request);
 
 static BOOL is_file_descriptor_from_remote();
 static BOOL is_set_by_instance(wfClipboard *clipboard);
@@ -550,7 +584,8 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId, instance->m_lIndex,
+	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
+											instance->m_clipDataId, instance->m_lIndex,
 											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
 											instance->m_lOffset.LowPart, cb);
 
@@ -736,7 +771,8 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Clone(IStream *This, IStream **pp
 	return E_NOTIMPL;
 }
 
-static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData, const FILEDESCRIPTORW *dsc)
+static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData, const FILEDESCRIPTORW *dsc,
+										UINT32 clipDataId)
 {
 	IStream *iStream = NULL;
 	BOOL success = FALSE;
@@ -779,6 +815,7 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			instance->m_lOffset.QuadPart = 0;
 			instance->m_connID = connID;
 			instance->m_streamId = (UINT32)InterlockedIncrement(&clipboard->req_f_stream_id_seq);
+			instance->m_clipDataId = clipDataId;
 
 			if (instance->m_Dsc.dwFlags & FD_ATTRIBUTES)
 			{
@@ -790,8 +827,8 @@ static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData,
 			{
 				/* get content size of this stream */
 				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, instance->m_streamId,
-													  instance->m_lIndex, FILECONTENTS_SIZE, 0, 0,
-													  8) == CHANNEL_RC_OK)
+													  instance->m_clipDataId, instance->m_lIndex,
+													  FILECONTENTS_SIZE, 0, 0, 8) == CHANNEL_RC_OK)
 				{
 					success = TRUE;
 				}
@@ -1007,6 +1044,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		IStream **streams = NULL;
 		UINT stream_count = 0;
 		SIZE_T hmem_size;
+		UINT32 clipDataId;
 		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
 		// FIXME: origin code may be failed here???
 		if (cliprdr_send_data_request(instance->m_connID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
@@ -1053,10 +1091,11 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 			return wf_cliprdr_fail_locked_file_descriptor_data(
 			    clipboard, pMedium, instance, NULL, 0, E_OUTOFMEMORY);
 
+		clipDataId = wf_cliprdr_file_list_id((const BYTE *)dsc, hmem_size);
 		for (i = 0; i < stream_count; i++)
 		{
-			streams[i] =
-			    (IStream *)CliprdrStream_New(instance->m_connID, i, clipboard, &dsc->fgd[i]);
+			streams[i] = (IStream *)CliprdrStream_New(instance->m_connID, i, clipboard,
+													  &dsc->fgd[i], clipDataId);
 			if (!streams[i])
 			{
 				return wf_cliprdr_fail_locked_file_descriptor_data(
@@ -1996,9 +2035,9 @@ static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UIN
 	return wait_response_event(connID, clipboard, clipboard->formatDataRespEvent, &clipboard->formatDataRespReceived, &clipboard->hmem);
 }
 
-static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId, ULONG index,
-									   UINT32 flag, DWORD positionhigh, DWORD positionlow,
-									   ULONG nreq)
+static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, UINT32 streamId,
+									   UINT32 clipDataId, ULONG index, UINT32 flag,
+									   DWORD positionhigh, DWORD positionlow, ULONG nreq)
 {
 	UINT rc;
 	CLIPRDR_FILE_CONTENTS_REQUEST fileContentsRequest = { 0 };
@@ -2023,7 +2062,8 @@ static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 con
 	fileContentsRequest.nPositionLow = positionlow;
 	fileContentsRequest.nPositionHigh = positionhigh;
 	fileContentsRequest.cbRequested = nreq;
-	fileContentsRequest.clipDataId = 0;
+	fileContentsRequest.haveClipDataId = TRUE;
+	fileContentsRequest.clipDataId = clipDataId;
 	fileContentsRequest.msgFlags = 0;
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 	if (rc != ERROR_SUCCESS)
@@ -2422,6 +2462,113 @@ error:
 		*puSize = nGet;
 
 	return res;
+}
+
+static void wf_cliprdr_free_served_file_list(wfServedFileList *list)
+{
+	size_t i;
+
+	if (list->file_names)
+	{
+		for (i = 0; i < list->nFiles; i++)
+			free(list->file_names[i]);
+		free(list->file_names);
+	}
+	free(list->file_sizes);
+	ZeroMemory(list, sizeof(*list));
+}
+
+static void wf_cliprdr_forget_served_file_lists(wfClipboard *clipboard)
+{
+	size_t i;
+
+	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
+		wf_cliprdr_free_served_file_list(&clipboard->served_file_lists[i]);
+	clipboard->next_served_file_list = 0;
+}
+
+static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 connID)
+{
+	wfServedFileList *list;
+	size_t i;
+
+	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
+	{
+		list = &clipboard->served_file_lists[i];
+		if (list->file_names && list->connID == connID && list->id == clipboard->file_list_id)
+			return;
+	}
+
+	list = &clipboard->served_file_lists[clipboard->next_served_file_list];
+	clipboard->next_served_file_list =
+		(clipboard->next_served_file_list + 1) % WF_CLIPRDR_SERVED_FILE_LISTS;
+	wf_cliprdr_free_served_file_list(list);
+
+	list->file_names = (WCHAR **)calloc(clipboard->nFiles, sizeof(WCHAR *));
+	list->file_sizes = (UINT64 *)calloc(clipboard->nFiles, sizeof(UINT64));
+	if (!list->file_names || !list->file_sizes)
+	{
+		wf_cliprdr_free_served_file_list(list);
+		return;
+	}
+	list->nFiles = clipboard->nFiles;
+	for (i = 0; i < clipboard->nFiles; i++)
+	{
+		if (!clipboard->file_names[i] ||
+			!(list->file_names[i] = _wcsdup(clipboard->file_names[i])))
+		{
+			wf_cliprdr_free_served_file_list(list);
+			return;
+		}
+		if (clipboard->fileDescriptor[i])
+			list->file_sizes[i] = ((UINT64)clipboard->fileDescriptor[i]->nFileSizeHigh << 32) |
+								  clipboard->fileDescriptor[i]->nFileSizeLow;
+	}
+	list->connID = connID;
+	list->id = clipboard->file_list_id;
+	list->first_file_index = clipboard->first_file_index;
+}
+
+/* Serves a request whose stream came from an earlier file list sent to the same connection.
+ * An unknown list fails the request rather than falling back to the current files. */
+static BOOL wf_cliprdr_read_served_file_list(wfClipboard *clipboard,
+											 const CLIPRDR_FILE_CONTENTS_REQUEST *request,
+											 BYTE *data, UINT32 cbRequested, DWORD *puSize)
+{
+	wfServedFileList *list = NULL;
+	size_t i;
+
+	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
+	{
+		if (clipboard->served_file_lists[i].file_names &&
+			clipboard->served_file_lists[i].connID == request->connID &&
+			clipboard->served_file_lists[i].id == request->clipDataId)
+		{
+			list = &clipboard->served_file_lists[i];
+			break;
+		}
+	}
+	if (!list || request->listIndex >= list->nFiles)
+		return FALSE;
+
+	if (request->dwFlags == FILECONTENTS_SIZE)
+	{
+		CopyMemory(data, &list->file_sizes[request->listIndex], sizeof(UINT64));
+		*puSize = sizeof(UINT64);
+		return TRUE;
+	}
+	if (request->dwFlags != FILECONTENTS_RANGE)
+		return FALSE;
+
+	if (clipboard->context->HandleClipboardFiles &&
+		request->listIndex == (UINT32)list->first_file_index &&
+		request->nPositionLow == 0 && request->nPositionHigh == 0)
+	{
+		clipboard->context->HandleClipboardFiles(request->connID, list->nFiles, list->file_names);
+	}
+	return wf_cliprdr_get_file_contents(list->file_names[request->listIndex], data,
+										request->nPositionLow, request->nPositionHigh, cbRequested,
+										puSize);
 }
 
 /* path_name has a '\' at the end. e.g. c:\newfolder\, file_name is c:\newfolder\new.txt */
@@ -3028,6 +3175,8 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		STGMEDIUM stg_medium;
 		DROPFILES *dropFiles;
 		FILEGROUPDESCRIPTORW *groupDsc;
+		clipboard->file_list_seq = GetClipboardSequenceNumber();
+		clipboard->file_list_id = 0;
 		result = OleGetClipboard(&dataObj);
 
 		if (FAILED(result))
@@ -3164,6 +3313,8 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 			buff = groupDsc;
 			rc = ERROR_SUCCESS;
+			clipboard->file_list_id = wf_cliprdr_file_list_id((const BYTE *)groupDsc, size);
+			wf_cliprdr_remember_served_file_list(clipboard, formatDataRequest->connID);
 		}
 		else
 		{
@@ -3430,7 +3581,22 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	vFormatEtc.lindex = fileContentsRequest->listIndex;
 	vFormatEtc.ptd = NULL;
 
-	if ((uStreamIdStc != fileContentsRequest->streamId) ||
+	if (fileContentsRequest->haveClipDataId &&
+		fileContentsRequest->clipDataId != clipboard->file_list_id)
+	{
+		if (wf_cliprdr_read_served_file_list(clipboard, fileContentsRequest, pData, cbRequested,
+											 &uSize))
+			rc = CHANNEL_RC_OK;
+		goto exit;
+	}
+
+	if (GetClipboardSequenceNumber() != clipboard->file_list_seq)
+	{
+		// The clipboard changed after the peer got its file list. The live FileContents
+		// belongs to the new copy, so reading it would splice another file into this one.
+		bIsStreamFile = FALSE;
+	}
+	else if ((uStreamIdStc != fileContentsRequest->streamId) ||
 		(uConnIdStc != fileContentsRequest->connID) || !pStreamStc)
 	{
 		LPENUMFORMATETC pEnumFormatEtc;
@@ -3842,6 +4008,7 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 		CloseHandle(clipboard->req_fevent);
 
 	clear_file_array(clipboard);
+	wf_cliprdr_forget_served_file_lists(clipboard);
 	clear_format_map(clipboard);
 	free(clipboard->format_mappings);
 	return TRUE;
