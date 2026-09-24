@@ -3425,7 +3425,8 @@ fn wait_for_app_exit_cmd(app_name: &str, filter: &str) -> String {
     format!(
         "set /a RUSTDESK_EXIT_WAIT=0
 :rustdesk_wait_for_exit
-tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul || goto rustdesk_exited
+tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul
+if errorlevel 1 goto rustdesk_exited
 set /a RUSTDESK_EXIT_WAIT+=1
 if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exited
 ping -n 2 127.0.0.1 >nul
@@ -4854,6 +4855,11 @@ mod tests {
         // the updater process itself.
         assert!(cmd.contains("\"IMAGENAME eq RustDesk.exe\" /FI \"PID ne 42\""));
         assert!(cmd.contains("find /I \"RustDesk.exe\""));
+        // `find` decides on a line of its own: a pipe runs each side in a
+        // child cmd.exe, so keep the jump out of the pipeline.
+        let pipeline = cmd.lines().find(|l| l.starts_with("tasklist")).unwrap();
+        assert!(!pipeline.contains("goto"));
+        assert!(cmd.contains("\nif errorlevel 1 goto rustdesk_exited\n"));
         // Bounded, so a process that never exits cannot hang the update.
         assert!(cmd.contains("geq 60 goto rustdesk_exited"));
         // Every label that is jumped to exists.
