@@ -5369,6 +5369,13 @@ pub mod peer_online {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
+                        let required_len = ids.len().div_ceil(u8::BITS as usize);
+                        if states.len() < required_len {
+                            bail!(
+                                "Invalid online response: expected at least {required_len} state bytes, got {}",
+                                states.len()
+                            );
+                        }
                         let mut onlines = Vec::new();
                         let mut offlines = Vec::new();
                         for i in 0..ids.len() {
