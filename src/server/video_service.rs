@@ -734,6 +734,7 @@ fn run(vs: VideoService) -> ResultType<()> {
     let mut static_refresh = static_refresh::StaticRefresh::new(
         vs.source,
         codec_format,
+        &encoder_cfg,
         &sp,
         &recorder,
         display_idx,
