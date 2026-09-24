@@ -2930,7 +2930,8 @@ class CursorData {
     final targetHeight = (height * scale).ceil();
     if ((_rasterWidth != targetWidth || _rasterHeight != targetHeight) &&
         !hasPixels) {
-      // No native cursor at this size yet; buildCursorOfCache asks for the pixels.
+      // Nothing to make this raster from; buildCursorOfCache asks for the pixels unless its
+      // native cursor was made before.
       data = null;
       return scale;
     }
@@ -3004,7 +3005,9 @@ class CursorData {
 
   String updateGetKey(double scale) {
     scale = _checkUpdateScale(scale);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}_${rasterWidth}_$rasterHeight';
+    // The raster asked for, not the one made last: a shape without pixels keeps the native
+    // cursors of every raster it was shown at.
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}_${(width * scale).ceil()}_${(height * scale).ceil()}';
   }
 }
 

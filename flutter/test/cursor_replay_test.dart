@@ -155,6 +155,27 @@ void main() {
     expect(registered.length, 100);
   });
 
+  test('a raster made before is found again after the shape was switched away from',
+      () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, 'A', size: 32);
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    final first = registered.single;
+    buildCursorOfCache(cursor, 0.5, cursor.cache);
+    await _settle();
+    await _feed(ffi, 'B');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    final count = registered.length;
+
+    _select(ffi, 'A'); // its pixels went; its cursors at both rasters stay
+    expect(_key(buildCursorOfCache(cursor, 1.0, cursor.cache)), first);
+    await _settle();
+    expect(ffi.cursor.fetched, isEmpty);
+    expect(registered.length, count);
+  });
+
   test('a new raster of a shape without pixels keeps the cursor shown before',
       () async {
     final cursor = ffi.cursorModel;
