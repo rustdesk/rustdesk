@@ -267,7 +267,8 @@ void main() {
         isNotEmpty);
   });
 
-  test('a raster returned to counts again as held by its native cursor',
+  test(
+      'a raster still missing keeps a late restore, whatever was shown meanwhile',
       () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, 'A', size: 32);
@@ -280,12 +281,21 @@ void main() {
     _select(ffi, 'A');
     ffi.cursor.holdFetches = true;
     buildCursorOfCache(cursor, 0.5, cursor.cache); // no cursor at 0.5: fetched
-    buildCursorOfCache(cursor, 1.0, cursor.cache); // back at 1.0, which has one
+    buildCursorOfCache(cursor, 1.0, cursor.cache); // 1.0 has one meanwhile
     _select(ffi, 'B');
     ffi.cursor.answerFetches();
     await _settle();
-    expect(cursor.cachedShape('A')!.hasPixels, isFalse,
-        reason: 'its native cursor at the raster asked last holds it');
+    ffi.cursor.fetched.clear();
+
+    _select(ffi, 'A');
+    buildCursorOfCache(cursor, 0.5, cursor.cache);
+    await _settle();
+    expect(ffi.cursor.fetched, isEmpty,
+        reason: 'its pixels waited for the cursor at 0.5');
+    expect(
+        registered
+            .where((key) => key.contains('_A_') && key.endsWith('_16_16')),
+        isNotEmpty);
   });
 
   test('shapes waiting for a native cursor keep their pixels, within the limit',
