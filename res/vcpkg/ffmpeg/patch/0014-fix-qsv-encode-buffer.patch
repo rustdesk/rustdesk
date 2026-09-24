@@ -1,24 +1,61 @@
 diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
 --- a/libavcodec/qsvenc.c
 +++ b/libavcodec/qsvenc.c
-@@ -1509,6 +1509,14 @@
+@@ -1419,6 +1419,18 @@
+     return 0;
+ }
+ 
++static int qsv_update_hevc_packet_size(QSVEncContext *q, const mfxInfoMFX *mfx)
++{
++    // Intel documents a larger buffer for complex CQP frames.
++    // https://github.com/Intel-Media-SDK/MediaSDK/blob/master/doc/mediasdk_release_notes.md
++    int64_t packet_size = (int64_t)mfx->BufferSizeInKB * mfx->BRCParamMultiplier * 1000 * 4;
++
++    if (packet_size > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE)
++        return AVERROR(ENOMEM);
++    q->packet_size = FFMAX(q->packet_size, packet_size);
++    return 0;
++}
++
+ static int qsv_retrieve_enc_params(AVCodecContext *avctx, QSVEncContext *q)
+ {
+     AVCPBProperties *cpb_props;
+@@ -1508,7 +1520,13 @@
+         return ff_qsv_print_error(avctx, ret,
                                    "Error calling GetVideoParam");
  
-     q->packet_size = q->param.mfx.BufferSizeInKB * q->param.mfx.BRCParamMultiplier * 1000;
+-    q->packet_size = q->param.mfx.BufferSizeInKB * q->param.mfx.BRCParamMultiplier * 1000;
 +    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
-+        // Intel documents a larger buffer for complex CQP frames.
-+        // https://github.com/Intel-Media-SDK/MediaSDK/blob/master/doc/mediasdk_release_notes.md
-+        int64_t packet_size = (int64_t)q->packet_size * 4;
-+        if (packet_size > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE)
-+            return AVERROR(ENOMEM);
-+        q->packet_size = packet_size;
++        ret = qsv_update_hevc_packet_size(q, &q->param.mfx);
++        if (ret < 0)
++            return ret;
++    } else {
++        q->packet_size = q->param.mfx.BufferSizeInKB * q->param.mfx.BRCParamMultiplier * 1000;
 +    }
  
      if (!extradata.SPSBufSize || (need_pps && !extradata.PPSBufSize)
          || (q->hevc_vps && !extradata_vps.VPSBufSize)
-@@ -2684,6 +2692,8 @@
-                 return AVERROR_EXTERNAL;
-             }
+@@ -2650,6 +2668,17 @@
+     if (ret < 0)
+         return ff_qsv_print_error(avctx, ret, "Error during resetting");
+ 
++    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
++        mfxVideoParam param = { 0 };
++
++        ret = MFXVideoENCODE_GetVideoParam(q->session, &param);
++        if (ret < 0)
++            return ff_qsv_print_error(avctx, ret, "Error querying parameters after reset");
++        ret = qsv_update_hevc_packet_size(q, &param.mfx);
++        if (ret < 0)
++            return ret;
++    }
++
+     return 0;
+ }
+ 
+@@ -2688,6 +2717,8 @@
+             if (ret == MFX_WRN_IN_EXECUTION)
+                 av_usleep(1000);
          } while (ret == MFX_WRN_IN_EXECUTION);
 +        if (ret < 0)
 +            return ff_qsv_print_error(avctx, ret, "Error synchronizing encoded frame");
