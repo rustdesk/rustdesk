@@ -5369,6 +5369,8 @@ pub mod peer_online {
                 match msg_in.union {
                     Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                         let states = online_response.states;
+                        // One bit per ID, rounded up to whole bytes:
+                        // 0 IDs -> 0 bytes; 1..=8 -> 1; 9..=16 -> 2; 17..=24 -> 3.
                         let required_len = ids.len().div_ceil(u8::BITS as usize);
                         if states.len() < required_len {
                             bail!(
