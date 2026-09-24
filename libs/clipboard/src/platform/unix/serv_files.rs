@@ -5,9 +5,16 @@ use hbb_common::{
     log,
 };
 use parking_lot::Mutex;
-use std::{collections::VecDeque, path::PathBuf, sync::Arc, time::SystemTime, usize};
+use std::{
+    collections::VecDeque,
+    path::PathBuf,
+    sync::{atomic::Ordering, Arc},
+    time::SystemTime,
+    usize,
+};
 
-// Our clients request at most 4 MiB per range. A larger read is refused, not shortened:
+// Our clients request at most this much per range: macOS 4 MiB, FUSE less, and Windows
+// splits larger reads (WF_CLIPRDR_MAX_RANGE_READ). A larger read is refused, not shortened:
 // a short response reads as end of file to IStream callers on Windows.
 const MAX_RANGE_READ: u64 = 16 * 1024 * 1024;
 
@@ -117,6 +124,14 @@ impl ClipFiles {
         self.files_pdu = data.to_vec();
         self.id = file_list_id(&self.files_pdu);
         Ok(())
+    }
+
+    // Close open files and their read buffers; `read_exact_at` reopens on the next read.
+    fn release_handles(&mut self) {
+        for file in self.file_list.iter_mut() {
+            file.offset.store(0, Ordering::Relaxed);
+            file.handle = None;
+        }
     }
 
     fn get_files_for_audit(&self, request: &FileContentsRequest) -> Option<ClipboardFile> {
@@ -302,15 +317,21 @@ fn select_clip_files<'a>(
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
-fn retire_if_served(clip_files: &mut ClipFiles) {
-    if clip_files.served_to.is_empty() {
+fn retire_if_served(current: &mut ClipFiles, mut replaced: ClipFiles) {
+    if replaced.served_to.is_empty() {
         return;
     }
+    if replaced.id == current.id {
+        // Same descriptors: its peers read the new list at the same indexes.
+        current.served_to = replaced.served_to;
+        return;
+    }
+    replaced.release_handles();
     let mut retired = RETIRED_CLIP_FILES.lock();
     if retired.len() == MAX_RETIRED_CLIP_FILES {
         retired.pop_front();
     }
-    retired.push_back(std::mem::take(clip_files));
+    retired.push_back(replaced);
 }
 
 pub fn read_file_contents(
@@ -377,9 +398,13 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     {
         return Ok(());
     }
-    retire_if_served(&mut files_lock);
-    files_lock.sync_files(files, current)?;
-    files_lock.build_file_list_pdu()
+    // Build aside, so a failure leaves the current list in place.
+    let mut next = ClipFiles::default();
+    next.sync_files(files, current)?;
+    next.build_file_list_pdu()?;
+    let replaced = std::mem::replace(&mut *files_lock, next);
+    retire_if_served(&mut files_lock, replaced);
+    Ok(())
 }
 
 pub fn get_file_list_pdu(conn_id: i32) -> Vec<u8> {
@@ -677,6 +702,78 @@ mod sig_test {
         assert!(refused(2, first_id));
         // A list id this side never sent.
         assert!(refused(1, first_id ^ 1));
+
+        clear_files();
+    }
+
+    #[test]
+    fn failed_recopy_keeps_the_current_list() {
+        let tmp = TmpDir::new("failed_recopy");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        let missing = tmp.join("missing.bin");
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let pdu = get_file_list_pdu(1);
+
+        assert!(sync_files(&[path_str(&missing)]).is_err());
+        assert_eq!(get_file_list_pdu(1), pdu);
+
+        clear_files();
+    }
+
+    #[test]
+    fn identical_recopy_keeps_its_peers_on_the_current_list() {
+        let tmp = TmpDir::new("same_recopy");
+        let dir = tmp.join("dir");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("file.bin"), b"AAAAAAAA").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&dir)]).unwrap();
+        let id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+
+        // A selection with a directory is rebuilt on every copy; an unchanged rebuild must
+        // not use up the slots that lists still being read depend on.
+        for _ in 0..=MAX_RETIRED_CLIP_FILES {
+            sync_files(&[path_str(&dir)]).unwrap();
+        }
+        assert!(RETIRED_CLIP_FILES.lock().is_empty());
+        let read = |id| range_data(read_file_contents(1, 7, idx, 0x2, 0, 0, 4, id));
+        assert_eq!(read(Some(id)), b"AAAA");
+        assert_eq!(read(None), b"AAAA");
+
+        clear_files();
+    }
+
+    #[test]
+    fn retired_list_closes_its_files_and_reads_on() {
+        let tmp = TmpDir::new("retired_handles");
+        let first = tmp.join("first.bin");
+        fs::write(&first, b"AAAABBBB").unwrap();
+        let second = tmp.join("second.bin");
+        fs::write(&second, b"CCCCCCCC").unwrap();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        let read = |offset| range_data(read_file_contents(1, 7, idx, 0x2, offset, 0, 4, Some(id)));
+        // Leaves the file open at offset 4.
+        assert_eq!(read(0), b"AAAA");
+
+        sync_files(&[path_str(&second)]).unwrap();
+        assert!(RETIRED_CLIP_FILES.lock()[0]
+            .file_list
+            .iter()
+            .all(|file| file.handle.is_none()));
+        // The file reopens at its start, so continuing at offset 4 must seek.
+        assert_eq!(read(4), b"BBBB");
 
         clear_files();
     }
