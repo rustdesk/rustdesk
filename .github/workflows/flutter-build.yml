@@ -2444,7 +2444,9 @@ jobs:
           sudo pip3 install git+https://github.com/rustdesk-org/appimage-builder.git
           # run appimage-builder
           pushd appimage
+          ./build-apprun.sh ${{ matrix.job.arch }}
           sudo appimage-builder --skip-tests --recipe ./AppImageBuilder-${{ matrix.job.arch }}.yml
+          cmp AppDir/AppRun appimage-build/AppRun/v2.0.0/AppRun-Release-${{ matrix.job.arch }}
 
       - name: Publish appimage package
         if: env.UPLOAD_ARTIFACT == 'true'
