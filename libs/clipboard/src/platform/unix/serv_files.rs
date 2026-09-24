@@ -324,19 +324,24 @@ fn select_clip_files<'a>(
     conn_id: i32,
     clip_data_id: Option<i32>,
 ) -> Option<&'a mut ClipFiles> {
-    match clip_data_id {
-        Some(id) if current.id == id => Some(current),
+    let pos = match clip_data_id {
+        Some(id) if current.id == id => return Some(current),
         Some(id) => retired
-            .iter_mut()
-            .rev()
-            .find(|files| files.id == id && files.served_to.contains(&conn_id)),
-        None if current.served_to.contains(&conn_id) => Some(current),
-        None => retired
-            .iter_mut()
-            .rev()
-            .find(|files| files.served_to.contains(&conn_id))
-            .or(Some(current)),
-    }
+            .iter()
+            .rposition(|files| files.id == id && files.served_to.contains(&conn_id))?,
+        None if current.served_to.contains(&conn_id) => return Some(current),
+        None => match retired
+            .iter()
+            .rposition(|files| files.served_to.contains(&conn_id))
+        {
+            Some(pos) => pos,
+            None => return Some(current),
+        },
+    };
+    // A list being read moves to the back, so it is not the next one evicted.
+    let files = retired.remove(pos)?;
+    retired.push_back(files);
+    retired.back_mut()
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
@@ -833,6 +838,35 @@ mod sig_test {
         let read = |id| range_data(read_file_contents(1, 7, idx, 0x2, 4, 0, 4, Some(id)));
         assert_eq!(read(first_id), b"AAAA");
         assert_eq!(read(second_id), b"BBBB");
+
+        clear_files();
+    }
+
+    #[test]
+    fn a_list_being_read_outlives_newer_copies() {
+        let tmp = TmpDir::new("read_keeps_list");
+        let files: Vec<PathBuf> = (0..=MAX_RETIRED_CLIP_FILES + 1)
+            .map(|i| {
+                let file = tmp.join(&format!("{i}.bin"));
+                fs::write(&file, format!("{i}{i}{i}{i}{i}{i}{i}{i}")).unwrap();
+                file
+            })
+            .collect();
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&files[0])]).unwrap();
+        let id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        let read = || range_data(read_file_contents(1, 7, idx, 0x2, 0, 0, 4, Some(id)));
+
+        // A unix peer fetches every new list as soon as it is copied, so each copy retires the
+        // one before it. Reads in between keep the list being transferred from being evicted.
+        for file in &files[1..] {
+            sync_files(&[path_str(file)]).unwrap();
+            get_file_list_pdu(2);
+            assert_eq!(read(), b"0000");
+        }
 
         clear_files();
     }

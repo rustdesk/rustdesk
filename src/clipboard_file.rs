@@ -383,7 +383,12 @@ pub mod unix_file_clip {
                 .map(|res| match res {
                     Ok(data) => clip_2_msg(data),
                     Err(e) => {
-                        log::error!("failed to read file contents: {:?}", e);
+                        hbb_common::throttled_log!(
+                            std::time::Duration::from_secs(5),
+                            error,
+                            "failed to read file contents: {:?}",
+                            e
+                        );
                         resp_file_contents_fail(stream_id)
                     }
                 })

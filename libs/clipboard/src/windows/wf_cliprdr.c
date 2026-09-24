@@ -2671,6 +2671,8 @@ static BOOL wf_cliprdr_read_served_file_list(wfClipboard *clipboard,
 	}
 	if (!list || request->listIndex >= list->nFiles)
 		return FALSE;
+	// A list being read is not the next one evicted.
+	list->last_served = ++clipboard->served_file_list_seq;
 
 	if (request->dwFlags == FILECONTENTS_SIZE)
 	{
