@@ -107,6 +107,15 @@ impl UsbPullState {
         }
     }
 
+    /// Without a reply the controller keeps the device it already shared for
+    /// this push bound until the session ends, and never learns why.
+    pub fn refuse_push_request(&self, bus_id: String) {
+        send(
+            &self.tx,
+            push_result_msg(bus_id, "No permission of USB forwarding".to_string()),
+        );
+    }
+
     pub fn handle_push_request(&mut self, bus_id: String) {
         // A channel whose `pull()`/`run_channel` task already ended (failed
         // listener bind, failed `usbip attach`, or a relay that hit EOF) has
