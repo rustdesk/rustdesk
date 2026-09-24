@@ -69,6 +69,10 @@ struct Shared {
     // lives on the capturer that uses it. The receive thread defers any cursor that races the
     // store.
     cursor_transform: std::sync::atomic::AtomicI32,
+    // The cursor calibration geometry, from the same snapshot as the transform and stored before
+    // it: a receive thread that has seen the transform sees this too. `None` means this stream
+    // never measures. Read once per shape arrival, never on the frame path.
+    cal_context: Mutex<Option<CalContext>>,
 }
 
 pub struct IpcDrmCapturer {
@@ -339,6 +343,7 @@ impl IpcDrmCapturer {
             }),
             cv: Condvar::new(),
             cursor_transform: std::sync::atomic::AtomicI32::new(TRANSFORM_PENDING),
+            cal_context: Mutex::new(None),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (tx, rx) = std::sync::mpsc::channel::<ResultType<(Vec<DrmDisplayInfo>, usize)>>();
@@ -365,6 +370,13 @@ impl IpcDrmCapturer {
         let wl = scrap::wayland::display::get_displays();
         let (wl_transform, origin) = transform_and_origin(&displays, wire_idx, &wl);
         let transform = frame_transform(wl_transform);
+        // Same snapshot as the transform, stored BEFORE the transform's Release store below.
+        let cal = calibration_context(&displays, wire_idx, &wl, snapshot_gen);
+        log::info!(
+            "drm: cursor calibration for display {display} ({}): {cal:?}",
+            displays.get(wire_idx).map(|d| d.name.as_str()).unwrap_or("?")
+        );
+        *shared.cal_context.lock().unwrap() = cal.ok();
         // This capturer now shows that layout. If the session init's own wayland query failed it
         // saved an empty baseline, so this is the only record of what the stream is built on.
         super::display_service::note_capturer_layout(&wl.displays, snapshot_gen);
@@ -896,6 +908,60 @@ pub struct DrmCursorData {
     pub hotx: i32,
     pub hoty: i32,
     pub colors: Vec<u8>,
+}
+
+// The kernel only exposes a cursor hotspot on DRIVER_CURSOR_HOTSPOT drivers (VMs); on bare metal
+// the wire carries `infer_hotspot`'s guess, which the bitmap alone cannot get right for a shape
+// whose click point the theme put where the alpha does not mark it. But
+// `plane_origin = pointer_tip - hotspot`, this process injects the tip itself, and the plane
+// position rides every frame: once both sit still, the difference IS the hotspot.
+
+/// The calibration geometry of one stream, resolved once when the capturer is built, from the
+/// wayland snapshot the frame transform comes from. Immutable for the session; a layout change
+/// bumps the snapshot generation, which stops measurement, and rebuilds the capturer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CalContext {
+    /// This output's rect in the logical layout the peer's absolute coordinates live in.
+    rect: (i32, i32, i32, i32),
+    /// The scanout size the cursor plane position is expressed in.
+    physical_size: (i32, i32),
+    /// The snapshot generation this was built from.
+    built_gen: u64,
+}
+
+/// Every eligibility check at once, on one snapshot. A partial snapshot cannot be trusted (the
+/// same rule `transform_and_origin` applies before it trusts a match), the output must be an
+/// identity match and never the layout-order guess, any rotation declines because the plane is
+/// unrotated scanout space while the injected point is the oriented layout (180 included, so the
+/// UNFOLDED transform is read), and the geometry must be usable.
+fn calibration_context(
+    drm: &[DrmDisplayInfo],
+    wire_idx: usize,
+    wl: &scrap::wayland::display::Displays,
+    gen: u64,
+) -> Result<CalContext, &'static str> {
+    if wl.displays.is_empty() || (wl.displays.len() == 1 && drm.len() > 1) {
+        return Err("partial wayland snapshot");
+    }
+    let info = drm.get(wire_idx).ok_or("wire index out of range")?;
+    let j = identity_matches(drm, &wl.displays)
+        .get(wire_idx)
+        .copied()
+        .flatten()
+        .ok_or("no identity match")?;
+    if wl.displays[j].transform != 0 {
+        return Err("rotated output");
+    }
+    let rects = scrap::wayland::display::logical_rects_of_displays(&wl.displays);
+    let r = rects.get(j).ok_or("no logical rect")?;
+    if r.w <= 0 || r.h <= 0 || info.width == 0 || info.height == 0 {
+        return Err("degenerate geometry");
+    }
+    Ok(CalContext {
+        rect: (r.x, r.y, r.w, r.h),
+        physical_size: (info.width as i32, info.height as i32),
+        built_gen: gen,
+    })
 }
 
 static DRM_CURSOR: Mutex<BTreeMap<i32, (u64, DrmCursorData)>> = Mutex::new(BTreeMap::new());
@@ -1867,6 +1933,7 @@ mod drm_capturer_tests {
                 }),
                 cv: Condvar::new(),
                 cursor_transform: std::sync::atomic::AtomicI32::new(0),
+                cal_context: Mutex::new(None),
             }),
             stop: Arc::new(AtomicBool::new(false)),
             display: 0,
@@ -2525,6 +2592,70 @@ mod drm_capturer_tests {
         let mut c = capturer_with(None);
         put_frame(&c, 800, 600);
         assert!(matches!(c.frame(Duration::from_millis(50)), Ok(_)));
+    }
+
+    #[test]
+    fn a_calibration_context_exists_only_for_an_identity_matched_upright_output() {
+        let one = |t: i32| {
+            let mut o = wl_display("HDMI-1", 0, 0, 1920, 1080);
+            o.transform = t;
+            scrap::wayland::display::Displays {
+                primary: 0,
+                displays: vec![o],
+            }
+        };
+        let drm = [drm_display("HDMI-A-1", 1920, 1080)];
+        assert_eq!(
+            calibration_context(&drm, 0, &one(0), 7),
+            Ok(CalContext {
+                rect: (0, 0, 1920, 1080),
+                physical_size: (1920, 1080),
+                built_gen: 7
+            })
+        );
+        for t in [90, 180, 270] {
+            assert!(calibration_context(&drm, 0, &one(t), 7).is_err(), "transform {t}");
+        }
+        // 180 is folded to 0 for the FRAME; that fold must never reach the calibration.
+        assert_eq!(frame_transform(transform_and_origin(&drm, 0, &one(180)).0), 0);
+        // Partial snapshot: two connectors, one output, even one with a matching name.
+        let two = [
+            drm_display("HDMI-A-1", 1920, 1080),
+            drm_display("DP-1", 2560, 1440),
+        ];
+        assert!(calibration_context(&two, 0, &one(0), 7).is_err());
+        // No identity match: the frame path guesses an origin, the calibration must not.
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![
+                wl_display("DP-1", 0, 0, 2560, 1440),
+                wl_display("DP-2", 2560, 0, 3840, 2160),
+            ],
+        };
+        assert!(calibration_context(&drm, 0, &wl, 7).is_err());
+        assert_eq!(transform_and_origin(&drm, 0, &wl).0, 0);
+        // Degenerate geometry.
+        let mut a = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        a.logical_size = Some((0, 0));
+        let mut b = wl_display("DP-1", 1920, 0, 2560, 1440);
+        b.logical_size = Some((0, 0));
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![a, b],
+        };
+        assert!(calibration_context(&two, 0, &wl, 7).is_err());
+        // wire_idx = 1: the rotated index 0 declines, the upright index 1 yields ITS rect.
+        let mut r = wl_display("HDMI-1", 0, 0, 1920, 1080);
+        r.transform = 90;
+        let wl = scrap::wayland::display::Displays {
+            primary: 0,
+            displays: vec![r, wl_display("DP-1", 1920, 0, 2560, 1440)],
+        };
+        assert!(calibration_context(&two, 0, &wl, 7).is_err());
+        assert_eq!(
+            calibration_context(&two, 1, &wl, 7).map(|c| (c.rect, c.physical_size)),
+            Ok(((1920, 0, 2560, 1440), (2560, 1440)))
+        );
     }
 
     fn drm_display(name: &str, w: u32, h: u32) -> DrmDisplayInfo {
