@@ -252,6 +252,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   });
 
+  testWidgets('saved button stays clear of wheel after viewport narrows',
+      (tester) async {
+    savedPositions['rl-mouse-btn-pos'] = '{"x":300.0,"y":180.0}';
+    tester.view.physicalSize = const Size(800, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final rightButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    expect(tester.getRect(rightButton).left, 300);
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
+    final wheel = find.byType(FloatingWheel);
+    expect(
+        tester.getRect(rightButton).overlaps(tester.getRect(wheel)), isFalse);
+    await tester.tap(wheel);
+    expect((ffi.inputModel as _Input).pressedButtons, [MouseButtons.wheel]);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 60));
+  });
+
   testWidgets('viewport shrink preserves an active button drag',
       (tester) async {
     tester.view.physicalSize = const Size(800, 400);
@@ -276,6 +300,34 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 60));
     }
+  });
+
+  testWidgets('rotation during a drag preserves the landscape position',
+      (tester) async {
+    const original = '{"x":600.0,"y":120.0}';
+    savedPositions['ll-mouse-btn-pos'] = original;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final leftButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final gesture = await tester.startGesture(tester.getCenter(leftButton));
+    try {
+      await gesture.moveBy(const Offset(30, -40));
+      await tester.pump();
+      tester.view.physicalSize = const Size(800, 400);
+      await tester.pump();
+      expect(tester.getRect(leftButton).topLeft, const Offset(600, 120));
+    } finally {
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(savedPositions['ll-mouse-btn-pos'], original);
   });
 
   testWidgets('temporary viewport shrink preserves saved button positions',

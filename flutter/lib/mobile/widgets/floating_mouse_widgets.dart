@@ -436,10 +436,10 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final currentOrientation = MediaQuery.of(context).orientation;
-    if ((_previousOrientation == null ||
-            _previousOrientation != currentOrientation) &&
-        !(_isDown && _isDragging)) {
-      _resetPosition(currentOrientation);
+    if (_previousOrientation == null ||
+        _previousOrientation != currentOrientation) {
+      _resetPosition(currentOrientation,
+          avoidWheel: _previousOrientation != null);
     }
     _previousOrientation = currentOrientation;
   }
@@ -448,10 +448,13 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   void didUpdateWidget(FloatingLeftRightButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.viewportSize != widget.viewportSize) {
-      if (_isDown && _isDragging) {
+      final currentOrientation = MediaQuery.of(context).orientation;
+      if (_isDown &&
+          _isDragging &&
+          _previousOrientation == currentOrientation) {
         _onMoveUpdateDelta(Offset.zero);
       } else {
-        _resetPosition(MediaQuery.of(context).orientation);
+        _resetPosition(currentOrientation, avoidWheel: true);
       }
     }
   }
@@ -507,12 +510,12 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     return _loadPositionFromString(ps) ?? _defaultPosition(isLeft);
   }
 
-  void _restorePosition(Orientation ori) {
+  void _restorePosition(Orientation ori, {bool avoidWheel = false}) {
     final saved = _savedOrDefaultPosition(ori, _isLeft);
     final otherSaved = _savedOrDefaultPosition(ori, !_isLeft);
     _position = _clampPosition(saved);
     final otherPosition = _clampPosition(otherSaved);
-    if (_position != saved || otherPosition != otherSaved) {
+    if (avoidWheel || _position != saved || otherPosition != otherSaved) {
       final buttonRect = Rect.fromLTWH(_position.dx, _position.dy,
           _kLeftRightButtonWidth, _kLeftRightButtonHeight);
       final size = widget.viewportSize;
@@ -544,9 +547,9 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     );
   }
 
-  void _resetPosition(Orientation ori) {
+  void _resetPosition(Orientation ori, {bool avoidWheel = false}) {
     setState(() {
-      _restorePosition(ori);
+      _restorePosition(ori, avoidWheel: avoidWheel);
       _isInitialized = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
