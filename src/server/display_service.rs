@@ -136,6 +136,21 @@ impl WaylandLayout {
 #[cfg(target_os = "linux")]
 static WAYLAND_LAYOUT_DRIFTED: AtomicBool = AtomicBool::new(false);
 
+/// True while the layout has drifted from the session-init baseline AND the matching uinput
+/// range was applied, which is the condition `remap_wayland_uinput_coord` remaps under. While
+/// it holds, an injected point has been moved onto the live layout and no longer lives in the
+/// layout the DRM cursor calibration resolved its geometry from, so the calibration declines
+/// to measure. It is a secondary guard: the snapshot generation is what stops a measurement
+/// once the layout moved, and this covers the window in which the remap is active and the
+/// promotion that re-baselines is still owed. Both are written by the poll below, so a layout
+/// change is seen up to one check interval late; inside that window the bitmap bound in the
+/// measurement is the only guard, and a value that passes it is replaced by the next confirmed
+/// pair. A failed range apply stores false, and then nothing is remapped either.
+#[cfg(all(target_os = "linux", feature = "drm"))]
+pub(crate) fn wayland_layout_drifted() -> bool {
+    WAYLAND_LAYOUT_DRIFTED.load(Ordering::Relaxed)
+}
+
 #[cfg(target_os = "linux")]
 pub(super) fn set_wayland_uinput_rect(rect: (i32, i32, i32, i32)) {
     WAYLAND_UINPUT_RECT.lock().unwrap().rect = Some(rect);
