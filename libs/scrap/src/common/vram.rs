@@ -15,8 +15,9 @@ use hbb_common::{
     bytes::Bytes,
     log, ResultType,
 };
+pub use hwcodec::common::Driver;
 use hwcodec::{
-    common::{DataFormat, Driver, MAX_GOP},
+    common::{DataFormat, MAX_GOP},
     vram::{
         decode::{self, DecodeFrame, Decoder},
         encode::{self, EncodeFrame, Encoder},
