@@ -5,7 +5,7 @@ diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
      return 0;
  }
  
-+static int qsv_update_hevc_packet_size(QSVEncContext *q, const mfxInfoMFX *mfx)
++static int qsv_update_packet_size(QSVEncContext *q, const mfxInfoMFX *mfx)
 +{
 +    // Intel documents a larger buffer for complex CQP frames.
 +    // https://github.com/Intel-Media-SDK/MediaSDK/blob/master/doc/mediasdk_release_notes.md
@@ -25,8 +25,8 @@ diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
                                    "Error calling GetVideoParam");
  
 -    q->packet_size = q->param.mfx.BufferSizeInKB * q->param.mfx.BRCParamMultiplier * 1000;
-+    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
-+        ret = qsv_update_hevc_packet_size(q, &q->param.mfx);
++    if (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_HEVC) {
++        ret = qsv_update_packet_size(q, &q->param.mfx);
 +        if (ret < 0)
 +            return ret;
 +    } else {
@@ -39,13 +39,13 @@ diff --git a/libavcodec/qsvenc.c b/libavcodec/qsvenc.c
      if (ret < 0)
          return ff_qsv_print_error(avctx, ret, "Error during resetting");
  
-+    if (avctx->codec_id == AV_CODEC_ID_HEVC) {
++    if (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_HEVC) {
 +        mfxVideoParam param = { 0 };
 +
 +        ret = MFXVideoENCODE_GetVideoParam(q->session, &param);
 +        if (ret < 0)
 +            return ff_qsv_print_error(avctx, ret, "Error querying parameters after reset");
-+        ret = qsv_update_hevc_packet_size(q, &param.mfx);
++        ret = qsv_update_packet_size(q, &param.mfx);
 +        if (ret < 0)
 +            return ret;
 +    }
