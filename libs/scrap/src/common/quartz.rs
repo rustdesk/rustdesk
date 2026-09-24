@@ -13,7 +13,8 @@ impl Capturer {
     pub fn new(display: Display) -> io::Result<Capturer> {
         let frame = Arc::new(Mutex::new(None));
 
-        let f = frame.clone();
+        // A retired native stream must not keep the last captured frame alive.
+        let f = Arc::downgrade(&frame);
         let inner = quartz::Capturer::new(
             display.0,
             display.width(),
@@ -21,8 +22,10 @@ impl Capturer {
             quartz::PixelFormat::Argb8888,
             Default::default(),
             move |inner| {
-                if let Ok(mut f) = f.lock() {
-                    *f = Some(inner);
+                if let Some(f) = f.upgrade() {
+                    if let Ok(mut f) = f.lock() {
+                        *f = Some(inner);
+                    };
                 }
             },
         )
@@ -46,6 +49,10 @@ impl Capturer {
 
 impl crate::TraitCapturer for Capturer {
     fn frame<'a>(&'a mut self, _timeout_ms: std::time::Duration) -> io::Result<Frame<'a>> {
+        // Stopped is terminal even when a replacement display has the same geometry.
+        if self.inner.is_stopped() {
+            return Err(io::ErrorKind::ConnectionReset.into());
+        }
         match self.frame.try_lock() {
             Ok(mut handle) => {
                 let mut frame = None;

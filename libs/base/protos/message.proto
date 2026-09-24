@@ -593,7 +593,26 @@ message DisplayResolution {
   Resolution resolution = 2;
 }
 
+// Native display identity, output pixels and desktop scale for an owned virtual display.
+message VirtualDisplayMode {
+  uint32 display_id = 1;
+  int32 width = 2;
+  int32 height = 3;
+  uint32 scale = 4;
+  string request_id = 5;
+}
+
 message SupportedResolutions { repeated Resolution resolutions = 1; }
+
+message DisplayScaleRequest {
+  string request_id = 1;
+  int32 display = 2;
+  // Zero queries capabilities. A change requires the token from a fresh query.
+  double percent = 3;
+  string token = 4;
+  // Bind post-change readback to the previously confirmed display.
+  string expected_identity = 5;
+}
 
 message SwitchDisplay {
   int32 display = 1;
@@ -859,6 +878,10 @@ message Misc {
     DisplayResolution change_display_resolution = 36;
     MessageQuery message_query = 37;
     int32 follow_current_display = 38;
+    VirtualDisplayMode virtual_display_mode = 39;
+    DisplayScaleRequest display_scale_request = 40;
+    string display_scale_response = 41;
+    string virtual_display_mode_response = 42;
   }
 }
 

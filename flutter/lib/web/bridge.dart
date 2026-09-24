@@ -417,6 +417,11 @@ class RustdeskImpl {
         ]));
   }
 
+  void sessionRefreshDisplayCapture(
+      {required UuidValue sessionId, dynamic hint}) {
+    throw UnsupportedError('All displays is unavailable in the web client');
+  }
+
   Future<void> sessionHandleFlutterKeyEvent(
       {required UuidValue sessionId,
       required String character,
@@ -693,6 +698,21 @@ class RustdeskImpl {
       {required UuidValue sessionId, dynamic hint}) {
     throw UnimplementedError("sessionSwitchSides");
   }
+
+  Future<void> sessionConfigureVirtualDisplay({
+    required UuidValue sessionId,
+    required String requestId,
+    required int displayId,
+    required int width,
+    required int height,
+    required int scale,
+    dynamic hint,
+  }) => Future.error(UnsupportedError('Native virtual display scaling is unavailable in the web client'));
+
+  Future<void> sessionRequestDisplayScale({required UuidValue sessionId,
+    required String requestId, required int display, required double percent,
+    required String token, required String expectedIdentity, dynamic hint}) =>
+    Future.error(UnsupportedError('System scaling is unavailable in the web client'));
 
   Future<void> sessionChangeResolution(
       {required UuidValue sessionId,

@@ -22,6 +22,9 @@ import 'package:flutter_hbb/models/peer_tab_model.dart';
 import 'package:flutter_hbb/models/printer_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
+import 'package:flutter_hbb/utils/virtual_display.dart';
+import 'package:flutter_hbb/models/display_scale_model.dart';
+import 'package:flutter_hbb/models/virtual_display_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
@@ -139,12 +142,8 @@ class FfiModel with ChangeNotifier {
   Timer? timerScreenshot;
 
   Rect? get rect => _rect;
-  bool get isOriginalResolutionSet =>
-      _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolutionSet ?? false;
   bool get isVirtualDisplayResolution =>
       _pi.tryGetDisplayIfNotAllDisplay()?.isVirtualDisplayResolution ?? false;
-  bool get isOriginalResolution =>
-      _pi.tryGetDisplayIfNotAllDisplay()?.isOriginalResolution ?? false;
 
   Map<String, bool> get permissions => _permissions;
   setPermissions(Map<String, bool> permissions) {
@@ -349,6 +348,16 @@ class FfiModel with ChangeNotifier {
         handleSyncPeerInfo(evt, sessionId, peerId);
       } else if (name == 'sync_platform_additions') {
         handlePlatformAdditions(evt, sessionId, peerId);
+      } else if (name == 'display_scale') {
+        final data = evt['data'];
+        if (data is String) {
+          DisplayScaleRequests.handle(sessionId.toString(), data);
+        }
+      } else if (name == 'virtual_display_mode') {
+        final data = evt['data'];
+        if (data is String) {
+          VirtualDisplayRequests.handle(sessionId.toString(), data);
+        }
       } else if (name == 'connection_ready') {
         setConnectionType(peerId, evt['secure'] == 'true',
             evt['direct'] == 'true', evt['stream_type'] ?? '');
@@ -816,6 +825,16 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  void _invalidatePendingFramesForDisplayChange(
+      Display previous, Display current) {
+    if (_pi.currentDisplay != kAllDisplayValue || _pi.displays.length != 1) {
+      return;
+    }
+    if (previous != current || previous.scale != current.scale) {
+      parent.target!.imageModel.invalidatePendingFrames();
+    }
+  }
+
   handleSwitchDisplay(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
     final display = int.parse(evt['display']);
@@ -848,7 +867,16 @@ class FfiModel with ChangeNotifier {
             evt['original_height'] ?? kInvalidResolutionValue.toString()) ??
         kInvalidResolutionValue;
     newDisplay._scale = _pi.scaleOfDisplay(display);
+    final previousDisplay = _pi.displays[display];
+    _invalidatePendingFramesForDisplayChange(previousDisplay, newDisplay);
     _pi.displays[display] = newDisplay;
+
+    // A later sync_peer_info may already see these updated dimensions.
+    if (_pi.currentDisplay == kAllDisplayValue &&
+        (previousDisplay.width != newDisplay.width ||
+            previousDisplay.height != newDisplay.height)) {
+      _updateSessionWidthHeight(sessionId);
+    }
 
     if (!_pi.isSupportMultiUiSession || _pi.currentDisplay == display) {
       updateCurDisplay(sessionId);
@@ -1488,7 +1516,6 @@ class FfiModel with ChangeNotifier {
     }
 
     _pi.isSet.value = true;
-    stateGlobal.resetLastResolutionGroupValues(peerId);
 
     if (isDesktop || isWebDesktop) {
       // checkDesktopKeyboardMode may change the keyboard mode if the current
@@ -1671,18 +1698,45 @@ class FfiModel with ChangeNotifier {
   handleSyncPeerInfo(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) async {
     if (evt['displays'] != null) {
+      final previousDisplayCount = _pi.displays.length;
       cachedPeerData.peerInfo['displays'] = evt['displays'];
       List<dynamic> displays = json.decode(evt['displays']);
       List<Display> newDisplays = [];
       for (int i = 0; i < displays.length; ++i) {
         newDisplays.add(evtToDisplay(displays[i]));
       }
+      // The matching native modes arrive in the next platform-additions event.
+      if (_pi.platformAdditions.containsKey(kMacOSVirtualDisplayModes)) {
+        _pi.platformAdditions[kMacOSVirtualDisplayModes] = <String, dynamic>{};
+        cachedPeerData.peerInfo['platform_additions'] =
+            json.encode(_pi.platformAdditions);
+      }
+      final displaySizesChanged = _pi.currentDisplay == kAllDisplayValue &&
+          (previousDisplayCount != newDisplays.length ||
+              newDisplays.asMap().entries.any((entry) =>
+                  _pi.displays[entry.key].width != entry.value.width ||
+                  _pi.displays[entry.key].height != entry.value.height));
+      if (previousDisplayCount == 1 && newDisplays.length == 1) {
+        _invalidatePendingFramesForDisplayChange(
+            _pi.displays.first, newDisplays.first);
+      }
       _pi.displays.value = newDisplays;
       _pi.displaysCount.value = _pi.displays.length;
 
       if (_pi.currentDisplay == kAllDisplayValue) {
+        if (displaySizesChanged && displaysRect() == _rect) {
+          _updateSessionWidthHeight(sessionId);
+        }
         updateCurDisplay(sessionId);
-        // to-do: What if the displays are changed?
+        if (previousDisplayCount != _pi.displays.length) {
+          parent.target!.imageModel.clearImage(
+              notify: true, invalidatePending: true, updateCursorPos: false);
+          try {
+            bind.sessionRefreshDisplayCapture(sessionId: sessionId);
+          } catch (e) {
+            debugPrint('Failed to refresh display capture: $e');
+          }
+        }
       } else {
         if (_pi.currentDisplay >= 0 &&
             _pi.currentDisplay < _pi.displays.length) {
@@ -1727,12 +1781,29 @@ class FfiModel with ChangeNotifier {
       return;
     }
 
+    // Display updates replace virtual-display state but omit other capabilities.
+    final virtualDisplayKeys = [
+      kMacOSVirtualDisplayModes,
+      if (_pi.platform == kPeerPlatformMacOS) ...[
+        'macos_virtual_display_supported',
+        'macos_virtual_displays',
+        'virtual_display_native_scale',
+      ],
+    ];
     if (updateData.isEmpty) {
+      for (final key in virtualDisplayKeys) {
+        _pi.platformAdditions.remove(key);
+      }
       _pi.platformAdditions.remove(kPlatformAdditionsRustDeskVirtualDisplays);
       _pi.platformAdditions.remove(kPlatformAdditionsAmyuniVirtualDisplays);
     } else {
       try {
         final updateJson = json.decode(updateData) as Map<String, dynamic>;
+        for (final key in virtualDisplayKeys) {
+          if (!updateJson.containsKey(key)) {
+            _pi.platformAdditions.remove(key);
+          }
+        }
         for (final key in updateJson.keys) {
           _pi.platformAdditions[key] = updateJson[key];
         }
@@ -1751,6 +1822,9 @@ class FfiModel with ChangeNotifier {
 
     cachedPeerData.peerInfo['platform_additions'] =
         json.encode(_pi.platformAdditions);
+    if (_pi.platform == kPeerPlatformMacOS) {
+      notifyListeners();
+    }
   }
 
   handleFollowCurrentDisplay(
@@ -1915,6 +1989,8 @@ class VirtualMouseMode with ChangeNotifier {
 
 class ImageModel with ChangeNotifier {
   ui.Image? _image;
+  int _imageGeneration = 0;
+  bool _updateCursorPosOnNextImage = true;
 
   ui.Image? get image => _image;
 
@@ -1936,7 +2012,27 @@ class ImageModel with ChangeNotifier {
 
   addCallbackOnFirstImage(Function(String) cb) => callbacksOnFirstImage.add(cb);
 
-  clearImage() => _image = null;
+  void invalidatePendingFrames() {
+    _imageGeneration++;
+  }
+
+  clearImage(
+      {bool notify = false,
+      bool invalidatePending = false,
+      bool updateCursorPos = true}) {
+    if (invalidatePending) {
+      invalidatePendingFrames();
+    }
+    if (notify && invalidatePending) {
+      disposeImage();
+    } else {
+      _image = null;
+    }
+    _updateCursorPosOnNextImage = updateCursorPos;
+    if (notify) {
+      notifyListeners();
+    }
+  }
 
   bool _webDecodingRgba = false;
   final List<Uint8List> _webRgbaList = List.empty(growable: true);
@@ -1975,6 +2071,7 @@ class ImageModel with ChangeNotifier {
   }
 
   decodeAndUpdate(int display, Uint8List rgba) async {
+    final imageGeneration = _imageGeneration;
     final pid = parent.target?.id;
     final rect = parent.target?.ffiModel.pi.getDisplayRect(display);
     final image = await img.decodeImageFromPixels(
@@ -1989,32 +2086,40 @@ class ImageModel with ChangeNotifier {
       image?.dispose();
       return;
     }
-    await update(image);
+    await update(image,
+        isCurrentSession: () => imageGeneration == _imageGeneration);
   }
 
   Future<void> update(ui.Image? image,
       {bool Function()? isCurrentSession}) async {
     if (_disposeIfStale(image, isCurrentSession)) return;
+    final updateCursorPos = _updateCursorPosOnNextImage;
     if (_image == null && image != null) {
       if (isDesktop || isWebDesktop) {
-        await parent.target?.canvasModel.updateViewStyle();
+        await parent.target?.canvasModel
+            .updateViewStyle(refreshMousePos: updateCursorPos);
         await parent.target?.canvasModel.updateScrollStyle();
         await parent.target?.canvasModel.initializeEdgeScrollEdgeThickness();
       }
       if (parent.target != null) {
-        await initializeCursorAndCanvas(parent.target!);
+        await initializeCursorAndCanvas(parent.target!,
+            updateCursorPos: updateCursorPos,
+            isCurrentSession: isCurrentSession);
       }
     }
     if (_disposeIfStale(image, isCurrentSession)) return;
     _image?.dispose();
     _image = image;
+    // A failed decode must not consume the pending cursor-preservation request.
+    if (image != null || isCurrentSession == null) {
+      _updateCursorPosOnNextImage = true;
+    }
     if (image != null) notifyListeners();
   }
 
   bool _disposeIfStale(ui.Image? image, bool Function()? isCurrentSession) {
-    if (image == null || isCurrentSession == null) return false;
-    if (isCurrentSession()) return false;
-    image.dispose();
+    if (isCurrentSession == null || isCurrentSession()) return false;
+    image?.dispose();
     return true;
   }
 
@@ -2052,6 +2157,7 @@ class ImageModel with ChangeNotifier {
   void disposeImage() {
     _image?.dispose();
     _image = null;
+    _updateCursorPosOnNextImage = true;
   }
 }
 
@@ -4245,15 +4351,9 @@ class Display {
       other.height == height &&
       other.cursorEmbedded == cursorEmbedded;
 
-  bool get isOriginalResolutionSet =>
-      originalWidth != kInvalidResolutionValue &&
-      originalHeight != kInvalidResolutionValue;
   bool get isVirtualDisplayResolution =>
       originalWidth == kVirtualDisplayResolutionValue &&
       originalHeight == kVirtualDisplayResolutionValue;
-  bool get isOriginalResolution =>
-      width == (originalWidth * scale).round() &&
-      height == (originalHeight * scale).round();
 }
 
 class Resolution {
@@ -4301,7 +4401,8 @@ class PeerInfo with ChangeNotifier {
 
   bool get isSupportMultiDisplay =>
       (isDesktop || isWebDesktop) && isSupportMultiUiSession;
-  bool get forceTextureRender => currentDisplay == kAllDisplayValue;
+  bool get forceTextureRender =>
+      currentDisplay == kAllDisplayValue && displays.length > 1;
 
   bool get cursorEmbedded => tryGetDisplay()?.cursorEmbedded ?? false;
 
@@ -4401,15 +4502,20 @@ Future<Map<String, dynamic>?> getCanvasConfig(SessionID sessionId) async {
   }
 }
 
-Future<void> initializeCursorAndCanvas(FFI ffi) async {
+Future<void> initializeCursorAndCanvas(FFI ffi,
+    {bool updateCursorPos = true, bool Function()? isCurrentSession}) async {
   var p = await getCanvasConfig(ffi.sessionId);
+  if (isCurrentSession != null && !isCurrentSession()) return;
   int currentDisplay = 0;
   if (p != null) {
     currentDisplay = p['currentDisplay'];
   }
-  if (p == null || currentDisplay != ffi.ffiModel.pi.currentDisplay) {
+  if (!updateCursorPos ||
+      p == null ||
+      currentDisplay != ffi.ffiModel.pi.currentDisplay) {
     ffi.cursorModel.updateDisplayOrigin(
-        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0);
+        ffi.ffiModel.rect?.left ?? 0, ffi.ffiModel.rect?.top ?? 0,
+        updateCursorPos: updateCursorPos);
     return;
   }
   double xCursor = p['xCursor'];
