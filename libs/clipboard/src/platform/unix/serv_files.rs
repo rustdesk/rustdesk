@@ -213,13 +213,23 @@ impl ClipFiles {
                         ),
                     });
                 }
-                let read_size = if offset + length > file.size {
+                let read_size = if length > file.size - offset {
                     file.size - offset
                 } else {
                     length
                 };
 
-                let mut buf = vec![0u8; read_size as usize];
+                // The peer picks the size (up to 4 GiB); fail the request, not the process.
+                let mut buf = Vec::new();
+                if buf.try_reserve_exact(read_size as usize).is_err() {
+                    log::error!(
+                        "failed to allocate {} bytes for file contents requested from conn: {}",
+                        read_size,
+                        conn_id
+                    );
+                    return Err(CliprdrError::CliprdrOutOfMemory);
+                }
+                buf.resize(read_size as usize, 0);
 
                 file.read_exact_at(&mut buf, offset)?;
 
@@ -266,8 +276,11 @@ pub fn read_file_contents(
             file_idx: list_index as usize,
         }
     } else if dw_flags == 0x2 {
-        let offset = (n_position_high as u64) << 32 | n_position_low as u64;
-        let length = cb_requested as u64;
+        // nPositionLow and cbRequested are UINT32s carried in i32 fields. Sign-extending
+        // them rejects offsets whose low word is >= 2 GiB and turns a negative length
+        // into a near-u64::MAX read.
+        let offset = (n_position_high as u64) << 32 | n_position_low as u32 as u64;
+        let length = cb_requested as u32 as u64;
 
         FileContentsRequest::Range {
             stream_id,
@@ -414,5 +427,36 @@ mod sig_test {
         }
 
         clear_files(); // leave the global clean for other tests
+    }
+
+    #[test]
+    fn range_request_huge_length_is_clamped() {
+        let tmp = TmpDir::new("range");
+        let file = tmp.join("data.bin");
+        fs::write(&file, b"0123456789").unwrap();
+        let files = vec![path_str(&file)];
+
+        let mut clip = ClipFiles::default();
+        clip.sync_files(&files, fingerprint(&files)).unwrap();
+        let file_idx = clip.first_file_index;
+
+        // offset + length used to wrap to 0, skip the clamp and ask for a u64::MAX buffer.
+        let resp = clip
+            .serve_file_contents(
+                0,
+                FileContentsRequest::Range {
+                    stream_id: 0,
+                    file_idx,
+                    offset: 1,
+                    length: u64::MAX,
+                },
+            )
+            .unwrap();
+        match resp {
+            ClipboardFile::FileContentsResponse { requested_data, .. } => {
+                assert_eq!(requested_data, b"123456789");
+            }
+            _ => panic!("unexpected response"),
+        }
     }
 }
