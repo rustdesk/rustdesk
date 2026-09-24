@@ -3619,8 +3619,13 @@ class CursorModel with ChangeNotifier {
 
   String nativeKey(CursorData cache, double scale) {
     final key = '${_keyScope}_${cache.updateGetKey(scale)}';
-    // A native cursor at another raster does not hold the pixels this one is made from.
-    if (!_cacheKeys.contains(key)) _nativeIds.remove(cache.id);
+    // A shape is held by a native cursor at the raster asked last; one at another raster does
+    // not hold the pixels this one is made from.
+    if (_cacheKeys.contains(key)) {
+      _nativeIds.add(cache.id);
+    } else {
+      _nativeIds.remove(cache.id);
+    }
     return key;
   }
 

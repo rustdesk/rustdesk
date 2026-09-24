@@ -267,6 +267,27 @@ void main() {
         isNotEmpty);
   });
 
+  test('a raster returned to counts again as held by its native cursor',
+      () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, 'A', size: 32);
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    await _feed(ffi, 'B');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+
+    _select(ffi, 'A');
+    ffi.cursor.holdFetches = true;
+    buildCursorOfCache(cursor, 0.5, cursor.cache); // no cursor at 0.5: fetched
+    buildCursorOfCache(cursor, 1.0, cursor.cache); // back at 1.0, which has one
+    _select(ffi, 'B');
+    ffi.cursor.answerFetches();
+    await _settle();
+    expect(cursor.cachedShape('A')!.hasPixels, isFalse,
+        reason: 'its native cursor at the raster asked last holds it');
+  });
+
   test('shapes waiting for a native cursor keep their pixels, within the limit',
       () async {
     const max = CursorModel.kRecentShapes;
