@@ -219,16 +219,20 @@ impl ClipFiles {
                     length
                 };
 
-                // The peer picks the size (up to 4 GiB); fail the request, not the process.
-                let mut buf = Vec::new();
-                if buf.try_reserve_exact(read_size as usize).is_err() {
-                    log::error!(
-                        "failed to allocate {} bytes for file contents requested from conn: {}",
-                        read_size,
-                        conn_id
-                    );
-                    return Err(CliprdrError::CliprdrOutOfMemory);
+                // A larger response cannot be framed for sending, so fail before reading it.
+                if read_size > hbb_common::bytes_codec::MAX_FRAME_LENGTH as u64 {
+                    return Err(CliprdrError::InvalidRequest {
+                        description: format!(
+                            "file contents request of {} bytes exceeds the frame limit, conn: {}",
+                            read_size, conn_id
+                        ),
+                    });
                 }
+
+                // The peer picks the size; fail the request, not the process.
+                let mut buf = Vec::new();
+                buf.try_reserve_exact(read_size as usize)
+                    .map_err(|_| CliprdrError::CliprdrOutOfMemory)?;
                 buf.resize(read_size as usize, 0);
 
                 file.read_exact_at(&mut buf, offset)?;
@@ -356,6 +360,30 @@ mod sig_test {
         p.to_string_lossy().to_string()
     }
 
+    // Tests that drive the global CLIP_FILES must not interleave.
+    static CLIP_FILES_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn lock_clip_files() -> std::sync::MutexGuard<'static, ()> {
+        CLIP_FILES_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    // Sparse, so a multi-GiB file costs no disk space.
+    fn write_at(path: &PathBuf, offset: u64, data: &[u8]) {
+        use std::io::{Seek, SeekFrom, Write};
+        let mut f = fs::File::create(path).unwrap();
+        f.seek(SeekFrom::Start(offset)).unwrap();
+        f.write_all(data).unwrap();
+    }
+
+    fn range_data(res: Vec<Result<ClipboardFile, CliprdrError>>) -> Vec<u8> {
+        match res.into_iter().last() {
+            Some(Ok(ClipboardFile::FileContentsResponse { requested_data, .. })) => requested_data,
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
     #[test]
     fn fingerprint_missing_path_is_default() {
         let tmp = TmpDir::new("missing");
@@ -406,7 +434,8 @@ mod sig_test {
         let files = vec![path_str(&file)];
 
         // Drive the public, guarded `sync_files` over the global CLIP_FILES;
-        // reset first (this is the only test that touches the global).
+        // reset first.
+        let _guard = lock_clip_files();
         clear_files();
 
         sync_files(&files).unwrap();
@@ -458,5 +487,54 @@ mod sig_test {
             }
             _ => panic!("unexpected response"),
         }
+    }
+
+    #[test]
+    fn range_request_decodes_wire_fields_as_u32() {
+        let tmp = TmpDir::new("decode");
+        let small = tmp.join("small.bin");
+        fs::write(&small, b"0123456789").unwrap();
+        let large = tmp.join("large.bin");
+        write_at(&large, 0x8000_0000, b"tail");
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&small), path_str(&large)]).unwrap();
+        let small_idx = CLIP_FILES.lock().first_file_index as i32;
+        let large_idx = small_idx + 1;
+
+        // A negative cbRequested is a UINT32 length, clamped to the rest of the file.
+        let res = read_file_contents(0, 0, small_idx, 0x2, 1, 0, -1);
+        assert_eq!(range_data(res), b"123456789");
+
+        // An nPositionLow with bit 31 set is an offset past 2 GiB, not a huge one.
+        let res = read_file_contents(0, 0, large_idx, 0x2, 0x8000_0000u32 as i32, 0, 4);
+        assert_eq!(range_data(res), b"tail");
+
+        clear_files();
+    }
+
+    #[test]
+    fn range_request_over_frame_limit_is_rejected() {
+        let tmp = TmpDir::new("frame");
+        let file = tmp.join("huge.bin");
+        let size = hbb_common::bytes_codec::MAX_FRAME_LENGTH as u64 + 1;
+        write_at(&file, size - 1, b"x");
+        let files = vec![path_str(&file)];
+
+        let mut clip = ClipFiles::default();
+        clip.sync_files(&files, fingerprint(&files)).unwrap();
+        let file_idx = clip.first_file_index;
+
+        let res = clip.serve_file_contents(
+            0,
+            FileContentsRequest::Range {
+                stream_id: 0,
+                file_idx,
+                offset: 0,
+                length: u32::MAX as u64,
+            },
+        );
+        assert!(matches!(res, Err(CliprdrError::InvalidRequest { .. })));
     }
 }
