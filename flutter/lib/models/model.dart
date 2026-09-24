@@ -3617,17 +3617,21 @@ class CursorModel with ChangeNotifier {
       '${_keyScope}_${cache.updateGetKey(scale)}';
 
   // Native cursors stay for the session, one per raster of each shape, and only [clear]
-  // deletes them, as before. They are not bounded because a delete frees nothing on Windows:
-  // the engine's `deleteCustomCursor/windows` releases the HCURSOR with `DeleteObject`, which
-  // does not take a cursor, so the handle leaks, and making the cursor again for a raster or a
-  // shape shown once more leaks another. Evicting would leak more than keeping.
+  // deletes them, as before; unlike the painted images they have no LRU, for now. A delete
+  // frees nothing on Windows: the engine's `deleteCustomCursor/windows` releases the HCURSOR
+  // with `DeleteObject`, which does not take a cursor. Measured on Windows with 500 cursors
+  // made by `CreateIconIndirect`, as the engine makes them: `DeleteObject` failed all 500 and
+  // left 500 USER objects alive, while `DestroyCursor` or `DestroyIcon` freed all 500. Each
+  // delete leaks its handle until the process exits, and making the cursor again for a raster
+  // or a shape shown once more leaks another, so an LRU would leak more than keeping them.
   //
   // Fixing the engine is not cheap. x64 runs our fork, rustdesk/engine, on Flutter 3.24; the
   // fix is one more patch to rebuild, publish, and carry across every Flutter upgrade. arm64
   // runs the stock engine of a newer Flutter, which has the same code: fixing it means
   // porting the fork to that version and building and publishing an arm64 engine as well, or
-  // an upstream fix and waiting for it to reach stable. Content ids keep the count to the
-  // shapes the peer really shows, a few dozen to a couple of hundred.
+  // an upstream fix and waiting for it to reach stable. Once both engines destroy cursors, an
+  // LRU like the painted images' can come back. Content ids keep the count to the shapes the
+  // peer really shows, a few dozen to a couple of hundred.
 
   /// The shape in use keeps its pixels, so a new raster is made from them at once; the others
   /// keep none once their native cursor holds them.
