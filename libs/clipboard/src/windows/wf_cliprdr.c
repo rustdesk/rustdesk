@@ -404,10 +404,13 @@ struct wf_served_file_list
 	UINT32 id;
 	UINT32 *connIDs; // connections the list was sent to
 	size_t nConnIDs;
+	UINT64 last_served; // served_file_list_seq when last sent; the lowest is evicted first
 	size_t nFiles;
 	size_t first_file_index;
 	WCHAR **file_names;
 	UINT64 *file_sizes;
+	BYTE *descriptors; // the FILEGROUPDESCRIPTORW sent, nonce included
+	SIZE_T descriptorsSize;
 };
 typedef struct wf_served_file_list wfServedFileList;
 
@@ -461,7 +464,7 @@ struct wf_clipboard
 	DWORD file_list_seq;   // clipboard sequence number the file list was read at
 	UINT32 file_list_id;   // wf_cliprdr_file_list_id() of the file list, 0 while none is valid
 	wfServedFileList served_file_lists[WF_CLIPRDR_SERVED_FILE_LISTS];
-	size_t next_served_file_list;
+	UINT64 served_file_list_seq;
 
 	BOOL legacyApi;
 	HMODULE hUser32;
@@ -2504,6 +2507,7 @@ static void wf_cliprdr_free_served_file_list(wfServedFileList *list)
 	}
 	free(list->file_sizes);
 	free(list->connIDs);
+	free(list->descriptors);
 	ZeroMemory(list, sizeof(*list));
 }
 
@@ -2525,17 +2529,65 @@ static void wf_cliprdr_forget_served_file_lists(wfClipboard *clipboard)
 
 	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
 		wf_cliprdr_free_served_file_list(&clipboard->served_file_lists[i]);
-	clipboard->next_served_file_list = 0;
 }
 
-static BOOL wf_cliprdr_copy_file_list(wfClipboard *clipboard, wfServedFileList *list)
+/* Whether a kept list has the current file_names and the same descriptors as dsc, apart
+ * from the nonce in fgd[0].clsid. */
+static BOOL wf_cliprdr_is_same_file_list(wfClipboard *clipboard, const wfServedFileList *list,
+										 const FILEGROUPDESCRIPTORW *dsc, SIZE_T size)
+{
+	SIZE_T nonce_start = offsetof(FILEGROUPDESCRIPTORW, fgd) + offsetof(FILEDESCRIPTORW, clsid);
+	SIZE_T nonce_end = nonce_start + sizeof(CLSID);
+	size_t i;
+
+	if (!list->file_names || list->nFiles != clipboard->nFiles ||
+		list->descriptorsSize != size || size < nonce_end)
+		return FALSE;
+	for (i = 0; i < list->nFiles; i++)
+	{
+		if (!clipboard->file_names[i] || wcscmp(list->file_names[i], clipboard->file_names[i]) != 0)
+			return FALSE;
+	}
+	return memcmp(list->descriptors, dsc, nonce_start) == 0 &&
+		   memcmp(list->descriptors + nonce_end, (const BYTE *)dsc + nonce_end,
+				  size - nonce_end) == 0;
+}
+
+/* Puts a nonce in fgd[0].clsid, which peers ignore without FD_CLSID. The list id hashes it,
+ * so each copy gets its own id even when two copies have identical names, sizes and times
+ * (the same file in two folders). Re-sending unchanged files keeps their nonce, and id. */
+static void wf_cliprdr_stamp_file_list(wfClipboard *clipboard, FILEGROUPDESCRIPTORW *dsc,
+									   SIZE_T size)
+{
+	size_t i;
+
+	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
+	{
+		if (wf_cliprdr_is_same_file_list(clipboard, &clipboard->served_file_lists[i], dsc, size))
+		{
+			dsc->fgd[0].clsid =
+				((const FILEGROUPDESCRIPTORW *)clipboard->served_file_lists[i].descriptors)
+					->fgd[0]
+					.clsid;
+			return;
+		}
+	}
+	if (FAILED(CoCreateGuid(&dsc->fgd[0].clsid)))
+		ZeroMemory(&dsc->fgd[0].clsid, sizeof(CLSID));
+}
+
+static BOOL wf_cliprdr_copy_file_list(wfClipboard *clipboard, wfServedFileList *list,
+									  const FILEGROUPDESCRIPTORW *dsc, SIZE_T size)
 {
 	size_t i;
 
 	list->file_names = (WCHAR **)calloc(clipboard->nFiles, sizeof(WCHAR *));
 	list->file_sizes = (UINT64 *)calloc(clipboard->nFiles, sizeof(UINT64));
-	if (!list->file_names || !list->file_sizes)
+	list->descriptors = (BYTE *)malloc(size);
+	if (!list->file_names || !list->file_sizes || !list->descriptors)
 		return FALSE;
+	CopyMemory(list->descriptors, dsc, size);
+	list->descriptorsSize = size;
 	list->nFiles = clipboard->nFiles;
 	for (i = 0; i < clipboard->nFiles; i++)
 	{
@@ -2551,9 +2603,10 @@ static BOOL wf_cliprdr_copy_file_list(wfClipboard *clipboard, wfServedFileList *
 	return TRUE;
 }
 
-/* One slot per list, shared by every connection it was sent to, so pastes of the same
- * list do not push out a list another transfer is still reading. */
-static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 connID)
+/* One slot per list, shared by every connection it was sent to. A full table evicts the list
+ * sent least recently, so a list a transfer has just started on is kept. */
+static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 connID,
+												 const FILEGROUPDESCRIPTORW *dsc, SIZE_T size)
 {
 	wfServedFileList *list = NULL;
 	UINT32 *connIDs;
@@ -2571,16 +2624,21 @@ static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 
 
 	if (!list)
 	{
-		list = &clipboard->served_file_lists[clipboard->next_served_file_list];
-		clipboard->next_served_file_list =
-			(clipboard->next_served_file_list + 1) % WF_CLIPRDR_SERVED_FILE_LISTS;
+		// An empty slot has last_served 0, so it is taken first.
+		list = &clipboard->served_file_lists[0];
+		for (i = 1; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
+		{
+			if (clipboard->served_file_lists[i].last_served < list->last_served)
+				list = &clipboard->served_file_lists[i];
+		}
 		wf_cliprdr_free_served_file_list(list);
-		if (!wf_cliprdr_copy_file_list(clipboard, list))
+		if (!wf_cliprdr_copy_file_list(clipboard, list, dsc, size))
 		{
 			wf_cliprdr_free_served_file_list(list);
 			return;
 		}
 	}
+	list->last_served = ++clipboard->served_file_list_seq;
 
 	if (wf_cliprdr_served_to(list, connID))
 		return;
@@ -2591,8 +2649,8 @@ static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 
 	list->connIDs = connIDs;
 }
 
-/* Serves a request whose stream came from an earlier file list sent to the same connection.
- * An unknown list fails the request rather than falling back to the current files. */
+/* Serves a request by path from the file list it names, if that list was sent to the same
+ * connection. An unknown list fails the request rather than falling back to other files. */
 static BOOL wf_cliprdr_read_served_file_list(wfClipboard *clipboard,
 											 const CLIPRDR_FILE_CONTENTS_REQUEST *request,
 											 BYTE *data, UINT32 cbRequested, DWORD *puSize)
@@ -3375,8 +3433,10 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 			buff = groupDsc;
 			rc = ERROR_SUCCESS;
+			wf_cliprdr_stamp_file_list(clipboard, groupDsc, size);
 			clipboard->file_list_id = wf_cliprdr_file_list_id((const BYTE *)groupDsc, size);
-			wf_cliprdr_remember_served_file_list(clipboard, formatDataRequest->connID);
+			wf_cliprdr_remember_served_file_list(clipboard, formatDataRequest->connID, groupDsc,
+												 size);
 		}
 		else
 		{
@@ -3589,6 +3649,25 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		return ERROR_INTERNAL_ERROR;
 	}
 
+	// A stream whose list is no longer the one on this clipboard, because a newer list was sent
+	// or the clipboard now holds files from a peer, reads by path from the list it came from.
+	// Only lists sent to this connection are served, so the check below still stops a paste
+	// from getting files it was never offered.
+	if (fileContentsRequest->haveClipDataId &&
+		(fileContentsRequest->clipDataId != clipboard->file_list_id ||
+		 is_set_by_instance(clipboard) || is_file_descriptor_from_remote()))
+	{
+		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
+		cbRequested = fileContentsRequest->dwFlags == FILECONTENTS_SIZE
+						  ? sizeof(UINT64)
+						  : fileContentsRequest->cbRequested;
+		pData = (BYTE *)calloc(1, cbRequested);
+		if (pData && wf_cliprdr_read_served_file_list(clipboard, fileContentsRequest, pData,
+													  cbRequested, &uSize))
+			rc = CHANNEL_RC_OK;
+		goto exit;
+	}
+
 	// If the clipboard is set by the instance, or the file descriptor is from remote,
 	// we should not process the request.
 	// Because this may be the following cases:
@@ -3623,17 +3702,6 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	if (!pData)
 	{
 		rc = ERROR_INTERNAL_ERROR;
-		goto exit;
-	}
-
-	if (fileContentsRequest->haveClipDataId &&
-		fileContentsRequest->clipDataId != clipboard->file_list_id)
-	{
-		// Served by path from an earlier list; the clipboard is not needed.
-		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
-		if (wf_cliprdr_read_served_file_list(clipboard, fileContentsRequest, pData, cbRequested,
-											 &uSize))
-			rc = CHANNEL_RC_OK;
 		goto exit;
 	}
 

@@ -1,5 +1,10 @@
-use super::{filetype::file_list_id, local_file::LocalFile};
-use crate::{platform::unix::local_file::construct_file_list, ClipboardFile, CliprdrError};
+use crate::{
+    platform::unix::{
+        filetype::file_list_id,
+        local_file::{construct_file_list, LocalFile},
+    },
+    ClipboardFile, CliprdrError,
+};
 use hbb_common::{
     bytes::{BufMut, BytesMut},
     log,
@@ -30,6 +35,11 @@ lazy_static::lazy_static! {
 }
 
 const MAX_RETIRED_CLIP_FILES: usize = 4;
+
+// The first descriptor's `clsid`, inside the 32 reserved bytes every peer skips. A random
+// nonce there makes each copy's list id distinct, even when two copies have identical
+// names, sizes and times (the same file in two folders).
+const LIST_NONCE: std::ops::Range<usize> = 8..24;
 
 #[derive(Debug)]
 enum FileContentsRequest {
@@ -122,8 +132,21 @@ impl ClipFiles {
             data.put(file.as_bin()?.as_slice());
         }
         self.files_pdu = data.to_vec();
+        if let Some(nonce) = self.files_pdu.get_mut(LIST_NONCE) {
+            nonce.copy_from_slice(&rand::random::<[u8; 16]>());
+        }
         self.id = file_list_id(&self.files_pdu);
         Ok(())
+    }
+
+    // The same files with the same descriptors, whatever the nonce.
+    fn has_same_files(&self, other: &ClipFiles) -> bool {
+        let (a, b) = (&self.files_pdu, &other.files_pdu);
+        self.files == other.files
+            && a.len() == b.len()
+            && a.len() >= LIST_NONCE.end
+            && a[..LIST_NONCE.start] == b[..LIST_NONCE.start]
+            && a[LIST_NONCE.end..] == b[LIST_NONCE.end..]
     }
 
     // Close open files and their read buffers; `read_exact_at` reopens on the next read.
@@ -317,13 +340,8 @@ fn select_clip_files<'a>(
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
-fn retire_if_served(current: &mut ClipFiles, mut replaced: ClipFiles) {
+fn retire_if_served(mut replaced: ClipFiles) {
     if replaced.served_to.is_empty() {
-        return;
-    }
-    if replaced.id == current.id {
-        // Same descriptors: its peers read the new list at the same indexes.
-        current.served_to = replaced.served_to;
         return;
     }
     replaced.release_handles();
@@ -402,8 +420,13 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     let mut next = ClipFiles::default();
     next.sync_files(files, current)?;
     next.build_file_list_pdu()?;
+    if next.has_same_files(&files_lock) {
+        // Nothing changed (a selection with a directory always rebuilds): keep the list, and
+        // the id its peers hold, instead of spending a retired slot on a duplicate.
+        return Ok(());
+    }
     let replaced = std::mem::replace(&mut *files_lock, next);
-    retire_if_served(&mut files_lock, replaced);
+    retire_if_served(replaced);
     Ok(())
 }
 
@@ -774,6 +797,42 @@ mod sig_test {
             .all(|file| file.handle.is_none()));
         // The file reopens at its start, so continuing at offset 4 must seek.
         assert_eq!(read(4), b"BBBB");
+
+        clear_files();
+    }
+
+    #[test]
+    fn same_file_metadata_in_another_folder_is_another_list() {
+        let tmp = TmpDir::new("same_metadata");
+        let (dir_a, dir_b) = (tmp.join("a"), tmp.join("b"));
+        fs::create_dir_all(&dir_a).unwrap();
+        fs::create_dir_all(&dir_b).unwrap();
+        let (first, second) = (dir_a.join("report.bin"), dir_b.join("report.bin"));
+        fs::write(&first, b"AAAAAAAA").unwrap();
+        fs::write(&second, b"BBBBBBBB").unwrap();
+        // Same name, size and mtime: the descriptors differ only by the nonce.
+        let mtime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        for path in [&first, &second] {
+            fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_modified(mtime)
+                .unwrap();
+        }
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&first)]).unwrap();
+        let first_id = file_list_id(&get_file_list_pdu(1));
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        sync_files(&[path_str(&second)]).unwrap();
+        let second_id = file_list_id(&get_file_list_pdu(1));
+        assert_ne!(first_id, second_id);
+
+        let read = |id| range_data(read_file_contents(1, 7, idx, 0x2, 4, 0, 4, Some(id)));
+        assert_eq!(read(first_id), b"AAAA");
+        assert_eq!(read(second_id), b"BBBB");
 
         clear_files();
     }
