@@ -36,6 +36,9 @@ pub struct CursorSnapshot {
     /// so the consumer must re-guess on the upright one.
     pub hot_measured: bool,
     pub colors: Vec<u8>,
+    /// Cursor plane position (CRTC_X/CRTC_Y), in this reader's scanout pixels.
+    pub x: i32,
+    pub y: i32,
 }
 
 /// Fold everything that makes a cursor a DIFFERENT cursor into its id.
@@ -639,6 +642,8 @@ impl DrmReader {
                     hoty: 0,
                     hot_measured: false,
                     colors: vec![0, 0, 0, 0],
+                    x: 0,
+                    y: 0,
                 })
             } else if !c.pixels.is_null()
                 && c.width > 0
@@ -691,6 +696,8 @@ impl DrmReader {
                     hoty,
                     hot_measured,
                     colors,
+                    x: c.x,
+                    y: c.y,
                 })
             } else {
                 None

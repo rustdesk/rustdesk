@@ -540,7 +540,14 @@ pub enum Data {
     /// Service -> client: a frame header; the packed BGRA pixels follow via `send_raw()`.
     /// CPU-fallback path (no render node, or no transferable dma-buf): pixels cross the wire.
     #[cfg(all(target_os = "linux", feature = "drm"))]
-    DrmFrame { width: u32, height: u32 },
+    DrmFrame {
+        width: u32,
+        height: u32,
+        /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
+        /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
+        #[serde(default)]
+        cursor_pos: Option<(i32, i32)>,
+    },
     /// Service -> client: a zero-copy dma-buf frame descriptor. The scanout fd is NOT a field; when
     /// `desc.has_fd` it rides an SCM_RIGHTS ancillary message on the same `DrmConn::send_msg`, and
     /// there is NO trailing `send_raw()` body. The unprivileged `--server` imports the fd and does
@@ -2367,6 +2374,31 @@ mod test {
         match serde_json::from_str::<Data>(modern).expect("modern DrmCursor must deserialize") {
             Data::DrmCursor { hot_measured, .. } => assert!(!hot_measured),
             other => panic!("expected DrmCursor, got {other:?}"),
+        }
+    }
+
+    /// A frame header from a producer that predates the cursor plane position reads as `None`;
+    /// a producer that sends one is read back exactly. A pin, not a gate: the consumer only ever
+    /// measures against `Some`.
+    #[cfg(all(target_os = "linux", feature = "drm"))]
+    #[test]
+    fn a_drm_frame_without_a_cursor_position_reads_as_none() {
+        let legacy = r#"{"t":"DrmFrame","c":{"width":8,"height":8}}"#;
+        match serde_json::from_str::<Data>(legacy).expect("legacy DrmFrame must deserialize") {
+            Data::DrmFrame {
+                width,
+                height,
+                cursor_pos,
+            } => {
+                assert_eq!((width, height), (8, 8));
+                assert_eq!(cursor_pos, None);
+            }
+            other => panic!("expected DrmFrame, got {other:?}"),
+        }
+        let modern = r#"{"t":"DrmFrame","c":{"width":8,"height":8,"cursor_pos":[3,4]}}"#;
+        match serde_json::from_str::<Data>(modern).expect("modern DrmFrame must deserialize") {
+            Data::DrmFrame { cursor_pos, .. } => assert_eq!(cursor_pos, Some((3, 4))),
+            other => panic!("expected DrmFrame, got {other:?}"),
         }
     }
 }
