@@ -8,12 +8,16 @@ class UsbDeviceInfo {
   final String vendor;
   final String product;
   final bool shared;
+  // Local devices only: pushed by this session, as opposed to `shared`,
+  // which also covers devices shared by the CLI or another session.
+  final bool pushed;
 
   UsbDeviceInfo.fromJson(Map<String, dynamic> json)
       : busId = json['bus_id']?.toString() ?? '',
         vendor = json['vendor']?.toString() ?? '',
         product = json['product']?.toString() ?? '',
-        shared = json['shared'] == true;
+        shared = json['shared'] == true,
+        pushed = json['pushed'] == true;
 }
 
 /// Controller-side state for a RemoteUsb session: the list of devices the
@@ -36,10 +40,10 @@ class UsbipModel with ChangeNotifier {
   // bind result when `handleBindResult` sees it come back.
   final Set<String> _pendingShareForAttach = {};
 
-  // This side's own devices, offered to the peer (push direction). A local
-  // device's `shared` field doubles as "pushed" here -- push/unpush always
-  // share/unshare as part of the same action (see `togglePush`), so the two
-  // can't drift apart the way independent share and push toggles could.
+  // This side's own devices, offered to the peer (push direction). Push and
+  // unpush share/unshare as part of the same action (see `togglePush`); a
+  // device's `pushed` field, not `shared`, says whether this session pushed
+  // it, since the CLI or another session may have shared it too.
   List<UsbDeviceInfo> localDevices = [];
   // busIds with a push/unpush request in flight.
   final Set<String> localPendingBusIds = {};
