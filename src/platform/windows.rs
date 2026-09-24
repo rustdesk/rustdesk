@@ -125,6 +125,8 @@ const REG_NAME_WINDOWS_INSTALLER: &str = "WindowsInstaller";
 const MSI_WINDOWS_INSTALLER_VALUE: u32 = 1;
 const MSI_EXIT_SUCCESS_REBOOT_INITIATED: u32 = 1641;
 const MSI_EXIT_SUCCESS_REBOOT_REQUIRED: u32 = 3010;
+// Shares the 0x5253_xxxx range of the elevated installer script exit codes.
+const UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE: u32 = 0x5253_0009;
 const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
@@ -3418,19 +3420,25 @@ fn get_directory_size_kb(path: &str) -> u64 {
 /// name to a 25 character column, so a longer custom client name would never
 /// match and the wait would end while the process still runs.
 ///
-/// The wait is bounded to 60 polls of roughly a second each, so a process that
-/// never exits delays the update by about a minute and the script then carries
-/// on as before.
-fn wait_for_app_exit_cmd(app_name: &str, filter: &str) -> String {
+/// The wait is bounded to 60 polls of roughly a second each. If a process is
+/// still running after that, the update is aborted instead of copying over files
+/// it may hold. Only `sc stop` and `taskkill` have run by then, so the script
+/// runs `restore_service_cmd` to start the service again if it was running, and
+/// exits with `UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE`, which `run_cmds` reports as a
+/// failed update.
+fn wait_for_app_exit_cmd(app_name: &str, filter: &str, restore_service_cmd: &str) -> String {
     format!(
         "set /a RUSTDESK_EXIT_WAIT=0
 :rustdesk_wait_for_exit
 tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul
 if errorlevel 1 goto rustdesk_exited
 set /a RUSTDESK_EXIT_WAIT+=1
-if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exited
+if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exit_timeout
 ping -n 2 127.0.0.1 >nul
 goto rustdesk_wait_for_exit
+:rustdesk_exit_timeout
+{restore_service_cmd}
+exit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}
 :rustdesk_exited"
     )
 }
@@ -3585,7 +3593,7 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // `sc stop` and `taskkill /F` do not wait for the processes to exit, see
     // `wait_for_app_exit_cmd`. A tray or main window can hold the files too, so
     // this is not limited to a running service.
-    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter);
+    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter, &restore_service_cmd);
     let cmds = format!(
         "
 chcp 65001
@@ -4827,7 +4835,7 @@ mod tests {
 
     #[test]
     fn test_wait_for_app_exit_cmd_uses_only_system_tools() {
-        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"");
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"", "sc start RustDesk");
         let lower = cmd.to_ascii_lowercase();
         // The elevated script runs with PATH restricted to the system directory
         // and, like the rest of the handoff, avoids script hosts.
@@ -4843,14 +4851,14 @@ mod tests {
         // which would make a long custom client name never match.
         let name = "Very-Long-Custom-Client-Name";
         assert!(name.len() + ".exe".len() > 25);
-        let cmd = wait_for_app_exit_cmd(name, "");
+        let cmd = wait_for_app_exit_cmd(name, "", "");
         assert!(cmd.contains("/FO CSV"));
         assert!(cmd.contains(&format!("find /I \"{name}.exe\"")));
     }
 
     #[test]
     fn test_wait_for_app_exit_cmd_is_bounded_and_skips_the_updater() {
-        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"");
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"", "sc start RustDesk");
         // Matches on the image name, which is not localized, and never waits on
         // the updater process itself.
         assert!(cmd.contains("\"IMAGENAME eq RustDesk.exe\" /FI \"PID ne 42\""));
@@ -4861,11 +4869,39 @@ mod tests {
         assert!(!pipeline.contains("goto"));
         assert!(cmd.contains("\nif errorlevel 1 goto rustdesk_exited\n"));
         // Bounded, so a process that never exits cannot hang the update.
-        assert!(cmd.contains("geq 60 goto rustdesk_exited"));
+        assert!(cmd.contains("geq 60 goto rustdesk_exit_timeout"));
         // Every label that is jumped to exists.
-        for label in ["rustdesk_wait_for_exit", "rustdesk_exited"] {
+        for label in [
+            "rustdesk_wait_for_exit",
+            "rustdesk_exit_timeout",
+            "rustdesk_exited",
+        ] {
             assert!(cmd.contains(&format!(":{label}\n")) || cmd.ends_with(&format!(":{label}")));
         }
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_fails_closed_on_timeout() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "sc start RustDesk");
+        // A timeout must not fall through to the copy: restore the service and
+        // abort with a distinct exit code before the success label.
+        let timeout = cmd.find("\n:rustdesk_exit_timeout\n").unwrap();
+        let exited = cmd.find("\n:rustdesk_exited").unwrap();
+        let expected = format!(
+            "\n:rustdesk_exit_timeout\nsc start RustDesk\nexit /b {}",
+            UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE
+        );
+        assert_eq!(&cmd[timeout..exited], expected.as_str());
+        // The loop jumps back before it could run into the timeout block, and
+        // the success label ends the command, so only a process exit reaches
+        // what follows.
+        assert!(cmd[..timeout].ends_with("\ngoto rustdesk_wait_for_exit"));
+        assert!(cmd.ends_with("\n:rustdesk_exited"));
+        // Without a service to restore, the update is still aborted.
+        let cmd = wait_for_app_exit_cmd("RustDesk", "", "");
+        assert!(cmd.contains(&format!(
+            "\n:rustdesk_exit_timeout\n\nexit /b {UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE}\n"
+        )));
     }
 
     #[test]

@@ -4,7 +4,7 @@ use super::{
         run_elevated_and_wait, trusted_install_environment,
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE, CMD_RELATIVE_PATH,
     },
-    validate_install_app_name, ResultType,
+    validate_install_app_name, ResultType, UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE,
 };
 use hbb_common::{
     bail, log,
@@ -168,6 +168,7 @@ fn elevated_install_failure_reason(exit_code: u32) -> &'static str {
             "failed to create the installer output directory"
         }
         BATCH_SHORTCUT_DECODE_FAILURE_EXIT_CODE => "failed to decode an embedded shortcut",
+        UPDATE_APP_EXIT_TIMEOUT_EXIT_CODE => "timed out waiting for the app processes to exit",
         _ => "installer command failed",
     }
 }
