@@ -347,8 +347,14 @@ fn repeat_intervals_are_codec_specific_after_the_first_attempt() {
         (CodecFormat::VP9, 10, 100, 100),
         (CodecFormat::VP8, 200, 200, 200),
         (CodecFormat::VP9, 200, 200, 200),
-        (CodecFormat::H264, 10, 100, 10),
-        (CodecFormat::H265, 10, 100, 10),
+        (CodecFormat::H264, 10, 100, 34),
+        (CodecFormat::H265, 10, 100, 34),
+        (CodecFormat::H264, 16, 100, 34),
+        (CodecFormat::H265, 16, 100, 34),
+        (CodecFormat::H264, 50, 100, 50),
+        (CodecFormat::H265, 50, 100, 50),
+        (CodecFormat::H264, 200, 200, 200),
+        (CodecFormat::H265, 200, 200, 200),
     ] {
         for first in [
             Outcome::Frame,
