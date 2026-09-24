@@ -441,6 +441,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                         shared_cursor_shape(msg.clone());
                     }
                 }
+                limit_cursor_handles(&mut state.cached_cursor_data, &msg);
                 state.cached_cursor_data.insert(cache_key, msg.clone());
                 super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
             }
@@ -503,10 +504,40 @@ lazy_static::lazy_static! {
 lazy_static::lazy_static! {
     // Every shape the service has sent, by content id, for a controller that asks for one
     // again. A shape under several handles is one message here, shared with `cached_cursor_data`,
-    // so this holds no more than that cache and is cleared with it. A shape dropped from both is
+    // and cleared with it; see `limit_cursor_handles` for the ceilings. A shape dropped is
     // rebuilt here the next time it is shown, in `run_cursor`, before any connection sends its
     // `cursor_id`: whatever a controller has just been told to show, it can ask for.
-    static ref CURSOR_SHAPES: Mutex<HashMap<u64, Arc<Message>>> = Default::default();
+    static ref CURSOR_SHAPES: Mutex<CursorShapes> = Default::default();
+}
+
+/// The shapes sent, by content id, and the bytes they hold compressed.
+#[derive(Default)]
+struct CursorShapes {
+    shapes: HashMap<u64, Arc<Message>>,
+    bytes: usize,
+}
+
+impl CursorShapes {
+    fn get(&self, id: &u64) -> Option<&Arc<Message>> {
+        self.shapes.get(id)
+    }
+
+    fn clear(&mut self) {
+        self.shapes.clear();
+        self.bytes = 0;
+    }
+
+    /// The message kept for this shape, `msg` if there was none.
+    fn keep(&mut self, cd: &CursorData, msg: &Arc<Message>) -> Arc<Message> {
+        let bytes = &mut self.bytes;
+        self.shapes
+            .entry(cd.id)
+            .or_insert_with(|| {
+                *bytes += cd.colors.len();
+                msg.clone()
+            })
+            .clone()
+    }
 }
 
 /// The message for a shape the platform gave, named by content, so the per-connection send sends
@@ -527,17 +558,31 @@ fn cursor_shape_message(
     shared_cursor_shape(Arc::new(msg))
 }
 
+// A platform may mint a new handle each time it shows a shape (Chrome, Electron), so the handles
+// filed would grow for the life of the service, each entry a u64 and an Arc even when every one
+// names the same shape. Past this many handles, or this many bytes of compressed shapes, however
+// few, the handles and the shapes start over together: a handle shown again is captured and named
+// again.
+const CURSOR_HANDLES_MAX: usize = 4096;
+const CURSOR_SHAPES_BYTES_MAX: usize = 32 << 20;
+
+fn limit_cursor_handles(handles: &mut HashMap<u64, Arc<Message>>, sending: &Arc<Message>) {
+    if handles.len() >= CURSOR_HANDLES_MAX
+        || CURSOR_SHAPES.lock().unwrap().bytes >= CURSOR_SHAPES_BYTES_MAX
+    {
+        handles.clear();
+        CURSOR_SHAPES.lock().unwrap().clear();
+        // The shape being sent was kept; keep it past the clear.
+        shared_cursor_shape(sending.clone());
+    }
+}
+
 /// The message already kept for this shape if there is one, so every handle for it shares it.
 fn shared_cursor_shape(msg: Arc<Message>) -> Arc<Message> {
     let Some(message::Union::CursorData(cd)) = &msg.union else {
         return msg;
     };
-    CURSOR_SHAPES
-        .lock()
-        .unwrap()
-        .entry(cd.id)
-        .or_insert_with(|| msg.clone())
-        .clone()
+    CURSOR_SHAPES.lock().unwrap().keep(cd, &msg)
 }
 
 /// The CursorData message of a shape the service has sent, for `Misc::request_cursor_data`.
@@ -2619,6 +2664,51 @@ mod cursor_shape_tests {
         let again = cursor_shape_message(raw(2), &mut compress);
         assert!(Arc::ptr_eq(&shown, &again), "a new handle, the same shape");
         assert_eq!(compressed, 1, "a shape sent before is not compressed again");
+
+        let sending = shared_cursor_shape(shape(u64::MAX - 3));
+        let mut few = HashMap::from([(1, shown.clone())]);
+        limit_cursor_handles(&mut few, &sending);
+        assert_eq!(few.len(), 1, "below the ceiling nothing goes");
+
+        let mut handles: HashMap<u64, Arc<Message>> = (0..CURSOR_HANDLES_MAX as u64)
+            .map(|handle| (handle, shown.clone()))
+            .collect();
+        limit_cursor_handles(&mut handles, &sending);
+        assert!(
+            handles.is_empty(),
+            "past the ceiling the handles start over"
+        );
+        let Some(message::Union::CursorData(cd)) = &shown.union else {
+            panic!("a cursor shape");
+        };
+        assert!(
+            cursor_data_message(cd.id).is_none(),
+            "and the shapes with them"
+        );
+        assert!(
+            cursor_data_message(u64::MAX - 3).is_some(),
+            "but the shape being sent is kept"
+        );
+
+        let big = |id| {
+            let mut msg = Message::new();
+            msg.set_cursor_data(CursorData {
+                id,
+                colors: vec![0u8; CURSOR_SHAPES_BYTES_MAX / 2 + 1].into(),
+                ..Default::default()
+            });
+            Arc::new(msg)
+        };
+        shared_cursor_shape(big(u64::MAX - 4));
+        let sending = shared_cursor_shape(big(u64::MAX - 5));
+        let mut few = HashMap::from([(1, shown.clone())]);
+        limit_cursor_handles(&mut few, &sending);
+        assert!(
+            few.is_empty(),
+            "past the byte ceiling the handles start over"
+        );
+        assert!(cursor_data_message(u64::MAX - 4).is_none());
+        assert!(cursor_data_message(u64::MAX - 5).is_some());
 
         super::super::service::Reset::reset(&mut StateCursor::default());
         assert!(
