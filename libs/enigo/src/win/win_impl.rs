@@ -39,14 +39,15 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     unsafe { SendInput(1, &mut input as LPINPUT, size_of::<INPUT>() as c_int) }
 }
 
-// `v` comes from the remote peer unchecked, so scale in i64 to avoid overflow.
+// `v` comes from the remote peer unchecked, so scale in i64 to avoid overflow, and clamp to
+// the 0..=65535 range MOUSEEVENTF_ABSOLUTE takes.
 // `extent` is 0 when the virtual screen metrics are unavailable.
 fn to_absolute(v: i32, origin: i32, extent: i32) -> Option<i32> {
     if extent <= 0 {
         return None;
     }
     let abs = (v as i64 - origin as i64) * 65535 / extent as i64;
-    Some(abs.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+    Some(abs.clamp(0, 65535) as i32)
 }
 
 fn keybd_event(mut flags: u32, vk: u16, scan: u16) -> DWORD {

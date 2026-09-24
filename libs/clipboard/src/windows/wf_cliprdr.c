@@ -57,8 +57,9 @@
 /* File lists kept after they were sent, so a transfer still in flight keeps reading its own
  * files after a later copy or paste replaces them. */
 #define WF_CLIPRDR_SERVED_FILE_LISTS 4u
-/* Largest range the unix file server serves in one request (MAX_RANGE_READ in
- * serv_files.rs); larger IStream reads are split into requests of this size. */
+/* Largest range served in one request: by the unix file server (MAX_RANGE_READ in
+ * serv_files.rs) and by the served-list path here. Larger IStream reads are split into
+ * requests of this size. */
 #define WF_CLIPRDR_MAX_RANGE_READ (16u * 1024u * 1024u)
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
@@ -3658,6 +3659,12 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		 is_set_by_instance(clipboard) || is_file_descriptor_from_remote()))
 	{
 		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
+		// Clients that send an id split reads to WF_CLIPRDR_MAX_RANGE_READ; refuse anything
+		// else before allocating what the peer asked for.
+		if (fileContentsRequest->dwFlags != FILECONTENTS_SIZE &&
+			(fileContentsRequest->dwFlags != FILECONTENTS_RANGE ||
+			 fileContentsRequest->cbRequested > WF_CLIPRDR_MAX_RANGE_READ))
+			goto exit;
 		cbRequested = fileContentsRequest->dwFlags == FILECONTENTS_SIZE
 						  ? sizeof(UINT64)
 						  : fileContentsRequest->cbRequested;
