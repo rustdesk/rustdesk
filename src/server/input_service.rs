@@ -442,6 +442,9 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                     }
                 }
                 limit_cursor_handles(&mut state.cached_cursor_data, &msg);
+                // A macOS seed marks a change, never the same one twice: filing it would only
+                // fill the map.
+                #[cfg(not(target_os = "macos"))]
                 state.cached_cursor_data.insert(cache_key, msg.clone());
                 super::log::trace!("Cursor data updated, hcursor: {}", cache_key);
             }
@@ -453,8 +456,12 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
             {
                 state.hcursor = drm_served_id;
             }
-            sp.send_shared(msg.clone());
-            state.cursor_data = msg;
+            // A new handle or seed for the shape already shown changes nothing a controller sees;
+            // a shape is one message however many handles name it.
+            if !Arc::ptr_eq(&msg, &state.cursor_data) {
+                sp.send_shared(msg.clone());
+                state.cursor_data = msg;
+            }
         }
     }
     sp.snapshot(|sps| {
@@ -562,7 +569,7 @@ fn cursor_shape_message(
 // filed would grow for the life of the service, each entry a u64 and an Arc even when every one
 // names the same shape. Past this many handles, or this many bytes of compressed shapes, however
 // few, the handles and the shapes start over together: a handle shown again is captured and named
-// again.
+// again. macOS files no handles, so there the bytes alone bound the shapes.
 const CURSOR_HANDLES_MAX: usize = 4096;
 const CURSOR_SHAPES_BYTES_MAX: usize = 32 << 20;
 
