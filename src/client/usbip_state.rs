@@ -31,9 +31,11 @@ pub(crate) struct UsbClientState {
     // sent, no `Open` seen yet) -- gates the `Open` handler so a peer can't
     // pull an arbitrary locally-shared device it was never offered.
     share_pending: RwLock<HashSet<String>>,
-    // bus_ids this session bound itself in `usb_push` and has not unbound
-    // yet -- the only devices a failed `PushResult` may roll back.
-    share_owned: RwLock<HashSet<String>>,
+    // bus_ids this session pushed and has not unpushed yet -- the only ones a
+    // `PushResult` may touch -- mapped to whether it also bound them itself
+    // (`false` for a device already shared by the CLI or another session),
+    // since only those may be unbound again.
+    share_owned: RwLock<HashMap<String, bool>>,
     // Local vhci ports this session attached (pull direction) and has not
     // detached yet.
     attached_ports: RwLock<HashSet<i32>>,
@@ -172,24 +174,25 @@ impl UsbClientState {
         self.share_pending.write().unwrap().remove(bus_id);
     }
 
-    /// `false` once the session is closing; the caller must then unbind
-    /// `bus_id` itself, since teardown has already run.
-    pub(crate) fn share_owned_add(&self, bus_id: String) -> bool {
+    /// `false` once the session is closing; the caller must then undo its
+    /// own bind of `bus_id`, since teardown has already run.
+    pub(crate) fn share_owned_add(&self, bus_id: String, bound: bool) -> bool {
         let mut owned = self.share_owned.write().unwrap();
         if self.closed.load(Ordering::SeqCst) {
             return false;
         }
-        owned.insert(bus_id);
+        owned.insert(bus_id, bound);
         true
     }
 
     pub(crate) fn share_owned(&self, bus_id: &str) -> bool {
-        self.share_owned.read().unwrap().contains(bus_id)
+        self.share_owned.read().unwrap().contains_key(bus_id)
     }
 
-    /// Removes and reports whether this session had bound `bus_id` itself,
-    /// so at most one caller undoes that binding.
-    pub(crate) fn share_owned_take(&self, bus_id: &str) -> bool {
+    /// Removes a push of `bus_id` by this session, reporting whether this
+    /// session also bound it -- `None` if it wasn't pushed here -- so at
+    /// most one caller undoes that binding.
+    pub(crate) fn share_owned_take(&self, bus_id: &str) -> Option<bool> {
         self.share_owned.write().unwrap().remove(bus_id)
     }
 
@@ -257,7 +260,10 @@ impl UsbClientState {
             self.closed.store(true, Ordering::SeqCst);
             std::mem::take(&mut *ports)
         };
-        let owned = std::mem::take(&mut *self.share_owned.write().unwrap());
+        let owned: Vec<String> = std::mem::take(&mut *self.share_owned.write().unwrap())
+            .into_iter()
+            .filter_map(|(bus_id, bound)| bound.then_some(bus_id))
+            .collect();
         if ports.is_empty() && owned.is_empty() {
             return;
         }
@@ -304,9 +310,20 @@ mod tests {
     fn attach_or_bind_finishing_after_close_is_left_to_the_caller() {
         let state = UsbClientState::default();
         state.close();
-        assert!(!state.share_owned_add("1-3".into()));
+        assert!(!state.share_owned_add("1-3".into(), true));
         assert!(!state.attached_port_add(4));
         assert!(!state.share_owned("1-3"));
         assert!(!state.attached_port_take(4));
+    }
+
+    #[test]
+    fn push_of_a_device_shared_elsewhere_is_not_unbound() {
+        let state = UsbClientState::default();
+        assert!(state.share_owned_add("1-2".into(), false));
+        assert!(state.share_owned_add("1-3".into(), true));
+        assert!(state.share_owned("1-2"));
+        assert_eq!(state.share_owned_take("1-2"), Some(false));
+        assert_eq!(state.share_owned_take("1-3"), Some(true));
+        assert_eq!(state.share_owned_take("1-3"), None);
     }
 }
