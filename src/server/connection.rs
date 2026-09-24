@@ -3387,13 +3387,19 @@ impl Connection {
                                 .collect::<Vec<(String, i64)>>(),
                             json!({}),
                         );
+                    } else if is_file_data_request(&clip)
+                        && crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) == "Y"
+                    {
+                        // One-way file transfer: never serve this side's clipboard files to the peer.
                     } else if let Some(clip) = msg_2_clip(clip) {
                         #[cfg(target_os = "windows")]
                         {
                             self.send_to_cm(ipc::Data::ClipboardFile(clip));
                         }
                         #[cfg(feature = "unix-file-copy-paste")]
-                        if crate::is_support_file_copy_paste(&self.lr.version) {
+                        if crate::is_support_file_copy_paste(&self.lr.version)
+                            && self.file_transfer_enabled()
+                        {
                             let mut out_msgs = vec![];
 
                             #[cfg(target_os = "macos")]
