@@ -330,6 +330,52 @@ void main() {
     expect(savedPositions['ll-mouse-btn-pos'], original);
   });
 
+  testWidgets('orientation can change before the button viewport updates',
+      (tester) async {
+    const original = '{"x":600.0,"y":120.0}';
+    savedPositions['ll-mouse-btn-pos'] = original;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    Future<void> pumpButton(Size mediaSize, Size viewportSize) async {
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(size: mediaSize),
+          child: Scaffold(
+            body: Stack(children: [
+              FloatingLeftRightButton(
+                isLeft: true,
+                inputModel: ffi.inputModel,
+                cursorModel: ffi.cursorModel,
+                viewportSize: viewportSize,
+              ),
+            ]),
+          ),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    await pumpButton(const Size(400, 800), const Size(400, 800));
+    final button = find.byType(FloatingLeftRightButton);
+    final gesture = await tester.startGesture(tester.getCenter(button));
+    try {
+      await gesture.moveBy(const Offset(30, -40));
+      await tester.pump();
+      await pumpButton(const Size(800, 400), const Size(400, 800));
+      await pumpButton(const Size(800, 400), const Size(800, 400));
+      expect(tester.getRect(button).topLeft, const Offset(600, 120));
+    } finally {
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(savedPositions['ll-mouse-btn-pos'], original);
+  });
+
   testWidgets('temporary viewport shrink preserves saved button positions',
       (tester) async {
     const original = '{"x":700.0,"y":150.0}';

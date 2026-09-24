@@ -438,6 +438,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     final currentOrientation = MediaQuery.of(context).orientation;
     if (_previousOrientation == null ||
         _previousOrientation != currentOrientation) {
+      if (_previousOrientation != null) _isDragging = false;
       _resetPosition(currentOrientation,
           avoidWheel: _previousOrientation != null);
     }
