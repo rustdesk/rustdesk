@@ -221,6 +221,63 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   });
 
+  testWidgets('clamped saved buttons remain separate from the wheel',
+      (tester) async {
+    savedPositions['lp-mouse-btn-pos'] = '{"x":900.0,"y":180.0}';
+    savedPositions['rp-mouse-btn-pos'] = '{"x":125.0,"y":345.0}';
+    tester.view.physicalSize = const Size(460, 464);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi);
+
+    final wheel = find.byType(FloatingWheel);
+    final leftButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final rightButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    expect(tester.getRect(leftButton).overlaps(tester.getRect(rightButton)),
+        isFalse);
+    expect(tester.getRect(leftButton).overlaps(tester.getRect(wheel)), isFalse);
+    expect(
+        tester.getRect(rightButton).overlaps(tester.getRect(wheel)), isFalse);
+    await tester.tap(leftButton);
+    await tester.tap(rightButton);
+    await tester.tap(wheel);
+    expect((ffi.inputModel as _Input).pressedButtons,
+        [MouseButtons.left, MouseButtons.right, MouseButtons.wheel]);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 60));
+  });
+
+  testWidgets('viewport shrink preserves an active button drag',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final leftButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && widget.isLeft);
+    final gesture = await tester.startGesture(tester.getCenter(leftButton));
+    try {
+      await gesture.moveBy(const Offset(30, -40));
+      await tester.pump();
+      expect(tester.getRect(leftButton).left, 355);
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 100, rightInset: 0);
+      expect(tester.getRect(leftButton).left, 355);
+      expect(tester.getRect(leftButton).top, 245);
+    } finally {
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+  });
+
   testWidgets('temporary viewport shrink preserves saved button positions',
       (tester) async {
     const original = '{"x":700.0,"y":150.0}';

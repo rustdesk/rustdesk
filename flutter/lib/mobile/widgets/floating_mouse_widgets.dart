@@ -436,8 +436,9 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final currentOrientation = MediaQuery.of(context).orientation;
-    if (_previousOrientation == null ||
-        _previousOrientation != currentOrientation) {
+    if ((_previousOrientation == null ||
+            _previousOrientation != currentOrientation) &&
+        !(_isDown && _isDragging)) {
       _resetPosition(currentOrientation);
     }
     _previousOrientation = currentOrientation;
@@ -447,7 +448,11 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
   void didUpdateWidget(FloatingLeftRightButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.viewportSize != widget.viewportSize) {
-      _resetPosition(MediaQuery.of(context).orientation);
+      if (_isDown && _isDragging) {
+        _onMoveUpdateDelta(Offset.zero);
+      } else {
+        _resetPosition(MediaQuery.of(context).orientation);
+      }
     }
   }
 
@@ -507,12 +512,22 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     final otherSaved = _savedOrDefaultPosition(ori, !_isLeft);
     _position = _clampPosition(saved);
     final otherPosition = _clampPosition(otherSaved);
-    if ((_position != saved || otherPosition != otherSaved) &&
-        Rect.fromLTWH(_position.dx, _position.dy, _kLeftRightButtonWidth,
-                _kLeftRightButtonHeight)
-            .overlaps(Rect.fromLTWH(otherPosition.dx, otherPosition.dy,
-                _kLeftRightButtonWidth, _kLeftRightButtonHeight))) {
-      _position = _clampPosition(_defaultPosition(_isLeft));
+    if (_position != saved || otherPosition != otherSaved) {
+      final buttonRect = Rect.fromLTWH(_position.dx, _position.dy,
+          _kLeftRightButtonWidth, _kLeftRightButtonHeight);
+      final size = widget.viewportSize;
+      final wheelRect = Rect.fromLTWH(
+          max(0.0, size.width - _wheelWidth - _kSpaceToHorizontalEdge),
+          max(0.0, (size.height - _wheelHeight) / 2),
+          _wheelWidth,
+          min(_wheelHeight, size.height));
+      final otherRect = Rect.fromLTWH(otherPosition.dx, otherPosition.dy,
+          _kLeftRightButtonWidth, _kLeftRightButtonHeight);
+      if (buttonRect.overlaps(otherRect) ||
+          buttonRect.overlaps(wheelRect) ||
+          otherRect.overlaps(wheelRect)) {
+        _position = _clampPosition(_defaultPosition(_isLeft));
+      }
     }
     _preSavedPos = _position;
   }
