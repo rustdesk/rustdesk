@@ -3393,7 +3393,9 @@ impl Connection {
                             self.send_to_cm(ipc::Data::ClipboardFile(clip));
                         }
                         #[cfg(feature = "unix-file-copy-paste")]
-                        if crate::is_support_file_copy_paste(&self.lr.version) {
+                        if crate::is_support_file_copy_paste(&self.lr.version)
+                            && self.file_transfer_enabled()
+                        {
                             let mut out_msgs = vec![];
 
                             #[cfg(target_os = "macos")]
