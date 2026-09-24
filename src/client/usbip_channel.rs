@@ -35,10 +35,12 @@ pub(crate) fn handle(handler: &FlutterHandler, union: Option<Union>) {
                     r.bus_id, r.error
                 );
                 handler.usb.share_pending_remove(&r.bus_id);
-                if !handler.usb.share_owned_take(&r.bus_id) {
+                let Some(bound) = handler.usb.share_owned_take(&r.bus_id) else {
                     return;
-                }
-                if let Some(rt) = handler.usb.session_runtime() {
+                };
+                if !bound {
+                    log::info!("usb push: {} was shared outside this session, leaving it", r.bus_id);
+                } else if let Some(rt) = handler.usb.session_runtime() {
                     let bus_id = r.bus_id.clone();
                     rt.spawn_blocking(move || {
                         if crate::client::usbip_share::bind_device(&bus_id, false) {
@@ -162,7 +164,7 @@ mod tests {
     #[test]
     fn failed_push_result_ignored_unless_pushed_by_this_session() {
         let handler = FlutterHandler::default();
-        handler.usb.share_owned_add("1-3".to_string());
+        handler.usb.share_owned_add("1-3".to_string(), true);
         handle(&handler, failed_push("1-2"));
         handle(&handler, failed_push("1-3; touch /tmp/x"));
         assert!(handler.usb.share_owned("1-3"));
@@ -171,9 +173,9 @@ mod tests {
     #[test]
     fn failed_push_result_rolls_back_only_once() {
         let handler = FlutterHandler::default();
-        handler.usb.share_owned_add("1-2".to_string());
+        handler.usb.share_owned_add("1-2".to_string(), true);
         handle(&handler, failed_push("1-2"));
         assert!(!handler.usb.share_owned("1-2"));
-        assert!(!handler.usb.share_owned_take("1-2"));
+        assert_eq!(handler.usb.share_owned_take("1-2"), None);
     }
 }
