@@ -48,6 +48,20 @@ workspace member. `base::config::keys` re-exports the handful of keys
 * Do not add dependencies unless needed.
 * Keep code simple and idiomatic.
 
+### Logging
+
+* `debug` and above are written to the log file. A log call that can fire
+  repeatedly (per packet, frame, input event, or loop iteration, or at a rate a
+  peer controls) must not use `debug` or higher unthrottled.
+* For such a site, pick one:
+
+  * `log::trace!` when the event is expected and the line only helps while
+    actively debugging;
+  * `hbb_common::throttled_log!(interval, level, ...)` when it signals a fault
+    that should still show up in a user's log. It keeps one line per interval
+    with a count of the rest. Use `hbb_common::log_throttle::LogThrottle`
+    directly only when the decision drives more than one log call.
+
 ## Tokio Rules
 
 * Assume a Tokio runtime already exists.
