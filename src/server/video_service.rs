@@ -867,7 +867,7 @@ fn run(vs: VideoService) -> ResultType<()> {
 
                     let frame = frame.to(encoder.yuvfmt(), &mut yuv, &mut mid_data)?;
                     static_refresh.on_frame(&frame);
-                    let send_conn_ids = handle_one_frame(
+                    let result = handle_one_frame(
                         display_idx,
                         &sp,
                         frame,
@@ -880,8 +880,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                         capture_width,
                         capture_height,
                     )?;
-                    static_refresh.on_encoded(!send_conn_ids.is_empty());
-                    frame_controller.set_send(now, send_conn_ids);
+                    static_refresh.on_frame_encoded(&result);
+                    frame_controller.set_send(now, result.send_conn_ids);
                     send_counter += 1;
                 }
                 #[cfg(windows)]
@@ -945,7 +945,8 @@ fn run(vs: VideoService) -> ResultType<()> {
                             &mut encoder_warmed_up,
                             capture_width,
                             capture_height,
-                        )?;
+                        )?
+                        .send_conn_ids;
                         static_refresh.on_encoded(!send_conn_ids.is_empty());
                         frame_controller.set_send(now, send_conn_ids);
                         send_counter += 1;
@@ -1284,7 +1285,7 @@ fn handle_one_frame(
     encoder_warmed_up: &mut bool,
     width: usize,
     height: usize,
-) -> ResultType<HashSet<i32>> {
+) -> ResultType<static_refresh::FrameEncodeResult> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
@@ -1295,6 +1296,7 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
+    let mut vpx_no_output = false;
     let first = *first_frame;
     *first_frame = false;
     match encoder.encode_to_message(frame, ms) {
@@ -1312,6 +1314,7 @@ fn handle_one_frame(
             send_conn_ids = sp.send_video_frame(msg);
         }
         Err(e) => {
+            vpx_no_output = e.is::<scrap::VpxNoOutput>();
             *encode_fail_counter += 1;
             // Encoding errors are not frequent except on Android
             if !cfg!(target_os = "android") {
@@ -1342,7 +1345,10 @@ fn handle_one_frame(
             }
         }
     }
-    Ok(send_conn_ids)
+    Ok(static_refresh::FrameEncodeResult {
+        send_conn_ids,
+        vpx_no_output,
+    })
 }
 
 #[inline]
