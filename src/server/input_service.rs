@@ -407,7 +407,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 super::log::trace!("Cursor data cached, hcursor: {}", hcursor);
                 msg = cached.clone();
             } else {
-                let mut data = crate::get_cursor_data(hcursor)?;
+                let data = crate::get_cursor_data(hcursor)?;
                 // File the shape under the id ACTUALLY served, not the one requested. Deliberately a
                 // NEW name rather than shadowing `hcursor`: the insert below reads as the requested
                 // id everywhere else in this function, and a cfg-gated shadow would make the two
@@ -422,19 +422,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 let cache_key = served_id;
                 #[cfg(not(all(target_os = "linux", feature = "drm")))]
                 let cache_key = hcursor;
-                // Named by content, so the per-connection send below sends a shape once however
-                // many handles the platform gives it; see `is_peer_naming_cursors_by_content`.
-                data.id = crate::cursor_content_id(
-                    data.width,
-                    data.height,
-                    data.hotx,
-                    data.hoty,
-                    &data.colors,
-                );
-                data.colors = hbb_common::compress::compress(&data.colors[..]).into();
-                let mut tmp = Message::new();
-                tmp.set_cursor_data(data);
-                msg = shared_cursor_shape(Arc::new(tmp));
+                msg = cursor_shape_message(data, hbb_common::compress::compress);
                 // A DRM cursor id is derived from the shape's pixels plus geometry, so an animated
                 // pointer mints a new id on every shape change and this map would grow for the life
                 // of the service, each entry pinning a compressed cursor message. (Upstream's X11
@@ -519,6 +507,24 @@ lazy_static::lazy_static! {
     // rebuilt here the next time it is shown, in `run_cursor`, before any connection sends its
     // `cursor_id`: whatever a controller has just been told to show, it can ask for.
     static ref CURSOR_SHAPES: Mutex<HashMap<u64, Arc<Message>>> = Default::default();
+}
+
+/// The message for a shape the platform gave, named by content, so the per-connection send sends
+/// a shape once however many handles the platform gives it; see
+/// `is_peer_naming_cursors_by_content`. A shape sent before, under any handle, is reused without
+/// being compressed again.
+fn cursor_shape_message(
+    mut data: CursorData,
+    compress: impl FnOnce(&[u8]) -> Vec<u8>,
+) -> Arc<Message> {
+    data.id = crate::cursor_content_id(data.width, data.height, data.hotx, data.hoty, &data.colors);
+    if let Some(msg) = cursor_data_message(data.id) {
+        return msg;
+    }
+    data.colors = compress(&data.colors[..]).into();
+    let mut msg = Message::new();
+    msg.set_cursor_data(data);
+    shared_cursor_shape(Arc::new(msg))
 }
 
 /// The message already kept for this shape if there is one, so every handle for it shares it.
@@ -2596,6 +2602,23 @@ mod cursor_shape_tests {
         let asked = cursor_data_message(u64::MAX - 1).expect("a sent shape is kept");
         assert!(Arc::ptr_eq(&asked, &first));
         assert!(cursor_data_message(u64::MAX - 2).is_none());
+
+        let raw = |handle| CursorData {
+            id: handle,
+            width: 4,
+            height: 4,
+            colors: vec![9u8; 4 * 4 * 4].into(),
+            ..Default::default()
+        };
+        let mut compressed = 0;
+        let mut compress = |rgba: &[u8]| {
+            compressed += 1;
+            hbb_common::compress::compress(rgba)
+        };
+        let shown = cursor_shape_message(raw(1), &mut compress);
+        let again = cursor_shape_message(raw(2), &mut compress);
+        assert!(Arc::ptr_eq(&shown, &again), "a new handle, the same shape");
+        assert_eq!(compressed, 1, "a shape sent before is not compressed again");
 
         super::super::service::Reset::reset(&mut StateCursor::default());
         assert!(
