@@ -3544,7 +3544,8 @@ class CursorModel with ChangeNotifier {
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
     _updateCurData();
-    if (id != _id) _cacheMap[id]?.releasePixels();
+    final cache = _cacheMap[id];
+    if (id != _id && cache != null) _switchedAway(cache);
     return true;
   }
 
@@ -3639,14 +3640,38 @@ class CursorModel with ChangeNotifier {
   /// The shape in use keeps its pixels, so a new raster is made from them at once; the others
   /// keep none once their native cursor holds them.
   void registered(CursorData cache, String key) {
+    _nativeIds.add(cache.id);
+    _awaitingNative.remove(cache.id);
     if (cache.id != _id && identical(_cacheMap[cache.id], cache)) {
       cache.releasePixels();
     }
   }
 
-  /// The peer's shapes used last that keep a painted image; the core rebuilds the others. An
-  /// animated cursor is a shape per frame, 18 for the Windows busy cursor and 23 for KDE's, and
-  /// a cycle longer than this limit would rebuild every frame.
+  // The shapes a native cursor holds, and those keeping their pixels until one does, oldest
+  // first: one decoded after the peer moved on must still get a native cursor when shown
+  // again, rather than be decoded again every time it comes back.
+  final _nativeIds = <String>{};
+  final _awaitingNative = <String>{};
+
+  void _switchedAway(CursorData cache) {
+    _awaitingNative.remove(cache.id);
+    // Mobile only paints the cursor, from its image.
+    if (isMobile || _nativeIds.contains(cache.id)) {
+      cache.releasePixels();
+      return;
+    }
+    _awaitingNative.add(cache.id);
+    while (_awaitingNative.length > kRecentShapes) {
+      final oldest = _awaitingNative.first;
+      _awaitingNative.remove(oldest);
+      if (oldest != _id) _cacheMap[oldest]?.releasePixels();
+    }
+  }
+
+  /// The peer's shapes used last that keep a painted image, and the most that keep their pixels
+  /// waiting for a native cursor; the core rebuilds the others. An animated cursor is a shape per
+  /// frame, 18 for the Windows busy cursor and 23 for KDE's, and a cycle longer than this limit
+  /// would rebuild every frame.
   static const kRecentShapes = 64;
 
   /// The native cursor shown last, shown on while the shape in use is made.
@@ -3729,7 +3754,7 @@ class CursorModel with ChangeNotifier {
     // A shape not decoded yet leaves the one shown before in place until it is.
     if (cache != null) _cache = cache;
     if (previous != null && !identical(previous, _cache)) {
-      previous.releasePixels();
+      _switchedAway(previous);
     }
     final tmp = _images.remove(_id);
     if (tmp != null) {
@@ -3803,6 +3828,8 @@ class CursorModel with ChangeNotifier {
     _clearCache();
     _cache = null;
     _cacheMap.clear();
+    _nativeIds.clear();
+    _awaitingNative.clear();
     _unavailable = null;
     _generation++;
   }

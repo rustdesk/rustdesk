@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -14,10 +15,22 @@ class _Cursor extends CursorModel {
   _Cursor(FFI ffi) : super(WeakReference(ffi));
   final core = <String, CursorShape>{};
   final fetched = <String>[];
+  // While set, a fetch answers only when [answerFetches] is called.
+  bool holdFetches = false;
+  final _held = <Completer<CursorShape?>, String>{};
   @override
-  Future<CursorShape?> fetchCursorShape(String id) async {
+  Future<CursorShape?> fetchCursorShape(String id) {
     fetched.add(id);
-    return core[id];
+    if (!holdFetches) return Future.value(core[id]);
+    final answer = Completer<CursorShape?>();
+    _held[answer] = id;
+    return answer.future;
+  }
+
+  void answerFetches() {
+    final held = Map.of(_held);
+    _held.clear();
+    held.forEach((answer, id) => answer.complete(core[id]));
   }
 
   bool showRemoteCursor = false;
@@ -95,12 +108,16 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
-  test('only the shape in use keeps an image, and nothing else keeps pixels',
-      () async {
+  test(
+      'only the shape in use keeps an image, and a shape its native cursor holds '
+      'keeps no pixels', () async {
+    final cursor = ffi.cursorModel;
     for (var round = 0; round < 3; round++) {
-      await _feed(ffi, '1', seed: 1);
-      await _feed(ffi, '2', seed: 2);
-      await _feed(ffi, '3', seed: 3);
+      for (final (id, seed) in [('1', 1), ('2', 2), ('3', 3)]) {
+        await _feed(ffi, id, seed: seed);
+        buildCursorOfCache(cursor, 1.0, cursor.cache);
+        await _settle();
+      }
     }
     expect(ffi.cursorModel.shapeIds, ['3']);
     for (final id in ['1', '2']) {
@@ -155,7 +172,8 @@ void main() {
     expect(registered.length, 100);
   });
 
-  test('a raster made before is found again after the shape was switched away from',
+  test(
+      'a raster made before is found again after the shape was switched away from',
       () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, 'A', size: 32);
@@ -180,15 +198,57 @@ void main() {
       () async {
     final cursor = ffi.cursorModel;
     await _feed(ffi, '1', size: 32);
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
     await _feed(ffi, '2', size: 32);
     final shown = _key(buildCursorOfCache(cursor, 1.0, cursor.cache));
     await _settle();
-    _select(ffi, '1'); // its pixels went when it was switched away from
+    _select(ffi, '1'); // its native cursor held its pixels, so they went
     expect(_key(buildCursorOfCache(cursor, 0.5, cursor.cache)), shown);
     await _settle();
     expect(ffi.cursor.fetched, ['1']);
     expect(_key(buildCursorOfCache(cursor, 0.5, cursor.cache)),
         cursor.nativeKey(cursor.cache!, 0.5));
+  });
+
+  test('shapes that keep decoding late still get their native cursors',
+      () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, 'arrow');
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    // A and B arrive, each decoding only after the peer moved on.
+    for (final (id, seed) in [('A', 1), ('B', 2)]) {
+      final pixels = _pixels(8, seed);
+      ffi.cursor.core[id] =
+          CursorShape(hotx: 0, hoty: 0, width: 8, height: 8, colors: pixels);
+      final decoding = ffi.ffiModel.handleCursorData(id, 0, 0, 8, 8, pixels);
+      _select(ffi, 'arrow');
+      await decoding;
+    }
+    // Each fetch answers only after the next switch.
+    ffi.cursor.holdFetches = true;
+    for (var i = 0; i < 6; i++) {
+      _select(ffi, i.isEven ? 'A' : 'B');
+      ffi.cursor.answerFetches();
+      await _settle();
+      buildCursorOfCache(cursor, 1.0, cursor.cache);
+      await _settle();
+    }
+    expect(registered.where((key) => key.contains('_A_')), isNotEmpty);
+    expect(registered.where((key) => key.contains('_B_')), isNotEmpty);
+  });
+
+  test('shapes waiting for a native cursor keep their pixels, within the limit',
+      () async {
+    const max = CursorModel.kRecentShapes;
+    for (var i = 0; i <= max + 1; i++) {
+      await _feed(ffi, '$i');
+    }
+    expect(ffi.cursorModel.cachedShape('0')!.hasPixels, isFalse,
+        reason: 'the one waiting longest is let go');
+    expect(ffi.cursorModel.cachedShape('1')!.hasPixels, isTrue);
+    expect(ffi.cursorModel.cachedShape('$max')!.hasPixels, isTrue);
   });
 
   test('two animated cursors and the everyday set keep their native cursors',
@@ -256,8 +316,9 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     _select(ffi, '2');
     await _settle();
-    expect(ffi.cursorModel.cachedShape('1')!.hasPixels, isFalse,
-        reason: 'decoded after the peer moved on, it is let go');
+    expect(ffi.cursorModel.cachedShape('1')!.hasPixels, isTrue,
+        reason:
+            'decoded after the peer moved on, it waits for its native cursor');
     _select(ffi, '1');
     ffi.cursorModel.image;
     await _settle();
