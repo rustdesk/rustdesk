@@ -136,14 +136,18 @@ impl UsbipMux {
                     ));
                     return;
                 }
-                // A device this connection didn't share stays as it is: it
-                // belongs to the CLI or to another session.
-                if !b.bind && !is_bound(&self.bound, &b.bus_id) {
-                    self.reply(bind_result_msg(
-                        b.bus_id,
-                        b.bind,
-                        "Not shared by this session".into(),
-                    ));
+                // A device the CLI or another session shared stays as it is:
+                // a share request for it succeeds without `usbip bind` (which
+                // would fail on it) and without this session owning it, and
+                // an unshare request leaves it shared.
+                let foreign = if b.bind {
+                    shared_bus_ids().contains(&b.bus_id)
+                } else {
+                    !is_bound(&self.bound, &b.bus_id)
+                };
+                if foreign {
+                    log::info!("usbip: {} is shared outside this session, leaving it as is", b.bus_id);
+                    self.reply(bind_result_msg(b.bus_id, b.bind, String::new()));
                     return;
                 }
                 let tx = self.tx.clone();
@@ -552,7 +556,7 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
     }
 
     #[test]
-    fn unbind_of_device_not_shared_here_is_refused() {
+    fn unbind_of_device_not_shared_here_leaves_it_shared() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let mut mux = UsbipMux::new(tx);
         let mut frame = UsbChannel::new();
@@ -565,7 +569,8 @@ busid=2-2#usbid=0dd8:3801#Netac Technology Co., Ltd#unknown product#
         let (_, msg) = rx.try_recv().unwrap();
         match &msg.union {
             Some(message::Union::UsbChannel(ch)) => match &ch.union {
-                Some(usb_channel::Union::BindResult(r)) => assert!(!r.error.is_empty()),
+                // Answered right away: no `usbip unbind` was started for it.
+                Some(usb_channel::Union::BindResult(r)) => assert!(r.error.is_empty()),
                 _ => panic!("expected a BindResult"),
             },
             _ => panic!("expected a UsbChannel message"),
