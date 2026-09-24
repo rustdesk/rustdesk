@@ -305,6 +305,7 @@ impl Session<FlutterHandler> {
                     "vendor": d.vendor,
                     "product": d.product,
                     "shared": d.shared,
+                    "pushed": self.ui_handler.usb.share_owned(&d.bus_id),
                 })
             })
             .collect();
@@ -365,24 +366,33 @@ impl Session<FlutterHandler> {
                 );
                 return;
             }
-            log::info!("usb push: sharing {} before push", bus_id);
-            if !bind_device(&bus_id, true) {
-                log::error!("usb push: failed to share {} locally, not pushing", bus_id);
-                session.push_event_(
-                    "usb_push_result",
-                    &[
-                        ("bus_id", json!(&bus_id)),
-                        ("error", json!(format!("Failed to share {}", bus_id))),
-                    ],
-                    &[],
-                    &[],
-                );
-                return;
+            // A device the CLI or another session already shared is pushed as
+            // it is (`usbip bind` would fail on it) and stays shared afterwards.
+            let bound = !shared_bus_ids().contains(&bus_id);
+            if !bound {
+                log::info!("usb push: {} is already shared, pushing it as is", bus_id);
+            } else {
+                log::info!("usb push: sharing {} before push", bus_id);
+                if !bind_device(&bus_id, true) {
+                    log::error!("usb push: failed to share {} locally, not pushing", bus_id);
+                    session.push_event_(
+                        "usb_push_result",
+                        &[
+                            ("bus_id", json!(&bus_id)),
+                            ("error", json!(format!("Failed to share {}", bus_id))),
+                        ],
+                        &[],
+                        &[],
+                    );
+                    return;
+                }
             }
             log::info!("usb push: shared {}, asking peer to attach", bus_id);
-            if !session.ui_handler.usb.share_owned_add(bus_id.clone()) {
-                log::info!("usb push: session closed while sharing {}, unsharing", bus_id);
-                unbind_device_retrying(&bus_id);
+            if !session.ui_handler.usb.share_owned_add(bus_id.clone(), bound) {
+                log::info!("usb push: session closed while sharing {}", bus_id);
+                if bound {
+                    unbind_device_retrying(&bus_id);
+                }
                 return;
             }
             session.ui_handler.usb.share_pending_add(bus_id.clone());
@@ -404,12 +414,11 @@ impl Session<FlutterHandler> {
         // Revoke the authorization to open a channel for this device in case
         // the peer never did (e.g. unpushed before its `Open` arrived).
         self.ui_handler.usb.share_pending_remove(&bus_id);
-        self.ui_handler.usb.share_owned_take(&bus_id);
-        // No live channel happens whenever this app instance never saw the
-        // push complete -- e.g. restarted after sharing, with the peer
-        // still gone. The device can still genuinely be locally bound
-        // though (`usbip bind` is a kernel fact, not app state), so the
-        // actual unshare below must not depend on a channel existing.
+        // Only a binding this session made is undone: a device shared by the
+        // CLI or another session stays shared.
+        let bound = self.ui_handler.usb.share_owned_take(&bus_id) == Some(true);
+        // No live channel happens whenever the peer never opened one or is
+        // already gone, and the unshare below must not depend on it.
         if let Some(channel_id) = self.ui_handler.usb.share_channel_for_bus_id(&bus_id) {
             log::info!("usb push: unpushing {} (channel {})", bus_id, channel_id);
             self.usb_close_forward(channel_id);
@@ -426,9 +435,14 @@ impl Session<FlutterHandler> {
         };
         let session = self.clone();
         rt.spawn_blocking(move || {
-            let ok = unbind_device_retrying(&bus_id);
+            let ok = if bound {
+                unbind_device_retrying(&bus_id)
+            } else {
+                log::info!("usb push: {} not shared by this session, leaving it shared", bus_id);
+                true
+            };
             let error = if ok {
-                log::info!("usb push: unshared {} after unpush", bus_id);
+                log::info!("usb push: unpushed {}", bus_id);
                 String::new()
             } else {
                 log::error!(
