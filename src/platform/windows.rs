@@ -3414,14 +3414,18 @@ fn get_directory_size_kb(path: &str) -> u64 {
 /// Only `tasklist`, `find` and `ping` from the system directory are used: the
 /// script runs with `PATH` restricted to it, and like the rest of the elevated
 /// handoff it avoids script hosts. The check matches the image name, which is
-/// not localized. The wait is bounded to 60 polls of roughly a second each, so a
-/// process that never exits delays the update by about a minute and the script
-/// then carries on as before.
+/// not localized. `/FO CSV` matters: the default table output cuts the image
+/// name to a 25 character column, so a longer custom client name would never
+/// match and the wait would end while the process still runs.
+///
+/// The wait is bounded to 60 polls of roughly a second each, so a process that
+/// never exits delays the update by about a minute and the script then carries
+/// on as before.
 fn wait_for_app_exit_cmd(app_name: &str, filter: &str) -> String {
     format!(
         "set /a RUSTDESK_EXIT_WAIT=0
 :rustdesk_wait_for_exit
-tasklist /NH /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul || goto rustdesk_exited
+tasklist /NH /FO CSV /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul || goto rustdesk_exited
 set /a RUSTDESK_EXIT_WAIT+=1
 if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exited
 ping -n 2 127.0.0.1 >nul
@@ -4830,6 +4834,17 @@ mod tests {
         assert!(!lower.contains("cscript"));
         // `timeout` refuses to run without a console.
         assert!(!lower.contains("timeout "));
+    }
+
+    #[test]
+    fn test_wait_for_app_exit_cmd_matches_long_image_names() {
+        // The default table output truncates image names to 25 characters,
+        // which would make a long custom client name never match.
+        let name = "Very-Long-Custom-Client-Name";
+        assert!(name.len() + ".exe".len() > 25);
+        let cmd = wait_for_app_exit_cmd(name, "");
+        assert!(cmd.contains("/FO CSV"));
+        assert!(cmd.contains(&format!("find /I \"{name}.exe\"")));
     }
 
     #[test]
