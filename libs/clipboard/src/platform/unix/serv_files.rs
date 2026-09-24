@@ -7,6 +7,10 @@ use hbb_common::{
 use parking_lot::Mutex;
 use std::{collections::VecDeque, path::PathBuf, sync::Arc, time::SystemTime, usize};
 
+// Our clients request at most 4 MiB per range. A larger read is refused, not shortened:
+// a short response reads as end of file to IStream callers on Windows.
+const MAX_RANGE_READ: u64 = 16 * 1024 * 1024;
+
 lazy_static::lazy_static! {
     // local files are cached, this value should not be changed when copying files
     // Because `CliprdrFileContentsRequest` only contains the index of the file in the list.
@@ -231,21 +235,16 @@ impl ClipFiles {
                     length
                 };
 
-                // A larger response cannot be framed for sending, so fail before reading it.
-                if read_size > hbb_common::bytes_codec::MAX_FRAME_LENGTH as u64 {
+                if read_size > MAX_RANGE_READ {
                     return Err(CliprdrError::InvalidRequest {
                         description: format!(
-                            "file contents request of {} bytes exceeds the frame limit, conn: {}",
-                            read_size, conn_id
+                            "file contents request of {} bytes exceeds the {} byte limit, conn: {}",
+                            read_size, MAX_RANGE_READ, conn_id
                         ),
                     });
                 }
 
-                // The peer picks the size; fail the request, not the process.
-                let mut buf = Vec::new();
-                buf.try_reserve_exact(read_size as usize)
-                    .map_err(|_| CliprdrError::CliprdrOutOfMemory)?;
-                buf.resize(read_size as usize, 0);
+                let mut buf = vec![0u8; read_size as usize];
 
                 file.read_exact_at(&mut buf, offset)?;
 
@@ -580,10 +579,10 @@ mod sig_test {
     }
 
     #[test]
-    fn range_request_over_frame_limit_is_rejected() {
-        let tmp = TmpDir::new("frame");
-        let file = tmp.join("huge.bin");
-        let size = hbb_common::bytes_codec::MAX_FRAME_LENGTH as u64 + 1;
+    fn range_request_over_limit_is_rejected() {
+        let tmp = TmpDir::new("limit");
+        let file = tmp.join("big.bin");
+        let size = MAX_RANGE_READ + 1;
         write_at(&file, size - 1, b"x");
         let files = vec![path_str(&file)];
 
