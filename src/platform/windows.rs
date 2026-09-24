@@ -3400,25 +3400,33 @@ fn get_directory_size_kb(path: &str) -> u64 {
     total_size / 1024
 }
 
-/// Batch lines that block until `service` has actually stopped, for at most a
-/// minute, then give the killed processes a moment to release their handles.
+/// Batch lines that wait, for about a minute at most, until no `{app_name}.exe`
+/// other than the updater itself is still running.
 ///
-/// `sc stop` only requests the stop and returns immediately, and the `XCOPY` in
-/// `update_me()` runs with `/C`, which skips files it cannot open instead of
-/// failing. While the service is still shutting down it holds files such as
-/// `librustdesk.dll`, which carries `crate::VERSION`, so those are silently left
-/// at the old version while the update reports success. The restarted service
-/// then still sees the release as newer and runs the update again, and again.
+/// `sc stop` only requests the stop and returns at once, and `taskkill /F` does
+/// not wait for the killed processes to go away. The `XCOPY` that follows runs
+/// with `/C`, which skips files it cannot open instead of failing, so a file a
+/// still-exiting process holds - such as `librustdesk.dll`, which carries
+/// `crate::VERSION` - is silently left at the old version while the update
+/// reports success. The restarted service then still sees the release as newer
+/// and runs the update again.
 ///
-/// `WaitForStatus` is used rather than parsing `sc query`, whose output is
-/// localized. `ping` is the delay because `timeout` needs a console, which this
-/// script does not have. The wait is bounded, so a service that never stops
-/// delays the update by a minute and the script then carries on as before.
-fn wait_for_service_stop_cmd(service: &str) -> String {
-    // PowerShell single-quoted string: a quote is escaped by doubling it.
-    let service = service.replace('\'', "''");
+/// Only `tasklist`, `find` and `ping` from the system directory are used: the
+/// script runs with `PATH` restricted to it, and like the rest of the elevated
+/// handoff it avoids script hosts. The check matches the image name, which is
+/// not localized. The wait is bounded to 60 polls of roughly a second each, so a
+/// process that never exits delays the update by about a minute and the script
+/// then carries on as before.
+fn wait_for_app_exit_cmd(app_name: &str, filter: &str) -> String {
     format!(
-        "powershell -NoProfile -NonInteractive -Command \"(Get-Service -Name '{service}' -ErrorAction SilentlyContinue).WaitForStatus('Stopped','00:01:00')\"\nping -n 3 127.0.0.1 >nul"
+        "set /a RUSTDESK_EXIT_WAIT=0
+:rustdesk_wait_for_exit
+tasklist /NH /FI \"IMAGENAME eq {app_name}.exe\"{filter} | find /I \"{app_name}.exe\" >nul || goto rustdesk_exited
+set /a RUSTDESK_EXIT_WAIT+=1
+if %RUSTDESK_EXIT_WAIT% geq 60 goto rustdesk_exited
+ping -n 2 127.0.0.1 >nul
+goto rustdesk_wait_for_exit
+:rustdesk_exited"
     )
 }
 
@@ -3569,19 +3577,16 @@ reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
     // There's should be 4 processes running: service, server, tray and main window.
     // But only 2 processes are shown in the tasklist.
     //
-    // `sc stop` does not wait for the service to exit, see
-    // `wait_for_service_stop_cmd`.
-    let wait_stopped_cmd = if is_service_running {
-        wait_for_service_stop_cmd(&app_name)
-    } else {
-        "".to_owned()
-    };
+    // `sc stop` and `taskkill /F` do not wait for the processes to exit, see
+    // `wait_for_app_exit_cmd`. A tray or main window can hold the files too, so
+    // this is not limited to a running service.
+    let wait_exit_cmd = wait_for_app_exit_cmd(&app_name, &filter);
     let cmds = format!(
         "
 chcp 65001
 sc stop {app_name}
 taskkill /F /IM {app_name}.exe{filter}
-{wait_stopped_cmd}
+{wait_exit_cmd}
 {reg_cmd}
 {copy_exe}
 {rename_exe}
@@ -4816,21 +4821,30 @@ mod tests {
     }
 
     #[test]
-    fn test_wait_for_service_stop_cmd_is_bounded_and_locale_independent() {
-        let cmd = wait_for_service_stop_cmd("RustDesk");
-        assert!(cmd.contains("Get-Service -Name 'RustDesk'"));
-        // Bounded, so a service that never stops cannot hang the update.
-        assert!(cmd.contains("WaitForStatus('Stopped','00:01:00')"));
-        // `sc query` output is localized; the service controller API is not.
-        assert!(!cmd.contains("STOPPED"));
+    fn test_wait_for_app_exit_cmd_uses_only_system_tools() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"");
+        let lower = cmd.to_ascii_lowercase();
+        // The elevated script runs with PATH restricted to the system directory
+        // and, like the rest of the handoff, avoids script hosts.
+        assert!(!lower.contains("powershell"));
+        assert!(!lower.contains("cscript"));
         // `timeout` refuses to run without a console.
-        assert!(!cmd.contains("timeout "));
+        assert!(!lower.contains("timeout "));
     }
 
     #[test]
-    fn test_wait_for_service_stop_cmd_escapes_quotes() {
-        let cmd = wait_for_service_stop_cmd("It's");
-        assert!(cmd.contains("Get-Service -Name 'It''s'"));
+    fn test_wait_for_app_exit_cmd_is_bounded_and_skips_the_updater() {
+        let cmd = wait_for_app_exit_cmd("RustDesk", " /FI \"PID ne 42\"");
+        // Matches on the image name, which is not localized, and never waits on
+        // the updater process itself.
+        assert!(cmd.contains("\"IMAGENAME eq RustDesk.exe\" /FI \"PID ne 42\""));
+        assert!(cmd.contains("find /I \"RustDesk.exe\""));
+        // Bounded, so a process that never exits cannot hang the update.
+        assert!(cmd.contains("geq 60 goto rustdesk_exited"));
+        // Every label that is jumped to exists.
+        for label in ["rustdesk_wait_for_exit", "rustdesk_exited"] {
+            assert!(cmd.contains(&format!(":{label}\n")) || cmd.ends_with(&format!(":{label}")));
+        }
     }
 
     #[test]
