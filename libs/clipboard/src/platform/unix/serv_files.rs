@@ -13,7 +13,10 @@ use parking_lot::Mutex;
 use std::{
     collections::VecDeque,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::SystemTime,
     usize,
 };
@@ -35,6 +38,8 @@ lazy_static::lazy_static! {
 }
 
 const MAX_RETIRED_CLIP_FILES: usize = 4;
+// Source of `ClipFiles::last_used`.
+static RETIRED_USE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 // The first descriptor's `clsid`, inside the 32 reserved bytes every peer skips. A random
 // nonce there makes each copy's list id distinct, even when two copies have identical
@@ -92,6 +97,9 @@ struct ClipFiles {
     id: i32,
     // Connections that were sent `files_pdu`.
     served_to: Vec<i32>,
+    // When a retired list was retired or last read; the lowest is evicted first. Kept apart
+    // from the queue order, which is the order lists were sent and picks a peer's list.
+    last_used: u64,
 }
 
 impl ClipFiles {
@@ -324,24 +332,24 @@ fn select_clip_files<'a>(
     conn_id: i32,
     clip_data_id: Option<i32>,
 ) -> Option<&'a mut ClipFiles> {
-    let pos = match clip_data_id {
+    let files = match clip_data_id {
         Some(id) if current.id == id => return Some(current),
         Some(id) => retired
-            .iter()
-            .rposition(|files| files.id == id && files.served_to.contains(&conn_id))?,
+            .iter_mut()
+            .rev()
+            .find(|files| files.id == id && files.served_to.contains(&conn_id))?,
         None if current.served_to.contains(&conn_id) => return Some(current),
         None => match retired
-            .iter()
-            .rposition(|files| files.served_to.contains(&conn_id))
+            .iter_mut()
+            .rev()
+            .find(|files| files.served_to.contains(&conn_id))
         {
-            Some(pos) => pos,
+            Some(files) => files,
             None => return Some(current),
         },
     };
-    // A list being read moves to the back, so it is not the next one evicted.
-    let files = retired.remove(pos)?;
-    retired.push_back(files);
-    retired.back_mut()
+    files.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    Some(files)
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
@@ -350,9 +358,14 @@ fn retire_if_served(mut replaced: ClipFiles) {
         return;
     }
     replaced.release_handles();
+    replaced.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
     let mut retired = RETIRED_CLIP_FILES.lock();
     if retired.len() == MAX_RETIRED_CLIP_FILES {
-        retired.pop_front();
+        // The list retired or read longest ago, so a transfer still reading keeps its list.
+        let oldest = (0..retired.len()).min_by_key(|&i| retired[i].last_used);
+        if let Some(i) = oldest {
+            retired.remove(i);
+        }
     }
     retired.push_back(replaced);
 }
@@ -867,6 +880,37 @@ mod sig_test {
             get_file_list_pdu(2);
             assert_eq!(read(), b"0000");
         }
+
+        clear_files();
+    }
+
+    #[test]
+    fn another_conns_read_does_not_change_a_legacy_peers_list() {
+        let tmp = TmpDir::new("legacy_order");
+        let [a, b, c] = ["a", "b", "c"].map(|name| {
+            let file = tmp.join(&format!("{name}.bin"));
+            fs::write(&file, name.repeat(8).to_uppercase()).unwrap();
+            file
+        });
+
+        let _guard = lock_clip_files();
+        clear_files();
+        sync_files(&[path_str(&a)]).unwrap();
+        get_file_list_pdu(1);
+        get_file_list_pdu(2);
+        let idx = CLIP_FILES.lock().first_file_index as i32;
+        sync_files(&[path_str(&b)]).unwrap();
+        get_file_list_pdu(1);
+        // Neither connection fetches C's list.
+        sync_files(&[path_str(&c)]).unwrap();
+
+        // Peers without ids: 1 is reading B, the list last sent to it; 2 is reading A.
+        let read = |conn_id, offset| {
+            range_data(read_file_contents(conn_id, 7, idx, 0x2, offset, 0, 4, None))
+        };
+        assert_eq!(read(1, 0), b"BBBB");
+        assert_eq!(read(2, 0), b"AAAA");
+        assert_eq!(read(1, 4), b"BBBB");
 
         clear_files();
     }
