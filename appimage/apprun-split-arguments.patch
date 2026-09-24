@@ -44,7 +44,7 @@
              }
  
 -            memset(buffer, 0, 1024);
-+            memset(buffer, 0, buffer_size);
++            buffer[0] = '\0';
          }
  
          begin = end;
