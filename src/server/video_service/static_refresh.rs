@@ -2,35 +2,44 @@ use super::{GenericService, VideoFrameController, VideoSource};
 use base::message_proto::Message;
 use hbb_common::{bail, log, ResultType};
 use scrap::{
-    codec::{Encoder, BR_BEST, BR_SPEED},
+    codec::{Encoder, BR_BALANCED, BR_BEST, BR_SPEED},
     record::Recorder,
     CodecFormat, EncodeInput,
 };
 use std::{
+    collections::HashSet,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-const REPEAT_INTERVAL: Duration = Duration::from_millis(100);
+const INITIAL_REPEAT_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_REPEAT_FAILURES: usize = 3;
 const MAX_REPEAT_NO_OUTPUTS: usize = 100;
 
 fn max_repeat_frames(codec: CodecFormat, quality: f32) -> usize {
-    let (low, balanced, best) = match codec {
-        CodecFormat::VP8 => (100, 100, 100),
-        CodecFormat::VP9 => (100, 100, 100),
-        CodecFormat::H264 => (100, 100, 100),
-        CodecFormat::H265 => (100, 100, 100),
+    let (low, low_to_balanced, balanced_to_best, best) = match codec {
+        CodecFormat::VP8 => (30, 20, 20, 0),
+        CodecFormat::VP9 => (30, 20, 20, 0),
+        CodecFormat::H264 => (90, 60, 60, 30),
+        CodecFormat::H265 => (150, 120, 90, 30),
         CodecFormat::AV1 => return 0,
         CodecFormat::Unknown => return 0,
     };
-    if quality <= BR_SPEED {
-        low
-    } else if quality >= BR_BEST {
+    if quality >= BR_BEST {
         best
+    } else if quality >= BR_BALANCED {
+        balanced_to_best
+    } else if quality > BR_SPEED {
+        low_to_balanced
     } else {
-        balanced
+        low
     }
+}
+
+#[derive(Debug)]
+pub(super) struct FrameEncodeResult {
+    pub(super) send_conn_ids: HashSet<i32>,
+    pub(super) vpx_no_output: bool,
 }
 
 pub(super) struct StaticRefresh<'a> {
@@ -93,6 +102,17 @@ impl<'a> StaticRefresh<'a> {
         }
     }
 
+    pub(super) fn on_frame_encoded(&mut self, result: &FrameEncodeResult) {
+        // VP8/VP9 rate control may drop a frame without an encoding error.
+        // The latest input is still cached, so allow repeats even without output;
+        // otherwise the final update may never be sent once capture becomes idle.
+        self.on_encoded(
+            !result.send_conn_ids.is_empty()
+                || (matches!(self.codec_format, CodecFormat::VP8 | CodecFormat::VP9)
+                    && result.vpx_no_output),
+        );
+    }
+
     pub(super) fn on_encoded(&mut self, success: bool) {
         self.last_encode = Instant::now();
         #[cfg(test)]
@@ -130,7 +150,14 @@ impl<'a> StaticRefresh<'a> {
                 let elapsed = self.last_encode.elapsed();
                 #[cfg(test)]
                 let elapsed = self.elapsed_since_encode;
-                elapsed < REPEAT_INTERVAL.max(spf)
+                let interval = if matches!(self.codec_format, CodecFormat::VP8 | CodecFormat::VP9)
+                    || (self.repeat_output_counter == 0 && self.repeat_no_outputs == 0)
+                {
+                    INITIAL_REPEAT_INTERVAL.max(spf)
+                } else {
+                    spf
+                };
+                elapsed < interval
             }
         {
             return Ok(());
@@ -151,7 +178,12 @@ impl<'a> StaticRefresh<'a> {
             })?;
 
             let result = encoder.encode_to_message(frame, ms);
-            self.last_encode = Instant::now();
+            self.last_encode = if matches!(self.codec_format, CodecFormat::VP8 | CodecFormat::VP9) {
+                Instant::now()
+            } else {
+                // Align with the capture loop so encoding time does not skip the next tick.
+                now
+            };
             #[cfg(test)]
             {
                 self.elapsed_since_encode = Duration::ZERO;
@@ -293,21 +325,22 @@ mod tests {
         let spf = Duration::from_millis(100);
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
-        for _ in 0..100 {
+        let limit = max_repeat_frames(CodecFormat::VP9, BR_BALANCED);
+        for _ in 0..limit {
             refresh.elapsed_since_encode = Duration::from_secs(60);
             attempt(&mut refresh, &calls, &[1], spf);
         }
-        assert_eq!(calls.get(), 100);
+        assert_eq!(calls.get(), limit);
 
         refresh.elapsed_since_encode = Duration::from_secs(600);
         attempt(&mut refresh, &calls, &[1], spf);
-        assert_eq!(calls.get(), 100);
+        assert_eq!(calls.get(), limit);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
         refresh.elapsed_since_encode = Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[1], spf);
-        assert_eq!(calls.get(), 101);
+        assert_eq!(calls.get(), limit + 1);
     }
 
     #[test]
@@ -316,7 +349,7 @@ mod tests {
         let recorder = Arc::new(Mutex::new(None));
         let mut refresh = StaticRefresh::new(
             VideoSource::Monitor,
-            CodecFormat::VP9,
+            CodecFormat::H264,
             &sp,
             &recorder,
             0,
@@ -337,29 +370,42 @@ mod tests {
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.elapsed_since_encode = Duration::from_millis(50);
+        refresh.elapsed_since_encode = Duration::from_millis(9);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 1);
 
-        refresh.elapsed_since_encode = Duration::from_millis(100);
+        refresh.elapsed_since_encode = Duration::from_millis(10);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
         assert_eq!(calls.get(), 2);
+
+        refresh.elapsed_since_encode = Duration::from_millis(49);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(50));
+        assert_eq!(calls.get(), 2);
+        refresh.elapsed_since_encode = Duration::from_millis(50);
+        attempt(&mut refresh, &calls, &[1], Duration::from_millis(50));
+        assert_eq!(calls.get(), 3);
 
         refresh.on_frame(&EncodeInput::YUV(&[1]));
         refresh.on_encoded(true);
         refresh.elapsed_since_encode = Duration::from_millis(50);
         attempt(&mut refresh, &calls, &[1], Duration::from_millis(10));
-        assert_eq!(calls.get(), 2);
+        assert_eq!(calls.get(), 3);
 
         refresh.elapsed_since_encode = Duration::from_secs(1);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 2);
+        assert_eq!(calls.get(), 3);
 
         refresh.elapsed_since_encode = Duration::from_secs(3);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 3);
+        assert_eq!(calls.get(), 4);
         attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
-        assert_eq!(calls.get(), 3);
+        assert_eq!(calls.get(), 4);
+        refresh.elapsed_since_encode = Duration::from_millis(1999);
+        attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
+        assert_eq!(calls.get(), 4);
+        refresh.elapsed_since_encode = Duration::from_millis(2000);
+        attempt(&mut refresh, &calls, &[1], Duration::from_secs(2));
+        assert_eq!(calls.get(), 5);
     }
 
     #[test]

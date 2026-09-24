@@ -20,6 +20,17 @@ use std::{ptr, slice};
 generate_call_macro!(call_vpx, false);
 generate_call_ptr_macro!(call_vpx_ptr);
 
+#[derive(Debug)]
+pub struct VpxNoOutput;
+
+impl std::fmt::Display for VpxNoOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("no valid frame")
+    }
+}
+
+impl std::error::Error for VpxNoOutput {}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
     VP8,
@@ -187,7 +198,7 @@ impl EncoderApi for VpxEncoder {
         if frames.len() > 0 {
             Ok(VpxEncoder::create_video_frame(self.id, frames))
         } else {
-            Err(anyhow!("no valid frame"))
+            Err(VpxNoOutput.into())
         }
     }
 
