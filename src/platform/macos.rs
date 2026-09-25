@@ -586,13 +586,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
 // https://github.com/stweil/OSXvnc/blob/master/OSXvnc-server/mousecursor.c
 fn unsafe_get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     unsafe {
-        // Captured only while the cursor is the change `hcursor` names. One that changed again is
-        // left for get_cursor to report again, or the change would be lost.
-        let changed = || CGSCurrentCursorSeed() as u32 as u64 != hcursor;
-        if changed() {
-            LATEST_SEED = 0;
-            bail!("cursor changed");
-        }
+        // The cursor shown is captured even if it changed after get_cursor read the seed: the
+        // content names the shape, and that change moved the seed on, so the next poll captures it.
         let c: id = msg_send![class!(NSCursor), currentSystemCursor];
         if c == nil {
             bail!("Failed to call [NSCursor currentSystemCursor]");
@@ -635,10 +630,6 @@ fn unsafe_get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 colors.push((b * 255.) as _);
                 colors.push((a * 255.) as _);
             }
-        }
-        if changed() {
-            LATEST_SEED = 0;
-            bail!("cursor changed");
         }
         Ok(CursorData {
             id: hcursor,
