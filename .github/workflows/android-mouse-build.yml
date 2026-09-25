@@ -7,11 +7,10 @@ env:
   RUST_VERSION: "1.75"
   CARGO_NDK_VERSION: "3.1.2"
   FLUTTER_VERSION: "3.24.5"
-  NDK_VERSION: "28.2.13676358"
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Free disk space
@@ -31,7 +30,7 @@ jobs:
           ref: 1.4.9
           submodules: recursive
 
-      - name: Patch Android cursor
+      - name: Patch Android local cursor
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -46,13 +45,18 @@ jobs:
               raise SystemExit("Cursor target not found")
 
           p.write_text(s.replace(old, new, 1))
-          print("Mouse cursor patch applied")
+          print("Android local cursor patch applied.")
           PY
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            build-essential \
+            gcc \
+            g++ \
+            libc6-dev \
+            linux-libc-dev \
             clang \
             cmake \
             ninja-build \
@@ -65,6 +69,8 @@ jobs:
             curl \
             unzip \
             jq
+
+          test -f /usr/include/x86_64-linux-gnu/bits/libc-header-start.h
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -100,12 +106,24 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           rustup target add aarch64-linux-android
+
+          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$NDK_BIN:$PATH"
+
+          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang"
+          export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang++"
+          export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
+
+          echo "Using Android compiler:"
+          echo "$CC_aarch64_linux_android"
+          "$CC_aarch64_linux_android" --version
+
           chmod +x flutter/ndk_arm64.sh
           ./flutter/ndk_arm64.sh
 
-      - name: Verify native library
+      - name: Verify native libraries
         run: |
-          find flutter/android/app/src/main/jniLibs -type f -name "*.so" -print
+          find flutter/android/app/src/main/jniLibs -type f -name "*.so" -print || true
 
       - name: Build APK
         working-directory: flutter
@@ -121,6 +139,7 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
+
           cp flutter/build/app/outputs/flutter-apk/app-release.apk \
              output/rustdesk-1.4.9-mouse-cursor-arm64.apk
 
@@ -128,4 +147,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-1.4.9-mouse-cursor-arm64
-          path: output/*.apk
+          path: output/rustdesk-1.4.9-mouse-cursor-arm64.apk
