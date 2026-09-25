@@ -33,7 +33,7 @@ mod lv;
 mod nb;
 mod nl;
 mod pl;
-mod ptbr;
+mod pt_BR;
 mod pt_PT;
 mod ro;
 mod ru;
@@ -202,9 +202,9 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
-        "br" => ptbr::T.deref(),
-        "pt" => ptbr::T.deref(),
-        "pt-br" => ptbr::T.deref(),
+        "br" => pt_BR::T.deref(),
+        "pt" => pt_BR::T.deref(),
+        "pt-br" => pt_BR::T.deref(),
         "pt-pt" => pt_PT::T.deref(),
         "tr" => tr::T.deref(),
         "cs" => cs::T.deref(),
