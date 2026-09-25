@@ -46,6 +46,40 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
   InputModel get _inputModel => widget.ffi.inputModel;
   CursorModel get _cursorModel => widget.ffi.cursorModel;
   late final VirtualMouseMode _virtualMouseMode;
+  final _leftButtonKey = GlobalKey<_FloatingLeftRightButtonState>();
+  final _rightButtonKey = GlobalKey<_FloatingLeftRightButtonState>();
+  Size? _lastViewportSize;
+
+  Rect? _otherButtonRect(bool isLeft) {
+    final other = (isLeft ? _rightButtonKey : _leftButtonKey).currentState;
+    if (other == null || !other._isInitialized) return null;
+    return Rect.fromLTWH(other._position.dx, other._position.dy,
+        _kLeftRightButtonWidth, _kLeftRightButtonHeight);
+  }
+
+  void _reconcileButtons(Offset? previousLeft, Offset? previousRight) {
+    final left = _leftButtonKey.currentState;
+    final right = _rightButtonKey.currentState;
+    if (left == null || right == null) return;
+
+    final moved = <_FloatingLeftRightButtonState>[
+      if (previousRight != null && previousRight != right._position) right,
+      if (previousLeft != null && previousLeft != left._position) left,
+    ];
+    void settle(_FloatingLeftRightButtonState button) {
+      button._onMoveUpdateDelta(Offset.zero, avoidWheel: true);
+      if (!button._isDown || !button._isDragging) {
+        button._preSavedPos = button._position;
+      }
+    }
+
+    for (final button in moved) {
+      if (!button._isDown || !button._isDragging) settle(button);
+    }
+    for (final button in moved) {
+      if (button._isDown && button._isDragging) settle(button);
+    }
+  }
 
   @override
   void initState() {
@@ -77,32 +111,47 @@ class _FloatingMouseWidgetsState extends State<FloatingMouseWidgets> {
       return const Offstage();
     }
     return LayoutBuilder(
-      builder: (context, constraints) => Stack(
-        children: [
-          FloatingWheel(
-            inputModel: _inputModel,
-            cursorModel: _cursorModel,
-            viewportSize: constraints.biggest,
-          ),
-          if (virtualMouseMode.showVirtualJoystick)
-            VirtualJoystick(
-              cursorModel: _cursorModel,
+      builder: (context, constraints) {
+        final viewportSize = constraints.biggest;
+        if (_lastViewportSize != null && _lastViewportSize != viewportSize) {
+          final previousLeft = _leftButtonKey.currentState?._position;
+          final previousRight = _rightButtonKey.currentState?._position;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _lastViewportSize == viewportSize) {
+              _reconcileButtons(previousLeft, previousRight);
+            }
+          });
+        }
+        _lastViewportSize = viewportSize;
+        return Stack(
+          children: [
+            FloatingWheel(
               inputModel: _inputModel,
+              cursorModel: _cursorModel,
+              viewportSize: viewportSize,
             ),
-          FloatingLeftRightButton(
-            isLeft: true,
-            inputModel: _inputModel,
-            cursorModel: _cursorModel,
-            viewportSize: constraints.biggest,
-          ),
-          FloatingLeftRightButton(
-            isLeft: false,
-            inputModel: _inputModel,
-            cursorModel: _cursorModel,
-            viewportSize: constraints.biggest,
-          ),
-        ],
-      ),
+            if (virtualMouseMode.showVirtualJoystick)
+              VirtualJoystick(
+                cursorModel: _cursorModel,
+                inputModel: _inputModel,
+              ),
+            FloatingLeftRightButton(
+              key: _leftButtonKey,
+              isLeft: true,
+              inputModel: _inputModel,
+              cursorModel: _cursorModel,
+              viewportSize: viewportSize,
+            ),
+            FloatingLeftRightButton(
+              key: _rightButtonKey,
+              isLeft: false,
+              inputModel: _inputModel,
+              cursorModel: _cursorModel,
+              viewportSize: viewportSize,
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -450,10 +499,11 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.viewportSize != widget.viewportSize) {
       final currentOrientation = MediaQuery.of(context).orientation;
-      if (_isDown &&
-          _isDragging &&
-          _previousOrientation == currentOrientation) {
-        _onMoveUpdateDelta(Offset.zero, avoidWheel: true);
+      final activeDrag =
+          _isDown && _isDragging && _previousOrientation == currentOrientation;
+      if (activeDrag) {
+        _onMoveUpdateDelta(Offset.zero,
+            avoidWheel: true, avoidOtherButton: false);
       } else {
         _resetPosition(currentOrientation, avoidWheel: true);
       }
@@ -572,7 +622,8 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     _lastBlockedRect = newRect;
   }
 
-  void _onMoveUpdateDelta(Offset delta, {bool avoidWheel = false}) {
+  void _onMoveUpdateDelta(Offset delta,
+      {bool avoidWheel = false, bool avoidOtherButton = true}) {
     var newPosition = _clampPosition(_position + delta);
     if (avoidWheel) {
       final size = widget.viewportSize;
@@ -590,6 +641,31 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
                 _kLeftRightButtonWidth, _kLeftRightButtonHeight)
             .overlaps(wheelRect)) {
           newPosition = _clampPosition(_defaultPosition(_isLeft));
+        }
+      }
+      final otherRect = avoidOtherButton
+          ? context
+              .findAncestorStateOfType<_FloatingMouseWidgetsState>()
+              ?._otherButtonRect(_isLeft)
+          : null;
+      if (otherRect != null &&
+          Rect.fromLTWH(newPosition.dx, newPosition.dy, _kLeftRightButtonWidth,
+                  _kLeftRightButtonHeight)
+              .overlaps(otherRect)) {
+        for (final position in [
+          Offset(newPosition.dx, otherRect.bottom),
+          Offset(newPosition.dx, otherRect.top - _kLeftRightButtonHeight),
+          Offset(otherRect.left - _kLeftRightButtonWidth, newPosition.dy),
+          Offset(otherRect.right, newPosition.dy),
+        ]) {
+          final candidate = _clampPosition(position);
+          final candidateRect = Rect.fromLTWH(candidate.dx, candidate.dy,
+              _kLeftRightButtonWidth, _kLeftRightButtonHeight);
+          if (!candidateRect.overlaps(otherRect) &&
+              !candidateRect.overlaps(wheelRect)) {
+            newPosition = candidate;
+            break;
+          }
         }
       }
     }
