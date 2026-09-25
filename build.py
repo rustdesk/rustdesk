@@ -390,9 +390,9 @@ def ffi_bindgen_function_refactor():
 # The commit is fetched directly by sha, so no branch or tag name takes part in the build: see
 # build_libdrmtap_so(). This is the SINGLE source of truth for the pin, deliberately not duplicated in
 # any workflow, so a bump is one edit here (plus the informational version comment in
-# libs/scrap/Cargo.toml). This commit is libdrmtap v0.5.6.
+# libs/scrap/Cargo.toml). This commit is libdrmtap v0.5.8.
 LIBDRMTAP_REPO_PINNED = 'https://github.com/rustdesk-org/libdrmtap'
-LIBDRMTAP_SHA_PINNED = '49b204f275af1a2d6dfead94effb4036c7d50a3a'
+LIBDRMTAP_SHA_PINNED = '95d4d74549631aa5c39461300acfd2e106583cc9'
 LIBDRMTAP_REPO = os.environ.get('DRMTAP_REPO', LIBDRMTAP_REPO_PINNED)
 LIBDRMTAP_SHA = os.environ.get('DRMTAP_SHA', LIBDRMTAP_SHA_PINNED)
 # Every way of getting a different .so than the pin needs the same explicit opt-in. Otherwise the
