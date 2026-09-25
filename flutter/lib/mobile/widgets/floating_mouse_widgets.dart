@@ -453,7 +453,7 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
       if (_isDown &&
           _isDragging &&
           _previousOrientation == currentOrientation) {
-        _onMoveUpdateDelta(Offset.zero);
+        _onMoveUpdateDelta(Offset.zero, avoidWheel: true);
       } else {
         _resetPosition(currentOrientation, avoidWheel: true);
       }
@@ -527,9 +527,13 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
           min(_wheelHeight, size.height));
       final otherRect = Rect.fromLTWH(otherPosition.dx, otherPosition.dy,
           _kLeftRightButtonWidth, _kLeftRightButtonHeight);
+      final otherFallback = _clampPosition(_defaultPosition(!_isLeft));
+      final otherFallbackRect = Rect.fromLTWH(otherFallback.dx,
+          otherFallback.dy, _kLeftRightButtonWidth, _kLeftRightButtonHeight);
       if (buttonRect.overlaps(otherRect) ||
           buttonRect.overlaps(wheelRect) ||
-          otherRect.overlaps(wheelRect)) {
+          (otherRect.overlaps(wheelRect) &&
+              buttonRect.overlaps(otherFallbackRect))) {
         _position = _clampPosition(_defaultPosition(_isLeft));
       }
     }
@@ -568,8 +572,27 @@ class _FloatingLeftRightButtonState extends State<FloatingLeftRightButton> {
     _lastBlockedRect = newRect;
   }
 
-  void _onMoveUpdateDelta(Offset delta) {
-    final newPosition = _clampPosition(_position + delta);
+  void _onMoveUpdateDelta(Offset delta, {bool avoidWheel = false}) {
+    var newPosition = _clampPosition(_position + delta);
+    if (avoidWheel) {
+      final size = widget.viewportSize;
+      final wheelRect = Rect.fromLTWH(
+          max(0.0, size.width - _wheelWidth - _kSpaceToHorizontalEdge),
+          max(0.0, (size.height - _wheelHeight) / 2),
+          _wheelWidth,
+          min(_wheelHeight, size.height));
+      if (Rect.fromLTWH(newPosition.dx, newPosition.dy, _kLeftRightButtonWidth,
+              _kLeftRightButtonHeight)
+          .overlaps(wheelRect)) {
+        newPosition = _clampPosition(
+            Offset(wheelRect.left - _kLeftRightButtonWidth, newPosition.dy));
+        if (Rect.fromLTWH(newPosition.dx, newPosition.dy,
+                _kLeftRightButtonWidth, _kLeftRightButtonHeight)
+            .overlaps(wheelRect)) {
+          newPosition = _clampPosition(_defaultPosition(_isLeft));
+        }
+      }
+    }
     final isPositionChanged = !(isDoubleEqual(newPosition.dx, _position.dx) &&
         isDoubleEqual(newPosition.dy, _position.dy));
     setState(() {
