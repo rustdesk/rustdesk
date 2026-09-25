@@ -1,4 +1,3 @@
-#[cfg(windows)]
 fn build_windows() {
     let file = "src/platform/windows.cc";
     let file2 = "src/platform/windows_delete_test_cert.cc";
@@ -87,12 +86,15 @@ fn install_android_deps() {
 
 fn main() {
     hbb_common::gen_version();
-    install_android_deps();
-    #[cfg(all(windows, feature = "inline"))]
-    build_manifest();
-    #[cfg(windows)]
-    build_windows();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "android" {
+        install_android_deps();
+    }
+    if target_os == "windows" {
+        #[cfg(all(windows, feature = "inline"))]
+        build_manifest();
+        build_windows();
+    }
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
         build_mac();
