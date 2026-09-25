@@ -2616,9 +2616,8 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Err(err) => {
                 log::warn!("Rejected cursor {peer_id}: {err}");
-                // Selected as a later cursor_id for the handle would be.
                 self.handler
-                    .set_cursor_id(self.cursor_dedupe.id(peer_id).to_string());
+                    .set_cursor_id(self.cursor_dedupe.rejected(peer_id, id).to_string());
             }
         }
     }
@@ -2712,11 +2711,18 @@ impl CursorDedupe {
         self.decoded.contains(&id)
     }
 
-    /// Names the handle once its shape decoded, now or before: a shape that did not decode
-    /// leaves nothing, and takes no handle from one that did.
+    /// Names the handle once its shape decoded, now or before.
     fn record(&mut self, peer_id: u64, id: u64) {
         self.ids.insert(peer_id, id);
         self.decoded.insert(id);
+    }
+
+    /// Names the handle by the content of a shape that did not decode, which is never marked
+    /// decoded: the UI has no shape under it, now or when the handle is selected again, and
+    /// the shape the handle named before is not shown in its place.
+    fn rejected(&mut self, peer_id: u64, id: u64) -> u64 {
+        self.ids.insert(peer_id, id);
+        id
     }
 }
 
@@ -2887,6 +2893,34 @@ mod cursor_dedupe_tests {
         let beam = CursorDedupe::name(&shape(1, 0, b"beam"));
         dedupe.record(1, beam);
         assert_eq!(dedupe.id(1), beam);
+    }
+
+    #[test]
+    fn a_rejected_shape_names_its_handle_and_is_never_decoded() {
+        let mut dedupe = CursorDedupe::default();
+        let arrow = CursorDedupe::name(&shape(7, 0, b"arrow"));
+        dedupe.record(7, arrow);
+        let beam = CursorDedupe::name(&shape(8, 0, b"beam"));
+        dedupe.record(8, beam);
+        let broken = CursorDedupe::name(&shape(7, 0, b"broken"));
+        assert_eq!(
+            dedupe.rejected(7, broken),
+            broken,
+            "not the shape it named before"
+        );
+        assert_eq!(
+            dedupe.id(7),
+            broken,
+            "nor when the handle is selected again"
+        );
+        assert_eq!(dedupe.id(8), beam, "another handle keeps its shape");
+        assert!(!dedupe.has_decoded(broken));
+        assert!(
+            dedupe.has_decoded(arrow),
+            "kept for a handle that brings it again"
+        );
+        dedupe.record(7, arrow);
+        assert_eq!(dedupe.id(7), arrow);
     }
 
     #[test]
