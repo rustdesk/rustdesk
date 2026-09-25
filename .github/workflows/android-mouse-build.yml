@@ -6,22 +6,37 @@ on:
 env:
   RUST_VERSION: "1.75"
   CARGO_NDK_VERSION: "3.1.2"
-  FLUTTER_VERSION: "3.24.5"
+  CARGO_EXPAND_VERSION: "1.0.95"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
+  ANDROID_FLUTTER_VERSION: "3.24.5"
+  BRIDGE_FLUTTER_VERSION: "3.22.3"
+  NDK_VERSION: "r28c"
+  VCPKG_COMMIT_ID: "120deac3062162151622ca4860575a33844ba10b"
+  VERSION: "1.4.9"
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
+      # ------------------------------------------------------------
+      # FREE SPACE
+      # ------------------------------------------------------------
+
       - name: Free disk space
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
+          tool-cache: false
           android: false
           dotnet: true
           haskell: true
           large-packages: false
           docker-images: true
           swap-storage: false
+
+      # ------------------------------------------------------------
+      # CHECKOUT RUSTDESK 1.4.9
+      # ------------------------------------------------------------
 
       - name: Checkout RustDesk 1.4.9
         uses: actions/checkout@v4
@@ -30,7 +45,11 @@ jobs:
           ref: 1.4.9
           submodules: recursive
 
-      - name: Patch Android local cursor
+      # ------------------------------------------------------------
+      # OUR MOUSE CURSOR PATCH
+      # ------------------------------------------------------------
+
+      - name: Patch Android local mouse cursor
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -42,156 +61,377 @@ jobs:
           new = "cursor: MouseCursor.defer,"
 
           if old not in s:
-              raise SystemExit("Cursor target not found")
+              raise SystemExit("ERROR: Cursor target line not found")
 
           p.write_text(s.replace(old, new, 1))
-          print("Android local cursor patch applied.")
+
+          print("Android local cursor patch applied successfully.")
           PY
 
-      - name: Install dependencies
+          echo "Patched cursor line:"
+          grep -n -B2 -A2 "cursor: MouseCursor.defer" \
+            flutter/lib/mobile/pages/remote_page.dart
+
+      # ------------------------------------------------------------
+      # UBUNTU DEPENDENCIES
+      # ------------------------------------------------------------
+
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             build-essential \
             gcc \
+            gcc-multilib \
             g++ \
+            g++-multilib \
             libc6-dev \
             linux-libc-dev \
             clang \
             cmake \
-            ninja-build \
-            nasm \
-            yasm \
+            curl \
+            git \
             libclang-dev \
             llvm-dev \
+            nasm \
+            ninja-build \
             pkg-config \
-            libssl-dev \
-            curl \
+            wget \
             unzip \
-            jq \
-            git \
             zip \
+            jq \
             autoconf \
             automake \
-            libtool
+            libtool \
+            openjdk-17-jdk-headless
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.24.5"
-          channel: stable
-          cache: true
+          test -f /usr/include/x86_64-linux-gnu/bits/libc-header-start.h
 
-      - name: Install Rust
+      # ------------------------------------------------------------
+      # RUST
+      # ------------------------------------------------------------
+
+      - name: Install Rust 1.75
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.75"
           targets: aarch64-linux-android
           components: rustfmt
 
-      - name: Ensure rustfmt installed
+      - name: Verify Rust
         run: |
-          rustup component add rustfmt --toolchain 1.75
+          rustc --version
+          cargo --version
           rustfmt --version
+
+      # ------------------------------------------------------------
+      # FLUTTER 3.22.3
+      # Used ONLY to generate flutter_rust_bridge files.
+      # RustDesk official 1.4.9 does this.
+      # ------------------------------------------------------------
+
+      - name: Install Flutter for bridge generation
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.22.3"
+          cache: true
+
+      - name: Install Flutter Rust Bridge tools
+        run: |
+          cargo install cargo-expand \
+            --version "${CARGO_EXPAND_VERSION}" \
+            --locked
+
+          cargo install flutter_rust_bridge_codegen \
+            --version "${FLUTTER_RUST_BRIDGE_VERSION}" \
+            --features "uuid" \
+            --locked
+
+          echo "FRB version:"
+          flutter_rust_bridge_codegen --version
+
+          echo "cargo-expand version:"
+          cargo expand --version
+
+      # ------------------------------------------------------------
+      # PREPARE PUBSPEC FOR OLD BRIDGE FLUTTER
+      # Exactly like RustDesk bridge workflow.
+      # ------------------------------------------------------------
+
+      - name: Prepare Flutter 3.22.3 bridge dependencies
+        run: |
+          sed -i \
+            -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' \
+            flutter/pubspec.yaml
+
+          cd flutter
+          flutter pub get
+
+      # ------------------------------------------------------------
+      # GENERATE BRIDGE
+      # IMPORTANT: input is flutter_ffi.rs, NOT flutter.rs
+      # ------------------------------------------------------------
+
+      - name: Generate Flutter Rust bridge
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter_ffi.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
+
+          cp \
+            ./flutter/macos/Runner/bridge_generated.h \
+            ./flutter/ios/Runner/bridge_generated.h
+
+          echo "Checking generated bridge files..."
+
+          test -f src/bridge_generated.rs
+          test -f src/bridge_generated.io.rs
+          test -f flutter/lib/generated_bridge.dart
+          test -f flutter/lib/generated_bridge.freezed.dart
+
+          ls -lh \
+            src/bridge_generated.rs \
+            src/bridge_generated.io.rs \
+            flutter/lib/generated_bridge.dart \
+            flutter/lib/generated_bridge.freezed.dart
+
+      # ------------------------------------------------------------
+      # Restore original RustDesk 1.4.9 pubspec after bridge generation
+      # ------------------------------------------------------------
+
+      - name: Restore Flutter pubspec
+        run: |
+          git checkout -- flutter/pubspec.yaml || true
+          git checkout -- flutter/pubspec.lock || true
+
+      # ------------------------------------------------------------
+      # INSTALL FLUTTER 3.24.5
+      # Actual Android application build version.
+      # ------------------------------------------------------------
+
+      - name: Install Flutter for Android build
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.24.5"
+          cache: true
+
+      - name: Verify Flutter build version
+        run: |
+          flutter --version
+
+      # ------------------------------------------------------------
+      # RustDesk carries a Flutter 3.24.x patch.
+      # Official Android workflow applies it.
+      # ------------------------------------------------------------
+
+      - name: Patch Flutter 3.24.5
+        run: |
+          FLUTTER_ROOT_DIR="$(dirname "$(dirname "$(which flutter)")")"
+
+          echo "Flutter root: $FLUTTER_ROOT_DIR"
+
+          cp \
+            .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff \
+            "$FLUTTER_ROOT_DIR/"
+
+          cd "$FLUTTER_ROOT_DIR"
+
+          git apply \
+            flutter_3.24.4_dropdown_menu_enableFilter.diff || \
+            echo "Flutter patch already applied or not required"
+
+      # ------------------------------------------------------------
+      # NDK
+      # ------------------------------------------------------------
 
       - name: Install Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r28c
+          add-to-path: true
 
-      - name: Install cargo-ndk
+      - name: Show Android NDK
         run: |
-          cargo install cargo-ndk --version 3.1.2 --locked
+          echo "NDK=${{ steps.setup-ndk.outputs.ndk-path }}"
+          ls "${{ steps.setup-ndk.outputs.ndk-path }}"
 
-      - name: Install flutter_rust_bridge_codegen
-        run: |
-          cargo install flutter_rust_bridge_codegen \
-            --version 1.80.1 \
-            --locked
-
-          flutter_rust_bridge_codegen --version
+      # ------------------------------------------------------------
+      # VCPKG
+      # Use pinned version from RustDesk 1.4.9 workflow.
+      # ------------------------------------------------------------
 
       - name: Setup vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
-          cd "$HOME/vcpkg"
-          ./bootstrap-vcpkg.sh
-          echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: "120deac3062162151622ca4860575a33844ba10b"
+          doNotCache: false
+
+      # ------------------------------------------------------------
+      # BUILD ANDROID NATIVE DEPENDENCIES
+      # FFmpeg / hwcodec etc.
+      # ------------------------------------------------------------
 
       - name: Build Android vcpkg dependencies
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /home/runner/vcpkg
         run: |
+          echo "VCPKG_ROOT=$VCPKG_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+
           chmod +x flutter/build_android_deps.sh
-          ./flutter/build_android_deps.sh arm64-v8a
+
+          if ! ./flutter/build_android_deps.sh arm64-v8a; then
+            echo "VCPKG BUILD FAILED"
+
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r f; do
+              echo
+              echo "================================================"
+              echo "$f"
+              echo "================================================"
+              tail -n 100 "$f" || true
+            done
+
+            exit 1
+          fi
+
+      # ------------------------------------------------------------
+      # CARGO-NDK
+      # ------------------------------------------------------------
+
+      - name: Install cargo-ndk
+        run: |
+          cargo install cargo-ndk \
+            --version "${CARGO_NDK_VERSION}" \
+            --locked
+
+          cargo ndk --version
+
+      # ------------------------------------------------------------
+      # BUILD LIBRUSTDESK.SO
+      # ------------------------------------------------------------
+
+      - name: Build RustDesk Android native library
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+
+          echo "VCPKG_ROOT=$VCPKG_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+
+          chmod +x flutter/ndk_arm64.sh
+
+          ./flutter/ndk_arm64.sh
+
+      # ------------------------------------------------------------
+      # COPY LIBRARY TO ANDROID JNI FOLDER
+      # Official filename produced by RustDesk is liblibrustdesk.so
+      # Android APK expects librustdesk.so.
+      # ------------------------------------------------------------
+
+      - name: Prepare Android native libraries
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          mkdir -p \
+            flutter/android/app/src/main/jniLibs/arm64-v8a
+
+          test -f \
+            target/aarch64-linux-android/release/liblibrustdesk.so
+
+          cp \
+            target/aarch64-linux-android/release/liblibrustdesk.so \
+            flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
+
+          cp \
+            "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+            flutter/android/app/src/main/jniLibs/arm64-v8a/
+
+          echo "JNI libraries:"
+          ls -lh \
+            flutter/android/app/src/main/jniLibs/arm64-v8a/
+
+      # ------------------------------------------------------------
+      # FLUTTER DEPENDENCIES
+      # ------------------------------------------------------------
 
       - name: Flutter pub get
         working-directory: flutter
         run: |
           flutter pub get
 
-      - name: Generate Flutter Rust bridge
-        run: |
-          flutter_rust_bridge_codegen \
-            --rust-input src/flutter.rs \
-            --dart-output flutter/lib/generated_bridge.dart \
-            --rust-output src/bridge_generated.rs
+      # ------------------------------------------------------------
+      # BUILD APK
+      # RustDesk official CI temporarily uses debug signing configuration
+      # when an official release signing key is unavailable.
+      # ------------------------------------------------------------
 
-          test -f src/bridge_generated.rs
-
-          echo "Generated:"
-          ls -lh src/bridge_generated.rs
-
-      - name: Build RustDesk native library
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          VCPKG_ROOT: /home/runner/vcpkg
-        run: |
-          rustup target add aarch64-linux-android
-
-          NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          export PATH="$NDK_BIN:$PATH"
-
-          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang"
-          export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang++"
-          export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
-
-          chmod +x flutter/ndk_arm64.sh
-          ./flutter/ndk_arm64.sh
-
-      - name: Copy native library
-        run: |
-          mkdir -p flutter/android/app/src/main/jniLibs/arm64-v8a
-
-          find target/aarch64-linux-android/release \
-            -name "librustdesk.so" \
-            -exec cp {} flutter/android/app/src/main/jniLibs/arm64-v8a/ \;
-
-          ls -lh flutter/android/app/src/main/jniLibs/arm64-v8a/
-
-      - name: Build APK
-        working-directory: flutter
+      - name: Build Android APK
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
+          export PATH="$JAVA_HOME/bin:$PATH"
+
+          java -version
+          flutter --version
+
+          sed -i \
+            "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" \
+            flutter/android/gradle.properties
+
+          sed -i \
+            "s/signingConfigs.release/signingConfigs.debug/g" \
+            flutter/android/app/build.gradle
+
+          cd flutter
+
           flutter build apk \
             --release \
             --target-platform android-arm64 \
-            --build-name 1.4.9 \
-            --build-number 140900
+            --split-per-abi
 
-      - name: Rename APK
+      # ------------------------------------------------------------
+      # COPY / RENAME OUTPUT
+      # ------------------------------------------------------------
+
+      - name: Prepare APK artifact
         run: |
           mkdir -p output
-          cp flutter/build/app/outputs/flutter-apk/app-release.apk \
-             output/rustdesk-1.4.9-mouse-cursor-arm64.apk
 
-      - name: Upload APK
+          APK="flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "APK was not found."
+
+            echo "Available APK files:"
+            find flutter/build -type f -name "*.apk" -print || true
+
+            exit 1
+          fi
+
+          cp \
+            "$APK" \
+            output/rustdesk-1.4.9-mouse-cursor-arm64.apk
+
+          echo "Final APK:"
+          ls -lh \
+            output/rustdesk-1.4.9-mouse-cursor-arm64.apk
+
+      # ------------------------------------------------------------
+      # UPLOAD
+      # ------------------------------------------------------------
+
+      - name: Upload patched RustDesk APK
         uses: actions/upload-artifact@v4
         with:
           name: rustdesk-1.4.9-mouse-cursor-arm64
           path: output/rustdesk-1.4.9-mouse-cursor-arm64.apk
+          if-no-files-found: error
