@@ -4001,6 +4001,17 @@ impl Connection {
                             self.send(msg_out).await;
                         }
                     }
+                    // Only to a connection the cursor service would send the shape to.
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    Some(misc::Union::RequestCursorData(id)) => {
+                        if self.is_remote()
+                            && (self.peer_keyboard_enabled() || self.show_remote_cursor)
+                        {
+                            if let Some(msg) = input_service::cursor_data_message(id) {
+                                self.send((*msg).clone()).await;
+                            }
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::AudioFrame(frame)) => {

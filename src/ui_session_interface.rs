@@ -76,6 +76,10 @@ pub struct Session<T: InvokeUiSession> {
     pub reconnect_count: Arc<AtomicUsize>,
     pub last_audit_note: Arc<Mutex<String>>,
     pub audit_guid: Arc<Mutex<String>>,
+    // Every cursor shape as the peer sent it, compressed, by the id the UI knows it by. The
+    // peer sends a shape once, and a window asks for it whenever it has to draw it again.
+    #[cfg(feature = "flutter")]
+    pub cursor_shapes: Arc<RwLock<HashMap<u64, CursorData>>>,
 }
 
 #[derive(Clone)]

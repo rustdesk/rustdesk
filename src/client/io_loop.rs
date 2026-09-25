@@ -61,7 +61,7 @@ use hbb_common::{
 use hbb_common::{tokio::sync::Mutex as TokioMutex, ResultType};
 use scrap::CodecFormat;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     num::NonZeroI64,
     path::PathBuf,
@@ -101,6 +101,7 @@ pub struct Remote<T: InvokeUiSession> {
     chroma: Arc<RwLock<Option<Chroma>>>,
     last_record_state: bool,
     sent_close_reason: bool,
+    cursor_dedupe: CursorDedupe,
 }
 
 #[derive(Default)]
@@ -152,6 +153,7 @@ impl<T: InvokeUiSession> Remote<T> {
             chroma: Default::default(),
             last_record_state: false,
             sent_close_reason: false,
+            cursor_dedupe: Default::default(),
         }
     }
 
@@ -1647,11 +1649,29 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                     _ => {}
                 },
+                Some(message::Union::CursorData(cd)) if self.dedupes_cursors() => {
+                    self.set_cursor_data_by_content(cd);
+                }
+                Some(message::Union::CursorId(id)) if self.dedupes_cursors() => {
+                    self.handler
+                        .set_cursor_id(self.cursor_dedupe.id(id).to_string());
+                }
                 Some(message::Union::CursorData(cd)) => {
                     let id = cd.id;
+                    #[cfg(feature = "flutter")]
+                    let compressed = cd.colors.clone();
                     match decode_cursor_data(cd) {
-                        Ok(cd) => self.handler.set_cursor_data(cd),
-                        Err(err) => log::warn!("Rejected cursor {id}: {err}"),
+                        Ok(cd) => {
+                            #[cfg(feature = "flutter")]
+                            self.keep_cursor_shape(cursor_shape(id, &cd, &compressed));
+                            self.handler.set_cursor_data(cd)
+                        }
+                        Err(err) => {
+                            log::warn!("Rejected cursor {id}: {err}");
+                            // The peer shows it now: selected, the UI treats it as a shape it
+                            // lacks, as it will when the peer selects it again.
+                            self.handler.set_cursor_id(id.to_string());
+                        }
                     }
                 }
                 Some(message::Union::CursorId(id)) => {
@@ -2701,6 +2721,69 @@ impl<T: InvokeUiSession> Remote<T> {
         msg.set_misc(misc);
         self.sender.send(Data::Message(msg)).ok();
     }
+
+    /// A shape that decoded, for the UI to ask for again; see `Session::cursor_shapes`.
+    #[cfg(feature = "flutter")]
+    fn keep_cursor_shape(&self, shape: CursorData) {
+        self.handler
+            .cursor_shapes
+            .write()
+            .unwrap()
+            .insert(shape.id, shape);
+    }
+
+    fn dedupes_cursors(&self) -> bool {
+        !crate::is_peer_naming_cursors_by_content(self.handler.lc.read().unwrap().version)
+    }
+
+    /// A shape the UI already has, under whatever handle, is only selected.
+    fn set_cursor_data_by_content(&mut self, cd: CursorData) {
+        let peer_id = cd.id;
+        let id = CursorDedupe::name(&cd);
+        if self.cursor_dedupe.has_decoded(id) {
+            self.cursor_dedupe.record(peer_id, id);
+            self.handler.set_cursor_id(id.to_string());
+            return;
+        }
+        #[cfg(feature = "flutter")]
+        let compressed = cd.colors.clone();
+        match decode_cursor_data(cd) {
+            Ok(mut cd) => {
+                cd.id = id;
+                self.cursor_dedupe.record(peer_id, id);
+                #[cfg(feature = "flutter")]
+                self.keep_cursor_shape(cursor_shape(id, &cd, &compressed));
+                self.handler.set_cursor_data(cd);
+            }
+            Err(err) => {
+                log::warn!("Rejected cursor {peer_id}: {err}");
+                self.handler
+                    .set_cursor_id(self.cursor_dedupe.rejected(peer_id, id).to_string());
+            }
+        }
+    }
+}
+
+/// A shape that decoded, still compressed, under the id the UI knows it by. Copied once it
+/// decoded: the message's colors may be a slice of a larger received buffer, which a clone
+/// would keep alive.
+#[cfg(any(feature = "flutter", test))]
+fn cursor_shape(id: u64, cd: &CursorData, compressed: &[u8]) -> CursorData {
+    CursorData {
+        id,
+        hotx: cd.hotx,
+        hoty: cd.hoty,
+        width: cd.width,
+        height: cd.height,
+        colors: compressed.to_vec().into(),
+        ..Default::default()
+    }
+}
+
+/// The RGBA of a shape kept by `Session::cursor_shapes`, for the UI to draw it again.
+#[cfg(any(feature = "flutter", test))]
+pub(crate) fn kept_cursor_rgba(shape: CursorData) -> hbb_common::ResultType<CursorData> {
+    decode_cursor_data(shape)
 }
 
 // Both UI handlers receive validated, uncompressed RGBA from the receive loop.
@@ -2742,6 +2825,49 @@ fn decode_cursor_data(data: CursorData) -> hbb_common::ResultType<CursorData> {
     }
     cd.colors = colors.into();
     Ok(cd)
+}
+
+/// Gives the UI one id per shape for a peer that names shapes by handle, so the UI decodes and
+/// keeps a shape once however many handles it arrives under. Nothing is dropped for the
+/// connection: the peer sends a shape once and may select any handle it named again.
+#[derive(Default)]
+struct CursorDedupe {
+    ids: HashMap<u64, u64>,
+    // The shapes given to the UI, by content id: whether one that arrives needs decoding.
+    decoded: HashSet<u64>,
+}
+
+impl CursorDedupe {
+    /// Hashes the compressed colors: one peer compresses the same pixels to the same bytes, and
+    /// a shape seen before is then never decompressed again.
+    fn name(cd: &CursorData) -> u64 {
+        crate::cursor_content_id(cd.width, cd.height, cd.hotx, cd.hoty, &cd.colors)
+    }
+
+    fn id(&self, peer_id: u64) -> u64 {
+        self.ids.get(&peer_id).copied().unwrap_or(peer_id)
+    }
+
+    fn has_decoded(&self, id: u64) -> bool {
+        self.decoded.contains(&id)
+    }
+
+    /// Names the handle once its shape decoded, now or before.
+    fn record(&mut self, peer_id: u64, id: u64) {
+        self.ids.insert(peer_id, id);
+        self.decoded.insert(id);
+    }
+
+    /// Names a known handle by the content of a shape that did not decode, which is never
+    /// marked decoded: the UI has no shape under it, now or when the handle is selected again,
+    /// and the shape the handle named before is not shown in its place. A handle never seen is
+    /// not filed, so what a peer sends that does not decode takes no room.
+    fn rejected(&mut self, peer_id: u64, id: u64) -> u64 {
+        if let Some(named) = self.ids.get_mut(&peer_id) {
+            *named = id;
+        }
+        id
+    }
 }
 
 struct RemoveJob {
@@ -2864,5 +2990,147 @@ mod tests {
             arrives(&mut far).await,
             "a clipboard after the login was held back"
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_dedupe_tests {
+    use super::*;
+
+    fn shape(id: u64, hotx: i32, colors: &[u8]) -> CursorData {
+        CursorData {
+            id,
+            hotx,
+            width: 2,
+            height: 2,
+            colors: colors.to_vec().into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_shape_sent_under_a_new_handle_keeps_its_id() {
+        let mut dedupe = CursorDedupe::default();
+        let first = CursorDedupe::name(&shape(1, 0, b"arrow"));
+        assert!(!dedupe.has_decoded(first));
+        dedupe.record(1, first);
+
+        let again = CursorDedupe::name(&shape(2, 0, b"arrow"));
+        assert_eq!(again, first);
+        assert!(dedupe.has_decoded(again));
+        dedupe.record(2, again);
+        assert_eq!(dedupe.id(2), first);
+        assert_eq!(dedupe.id(1), first);
+    }
+
+    #[test]
+    fn the_hotspot_is_part_of_the_shape() {
+        let a = CursorDedupe::name(&shape(1, 0, b"arrow"));
+        let b = CursorDedupe::name(&shape(2, 1, b"arrow"));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn a_reused_handle_names_its_latest_shape() {
+        let mut dedupe = CursorDedupe::default();
+        dedupe.record(1, CursorDedupe::name(&shape(1, 0, b"arrow")));
+        let beam = CursorDedupe::name(&shape(1, 0, b"beam"));
+        dedupe.record(1, beam);
+        assert_eq!(dedupe.id(1), beam);
+    }
+
+    #[test]
+    fn a_rejected_shape_names_its_handle_and_is_never_decoded() {
+        let mut dedupe = CursorDedupe::default();
+        let arrow = CursorDedupe::name(&shape(7, 0, b"arrow"));
+        dedupe.record(7, arrow);
+        let beam = CursorDedupe::name(&shape(8, 0, b"beam"));
+        dedupe.record(8, beam);
+        let broken = CursorDedupe::name(&shape(7, 0, b"broken"));
+        assert_eq!(
+            dedupe.rejected(7, broken),
+            broken,
+            "not the shape it named before"
+        );
+        assert_eq!(
+            dedupe.id(7),
+            broken,
+            "nor when the handle is selected again"
+        );
+        assert_eq!(dedupe.id(8), beam, "another handle keeps its shape");
+        assert!(!dedupe.has_decoded(broken));
+        assert!(
+            dedupe.has_decoded(arrow),
+            "kept for a handle that brings it again"
+        );
+        dedupe.record(7, arrow);
+        assert_eq!(dedupe.id(7), arrow);
+    }
+
+    #[test]
+    fn a_shape_rejected_under_handles_never_seen_files_nothing() {
+        let mut dedupe = CursorDedupe::default();
+        let broken = CursorDedupe::name(&shape(0, 0, b"broken"));
+        for handle in 0..1000 {
+            assert_eq!(dedupe.rejected(handle, broken), broken);
+        }
+        assert!(dedupe.ids.is_empty());
+        assert!(!dedupe.has_decoded(broken));
+    }
+
+    #[test]
+    fn an_id_the_peer_never_sent_is_passed_on() {
+        assert_eq!(CursorDedupe::default().id(7), 7);
+    }
+
+    #[test]
+    fn peers_from_1_5_0_name_cursors_by_content() {
+        use hbb_common::get_version_number as v;
+        assert!(!crate::is_peer_naming_cursors_by_content(v("1.4.9")));
+        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.0")));
+        assert!(crate::is_peer_naming_cursors_by_content(v("1.5.1")));
+    }
+}
+
+#[cfg(test)]
+mod kept_cursor_tests {
+    use super::*;
+
+    fn compressed(width: i32, height: i32) -> CursorData {
+        let rgba = vec![7u8; (width * height * 4) as usize];
+        CursorData {
+            id: 1,
+            width,
+            height,
+            colors: hbb_common::compress::compress(&rgba).into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_kept_shape_is_a_copy_under_the_ui_id() {
+        let mut cd = compressed(4, 4);
+        cd.hotx = 1;
+        let kept = cursor_shape(42, &cd, &cd.colors);
+        assert_eq!(kept.id, 42);
+        assert_eq!((kept.hotx, kept.width, kept.height), (1, 4, 4));
+        assert_eq!(kept.colors, cd.colors);
+        assert_ne!(
+            kept.colors.as_ptr(),
+            cd.colors.as_ptr(),
+            "not a view of the received buffer"
+        );
+    }
+
+    #[test]
+    fn a_kept_shape_is_checked_again_when_it_is_read() {
+        assert_eq!(kept_cursor_rgba(compressed(4, 4)).unwrap().colors.len(), 64);
+        assert!(
+            kept_cursor_rgba(compressed(513, 1)).is_err(),
+            "over the size cap"
+        );
+        let mut bomb = compressed(4, 4);
+        bomb.colors = hbb_common::compress::compress(&vec![0u8; 1 << 20]).into();
+        assert!(kept_cursor_rgba(bomb).is_err(), "more pixels than its size");
     }
 }

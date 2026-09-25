@@ -58,7 +58,8 @@ const _restartReconnectSilentDelaySecs = 5;
 class CachedPeerData {
   Map<String, dynamic> updatePrivacyMode = {};
   Map<String, dynamic> peerInfo = {};
-  List<Map<String, dynamic>> cursorDataList = [];
+  // No shapes: the core keeps them for the session, and the window a tab moves to asks it
+  // for the one in use.
   Map<String, dynamic> lastCursorId = {};
   Map<String, bool> permissions = {};
 
@@ -73,7 +74,6 @@ class CachedPeerData {
     return jsonEncode({
       'updatePrivacyMode': updatePrivacyMode,
       'peerInfo': peerInfo,
-      'cursorDataList': cursorDataList,
       'lastCursorId': lastCursorId,
       'permissions': permissions,
       'secure': secure,
@@ -88,9 +88,6 @@ class CachedPeerData {
       final data = CachedPeerData();
       data.updatePrivacyMode = map['updatePrivacyMode'];
       data.peerInfo = map['peerInfo'];
-      for (final cursorData in map['cursorDataList']) {
-        data.cursorDataList.add(cursorData);
-      }
       data.lastCursorId = map['lastCursorId'];
       map['permissions'].forEach((key, value) {
         data.permissions[key] = value;
@@ -323,10 +320,6 @@ class FfiModel with ChangeNotifier {
     updatePrivacyMode(data.updatePrivacyMode, sessionId, peerId);
     setConnectionType(peerId, data.secure, data.direct, data.streamType);
     await handlePeerInfo(data.peerInfo, peerId, true);
-    for (final element in data.cursorDataList) {
-      updateLastCursorId(element);
-      await handleCursorData(element);
-    }
     if (data.lastCursorId.isNotEmpty) {
       updateLastCursorId(data.lastCursorId);
       handleCursorId(data.lastCursorId);
@@ -356,9 +349,6 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         // switch display is kept for backward compatibility
         handleSwitchDisplay(evt, sessionId, peerId);
-      } else if (name == 'cursor_data') {
-        updateLastCursorId(evt);
-        await handleCursorData(evt);
       } else if (name == 'cursor_id') {
         updateLastCursorId(evt);
         handleCursorId(evt);
@@ -1662,9 +1652,14 @@ class FfiModel with ChangeNotifier {
     parent.target?.cursorModel.updateCursorId(evt);
   }
 
-  handleCursorData(Map<String, dynamic> evt) async {
-    cachedPeerData.cursorDataList.add(evt);
-    await parent.target?.cursorModel.updateCursorData(evt);
+  /// A shape arriving is the shape in use, as a cursor_id is.
+  handleCursorData(String id, int hotx, int hoty, int width, int height,
+      Uint8List colors) async {
+    // The replay selects this last, whatever the order the shapes are replayed in.
+    cachedPeerData.lastCursorId = {'id': id};
+    parent.target?.cursorModel.id = id;
+    await parent.target?.cursorModel
+        .updateCursorData(id, hotx, hoty, width, height, colors);
   }
 
   /// Handle the peer info synchronization event based on [evt].
@@ -2858,12 +2853,13 @@ class CanvasModel with ChangeNotifier {
 
 // data for cursor
 class CursorData {
-  // At most 4 MiB of RGBA, including Linux's square cursor padding.
-  static const _maxRasterSize = 1024;
+  // At most 1 MiB of RGBA, including Linux's square cursor padding: twice the largest
+  // accessibility cursor, beyond which a cursor is shown smaller rather than larger.
+  static const _maxRasterSize = 512;
 
   final String peerId;
   final String id;
-  final img2.Image image;
+  img2.Image? _image;
   double scale;
   Uint8List? data;
   final double hotxOrigin;
@@ -2879,17 +2875,28 @@ class CursorData {
   int get rasterWidth => _rasterWidth;
   int get rasterHeight => _rasterHeight;
 
+  img2.Image get image => _image!;
+
+  /// False for a shape not in use; only the shape in use keeps pixels, for a new raster.
+  bool get hasPixels => _image != null;
+
+  void releasePixels() {
+    _image = null;
+    data = null;
+  }
+
   CursorData({
     required this.peerId,
     required this.id,
-    required this.image,
+    required img2.Image image,
     required this.scale,
     required this.data,
     required this.hotxOrigin,
     required this.hotyOrigin,
     required this.width,
     required this.height,
-  })  : _rasterWidth = (width * scale).ceil(),
+  })  : _image = image,
+        _rasterWidth = (width * scale).ceil(),
         _rasterHeight = (height * scale).ceil(),
         hotx = hotxOrigin * scale,
         hoty = hotyOrigin * scale;
@@ -2921,6 +2928,13 @@ class CursorData {
 
     final targetWidth = (width * scale).ceil();
     final targetHeight = (height * scale).ceil();
+    if ((_rasterWidth != targetWidth || _rasterHeight != targetHeight) &&
+        !hasPixels) {
+      // Nothing to make this raster from; buildCursorOfCache asks for the pixels unless its
+      // native cursor was made before.
+      data = null;
+      return scale;
+    }
     if (_rasterWidth != targetWidth || _rasterHeight != targetHeight) {
       if (isWindows) {
         data = img2
@@ -2991,7 +3005,9 @@ class CursorData {
 
   String updateGetKey(double scale) {
     scale = _checkUpdateScale(scale);
-    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}_${rasterWidth}_$rasterHeight';
+    // The raster asked for, not the one made last: a shape without pixels keeps the native
+    // cursors of every raster it was shown at.
+    return '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}_${(width * scale).ceil()}_${(height * scale).ceil()}';
   }
 }
 
@@ -3162,7 +3178,16 @@ class CursorModel with ChangeNotifier {
 
   get lastIsBlocked => _lastIsBlocked;
 
-  ui.Image? get image => _image;
+  /// The image of the shape in use, or the one shown before until it is back: a switch falls
+  /// back to the default cursor only for a shape the core cannot give. Asks the core for the
+  /// shape in use when it was let go.
+  ui.Image? get image {
+    if (_images[_id] == null && _cacheMap.containsKey(_id)) {
+      restorePixels(_id);
+    }
+    return _image;
+  }
+
   CursorData? get cache => _cache;
 
   double get x => _x - _displayOriginX;
@@ -3175,7 +3200,10 @@ class CursorModel with ChangeNotifier {
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  set id(String id) => _id = id;
+  set id(String id) {
+    if (_id != id) _unavailable = null;
+    _id = id;
+  }
 
   bool get isPeerControlProtected =>
       DateTime.now().difference(_lastPeerMouse).inMilliseconds <
@@ -3190,7 +3218,12 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  CursorModel(this.parent);
+  CursorModel(this.parent) {
+    // Made now, not when first drawn: nothing draws again when their decode lands, so the first
+    // build that needs one would show the shape before in its place.
+    preDefaultCursor.cache;
+    preForbiddenCursor.cache;
+  }
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
@@ -3489,30 +3522,44 @@ class CursorModel with ChangeNotifier {
     _images.clear();
   }
 
-  updateCursorData(Map<String, dynamic> evt) async {
-    final id = evt['id'];
-    final hotx = double.parse(evt['hotx']);
-    final hoty = double.parse(evt['hoty']);
-    final width = int.parse(evt['width']);
-    final height = int.parse(evt['height']);
-    List<dynamic> colors = json.decode(evt['colors']);
-    final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
+  /// Its image is kept with the ones used last, see [_imageLimit]; a shape that does not decode
+  /// is marked as one the core cannot give.
+  Future<void> updateCursorData(String id, int hotxInt, int hotyInt, int width,
+      int height, Uint8List rgba) async {
+    final generation = _generation;
+    if (_unavailable == id) _unavailable = null;
+    final hotx = hotxInt.toDouble();
+    final hoty = hotyInt.toDouble();
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
     if (image == null) {
+      // It did not decode; painting must not ask for it on every frame.
+      _markUnavailable(generation, id);
       return;
     }
-    if (await _updateCache(rgba, image, id, hotx, hoty, width, height)) {
-      _images[id]?.item1.dispose();
-      _images[id] = Tuple3(image, hotx, hoty);
+    if (!await _updateCache(
+        generation, rgba, image, id, hotx, hoty, width, height)) {
+      // Not kept, or the session was cleared while it decoded.
+      image.dispose();
+      _markUnavailable(generation, id);
+      return;
+    }
+    final old = _images.remove(id);
+    _images[id] = Tuple3(image, hotx, hoty);
+    if (old != null) {
+      if (identical(old.item1, _image)) _image = image;
+      old.item1.dispose();
     }
 
     // Update last cursor data.
     // Do not use the previous `image` and `id`, because `_id` may be changed.
     _updateCurData();
+    final cache = _cacheMap[id];
+    if (id != _id && cache != null) _switchedAway(cache);
   }
 
   Future<bool> _updateCache(
+    int generation,
     Uint8List rgba,
     ui.Image image,
     String id,
@@ -3523,7 +3570,11 @@ class CursorModel with ChangeNotifier {
   ) async {
     Uint8List? data;
     img2.Image imgOrigin = img2.Image.fromBytes(
-        width: w, height: h, bytes: rgba.buffer, order: img2.ChannelOrder.rgba);
+        width: w,
+        height: h,
+        bytes: rgba.buffer,
+        bytesOffset: rgba.offsetInBytes,
+        order: img2.ChannelOrder.rgba);
     if (isWindows) {
       data = imgOrigin.getBytes(order: img2.ChannelOrder.bgra);
     } else {
@@ -3556,34 +3607,200 @@ class CursorModel with ChangeNotifier {
       width: w,
       height: h,
     );
+    if (generation != _generation) {
+      return false;
+    }
     _cacheMap[id] = cache;
     return true;
   }
 
+  @visibleForTesting
+  Iterable<String> get shapeIds => _images.keys;
+
+  @visibleForTesting
+  CursorData? cachedShape(String id) => _cacheMap[id];
+
+  final _restoring = <String>{};
+
+  // Tabs in a window share its engine's native cursors, predefined ones included.
+  static int _nextKeyScope = 0;
+  final int _keyScope = _nextKeyScope++;
+
+  String nativeKey(CursorData cache, double scale) {
+    final key = '${_keyScope}_${cache.updateGetKey(scale)}';
+    // A native cursor at another raster does not hold the pixels this one is made from.
+    if (!_cacheKeys.contains(key)) _nativeIds.remove(cache.id);
+    return key;
+  }
+
+  // Native cursors stay for the session, one per raster of each shape, and only [clear]
+  // deletes them, as before; unlike the painted images they have no LRU, for now. A delete
+  // frees nothing on Windows: the engine's `deleteCustomCursor/windows` releases the HCURSOR
+  // with `DeleteObject`, which does not take a cursor. Measured on Windows with 500 cursors
+  // made by `CreateIconIndirect`, as the engine makes them: `DeleteObject` failed all 500 and
+  // left 500 USER objects alive, while `DestroyCursor` or `DestroyIcon` freed all 500. Each
+  // delete leaks its handle until the process exits, and making the cursor again for a raster
+  // or a shape shown once more leaks another, so an LRU would leak more than keeping them.
+  //
+  // Fixing the engine is not cheap. x64 runs our fork, rustdesk/engine, on Flutter 3.24; the
+  // fix is one more patch to rebuild, publish, and carry across every Flutter upgrade. arm64
+  // runs the stock engine of a newer Flutter, which has the same code: fixing it means
+  // porting the fork to that version and building and publishing an arm64 engine as well, or
+  // an upstream fix and waiting for it to reach stable. Once both engines destroy cursors, an
+  // LRU like the painted images' can come back. Content ids keep the count to the shapes the
+  // peer really shows, a few dozen to a couple of hundred.
+
+  /// The shape in use keeps its pixels, so a new raster is made from them at once; the others
+  /// keep none once their native cursor holds them.
+  void registered(CursorData cache, String key) {
+    _nativeIds.add(cache.id);
+    _awaitingNative.remove(cache.id);
+    if (cache.id != _id && identical(_cacheMap[cache.id], cache)) {
+      cache.releasePixels();
+    }
+  }
+
+  // The shapes a native cursor holds, and those keeping their pixels until one does, oldest
+  // first: one decoded after the peer moved on must still get a native cursor when shown
+  // again, rather than be decoded again every time it comes back.
+  final _nativeIds = <String>{};
+  final _awaitingNative = <String>{};
+
+  void _switchedAway(CursorData cache) {
+    _awaitingNative.remove(cache.id);
+    // Mobile only paints the cursor, from its image.
+    if (isMobile || _nativeIds.contains(cache.id)) {
+      cache.releasePixels();
+      return;
+    }
+    _awaitingNative.add(cache.id);
+    while (_awaitingNative.length > kRecentShapes) {
+      final oldest = _awaitingNative.first;
+      _awaitingNative.remove(oldest);
+      if (oldest != _id) _cacheMap[oldest]?.releasePixels();
+    }
+  }
+
+  /// The peer's shapes used last that keep a painted image, and the most that keep their pixels
+  /// waiting for a native cursor; the core rebuilds the others. An animated cursor is a shape per
+  /// frame, 18 for the Windows busy cursor and 23 for KDE's, and a cycle longer than this limit
+  /// would rebuild every frame.
+  static const kRecentShapes = 64;
+
+  /// The native cursor of the shape shown last, shown on while the shape in use is made.
+  String? shownKey;
+
+  void shown(CursorData cache, String key) {
+    // The forbidden cursor shows only while input is off; it is no stand-in for a shape.
+    if (cache.id != kPreForbiddenCursorId) shownKey = key;
+  }
+
+  /// Whether the desktop paints the peer's cursor over the remote image.
+  @protected
+  bool get showsRemoteCursor {
+    final tag = ShowRemoteCursorState.tag(parent.target?.id ?? '');
+    return Get.isRegistered<RxBool>(tag: tag) &&
+        Get.find<RxBool>(tag: tag).value;
+  }
+
+  // Painted images kept: mobile always paints the cursor, a desktop only when it shows the
+  // remote cursor, and otherwise the native cursors show the shapes.
+  int get _imageLimit => isMobile || showsRemoteCursor ? kRecentShapes : 1;
+
+  // `_images` is in order of use. The image painted is kept, whoever's it is.
+  void _evictImages() {
+    var excess = _images.length - _imageLimit;
+    _images.removeWhere((id, shape) {
+      if (excess <= 0 || id == _id || identical(shape.item1, _image)) {
+        return false;
+      }
+      excess--;
+      shape.item1.dispose();
+      return true;
+    });
+  }
+
+  /// The core keeps every shape the peer sent, compressed; see `Session::cursor_shapes`.
+  @protected
+  Future<CursorShape?> fetchCursorShape(String id) {
+    final ffi = parent.target;
+    if (ffi == null) return Future.value(null);
+    return bind.sessionGetCursorShape(sessionId: ffi.sessionId, id: id);
+  }
+
+  // The shape the core could not give, not asked for again while it is the one in use. One
+  // is enough: only the shape in use is asked for on every frame, and the peer's ids must not
+  // accumulate here.
+  String? _unavailable;
+  // Counts session clears, so that a decode finishing after one keeps nothing.
+  int _generation = 0;
+
+  /// Decodes the shape in use again from the core, for a raster its native cursor lacks, for
+  /// painting it, or for a window a tab moved to.
+  void restorePixels(String id) {
+    if (id != _id || _unavailable == id || !_restoring.add(id)) return;
+    final generation = _generation;
+    () async {
+      try {
+        // A throw becomes an error the await hands over later, not during the build that may
+        // have asked: a failure tells the listeners.
+        final shape = await Future.sync(() => fetchCursorShape(id));
+        if (generation != _generation) {
+          return;
+        } else if (shape == null) {
+          _markUnavailable(generation, id);
+          debugPrint('Cursor $id is not kept by the core');
+        } else {
+          // Decoded even if the peer moved on: an animation comes back to it.
+          await updateCursorData(id, shape.hotx, shape.hoty, shape.width,
+              shape.height, shape.colors);
+        }
+      } catch (e) {
+        _markUnavailable(generation, id);
+        debugPrint('Failed to fetch cursor $id: $e');
+      } finally {
+        _restoring.remove(id);
+      }
+    }();
+  }
+
+  void _markUnavailable(int generation, String id) {
+    if (generation != _generation || id != _id) return;
+    _unavailable = id;
+    _updateCurData();
+  }
+
   bool _updateCurData() {
-    _cache = _cacheMap[_id];
-    final tmp = _images[_id];
+    final previous = _cache;
+    final cache = _cacheMap[_id];
+    // A shape not decoded yet leaves the one shown before in place until it is; one the core
+    // cannot give leaves none, so the default cursor shows, as for a shape never sent.
+    if (cache != null || _unavailable == _id) _cache = cache;
+    if (previous != null && !identical(previous, _cache)) {
+      _switchedAway(previous);
+    }
+    final tmp = _images.remove(_id);
     if (tmp != null) {
+      _images[_id] = tmp;
       _image = tmp.item1;
       _hotx = tmp.item2;
       _hoty = tmp.item3;
-      try {
-        // may throw exception, because the listener maybe already dispose
-        notifyListeners();
-      } catch (e) {
-        debugPrint(
-            'WARNING: updateCursorId $_id, without notifyListeners(). $e');
-      }
-      return true;
-    } else {
-      return false;
+    } else if (_unavailable == _id) {
+      _image = null;
     }
+    _evictImages();
+    try {
+      // may throw exception, because the listener maybe already dispose
+      notifyListeners();
+    } catch (e) {
+      debugPrint('WARNING: updateCursorId $_id, without notifyListeners(). $e');
+    }
+    return tmp != null || cache != null;
   }
 
   updateCursorId(Map<String, dynamic> evt) {
     if (!_updateCurData()) {
-      debugPrint(
-          'WARNING: updateCursorId $_id, cache is ${_cache == null ? "null" : "not null"}. without notifyListeners()');
+      restorePixels(_id);
     }
   }
 
@@ -3636,6 +3853,10 @@ class CursorModel with ChangeNotifier {
     _clearCache();
     _cache = null;
     _cacheMap.clear();
+    _nativeIds.clear();
+    _awaitingNative.clear();
+    _unavailable = null;
+    _generation++;
   }
 
   _clearCache() {
@@ -3644,6 +3865,8 @@ class CursorModel with ChangeNotifier {
       debugPrint("deleting cursor with key $k");
       deleteCustomCursor(k);
     }
+    _cacheKeys.clear();
+    shownKey = null;
     resetSystemCursor();
   }
 
@@ -3983,6 +4206,7 @@ class FFI {
     }
 
     if (isWeb) {
+      platformFFI.setCursorDataCallback(ffiModel.handleCursorData);
       platformFFI.setRgbaCallback((int display, Uint8List data) {
         onEvent2UIRgba();
         imageModel.onRgba(display, data);
@@ -4065,6 +4289,9 @@ class FFI {
           } else {
             platformFFI.nextRgba(sessionId, display);
           }
+        } else if (message is EventToUI_Cursor) {
+          await ffiModel.handleCursorData(message.id, message.hotx,
+              message.hoty, message.width, message.height, message.colors);
         } else if (message is EventToUI_Texture) {
           final display = message.field0;
           final gpuTexture = message.field1;

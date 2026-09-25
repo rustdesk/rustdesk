@@ -228,6 +228,14 @@ mod tests {
             #[cfg(target_os = "macos")]
             macos::is_process_trusted(false);
         }
+        // A macOS capture takes the cursor shown, whatever seed it is asked for.
+        #[cfg(target_os = "macos")]
+        {
+            macos::reset_input_cache();
+            if let Some(change) = get_cursor().unwrap() {
+                assert!(get_cursor_data(change.wrapping_add(1)).is_ok());
+            }
+        }
     }
     #[test]
     fn test_get_cursor_pos() {

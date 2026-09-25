@@ -97,6 +97,16 @@ pub enum EventToUI {
     Event(String),
     Rgba(usize),
     Texture(usize, bool), // (display, gpu_texture)
+    // A shape's RGBA as bytes: as text it was four times the size and parsed on the UI thread.
+    // The id stays text, since the peer's ids can exceed Dart's int.
+    Cursor {
+        id: String,
+        hotx: i32,
+        hoty: i32,
+        width: i32,
+        height: i32,
+        colors: Vec<u8>,
+    },
 }
 
 pub fn host_stop_system_key_propagate(_stopped: bool) {
@@ -199,6 +209,34 @@ pub fn session_start_with_displays(
         }
     }
     Ok(())
+}
+
+// A cursor shape the core keeps, as RGBA, for a window that has to draw it again.
+pub struct CursorShape {
+    pub hotx: i32,
+    pub hoty: i32,
+    pub width: i32,
+    pub height: i32,
+    pub colors: Vec<u8>,
+}
+
+pub fn session_get_cursor_shape(session_id: SessionID, id: String) -> Option<CursorShape> {
+    let id = id.parse::<u64>().ok()?;
+    let session = sessions::get_session_by_session_id(&session_id)?;
+    let shape = session.cursor_shapes.read().unwrap().get(&id).cloned()?;
+    match crate::client::io_loop::kept_cursor_rgba(shape) {
+        Ok(cd) => Some(CursorShape {
+            hotx: cd.hotx,
+            hoty: cd.hoty,
+            width: cd.width,
+            height: cd.height,
+            colors: cd.colors.to_vec(),
+        }),
+        Err(err) => {
+            log::warn!("Kept cursor {id} failed to decode: {err}");
+            None
+        }
+    }
 }
 
 pub fn session_get_remember(session_id: SessionID) -> Option<bool> {

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -79,6 +78,8 @@ class _FFI extends Fake implements FFI {
   final ffiModel = _Peer();
   @override
   final inputModel = _Input();
+  @override
+  var id = '';
 }
 
 class _Cursor extends CursorModel {
@@ -111,7 +112,7 @@ void main() {
     ((1, 64), 0.25, (1, 16)),
     ((8, 8), 0.5, (12, 12)),
     ((4, 64), 1.0, (4, 64)),
-    ((1, 512), 10.0, (2, 1024)),
+    ((1, 512), 10.0, (1, 512)),
   ]) {
     test('native cursor size $scenario',
         () => _checkSize(scenario, registrations));
@@ -181,15 +182,14 @@ Future<void> _checkWindowsPeerAlpha(
   addTearDown(() => _dispose(cursor));
   addTearDown(cursor.disposeImages);
   addTearDown(ffi.canvasModel.dispose);
-  await cursor.updateCursorData({
-    'id': 'alpha',
-    'hotx': '0',
-    'hoty': '0',
-    'width': '$sourceSize',
-    'height': '$sourceSize',
-    'colors': jsonEncode(List.generate(sourceSize * sourceSize * channels,
-        (i) => pattern.$1[i % pattern.$1.length])),
-  });
+  await cursor.updateCursorData(
+      'alpha',
+      0,
+      0,
+      sourceSize,
+      sourceSize,
+      Uint8List.fromList(List.generate(sourceSize * sourceSize * channels,
+          (i) => pattern.$1[i % pattern.$1.length])));
   buildCursorOfCache(cursor, 1.0 / dpr, cursor.cache);
   await Future<void>.delayed(Duration.zero);
   final args = registrations.single;
@@ -259,7 +259,7 @@ Future<void> _checkRasterTransitions(
   ]) {
     buildCursorOfCache(cursor, scale, cursor.cache);
     await Future<void>.delayed(Duration.zero);
-    final key = cursor.cache.updateGetKey(scale);
+    final key = cursor.nativeKey(cursor.cache, scale);
     _expectSize(
         registrations.singleWhere((args) => args['name'] == key), expected);
   }
@@ -268,7 +268,7 @@ Future<void> _checkRasterTransitions(
 
 Future<void> _checkResizeLimits(
     (int, int) size, List<Map<dynamic, dynamic>> registrations) async {
-  const maxSide = 1024;
+  const maxSide = 512;
   const sourceLongEdge = 30;
   const validScale = maxSide / sourceLongEdge;
   final ffi = _FFI(_Canvas(kRemoteViewStyleAdaptive));
@@ -361,7 +361,7 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
             mode.$1 != kRemoteViewStyleOriginal
         ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
         : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
-    final key = cursor.cache.updateGetKey(cursor.cache.scale);
+    final key = cursor.nativeKey(cursor.cache, cursor.cache.scale);
     _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
   }
   await tester.pumpWidget(const SizedBox.shrink());
