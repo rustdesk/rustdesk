@@ -54,7 +54,8 @@ void main() {
     final evt = {'id': '2'};
     ffi.ffiModel.updateLastCursorId(evt);
     ffi.ffiModel.handleCursorId(evt);
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    // Not a wait for the default cursor itself: asking for it would make it.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     expect(cursor.cache, isNull);
     final built = _key(buildCursorOfCache(
         cursor, 1.0, cursor.cache ?? preDefaultCursor.cache));

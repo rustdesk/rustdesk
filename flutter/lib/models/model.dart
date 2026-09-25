@@ -3742,7 +3742,8 @@ class CursorModel with ChangeNotifier {
     final generation = _generation;
     () async {
       try {
-        // Never at once: a build may be what asked, and a failure tells the listeners.
+        // A throw becomes an error the await hands over later, not during the build that may
+        // have asked: a failure tells the listeners.
         final shape = await Future.sync(() => fetchCursorShape(id));
         if (generation != _generation) {
           return;
