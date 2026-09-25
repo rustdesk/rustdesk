@@ -41,6 +41,7 @@ pub struct VRamEncoderConfig {
     pub quality: f32,
     pub feature: FeatureContext,
     pub keyframe_interval: Option<usize>,
+    pub fps: i32,
 }
 
 pub struct VRamEncoder {
@@ -73,7 +74,7 @@ impl EncoderApi for VRamEncoder {
                         width: config.width as _,
                         height: config.height as _,
                         kbitrate: bitrate as _,
-                        framerate: 30,
+                        framerate: config.fps.max(1),
                         gop,
                     },
                 };
