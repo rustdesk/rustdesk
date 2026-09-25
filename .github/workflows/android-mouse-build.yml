@@ -1,13 +1,29 @@
-name: Patch RustDesk Android Mouse
+name: Build RustDesk 1.4.9 Mouse Mod
 
 on:
   workflow_dispatch:
 
+env:
+  RUST_VERSION: "1.75"
+  CARGO_NDK_VERSION: "3.1.2"
+  FLUTTER_VERSION: "3.24.5"
+  NDK_VERSION: "28.2.13676358"
+
 jobs:
-  patch-test:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-24.04
 
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
       - name: Checkout RustDesk 1.4.9
         uses: actions/checkout@v4
         with:
@@ -15,7 +31,7 @@ jobs:
           ref: 1.4.9
           submodules: recursive
 
-      - name: Keep Android local mouse cursor visible
+      - name: Patch Android cursor
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -23,25 +39,93 @@ jobs:
           p = Path("flutter/lib/mobile/pages/remote_page.dart")
           s = p.read_text()
 
-          old = """cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,"""
-          new = """cursor: MouseCursor.defer,"""
+          old = "cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,"
+          new = "cursor: MouseCursor.defer,"
 
           if old not in s:
-              raise SystemExit("Target cursor line not found")
+              raise SystemExit("Cursor target not found")
 
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-
-          print("Patch applied successfully.")
+          p.write_text(s.replace(old, new, 1))
+          print("Mouse cursor patch applied")
           PY
 
-      - name: Show patched section
+      - name: Install dependencies
         run: |
-          grep -n -A5 -B5 "cursor: MouseCursor.defer" \
-            flutter/lib/mobile/pages/remote_page.dart
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            ninja-build \
+            nasm \
+            yasm \
+            libclang-dev \
+            llvm-dev \
+            pkg-config \
+            libssl-dev \
+            curl \
+            unzip \
+            jq
 
-      - name: Save patched source
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: stable
+          cache: true
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.75"
+          targets: aarch64-linux-android
+
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r28c
+
+      - name: Install cargo-ndk
+        run: |
+          cargo install cargo-ndk --version 3.1.2 --locked
+
+      - name: Flutter pub get
+        working-directory: flutter
+        run: |
+          flutter pub get
+
+      - name: Build RustDesk native library
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+          chmod +x flutter/ndk_arm64.sh
+          ./flutter/ndk_arm64.sh
+
+      - name: Verify native library
+        run: |
+          find flutter/android/app/src/main/jniLibs -type f -name "*.so" -print
+
+      - name: Build APK
+        working-directory: flutter
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --build-name 1.4.9 \
+            --build-number 140900
+
+      - name: Rename APK
+        run: |
+          mkdir -p output
+          cp flutter/build/app/outputs/flutter-apk/app-release.apk \
+             output/rustdesk-1.4.9-mouse-cursor-arm64.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: patched-remote-page
-          path: flutter/lib/mobile/pages/remote_page.dart
+          name: rustdesk-1.4.9-mouse-cursor-arm64
+          path: output/*.apk
