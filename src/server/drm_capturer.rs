@@ -692,6 +692,8 @@ async fn recv_thread(
                         super::input_service::last_peer_abs_sample,
                         super::display_service::wayland_layout_drifted(),
                         scrap::wayland::display::wayland_snapshot_generation(),
+                        super::display_service::input_map_gen(),
+                        super::display_service::input_map_epoch(),
                         display,
                         cursor_epoch,
                     );
@@ -763,6 +765,8 @@ async fn recv_thread(
                         super::input_service::last_peer_abs_sample,
                         super::display_service::wayland_layout_drifted(),
                         scrap::wayland::display::wayland_snapshot_generation(),
+                        super::display_service::input_map_gen(),
+                        super::display_service::input_map_epoch(),
                         display,
                         cursor_epoch,
                     );
@@ -1051,8 +1055,9 @@ struct CursorCal {
     wire_hot: Hotspot,
     /// What the client is being served: the cache's confirmed value, else the wire's.
     current_hot: Hotspot,
-    /// An unconfirmed measurement, with the peer sample it was taken against.
-    candidate: Option<(Hotspot, u64)>,
+    /// An unconfirmed measurement, with the peer sample it was taken against and the
+    /// input-mapping epoch of that sample.
+    candidate: Option<(Hotspot, u64, u64)>,
     plane: Option<Pos>,
     stable_ticks: u32,
     measured_this_position: bool,
@@ -1084,28 +1089,32 @@ fn settled_unmeasured(c: &CursorCal) -> bool {
 
 /// The peer sample a measurement may subtract from, or none: the layout must not have moved
 /// since the context was built (the remap flag is a secondary guard for the window in which the
-/// promotion is still owed), the sample must have been mapped against that same layout, and it
-/// must be old enough to have been consumed and young enough to still describe the pointer.
-/// The generation and the flag are both advanced by the display service's layout poll, so a
-/// monitor moved mid-session is seen up to one check interval late; a measurement inside that
-/// window is bounded by the bitmap and replaced by the next confirmed pair.
+/// promotion is still owed), the device must run the uinput range of that layout and the sample
+/// must have been injected after it adopted that range (a stale range maps the point elsewhere,
+/// and two stops share the error), the sample must have been mapped against that same layout,
+/// and it must be old enough to have been consumed and young enough to still describe the
+/// pointer. The generation and the flag are both advanced by the display service's layout poll,
+/// so a monitor moved mid-session is seen up to one check interval late; a measurement inside
+/// that window is bounded by the bitmap and cached under its generation only.
 fn usable_sample(
     ctx: &CalContext,
     s: Option<super::input_service::PeerAbsSample>,
     drifted: bool,
     current_gen: u64,
-) -> Option<(Pos, u64)> {
-    if drifted || current_gen != ctx.built_gen {
+    map_gen: u64,
+    map_epoch: u64,
+) -> Option<(Pos, u64, u64)> {
+    if drifted || current_gen != ctx.built_gen || map_gen != ctx.built_gen {
         return None;
     }
     let s = s?;
-    if s.gen != ctx.built_gen {
+    if s.gen != ctx.built_gen || s.map_epoch != map_epoch {
         return None;
     }
     if !(CURSOR_CAL_MIN_INPUT_AGE_MS..=CURSOR_CAL_MAX_INPUT_AGE_MS).contains(&s.age_ms) {
         return None;
     }
-    Some((s.pos, s.seq))
+    Some((s.pos, s.seq, s.map_epoch))
 }
 
 fn near(a: Hotspot, b: Hotspot) -> bool {
@@ -1115,16 +1124,18 @@ fn near(a: Hotspot, b: Hotspot) -> bool {
 /// The confirmation policy. `Some` only when a second measurement agrees with the candidate,
 /// and then it IS the candidate, never the second raw value. Two measurements against the same
 /// peer sample are not independent: the plane moved and the peer did not, which is what a local
-/// hand on the mouse looks like, so they never confirm each other.
-fn observe_measurement(c: &mut CursorCal, m: Hotspot, seq: u64) -> Option<Hotspot> {
+/// hand on the mouse looks like, so they never confirm each other. Nor do two taken under
+/// different input mappings: the device adopted a new range in between, and the candidate was
+/// measured against the old one.
+fn observe_measurement(c: &mut CursorCal, m: Hotspot, seq: u64, map_epoch: u64) -> Option<Hotspot> {
     match c.candidate {
-        Some((_, kseq)) if kseq == seq => None,
-        Some((k, _)) if near(k, m) => {
+        Some((_, kseq, _)) if kseq == seq => None,
+        Some((k, _, kepoch)) if kepoch == map_epoch && near(k, m) => {
             c.candidate = None;
             Some(k)
         }
         _ => {
-            c.candidate = Some((m, seq));
+            c.candidate = Some((m, seq, map_epoch));
             None
         }
     }
@@ -1281,12 +1292,15 @@ fn on_cursor_shape(
 
 /// A frame reported where the plane is. The sample is read only once the plane has settled, so
 /// most frames cost one comparison and no lock.
+#[allow(clippy::too_many_arguments)]
 fn on_cursor_plane(
     cal: &mut Option<CursorCal>,
     pos: Option<Pos>,
     sample: impl FnOnce() -> Option<super::input_service::PeerAbsSample>,
     drifted: bool,
     current_gen: u64,
+    map_gen: u64,
+    map_epoch: u64,
     display: i32,
     cursor_epoch: u64,
 ) {
@@ -1297,14 +1311,16 @@ fn on_cursor_plane(
     if !settled_unmeasured(c) {
         return;
     }
-    let Some((injected, seq)) = usable_sample(&c.ctx, sample(), drifted, current_gen) else {
+    let Some((injected, seq, epoch)) =
+        usable_sample(&c.ctx, sample(), drifted, current_gen, map_gen, map_epoch)
+    else {
         return;
     };
     c.measured_this_position = true;
     let Some(m) = measure_hotspot(&c.ctx, injected, p, (c.width as i32, c.height as i32)) else {
         return;
     };
-    let Some(accepted) = observe_measurement(c, m, seq) else {
+    let Some(accepted) = observe_measurement(c, m, seq, epoch) else {
         log::debug!("drm: cursor hotspot for display {display}: measured {m:?} (sample {seq}), waiting for a second one");
         return;
     };
@@ -2956,15 +2972,21 @@ mod drm_capturer_tests {
         }
     }
     fn peer(pos: Pos, seq: u64) -> crate::server::input_service::PeerAbsSample {
-        peer_under(pos, seq, CAL_GEN)
+        peer_under(pos, seq, CAL_GEN, 0)
     }
-    /// A sample injected under layout generation `gen`.
-    fn peer_under(pos: Pos, seq: u64, gen: u64) -> crate::server::input_service::PeerAbsSample {
+    /// A sample injected under layout generation `gen` and input-mapping count `map_epoch`.
+    fn peer_under(
+        pos: Pos,
+        seq: u64,
+        gen: u64,
+        map_epoch: u64,
+    ) -> crate::server::input_service::PeerAbsSample {
         crate::server::input_service::PeerAbsSample {
             pos,
             age_ms: 400,
             seq,
             gen,
+            map_epoch,
         }
     }
     /// A guessed shape arriving on a stream with a context, as the receive loop registers it.
@@ -2992,19 +3014,20 @@ mod drm_capturer_tests {
         display: i32,
         epoch: u64,
     ) {
-        settle_under(cal, plane, sample, display, epoch, CAL_GEN);
+        settle_under(cal, plane, sample, display, epoch, (CAL_GEN, CAL_GEN, 0));
     }
-    /// `settle` for a stream of layout generation `gen`.
+    /// `settle` under (layout generation, generation whose uinput range the device runs,
+    /// input-mapping count), as the receive loop reads them.
     fn settle_under(
         cal: &mut Option<CursorCal>,
         plane: Pos,
         sample: Option<crate::server::input_service::PeerAbsSample>,
         display: i32,
         epoch: u64,
-        gen: u64,
+        (gen, map_gen, map_epoch): (u64, u64, u64),
     ) {
         for _ in 0..=CURSOR_CAL_STABLE_TICKS {
-            on_cursor_plane(cal, Some(plane), || sample, false, gen, display, epoch);
+            on_cursor_plane(cal, Some(plane), || sample, false, gen, map_gen, map_epoch, display, epoch);
         }
     }
     fn served(display: i32) -> (u64, i32, i32) {
@@ -3032,7 +3055,7 @@ mod drm_capturer_tests {
         assert_eq!(served(d), (plain(shape), 4, 4));
         // (500,300) - (488,288) = (12,12): the candidate.
         settle(&mut cal, (488, 288), Some(peer((500, 300), 1)), d, e);
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1, 0)));
         assert_eq!(cal.as_ref().unwrap().current_hot, (4, 4));
         assert_eq!(served(d), (plain(shape), 4, 4), "unconfirmed: nothing visible changes");
         assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
@@ -3111,15 +3134,15 @@ mod drm_capturer_tests {
     #[test]
     fn a_disagreeing_measurement_replaces_the_candidate_and_the_same_sample_never_confirms() {
         let mut c = arrive(9_703, next_cursor_epoch(), 0x7a03, (4, 4)).unwrap();
-        assert_eq!(observe_measurement(&mut c, (12, 12), 1), None);
-        assert_eq!(c.candidate, Some(((12, 12), 1)));
-        assert_eq!(observe_measurement(&mut c, (30, 4), 2), None, "disagreement replaces");
-        assert_eq!(c.candidate, Some(((30, 4), 2)));
-        assert_eq!(observe_measurement(&mut c, (31, 4), 3), Some((30, 4)), "the retained one");
+        assert_eq!(observe_measurement(&mut c, (12, 12), 1, 0), None);
+        assert_eq!(c.candidate, Some(((12, 12), 1, 0)));
+        assert_eq!(observe_measurement(&mut c, (30, 4), 2, 0), None, "disagreement replaces");
+        assert_eq!(c.candidate, Some(((30, 4), 2, 0)));
+        assert_eq!(observe_measurement(&mut c, (31, 4), 3, 0), Some((30, 4)), "the retained one");
         assert_eq!(c.candidate, None);
-        assert_eq!(observe_measurement(&mut c, (12, 12), 4), None);
-        assert_eq!(observe_measurement(&mut c, (12, 12), 4), None, "same sample: not independent");
-        assert_eq!(c.candidate, Some(((12, 12), 4)));
+        assert_eq!(observe_measurement(&mut c, (12, 12), 4, 0), None);
+        assert_eq!(observe_measurement(&mut c, (12, 12), 4, 0), None, "same sample: not independent");
+        assert_eq!(c.candidate, Some(((12, 12), 4, 0)));
     }
 
     // The local hand on the mouse (review of rustdesk#16122): the remote peer stops, a local user
@@ -3133,12 +3156,12 @@ mod drm_capturer_tests {
         let before = served(d);
         let stale = Some(peer((500, 300), 1));
         settle(&mut cal, (493, 288), stale, d, e); // (7,12)
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
         settle(&mut cal, (494, 288), stale, d, e); // (6,12), same sample
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
         settle(&mut cal, (400, 400), stale, d, e); // away: out of the bitmap
         settle(&mut cal, (493, 288), stale, d, e); // back: (7,12) again, same sample
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1, 0)));
         assert_eq!(served(d), before);
         assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
     }
@@ -3259,12 +3282,12 @@ mod drm_capturer_tests {
         let mut cal = arrive(d, e, shape, (4, 4));
         let before = served(d);
         settle(&mut cal, (488, 288), Some(peer((500, 300), 1)), d, e);
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1, 0)));
         for _ in 0..CURSOR_CAL_WINDOW_TICKS {
             let fresh = Some(peer((500, 300), 2));
-            on_cursor_plane(&mut cal, Some((488, 288)), || fresh, false, CAL_GEN, d, e);
+            on_cursor_plane(&mut cal, Some((488, 288)), || fresh, false, CAL_GEN, CAL_GEN, 0, d, e);
         }
-        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1)));
+        assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1, 0)));
         assert_eq!(served(d), before);
         assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
     }
@@ -3292,18 +3315,60 @@ mod drm_capturer_tests {
                 age_ms: age,
                 seq: 9,
                 gen,
+                map_epoch: 3,
             })
         };
         let min = CURSOR_CAL_MIN_INPUT_AGE_MS;
         let max = CURSOR_CAL_MAX_INPUT_AGE_MS;
-        assert_eq!(usable_sample(&ctx, s(min, CAL_GEN), false, CAL_GEN), Some(((1, 1), 9)));
-        assert_eq!(usable_sample(&ctx, s(max, CAL_GEN), false, CAL_GEN), Some(((1, 1), 9)));
-        assert_eq!(usable_sample(&ctx, s(min - 1, CAL_GEN), false, CAL_GEN), None);
-        assert_eq!(usable_sample(&ctx, s(max + 1, CAL_GEN), false, CAL_GEN), None);
-        assert_eq!(usable_sample(&ctx, None, false, CAL_GEN), None);
-        assert_eq!(usable_sample(&ctx, s(400, CAL_GEN), true, CAL_GEN), None, "drift");
-        assert_eq!(usable_sample(&ctx, s(400, CAL_GEN), false, CAL_GEN + 1), None, "layout moved");
-        assert_eq!(usable_sample(&ctx, s(400, CAL_GEN - 1), false, CAL_GEN), None, "old sample");
+        let g = CAL_GEN;
+        assert_eq!(usable_sample(&ctx, s(min, g), false, g, g, 3), Some(((1, 1), 9, 3)));
+        assert_eq!(usable_sample(&ctx, s(max, g), false, g, g, 3), Some(((1, 1), 9, 3)));
+        assert_eq!(usable_sample(&ctx, s(min - 1, g), false, g, g, 3), None);
+        assert_eq!(usable_sample(&ctx, s(max + 1, g), false, g, g, 3), None);
+        assert_eq!(usable_sample(&ctx, None, false, g, g, 3), None);
+        assert_eq!(usable_sample(&ctx, s(400, g), true, g, g, 3), None, "drift");
+        assert_eq!(usable_sample(&ctx, s(400, g), false, g + 1, g, 3), None, "layout moved");
+        assert_eq!(usable_sample(&ctx, s(400, g - 1), false, g, g, 3), None, "old sample");
+    }
+
+    /// zhou, 25-sep review of #16122: while the device runs the range of another layout (an
+    /// update pending or failed after the generation moved), or before any range was adopted, an
+    /// injected point lands elsewhere than the peer meant, and two stops share that error; and a
+    /// sample injected before the last adoption was mapped by the old range even when the
+    /// generation matches. Neither is a calibration reference.
+    #[test]
+    fn a_sample_is_a_reference_only_under_the_adopted_input_mapping() {
+        let ctx = ctx1();
+        let s = Some(crate::server::input_service::PeerAbsSample {
+            pos: (1, 1),
+            age_ms: 400,
+            seq: 9,
+            gen: CAL_GEN,
+            map_epoch: 3,
+        });
+        assert_eq!(usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN, 3), Some(((1, 1), 9, 3)));
+        assert_eq!(
+            usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN - 1, 3),
+            None,
+            "the device still runs the range of the previous layout"
+        );
+        assert_eq!(usable_sample(&ctx, s, false, CAL_GEN, u64::MAX, 3), None, "no range adopted");
+        assert_eq!(
+            usable_sample(&ctx, s, false, CAL_GEN, CAL_GEN, 4),
+            None,
+            "injected before the device adopted the current range"
+        );
+    }
+
+    /// The candidate was measured under the previous input mapping: a measurement under the new
+    /// one starts over instead of confirming it, however well the two agree.
+    #[test]
+    fn a_candidate_does_not_confirm_across_an_input_mapping_change() {
+        let mut c = arrive(9_721, next_cursor_epoch(), 0x7a21, (4, 4)).unwrap();
+        assert_eq!(observe_measurement(&mut c, (30, 4), 1, 3), None);
+        assert_eq!(observe_measurement(&mut c, (30, 4), 2, 4), None, "a new range in between");
+        assert_eq!(c.candidate, Some(((30, 4), 2, 4)), "the newer one is the candidate");
+        assert_eq!(observe_measurement(&mut c, (31, 4), 3, 4), Some((30, 4)));
     }
 
     /// zhou, 25-sep review of #16122: a correction two stops confirmed under one layout
@@ -3330,18 +3395,18 @@ mod drm_capturer_tests {
         settle_under(
             &mut new,
             (480, 280),
-            Some(peer_under((500, 300), 3, next)),
+            Some(peer_under((500, 300), 3, next, 0)),
             d2,
             e2,
-            next,
+            (next, next, 0),
         );
         settle_under(
             &mut new,
             (580, 380),
-            Some(peer_under((600, 400), 4, next)),
+            Some(peer_under((600, 400), 4, next, 0)),
             d2,
             e2,
-            next,
+            (next, next, 0),
         );
         assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)));
         assert_eq!(served(d2), (corrected(shape, (20, 20)), 20, 20));
@@ -3349,6 +3414,67 @@ mod drm_capturer_tests {
         forget_cursor_cal(shape, CAL_GEN);
         assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)), "the old stream writes late");
         forget_cursor_cal(shape, next);
+    }
+
+    /// zhou, 25-sep review of #16122: generations equal and no drift, but the device still runs
+    /// the uinput range of the previous layout: two otherwise valid stops publish and cache
+    /// nothing. After the device acknowledges the range, a sample injected before that does not
+    /// count, and fresh ones confirm.
+    #[test]
+    fn a_stale_input_mapping_publishes_nothing_until_fresh_samples_follow_the_adoption() {
+        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let (d, e, shape) = (9_725, next_cursor_epoch(), 0x7a25);
+        forget_cursor_cal(shape, CAL_GEN);
+        let mut cal = arrive(d, e, shape, (4, 4));
+        let stale = (CAL_GEN, CAL_GEN - 1, 0);
+        settle_under(
+            &mut cal,
+            (488, 288),
+            Some(peer_under((500, 300), 1, CAL_GEN, 0)),
+            d,
+            e,
+            stale,
+        );
+        settle_under(
+            &mut cal,
+            (587, 388),
+            Some(peer_under((600, 400), 2, CAL_GEN, 0)),
+            d,
+            e,
+            stale,
+        );
+        assert_eq!(cal.as_ref().unwrap().candidate, None, "nothing measured");
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
+        assert_eq!(served(d), (plain(shape), 4, 4));
+        let adopted = (CAL_GEN, CAL_GEN, 1);
+        settle_under(
+            &mut cal,
+            (478, 278),
+            Some(peer_under((500, 300), 3, CAL_GEN, 0)),
+            d,
+            e,
+            adopted,
+        );
+        assert_eq!(cal.as_ref().unwrap().candidate, None, "injected before the adoption");
+        settle_under(
+            &mut cal,
+            (488, 288),
+            Some(peer_under((500, 300), 4, CAL_GEN, 1)),
+            d,
+            e,
+            adopted,
+        );
+        settle_under(
+            &mut cal,
+            (587, 388),
+            Some(peer_under((600, 400), 5, CAL_GEN, 1)),
+            d,
+            e,
+            adopted,
+        );
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)));
+        assert_eq!(served(d), (corrected(shape, (12, 12)), 12, 12));
+        forget_cursor_cal(shape, CAL_GEN);
     }
 
     #[test]
@@ -3433,11 +3559,11 @@ mod drm_capturer_tests {
     fn the_first_position_after_a_shape_never_counts_as_settled() {
         let (d, e, shape) = (9_711, next_cursor_epoch(), 0x7a11);
         let mut cal = arrive(d, e, shape, (4, 4));
-        on_cursor_plane(&mut cal, None, || None, false, CAL_GEN, d, e);
+        on_cursor_plane(&mut cal, None, || None, false, CAL_GEN, CAL_GEN, 0, d, e);
         assert_eq!(cal.as_ref().unwrap().plane, None, "no position, no state change");
         for _ in 0..CURSOR_CAL_STABLE_TICKS {
             let s = Some(peer((500, 300), 1));
-            on_cursor_plane(&mut cal, Some((488, 288)), || s, false, CAL_GEN, d, e);
+            on_cursor_plane(&mut cal, Some((488, 288)), || s, false, CAL_GEN, CAL_GEN, 0, d, e);
         }
         let c = cal.as_ref().unwrap();
         assert_eq!(c.stable_ticks, CURSOR_CAL_STABLE_TICKS - 1);

@@ -2084,6 +2084,8 @@ jobs:
               cargo test --locked --lib --features drm cursor_pos_tests
             run_drm_tests "rustdesk peer_abs_sample_tests" \
               cargo test --locked --lib --features drm peer_abs_sample_tests
+            run_drm_tests "rustdesk input_map_tests" \
+              cargo test --locked --lib --features drm input_map_tests
             run_drm_tests "scrap hotspot_provenance_tests" \
               cargo test --locked -p scrap --features drm hotspot_provenance_tests
             run_drm_tests "scrap hotspot_guess_tests" \

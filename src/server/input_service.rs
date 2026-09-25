@@ -1084,8 +1084,9 @@ fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i3
 /// DRM cursor calibration subtracts a cursor-plane position from this, so the two spaces must
 /// match. Only the uinput absolute path writes here.
 #[cfg(all(target_os = "linux", feature = "drm"))]
-static LATEST_PEER_ABS_POS: std::sync::Mutex<Option<((i32, i32), std::time::Instant, u64, u64)>> =
-    std::sync::Mutex::new(None);
+static LATEST_PEER_ABS_POS: std::sync::Mutex<
+    Option<((i32, i32), std::time::Instant, u64, u64, u64)>,
+> = std::sync::Mutex::new(None);
 #[cfg(all(target_os = "linux", feature = "drm"))]
 static PEER_ABS_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -1100,14 +1101,21 @@ pub(crate) struct PeerAbsSample {
     pub seq: u64,
     /// The layout generation the point was mapped against.
     pub gen: u64,
+    /// The input-mapping epoch at injection: a sample from before a range adoption was mapped by
+    /// the old range. See `display_service::input_map_epoch`.
+    pub map_epoch: u64,
 }
 
-/// The peer moved the pointer to an absolute, post-remap position.
+/// The peer moved the pointer to an absolute, post-remap position. Called under the ENIGO guard
+/// of the move, which an adoption also needs for its refresh: a move stamped with the count of an
+/// adoption was injected after that adoption's refresh.
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) fn note_peer_absolute_move(x: i32, y: i32) {
     let seq = PEER_ABS_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
     let gen = scrap::wayland::display::wayland_snapshot_generation();
-    *LATEST_PEER_ABS_POS.lock().unwrap() = Some(((x, y), std::time::Instant::now(), seq, gen));
+    let map_epoch = super::display_service::input_map_epoch();
+    *LATEST_PEER_ABS_POS.lock().unwrap() =
+        Some(((x, y), std::time::Instant::now(), seq, gen, map_epoch));
 }
 
 /// The pointer moved by a path that has no post-remap absolute position to offer: a relative
@@ -1120,12 +1128,13 @@ pub(crate) fn note_pointer_moved_without_absolute_sample() {
 
 #[cfg(all(target_os = "linux", feature = "drm"))]
 pub(crate) fn last_peer_abs_sample() -> Option<PeerAbsSample> {
-    let (pos, at, seq, gen) = (*LATEST_PEER_ABS_POS.lock().unwrap())?;
+    let (pos, at, seq, gen, map_epoch) = (*LATEST_PEER_ABS_POS.lock().unwrap())?;
     Some(PeerAbsSample {
         pos,
         age_ms: at.elapsed().as_millis() as u64,
         seq,
         gen,
+        map_epoch,
     })
 }
 
