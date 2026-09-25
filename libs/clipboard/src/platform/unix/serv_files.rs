@@ -13,11 +13,8 @@ use parking_lot::Mutex;
 use std::{
     collections::VecDeque,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant, SystemTime},
+    sync::{atomic::Ordering, Arc},
+    time::SystemTime,
     usize,
 };
 
@@ -38,11 +35,6 @@ lazy_static::lazy_static! {
 }
 
 const MAX_RETIRED_CLIP_FILES: usize = 4;
-// Source of `ClipFiles::last_used`.
-static RETIRED_USE_SEQ: AtomicU64 = AtomicU64::new(0);
-// A retired list nobody has read for this long is dropped: its transfer is over, or its peer is
-// gone. The current list is kept, as before.
-const RETIRED_CLIP_FILES_TTL: Duration = Duration::from_secs(5 * 60);
 
 // The first descriptor's `clsid`, inside the 32 reserved bytes every peer skips. A random
 // nonce there makes each copy's list id distinct, even when two copies have identical
@@ -100,11 +92,6 @@ struct ClipFiles {
     id: i32,
     // Connections that were sent `files_pdu`.
     served_to: Vec<i32>,
-    // When a retired list was retired or last read; the lowest is evicted first. Kept apart
-    // from the queue order, which is the order lists were sent and picks a peer's list.
-    last_used: u64,
-    // When a retired list was retired or last read, for `RETIRED_CLIP_FILES_TTL`.
-    last_used_at: Option<Instant>,
 }
 
 impl ClipFiles {
@@ -152,16 +139,6 @@ impl ClipFiles {
         Ok(())
     }
 
-    // The same files with the same descriptors, whatever the nonce.
-    fn has_same_files(&self, other: &ClipFiles) -> bool {
-        let (a, b) = (&self.files_pdu, &other.files_pdu);
-        self.files == other.files
-            && a.len() == b.len()
-            && a.len() >= LIST_NONCE.end
-            && a[..LIST_NONCE.start] == b[..LIST_NONCE.start]
-            && a[LIST_NONCE.end..] == b[LIST_NONCE.end..]
-    }
-
     // Close files that are not being read, such as the preloaded next file; `read_exact_at`
     // reopens them on the next read. A file part-way through keeps its handle and offset, so
     // its remaining bytes come from the same file even if its path is replaced meanwhile.
@@ -170,6 +147,36 @@ impl ClipFiles {
             if file.offset.load(Ordering::Relaxed) == 0 {
                 file.handle = None;
             }
+        }
+    }
+
+    // A retired list's file is reopened by path once its handle was closed, and the path may now
+    // name a replacement. Check size and modified time on the handle the read will use, and refuse
+    // a file that no longer matches the list.
+    fn check_retired_file(&mut self, request: &FileContentsRequest) -> Result<(), CliprdrError> {
+        let FileContentsRequest::Range { file_idx, .. } = request else {
+            return Ok(());
+        };
+        let Some(file) = self.file_list.get_mut(*file_idx) else {
+            return Ok(());
+        };
+        if file.is_dir {
+            return Ok(());
+        }
+        file.load_handle()?;
+        let unchanged = file
+            .handle
+            .as_ref()
+            .and_then(|handle| handle.get_ref().metadata().ok())
+            .map_or(false, |md| {
+                md.len() == file.size && md.modified().ok() == Some(file.last_write_time)
+            });
+        if unchanged {
+            Ok(())
+        } else {
+            Err(CliprdrError::InvalidRequest {
+                description: format!("file {} changed since its list was sent", file.name),
+            })
         }
     }
 
@@ -340,34 +347,19 @@ fn select_clip_files<'a>(
     conn_id: i32,
     clip_data_id: Option<i32>,
 ) -> Option<&'a mut ClipFiles> {
-    let files = match clip_data_id {
-        Some(id) if current.id == id => return Some(current),
+    match clip_data_id {
+        Some(id) if current.id == id => Some(current),
         Some(id) => retired
             .iter_mut()
             .rev()
-            .find(|files| files.id == id && files.served_to.contains(&conn_id))?,
-        None if current.served_to.contains(&conn_id) => return Some(current),
-        None => match retired
+            .find(|files| files.id == id && files.served_to.contains(&conn_id)),
+        None if current.served_to.contains(&conn_id) => Some(current),
+        None => retired
             .iter_mut()
             .rev()
             .find(|files| files.served_to.contains(&conn_id))
-        {
-            Some(files) => files,
-            None => return Some(current),
-        },
-    };
-    files.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
-    files.last_used_at = Some(Instant::now());
-    Some(files)
-}
-
-// `retain` keeps the queue in the order lists were sent.
-fn expire_retired(retired: &mut VecDeque<ClipFiles>, now: Instant) {
-    retired.retain(|files| {
-        files.last_used_at.map_or(true, |at| {
-            now.saturating_duration_since(at) < RETIRED_CLIP_FILES_TTL
-        })
-    });
+            .or(Some(current)),
+    }
 }
 
 // Keep a list a peer was sent, so its streams do not read the new copy at the same indexes.
@@ -376,16 +368,9 @@ fn retire_if_served(mut replaced: ClipFiles) {
         return;
     }
     replaced.release_handles();
-    replaced.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
-    replaced.last_used_at = Some(Instant::now());
     let mut retired = RETIRED_CLIP_FILES.lock();
-    expire_retired(&mut retired, Instant::now());
     if retired.len() == MAX_RETIRED_CLIP_FILES {
-        // The list retired or read longest ago, so a transfer still reading keeps its list.
-        let oldest = (0..retired.len()).min_by_key(|&i| retired[i].last_used);
-        if let Some(i) = oldest {
-            retired.remove(i);
-        }
+        retired.pop_front();
     }
     retired.push_back(replaced);
 }
@@ -426,7 +411,7 @@ pub fn read_file_contents(
 
     let mut current = CLIP_FILES.lock();
     let mut retired = RETIRED_CLIP_FILES.lock();
-    expire_retired(&mut retired, Instant::now());
+    let current_ptr: *const ClipFiles = &*current;
     let Some(clip_files) = select_clip_files(&mut current, &mut retired, conn_id, clip_data_id)
     else {
         return vec![Err(CliprdrError::InvalidRequest {
@@ -436,6 +421,11 @@ pub fn read_file_contents(
             ),
         })];
     };
+    if !std::ptr::eq(&*clip_files, current_ptr) {
+        if let Err(e) = clip_files.check_retired_file(&fcr) {
+            return vec![Err(e)];
+        }
+    }
     let mut res = vec![];
     if let Some(files_res) = clip_files.get_files_for_audit(&fcr) {
         res.push(Ok(files_res));
@@ -459,11 +449,6 @@ pub fn sync_files(files: &[String]) -> Result<(), CliprdrError> {
     let mut next = ClipFiles::default();
     next.sync_files(files, current)?;
     next.build_file_list_pdu()?;
-    if next.has_same_files(&files_lock) {
-        // Nothing changed (a selection with a directory always rebuilds): keep the list, and
-        // the id its peers hold, instead of spending a retired slot on a duplicate.
-        return Ok(());
-    }
     let replaced = std::mem::replace(&mut *files_lock, next);
     retire_if_served(replaced);
     Ok(())
@@ -786,32 +771,6 @@ mod sig_test {
         clear_files();
     }
 
-    #[test]
-    fn identical_recopy_keeps_its_peers_on_the_current_list() {
-        let tmp = TmpDir::new("same_recopy");
-        let dir = tmp.join("dir");
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("file.bin"), b"AAAAAAAA").unwrap();
-
-        let _guard = lock_clip_files();
-        clear_files();
-        sync_files(&[path_str(&dir)]).unwrap();
-        let id = file_list_id(&get_file_list_pdu(1));
-        let idx = CLIP_FILES.lock().first_file_index as i32;
-
-        // A selection with a directory is rebuilt on every copy; an unchanged rebuild must
-        // not use up the slots that lists still being read depend on.
-        for _ in 0..=MAX_RETIRED_CLIP_FILES {
-            sync_files(&[path_str(&dir)]).unwrap();
-        }
-        assert!(RETIRED_CLIP_FILES.lock().is_empty());
-        let read = |id| range_data(read_file_contents(1, 7, idx, 0x2, 0, 0, 4, id));
-        assert_eq!(read(Some(id)), b"AAAA");
-        assert_eq!(read(None), b"AAAA");
-
-        clear_files();
-    }
-
     fn file_index(path: &PathBuf) -> i32 {
         let files = CLIP_FILES.lock();
         files
@@ -929,94 +888,33 @@ mod sig_test {
     }
 
     #[test]
-    fn a_list_being_read_outlives_newer_copies() {
-        let tmp = TmpDir::new("read_keeps_list");
-        let files: Vec<PathBuf> = (0..=MAX_RETIRED_CLIP_FILES + 1)
-            .map(|i| {
-                let file = tmp.join(&format!("{i}.bin"));
-                fs::write(&file, format!("{i}{i}{i}{i}{i}{i}{i}{i}")).unwrap();
-                file
-            })
-            .collect();
-
-        let _guard = lock_clip_files();
-        clear_files();
-        sync_files(&[path_str(&files[0])]).unwrap();
-        let id = file_list_id(&get_file_list_pdu(1));
-        let idx = CLIP_FILES.lock().first_file_index as i32;
-        let read = || range_data(read_file_contents(1, 7, idx, 0x2, 0, 0, 4, Some(id)));
-
-        // A unix peer fetches every new list as soon as it is copied, so each copy retires the
-        // one before it. Reads in between keep the list being transferred from being evicted.
-        for file in &files[1..] {
-            sync_files(&[path_str(file)]).unwrap();
-            get_file_list_pdu(2);
-            assert_eq!(read(), b"0000");
-        }
-
-        clear_files();
-    }
-
-    #[test]
-    fn another_conns_read_does_not_change_a_legacy_peers_list() {
-        let tmp = TmpDir::new("legacy_order");
-        let [a, b, c] = ["a", "b", "c"].map(|name| {
-            let file = tmp.join(&format!("{name}.bin"));
-            fs::write(&file, name.repeat(8).to_uppercase()).unwrap();
-            file
-        });
-
-        let _guard = lock_clip_files();
-        clear_files();
-        sync_files(&[path_str(&a)]).unwrap();
-        get_file_list_pdu(1);
-        get_file_list_pdu(2);
-        let idx = CLIP_FILES.lock().first_file_index as i32;
-        sync_files(&[path_str(&b)]).unwrap();
-        get_file_list_pdu(1);
-        // Neither connection fetches C's list.
-        sync_files(&[path_str(&c)]).unwrap();
-
-        // Peers without ids: 1 is reading B, the list last sent to it; 2 is reading A.
-        let read = |conn_id, offset| {
-            range_data(read_file_contents(conn_id, 7, idx, 0x2, offset, 0, 4, None))
-        };
-        assert_eq!(read(1, 0), b"BBBB");
-        assert_eq!(read(2, 0), b"AAAA");
-        assert_eq!(read(1, 4), b"BBBB");
-
-        clear_files();
-    }
-
-    #[test]
-    fn an_idle_retired_list_expires() {
-        let tmp = TmpDir::new("idle_list");
+    fn a_retired_list_refuses_a_file_replaced_before_its_read() {
+        let tmp = TmpDir::new("replaced_unread");
         let first = tmp.join("first.bin");
         fs::write(&first, b"AAAAAAAA").unwrap();
         let second = tmp.join("second.bin");
         fs::write(&second, b"BBBBBBBB").unwrap();
+        let other = tmp.join("other.bin");
+        fs::write(&other, b"EEEEEEEE").unwrap();
 
         let _guard = lock_clip_files();
         clear_files();
-        sync_files(&[path_str(&first)]).unwrap();
+        sync_files(&[path_str(&first), path_str(&second)]).unwrap();
         let id = file_list_id(&get_file_list_pdu(1));
-        let idx = CLIP_FILES.lock().first_file_index as i32;
-        let read = |id| read_file_contents(1, 7, idx, 0x2, 0, 0, 4, id);
-        assert_eq!(range_data(read(Some(id))), b"AAAA");
-        sync_files(&[path_str(&second)]).unwrap();
+        let (first_idx, second_idx) = (file_index(&first), file_index(&second));
+        let read = |idx, offset| read_file_contents(1, 7, idx, 0x2, offset, 0, 4, Some(id));
+        assert_eq!(range_data(read(first_idx, 0)), b"AAAA");
 
-        // Expiry runs with a later `now` rather than a backdated timestamp: an `Instant` cannot
-        // go back past the clock's start, which is only minutes away on a fresh machine.
-        let now = Instant::now();
-        expire_retired(&mut RETIRED_CLIP_FILES.lock(), now);
-        assert_eq!(RETIRED_CLIP_FILES.lock().len(), 1);
-        let later = now + RETIRED_CLIP_FILES_TTL + Duration::from_secs(1);
-        expire_retired(&mut RETIRED_CLIP_FILES.lock(), later);
-        assert!(RETIRED_CLIP_FILES.lock().is_empty());
+        // Retiring closes `second`, which has not been read yet; it is then replaced.
+        sync_files(&[path_str(&other)]).unwrap();
+        replace_atomically(&second, b"CCCCCCCCCC");
+
         assert!(matches!(
-            read(Some(id)).last(),
+            read(second_idx, 0).last(),
             Some(Err(CliprdrError::InvalidRequest { .. }))
         ));
+        // The file part-way through is unaffected.
+        assert_eq!(range_data(read(first_idx, 4)), b"AAAA");
 
         clear_files();
     }

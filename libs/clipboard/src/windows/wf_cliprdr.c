@@ -60,9 +60,6 @@
 /* Largest range served in one request, here and by the unix file server (MAX_RANGE_READ in
  * serv_files.rs). Larger IStream reads are split into requests of this size. */
 #define WF_CLIPRDR_MAX_RANGE_READ (16u * 1024u * 1024u)
-/* An earlier file list nobody has read for this long is dropped: its transfer is over, or its
- * peer is gone. The current list is kept, as before. */
-#define WF_CLIPRDR_SERVED_FILE_LIST_TTL_MS (5ull * 60 * 1000)
 static const WCHAR WF_CLIPRDR_SUPERSCRIPT_DIGITS[] = L"\x00B9\x00B2\x00B3";
 static const WCHAR WF_CLIPRDR_INVALID_FILE_NAME_CHARS[] = L"<>:\"|?*";
 
@@ -408,7 +405,6 @@ struct wf_served_file_list
 	UINT32 *connIDs; // connections the list was sent to
 	size_t nConnIDs;
 	UINT64 last_served; // served_file_list_seq when last sent; the lowest is evicted first
-	ULONGLONG last_used_tick; // GetTickCount64() when last sent or read
 	size_t nFiles;
 	size_t first_file_index;
 	WCHAR **file_names;
@@ -2607,36 +2603,6 @@ static BOOL wf_cliprdr_copy_file_list(wfClipboard *clipboard, wfServedFileList *
 	return TRUE;
 }
 
-static void wf_cliprdr_touch_served_file_list(wfClipboard *clipboard, UINT32 id)
-{
-	size_t i;
-
-	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
-	{
-		wfServedFileList *list = &clipboard->served_file_lists[i];
-		if (list->file_names && list->id == id)
-		{
-			list->last_served = ++clipboard->served_file_list_seq;
-			list->last_used_tick = GetTickCount64();
-			return;
-		}
-	}
-}
-
-static void wf_cliprdr_expire_served_file_lists(wfClipboard *clipboard)
-{
-	ULONGLONG now = GetTickCount64();
-	size_t i;
-
-	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
-	{
-		wfServedFileList *list = &clipboard->served_file_lists[i];
-		if (list->file_names && list->id != clipboard->file_list_id &&
-			now - list->last_used_tick > WF_CLIPRDR_SERVED_FILE_LIST_TTL_MS)
-			wf_cliprdr_free_served_file_list(list);
-	}
-}
-
 /* One slot per list, shared by every connection it was sent to. A full table evicts the list
  * sent least recently, so a list a transfer has just started on is kept. */
 static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 connID,
@@ -2646,7 +2612,6 @@ static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 
 	UINT32 *connIDs;
 	size_t i;
 
-	wf_cliprdr_expire_served_file_lists(clipboard);
 	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
 	{
 		if (clipboard->served_file_lists[i].file_names &&
@@ -2674,7 +2639,6 @@ static void wf_cliprdr_remember_served_file_list(wfClipboard *clipboard, UINT32 
 		}
 	}
 	list->last_served = ++clipboard->served_file_list_seq;
-	list->last_used_tick = GetTickCount64();
 
 	if (wf_cliprdr_served_to(list, connID))
 		return;
@@ -2733,7 +2697,6 @@ static BOOL wf_cliprdr_read_served_file_list(wfClipboard *clipboard,
 	wfServedFileList *list = NULL;
 	size_t i;
 
-	wf_cliprdr_expire_served_file_lists(clipboard);
 	for (i = 0; i < WF_CLIPRDR_SERVED_FILE_LISTS; i++)
 	{
 		if (clipboard->served_file_lists[i].file_names &&
@@ -2746,9 +2709,6 @@ static BOOL wf_cliprdr_read_served_file_list(wfClipboard *clipboard,
 	}
 	if (!list || request->listIndex >= list->nFiles)
 		return FALSE;
-	// A list being read is not the next one evicted.
-	list->last_served = ++clipboard->served_file_list_seq;
-	list->last_used_tick = GetTickCount64();
 
 	if (request->dwFlags == FILECONTENTS_SIZE)
 	{
@@ -3729,41 +3689,17 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		return ERROR_INTERNAL_ERROR;
 	}
 
-	// Refuse a range over the cap before allocating for it. Clients of this version split larger
-	// reads; an older Windows client reading more in one IStream::Read fails, as with unix owners.
-	if (fileContentsRequest->dwFlags == FILECONTENTS_RANGE &&
-		fileContentsRequest->cbRequested > WF_CLIPRDR_MAX_RANGE_READ)
+	// Refuse an unknown request type, or a range over the cap, before allocating for it. Clients
+	// of this version split larger reads; an older Windows client reading more in one
+	// IStream::Read fails, as with unix owners.
+	if ((fileContentsRequest->dwFlags != FILECONTENTS_SIZE &&
+		 fileContentsRequest->dwFlags != FILECONTENTS_RANGE) ||
+		(fileContentsRequest->dwFlags == FILECONTENTS_RANGE &&
+		 fileContentsRequest->cbRequested > WF_CLIPRDR_MAX_RANGE_READ))
 	{
 		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
 		goto exit;
 	}
-
-	// A stream whose list is no longer the one on this clipboard, because a newer list was sent
-	// or the clipboard now holds files from a peer, reads by path from the list it came from.
-	// Only lists sent to this connection are served, so the check below still stops a paste
-	// from getting files it was never offered.
-	if (fileContentsRequest->haveClipDataId &&
-		(fileContentsRequest->clipDataId != clipboard->file_list_id ||
-		 is_set_by_instance(clipboard) || is_file_descriptor_from_remote()))
-	{
-		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
-		if (fileContentsRequest->dwFlags != FILECONTENTS_SIZE &&
-			fileContentsRequest->dwFlags != FILECONTENTS_RANGE)
-			goto exit;
-		cbRequested = fileContentsRequest->dwFlags == FILECONTENTS_SIZE
-						  ? sizeof(UINT64)
-						  : fileContentsRequest->cbRequested;
-		pData = (BYTE *)calloc(1, cbRequested);
-		if (pData && wf_cliprdr_read_served_file_list(clipboard, fileContentsRequest, pData,
-													  cbRequested, &uSize))
-			rc = CHANNEL_RC_OK;
-		goto exit;
-	}
-
-	// The current list is read through the existing path below; keep its kept copy from being
-	// evicted or expiring while it is read, so the transfer can go on after a newer list is sent.
-	if (fileContentsRequest->haveClipDataId)
-		wf_cliprdr_touch_served_file_list(clipboard, fileContentsRequest->clipDataId);
 
 	// If the clipboard is set by the instance, or the file descriptor is from remote,
 	// we should not process the request.
@@ -3787,6 +3723,22 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	// So we just ignore the request from `C` in this case.
 	if (is_set_by_instance(clipboard) || is_file_descriptor_from_remote()) {
 		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
+
+	// A stream whose list is no longer the current one reads by path from the list it came from.
+	// Only lists sent to this connection are served.
+	if (fileContentsRequest->haveClipDataId &&
+		fileContentsRequest->clipDataId != clipboard->file_list_id)
+	{
+		ZeroMemory(&vStgMedium, sizeof(STGMEDIUM)); // read at exit
+		cbRequested = fileContentsRequest->dwFlags == FILECONTENTS_SIZE
+						  ? sizeof(UINT64)
+						  : fileContentsRequest->cbRequested;
+		pData = (BYTE *)calloc(1, cbRequested);
+		if (pData && wf_cliprdr_read_served_file_list(clipboard, fileContentsRequest, pData,
+													  cbRequested, &uSize))
+			rc = CHANNEL_RC_OK;
 		goto exit;
 	}
 
