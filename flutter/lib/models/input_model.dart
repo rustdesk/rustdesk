@@ -15,8 +15,11 @@ import 'package:get/get.dart';
 
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../models/shortcut_model.dart';
 import '../../models/state_model.dart';
+import '../common/widgets/keyboard_shortcuts/shortcut_utils.dart';
 import 'input_modifier_utils.dart';
+import 'local_flutter_shortcuts.dart';
 import 'relative_mouse_model.dart';
 import '../common.dart';
 import '../consts.dart';
@@ -416,6 +419,14 @@ class InputModel {
 
   final ToReleaseRawKeys toReleaseRawKeys = ToReleaseRawKeys();
   final ToReleaseKeys toReleaseKeys = ToReleaseKeys();
+  late final _localFlutterShortcuts = LocalFlutterShortcutDispatcher(
+    onTriggered: (action) {
+      final ffi = parent.target;
+      if (ffi != null && !ffi.closed) {
+        ffi.shortcutModel.onTriggered(action);
+      }
+    },
+  );
 
   // trackpad
   var _trackpadLastDelta = Offset.zero;
@@ -736,7 +747,11 @@ class InputModel {
   }
 
   KeyEventResult handleRawKeyEvent(RawKeyEvent e) {
-    if (isViewOnly) return KeyEventResult.handled;
+    if (_localFlutterShortcuts.tryDispatchRaw(e)) return KeyEventResult.handled;
+    if (isViewOnly) {
+      _tryDispatchRawFlutterShortcut(e, releaseModifiers: false);
+      return KeyEventResult.handled;
+    }
     if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {
       if (isDesktop) {
@@ -745,6 +760,7 @@ class InputModel {
         return KeyEventResult.ignored;
       }
     }
+    _syncFlutterShortcutModifiersAfterViewOnly(e.physicalKey, raw: true);
 
     if (_relativeMouse.handleRawKeyEvent(e)) {
       return KeyEventResult.handled;
@@ -812,8 +828,11 @@ class InputModel {
 
     // * Currently mobile does not enable map mode
     if ((isDesktop || isWebDesktop) && keyboardMode == kKeyMapMode) {
+      _restoreRawFlutterShortcutModifiers(e);
       mapKeyboardModeRaw(e, iosCapsLock);
     } else {
+      if (_tryDispatchRawFlutterShortcut(e)) return KeyEventResult.handled;
+      _restoreRawFlutterShortcutModifiers(e, mapMode: false);
       legacyKeyboardModeRaw(e);
     }
 
@@ -821,7 +840,11 @@ class InputModel {
   }
 
   KeyEventResult handleKeyEvent(KeyEvent e) {
-    if (isViewOnly) return KeyEventResult.handled;
+    if (_localFlutterShortcuts.tryDispatch(e)) return KeyEventResult.handled;
+    if (isViewOnly) {
+      _tryDispatchFlutterShortcut(e, releaseModifiers: false);
+      return KeyEventResult.handled;
+    }
     if (isViewCamera) return KeyEventResult.handled;
     if (!isInputSourceFlutter) {
       if (isDesktop) {
@@ -829,6 +852,10 @@ class InputModel {
       } else if (isWeb) {
         return KeyEventResult.ignored;
       }
+    }
+    _syncFlutterShortcutModifiersAfterViewOnly(e.physicalKey);
+    if (isWeb && _tryDispatchFlutterShortcut(e)) {
+      return KeyEventResult.handled;
     }
     if (isWindows || isLinux) {
       // Ignore meta keys. Because flutter window will loose focus if meta key is pressed.
@@ -910,6 +937,7 @@ class InputModel {
     final isDesktopAndMapMode =
         isDesktop || (isWebDesktop && keyboardMode == kKeyMapMode);
     if (isMobileAndMapMode || isDesktopAndMapMode) {
+      _restoreFlutterShortcutModifiers(e);
       // FIXME: e.character is wrong for dead keys, eg: ^ in de
       newKeyboardMode(
           e.character ?? '',
@@ -918,10 +946,157 @@ class InputModel {
           e is KeyDownEvent || e is KeyRepeatEvent,
           iosCapsLock);
     } else {
+      if (!isWeb && _tryDispatchFlutterShortcut(e)) return KeyEventResult.handled;
+      _restoreFlutterShortcutModifiers(e, mapMode: false);
       legacyKeyboardMode(e);
     }
 
     return KeyEventResult.handled;
+  }
+
+  bool _tryDispatchFlutterShortcut(KeyEvent e, {bool releaseModifiers = true}) {
+    final keyboard = HardwareKeyboard.instance;
+    return _localFlutterShortcuts.tryDispatch(
+      e,
+      viewOnly: isViewOnly,
+      match: () => _matchFlutterShortcut(e.physicalKey,
+          ctrlPressed: keyboard.isControlPressed,
+          altPressed: keyboard.isAltPressed,
+          shiftPressed: keyboard.isShiftPressed,
+          commandPressed: keyboard.isMetaPressed),
+      releaseModifiers:
+          releaseModifiers ? _releaseFlutterShortcutModifiers : null,
+    );
+  }
+
+  bool _tryDispatchRawFlutterShortcut(RawKeyEvent e,
+      {bool releaseModifiers = true}) {
+    return _localFlutterShortcuts.tryDispatchRaw(
+      e,
+      viewOnly: isViewOnly,
+      match: () => _matchFlutterShortcut(e.physicalKey,
+          ctrlPressed: e.isControlPressed,
+          altPressed: e.isAltPressed,
+          shiftPressed: e.isShiftPressed,
+          commandPressed: e.isMetaPressed),
+      releaseModifiers: releaseModifiers
+          ? () => _releaseFlutterShortcutModifiers(raw: true)
+          : null,
+    );
+  }
+
+  Future<void> _releaseFlutterShortcutModifiers({bool raw = false}) async {
+    final releases = <Future<void>>[];
+    // Release only on the remote: the modifiers are still physically held.
+    final pressed = raw
+        ? RawKeyboard.instance.keysPressed
+        : HardwareKeyboard.instance.logicalKeysPressed;
+    for (final entry in {
+      LogicalKeyboardKey.controlLeft: PhysicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.controlRight: PhysicalKeyboardKey.controlRight,
+      LogicalKeyboardKey.altLeft: PhysicalKeyboardKey.altLeft,
+      LogicalKeyboardKey.altRight: PhysicalKeyboardKey.altRight,
+      LogicalKeyboardKey.shiftLeft: PhysicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.shiftRight: PhysicalKeyboardKey.shiftRight,
+      LogicalKeyboardKey.metaLeft: PhysicalKeyboardKey.metaLeft,
+      LogicalKeyboardKey.metaRight: PhysicalKeyboardKey.metaRight,
+    }.entries) {
+      if (!pressed.contains(entry.key)) continue;
+      if (isWebDesktop && keyboardMode == kKeyMapMode) {
+        _localFlutterShortcuts.recordReleasedModifiers([entry.value]);
+        releases.add(bind.sessionHandleFlutterKeyEvent(
+          sessionId: sessionId,
+          character: '',
+          usbHid: entry.value.usbHidUsage & 0xFFFF,
+          lockModes: _buildLockModes(false),
+          downOrUp: false,
+        ));
+      } else {
+        final label = physicalKeyMap[entry.value.usbHidUsage] ?? entry.key.keyLabel;
+        releases.add(bind.sessionInputKey(
+          sessionId: sessionId,
+          name: label,
+          down: false,
+          press: false,
+          alt: false,
+          ctrl: false,
+          shift: false,
+          command: false,
+        ));
+      }
+    }
+    await Future.wait(releases);
+  }
+
+  void _syncFlutterShortcutModifiersAfterViewOnly(PhysicalKeyboardKey incoming,
+      {bool raw = false}) {
+    if (!isInputSourceFlutter) return;
+    final pressed = raw
+        ? RawKeyboard.instance.physicalKeysPressed
+        : HardwareKeyboard.instance.physicalKeysPressed;
+    if (!_localFlutterShortcuts.resumeModifiersAfterViewOnly(incoming, pressed)) {
+      return;
+    }
+    ctrl = pressed.contains(PhysicalKeyboardKey.controlLeft) ||
+        pressed.contains(PhysicalKeyboardKey.controlRight);
+    alt = pressed.contains(PhysicalKeyboardKey.altLeft) ||
+        pressed.contains(PhysicalKeyboardKey.altRight);
+    shift = pressed.contains(PhysicalKeyboardKey.shiftLeft) ||
+        pressed.contains(PhysicalKeyboardKey.shiftRight);
+    command = pressed.contains(PhysicalKeyboardKey.metaLeft) ||
+        pressed.contains(PhysicalKeyboardKey.metaRight);
+  }
+
+  void _restoreFlutterShortcutModifiers(KeyEvent e, {bool mapMode = true}) {
+    final keys = _localFlutterShortcuts.takeModifiersToRestore(
+        e, HardwareKeyboard.instance.physicalKeysPressed);
+    if (!mapMode) return;
+    for (final key in keys) {
+      newKeyboardMode('', key.usbHidUsage & 0xFFFF, true, false);
+    }
+  }
+
+  void _restoreRawFlutterShortcutModifiers(RawKeyEvent e, {bool mapMode = true}) {
+    final keys = _localFlutterShortcuts.takeRawModifiersToRestore(
+        e, RawKeyboard.instance.physicalKeysPressed);
+    if (!mapMode) return;
+    for (final key in keys) {
+      newKeyboardMode('', key.usbHidUsage & 0xFFFF, true, false);
+    }
+  }
+
+  String? _matchFlutterShortcut(PhysicalKeyboardKey key,
+      {required bool ctrlPressed,
+      required bool altPressed,
+      required bool shiftPressed,
+      required bool commandPressed}) {
+    if (isViewCamera) return null;
+    final keyName = physicalKeyName(key);
+    if (keyName == null) return null;
+    final config = ShortcutModel.config();
+    if (!config.enabled || config.passThrough) return null;
+    final mods = <String>[];
+    if (isMacOS || isIOS || isWebOnMacOs) {
+      if (commandPressed) mods.add('primary');
+      if (ctrlPressed) mods.add('ctrl');
+    } else if (ctrlPressed) {
+      mods.add('primary');
+    }
+    if (altPressed) mods.add('alt');
+    if (shiftPressed) mods.add('shift');
+    for (final binding in config.bindings) {
+      final action = binding['action'];
+      final key = binding['key'];
+      final bindingMods =
+          canonicalShortcutModsForSave(shortcutModSetFrom(binding['mods']));
+      if (action is String &&
+          key == keyName &&
+          bindingMods.isNotEmpty &&
+          listEquals(bindingMods, mods)) {
+        return action;
+      }
+    }
+    return null;
   }
 
   /// Send Key Event
@@ -1108,6 +1283,7 @@ class InputModel {
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   void resetModifiers() {
     shift = ctrl = alt = command = false;
+    if (parent.target?.closed == true) _localFlutterShortcuts.clear();
   }
 
   /// Modify the given modifier map [evt] based on current modifier key status.

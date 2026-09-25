@@ -263,6 +263,7 @@ pub fn will_session_close_close_session(session_id: SessionID) -> SyncReturn<boo
 
 pub fn session_close(session_id: SessionID) {
     if let Some(session) = sessions::remove_session_by_session_id(&session_id) {
+        crate::keyboard::shortcuts::clear_session_state(&session_id);
         // `release_remote_keys` is not required for mobile platforms in common cases.
         // But we still call it to make the code more stable.
         #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -324,6 +325,9 @@ pub fn session_toggle_option(session_id: SessionID, value: String) {
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         log::warn!("toggle option {}", &value);
         session.toggle_option(value.clone());
+        if value == "view-only" && session.get_toggle_option(value.clone()) {
+            crate::keyboard::shortcuts::enter_view_only(&session_id);
+        }
         try_sync_peer_option(&session, &session_id, &value, None);
     }
     #[cfg(not(target_os = "ios"))]
@@ -578,6 +582,7 @@ pub fn session_handle_flutter_key_event(
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_key_event(
+            session_id,
             &keyboard_mode,
             &character,
             usb_hid,
@@ -598,6 +603,7 @@ pub fn session_handle_flutter_raw_key_event(
     if let Some(session) = sessions::get_session_by_session_id(&session_id) {
         let keyboard_mode = session.get_keyboard_mode();
         session.handle_flutter_raw_key_event(
+            session_id,
             &keyboard_mode,
             &name,
             platform_code,
@@ -1790,6 +1796,7 @@ pub fn cm_get_clients_length() -> usize {
 
 pub fn main_init(app_dir: String, custom_client_config: String) {
     initialize(&app_dir, &custom_client_config);
+    crate::keyboard::shortcuts::reload_from_config();
 }
 
 pub fn main_device_id(id: String) {
@@ -2317,6 +2324,17 @@ pub fn main_init_input_source() -> SyncReturn<()> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::keyboard::input_source::init_input_source();
     SyncReturn(())
+}
+
+pub fn main_reload_keyboard_shortcuts() -> SyncReturn<()> {
+    crate::keyboard::shortcuts::reload_from_config();
+    SyncReturn(())
+}
+
+pub fn main_get_default_keyboard_shortcuts() -> SyncReturn<String> {
+    let bindings = crate::keyboard::shortcuts::default_bindings();
+    let json = serde_json::to_string(&bindings).unwrap_or_default();
+    SyncReturn(json)
 }
 
 pub fn main_is_installed_lower_version() -> SyncReturn<bool> {

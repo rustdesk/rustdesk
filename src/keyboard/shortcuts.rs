@@ -1,0 +1,1357 @@
+//! Keyboard shortcuts for triggering session actions locally.
+
+use std::sync::{Arc, RwLock};
+
+use hbb_common::log;
+use serde::{Deserialize, Serialize};
+
+const LOCAL_CONFIG_KEY: &str = "keyboard-shortcuts";
+
+lazy_static::lazy_static! {
+    static ref CACHE: RwLock<Arc<Bindings>> = RwLock::new(Arc::new(Bindings::default()));
+}
+
+/// Registry of all valid action ids that may appear in `Binding.action`.
+/// Source-of-truth lives on the Flutter side (`flutter/lib/consts.dart`,
+/// `kShortcutAction*`); these mirror that vocabulary so Rust code can reach
+/// for them without re-stringifying.
+#[allow(dead_code)]
+pub mod action_id {
+    pub const SEND_CTRL_ALT_DEL: &str    = "send_ctrl_alt_del";
+    pub const TOGGLE_FULLSCREEN: &str    = "toggle_fullscreen";
+    pub const SWITCH_DISPLAY_NEXT: &str  = "switch_display_next";
+    pub const SWITCH_DISPLAY_PREV: &str  = "switch_display_prev";
+    pub const SWITCH_DISPLAY_ALL: &str   = "switch_display_all";
+    pub const SCREENSHOT: &str           = "screenshot";
+    pub const INSERT_LOCK: &str          = "insert_lock";
+    pub const REFRESH: &str              = "refresh";
+    pub const TOGGLE_BLOCK_INPUT: &str   = "toggle_block_input";
+    pub const TOGGLE_RECORDING: &str     = "toggle_recording";
+    pub const SWITCH_SIDES: &str         = "switch_sides";
+    pub const CLOSE_TAB: &str            = "close_tab";
+    pub const TOGGLE_TOOLBAR: &str       = "toggle_toolbar";
+    pub const RESTART_REMOTE: &str       = "restart_remote";
+    pub const RESET_CANVAS: &str         = "reset_canvas";
+    pub const TOGGLE_MUTE: &str          = "toggle_mute";
+    pub const PIN_TOOLBAR: &str          = "pin_toolbar";
+    pub const VIEW_MODE_ORIGINAL: &str   = "view_mode_original";
+    pub const VIEW_MODE_ADAPTIVE: &str   = "view_mode_adaptive";
+    pub const TOGGLE_CHAT: &str               = "toggle_chat";
+    pub const TOGGLE_QUALITY_MONITOR: &str    = "toggle_quality_monitor";
+    pub const TOGGLE_SHOW_REMOTE_CURSOR: &str = "toggle_show_remote_cursor";
+    pub const TOGGLE_SHOW_MY_CURSOR: &str     = "toggle_show_my_cursor";
+    pub const TOGGLE_DISABLE_CLIPBOARD: &str  = "toggle_disable_clipboard";
+    pub const PRIVACY_MODE_1: &str            = "privacy_mode_1";
+    pub const PRIVACY_MODE_2: &str            = "privacy_mode_2";
+    pub const KEYBOARD_MODE_MAP: &str         = "keyboard_mode_map";
+    pub const KEYBOARD_MODE_TRANSLATE: &str   = "keyboard_mode_translate";
+    pub const KEYBOARD_MODE_LEGACY: &str      = "keyboard_mode_legacy";
+    pub const CODEC_AUTO: &str                = "codec_auto";
+    pub const CODEC_VP8: &str                 = "codec_vp8";
+    pub const CODEC_VP9: &str                 = "codec_vp9";
+    pub const CODEC_AV1: &str                 = "codec_av1";
+    pub const CODEC_H264: &str                = "codec_h264";
+    pub const CODEC_H265: &str                = "codec_h265";
+    pub const PLUG_OUT_ALL_VIRTUAL_DISPLAYS: &str = "plug_out_all_virtual_displays";
+    pub const TOGGLE_RELATIVE_MOUSE_MODE: &str = "toggle_relative_mouse_mode";
+    pub const TOGGLE_FOLLOW_REMOTE_CURSOR: &str = "toggle_follow_remote_cursor";
+    pub const TOGGLE_FOLLOW_REMOTE_WINDOW: &str = "toggle_follow_remote_window";
+    pub const TOGGLE_ZOOM_CURSOR: &str        = "toggle_zoom_cursor";
+    pub const TOGGLE_REVERSE_MOUSE_WHEEL: &str = "toggle_reverse_mouse_wheel";
+    pub const TOGGLE_SWAP_LEFT_RIGHT_MOUSE: &str = "toggle_swap_left_right_mouse";
+    pub const TOGGLE_LOCK_AFTER_SESSION_END: &str = "toggle_lock_after_session_end";
+    pub const TOGGLE_TRUE_COLOR: &str         = "toggle_true_color";
+    pub const TOGGLE_SWAP_CTRL_CMD: &str      = "toggle_swap_ctrl_cmd";
+    pub const TOGGLE_ENABLE_FILE_COPY_PASTE: &str = "toggle_enable_file_copy_paste";
+    pub const VIEW_MODE_CUSTOM: &str          = "view_mode_custom";
+    pub const IMAGE_QUALITY_BEST: &str        = "image_quality_best";
+    pub const IMAGE_QUALITY_BALANCED: &str    = "image_quality_balanced";
+    pub const IMAGE_QUALITY_LOW: &str         = "image_quality_low";
+    pub const SEND_CLIPBOARD_KEYSTROKES: &str = "send_clipboard_keystrokes";
+    pub const SWITCH_TAB_NEXT: &str           = "switch_tab_next";
+    pub const SWITCH_TAB_PREV: &str           = "switch_tab_prev";
+    pub const TOGGLE_VOICE_CALL: &str         = "toggle_voice_call";
+    pub const TOGGLE_VIEW_ONLY: &str          = "toggle_view_only";
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Modifier {
+    Primary,
+    Ctrl,
+    Alt,
+    Shift,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Binding {
+    pub action: String,
+    pub mods: Vec<Modifier>,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct Bindings {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Persistent companion to `enabled`: when true, the matcher returns early
+    /// and every keystroke flows through to the remote (i.e. all bindings are
+    /// suspended). Stored alongside `enabled` and `bindings` so a single
+    /// reload refreshes both flags.
+    #[serde(default)]
+    pub pass_through: bool,
+    #[serde(default)]
+    pub bindings: Vec<Binding>,
+}
+
+pub fn default_bindings() -> Vec<Binding> {
+    let prefix = || vec![Modifier::Primary, Modifier::Alt, Modifier::Shift];
+    // Defaults align with AnyDesk's M/S/I/C/Delete/Arrow/Digit conventions
+    // where applicable; "P" for screenshot also matches AnyDesk.
+    vec![
+        Binding { action: action_id::SEND_CTRL_ALT_DEL.into(),         mods: prefix(), key: "delete".into() },
+        Binding { action: action_id::TOGGLE_FULLSCREEN.into(),         mods: prefix(), key: "enter".into() },
+        Binding { action: action_id::SWITCH_DISPLAY_NEXT.into(),       mods: prefix(), key: "arrow_right".into() },
+        Binding { action: action_id::SWITCH_DISPLAY_PREV.into(),       mods: prefix(), key: "arrow_left".into() },
+        Binding { action: action_id::SCREENSHOT.into(),                mods: prefix(), key: "p".into() },
+        Binding { action: action_id::TOGGLE_SHOW_REMOTE_CURSOR.into(), mods: prefix(), key: "m".into() },
+        Binding { action: action_id::TOGGLE_MUTE.into(),               mods: prefix(), key: "s".into() },
+        Binding { action: action_id::TOGGLE_BLOCK_INPUT.into(),        mods: prefix(), key: "i".into() },
+        Binding { action: action_id::TOGGLE_CHAT.into(),               mods: prefix(), key: "c".into() },
+    ]
+}
+
+/// Match a normalized (key, modifiers) pair against the given bindings.
+/// Returns the matched action ID, or None when the matcher is off
+/// (`enabled == false`), suspended (`pass_through == true`), or no binding
+/// fires for this combo.
+///
+/// Defense-in-depth: bindings with an empty modifier list are skipped here
+/// even though the recording dialog refuses to save them. A hand-edited
+/// config (or a future writer-side bug) that lets an empty-mods binding
+/// through would otherwise turn that key's every press into a swallowed
+/// shortcut, breaking normal typing in the remote session — a much worse
+/// failure than the binding simply not firing.
+pub fn match_normalized<'a>(key: &str, mods: &[Modifier], b: &'a Bindings) -> Option<&'a str> {
+    if !b.enabled || b.pass_through {
+        return None;
+    }
+    for binding in &b.bindings {
+        if binding.mods.is_empty() {
+            continue;
+        }
+        if binding.key == key && mods_equal(&binding.mods, mods) {
+            return Some(binding.action.as_str());
+        }
+    }
+    None
+}
+
+pub fn normalize_modifiers(alt: bool, ctrl: bool, shift: bool, command: bool) -> Vec<Modifier> {
+    // iOS shares Apple's keyboard semantics with macOS — recording dialog
+    // already treats iOS as `_isMac`, so the matcher must too.
+    //
+    // AltGr conflation: `get_modifiers_state` ORs Alt and AltGr, so an
+    // AltGr+key press satisfies `Modifier::Alt`. Theoretical collision only;
+    // fix at `get_modifiers_state` if a real bug surfaces.
+    let mut v = Vec::new();
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
+        if command { v.push(Modifier::Primary); }
+        if ctrl    { v.push(Modifier::Ctrl); }
+    } else {
+        if ctrl    { v.push(Modifier::Primary); }
+    }
+    if alt     { v.push(Modifier::Alt); }
+    if shift   { v.push(Modifier::Shift); }
+    v
+}
+
+/// Map an rdev::Event to a string key name, matching the storage schema.
+/// Returns None for events we don't intercept (modifier-only presses, releases, etc.).
+pub fn event_to_key_name(event: &rdev::Event) -> Option<String> {
+    use rdev::{EventType, Key};
+    let key = match event.event_type {
+        EventType::KeyPress(k) => k,
+        _ => return None,
+    };
+    Some(match key {
+        Key::Delete => "delete".into(),
+        Key::Backspace => "backspace".into(),
+        Key::Tab => "tab".into(),
+        Key::Space => "space".into(),
+        Key::Home => "home".into(),
+        Key::End => "end".into(),
+        Key::PageUp => "page_up".into(),
+        Key::PageDown => "page_down".into(),
+        Key::Insert => "insert".into(),
+        // Numpad Enter (`KpReturn`) shares the "enter" name with the main
+        // Return key — matches the Web matcher (`NumpadEnter` -> "enter") and
+        // matches user expectation that the two physical Enters are
+        // interchangeable for shortcuts.
+        Key::Return | Key::KpReturn => "enter".into(),
+        Key::LeftArrow => "arrow_left".into(),
+        Key::RightArrow => "arrow_right".into(),
+        Key::UpArrow => "arrow_up".into(),
+        Key::DownArrow => "arrow_down".into(),
+        Key::KeyA => "a".into(),
+        Key::KeyB => "b".into(),
+        Key::KeyC => "c".into(),
+        Key::KeyD => "d".into(),
+        Key::KeyE => "e".into(),
+        Key::KeyF => "f".into(),
+        Key::KeyG => "g".into(),
+        Key::KeyH => "h".into(),
+        Key::KeyI => "i".into(),
+        Key::KeyJ => "j".into(),
+        Key::KeyK => "k".into(),
+        Key::KeyL => "l".into(),
+        Key::KeyM => "m".into(),
+        Key::KeyN => "n".into(),
+        Key::KeyO => "o".into(),
+        Key::KeyP => "p".into(),
+        Key::KeyQ => "q".into(),
+        Key::KeyR => "r".into(),
+        Key::KeyS => "s".into(),
+        Key::KeyT => "t".into(),
+        Key::KeyU => "u".into(),
+        Key::KeyV => "v".into(),
+        Key::KeyW => "w".into(),
+        Key::KeyX => "x".into(),
+        Key::KeyY => "y".into(),
+        Key::KeyZ => "z".into(),
+        Key::Num0 => "digit0".into(),
+        Key::Num1 => "digit1".into(),
+        Key::Num2 => "digit2".into(),
+        Key::Num3 => "digit3".into(),
+        Key::Num4 => "digit4".into(),
+        Key::Num5 => "digit5".into(),
+        Key::Num6 => "digit6".into(),
+        Key::Num7 => "digit7".into(),
+        Key::Num8 => "digit8".into(),
+        Key::Num9 => "digit9".into(),
+        Key::F1 => "f1".into(),
+        Key::F2 => "f2".into(),
+        Key::F3 => "f3".into(),
+        Key::F4 => "f4".into(),
+        Key::F5 => "f5".into(),
+        Key::F6 => "f6".into(),
+        Key::F7 => "f7".into(),
+        Key::F8 => "f8".into(),
+        Key::F9 => "f9".into(),
+        Key::F10 => "f10".into(),
+        Key::F11 => "f11".into(),
+        Key::F12 => "f12".into(),
+        _ => return None,
+    })
+}
+
+/// Read keyboard-shortcut bindings from `LocalConfig` and refresh the cache.
+///
+/// Empty or invalid JSON falls back to `Bindings::default()` (disabled, no
+/// bindings). Call this once at startup and again whenever the config is
+/// written.
+pub fn reload_from_config() {
+    let raw = hbb_common::config::LocalConfig::get_option(LOCAL_CONFIG_KEY);
+    reload_from_raw(&raw);
+}
+
+fn reload_from_raw(raw: &str) {
+    let parsed = if raw.is_empty() {
+        Bindings::default()
+    } else {
+        match serde_json::from_str(&raw) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                log::warn!("Failed to parse keyboard shortcut config: {}", e);
+                Bindings::default()
+            }
+        }
+    };
+    match CACHE.write() {
+        Ok(mut w) => {
+            *w = Arc::new(parsed);
+        }
+        Err(poison) => {
+            log::error!("Keyboard shortcut cache write lock is poisoned");
+            *poison.into_inner() = Arc::new(parsed);
+        }
+    }
+}
+
+/// Snapshot of the currently cached bindings. Cheap (one atomic increment) —
+/// safe to call on every keystroke.
+pub fn current() -> Arc<Bindings> {
+    match CACHE.read() {
+        Ok(b) => Arc::clone(&b),
+        Err(poison) => {
+            log::error!("Keyboard shortcut cache read lock is poisoned");
+            Arc::clone(&poison.into_inner())
+        }
+    }
+}
+
+/// Match an `rdev::Event` against the cached bindings. Returns the matched
+/// action id, or `None` if no binding fires.
+///
+/// A bound chord belongs to RustDesk: it is consumed even when the action is
+/// unavailable in the current session (e.g. screenshot on a peer that does not
+/// support it), and the Flutter side then does nothing. It is never forwarded
+/// to the remote, so what a chord does depends on the binding alone, not on
+/// session state the user cannot see.
+pub fn match_event(event: &rdev::Event) -> Option<String> {
+    let bindings = current();
+    if !bindings.enabled || bindings.pass_through {
+        return None;
+    }
+    // Note: `match_normalized` re-checks both flags below — this short-circuit
+    // is just to avoid the `event_to_key_name` + `get_modifiers_state` work
+    // in the common bypass case.
+    let key_name = event_to_key_name(event)?;
+    let (alt, ctrl, shift, command) =
+        crate::keyboard::client::get_modifiers_state(false, false, false, false);
+    let mods = normalize_modifiers(alt, ctrl, shift, command);
+    match_normalized(&key_name, &mods, &bindings).map(str::to_owned)
+}
+
+#[cfg(feature = "flutter")]
+lazy_static::lazy_static! {
+    /// Physical keys whose press fired a shortcut and whose release has not
+    /// arrived yet. Every event of such a key belongs to RustDesk until its
+    /// release, whatever the modifiers do meanwhile: auto repeats and the
+    /// release are consumed and never reach the remote.
+    ///
+    /// Ownership is physical, so it is shared by every session: a shortcut
+    /// can switch focus or close its own session before the key is released,
+    /// and the session that receives the release is not the one that fired.
+    /// It is never dropped with a session. A key whose release is missed
+    /// heals itself: its next press is consumed as a repeat and that release
+    /// removes it.
+    static ref FIRED_KEYS: std::sync::Mutex<std::collections::HashSet<rdev::Key>> =
+        Default::default();
+    /// Actions waiting for the release of the key that fired them, with the
+    /// session that fired them. See `runs_on_release`.
+    static ref RELEASE_ACTIONS: std::sync::Mutex<
+        std::collections::HashMap<rdev::Key, (hbb_common::SessionID, String)>,
+    > = Default::default();
+    static ref RELEASED_MODIFIERS: std::sync::Mutex<
+        std::collections::HashMap<hbb_common::SessionID, std::collections::HashMap<rdev::Key, rdev::Event>>,
+    > = Default::default();
+}
+
+/// Actions that move keyboard focus to another session. They run when the
+/// key that fired them is released, not when it is pressed, so the matcher
+/// that consumed the press also sees its repeats and its release. The next
+/// session may route its keys through the other matcher (Flutter's legacy
+/// path on Linux), which never saw the press. Mirrors
+/// `kShortcutActionsRunOnKeyUp` in `shortcut_constants.dart`; both are
+/// checked against `flutter/test/fixtures/key_up_shortcut_actions.json`.
+const RELEASE_ACTION_IDS: &[&str] = &[
+    action_id::CLOSE_TAB,
+    action_id::SWITCH_TAB_NEXT,
+    action_id::SWITCH_TAB_PREV,
+];
+
+pub fn runs_on_release(action_id: &str) -> bool {
+    RELEASE_ACTION_IDS.contains(&action_id)
+}
+
+/// Forget the modifiers a session released on its remote and the actions it
+/// still owes on key release. Fired keys are physical and stay owned until
+/// their release, whichever session gets it.
+#[cfg(feature = "flutter")]
+pub fn clear_session_state(session_id: &hbb_common::SessionID) {
+    RELEASE_ACTIONS.lock().unwrap().retain(|_, (sid, _)| sid != session_id);
+    let held = RELEASED_MODIFIERS.lock().unwrap().remove(session_id);
+    if let Some(held) = held {
+        {
+            let mut state = super::MODIFIERS_STATE.lock().unwrap();
+            for key in held.keys() {
+                state.insert(*key, false);
+            }
+        }
+        let mut to_release = super::TO_RELEASE.lock().unwrap();
+        for key in held.keys() {
+            to_release.remove(key);
+        }
+    }
+}
+
+#[cfg(feature = "flutter")]
+pub fn enter_view_only(session_id: &hbb_common::SessionID) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if super::IS_RDEV_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    // The Flutter input source stops routing key events here, so the release
+    // of a fired key can no longer reach this matcher.
+    FIRED_KEYS.lock().unwrap().clear();
+    RELEASE_ACTIONS.lock().unwrap().clear();
+    clear_session_state(session_id);
+}
+
+#[cfg(feature = "flutter")]
+pub fn transfer_released_modifiers(from: &hbb_common::SessionID, to: &hbb_common::SessionID) {
+    if from == to {
+        return;
+    }
+    let mut released = RELEASED_MODIFIERS.lock().unwrap();
+    if let Some(held) = released.remove(from) {
+        released.entry(*to).or_default().extend(held);
+    }
+}
+
+/// Match `event` against the cached bindings; if it matched, push a
+/// `shortcut_triggered` Flutter session event and return `true` so the caller
+/// can `return` early. Returns `false` when no shortcut fired (caller should
+/// continue with normal key handling).
+///
+/// `session_id`:
+/// * `Some(&id)` — Flutter FFI path: dispatch to the exact session whose key
+///   event we're processing. No dependence on the global focus tracker.
+/// * `None` — rdev grab loop: the loop is process-wide and has no way to know
+///   which Flutter session id the keystroke was meant for, so route to the
+///   globally-current session via `flutter::get_cur_session_id()`.
+///
+/// `peer` and `send` must belong to the same session as `session_id`, so the
+/// remote key releases go to the session the chord was typed into.
+#[cfg(feature = "flutter")]
+pub fn try_dispatch(
+    session_id: Option<&hbb_common::SessionID>,
+    event: &rdev::Event,
+    keyboard_mode: &str,
+    peer: impl FnOnce() -> String,
+    send: impl Fn(&base::message_proto::KeyEvent),
+) -> bool {
+    use rdev::EventType;
+    let resolved;
+    let sid = match session_id {
+        Some(id) => id,
+        None => {
+            resolved = crate::flutter::get_cur_session_id();
+            &resolved
+        }
+    };
+    if let EventType::KeyRelease(key) = event.event_type {
+        let mut released = RELEASED_MODIFIERS.lock().unwrap();
+        if let Some(held) = released.get_mut(sid) {
+            held.remove(&key);
+            if held.is_empty() {
+                released.remove(sid);
+            }
+        }
+    }
+    {
+        let mut fired = FIRED_KEYS.lock().unwrap();
+        match event.event_type {
+            EventType::KeyPress(k) if fired.contains(&k) => return true,
+            EventType::KeyRelease(k) if fired.remove(&k) => {
+                drop(fired);
+                let pending = RELEASE_ACTIONS.lock().unwrap().remove(&k);
+                if let Some((sid, action_id)) = pending {
+                    crate::flutter::push_session_event(
+                        &sid,
+                        "shortcut_triggered",
+                        vec![("action", &action_id)],
+                    );
+                }
+                return true;
+            }
+            _ => {}
+        }
+    }
+    let Some(action_id) = match_event(event) else {
+        restore_remote_modifiers(sid, event, keyboard_mode, peer, &send);
+        return false;
+    };
+    release_remote_keys(sid, keyboard_mode, &peer(), &send);
+    if let EventType::KeyPress(k) = event.event_type {
+        FIRED_KEYS.lock().unwrap().insert(k);
+        let mut pending = RELEASE_ACTIONS.lock().unwrap();
+        if runs_on_release(&action_id) {
+            pending.insert(k, (*sid, action_id));
+            return true;
+        }
+        pending.remove(&k);
+    }
+    crate::flutter::push_session_event(sid, "shortcut_triggered", vec![("action", &action_id)]);
+    true
+}
+
+#[cfg(feature = "flutter")]
+fn restore_remote_modifiers(
+    session_id: &hbb_common::SessionID,
+    event: &rdev::Event,
+    keyboard_mode: &str,
+    peer: impl FnOnce() -> String,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
+    use super::{event_to_key_events, get_keyboard_mode_enum, is_modifier, MODIFIERS_STATE};
+
+    let rdev::EventType::KeyPress(key) = event.event_type else { return };
+    if is_modifier(&key) {
+        return;
+    }
+    let held = RELEASED_MODIFIERS.lock().unwrap().remove(session_id);
+    let Some(mut held) = held else { return };
+    {
+        let state = MODIFIERS_STATE.lock().unwrap();
+        held.retain(|key, _| state.get(key).copied().unwrap_or(false));
+    }
+    if held.is_empty() {
+        return;
+    }
+    let peer = peer();
+    let mode = get_keyboard_mode_enum(keyboard_mode);
+    for event in held.into_values() {
+        for key_event in event_to_key_events(peer.clone(), &event, mode, None) {
+            send(&key_event);
+        }
+    }
+}
+
+/// Release on the remote every key it still holds, the chord's modifiers
+/// included, so the action does not run with them held down there.
+///
+/// Unlike `keyboard::release_remote_keys` this keeps the local modifier state:
+/// the user is still physically holding the modifiers, and the next key of
+/// the chord (or an auto repeat) must still see them. It also sends through
+/// `send` instead of the globally current session.
+#[cfg(feature = "flutter")]
+fn release_remote_keys(
+    session_id: &hbb_common::SessionID,
+    keyboard_mode: &str,
+    peer: &str,
+    send: &impl Fn(&base::message_proto::KeyEvent),
+) {
+    use super::{event_to_key_events, get_keyboard_mode_enum, take_remote_keys, MODIFIERS_STATE, TO_RELEASE};
+    use rdev::{EventType, Key};
+
+    let mode = get_keyboard_mode_enum(keyboard_mode);
+    let to_release = take_remote_keys();
+    let held: Vec<(Key, rdev::Event)> = {
+        let state = MODIFIERS_STATE.lock().unwrap();
+        to_release
+            .iter()
+            .filter(|(k, _)| state.get(k).copied().unwrap_or(false))
+            .map(|(key, event)| (*key, event.clone()))
+            .collect()
+    };
+    for (key, mut event) in to_release {
+        let mut types = vec![EventType::KeyRelease(key)];
+        // Same as `keyboard::release_remote_keys_for_events`: a lone Alt
+        // release can leave Alt held on the controlled side.
+        if key == Key::Alt || key == Key::AltGr {
+            types.push(EventType::KeyPress(key));
+            types.push(EventType::KeyRelease(key));
+        }
+        for t in types {
+            event.event_type = t;
+            for key_event in event_to_key_events(peer.to_owned(), &event, mode, None) {
+                send(&key_event);
+            }
+        }
+    }
+    {
+        let mut state = MODIFIERS_STATE.lock().unwrap();
+        for (key, _) in &held {
+            state.insert(*key, true);
+        }
+    }
+    RELEASED_MODIFIERS.lock().unwrap().insert(
+        *session_id, held.iter().cloned().collect()
+    );
+    // Focus-loss cleanup must still reset modifiers released outside the grab.
+    TO_RELEASE.lock().unwrap().extend(held);
+}
+
+fn mods_bits(m: &[Modifier]) -> u8 {
+    let mut bits = 0u8;
+    for x in m {
+        bits |= match x {
+            Modifier::Primary => 1,
+            Modifier::Alt     => 2,
+            Modifier::Shift   => 4,
+            // macOS users can bind shortcuts that use Control independently
+            // of Command. On Win/Linux this variant should never appear in a
+            // saved binding (`normalize_modifiers` collapses Ctrl into
+            // Primary), but we still give it a distinct bit so a hand-edited
+            // config can't accidentally collide with another modifier.
+            Modifier::Ctrl    => 8,
+        };
+    }
+    bits
+}
+
+fn mods_equal(a: &[Modifier], b: &[Modifier]) -> bool {
+    mods_bits(a) == mods_bits(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_press(k: rdev::Key) -> rdev::Event {
+        let mut event = rdev::Event {
+            time: std::time::SystemTime::now(),
+            unicode: None,
+            platform_code: 0,
+            position_code: 0,
+            event_type: rdev::EventType::KeyPress(k),
+            usb_hid: 0,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
+        };
+        #[cfg(target_os = "windows")]
+        {
+            event.platform_code = rdev::win_code_from_key(k).unwrap_or_default();
+            event.position_code = rdev::win_scancode_from_key(k).unwrap_or_default();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            event.platform_code = rdev::macos_keycode_from_key(k).unwrap_or_default() as _;
+            event.position_code = event.platform_code;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            event.position_code = rdev::linux_keycode_from_key(k).unwrap_or_default();
+            event.platform_code = event.position_code;
+        }
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            event.usb_hid = rdev::usb_hid_keycode_from_key(k).unwrap_or_default();
+        }
+        event
+    }
+
+    #[test]
+    fn event_to_key_name_handles_f_keys() {
+        use rdev::Key;
+        assert_eq!(event_to_key_name(&make_press(Key::F1)), Some("f1".into()));
+        assert_eq!(event_to_key_name(&make_press(Key::F5)), Some("f5".into()));
+        assert_eq!(event_to_key_name(&make_press(Key::F12)), Some("f12".into()));
+    }
+
+    /// Cross-language parity for default bindings. The fixture file is the
+    /// shared source of truth — Dart has a mirror test against the same file
+    /// (`kDefaultShortcutBindings matches fixture` in
+    /// `flutter/test/keyboard_shortcuts_test.dart`). Any drift on either
+    /// side breaks one of the two tests.
+    #[test]
+    fn default_bindings_match_fixture_json() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/default_keyboard_shortcuts.json"
+        ))
+        .expect("fixture is valid JSON");
+        let actual: serde_json::Value =
+            serde_json::to_value(default_bindings()).expect("serialize defaults");
+        assert_eq!(
+            fixture, actual,
+            "default_bindings() drifted from \
+             flutter/test/fixtures/default_keyboard_shortcuts.json — update \
+             shortcuts.rs, the fixture, and Dart kDefaultShortcutBindings together"
+        );
+    }
+
+    #[test]
+    fn event_to_key_name_treats_numpad_enter_as_enter() {
+        use rdev::{Event, EventType, Key};
+        let make = |k: Key| Event {
+            time: std::time::SystemTime::now(),
+            unicode: None,
+            platform_code: 0,
+            position_code: 0,
+            event_type: EventType::KeyPress(k),
+            usb_hid: 0,
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            extra_data: 0,
+        };
+        assert_eq!(event_to_key_name(&make(Key::Return)), Some("enter".into()));
+        assert_eq!(event_to_key_name(&make(Key::KpReturn)), Some("enter".into()));
+    }
+
+    #[test]
+    fn bindings_round_trip_json() {
+        let json = r#"{
+            "enabled": true,
+            "bindings": [
+                {"action": "send_ctrl_alt_del", "mods": ["primary","alt","shift"], "key": "delete"},
+                {"action": "toggle_fullscreen",  "mods": ["primary","alt","shift"], "key": "enter"}
+            ]
+        }"#;
+        let parsed: Bindings = serde_json::from_str(json).expect("parse");
+        assert!(parsed.enabled);
+        assert_eq!(parsed.bindings.len(), 2);
+        assert_eq!(parsed.bindings[0].action, "send_ctrl_alt_del");
+        assert_eq!(parsed.bindings[0].key, "delete");
+
+        let serialized = serde_json::to_string(&parsed).expect("serialize");
+        let reparsed: Bindings = serde_json::from_str(&serialized).expect("reparse");
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn defaults_match_design_doc() {
+        let defaults = default_bindings();
+        let actions: Vec<&str> = defaults.iter().map(|b| b.action.as_str()).collect();
+        assert!(actions.contains(&action_id::SEND_CTRL_ALT_DEL));
+        assert!(actions.contains(&action_id::TOGGLE_FULLSCREEN));
+        assert!(actions.contains(&action_id::SWITCH_DISPLAY_NEXT));
+        assert!(actions.contains(&action_id::SWITCH_DISPLAY_PREV));
+        assert!(actions.contains(&action_id::SCREENSHOT));
+        assert!(actions.contains(&action_id::TOGGLE_SHOW_REMOTE_CURSOR));
+        assert!(actions.contains(&action_id::TOGGLE_MUTE));
+        assert!(actions.contains(&action_id::TOGGLE_BLOCK_INPUT));
+        assert!(actions.contains(&action_id::TOGGLE_CHAT));
+        // every default binding includes the three-modifier prefix
+        for b in &defaults {
+            assert!(b.mods.contains(&Modifier::Primary));
+            assert!(b.mods.contains(&Modifier::Alt));
+            assert!(b.mods.contains(&Modifier::Shift));
+        }
+    }
+
+    fn match_for_test<'a>(key: &str, mods: &[Modifier], b: &'a Bindings) -> Option<&'a str> {
+        match_normalized(key, mods, b)
+    }
+
+    #[test]
+    fn match_returns_none_when_pass_through() {
+        let bindings = Bindings {
+            enabled: true,
+            pass_through: true,
+            bindings: default_bindings(),
+        };
+        let result = match_normalized(
+            "p",
+            &[Modifier::Primary, Modifier::Alt, Modifier::Shift],
+            &bindings,
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_returns_none_when_disabled() {
+        let bindings = Bindings { enabled: false, pass_through: false, bindings: default_bindings() };
+        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_screenshot_when_enabled() {
+        let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
+        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        assert_eq!(result, Some(action_id::SCREENSHOT));
+    }
+
+    #[test]
+    fn match_returns_none_when_modifiers_partial() {
+        let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
+        // missing Shift
+        let result = match_for_test("p", &[Modifier::Primary, Modifier::Alt], &bindings);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_does_not_fire_on_extra_unbound_keys() {
+        let bindings = Bindings { enabled: true, pass_through: false, bindings: default_bindings() };
+        let result = match_for_test("z", &[Modifier::Primary, Modifier::Alt, Modifier::Shift], &bindings);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn match_handles_duplicate_modifiers_in_input() {
+        // A user-edited config could contain duplicate modifiers; the matcher must
+        // treat the modifier list as a set, not a multiset.
+        let bindings = Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![Binding {
+                action: "x".into(),
+                mods: vec![Modifier::Primary, Modifier::Alt],
+                key: "a".into(),
+            }],
+        };
+        // Caller passes Primary twice — must not match a binding with Primary+Alt.
+        assert_eq!(
+            match_normalized("a", &[Modifier::Primary, Modifier::Primary], &bindings),
+            None,
+        );
+        // Caller passes Primary+Alt with one duplicate — should still match.
+        assert_eq!(
+            match_normalized("a", &[Modifier::Primary, Modifier::Alt, Modifier::Alt], &bindings),
+            Some("x"),
+        );
+    }
+
+    #[test]
+    fn modifier_normalization_primary_resolves_per_os() {
+        // On Win/Linux: pressing Ctrl satisfies Primary
+        let mods = normalize_modifiers(/*alt=*/true, /*ctrl=*/true, /*shift=*/true, /*command=*/false);
+        if cfg!(any(target_os = "macos", target_os = "ios")) {
+            // On Apple platforms Ctrl is NOT primary
+            assert!(!mods.contains(&Modifier::Primary));
+            assert!(mods.contains(&Modifier::Ctrl));
+        } else {
+            assert!(mods.contains(&Modifier::Primary));
+        }
+        assert!(mods.contains(&Modifier::Alt));
+        assert!(mods.contains(&Modifier::Shift));
+    }
+
+    #[test]
+    fn modifier_normalization_command_is_primary_on_apple() {
+        let mods = normalize_modifiers(true, false, true, /*command=*/true);
+        if cfg!(any(target_os = "macos", target_os = "ios")) {
+            assert!(mods.contains(&Modifier::Primary));
+        } else {
+            // On Win/Linux Command/Meta is NOT primary
+            assert!(!mods.contains(&Modifier::Primary));
+        }
+    }
+
+    #[test]
+    fn match_refuses_zero_modifier_bindings() {
+        // Defense-in-depth: a hand-edited config with empty `mods` must NOT
+        // turn every plain "P" press into a screenshot shortcut, which would
+        // swallow all typing in the remote session. The recording dialog
+        // already refuses to save such bindings, but the matcher must hold
+        // the line independently.
+        let bindings = Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![Binding {
+                action: "screenshot".into(),
+                mods: vec![],
+                key: "p".into(),
+            }],
+        };
+        assert_eq!(match_normalized("p", &[], &bindings), None);
+        // Even with extra modifiers held by the user, a zero-mod binding
+        // still doesn't match (no shape of held modifiers can equal the
+        // empty saved set after the empty-check skips the entry).
+        assert_eq!(
+            match_normalized("p", &[Modifier::Primary], &bindings),
+            None,
+        );
+    }
+
+    /// Cross-language parity for the full set of shortcut-bindable key
+    /// names (not just the defaults). The fixture lists every name the
+    /// matcher accepts; this test verifies the (rdev::Key → name) round-trip
+    /// covers exactly that set. Dart has a mirror test against the same
+    /// fixture (`physicalKeyName covers the supported-keys fixture` in
+    /// `flutter/test/keyboard_shortcuts_test.dart`).
+    ///
+    /// Adding a key requires updates in three places: the fixture, this
+    /// table, and the Dart `physicalKeyName` — that's the price of the
+    /// parity guarantee. Drift on any side breaks one of the two tests.
+    #[test]
+    fn supported_keys_match_fixture() {
+        use rdev::Key;
+        use std::collections::BTreeSet;
+
+        let table: &[(&str, Key)] = &[
+            ("a", Key::KeyA), ("b", Key::KeyB), ("c", Key::KeyC),
+            ("d", Key::KeyD), ("e", Key::KeyE), ("f", Key::KeyF),
+            ("g", Key::KeyG), ("h", Key::KeyH), ("i", Key::KeyI),
+            ("j", Key::KeyJ), ("k", Key::KeyK), ("l", Key::KeyL),
+            ("m", Key::KeyM), ("n", Key::KeyN), ("o", Key::KeyO),
+            ("p", Key::KeyP), ("q", Key::KeyQ), ("r", Key::KeyR),
+            ("s", Key::KeyS), ("t", Key::KeyT), ("u", Key::KeyU),
+            ("v", Key::KeyV), ("w", Key::KeyW), ("x", Key::KeyX),
+            ("y", Key::KeyY), ("z", Key::KeyZ),
+            ("digit0", Key::Num0), ("digit1", Key::Num1),
+            ("digit2", Key::Num2), ("digit3", Key::Num3),
+            ("digit4", Key::Num4), ("digit5", Key::Num5),
+            ("digit6", Key::Num6), ("digit7", Key::Num7),
+            ("digit8", Key::Num8), ("digit9", Key::Num9),
+            ("f1", Key::F1), ("f2", Key::F2), ("f3", Key::F3),
+            ("f4", Key::F4), ("f5", Key::F5), ("f6", Key::F6),
+            ("f7", Key::F7), ("f8", Key::F8), ("f9", Key::F9),
+            ("f10", Key::F10), ("f11", Key::F11), ("f12", Key::F12),
+            ("delete", Key::Delete),
+            ("backspace", Key::Backspace),
+            ("tab", Key::Tab),
+            ("space", Key::Space),
+            ("enter", Key::Return),
+            ("enter", Key::KpReturn),
+            ("arrow_left", Key::LeftArrow),
+            ("arrow_right", Key::RightArrow),
+            ("arrow_up", Key::UpArrow),
+            ("arrow_down", Key::DownArrow),
+            ("home", Key::Home),
+            ("end", Key::End),
+            ("page_up", Key::PageUp),
+            ("page_down", Key::PageDown),
+            ("insert", Key::Insert),
+        ];
+
+        // Round-trip: every entry in the table must map through
+        // event_to_key_name to its declared name.
+        for (name, key) in table {
+            assert_eq!(
+                event_to_key_name(&make_press(*key)).as_deref(),
+                Some(*name),
+                "rdev::Key::{:?} should map to {:?}",
+                key, name,
+            );
+        }
+
+        // The set of names produced by the table must equal the fixture.
+        let actual: BTreeSet<&str> = table.iter().map(|(n, _)| *n).collect();
+        let fixture_raw: Vec<String> = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/supported_shortcut_keys.json"
+        ))
+        .expect("fixture is valid JSON");
+        let expected: BTreeSet<&str> =
+            fixture_raw.iter().map(String::as_str).collect();
+        assert_eq!(
+            actual, expected,
+            "event_to_key_name vocabulary drifted from \
+             flutter/test/fixtures/supported_shortcut_keys.json — update \
+             shortcuts.rs, the fixture, and Dart physicalKeyName together"
+        );
+    }
+
+    /// The native Flutter path turns a key into a name through its USB HID
+    /// usage (`rdev::usb_hid_key_from_code` -> `event_to_key_name`); the Dart
+    /// recorder does the same through `physicalKeyName`. Both are checked
+    /// against the same fixture, so a binding recorded on any keyboard layout
+    /// matches the key that was pressed.
+    #[test]
+    fn usb_hid_keys_match_fixture() {
+        let pairs: Vec<(String, u32)> = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/shortcut_key_usb_hid.json"
+        ))
+        .expect("parse fixture");
+        for (name, usage) in pairs {
+            let key = rdev::usb_hid_key_from_code(usage);
+            assert_eq!(
+                event_to_key_name(&make_press(key)).as_deref(),
+                Some(name.as_str()),
+                "USB HID {usage:#04x}"
+            );
+        }
+    }
+
+    /// Serializes the tests that write the global `CACHE`.
+    static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn reload_handles_missing_and_invalid_json() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // empty (no value set) → defaults
+        reload_from_raw("");
+        let b = current();
+        assert!(!b.enabled);
+        assert!(b.bindings.is_empty());
+
+        // invalid JSON → defaults (no panic)
+        reload_from_raw("not json");
+        let b = current();
+        assert!(!b.enabled);
+    }
+
+    #[cfg(feature = "flutter")]
+    fn make_release(k: rdev::Key) -> rdev::Event {
+        let mut e = make_press(k);
+        e.event_type = rdev::EventType::KeyRelease(k);
+        e
+    }
+
+    /// Holding the chord modifiers and pressing two bound keys must fire both
+    /// actions once each: releasing the modifiers on the remote must not clear
+    /// them locally, and overlapping fired keys each own their repeats and
+    /// release.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_consumes_overlapping_fired_keys() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        // Records the action of every press that dispatched: a press whose key
+        // was not already fired before the call.
+        let fired = std::cell::RefCell::new(Vec::new());
+        let dispatch = |e: &rdev::Event| {
+            let before = fired_keys();
+            let action = match_event(e);
+            let hit = try_dispatch(Some(&SID_A), e, "map", || "windows".into(), |_| {});
+            if let rdev::EventType::KeyPress(k) = e.event_type {
+                if hit && !before.contains(&k) {
+                    fired.borrow_mut().push(action.unwrap_or_default());
+                }
+            }
+            hit
+        };
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        {
+            let state = super::super::MODIFIERS_STATE.lock().unwrap();
+            for k in chord {
+                assert_eq!(state.get(&k), Some(&true), "{k:?} must stay held locally");
+            }
+        }
+        assert!(dispatch(&make_press(Key::KeyC)), "second chord key fires");
+        assert!(dispatch(&make_press(Key::KeyP)), "P repeat is consumed");
+        assert!(dispatch(&make_release(Key::KeyP)), "P release is consumed");
+        assert!(dispatch(&make_release(Key::KeyC)), "C release is consumed");
+        assert!(fired_keys().is_empty());
+        assert_eq!(
+            *fired.borrow(),
+            vec![action_id::SCREENSHOT.to_owned(), action_id::TOGGLE_CHAT.to_owned()]
+        );
+
+        release_chord(chord);
+    }
+
+    /// A fired key stays owned until its release even after the modifiers go.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_consumes_fired_key_after_modifiers_release() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let dispatch =
+            |e: &rdev::Event| try_dispatch(Some(&SID_A), e, "map", || "windows".into(), |_| {});
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        release_chord(chord);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat without modifiers is consumed");
+        assert!(dispatch(&make_release(Key::KeyP)), "release without modifiers is consumed");
+        assert!(!dispatch(&make_press(Key::KeyP)), "a new press without the chord passes");
+        assert!(!dispatch(&make_release(Key::KeyP)));
+    }
+
+    /// Close tab is itself a shortcut: the session that fired the key is gone
+    /// before the key is released, and the session that receives the rest of
+    /// the key's events still owns them.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_keeps_fired_key_after_session_close() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let dispatch = |sid: &hbb_common::SessionID, e: &rdev::Event| {
+            try_dispatch(Some(sid), e, "map", || "windows".into(), |_| {})
+        };
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)));
+        clear_session_state(&SID_A);
+        assert!(dispatch(&SID_B, &make_press(Key::KeyP)), "repeat stays consumed after A closed");
+        release_chord(chord);
+        assert!(dispatch(&SID_B, &make_press(Key::KeyP)), "repeat without the chord too");
+        assert!(dispatch(&SID_B, &make_release(Key::KeyP)), "release stays consumed after A closed");
+        assert!(fired_keys().is_empty());
+        assert!(!dispatch(&SID_B, &make_press(Key::KeyP)), "a new press without the chord passes");
+        assert!(!dispatch(&SID_B, &make_release(Key::KeyP)));
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_consumes_fired_key_after_session_switch() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let previous_session = crate::flutter::get_cur_session_id();
+        crate::flutter::set_cur_session_id(SID_A);
+        let dispatch = |e: &rdev::Event| {
+            try_dispatch(None, e, "map", || "windows".into(), |_| {})
+        };
+
+        assert!(dispatch(&make_press(Key::KeyP)));
+        crate::flutter::set_cur_session_id(SID_B);
+        release_chord(chord);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat stays consumed in the new tab");
+        clear_session_state(&SID_A);
+        crate::flutter::set_cur_session_id(SID_A);
+        assert!(dispatch(&make_press(Key::KeyP)), "repeat stays consumed after switching back");
+        crate::flutter::set_cur_session_id(SID_B);
+        assert!(dispatch(&make_release(Key::KeyP)), "release stays consumed in the new tab");
+        crate::flutter::set_cur_session_id(SID_A);
+        assert!(!dispatch(&make_press(Key::KeyP)), "new press is not a stale repeat");
+        crate::flutter::set_cur_session_id(previous_session);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn dispatch_preserves_modifier_cleanup_on_leave() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        super::super::release_remote_keys("map");
+        assert_eq!(
+            super::super::client::get_modifiers_state(false, false, false, false),
+            (false, false, false, false),
+            "leaving the remote image must clear modifiers even after a shortcut"
+        );
+        release_chord(chord);
+        reset_fired_keys();
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn repeated_shortcuts_leave_remote_modifiers_released() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let remote_held = std::cell::RefCell::new(
+            chord.into_iter().collect::<std::collections::HashSet<_>>()
+        );
+        for key in [Key::KeyP, Key::KeyC] {
+            assert!(try_dispatch(
+                Some(&SID_A),
+                &make_press(key),
+                "map",
+                || "windows".into(),
+                |event| {
+                    let key = rdev::win_key_from_scancode(event.chr());
+                    assert!(chord.contains(&key), "only held modifiers are released");
+                    if event.down {
+                        remote_held.borrow_mut().insert(key);
+                    } else {
+                        remote_held.borrow_mut().remove(&key);
+                    }
+                },
+            ));
+            assert!(remote_held.borrow().is_empty());
+        }
+        release_chord(chord);
+        reset_fired_keys();
+    }
+
+    #[cfg(feature = "flutter")]
+    fn shortcut_followed_by_c(release_primary: bool) -> (rdev::Key, Vec<(rdev::Key, bool)>) {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_fired_keys();
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![Binding {
+                action: action_id::SCREENSHOT.into(),
+                mods: vec![Modifier::Primary],
+                key: "p".into(),
+            }],
+        });
+        let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            Key::MetaLeft
+        } else {
+            Key::ControlLeft
+        };
+        let sent = std::cell::RefCell::new(Vec::new());
+        let send = |event: &base::message_proto::KeyEvent| {
+            sent.borrow_mut().push((rdev::win_key_from_scancode(event.chr()), event.down));
+        };
+        let handle = |event: &rdev::Event| {
+            if !try_dispatch(Some(&SID_A), event, "map", || "windows".into(), &send) {
+                for key_event in super::super::event_to_key_events(
+                    "windows".into(), event, KeyboardMode::Map, Some(0)
+                ) {
+                    send(&key_event);
+                }
+            }
+        };
+        handle(&make_press(primary));
+        handle(&make_press(Key::KeyP));
+        handle(&make_release(Key::KeyP));
+        if release_primary {
+            handle(&make_release(primary));
+        }
+        sent.borrow_mut().clear();
+        handle(&make_press(Key::KeyC));
+        let result = sent.borrow().clone();
+        handle(&make_release(Key::KeyC));
+        handle(&make_release(primary));
+        reset_fired_keys();
+        (primary, result)
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn unbound_key_restores_modifiers_held_after_shortcut() {
+        let (primary, sent) = shortcut_followed_by_c(false);
+        assert_eq!(sent, vec![(primary, true), (rdev::Key::KeyC, true)]);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn unbound_key_does_not_restore_released_modifiers() {
+        let (_, sent) = shortcut_followed_by_c(true);
+        assert_eq!(sent, vec![(rdev::Key::KeyC, true)]);
+    }
+
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    #[test]
+    fn view_only_preserves_rdev_shortcut_keys() {
+        use rdev::Key;
+        use std::sync::atomic::Ordering;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = super::super::IS_RDEV_ENABLED.swap(true, Ordering::SeqCst);
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        enter_view_only(&SID_A);
+        let action = match_event(&make_press(Key::KeyC));
+        let fired = fired_keys().contains(&Key::KeyP);
+        super::super::IS_RDEV_ENABLED.store(previous, Ordering::SeqCst);
+        release_chord(chord);
+        clear_session_state(&SID_A);
+        assert_eq!(action.as_deref(), Some(action_id::TOGGLE_CHAT));
+        assert!(fired, "rdev still receives the held shortcut key's release");
+    }
+
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    #[test]
+    fn view_only_clears_flutter_shortcut_keys_and_modifiers() {
+        use rdev::Key;
+        use std::sync::atomic::Ordering;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = super::super::IS_RDEV_ENABLED.swap(false, Ordering::SeqCst);
+        let chord = enable_defaults_and_hold_chord();
+        assert!(try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(), |_| {}
+        ));
+        clear_session_state(&SID_B);
+        assert_eq!(match_event(&make_press(Key::KeyC)).as_deref(), Some(action_id::TOGGLE_CHAT));
+        enter_view_only(&SID_A);
+        super::super::IS_RDEV_ENABLED.store(previous, Ordering::SeqCst);
+        assert!(fired_keys().is_empty());
+        assert_eq!(
+            super::super::client::get_modifiers_state(false, false, false, false),
+            (false, false, false, false)
+        );
+        assert!(!try_dispatch(
+            Some(&SID_A), &make_press(Key::KeyP), "map", || "windows".into(),
+            |_| panic!("view-only reset must not replay old modifiers")
+        ));
+        release_chord(chord);
+    }
+
+    /// The Dart matcher keeps the same list (`kShortcutActionsRunOnKeyUp`);
+    /// the fixture is the shared source of truth.
+    #[test]
+    fn key_up_actions_match_fixture() {
+        use std::collections::BTreeSet;
+
+        let fixture: Vec<String> = serde_json::from_str(include_str!(
+            "../../flutter/test/fixtures/key_up_shortcut_actions.json"
+        ))
+        .expect("parse fixture");
+        let expected: BTreeSet<&str> = fixture.iter().map(String::as_str).collect();
+        let actual: BTreeSet<&str> = RELEASE_ACTION_IDS.iter().copied().collect();
+        assert_eq!(
+            actual, expected,
+            "runs_on_release drifted from key_up_shortcut_actions.json — update \
+             shortcuts.rs, the fixture, and Dart kShortcutActionsRunOnKeyUp together"
+        );
+        for id in &fixture {
+            assert!(runs_on_release(id));
+        }
+        assert!(!runs_on_release(action_id::SCREENSHOT));
+    }
+
+    /// Close tab and tab switching move focus away before the key is
+    /// released; they run on the release so the same matcher sees the whole
+    /// press.
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn focus_changing_actions_run_on_release() {
+        use rdev::Key;
+
+        let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let chord = enable_defaults_and_hold_chord();
+        let prefix = || vec![Modifier::Primary, Modifier::Alt, Modifier::Shift];
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: vec![
+                Binding { action: action_id::CLOSE_TAB.into(), mods: prefix(), key: "w".into() },
+                Binding { action: action_id::SCREENSHOT.into(), mods: prefix(), key: "p".into() },
+            ],
+        });
+        let dispatch = |sid: &hbb_common::SessionID, e: &rdev::Event| {
+            try_dispatch(Some(sid), e, "map", || "windows".into(), |_| {})
+        };
+        let pending_for = |k: Key| RELEASE_ACTIONS.lock().unwrap().get(&k).cloned();
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)));
+        assert_eq!(pending_for(Key::KeyW), Some((SID_A, action_id::CLOSE_TAB.to_owned())));
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)), "repeat is consumed");
+        assert_eq!(pending_for(Key::KeyW), Some((SID_A, action_id::CLOSE_TAB.to_owned())));
+        assert!(dispatch(&SID_B, &make_release(Key::KeyW)), "release is consumed wherever it lands");
+        assert_eq!(pending_for(Key::KeyW), None, "the action ran on the release");
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyP)));
+        assert_eq!(pending_for(Key::KeyP), None, "other actions still run on the press");
+        assert!(dispatch(&SID_A, &make_release(Key::KeyP)));
+
+        assert!(dispatch(&SID_A, &make_press(Key::KeyW)));
+        clear_session_state(&SID_A);
+        assert_eq!(pending_for(Key::KeyW), None, "a closed session owes nothing");
+        assert!(dispatch(&SID_A, &make_release(Key::KeyW)), "but its key stays owned");
+        release_chord(chord);
+    }
+
+    #[cfg(feature = "flutter")]
+    const SID_A: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xA);
+    #[cfg(feature = "flutter")]
+    const SID_B: hbb_common::SessionID = hbb_common::SessionID::from_u128(0xB);
+
+    #[cfg(feature = "flutter")]
+    fn fired_keys() -> std::collections::HashSet<rdev::Key> {
+        FIRED_KEYS.lock().unwrap().clone()
+    }
+
+    #[cfg(feature = "flutter")]
+    fn reset_fired_keys() {
+        FIRED_KEYS.lock().unwrap().clear();
+        RELEASE_ACTIONS.lock().unwrap().clear();
+    }
+
+    #[cfg(feature = "flutter")]
+    fn enable_defaults_and_hold_chord() -> [rdev::Key; 3] {
+        use base::message_proto::KeyboardMode;
+        use rdev::Key;
+
+        *CACHE.write().unwrap() = Arc::new(Bindings {
+            enabled: true,
+            pass_through: false,
+            bindings: default_bindings(),
+        });
+        reset_fired_keys();
+        clear_session_state(&SID_A);
+        clear_session_state(&SID_B);
+        let primary = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            Key::MetaLeft
+        } else {
+            Key::ControlLeft
+        };
+        let chord = [primary, Key::Alt, Key::ShiftLeft];
+        for k in chord {
+            super::super::event_to_key_events("windows".into(), &make_press(k), KeyboardMode::Map, None);
+        }
+        chord
+    }
+
+    #[cfg(feature = "flutter")]
+    fn release_chord(chord: [rdev::Key; 3]) {
+        use base::message_proto::KeyboardMode;
+        for k in chord {
+            super::super::event_to_key_events("windows".into(), &make_release(k), KeyboardMode::Map, None);
+        }
+    }
+}
