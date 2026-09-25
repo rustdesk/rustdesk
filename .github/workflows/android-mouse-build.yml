@@ -84,6 +84,12 @@ jobs:
         with:
           toolchain: "1.75"
           targets: aarch64-linux-android
+          components: rustfmt
+
+      - name: Ensure rustfmt installed
+        run: |
+          rustup component add rustfmt --toolchain 1.75
+          rustfmt --version
 
       - name: Install Android NDK
         uses: nttld/setup-ndk@v1
