@@ -1,10 +1,10 @@
-name: Build RustDesk Android Mouse Mod
+name: Inspect RustDesk Android Mouse
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  inspect:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,16 +15,45 @@ jobs:
           ref: 1.4.9
           submodules: recursive
 
-      - name: Show source version
+      - name: Search mouse and cursor code
         run: |
-          git describe --tags --always
-          git status
-          ls flutter
+          {
+            echo "=== POINTER CAPTURE ==="
+            grep -R -n \
+              -e "requestPointerCapture" \
+              -e "releasePointerCapture" \
+              -e "pointerCapture" \
+              android flutter 2>/dev/null || true
 
-      - name: Upload source check
+            echo
+            echo "=== VIEW ONLY ==="
+            grep -R -n \
+              -e "viewOnly" \
+              -e "view_only" \
+              -e "ViewOnly" \
+              flutter/lib android 2>/dev/null || true
+
+            echo
+            echo "=== CURSOR ==="
+            grep -R -n \
+              -e "show-my-cursor" \
+              -e "SystemMouseCursors" \
+              -e "MouseRegion" \
+              -e "PointerDeviceKind.mouse" \
+              flutter/lib android 2>/dev/null || true
+
+            echo
+            echo "=== INPUT MODEL ==="
+            grep -R -n \
+              -e "sendMouse" \
+              -e "sendPointer" \
+              -e "handleMouse" \
+              -e "mouseEvent" \
+              flutter/lib android 2>/dev/null || true
+          } | tee mouse-search.txt
+
+      - name: Upload search results
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-1.4.9-source-check
-          path: |
-            flutter/pubspec.yaml
-            flutter/build_fdroid.sh
+          name: rustdesk-mouse-search
+          path: mouse-search.txt
