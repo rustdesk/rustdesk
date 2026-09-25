@@ -362,11 +362,11 @@ fn select_clip_files<'a>(
 }
 
 // `retain` keeps the queue in the order lists were sent.
-fn expire_retired(retired: &mut VecDeque<ClipFiles>) {
+fn expire_retired(retired: &mut VecDeque<ClipFiles>, now: Instant) {
     retired.retain(|files| {
-        files
-            .last_used_at
-            .map_or(true, |at| at.elapsed() < RETIRED_CLIP_FILES_TTL)
+        files.last_used_at.map_or(true, |at| {
+            now.saturating_duration_since(at) < RETIRED_CLIP_FILES_TTL
+        })
     });
 }
 
@@ -379,7 +379,7 @@ fn retire_if_served(mut replaced: ClipFiles) {
     replaced.last_used = RETIRED_USE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
     replaced.last_used_at = Some(Instant::now());
     let mut retired = RETIRED_CLIP_FILES.lock();
-    expire_retired(&mut retired);
+    expire_retired(&mut retired, Instant::now());
     if retired.len() == MAX_RETIRED_CLIP_FILES {
         // The list retired or read longest ago, so a transfer still reading keeps its list.
         let oldest = (0..retired.len()).min_by_key(|&i| retired[i].last_used);
@@ -426,7 +426,7 @@ pub fn read_file_contents(
 
     let mut current = CLIP_FILES.lock();
     let mut retired = RETIRED_CLIP_FILES.lock();
-    expire_retired(&mut retired);
+    expire_retired(&mut retired, Instant::now());
     let Some(clip_files) = select_clip_files(&mut current, &mut retired, conn_id, clip_data_id)
     else {
         return vec![Err(CliprdrError::InvalidRequest {
@@ -1005,14 +1005,18 @@ mod sig_test {
         assert_eq!(range_data(read(Some(id))), b"AAAA");
         sync_files(&[path_str(&second)]).unwrap();
 
-        // Unread for longer than the TTL: dropped, with its open file, before the next lookup.
-        RETIRED_CLIP_FILES.lock()[0].last_used_at =
-            Instant::now().checked_sub(RETIRED_CLIP_FILES_TTL + Duration::from_secs(1));
+        // Expiry runs with a later `now` rather than a backdated timestamp: an `Instant` cannot
+        // go back past the clock's start, which is only minutes away on a fresh machine.
+        let now = Instant::now();
+        expire_retired(&mut RETIRED_CLIP_FILES.lock(), now);
+        assert_eq!(RETIRED_CLIP_FILES.lock().len(), 1);
+        let later = now + RETIRED_CLIP_FILES_TTL + Duration::from_secs(1);
+        expire_retired(&mut RETIRED_CLIP_FILES.lock(), later);
+        assert!(RETIRED_CLIP_FILES.lock().is_empty());
         assert!(matches!(
             read(Some(id)).last(),
             Some(Err(CliprdrError::InvalidRequest { .. }))
         ));
-        assert!(RETIRED_CLIP_FILES.lock().is_empty());
 
         clear_files();
     }
