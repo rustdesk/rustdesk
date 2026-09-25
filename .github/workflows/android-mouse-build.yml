@@ -1,10 +1,10 @@
-name: Inspect RustDesk Android Mouse
+name: Patch RustDesk Android Mouse
 
 on:
   workflow_dispatch:
 
 jobs:
-  inspect:
+  patch-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,45 +15,33 @@ jobs:
           ref: 1.4.9
           submodules: recursive
 
-      - name: Search mouse and cursor code
+      - name: Keep Android local mouse cursor visible
         run: |
-          {
-            echo "=== POINTER CAPTURE ==="
-            grep -R -n \
-              -e "requestPointerCapture" \
-              -e "releasePointerCapture" \
-              -e "pointerCapture" \
-              android flutter 2>/dev/null || true
+          python3 - <<'PY'
+          from pathlib import Path
 
-            echo
-            echo "=== VIEW ONLY ==="
-            grep -R -n \
-              -e "viewOnly" \
-              -e "view_only" \
-              -e "ViewOnly" \
-              flutter/lib android 2>/dev/null || true
+          p = Path("flutter/lib/mobile/pages/remote_page.dart")
+          s = p.read_text()
 
-            echo
-            echo "=== CURSOR ==="
-            grep -R -n \
-              -e "show-my-cursor" \
-              -e "SystemMouseCursors" \
-              -e "MouseRegion" \
-              -e "PointerDeviceKind.mouse" \
-              flutter/lib android 2>/dev/null || true
+          old = """cursor: ffiModel.keyboard ? SystemMouseCursors.none : MouseCursor.defer,"""
+          new = """cursor: MouseCursor.defer,"""
 
-            echo
-            echo "=== INPUT MODEL ==="
-            grep -R -n \
-              -e "sendMouse" \
-              -e "sendPointer" \
-              -e "handleMouse" \
-              -e "mouseEvent" \
-              flutter/lib android 2>/dev/null || true
-          } | tee mouse-search.txt
+          if old not in s:
+              raise SystemExit("Target cursor line not found")
 
-      - name: Upload search results
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          print("Patch applied successfully.")
+          PY
+
+      - name: Show patched section
+        run: |
+          grep -n -A5 -B5 "cursor: MouseCursor.defer" \
+            flutter/lib/mobile/pages/remote_page.dart
+
+      - name: Save patched source
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-mouse-search
-          path: mouse-search.txt
+          name: patched-remote-page
+          path: flutter/lib/mobile/pages/remote_page.dart
