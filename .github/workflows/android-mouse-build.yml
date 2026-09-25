@@ -68,7 +68,12 @@ jobs:
             libssl-dev \
             curl \
             unzip \
-            jq
+            jq \
+            git \
+            zip \
+            autoconf \
+            automake \
+            libtool
 
           test -f /usr/include/x86_64-linux-gnu/bits/libc-header-start.h
 
@@ -101,6 +106,29 @@ jobs:
         run: |
           cargo install cargo-ndk --version 3.1.2 --locked
 
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          cd "$HOME/vcpkg"
+          ./bootstrap-vcpkg.sh
+
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+
+      - name: Build Android vcpkg dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /home/runner/vcpkg
+        run: |
+          chmod +x flutter/build_android_deps.sh
+          ./flutter/build_android_deps.sh arm64-v8a
+
+          echo "Installed vcpkg libraries:"
+          find "$VCPKG_ROOT/installed/arm64-android/lib" \
+            -maxdepth 1 \
+            -type f \
+            | head -50
+
       - name: Flutter pub get
         working-directory: flutter
         run: |
@@ -110,26 +138,35 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          VCPKG_ROOT: /home/runner/vcpkg
         run: |
           rustup target add aarch64-linux-android
 
           NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export PATH="$NDK_BIN:$PATH"
 
-          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang"
-          export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android24-clang++"
+          export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang"
+          export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang++"
           export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
 
           echo "Using Android compiler:"
           echo "$CC_aarch64_linux_android"
           "$CC_aarch64_linux_android" --version
 
+          echo "VCPKG_ROOT=$VCPKG_ROOT"
+
           chmod +x flutter/ndk_arm64.sh
           ./flutter/ndk_arm64.sh
 
-      - name: Verify native libraries
+      - name: Copy native library
         run: |
-          find flutter/android/app/src/main/jniLibs -type f -name "*.so" -print || true
+          mkdir -p flutter/android/app/src/main/jniLibs/arm64-v8a
+
+          find target/aarch64-linux-android/release \
+            -name "librustdesk.so" \
+            -exec cp {} flutter/android/app/src/main/jniLibs/arm64-v8a/ \;
+
+          ls -lh flutter/android/app/src/main/jniLibs/arm64-v8a/
 
       - name: Build APK
         working-directory: flutter
