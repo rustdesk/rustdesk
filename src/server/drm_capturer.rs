@@ -1140,17 +1140,17 @@ fn apply_confirmed_hotspot(c: &mut CursorCal, accepted: Hotspot, display: i32, c
     if near(accepted, c.current_hot) {
         if c.current_hot == c.wire_hot {
             // The wire is served and was right: nothing of ours stays cached for this shape.
-            forget_cursor_cal(c.id);
-        } else if cached_cursor_cal(c.id) != Some(c.current_hot) {
-            store_cursor_cal(c.id, c.current_hot);
+            forget_cursor_cal(c.id, c.ctx.built_gen);
+        } else if cached_cursor_cal(c.id, c.ctx.built_gen) != Some(c.current_hot) {
+            store_cursor_cal(c.id, c.current_hot, c.ctx.built_gen);
         }
         return;
     }
     let target = if near(accepted, c.wire_hot) {
-        forget_cursor_cal(c.id);
+        forget_cursor_cal(c.id, c.ctx.built_gen);
         c.wire_hot
     } else {
-        store_cursor_cal(c.id, accepted);
+        store_cursor_cal(c.id, accepted, c.ctx.built_gen);
         accepted
     };
     debug_assert_ne!(target, c.current_hot, "not near the served value, so a change");
@@ -1179,23 +1179,44 @@ fn apply_confirmed_hotspot(c: &mut CursorCal, accepted: Hotspot, display: i32, c
 }
 
 /// Confirmed hotspots per wire cursor id, so a shape the compositor reuses (arrow, beam, arrow)
-/// is served right from its first frame. Bounded by wholesale clearing; ids churn on theme or
-/// size changes and re-measuring is cheap. Read in one place, behind the context gate.
-static CURSOR_CAL_CACHE: Mutex<BTreeMap<u64, Hotspot>> = Mutex::new(BTreeMap::new());
+/// is served right from its first frame, each with the layout generation it was confirmed under:
+/// a value measured against a layout the poll had not yet seen move is served only to streams
+/// of that generation, never to the one rebuilt after the promotion. Bounded by clearing what
+/// the writer's generation or an older one confirmed; ids churn on theme or size changes and
+/// re-measuring is cheap. Read in one place, behind the context gate.
+static CURSOR_CAL_CACHE: Mutex<BTreeMap<u64, (Hotspot, u64)>> = Mutex::new(BTreeMap::new());
 const CURSOR_CAL_CACHE_CAP: usize = 64;
 
-fn store_cursor_cal(wire_id: u64, h: Hotspot) {
+/// An entry is replaced or dropped only by its own generation or a newer one: a receive thread
+/// still running on the old layout cannot undo what the rebuilt stream confirmed.
+fn store_cursor_cal(wire_id: u64, h: Hotspot, gen: u64) {
     let mut cache = CURSOR_CAL_CACHE.lock().unwrap();
-    if cache.len() >= CURSOR_CAL_CACHE_CAP && !cache.contains_key(&wire_id) {
-        cache.clear();
+    if cache.get(&wire_id).is_some_and(|(_, g)| *g > gen) {
+        return;
     }
-    cache.insert(wire_id, h);
+    if cache.len() >= CURSOR_CAL_CACHE_CAP && !cache.contains_key(&wire_id) {
+        cache.retain(|_, (_, g)| *g > gen);
+        if cache.len() >= CURSOR_CAL_CACHE_CAP {
+            return;
+        }
+    }
+    cache.insert(wire_id, (h, gen));
 }
-fn forget_cursor_cal(wire_id: u64) {
-    CURSOR_CAL_CACHE.lock().unwrap().remove(&wire_id);
+fn forget_cursor_cal(wire_id: u64, gen: u64) {
+    let mut cache = CURSOR_CAL_CACHE.lock().unwrap();
+    if cache.get(&wire_id).is_some_and(|(_, g)| *g <= gen) {
+        cache.remove(&wire_id);
+    }
 }
-fn cached_cursor_cal(wire_id: u64) -> Option<Hotspot> {
-    CURSOR_CAL_CACHE.lock().unwrap().get(&wire_id).copied()
+/// The correction confirmed for this shape under this generation, if any. A stream of another
+/// generation gets none and serves the wire hotspot until a pair confirms one.
+fn cached_cursor_cal(wire_id: u64, gen: u64) -> Option<Hotspot> {
+    CURSOR_CAL_CACHE
+        .lock()
+        .unwrap()
+        .get(&wire_id)
+        .filter(|(_, g)| *g == gen)
+        .map(|(h, _)| *h)
 }
 
 /// Mixes the hotspot into the wire id on top of the reader's fold, so `run_cursor` sees the
@@ -1239,7 +1260,7 @@ fn on_cursor_shape(
             raw: raw.clone(),
             ctx,
             wire_hot,
-            current_hot: cached_cursor_cal(id).unwrap_or(wire_hot),
+            current_hot: cached_cursor_cal(id, ctx.built_gen).unwrap_or(wire_hot),
             candidate: None,
             plane: None,
             stable_ticks: 0,
@@ -2935,11 +2956,15 @@ mod drm_capturer_tests {
         }
     }
     fn peer(pos: Pos, seq: u64) -> crate::server::input_service::PeerAbsSample {
+        peer_under(pos, seq, CAL_GEN)
+    }
+    /// A sample injected under layout generation `gen`.
+    fn peer_under(pos: Pos, seq: u64, gen: u64) -> crate::server::input_service::PeerAbsSample {
         crate::server::input_service::PeerAbsSample {
             pos,
             age_ms: 400,
             seq,
-            gen: CAL_GEN,
+            gen,
         }
     }
     /// A guessed shape arriving on a stream with a context, as the receive loop registers it.
@@ -2967,8 +2992,19 @@ mod drm_capturer_tests {
         display: i32,
         epoch: u64,
     ) {
+        settle_under(cal, plane, sample, display, epoch, CAL_GEN);
+    }
+    /// `settle` for a stream of layout generation `gen`.
+    fn settle_under(
+        cal: &mut Option<CursorCal>,
+        plane: Pos,
+        sample: Option<crate::server::input_service::PeerAbsSample>,
+        display: i32,
+        epoch: u64,
+        gen: u64,
+    ) {
         for _ in 0..=CURSOR_CAL_STABLE_TICKS {
-            on_cursor_plane(cal, Some(plane), || sample, false, CAL_GEN, display, epoch);
+            on_cursor_plane(cal, Some(plane), || sample, false, gen, display, epoch);
         }
     }
     fn served(display: i32) -> (u64, i32, i32) {
@@ -2991,7 +3027,7 @@ mod drm_capturer_tests {
     fn a_confirming_measurement_publishes_the_retained_candidate_not_the_new_sample() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (d, e, shape) = (9_700, next_cursor_epoch(), 0x7a00);
-        forget_cursor_cal(shape);
+        forget_cursor_cal(shape, CAL_GEN);
         let mut cal = arrive(d, e, shape, (4, 4));
         assert_eq!(served(d), (plain(shape), 4, 4));
         // (500,300) - (488,288) = (12,12): the candidate.
@@ -2999,15 +3035,15 @@ mod drm_capturer_tests {
         assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1)));
         assert_eq!(cal.as_ref().unwrap().current_hot, (4, 4));
         assert_eq!(served(d), (plain(shape), 4, 4), "unconfirmed: nothing visible changes");
-        assert_eq!(cached_cursor_cal(shape), None);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
         // (600,400) - (587,388) = (13,12): confirms (12,12).
         settle(&mut cal, (587, 388), Some(peer((600, 400), 2)), d, e);
         let c = cal.as_ref().unwrap();
         assert_eq!(c.candidate, None);
         assert_eq!(c.current_hot, (12, 12));
-        assert_eq!(cached_cursor_cal(shape), Some((12, 12)));
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)));
         assert_eq!(served(d), (corrected(shape, (12, 12)), 12, 12));
-        forget_cursor_cal(shape);
+        forget_cursor_cal(shape, CAL_GEN);
     }
 
     // The confirmed value is within tolerance of the wire: the producer's guess was right, the
@@ -3016,13 +3052,13 @@ mod drm_capturer_tests {
     fn a_confirmed_value_near_the_wire_serves_the_wire_and_drops_the_cached_correction() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (d, e, shape) = (9_701, next_cursor_epoch(), 0x7a01);
-        store_cursor_cal(shape, (30, 4));
+        store_cursor_cal(shape, (30, 4), CAL_GEN);
         let mut cal = arrive(d, e, shape, (10, 10));
         assert_eq!(served(d), (corrected(shape, (30, 4)), 30, 4), "seeded from the cache");
         // (12,10) then (14,10): confirms (12,10), which is 2 px from the wire.
         settle(&mut cal, (488, 290), Some(peer((500, 300), 1)), d, e);
         settle(&mut cal, (586, 390), Some(peer((600, 400), 2)), d, e);
-        assert_eq!(cached_cursor_cal(shape), None, "the wire was right: the correction goes");
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None, "the wire was right: the correction goes");
         assert_eq!(cal.as_ref().unwrap().current_hot, (10, 10));
         assert_eq!(served(d), (plain(shape), 10, 10));
     }
@@ -3033,7 +3069,7 @@ mod drm_capturer_tests {
     fn a_confirmed_value_in_band_with_the_served_one_changes_nothing_and_stays_cached() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (d, e, shape) = (9_702, next_cursor_epoch(), 0x7a02);
-        store_cursor_cal(shape, (12, 12));
+        store_cursor_cal(shape, (12, 12), CAL_GEN);
         let mut cal = arrive(d, e, shape, (4, 4));
         let before = served(d);
         assert_eq!(before, (corrected(shape, (12, 12)), 12, 12));
@@ -3043,8 +3079,8 @@ mod drm_capturer_tests {
         settle(&mut cal, (587, 388), Some(peer((602, 400), 2)), d, e);
         assert_eq!(served(d), before, "in band: nothing visible changes");
         assert_eq!(cal.as_ref().unwrap().current_hot, (12, 12));
-        assert_eq!(cached_cursor_cal(shape), Some((12, 12)), "the served value is cached again");
-        forget_cursor_cal(shape);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)), "the served value is cached again");
+        forget_cursor_cal(shape, CAL_GEN);
     }
 
     // Review of rustdesk#16122 (pre-push, 23-sep): a served correction 3 px from the wire and a
@@ -3055,7 +3091,7 @@ mod drm_capturer_tests {
     fn a_confirmed_value_in_band_with_both_keeps_the_served_correction() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (d, e, shape) = (9_706, next_cursor_epoch(), 0x7a06);
-        store_cursor_cal(shape, (13, 10));
+        store_cursor_cal(shape, (13, 10), CAL_GEN);
         let mut cal = arrive(d, e, shape, (10, 10));
         let before = served(d);
         assert_eq!(before, (corrected(shape, (13, 10)), 13, 10));
@@ -3064,12 +3100,12 @@ mod drm_capturer_tests {
         settle(&mut cal, (586, 390), Some(peer((600, 400), 2)), d, e);
         assert_eq!(served(d), before, "in band with the served value: it stays");
         assert_eq!(cal.as_ref().unwrap().current_hot, (13, 10));
-        assert_eq!(cached_cursor_cal(shape), Some((13, 10)));
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((13, 10)));
         // (10,10) twice: in band with the wire only, so the wire is served again.
         settle(&mut cal, (490, 290), Some(peer((500, 300), 3)), d, e);
         settle(&mut cal, (590, 390), Some(peer((600, 400), 4)), d, e);
         assert_eq!(served(d), (plain(shape), 10, 10));
-        assert_eq!(cached_cursor_cal(shape), None);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
     }
 
     #[test]
@@ -3092,7 +3128,7 @@ mod drm_capturer_tests {
     #[test]
     fn a_plane_move_without_a_new_peer_sample_never_confirms() {
         let (d, e, shape) = (9_705, next_cursor_epoch(), 0x7a05);
-        forget_cursor_cal(shape);
+        forget_cursor_cal(shape, CAL_GEN);
         let mut cal = arrive(d, e, shape, (4, 4));
         let before = served(d);
         let stale = Some(peer((500, 300), 1));
@@ -3104,7 +3140,7 @@ mod drm_capturer_tests {
         settle(&mut cal, (493, 288), stale, d, e); // back: (7,12) again, same sample
         assert_eq!(cal.as_ref().unwrap().candidate, Some(((7, 12), 1)));
         assert_eq!(served(d), before);
-        assert_eq!(cached_cursor_cal(shape), None);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
     }
 
     #[test]
@@ -3191,7 +3227,7 @@ mod drm_capturer_tests {
     fn a_cached_correction_is_not_served_without_a_context() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let (d, e, shape) = (9_706, next_cursor_epoch(), 0x7a06);
-        store_cursor_cal(shape, (20, 20));
+        store_cursor_cal(shape, (20, 20), CAL_GEN);
         let raw = vec![0; 64 * 64 * 4];
         let cal = on_cursor_shape(d, e, None, shape, 64, 64, 4, 4, false, raw.clone(), 0);
         assert!(cal.is_none());
@@ -3199,7 +3235,7 @@ mod drm_capturer_tests {
         let cal = on_cursor_shape(d, e, Some(ctx1()), shape, 64, 64, 4, 4, false, raw, 0);
         assert!(cal.is_some(), "control: with a context the same arrival is served corrected");
         assert_eq!(served(d), (corrected(shape, (20, 20)), 20, 20));
-        forget_cursor_cal(shape);
+        forget_cursor_cal(shape, CAL_GEN);
     }
 
     #[test]
@@ -3219,7 +3255,7 @@ mod drm_capturer_tests {
     #[test]
     fn a_still_plane_is_measured_once() {
         let (d, e, shape) = (9_708, next_cursor_epoch(), 0x7a08);
-        forget_cursor_cal(shape);
+        forget_cursor_cal(shape, CAL_GEN);
         let mut cal = arrive(d, e, shape, (4, 4));
         let before = served(d);
         settle(&mut cal, (488, 288), Some(peer((500, 300), 1)), d, e);
@@ -3230,7 +3266,7 @@ mod drm_capturer_tests {
         }
         assert_eq!(cal.as_ref().unwrap().candidate, Some(((12, 12), 1)));
         assert_eq!(served(d), before);
-        assert_eq!(cached_cursor_cal(shape), None);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), None);
     }
 
     #[test]
@@ -3268,6 +3304,51 @@ mod drm_capturer_tests {
         assert_eq!(usable_sample(&ctx, s(400, CAL_GEN), true, CAL_GEN), None, "drift");
         assert_eq!(usable_sample(&ctx, s(400, CAL_GEN), false, CAL_GEN + 1), None, "layout moved");
         assert_eq!(usable_sample(&ctx, s(400, CAL_GEN - 1), false, CAL_GEN), None, "old sample");
+    }
+
+    /// zhou, 25-sep review of #16122: a correction two stops confirmed under one layout
+    /// generation is not served to the stream rebuilt under the next one, which serves the wire
+    /// hotspot until a pair of its own confirms a value; and a late write from the old stream
+    /// neither replaces nor drops what the new one confirmed.
+    #[test]
+    fn a_correction_confirmed_under_an_older_generation_is_not_served() {
+        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let (d, e, shape) = (9_722, next_cursor_epoch(), 0x7a22);
+        let next = CAL_GEN + 1;
+        forget_cursor_cal(shape, next);
+        let mut old = arrive(d, e, shape, (4, 4));
+        settle(&mut old, (488, 288), Some(peer((500, 300), 1)), d, e);
+        settle(&mut old, (587, 388), Some(peer((600, 400), 2)), d, e);
+        assert_eq!(cached_cursor_cal(shape, CAL_GEN), Some((12, 12)));
+        let mut ctx = ctx1();
+        ctx.built_gen = next;
+        let (d2, e2) = (9_724, next_cursor_epoch());
+        let raw = vec![0; 64 * 64 * 4];
+        let mut new = on_cursor_shape(d2, e2, Some(ctx), shape, 64, 64, 4, 4, false, raw, 0);
+        assert_eq!(served(d2), (plain(shape), 4, 4), "the rebuilt stream serves the wire value");
+        // (500,300) - (480,280) and (600,400) - (580,380): (20,20), under the new generation.
+        settle_under(
+            &mut new,
+            (480, 280),
+            Some(peer_under((500, 300), 3, next)),
+            d2,
+            e2,
+            next,
+        );
+        settle_under(
+            &mut new,
+            (580, 380),
+            Some(peer_under((600, 400), 4, next)),
+            d2,
+            e2,
+            next,
+        );
+        assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)));
+        assert_eq!(served(d2), (corrected(shape, (20, 20)), 20, 20));
+        store_cursor_cal(shape, (12, 12), CAL_GEN);
+        forget_cursor_cal(shape, CAL_GEN);
+        assert_eq!(cached_cursor_cal(shape, next), Some((20, 20)), "the old stream writes late");
+        forget_cursor_cal(shape, next);
     }
 
     #[test]
@@ -3320,8 +3401,28 @@ mod drm_capturer_tests {
     fn the_calibration_cache_is_bounded() {
         let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         for i in 0..(CURSOR_CAL_CACHE_CAP as u64 * 2) {
-            store_cursor_cal(0x1_0000 + i, (1, 1));
+            store_cursor_cal(0x1_0000 + i, (1, 1), CAL_GEN);
         }
+        assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
+        CURSOR_CAL_CACHE.lock().unwrap().clear();
+    }
+
+    /// The bound clears what the writer's generation or an older one confirmed, never a newer
+    /// entry: a stream still on the old layout filling the cache does not drop what the rebuilt
+    /// one confirmed. With only newer entries left, the older writer's value is not cached.
+    #[test]
+    fn the_bound_never_drops_an_entry_from_a_newer_generation() {
+        let _serial = CACHE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        CURSOR_CAL_CACHE.lock().unwrap().clear();
+        let newer = CAL_GEN + 1;
+        for i in 0..CURSOR_CAL_CACHE_CAP as u64 {
+            store_cursor_cal(0x2_0000 + i, (1, 1), newer);
+        }
+        store_cursor_cal(0x3_0000, (2, 2), CAL_GEN);
+        assert_eq!(cached_cursor_cal(0x3_0000, CAL_GEN), None, "no room without a newer entry");
+        assert_eq!(cached_cursor_cal(0x2_0000, newer), Some((1, 1)));
+        store_cursor_cal(0x3_0001, (2, 2), newer);
+        assert_eq!(cached_cursor_cal(0x3_0001, newer), Some((2, 2)), "its own generation clears");
         assert!(CURSOR_CAL_CACHE.lock().unwrap().len() <= CURSOR_CAL_CACHE_CAP);
         CURSOR_CAL_CACHE.lock().unwrap().clear();
     }
