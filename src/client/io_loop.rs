@@ -2717,11 +2717,14 @@ impl CursorDedupe {
         self.decoded.insert(id);
     }
 
-    /// Names the handle by the content of a shape that did not decode, which is never marked
-    /// decoded: the UI has no shape under it, now or when the handle is selected again, and
-    /// the shape the handle named before is not shown in its place.
+    /// Names a known handle by the content of a shape that did not decode, which is never
+    /// marked decoded: the UI has no shape under it, now or when the handle is selected again,
+    /// and the shape the handle named before is not shown in its place. A handle never seen is
+    /// not filed, so what a peer sends that does not decode takes no room.
     fn rejected(&mut self, peer_id: u64, id: u64) -> u64 {
-        self.ids.insert(peer_id, id);
+        if let Some(named) = self.ids.get_mut(&peer_id) {
+            *named = id;
+        }
         id
     }
 }
@@ -2921,6 +2924,17 @@ mod cursor_dedupe_tests {
         );
         dedupe.record(7, arrow);
         assert_eq!(dedupe.id(7), arrow);
+    }
+
+    #[test]
+    fn a_shape_rejected_under_handles_never_seen_files_nothing() {
+        let mut dedupe = CursorDedupe::default();
+        let broken = CursorDedupe::name(&shape(0, 0, b"broken"));
+        for handle in 0..1000 {
+            assert_eq!(dedupe.rejected(handle, broken), broken);
+        }
+        assert!(dedupe.ids.is_empty());
+        assert!(!dedupe.has_decoded(broken));
     }
 
     #[test]
