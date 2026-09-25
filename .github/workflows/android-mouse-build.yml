@@ -75,8 +75,6 @@ jobs:
             automake \
             libtool
 
-          test -f /usr/include/x86_64-linux-gnu/bits/libc-header-start.h
-
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -106,12 +104,19 @@ jobs:
         run: |
           cargo install cargo-ndk --version 3.1.2 --locked
 
+      - name: Install flutter_rust_bridge_codegen
+        run: |
+          cargo install flutter_rust_bridge_codegen \
+            --version 1.80.1 \
+            --locked
+
+          flutter_rust_bridge_codegen --version
+
       - name: Setup vcpkg
         run: |
           git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
           cd "$HOME/vcpkg"
           ./bootstrap-vcpkg.sh
-
           echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
 
       - name: Build Android vcpkg dependencies
@@ -123,16 +128,22 @@ jobs:
           chmod +x flutter/build_android_deps.sh
           ./flutter/build_android_deps.sh arm64-v8a
 
-          echo "Installed vcpkg libraries:"
-          find "$VCPKG_ROOT/installed/arm64-android/lib" \
-            -maxdepth 1 \
-            -type f \
-            | head -50
-
       - name: Flutter pub get
         working-directory: flutter
         run: |
           flutter pub get
+
+      - name: Generate Flutter Rust bridge
+        run: |
+          flutter_rust_bridge_codegen \
+            --rust-input src/flutter.rs \
+            --dart-output flutter/lib/generated_bridge.dart \
+            --rust-output src/bridge_generated.rs
+
+          test -f src/bridge_generated.rs
+
+          echo "Generated:"
+          ls -lh src/bridge_generated.rs
 
       - name: Build RustDesk native library
         env:
@@ -148,12 +159,6 @@ jobs:
           export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang"
           export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android21-clang++"
           export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
-
-          echo "Using Android compiler:"
-          echo "$CC_aarch64_linux_android"
-          "$CC_aarch64_linux_android" --version
-
-          echo "VCPKG_ROOT=$VCPKG_ROOT"
 
           chmod +x flutter/ndk_arm64.sh
           ./flutter/ndk_arm64.sh
@@ -182,7 +187,6 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p output
-
           cp flutter/build/app/outputs/flutter-apk/app-release.apk \
              output/rustdesk-1.4.9-mouse-cursor-arm64.apk
 
