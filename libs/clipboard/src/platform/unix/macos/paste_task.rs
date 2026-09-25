@@ -4,10 +4,8 @@ use crate::{
 };
 use base::fs::join_validated_path;
 use hbb_common::{allow_err, log, tokio::time::Instant};
-use objc2::rc::{autoreleasepool, Id};
-use objc2_foundation::{
-    NSProgress, NSProgressFileOperationKindDownloading, NSProgressKindFile, NSString, NSURL,
-};
+use objc2::rc::Id;
+use objc2_foundation::NSProgress;
 use std::{
     cmp::min,
     fs::{File, FileTimes, OpenOptions},
@@ -337,6 +335,11 @@ impl PasteTaskHandle {
     }
 
     fn start_progress_completed(&mut self) -> Result<(), CliprdrError> {
+        use objc2::rc::autoreleasepool;
+        use objc2_foundation::{
+            NSProgressFileOperationKindDownloading, NSProgressKindFile, NSString, NSURL,
+        };
+
         let total_bytes = finder_progress_byte_count(self.progress.download_file_size)?;
         // Finder can retain the legacy timestamp/xattr indicator after a single-chunk transfer.
         autoreleasepool(|_| unsafe {
@@ -358,6 +361,8 @@ impl PasteTaskHandle {
         &mut self,
         completed_bytes: Option<u64>,
     ) -> Result<(), CliprdrError> {
+        use objc2::rc::autoreleasepool;
+
         let completed_bytes = finder_progress_byte_count(
             completed_bytes.unwrap_or(self.progress.download_file_current_size),
         )?;
@@ -371,6 +376,8 @@ impl PasteTaskHandle {
 
     #[inline]
     fn remove_progress_completed(&mut self) {
+        use objc2::rc::autoreleasepool;
+
         if let Some(progress) = self.progress.finder_progress.take() {
             autoreleasepool(|_| unsafe { progress.unpublish() });
         }
@@ -738,6 +745,38 @@ mod tests {
             target_dir,
             files,
         }
+    }
+
+    #[test]
+    fn finder_progress_completes_single_response_transfer() {
+        let (_temp, target, _) = test_directories();
+        let data = b"single response";
+        let file = file_description("small.txt", FileType::File, data.len() as u64);
+        let mut task = paste_task_handle(target.clone(), vec![file]);
+        task.update_next(0).unwrap();
+        let download_path = PathBuf::from(&task.progress.download_file_path);
+        let progress = task.progress.finder_progress.as_ref().unwrap().clone();
+        assert_eq!(unsafe { progress.completedUnitCount() }, 0);
+
+        task.handle_file_contents_response(FileContentsResponse {
+            conn_id: 0,
+            msg_flags: 1,
+            stream_id: 0,
+            requested_data: data.to_vec(),
+        })
+        .unwrap();
+
+        unsafe {
+            assert_eq!(progress.totalUnitCount(), data.len() as i64);
+            assert_eq!(progress.completedUnitCount(), progress.totalUnitCount());
+            assert!(progress.isFinished());
+        }
+        assert!(task.progress.finder_progress.is_none());
+        assert!(task.progress.file_handle.is_none());
+        assert!(task.is_finished());
+        assert!(task.progress.error.is_none());
+        assert!(!download_path.exists());
+        assert_eq!(std::fs::read(target.join("small.txt")).unwrap(), data);
     }
 
     #[test]
