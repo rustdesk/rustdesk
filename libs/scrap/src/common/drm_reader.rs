@@ -531,6 +531,19 @@ impl DrmReader {
             .map(|s| s.to_owned())
     }
 
+    /// The DRM `rotation` bitmask of the plane the last grab read from, read now, so call it next
+    /// to the grab it describes. A plane without the property answers rotate-0: it cannot have
+    /// turned anything, so the compositor drew the scanout already turned and the whole output
+    /// transform is still to be undone. `None` only when the library cannot say: it predates the
+    /// call (0.5.8), no plane is bound, or the property set could not be read.
+    pub fn plane_rotation(&mut self) -> Option<u32> {
+        let f = self.lib.plane_rotation?;
+        let mut rotation: u32 = 0;
+        // SAFETY: self.ctx is a live context and `rotation` outlives the call.
+        let rc = unsafe { f(self.ctx, &mut rotation) };
+        plane_rotation_answer(rc, rotation)
+    }
+
     /// Zero-copy EXPORT grab: fills a `drmtap_dmabuf_desc` (dma-buf fd, plane layout, HDR metadata) WITHOUT mapping, detiling or copying pixels, so on this
     /// path the root process never loads libEGL/libGLESv2. The exported fd is READ-ONLY (libdrmtap drops `DRM_RDWR` and `dup` shares that open file
     /// description), so the `--server` that receives it can map the scanout but never write the live framebuffer. Validation here is METADATA ONLY.
@@ -983,5 +996,38 @@ mod hotspot_guess_tests {
     fn a_blank_sprite_has_no_hotspot_to_guess() {
         let (px, w, h) = sprite(&["...", "...", "..."]);
         assert_eq!(infer_hotspot(&px, w, h), (0, 0));
+    }
+}
+
+/// DRM_MODE_ROTATE_0: the `rotation` bitmask of a plane that turned nothing.
+const DRM_MODE_ROTATE_0: u32 = 1 << 0;
+
+/// What a `drmtap_plane_rotation` return means to the consumer. Success is the mask. `-ENOTSUP`
+/// (the plane has no `rotation` property) is rotate-0, not "unknown": such a plane cannot have
+/// turned the scanout, so the frame arrives turned by the whole output transform, which is the
+/// virtio-gpu and vmwgfx case this exists for. Anything else (`-ENOENT` with no plane bound, a
+/// failed property read) is `None`, and the consumer keeps its pre-0.5.8 rule.
+fn plane_rotation_answer(rc: c_int, rotation: u32) -> Option<u32> {
+    if rc == 0 {
+        Some(rotation)
+    } else if rc == -hbb_common::libc::ENOTSUP {
+        Some(DRM_MODE_ROTATE_0)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod plane_rotation_tests {
+    use super::*;
+
+    #[test]
+    fn a_plane_without_the_property_turned_nothing() {
+        assert_eq!(plane_rotation_answer(0, 0x4), Some(0x4));
+        assert_eq!(plane_rotation_answer(0, 0x1), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOTSUP, 0), Some(0x1));
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::ENOENT, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EINVAL, 0), None);
+        assert_eq!(plane_rotation_answer(-hbb_common::libc::EIO, 7), None);
     }
 }

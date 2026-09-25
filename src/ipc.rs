@@ -543,6 +543,9 @@ pub enum Data {
     DrmFrame {
         width: u32,
         height: u32,
+        /// See `DmabufDesc::plane_rotation`; absent from a producer older than this field.
+        #[serde(default)]
+        plane_rotation: Option<u32>,
         /// See `DmabufDesc::cursor_pos`: the cursor plane position read right after this frame,
         /// or `None` when the cursor is hidden, the read failed or the producer predates the field.
         #[serde(default)]
@@ -2389,6 +2392,7 @@ mod test {
                 width,
                 height,
                 cursor_pos,
+                ..
             } => {
                 assert_eq!((width, height), (8, 8));
                 assert_eq!(cursor_pos, None);

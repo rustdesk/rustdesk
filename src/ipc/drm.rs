@@ -45,6 +45,14 @@ pub struct DmabufDesc {
     pub hdr_max_nits: u32,
     /// True: the fd rides this message's SCM_RIGHTS cmsg. False: import-once cache hit for `fb_id`.
     pub has_fd: bool,
+    /// The DRM `rotation` bitmask the primary plane scanned this frame out with, from
+    /// `drmtap_plane_rotation()` (libdrmtap 0.5.8); a plane without the property is reported as
+    /// rotate-0. `None` when the library cannot say (older than 0.5.8, nothing bound, or the
+    /// property set unreadable). A frame from a plane that rotated in hardware is already
+    /// upright; one from a plane that did not is turned by the output transform. See
+    /// `frame_transform`.
+    #[serde(default)]
+    pub plane_rotation: Option<u32>,
     /// Cursor plane position read right after this frame was grabbed, in scanout pixels of the
     /// display this stream shows, so a few ms newer than the frame. `None` means the cursor is
     /// hidden, the read failed or was rejected, or the producer predates this field. It rides
@@ -107,6 +115,8 @@ enum DrmProducerMsg {
         width: u32,
         height: u32,
         data: Bytes,
+        /// See `DmabufDesc::plane_rotation`.
+        plane_rotation: Option<u32>,
         /// See `DmabufDesc::cursor_pos`. The dmabuf path carries it inside the descriptor; this
         /// one has no descriptor, so it travels beside the pixels.
         cursor_pos: Option<(i32, i32)>,
@@ -151,6 +161,7 @@ mod cursor_pos_tests {
             hdr_eotf: 0,
             hdr_max_nits: 0,
             has_fd: false,
+            plane_rotation: None,
             cursor_pos: None,
         }
     }
@@ -184,6 +195,7 @@ mod cursor_pos_tests {
             width: 4,
             height: 4,
             data: Bytes::new(),
+            plane_rotation: None,
             cursor_pos: None,
         };
         stamp_cursor_pos(&mut cpu, Some(&visible));
@@ -1069,12 +1081,14 @@ async fn handle_drm_conn(stream: Connection) -> ResultType<()> {
                 width,
                 height,
                 data,
+                plane_rotation,
                 cursor_pos,
             }) => {
                 conn.send_msg(
                     &Data::DrmFrame {
                         width,
                         height,
+                        plane_rotation,
                         cursor_pos,
                     },
                     None,
@@ -1154,6 +1168,7 @@ fn drm_capture_worker(
             // state itself (CREDIT_STALL) since our watchdog cannot advance.
             None
         } else if use_dmabuf {
+            // Read right after the grab: the library answers for the plane that grab read from.
             Some(match reader.grab_desc() {
                 Ok((fd, d)) => Ok(DrmProducerMsg::Frame {
                     desc: DmabufDesc {
@@ -1169,6 +1184,7 @@ fn drm_capture_worker(
                         hdr_eotf: d.hdr_eotf,
                         hdr_max_nits: d.hdr_max_nits,
                         has_fd: true, // every exported frame carries its fd; see the send below
+                        plane_rotation: reader.plane_rotation(),
                         cursor_pos: None, // stamped below, from the one cursor read of this tick
                     },
                     fd: Some(fd),
@@ -1176,15 +1192,17 @@ fn drm_capture_worker(
                 Err(err) => Err(err),
             })
         } else {
-            Some(match reader.grab() {
-                Ok((buf, w, h)) => Ok(DrmProducerMsg::FrameCpu {
-                    width: w as u32,
-                    height: h as u32,
-                    data: Bytes::copy_from_slice(buf),
-                    cursor_pos: None,
-                }),
-                Err(err) => Err(err),
-            })
+            // The mapped buffer borrows the reader: copy it out, then ask about the plane.
+            let copied = reader
+                .grab()
+                .map(|(buf, w, h)| (Bytes::copy_from_slice(buf), w as u32, h as u32));
+            Some(copied.map(|(data, width, height)| DrmProducerMsg::FrameCpu {
+                width,
+                height,
+                data,
+                plane_rotation: reader.plane_rotation(),
+                cursor_pos: None,
+            }))
         };
         // ONE cursor read per tick, and none on a stalled or failed grab: the plane position rides
         // the frame it was read next to, and the shape ships when it changes. The position is a
@@ -1673,6 +1691,7 @@ mod drm_conn_tests {
             &Data::DrmFrame {
                 width: 1920,
                 height: 1080,
+                plane_rotation: None,
                 cursor_pos: None,
             },
             None,
@@ -1685,6 +1704,7 @@ mod drm_conn_tests {
             Data::DrmFrame {
                 width: 1920,
                 height: 1080,
+                plane_rotation: None,
                 cursor_pos: None
             }
         ));
@@ -1701,6 +1721,7 @@ mod drm_conn_tests {
             &Data::DrmFrame {
                 width: 4,
                 height: 4,
+                plane_rotation: None,
                 cursor_pos: None,
             },
             Some(rd.as_fd()),
@@ -1818,6 +1839,7 @@ mod drm_conn_tests {
         let payload = serde_json::to_vec(&Data::DrmFrame {
             width: 8,
             height: 8,
+            plane_rotation: None,
             cursor_pos: None,
         })
         .unwrap();
@@ -1831,6 +1853,7 @@ mod drm_conn_tests {
             Data::DrmFrame {
                 width: 8,
                 height: 8,
+                plane_rotation: None,
                 cursor_pos: None
             }
         ));
