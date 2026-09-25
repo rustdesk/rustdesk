@@ -1,0 +1,30 @@
+name: Build RustDesk Android Mouse Mod
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout RustDesk 1.4.9
+        uses: actions/checkout@v4
+        with:
+          repository: rustdesk/rustdesk
+          ref: 1.4.9
+          submodules: recursive
+
+      - name: Show source version
+        run: |
+          git describe --tags --always
+          git status
+          ls flutter
+
+      - name: Upload source check
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustdesk-1.4.9-source-check
+          path: |
+            flutter/pubspec.yaml
+            flutter/build_fdroid.sh
