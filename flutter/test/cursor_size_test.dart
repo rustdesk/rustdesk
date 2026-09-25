@@ -362,7 +362,7 @@ Future<void> _checkView(WidgetTester tester, (String, bool) mode,
         ? (sourceSize * (Platform.isWindows ? dpr : 1.0)).ceil()
         : (size * scale * (Platform.isWindows ? dpr : 1.0)).ceil();
     final key = cursor.nativeKey(cursor.cache, cursor.cache.scale);
-    _expectSize(registrations.lastWhere((v) => v['name'] == key), (w, w));
+    _expectSize(registrations.singleWhere((v) => v['name'] == key), (w, w));
   }
   await tester.pumpWidget(const SizedBox.shrink());
 }

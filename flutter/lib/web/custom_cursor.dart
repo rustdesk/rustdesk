@@ -124,12 +124,12 @@ MouseCursor buildCursorOfCache(
       cursor.addKey(key);
       cursor.registered(cache, key);
     }
-    cursor.shownKey = key;
+    cursor.shown(cache, key);
     return FlutterCustomMemoryImageCursor(key: key);
   }
 }
 
-// The cursor shown last stays while the one in use is made, rather than the system one.
+// The last shape's cursor stays while the one in use is made, rather than the system one.
 MouseCursor _shownCursor(model.CursorModel cursor) {
   final key = cursor.shownKey;
   return key == null

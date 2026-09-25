@@ -92,7 +92,7 @@ class CursorShape {
 }
 
 class RustdeskImpl {
-  // Each request carries its own callback, since several may be in flight.
+  // The core answers through the callback, before callMethod returns.
   Future<CursorShape?> sessionGetCursorShape(
       {required UuidValue sessionId, required String id, dynamic hint}) {
     final completer = Completer<CursorShape?>();

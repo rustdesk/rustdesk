@@ -3178,8 +3178,9 @@ class CursorModel with ChangeNotifier {
 
   get lastIsBlocked => _lastIsBlocked;
 
-  /// The image of the shape in use, or the one shown before until it is back: a switch never
-  /// falls back to the default cursor. Asks the core for the shape in use when it was let go.
+  /// The image of the shape in use, or the one shown before until it is back: a switch falls
+  /// back to the default cursor only for a shape the core cannot give. Asks the core for the
+  /// shape in use when it was let go.
   ui.Image? get image {
     if (_images[_id] == null && _cacheMap.containsKey(_id)) {
       restorePixels(_id);
@@ -3217,7 +3218,12 @@ class CursorModel with ChangeNotifier {
     }
   }
 
-  CursorModel(this.parent);
+  CursorModel(this.parent) {
+    // Made now, not when first drawn: nothing draws again when their decode lands, so the first
+    // build that needs one would show the shape before in its place.
+    preDefaultCursor.cache;
+    preForbiddenCursor.cache;
+  }
 
   Set<String> get cachedKeys => _cacheKeys;
   addKey(String key) => _cacheKeys.add(key);
@@ -3516,8 +3522,9 @@ class CursorModel with ChangeNotifier {
     _images.clear();
   }
 
-  /// Whether the shape decoded; its image is kept with the ones used last, see [_imageLimit].
-  Future<bool> updateCursorData(String id, int hotxInt, int hotyInt, int width,
+  /// Its image is kept with the ones used last, see [_imageLimit]; a shape that does not decode
+  /// is marked as one the core cannot give.
+  Future<void> updateCursorData(String id, int hotxInt, int hotyInt, int width,
       int height, Uint8List rgba) async {
     final generation = _generation;
     if (_unavailable == id) _unavailable = null;
@@ -3526,13 +3533,16 @@ class CursorModel with ChangeNotifier {
     final image = await img.decodeImageFromPixels(
         rgba, width, height, ui.PixelFormat.rgba8888);
     if (image == null) {
-      return false;
+      // It did not decode; painting must not ask for it on every frame.
+      _markUnavailable(generation, id);
+      return;
     }
     if (!await _updateCache(
         generation, rgba, image, id, hotx, hoty, width, height)) {
       // Not kept, or the session was cleared while it decoded.
       image.dispose();
-      return false;
+      _markUnavailable(generation, id);
+      return;
     }
     final old = _images.remove(id);
     _images[id] = Tuple3(image, hotx, hoty);
@@ -3546,7 +3556,6 @@ class CursorModel with ChangeNotifier {
     _updateCurData();
     final cache = _cacheMap[id];
     if (id != _id && cache != null) _switchedAway(cache);
-    return true;
   }
 
   Future<bool> _updateCache(
@@ -3678,8 +3687,13 @@ class CursorModel with ChangeNotifier {
   /// would rebuild every frame.
   static const kRecentShapes = 64;
 
-  /// The native cursor shown last, shown on while the shape in use is made.
+  /// The native cursor of the shape shown last, shown on while the shape in use is made.
   String? shownKey;
+
+  void shown(CursorData cache, String key) {
+    // The forbidden cursor shows only while input is off; it is no stand-in for a shape.
+    if (cache.id != kPreForbiddenCursorId) shownKey = key;
+  }
 
   /// Whether the desktop paints the peer's cursor over the remote image.
   @protected
@@ -3728,23 +3742,20 @@ class CursorModel with ChangeNotifier {
     final generation = _generation;
     () async {
       try {
-        final shape = await fetchCursorShape(id);
+        // Never at once: a build may be what asked, and a failure tells the listeners.
+        final shape = await Future.sync(() => fetchCursorShape(id));
         if (generation != _generation) {
           return;
         } else if (shape == null) {
-          if (id == _id) _unavailable = id;
+          _markUnavailable(generation, id);
           debugPrint('Cursor $id is not kept by the core');
         } else {
           // Decoded even if the peer moved on: an animation comes back to it.
-          final decoded = await updateCursorData(id, shape.hotx, shape.hoty,
-              shape.width, shape.height, shape.colors);
-          if (!decoded && generation == _generation && id == _id) {
-            // It did not decode; painting must not ask for it on every frame.
-            _unavailable = id;
-          }
+          await updateCursorData(id, shape.hotx, shape.hoty, shape.width,
+              shape.height, shape.colors);
         }
       } catch (e) {
-        if (id == _id) _unavailable = id;
+        _markUnavailable(generation, id);
         debugPrint('Failed to fetch cursor $id: $e');
       } finally {
         _restoring.remove(id);
@@ -3752,11 +3763,18 @@ class CursorModel with ChangeNotifier {
     }();
   }
 
+  void _markUnavailable(int generation, String id) {
+    if (generation != _generation || id != _id) return;
+    _unavailable = id;
+    _updateCurData();
+  }
+
   bool _updateCurData() {
     final previous = _cache;
     final cache = _cacheMap[_id];
-    // A shape not decoded yet leaves the one shown before in place until it is.
-    if (cache != null) _cache = cache;
+    // A shape not decoded yet leaves the one shown before in place until it is; one the core
+    // cannot give leaves none, so the default cursor shows, as for a shape never sent.
+    if (cache != null || _unavailable == _id) _cache = cache;
     if (previous != null && !identical(previous, _cache)) {
       _switchedAway(previous);
     }
@@ -3766,6 +3784,8 @@ class CursorModel with ChangeNotifier {
       _image = tmp.item1;
       _hotx = tmp.item2;
       _hoty = tmp.item3;
+    } else if (_unavailable == _id) {
+      _image = null;
     }
     _evictImages();
     try {

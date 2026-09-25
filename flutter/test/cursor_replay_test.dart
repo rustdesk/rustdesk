@@ -17,10 +17,13 @@ class _Cursor extends CursorModel {
   final fetched = <String>[];
   // While set, a fetch answers only when [answerFetches] is called.
   bool holdFetches = false;
+  // While set, a fetch throws before it returns a future.
+  bool throwAtOnce = false;
   final _held = <Completer<CursorShape?>, String>{};
   @override
   Future<CursorShape?> fetchCursorShape(String id) {
     fetched.add(id);
+    if (throwAtOnce) throw StateError('no core');
     if (!holdFetches) return Future.value(core[id]);
     final answer = Completer<CursorShape?>();
     _held[answer] = id;
@@ -31,6 +34,12 @@ class _Cursor extends CursorModel {
     final held = Map.of(_held);
     _held.clear();
     held.forEach((answer, id) => answer.complete(core[id]));
+  }
+
+  void failFetches() {
+    final held = Map.of(_held);
+    _held.clear();
+    held.forEach((answer, _) => answer.completeError(StateError('failed')));
   }
 
   bool showRemoteCursor = false;
@@ -516,6 +525,87 @@ void main() {
     expect(cursor.image, isNotNull);
     await _feed(ffi, '2');
     expect(cursor.cache?.id, '2');
+  });
+
+  for (final how in ['does not have', 'cannot decode']) {
+    test('a shape the core $how leaves the default cursor, not the one before',
+        () async {
+      final cursor = ffi.cursorModel;
+      await _feed(ffi, '1');
+      if (how == 'cannot decode') {
+        ffi.cursor.core['2'] = CursorShape(
+            hotx: 0, hoty: 0, width: 8, height: 8, colors: Uint8List(3));
+      }
+      _select(ffi, '2');
+      expect(cursor.cache?.id, '1', reason: 'kept while the shape may come');
+      var notified = 0;
+      cursor.addListener(() => notified++);
+      await _settle();
+      expect(cursor.cache, isNull,
+          reason: 'the desktop shows preDefaultCursor');
+      expect(cursor.image, isNull, reason: 'and so does a painted cursor');
+      expect(notified, greaterThan(0));
+    });
+  }
+
+  test('a shape sent that does not decode leaves the default cursor', () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1');
+    ffi.cursor.core['2'] = CursorShape(
+        hotx: 0, hoty: 0, width: 8, height: 8, colors: Uint8List(3));
+    await ffi.ffiModel.handleCursorData('2', 0, 0, 8, 8, Uint8List(3));
+    expect(cursor.cache, isNull);
+    expect(cursor.image, isNull);
+    _select(ffi, '2');
+    await _settle();
+    expect(ffi.cursor.fetched, isEmpty, reason: 'it is not asked for either');
+  });
+
+  test('a fetch failing after the session was cleared marks nothing in it',
+      () async {
+    final cursor = ffi.cursorModel;
+    ffi.cursor.holdFetches = true;
+    _select(ffi, '1'); // not decoded here yet, so it is asked for
+    cursor.clear();
+    ffi.cursor.failFetches();
+    await _settle();
+    ffi.cursor.holdFetches = false;
+    _select(ffi, '1'); // the same id, now in the new session
+    await _settle();
+    expect(ffi.cursor.fetched, ['1', '1']);
+  });
+
+  test('a fetch that throws at once tells the listeners after the build',
+      () async {
+    final cursor = ffi.cursorModel;
+    await _feed(ffi, '1');
+    ffi.cursor.throwAtOnce = true;
+    cursor.id = '2';
+    var notified = 0;
+    cursor.addListener(() => notified++);
+    cursor.restorePixels('2');
+    expect(notified, 0, reason: 'a build may be what asked');
+    await _settle();
+    expect(notified, greaterThan(0));
+    expect(cursor.cache, isNull);
+  });
+
+  test('a raster still being made falls back to a shape, not the forbidden one',
+      () async {
+    final cursor = ffi.cursorModel;
+    for (var i = 0; preForbiddenCursor.cache == null && i < 100; i++) {
+      await _settle();
+    }
+    expect(preForbiddenCursor.cache, isNotNull);
+    await _feed(ffi, '1', size: 32);
+    buildCursorOfCache(cursor, 1.0, cursor.cache);
+    await _settle();
+    await _feed(ffi, '2', size: 32);
+    final shown = _key(buildCursorOfCache(cursor, 1.0, cursor.cache));
+    await _settle();
+    buildCursorOfCache(cursor, 1.0, preForbiddenCursor.cache); // input disabled
+    _select(ffi, '1'); // its native cursor held its pixels, so they went
+    expect(_key(buildCursorOfCache(cursor, 0.5, cursor.cache)), shown);
   });
 
   group('a painted cursor', () {

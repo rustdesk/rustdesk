@@ -1542,7 +1542,12 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.keep_cursor_shape(cursor_shape(id, &cd, &compressed));
                             self.handler.set_cursor_data(cd)
                         }
-                        Err(err) => log::warn!("Rejected cursor {id}: {err}"),
+                        Err(err) => {
+                            log::warn!("Rejected cursor {id}: {err}");
+                            // The peer shows it now: selected, the UI treats it as a shape it
+                            // lacks, as it will when the peer selects it again.
+                            self.handler.set_cursor_id(id.to_string());
+                        }
                     }
                 }
                 Some(message::Union::CursorId(id)) => {
@@ -2609,7 +2614,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.keep_cursor_shape(cursor_shape(id, &cd, &compressed));
                 self.handler.set_cursor_data(cd);
             }
-            Err(err) => log::warn!("Rejected cursor {peer_id}: {err}"),
+            Err(err) => {
+                log::warn!("Rejected cursor {peer_id}: {err}");
+                // Selected as a later cursor_id for the handle would be.
+                self.handler
+                    .set_cursor_id(self.cursor_dedupe.id(peer_id).to_string());
+            }
         }
     }
 }
