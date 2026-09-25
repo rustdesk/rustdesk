@@ -276,6 +276,57 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   });
 
+  testWidgets('a safe saved button stays put when the other crosses the wheel',
+      (tester) async {
+    savedPositions['ll-mouse-btn-pos'] = '{"x":320.0,"y":120.0}';
+    savedPositions['rl-mouse-btn-pos'] = '{"x":300.0,"y":300.0}';
+    tester.view.physicalSize = const Size(800, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
+
+    final wheel = tester.getRect(find.byType(FloatingWheel));
+    final rightButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    expect(tester.getRect(rightButton).topLeft, const Offset(300, 300));
+    expect(tester.getRect(rightButton).overlaps(wheel), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('active drag stays clear of wheel when viewport narrows',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final ffi = _FFI();
+
+    await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 0);
+    final rightButton = find.byWidgetPredicate(
+        (widget) => widget is FloatingLeftRightButton && !widget.isLeft);
+    final gesture = await tester.startGesture(tester.getCenter(rightButton));
+    try {
+      await gesture.moveBy(const Offset(230, -225));
+      await tester.pump();
+      expect(tester.getRect(rightButton).topLeft, const Offset(650, 120));
+
+      await pumpMouseWidgets(tester, ffi, bottomBarHeight: 0, rightInset: 400);
+      final buttonRect = tester.getRect(rightButton);
+      final wheelRect = tester.getRect(find.byType(FloatingWheel));
+      expect(buttonRect.top, 120);
+      expect(buttonRect.overlaps(wheelRect), isFalse);
+    } finally {
+      await gesture.up();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+  });
+
   testWidgets('viewport shrink preserves an active button drag',
       (tester) async {
     tester.view.physicalSize = const Size(800, 400);
